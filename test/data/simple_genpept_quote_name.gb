@@ -1,0 +1,33 @@
+LOCUS       pDONR201_1                35 aa                     UNK 19-OCT-2021
+DEFINITION  .
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2               102 aa                     UNK 19-OCT-2021
+DEFINITION  .
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..100
+                     /program="phmmer"
+                     /name="""CcdB"""
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.0"
+                     /cds_id="958_-1_1264"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//

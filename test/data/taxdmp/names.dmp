@@ -1,0 +1,198 @@
+1	|	all	|		|	synonym	|
+1	|	root	|		|	scientific name	|
+17	|	root_escherichia	|		|	scientific name	|
+2	|	Bacteria	|	Bacteria <bacteria>	|	scientific name	|
+2	|	bacteria	|		|	blast name	|
+2	|	eubacteria	|		|	genbank common name	|
+2	|	Monera	|	Monera <bacteria>	|	in-part	|
+2	|	Procaryotae	|	Procaryotae <bacteria>	|	in-part	|
+2	|	Prokaryotae	|	Prokaryotae <bacteria>	|	in-part	|
+2	|	Prokaryota	|	Prokaryota <bacteria>	|	in-part	|
+2	|	prokaryote	|	prokaryote <bacteria>	|	in-part	|
+2	|	prokaryotes	|	prokaryotes <bacteria>	|	in-part	|
+2759	|	Eucarya	|		|	synonym	|
+2759	|	Eucaryotae	|		|	synonym	|
+2759	|	eucaryotes	|		|	genbank common name	|
+2759	|	Eukarya	|		|	synonym	|
+2759	|	Eukaryotae	|		|	synonym	|
+2759	|	Eukaryota	|		|	scientific name	|
+2759	|	eukaryotes	|	eukaryotes <blast name>	|	blast name	|
+2759	|	eukaryotes	|	eukaryotes <common name>	|	common name	|
+131567	|	biota	|		|	synonym	|
+131567	|	cellular organisms	|		|	scientific name	|
+1224	|	Alphaproteobacteriota	|		|	synonym	|
+1224	|	"Alphaproteobacteriota" Whitman et al. 2018	|		|	synonym	|
+1224	|	proteobacteria	|		|	blast name	|
+1224	|	"Proteobacteria" Garrity et al. 2005	|		|	authority	|
+1224	|	Proteobacteria Stackebrandt et al. 1988	|		|	authority	|
+1224	|	Proteobacteria	|		|	synonym	|
+1224	|	"Proteobacteriota" Panda et al. 2022	|		|	authority	|
+1224	|	Proteobacteriota	|		|	synonym	|
+1224	|	Pseudomonadota corrig. Garrity et al. 2021	|		|	authority	|
+1224	|	Pseudomonadota	|		|	scientific name	|
+1224	|	purple photosynthetic bacteria and relatives	|		|	common name	|
+1236	|	Gammaproteobacteria Garrity et al. 2005 emend. Williams and Kelly 2013	|		|	authority	|
+1236	|	Gammaproteobacteria	|		|	scientific name	|
+1236	|	gamma proteobacteria	|		|	synonym	|
+1236	|	gamma subdivision	|		|	synonym	|
+1236	|	gamma subgroup	|		|	synonym	|
+1236	|	g-proteobacteria	|		|	blast name	|
+1236	|	Proteobacteria gamma subdivision	|		|	synonym	|
+1236	|	"Pseudomonadia" Oren et al. 2016	|		|	authority	|
+1236	|	Pseudomonadia	|		|	synonym	|
+1236	|	Purple bacteria, gamma subdivision	|		|	synonym	|
+91347	|	Enterobacterales Adeolu et al. 2016	|		|	authority	|
+91347	|	Enterobacterales	|		|	scientific name	|
+91347	|	Enterobacteriaceae and related endosymbionts	|		|	synonym	|
+91347	|	Enterobacteriaceae group	|		|	synonym	|
+91347	|	Enterobacteriales	|		|	synonym	|
+91347	|	gamma-3 proteobacteria	|	gamma-3 proteobacteria <enterobacteria,Enterobacterales>	|	in-part	|
+543	|	Enterobacteraceae (ex Lapage 1979) Lapage 1982	|		|	authority	|
+543	|	Enterobacteraceae	|		|	synonym	|
+543	|	enterobacteria	|		|	blast name	|
+543	|	Enterobacteriaceae (ex Rahn 1937) Ewing et al. 1980	|		|	authority	|
+543	|	Enterobacteriaceae Rahn 1937 (Approved Lists 1980) emend. Adeolu et al. 2016	|		|	authority	|
+543	|	Enterobacteriaceae	|		|	scientific name	|
+543	|	gamma-3 proteobacteria	|	gamma-3 proteobacteria <enterobacteria,Enterobacteriaceae>	|	in-part	|
+561	|	Escherichia Castellani and Chalmers 1919	|		|	authority	|
+561	|	Escherichia	|		|	scientific name	|
+562	|	Achromobacter sp. ATCC 35328	|		|	includes	|
+562	|	ATCC 11775	|	ATCC 11775 <neotype strain>	|	type material	|
+562	|	"Bacillus coli" Migula 1895	|		|	authority	|
+562	|	Bacillus coli	|		|	synonym	|
+562	|	bacterium 10a	|		|	includes	|
+562	|	"Bacterium coli commune" Escherich 1885	|		|	authority	|
+562	|	Bacterium coli commune	|		|	synonym	|
+562	|	"Bacterium coli" (Migula 1895) Lehmann and Neumann 1896	|		|	authority	|
+562	|	Bacterium coli	|		|	synonym	|
+562	|	bacterium E3	|		|	includes	|
+562	|	CCUG 24	|	CCUG 24 <neotype strain>	|	type material	|
+562	|	CCUG 29300	|	CCUG 29300 <neotype strain>	|	type material	|
+562	|	CIP 54.8	|	CIP 54.8 <neotype strain>	|	type material	|
+562	|	DSM 30083	|	DSM 30083 <neotype strain>	|	type material	|
+562	|	E. coli	|		|	common name	|
+562	|	Enterococcus coli	|		|	synonym	|
+562	|	Escherichia coli (Migula 1895) Castellani and Chalmers 1919	|		|	authority	|
+562	|	Escherichia coli	|		|	scientific name	|
+562	|	Escherichia/Shigella coli	|		|	equivalent name	|
+562	|	Escherichia sp. 3_2_53FAA	|		|	includes	|
+562	|	Escherichia sp. MAR	|		|	includes	|
+562	|	IAM 12119	|	IAM 12119 <neotype strain>	|	type material	|
+562	|	JCM 1649	|	JCM 1649 <neotype strain>	|	type material	|
+562	|	LMG 2092	|	LMG 2092 <neotype strain>	|	type material	|
+562	|	LMG:2092	|	LMG:2092 <neotype strain>	|	type material	|
+562	|	NBRC 102203	|	NBRC 102203 <neotype strain>	|	type material	|
+562	|	NCCB 54008	|	NCCB 54008 <neotype strain>	|	type material	|
+562	|	NCTC 9001	|	NCTC 9001 <neotype strain>	|	type material	|
+562	|	strain U5/41	|	strain U5/41 <neotype strain>	|	type material	|
+1783272	|	Terrabacteria group	|		|	scientific name	|
+1239	|	"Bacillaeota" Oren et al. 2015	|		|	authority	|
+1239	|	Bacillaeota	|		|	synonym	|
+1239	|	Bacillota corrig. Gibbons and Murray 2021	|		|	synonym	|
+1239	|	Bacillota	|		|	scientific name	|
+1239	|	Bacillus/Clostridium group	|		|	synonym	|
+1239	|	clostridial firmicutes	|		|	synonym	|
+1239	|	Clostridium group firmicutes	|		|	synonym	|
+1239	|	"Firmicuteota" Panda et al. 2022	|		|	authority	|
+1239	|	Firmicuteota	|		|	synonym	|
+1239	|	firmicutes	|		|	blast name	|
+1239	|	"Firmicutes" corrig. Gibbons and Murray 1978 (Approved Lists 1980)	|		|	synonym	|
+1239	|	Firmicutes	|		|	equivalent name	|
+1239	|	Low G+C firmicutes	|		|	synonym	|
+1239	|	low GC Gram+	|		|	common name	|
+1239	|	low G+C Gram-positive bacteria	|		|	common name	|
+91061	|	Bacilli Ludwig et al. 2010	|		|	authority	|
+91061	|	Bacilli	|		|	scientific name	|
+91061	|	Bacillus/Lactobacillus/Streptococcus group	|		|	synonym	|
+91061	|	Firmibacteria Murray 1988	|		|	authority	|
+91061	|	Firmibacteria	|		|	synonym	|
+1385	|	Bacillales Prevot 1953 (Approved Lists 1980)	|		|	authority	|
+1385	|	Bacillales	|		|	scientific name	|
+1385	|	Bacillus/Staphylococcus group	|		|	synonym	|
+1385	|	Caryophanales Peshkoff 1939 (Approved Lists 1980)	|		|	authority	|
+1385	|	Caryophanales	|		|	synonym	|
+186817	|	Bacillaceae Fischer 1895	|		|	authority	|
+186817	|	Bacillaceae	|		|	scientific name	|
+1386	|	Bacillus	|	Bacillus <firmicutes>	|	scientific name	|
+1386	|	Bacillus Cohn 1872 (Approved lists 1980)	|		|	authority	|
+1386	|	Bacillus Cohn 1872 (Approved lists 1980) emend. Gupta et al. 2020	|		|	authority	|
+1386	|	Bacillus rRNA group 1	|		|	common name	|
+653685	|	Bacillus subtilis group	|		|	scientific name	|
+1423	|	Arthrobacter sp. CHR2P1B1-M	|		|	includes	|
+1423	|	ATCC 6051	|	ATCC 6051 <type strain>	|	type material	|
+1423	|	ATCC 6051-U	|	ATCC 6051-U <type strain>	|	type material	|
+1423	|	Bacillus mesentericus	|	Bacillus mesentericus <Bacillus subtilis>	|	in-part	|
+1423	|	Bacillus natto	|		|	synonym	|
+1423	|	Bacillus sp. 10405	|		|	includes	|
+1423	|	Bacillus sp. 15:2	|		|	includes	|
+1423	|	Bacillus sp. AECSB01	|		|	includes	|
+1423	|	Bacillus sp. AECSB04	|		|	includes	|
+1423	|	Bacillus sp. AECSB05	|		|	includes	|
+1423	|	Bacillus sp. AECSB06	|		|	includes	|
+1423	|	Bacillus sp. AECSB07	|		|	includes	|
+1423	|	Bacillus sp. AECSB08	|		|	includes	|
+1423	|	Bacillus sp. AECSB12	|		|	includes	|
+1423	|	Bacillus sp. AECSB13	|		|	includes	|
+1423	|	Bacillus sp. AECSB14	|		|	includes	|
+1423	|	Bacillus sp. BS4(2013)	|		|	includes	|
+1423	|	Bacillus sp. BS9(2013)	|		|	includes	|
+1423	|	Bacillus sp. BV3	|		|	includes	|
+1423	|	Bacillus sp. BV5	|		|	includes	|
+1423	|	Bacillus sp. HE08	|		|	includes	|
+1423	|	Bacillus sp. JKR21	|		|	includes	|
+1423	|	Bacillus sp. LB002	|		|	includes	|
+1423	|	Bacillus sp. LKM-BL	|		|	includes	|
+1423	|	Bacillus sp. PW16b	|		|	includes	|
+1423	|	Bacillus sp. PW19	|		|	includes	|
+1423	|	Bacillus sp. RSP-GLU	|		|	includes	|
+1423	|	Bacillus sp. S2 BC-1	|		|	includes	|
+1423	|	Bacillus sp. SWI06	|		|	includes	|
+1423	|	Bacillus sp. UMX-03	|		|	includes	|
+1423	|	Bacillus subtilis/Bacillus globigii	|	Bacillus subtilis/Bacillus globigii <Bacillus subtilis>	|	in-part	|
+1423	|	Bacillus subtilis (Ehrenberg 1835) Cohn 1872	|		|	authority	|
+1423	|	Bacillus subtilis	|		|	scientific name	|
+1423	|	Bacillus uniflagellatus	|		|	synonym	|
+1423	|	BCRC 10255	|	BCRC 10255 <type strain>	|	type material	|
+1423	|	Brevibacillus sp. BHR3P2B5-M	|		|	includes	|
+1423	|	CCM 2216	|	CCM 2216 <type strain>	|	type material	|
+1423	|	CCRC 10255	|	CCRC 10255 <type strain>	|	type material	|
+1423	|	CCRC:10255	|	CCRC:10255 <type strain>	|	type material	|
+1423	|	CCUG 163 B	|	CCUG 163 B <type strain>	|	type material	|
+1423	|	CFBP 4228	|	CFBP 4228 <type strain>	|	type material	|
+1423	|	CIP 52.65	|	CIP 52.65 <type strain>	|	type material	|
+1423	|	culture-collection:NRRL:B:4219	|	culture-collection:NRRL:B:4219 <type strain>	|	type material	|
+1423	|	culture-collection:NRRL:NRS:1315	|	culture-collection:NRRL:NRS:1315 <type strain>	|	type material	|
+1423	|	culture-collection:NRRL:NRS:744	|	culture-collection:NRRL:NRS:744 <type strain>	|	type material	|
+1423	|	culture-collection:VKM:B:501	|	culture-collection:VKM:B:501 <type strain>	|	type material	|
+1423	|	DSM 10	|	DSM 10 <type strain>	|	type material	|
+1423	|	IAM 12118	|	IAM 12118 <type strain>	|	type material	|
+1423	|	IFO 12210	|	IFO 12210 <type strain>	|	type material	|
+1423	|	IFO 13719	|	IFO 13719 <type strain>	|	type material	|
+1423	|	IFO 16412	|	IFO 16412 <type strain>	|	type material	|
+1423	|	IMET 10758	|	IMET 10758 <type strain>	|	type material	|
+1423	|	JCM 1465	|	JCM 1465 <type strain>	|	type material	|
+1423	|	KCTC 3135	|	KCTC 3135 <type strain>	|	type material	|
+1423	|	KCTC-3135	|	KCTC-3135 <type strain>	|	type material	|
+1423	|	KCTC:3135	|	KCTC:3135 <type strain>	|	type material	|
+1423	|	KCTC3135	|	KCTC3135 <type strain>	|	type material	|
+1423	|	LMG 7135	|	LMG 7135 <type strain>	|	type material	|
+1423	|	LMG:7135	|	LMG:7135 <type strain>	|	type material	|
+1423	|	NBRC 13719	|	NBRC 13719 <type strain>	|	type material	|
+1423	|	NBRC 16412	|	NBRC 16412 <type strain>	|	type material	|
+1423	|	NCAIM B.01095	|	NCAIM B.01095 <type strain>	|	type material	|
+1423	|	NCCB 32009	|	NCCB 32009 <type strain>	|	type material	|
+1423	|	NCCB 53016	|	NCCB 53016 <type strain>	|	type material	|
+1423	|	NCCB 70064	|	NCCB 70064 <type strain>	|	type material	|
+1423	|	NCDO 1769	|	NCDO 1769 <type strain>	|	type material	|
+1423	|	NCIB 3610	|	NCIB 3610 <type strain>	|	type material	|
+1423	|	NCIB:3610	|	NCIB:3610 <type strain>	|	type material	|
+1423	|	NCIMB 3610	|	NCIMB 3610 <type strain>	|	type material	|
+1423	|	NCTC 3610	|	NCTC 3610 <type strain>	|	type material	|
+1423	|	NRRL B-4219	|	NRRL B-4219 <type strain>	|	type material	|
+1423	|	NRRL NRS-1315	|	NRRL NRS-1315 <type strain>	|	type material	|
+1423	|	NRRL NRS-744	|	NRRL NRS-744 <type strain>	|	type material	|
+1423	|	PNCM 1514	|	PNCM 1514 <type strain>	|	type material	|
+1423	|	strain 168	|	strain 168 <type strain>	|	type material	|
+1423	|	"Vibrio subtilis" Ehrenberg 1835	|		|	authority	|
+1423	|	Vibrio subtilis	|		|	synonym	|
+1423	|	VKM B-501	|	VKM B-501 <type strain>	|	type material	|

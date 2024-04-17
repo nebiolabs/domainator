@@ -1,0 +1,51 @@
+LOCUS       pDONR201_1265:958rc      306 bp    DNA              UNK 27-DEC-2023
+DEFINITION  Gateway donor vector.
+ACCESSION   urn.local...v2-dgufz7r
+VERSION     urn.local...v2-dgufz7r
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..306)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..306
+                     /invitrogen="""1060000"
+                     /label="ccdB"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /cds_id="1264_-1_959"
+                     /domainator_CcdB="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      4..300
+                     /program="hmmsearch"
+                     /database="CcdB"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     Domain_Search   4..300
+                     /program="hmmsearch"
+                     /database="CcdB"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 atgcagttta aggtttacac ctataaaaga gagagccgtt atcgtctgtt tgtggatgta
+       61 cagagtgata ttattgacac gcccgggcga cggatggtga tccccctggc cagtgcacgt
+      121 ctgctgtcag ataaagtctc ccgtgaactt tacccggtgg tgcatatcgg ggatgaaagc
+      181 tggcgcatga tgaccaccga tatggccagt gtgccggtct ccgttatcgg ggaagaagtg
+      241 gctgatctca gccaccgcga aaatgacatc aaaaacgcca ttaacctgat gttctgggga
+      301 atataa
+//

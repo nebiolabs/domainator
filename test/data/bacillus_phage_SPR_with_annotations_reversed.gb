@@ -1,0 +1,157 @@
+LOCUS       OM236515mod_(reversed)        2552 bp    DNA     circular PHG 13-MAR-2023
+DEFINITION  Bacillus phage SPR, complete genome.
+ACCESSION   OM236515mod
+VERSION     OM236515mod.1
+KEYWORDS    .
+SOURCE      Bacillus phage SPR
+  ORGANISM  Bacillus phage SPR
+            Viruses; Duplodnaviria; Heunggongvirae; Uroviricota;
+            Caudoviricetes; Siphoviridae.
+REFERENCE   1  (bases 1 to 131262)
+  AUTHORS   Stokar-Avihail,A.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (11-JAN-2022) Molecular Genetics, Weizmann Institute,
+            Hertzl 234, Rehovot 7610001, Israel
+COMMENT     ##Assembly-Data-START##                                            
+            Assembly Method       :: SPAdes v. 3.10.1                          
+            Sequencing Technology :: Illumina                                  
+            ##Assembly-Data-END##
+FEATURES             Location/Qualifiers
+     source          1..2552
+                     /organism="Bacillus phage SPR"
+                     /mol_type="genomic DNA"
+                     /db_xref="taxon:10725"
+                     /lab_host="Bacillus subtilis BEST7003"
+                     /note="Obtained from the Bacillus Genetic Stock Center
+                     (BGSC: 1L56)"
+     CDS             join(2423..2552,1..710)
+                     /locus_tag="spr_1"
+                     /EC_number="2.1.1.45"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="thymidylate synthase"
+                     /protein_id="UNY48715.1"
+                     /db_xref="GO:0004799"
+                     /translation="MTQFDKQYSSIINDIINNGISDEEFQVRTKWDSDGTPAHTLSVI
+                     SKQMRFDNSEVPILTTKKVAWKTAIKELLWIWQLKSNDVNDLNKMGVHIWDQWKQEDG
+                     TIGHAYGFQLGKKNRSLNGEKVDQVDYLLHQLKNNPSSRRHITMLWNPDDLDSMALTP
+                     CVYETQWYVKQGKLHLEVRARSNDMALGNPFNVFQYNVLQRMIAQVTGYKLGEYIFNI
+                     GDCHVYTRHIDNLKIQMEREQFEAPELWINPEVKDFYHFTIDDFKLINYKHGDKLLFE
+                     VAV"
+                     /cds_id="0_-1_2552"
+                     /domainator_SPR="Thymidylat_synt (Thymidylate synthase,
+                     4.1e-93, 307.3)"
+     gene            join(2423..2552,1..710)
+                     /locus_tag="spr_1"
+     Domainator      join(2438..2552,1..707)
+                     /program="hmmsearch"
+                     /database="SPR"
+                     /description="Thymidylate synthase"
+                     /evalue="4.1e-93"
+                     /score="307.3"
+                     /name="Thymidylat_synt"
+                     /cds_id="0_-1_2552"
+     CDS             710..1231
+                     /locus_tag="spr_2"
+                     /EC_number="1.5.1.3"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="dihydrofolate reductase"
+                     /protein_id="UNY48523.1"
+                     /db_xref="GO:0004146"
+                     /translation="MLSLIACCDKTLAIGHQNKLLYHVPADMKHFKEKTEGKICIQGR
+                     STYESIIGMTGKPLQNRRNIILTRDQNFKPDYSSFVYHSIEEVLKLIQGQVNTDEEVM
+                     VIGGSMIYKAFLPYADKVYLTIVDSESNEADSYFPMLDDHWKVTNKQHNEADEKNKYN
+                     YSFLTFENKYRQK"
+                     /cds_id="1321_-1_1843"
+                     /domainator_SPR="DHFR_1 (Dihydrofolate reductase, 5.6e-50,
+                     165.1)"
+     gene            710..1231
+                     /locus_tag="spr_2"
+     Domainator      710..1213
+                     /program="hmmsearch"
+                     /database="SPR"
+                     /description="Dihydrofolate reductase"
+                     /evalue="5.6e-50"
+                     /score="165.1"
+                     /name="DHFR_1"
+                     /cds_id="1321_-1_1843"
+     CDS             1402..1695
+                     /locus_tag="spr_191"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="UNY48712.1"
+                     /translation="MLKDKNKLLKSIEKINKLEEGLSLFEEGDEEYLSVLVKIQGLYD
+                     EISDTALECFKEMTTKIRKTGQKRIVKGIDQLPYTIKENIADQVNELKGELFG"
+                     /cds_id="857_-1_1151"
+     gene            1402..1695
+                     /locus_tag="spr_191"
+     CDS             1692..1907
+                     /locus_tag="spr_192"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="UNY48713.1"
+                     /translation="MKANINGIEFEGTPEEINELINLHGYKNMLQDDLLMRNFEQLSR
+                     VNRSRPTNLFKVGDYDFHDSPKCLIIT"
+                     /cds_id="645_-1_861"
+     gene            1692..1907
+                     /locus_tag="spr_192"
+     CDS             1950..2366
+                     /locus_tag="spr_193"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="UNY48714.1"
+                     /translation="MFIIAYLTLFLAAYLIALNINEVRLIIRGESDTYRKVKSVLDNS
+                     TIENVKRNKNLIYLFTLLKGISFIVPLAYIGLVMHDNILMLAWTAVSLIYVVLRMFKV
+                     LDALEGERIKQNTYFYLLFVCGNFLFVVFYLADIFV"
+                     /cds_id="186_-1_603"
+     gene            1950..2366
+                     /locus_tag="spr_193"
+ORIGIN      
+        1 ttagtaagca aatgagattc gacaactcag aggttccgat tttaacgaca aaaaaagttg
+       61 cctggaaaac agccattaaa gagttgctct ggatttggca gctgaaatct aatgatgtta
+      121 atgatttaaa caagatgggc gtacatattt gggatcagtg gaaacaagaa gacggcacca
+      181 tcggacatgc atatggattt cagctgggga agaaaaacag aagtctaaat ggagaaaaag
+      241 tggatcaggt agactatctt cttcatcaat tgaagaacaa cccgtcttca cgcagacaca
+      301 ttacaatgct gtggaatcct gatgatttag actcaatggc cttaacgcca tgtgtatacg
+      361 aaactcaatg gtatgttaag caaggtaagc tccacctcga ggtaagagca cggagcaatg
+      421 atatggcgtt ggggaatcca ttcaatgtat tccagtacaa tgtgttgcag cgcatgattg
+      481 ctcaagtgac tggttataag cttggtgaat atatctttaa cattggggat tgccatgtgt
+      541 acacacgtca tatagacaat ttgaaaattc aaatggaaag agaacagttt gaagcacctg
+      601 aactatggat caatcctgaa gtgaaagatt tttatcattt tacaatcgat gatttcaaat
+      661 taatcaacta taaacatggg gacaagctat tatttgaggt agcggtttaa tgctatctct
+      721 tattgcttgc tgtgataaaa ctctggccat tggacatcaa aacaaattac tgtatcatgt
+      781 gcctgctgac atgaaacatt tcaaagaaaa aactgagggg aaaatatgta ttcaaggaag
+      841 atcaacatac gaatcaatta tcggtatgac aggtaagcct ctacagaata gaaggaatat
+      901 tatacttact agggatcaga actttaagcc agattattca tcctttgtgt atcattcaat
+      961 tgaggaggtc ttaaagctca ttcaaggtca agttaacact gatgaggaag tgatggtgat
+     1021 agggggaagt atgatttaca aagcattctt gccctacgct gataaagtgt atttgacaat
+     1081 tgttgattca gagtcaaatg aagcagattc atatttccca atgttagatg atcattggaa
+     1141 agtgactaat aaacaacata atgaagccga tgaaaagaac aaatacaatt attccttcct
+     1201 aacttttgaa aataaatata gacaaaaata aaaaatatgt ataatataat aacaagaggt
+     1261 tgatgaaata gcagtttttt atttaaaata cattgaacat atgagacaag tcgctgagta
+     1321 cgagaaagac ctgagataca aaagtgcagc aactaatttc ttaaagatga tcgaccataa
+     1381 ttaaaatacg cgggtgatta attgttaaag gataaaaata aattattaaa gagtattgaa
+     1441 aagatcaaca aacttgaaga agggttgtca ctatttgaag aaggtgacga agaatattta
+     1501 agtgtattag tgaaaattca ggggctatat gatgaaatct cagatactgc tttagagtgt
+     1561 tttaaagaga tgactacaaa aatcaggaaa actggtcaga aacggattgt aaaagggatt
+     1621 gatcagttgc catatacaat taaagaaaac attgctgatc aagtgaatga attaaagggg
+     1681 gagctttttg gatgaaagca aatattaatg gtattgaatt tgagggtacg cccgaagaaa
+     1741 taaacgaatt gattaattta catggatata agaatatgct gcaagatgat ttattaatga
+     1801 ggaactttga acagcttagc cgagtgaata gatcaagacc gactaattta tttaaagtag
+     1861 gggattatga tttccatgac tcgcctaaat gcttaattat cacttgatta gagtagtaat
+     1921 aaatcaaaag acaaatataa aataaggaga tgtttattat agcgtatcta actttatttc
+     1981 tagcagctta tctaattgca ttaaacatta atgaggtcag attgattatt cgaggagaaa
+     2041 gtgatacata tagaaaagta aagagtgtgc tcgataattc aactattgaa aacgtgaaac
+     2101 gaaataagaa tttgatttac ctgtttactt tgctcaaggg aatatctttc attgtccctc
+     2161 tggcttatat tggattagtt atgcacgata acatcctaat gcttgcgtgg acagcagttt
+     2221 cacttattta tgttgtcctt agaatgttca aagttttaga tgcattagaa ggtgaaagaa
+     2281 tcaagcaaaa cacatatttt tacttgttat ttgtttgtgg gaattttctt tttgttgtat
+     2341 tttatttggc agatatattc gtataaaata tttaattaat gctttgcttt ttcaaatact
+     2401 atttccaaaa ggactgagaa tcatgactca attcgataaa caatacagtt caatcataaa
+     2461 tgacattata aataatggaa tctcagacga agaatttcaa gtaagaacaa agtgggactc
+     2521 agatggaaca ccggctcata cactaagcgt ga
+//

@@ -1,0 +1,19 @@
+Bootstrap: docker
+From: continuumio/miniconda3:23.10.0-1
+
+%files
+./src /opt/domainator/src
+./conda_env.yml /opt/domainator
+./test /opt/domainator/test
+./pyproject.toml /opt/domainator
+
+
+%post
+
+git clone https://github.com/seanrjohnson/esmologs.git
+cd esmologs
+
+conda env update --name base --file conda_env.yml
+
+cd /opt/domainator
+conda env update --name base --file conda_env.yml

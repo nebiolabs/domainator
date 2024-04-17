@@ -1,0 +1,358 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graph label="FeSOD_dist.dense.hdf5_out" xmlns="http://www.cs.rpi.edu/XGMML">
+  <node id="n0" label="n0">
+    <att type="string" name="Description" value="FeSOD_A0A1F4ZT98|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A1F4ZT98" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.097440548" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n1" label="n1">
+    <att type="string" name="Description" value="FeSOD_A0A067LT26|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="2" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A067LT26" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.828329655" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+  </node>
+  <node id="n2" label="n2">
+    <att type="string" name="Description" value="FeSOD_A0A2E1RF15|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A2E1RF15" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.340114417" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n3" label="n3">
+    <att type="string" name="Description" value="FeSOD_A0A538G8K1|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A538G8K1" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.021717089" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n4" label="n4">
+    <att type="string" name="Description" value="FeSOD_A0A6L8W9C4|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A6L8W9C4" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.05147778" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n5" label="n5">
+    <att type="string" name="Description" value="FeSOD_A0A2H0YVA1|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A2H0YVA1" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.08286451" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n6" label="n6">
+    <att type="string" name="Description" value="FeSOD_R7J7P3|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="R7J7P3" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.029610013" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n7" label="n7">
+    <att type="string" name="Description" value="FeSOD_B8LFE6|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="2" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="B8LFE6" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.433221718" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+  </node>
+  <node id="n8" label="n8">
+    <att type="string" name="Description" value="FeSOD_A0A1C0AS03|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="2" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A1C0AS03" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.59654186" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+  </node>
+  <node id="n9" label="n9">
+    <att type="string" name="Description" value="FeSOD_A0A2M8Q2V9|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A2M8Q2V9" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.146398972" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n10" label="n10">
+    <att type="string" name="Description" value="FeSOD_A0A2E1VW30|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A2E1VW30" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.450472955" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n11" label="n11">
+    <att type="string" name="Description" value="FeSOD_A0A1V4UH29|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="2" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A1V4UH29" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.549335033" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+  </node>
+  <node id="n12" label="n12">
+    <att type="string" name="Description" value="FeSOD_A0A7V9SPC9|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="2" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A7V9SPC9" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.129515554" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+  </node>
+  <node id="n13" label="n13">
+    <att type="string" name="Description" value="FeSOD_R7F5H2|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="3" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="R7F5H2" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.441960291" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#ff7f0e" />
+  </node>
+  <node id="n14" label="n14">
+    <att type="string" name="Description" value="FeSOD_A0A2N5YS14|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A2N5YS14" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="0" />
+    <att type="real" name="expression level" value="0.91315881" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n15" label="n15">
+    <att type="string" name="Description" value="FeSOD_A0A0F6MY72|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A0F6MY72" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.341330749" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n16" label="n16">
+    <att type="string" name="Description" value="FeSOD_A0A060HP82|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A060HP82" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.602844258" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n17" label="n17">
+    <att type="string" name="Description" value="FeSOD_A0A4P7WS39|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A4P7WS39" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.468473632" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <node id="n18" label="n18">
+    <att type="string" name="Description" value="FeSOD_A0A076JJX0|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="2" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="A0A076JJX0" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.342002723" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+  </node>
+  <node id="n19" label="n19">
+    <att type="string" name="Description" value="FeSOD_G8R729|unreviewed|Superoxide" />
+    <att type="integer" name="SSN_cluster" value="1" />
+    <att type="string" name="Type" value="FeSOD" />
+    <att type="string" name="Accession" value="G8R729" />
+    <att type="string" name="Status" value="unreviewed" />
+    <att type="string" name="Substrate" value="Superoxide" />
+    <att type="integer" name="active" value="1" />
+    <att type="real" name="expression level" value="0.265199983" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+  </node>
+  <edge id="e0" label="e0" source="n0" target="n3">
+    <att type="real" name="SSN_SCORE" value="199.0" />
+  </edge>
+  <edge id="e1" label="e1" source="n0" target="n5">
+    <att type="real" name="SSN_SCORE" value="191.0" />
+  </edge>
+  <edge id="e2" label="e2" source="n0" target="n9">
+    <att type="real" name="SSN_SCORE" value="216.0" />
+  </edge>
+  <edge id="e3" label="e3" source="n0" target="n19">
+    <att type="real" name="SSN_SCORE" value="187.0" />
+  </edge>
+  <edge id="e4" label="e4" source="n1" target="n7">
+    <att type="real" name="SSN_SCORE" value="267.0" />
+  </edge>
+  <edge id="e5" label="e5" source="n1" target="n8">
+    <att type="real" name="SSN_SCORE" value="275.0" />
+  </edge>
+  <edge id="e6" label="e6" source="n1" target="n12">
+    <att type="real" name="SSN_SCORE" value="244.0" />
+  </edge>
+  <edge id="e7" label="e7" source="n1" target="n18">
+    <att type="real" name="SSN_SCORE" value="271.0" />
+  </edge>
+  <edge id="e8" label="e8" source="n2" target="n4">
+    <att type="real" name="SSN_SCORE" value="240.0" />
+  </edge>
+  <edge id="e9" label="e9" source="n2" target="n10">
+    <att type="real" name="SSN_SCORE" value="233.0" />
+  </edge>
+  <edge id="e10" label="e10" source="n2" target="n14">
+    <att type="real" name="SSN_SCORE" value="233.0" />
+  </edge>
+  <edge id="e11" label="e11" source="n2" target="n17">
+    <att type="real" name="SSN_SCORE" value="234.0" />
+  </edge>
+  <edge id="e12" label="e12" source="n9" target="n3">
+    <att type="real" name="SSN_SCORE" value="279.0" />
+  </edge>
+  <edge id="e13" label="e13" source="n16" target="n3">
+    <att type="real" name="SSN_SCORE" value="202.0" />
+  </edge>
+  <edge id="e14" label="e14" source="n3" target="n19">
+    <att type="real" name="SSN_SCORE" value="231.0" />
+  </edge>
+  <edge id="e15" label="e15" source="n10" target="n4">
+    <att type="real" name="SSN_SCORE" value="258.0" />
+  </edge>
+  <edge id="e16" label="e16" source="n14" target="n4">
+    <att type="real" name="SSN_SCORE" value="237.0" />
+  </edge>
+  <edge id="e17" label="e17" source="n15" target="n4">
+    <att type="real" name="SSN_SCORE" value="275.0" />
+  </edge>
+  <edge id="e18" label="e18" source="n5" target="n3">
+    <att type="real" name="SSN_SCORE" value="184.0" />
+  </edge>
+  <edge id="e19" label="e19" source="n5" target="n9">
+    <att type="real" name="SSN_SCORE" value="208.0" />
+  </edge>
+  <edge id="e20" label="e20" source="n5" target="n19">
+    <att type="real" name="SSN_SCORE" value="192.0" />
+  </edge>
+  <edge id="e21" label="e21" source="n2" target="n6">
+    <att type="real" name="SSN_SCORE" value="192.0" />
+  </edge>
+  <edge id="e22" label="e22" source="n10" target="n6">
+    <att type="real" name="SSN_SCORE" value="199.0" />
+  </edge>
+  <edge id="e23" label="e23" source="n14" target="n6">
+    <att type="real" name="SSN_SCORE" value="209.0" />
+  </edge>
+  <edge id="e24" label="e24" source="n17" target="n6">
+    <att type="real" name="SSN_SCORE" value="191.0" />
+  </edge>
+  <edge id="e25" label="e25" source="n8" target="n7">
+    <att type="real" name="SSN_SCORE" value="264.0" />
+  </edge>
+  <edge id="e26" label="e26" source="n12" target="n7">
+    <att type="real" name="SSN_SCORE" value="216.0" />
+  </edge>
+  <edge id="e27" label="e27" source="n18" target="n7">
+    <att type="real" name="SSN_SCORE" value="238.0" />
+  </edge>
+  <edge id="e28" label="e28" source="n8" target="n12">
+    <att type="real" name="SSN_SCORE" value="234.0" />
+  </edge>
+  <edge id="e29" label="e29" source="n18" target="n8">
+    <att type="real" name="SSN_SCORE" value="248.0" />
+  </edge>
+  <edge id="e30" label="e30" source="n2" target="n9">
+    <att type="real" name="SSN_SCORE" value="214.0" />
+  </edge>
+  <edge id="e31" label="e31" source="n16" target="n9">
+    <att type="real" name="SSN_SCORE" value="226.0" />
+  </edge>
+  <edge id="e32" label="e32" source="n9" target="n19">
+    <att type="real" name="SSN_SCORE" value="271.0" />
+  </edge>
+  <edge id="e33" label="e33" source="n10" target="n14">
+    <att type="real" name="SSN_SCORE" value="222.0" />
+  </edge>
+  <edge id="e34" label="e34" source="n15" target="n10">
+    <att type="real" name="SSN_SCORE" value="243.0" />
+  </edge>
+  <edge id="e35" label="e35" source="n11" target="n7">
+    <att type="real" name="SSN_SCORE" value="177.0" />
+  </edge>
+  <edge id="e36" label="e36" source="n18" target="n12">
+    <att type="real" name="SSN_SCORE" value="219.0" />
+  </edge>
+  <edge id="e37" label="e37" source="n15" target="n14">
+    <att type="real" name="SSN_SCORE" value="224.0" />
+  </edge>
+  <edge id="e38" label="e38" source="n15" target="n2">
+    <att type="real" name="SSN_SCORE" value="231.0" />
+  </edge>
+  <edge id="e39" label="e39" source="n16" target="n0">
+    <att type="real" name="SSN_SCORE" value="177.0" />
+  </edge>
+  <edge id="e40" label="e40" source="n16" target="n19">
+    <att type="real" name="SSN_SCORE" value="213.0" />
+  </edge>
+  <edge id="e41" label="e41" source="n17" target="n4">
+    <att type="real" name="SSN_SCORE" value="205.0" />
+  </edge>
+  <edge id="e42" label="e42" source="n10" target="n17">
+    <att type="real" name="SSN_SCORE" value="203.0" />
+  </edge>
+  <edge id="e43" label="e43" source="n15" target="n17">
+    <att type="real" name="SSN_SCORE" value="208.0" />
+  </edge>
+  <edge id="e44" label="e44" source="n2" target="n19">
+    <att type="real" name="SSN_SCORE" value="218.0" />
+  </edge>
+</graph>

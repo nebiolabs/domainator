@@ -1,0 +1,2628 @@
+LOCUS       pDONR201_1_3678:1265rc  2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..2412)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(1..762)
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      complement(25..723)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      complement(31..384)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             1413..2072
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domain_Search   1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1917..2069
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             2287..2412
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      2287..2409
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+ORIGIN
+        1 ttagaaaaac tcatcgagca tcaaatgaaa ctgcaattta ttcatatcag gattatcaat
+       61 accatatttt tgaaaaagcc gtttctgtaa tgaaggagaa aactcaccga ggcagttcca
+      121 taggatggca agatcctggt atcggtctgc gattccgact cgtccaacat caatacaacc
+      181 tattaatttc ccctcgtcaa aaataaggtt atcaagtgag aaatcaccat gagtgacgac
+      241 tgaatccggt gagaatggca aaagtttatg catttctttc cagacttgtt caacaggcca
+      301 gccattacgc tcgtcatcaa aatcactcgc atcaaccaaa ccgttattca ttcgtgattg
+      361 cgcctgagcg agacgaaata cgcgatcgct gttaaaagga caattacaaa caggaatcga
+      421 atgcaaccgg cgcaggaaca ctgccagcgc atcaacaata ttttcacctg aatcaggata
+      481 ttcttctaat acctggaatg ctgtttttcc ggggatcgca gtggtgagta accatgcatc
+      541 atcaggagta cggataaaat gcttgatggt cggaagaggc ataaattccg tcagccagtt
+      601 tagtctgacc atctcatctg taacatcatt ggcaacgcta cctttgccat gtttcagaaa
+      661 caactctggc gcatcgggct tcccatacaa gcgatagatt gtcgcacctg attgcccgac
+      721 attatcgcga gcccatttat acccatataa atcagcatcc atgttggaat ttaatcgcgg
+      781 cctcgacgtt tcccgttgaa tatggctcat aacacccctt gtattactgt ttatgtaagc
+      841 agacagtttt attgttcatg atgatatatt tttatcttgt gcaatgtaac atcagagatt
+      901 ttgagacacg ggccagagct gcagctggat ggcaaataat gattttattt tgactgatag
+      961 tgacctgttc gttgcaacaa attgataagc aatgctttct tataatgccc actttgtaca
+     1021 agaaagctga acgagaaacg taaaatgata taaatatcaa tatattaaat tagattttgc
+     1081 ataaaaaaca gactacataa tactgtaaaa cacaacatat ccagtcacta tgaatcaact
+     1141 acttagatgg tattagtgac ctgtagtcga ctaagttggc agcatcaccc gacgcacttt
+     1201 gcgccgaata aatacctgtg acggaagatc acttcgcaga ataaataaat cctggtgtcc
+     1261 ctgttgatac cgggaagccc tgggccaact tttggcgaaa atgagacgtt gatcggcacg
+     1321 taagaggttc caactttcac cataatgaaa taagatcact accgggcgta ttttttgagt
+     1381 tatcgagatt ttcaggagct aaggaagcta aaatggagaa aaaaatcact ggatatacca
+     1441 ccgttgatat atcccaatgg catcgtaaag aacattttga ggcatttcag tcagttgctc
+     1501 aatgtaccta taaccagacc gttcagctgg atattacggc ctttttaaag accgtaaaga
+     1561 aaaataagca caagttttat ccggccttta ttcacattct tgcccgcctg atgaatgctc
+     1621 atccggaatt ccgtatggca atgaaagacg gtgagctggt gatatgggat agtgttcacc
+     1681 cttgttacac cgttttccat gagcaaactg aaacgttttc atcgctctgg agtgaatacc
+     1741 acgacgattt ccggcagttt ctacacatat attcgcaaga tgtggcgtgt tacggtgaaa
+     1801 acctggccta tttccctaaa gggtttattg agaatatgtt tttcgtctca gccaatccct
+     1861 gggtgagttt caccagtttt gatttaaacg tggccaatat ggacaacttc ttcgcccccg
+     1921 ttttcaccat gggcaaatat tatacgcaag gcgacaaggt gctgatgccg ctggcgattc
+     1981 aggttcatca tgccgtctgt gatggcttcc atgtcggcag aatgcttaat gaattacaac
+     2041 agtactgcga tgagtggcag ggcggggcgt aatcgcgtgg atccggctta ctaaaagcca
+     2101 gataacagta tgcgtatttg cgcgctgatt tttgcggtat aagaatatat actgatatgt
+     2161 atacccgaag tatgtcaaaa agaggtgtgc tatgaagcag cgtattacag tgacagttga
+     2221 cagcgacagc tatcagttgc tcaaggcata tatgatgtca atatctccgg tctggtaagc
+     2281 acaaccatgc agaatgaagc ccgtcgtctg cgtgccgaac gctggaaagc ggaaaatcag
+     2341 gaagggatgg ctgaggtcgc ccggtttatt gaaatgaacg gctcttttgc tgacgagaac
+     2401 agggactggt gannnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_2_3678:1265rc  2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..2412)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(1..762)
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      complement(25..723)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      complement(31..384)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             1413..2072
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domain_Search   1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1917..2069
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             2287..2412
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      2287..2409
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+ORIGIN
+        1 ttagaaaaac tcatcgagca tcaaatgaaa ctgcaattta ttcatatcag gattatcaat
+       61 accatatttt tgaaaaagcc gtttctgtaa tgaaggagaa aactcaccga ggcagttcca
+      121 taggatggca agatcctggt atcggtctgc gattccgact cgtccaacat caatacaacc
+      181 tattaatttc ccctcgtcaa aaataaggtt atcaagtgag aaatcaccat gagtgacgac
+      241 tgaatccggt gagaatggca aaagtttatg catttctttc cagacttgtt caacaggcca
+      301 gccattacgc tcgtcatcaa aatcactcgc atcaaccaaa ccgttattca ttcgtgattg
+      361 cgcctgagcg agacgaaata cgcgatcgct gttaaaagga caattacaaa caggaatcga
+      421 atgcaaccgg cgcaggaaca ctgccagcgc atcaacaata ttttcacctg aatcaggata
+      481 ttcttctaat acctggaatg ctgtttttcc ggggatcgca gtggtgagta accatgcatc
+      541 atcaggagta cggataaaat gcttgatggt cggaagaggc ataaattccg tcagccagtt
+      601 tagtctgacc atctcatctg taacatcatt ggcaacgcta cctttgccat gtttcagaaa
+      661 caactctggc gcatcgggct tcccatacaa gcgatagatt gtcgcacctg attgcccgac
+      721 attatcgcga gcccatttat acccatataa atcagcatcc atgttggaat ttaatcgcgg
+      781 cctcgacgtt tcccgttgaa tatggctcat aacacccctt gtattactgt ttatgtaagc
+      841 agacagtttt attgttcatg atgatatatt tttatcttgt gcaatgtaac atcagagatt
+      901 ttgagacacg ggccagagct gcagctggat ggcaaataat gattttattt tgactgatag
+      961 tgacctgttc gttgcaacaa attgataagc aatgctttct tataatgccc actttgtaca
+     1021 agaaagctga acgagaaacg taaaatgata taaatatcaa tatattaaat tagattttgc
+     1081 ataaaaaaca gactacataa tactgtaaaa cacaacatat ccagtcacta tgaatcaact
+     1141 acttagatgg tattagtgac ctgtagtcga ctaagttggc agcatcaccc gacgcacttt
+     1201 gcgccgaata aatacctgtg acggaagatc acttcgcaga ataaataaat cctggtgtcc
+     1261 ctgttgatac cgggaagccc tgggccaact tttggcgaaa atgagacgtt gatcggcacg
+     1321 taagaggttc caactttcac cataatgaaa taagatcact accgggcgta ttttttgagt
+     1381 tatcgagatt ttcaggagct aaggaagcta aaatggagaa aaaaatcact ggatatacca
+     1441 ccgttgatat atcccaatgg catcgtaaag aacattttga ggcatttcag tcagttgctc
+     1501 aatgtaccta taaccagacc gttcagctgg atattacggc ctttttaaag accgtaaaga
+     1561 aaaataagca caagttttat ccggccttta ttcacattct tgcccgcctg atgaatgctc
+     1621 atccggaatt ccgtatggca atgaaagacg gtgagctggt gatatgggat agtgttcacc
+     1681 cttgttacac cgttttccat gagcaaactg aaacgttttc atcgctctgg agtgaatacc
+     1741 acgacgattt ccggcagttt ctacacatat attcgcaaga tgtggcgtgt tacggtgaaa
+     1801 acctggccta tttccctaaa gggtttattg agaatatgtt tttcgtctca gccaatccct
+     1861 gggtgagttt caccagtttt gatttaaacg tggccaatat ggacaacttc ttcgcccccg
+     1921 ttttcaccat gggcaaatat tatacgcaag gcgacaaggt gctgatgccg ctggcgattc
+     1981 aggttcatca tgccgtctgt gatggcttcc atgtcggcag aatgcttaat gaattacaac
+     2041 agtactgcga tgagtggcag ggcggggcgt aatcgcgtgg atccggctta ctaaaagcca
+     2101 gataacagta tgcgtatttg cgcgctgatt tttgcggtat aagaatatat actgatatgt
+     2161 atacccgaag tatgtcaaaa agaggtgtgc tatgaagcag cgtattacag tgacagttga
+     2221 cagcgacagc tatcagttgc tcaaggcata tatgatgtca atatctccgg tctggtaagc
+     2281 acaaccatgc agaatgaagc ccgtcgtctg cgtgccgaac gctggaaagc ggaaaatcag
+     2341 gaagggatgg ctgaggtcgc ccggtttatt gaaatgaacg gctcttttgc tgacgagaac
+     2401 agggactggt gannnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_3_3678:1265rc  2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..2412)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(1..762)
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      complement(25..723)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      complement(31..384)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             1413..2072
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domain_Search   1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1917..2069
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             2287..2412
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      2287..2409
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+ORIGIN
+        1 ttagaaaaac tcatcgagca tcaaatgaaa ctgcaattta ttcatatcag gattatcaat
+       61 accatatttt tgaaaaagcc gtttctgtaa tgaaggagaa aactcaccga ggcagttcca
+      121 taggatggca agatcctggt atcggtctgc gattccgact cgtccaacat caatacaacc
+      181 tattaatttc ccctcgtcaa aaataaggtt atcaagtgag aaatcaccat gagtgacgac
+      241 tgaatccggt gagaatggca aaagtttatg catttctttc cagacttgtt caacaggcca
+      301 gccattacgc tcgtcatcaa aatcactcgc atcaaccaaa ccgttattca ttcgtgattg
+      361 cgcctgagcg agacgaaata cgcgatcgct gttaaaagga caattacaaa caggaatcga
+      421 atgcaaccgg cgcaggaaca ctgccagcgc atcaacaata ttttcacctg aatcaggata
+      481 ttcttctaat acctggaatg ctgtttttcc ggggatcgca gtggtgagta accatgcatc
+      541 atcaggagta cggataaaat gcttgatggt cggaagaggc ataaattccg tcagccagtt
+      601 tagtctgacc atctcatctg taacatcatt ggcaacgcta cctttgccat gtttcagaaa
+      661 caactctggc gcatcgggct tcccatacaa gcgatagatt gtcgcacctg attgcccgac
+      721 attatcgcga gcccatttat acccatataa atcagcatcc atgttggaat ttaatcgcgg
+      781 cctcgacgtt tcccgttgaa tatggctcat aacacccctt gtattactgt ttatgtaagc
+      841 agacagtttt attgttcatg atgatatatt tttatcttgt gcaatgtaac atcagagatt
+      901 ttgagacacg ggccagagct gcagctggat ggcaaataat gattttattt tgactgatag
+      961 tgacctgttc gttgcaacaa attgataagc aatgctttct tataatgccc actttgtaca
+     1021 agaaagctga acgagaaacg taaaatgata taaatatcaa tatattaaat tagattttgc
+     1081 ataaaaaaca gactacataa tactgtaaaa cacaacatat ccagtcacta tgaatcaact
+     1141 acttagatgg tattagtgac ctgtagtcga ctaagttggc agcatcaccc gacgcacttt
+     1201 gcgccgaata aatacctgtg acggaagatc acttcgcaga ataaataaat cctggtgtcc
+     1261 ctgttgatac cgggaagccc tgggccaact tttggcgaaa atgagacgtt gatcggcacg
+     1321 taagaggttc caactttcac cataatgaaa taagatcact accgggcgta ttttttgagt
+     1381 tatcgagatt ttcaggagct aaggaagcta aaatggagaa aaaaatcact ggatatacca
+     1441 ccgttgatat atcccaatgg catcgtaaag aacattttga ggcatttcag tcagttgctc
+     1501 aatgtaccta taaccagacc gttcagctgg atattacggc ctttttaaag accgtaaaga
+     1561 aaaataagca caagttttat ccggccttta ttcacattct tgcccgcctg atgaatgctc
+     1621 atccggaatt ccgtatggca atgaaagacg gtgagctggt gatatgggat agtgttcacc
+     1681 cttgttacac cgttttccat gagcaaactg aaacgttttc atcgctctgg agtgaatacc
+     1741 acgacgattt ccggcagttt ctacacatat attcgcaaga tgtggcgtgt tacggtgaaa
+     1801 acctggccta tttccctaaa gggtttattg agaatatgtt tttcgtctca gccaatccct
+     1861 gggtgagttt caccagtttt gatttaaacg tggccaatat ggacaacttc ttcgcccccg
+     1921 ttttcaccat gggcaaatat tatacgcaag gcgacaaggt gctgatgccg ctggcgattc
+     1981 aggttcatca tgccgtctgt gatggcttcc atgtcggcag aatgcttaat gaattacaac
+     2041 agtactgcga tgagtggcag ggcggggcgt aatcgcgtgg atccggctta ctaaaagcca
+     2101 gataacagta tgcgtatttg cgcgctgatt tttgcggtat aagaatatat actgatatgt
+     2161 atacccgaag tatgtcaaaa agaggtgtgc tatgaagcag cgtattacag tgacagttga
+     2221 cagcgacagc tatcagttgc tcaaggcata tatgatgtca atatctccgg tctggtaagc
+     2281 acaaccatgc agaatgaagc ccgtcgtctg cgtgccgaac gctggaaagc ggaaaatcag
+     2341 gaagggatgg ctgaggtcgc ccggtttatt gaaatgaacg gctcttttgc tgacgagaac
+     2401 agggactggt gannnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_4_3678:1265rc  2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..2412)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(1..762)
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      complement(25..723)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      complement(31..384)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             1413..2072
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domain_Search   1434..2039
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1917..2069
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             2287..2412
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      2287..2409
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+ORIGIN
+        1 ttagaaaaac tcatcgagca tcaaatgaaa ctgcaattta ttcatatcag gattatcaat
+       61 accatatttt tgaaaaagcc gtttctgtaa tgaaggagaa aactcaccga ggcagttcca
+      121 taggatggca agatcctggt atcggtctgc gattccgact cgtccaacat caatacaacc
+      181 tattaatttc ccctcgtcaa aaataaggtt atcaagtgag aaatcaccat gagtgacgac
+      241 tgaatccggt gagaatggca aaagtttatg catttctttc cagacttgtt caacaggcca
+      301 gccattacgc tcgtcatcaa aatcactcgc atcaaccaaa ccgttattca ttcgtgattg
+      361 cgcctgagcg agacgaaata cgcgatcgct gttaaaagga caattacaaa caggaatcga
+      421 atgcaaccgg cgcaggaaca ctgccagcgc atcaacaata ttttcacctg aatcaggata
+      481 ttcttctaat acctggaatg ctgtttttcc ggggatcgca gtggtgagta accatgcatc
+      541 atcaggagta cggataaaat gcttgatggt cggaagaggc ataaattccg tcagccagtt
+      601 tagtctgacc atctcatctg taacatcatt ggcaacgcta cctttgccat gtttcagaaa
+      661 caactctggc gcatcgggct tcccatacaa gcgatagatt gtcgcacctg attgcccgac
+      721 attatcgcga gcccatttat acccatataa atcagcatcc atgttggaat ttaatcgcgg
+      781 cctcgacgtt tcccgttgaa tatggctcat aacacccctt gtattactgt ttatgtaagc
+      841 agacagtttt attgttcatg atgatatatt tttatcttgt gcaatgtaac atcagagatt
+      901 ttgagacacg ggccagagct gcagctggat ggcaaataat gattttattt tgactgatag
+      961 tgacctgttc gttgcaacaa attgataagc aatgctttct tataatgccc actttgtaca
+     1021 agaaagctga acgagaaacg taaaatgata taaatatcaa tatattaaat tagattttgc
+     1081 ataaaaaaca gactacataa tactgtaaaa cacaacatat ccagtcacta tgaatcaact
+     1141 acttagatgg tattagtgac ctgtagtcga ctaagttggc agcatcaccc gacgcacttt
+     1201 gcgccgaata aatacctgtg acggaagatc acttcgcaga ataaataaat cctggtgtcc
+     1261 ctgttgatac cgggaagccc tgggccaact tttggcgaaa atgagacgtt gatcggcacg
+     1321 taagaggttc caactttcac cataatgaaa taagatcact accgggcgta ttttttgagt
+     1381 tatcgagatt ttcaggagct aaggaagcta aaatggagaa aaaaatcact ggatatacca
+     1441 ccgttgatat atcccaatgg catcgtaaag aacattttga ggcatttcag tcagttgctc
+     1501 aatgtaccta taaccagacc gttcagctgg atattacggc ctttttaaag accgtaaaga
+     1561 aaaataagca caagttttat ccggccttta ttcacattct tgcccgcctg atgaatgctc
+     1621 atccggaatt ccgtatggca atgaaagacg gtgagctggt gatatgggat agtgttcacc
+     1681 cttgttacac cgttttccat gagcaaactg aaacgttttc atcgctctgg agtgaatacc
+     1741 acgacgattt ccggcagttt ctacacatat attcgcaaga tgtggcgtgt tacggtgaaa
+     1801 acctggccta tttccctaaa gggtttattg agaatatgtt tttcgtctca gccaatccct
+     1861 gggtgagttt caccagtttt gatttaaacg tggccaatat ggacaacttc ttcgcccccg
+     1921 ttttcaccat gggcaaatat tatacgcaag gcgacaaggt gctgatgccg ctggcgattc
+     1981 aggttcatca tgccgtctgt gatggcttcc atgtcggcag aatgcttaat gaattacaac
+     2041 agtactgcga tgagtggcag ggcggggcgt aatcgcgtgg atccggctta ctaaaagcca
+     2101 gataacagta tgcgtatttg cgcgctgatt tttgcggtat aagaatatat actgatatgt
+     2161 atacccgaag tatgtcaaaa agaggtgtgc tatgaagcag cgtattacag tgacagttga
+     2221 cagcgacagc tatcagttgc tcaaggcata tatgatgtca atatctccgg tctggtaagc
+     2281 acaaccatgc agaatgaagc ccgtcgtctg cgtgccgaac gctggaaagc ggaaaatcag
+     2341 gaagggatgg ctgaggtcgc ccggtttatt gaaatgaacg gctcttttgc tgacgagaac
+     2401 agggactggt gannnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_1_1392:1rc     2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1286..2675)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1286..1411
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1286..1408
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1413..1718
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     Domain_Search   1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     CDS             complement(2571..2675)
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      541 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      601 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      661 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      721 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      781 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      841 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      901 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      961 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1021 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1081 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1141 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1201 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1261 nnnnnnnnnn nnnnnnnnnn nnnnnatgca gaatgaagcc cgtcgtctgc gtgccgaacg
+     1321 ctggaaagcg gaaaatcagg aagggatggc tgaggtcgcc cggtttattg aaatgaacgg
+     1381 ctcttttgct gacgagaaca gggactggtg aaatgcagtt taaggtttac acctataaaa
+     1441 gagagagccg ttatcgtctg tttgtggatg tacagagtga tattattgac acgcccgggc
+     1501 gacggatggt gatccccctg gccagtgcac gtctgctgtc agataaagtc tcccgtgaac
+     1561 tttacccggt ggtgcatatc ggggatgaaa gctggcgcat gatgaccacc gatatggcca
+     1621 gtgtgccggt ctccgttatc ggggaagaag tggctgatct cagccaccgc gaaaatgaca
+     1681 tcaaaaacgc cattaacctg atgttctggg gaatataaat gtcaggctcc cttatacaca
+     1741 gccagtctgc aggtcgatac agtagaaatt acagaaactt tatcacgttt agtaagtata
+     1801 gaggctgaaa atccagatga agccgaacga cttgtaagag aaaagtataa gagttgtgaa
+     1861 attgttcttg atgcagatga ttttcaggac tatgacacta gcgtatatga ataggtagat
+     1921 gtttttattt tgtcacacaa aaaagaggct cgcacctctt tttcttattt ctttttatga
+     1981 tttaatacgg cattgaggac aatagcgagt aggctggata cgacgattcc gtttgagaag
+     2041 aacatttgga aggctgtcgg tcgactaagt tggcagcatc acccgaagaa catttggaag
+     2101 gctgtcggtc gactacaggt cactaatacc atctaagtag ttgattcata gtgactggat
+     2161 atgttgtgtt ttacagtatt atgtagtctg ttttttatgc aaaatctaat ttaatatatt
+     2221 gatatttata tcattttacg tttctcgttc tgcttttttg tacaaacttg gcattataaa
+     2281 aaagcattgc tcatcaattt gttgcaacga acaggtcact atcagtcaaa ataaaatcat
+     2341 tatttggggc ccgagatcca tgctagcgtt aacgcgagag tagggaactg ccaggcatca
+     2401 aataaaacga aaggctcagt cggaagactg ggcctttcgt tttatctgtt gtttgtcggt
+     2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
+     2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
+     2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
+     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_2_1392:1rc     2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1286..2675)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1286..1411
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1286..1408
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1413..1718
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     Domain_Search   1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     CDS             complement(2571..2675)
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      541 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      601 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      661 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      721 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      781 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      841 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      901 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      961 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1021 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1081 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1141 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1201 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1261 nnnnnnnnnn nnnnnnnnnn nnnnnatgca gaatgaagcc cgtcgtctgc gtgccgaacg
+     1321 ctggaaagcg gaaaatcagg aagggatggc tgaggtcgcc cggtttattg aaatgaacgg
+     1381 ctcttttgct gacgagaaca gggactggtg aaatgcagtt taaggtttac acctataaaa
+     1441 gagagagccg ttatcgtctg tttgtggatg tacagagtga tattattgac acgcccgggc
+     1501 gacggatggt gatccccctg gccagtgcac gtctgctgtc agataaagtc tcccgtgaac
+     1561 tttacccggt ggtgcatatc ggggatgaaa gctggcgcat gatgaccacc gatatggcca
+     1621 gtgtgccggt ctccgttatc ggggaagaag tggctgatct cagccaccgc gaaaatgaca
+     1681 tcaaaaacgc cattaacctg atgttctggg gaatataaat gtcaggctcc cttatacaca
+     1741 gccagtctgc aggtcgatac agtagaaatt acagaaactt tatcacgttt agtaagtata
+     1801 gaggctgaaa atccagatga agccgaacga cttgtaagag aaaagtataa gagttgtgaa
+     1861 attgttcttg atgcagatga ttttcaggac tatgacacta gcgtatatga ataggtagat
+     1921 gtttttattt tgtcacacaa aaaagaggct cgcacctctt tttcttattt ctttttatga
+     1981 tttaatacgg cattgaggac aatagcgagt aggctggata cgacgattcc gtttgagaag
+     2041 aacatttgga aggctgtcgg tcgactaagt tggcagcatc acccgaagaa catttggaag
+     2101 gctgtcggtc gactacaggt cactaatacc atctaagtag ttgattcata gtgactggat
+     2161 atgttgtgtt ttacagtatt atgtagtctg ttttttatgc aaaatctaat ttaatatatt
+     2221 gatatttata tcattttacg tttctcgttc tgcttttttg tacaaacttg gcattataaa
+     2281 aaagcattgc tcatcaattt gttgcaacga acaggtcact atcagtcaaa ataaaatcat
+     2341 tatttggggc ccgagatcca tgctagcgtt aacgcgagag tagggaactg ccaggcatca
+     2401 aataaaacga aaggctcagt cggaagactg ggcctttcgt tttatctgtt gtttgtcggt
+     2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
+     2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
+     2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
+     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_3_1392:1rc     2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1286..2675)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1286..1411
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1286..1408
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1413..1718
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     Domain_Search   1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     CDS             complement(2571..2675)
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      541 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      601 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      661 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      721 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      781 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      841 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      901 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      961 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1021 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1081 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1141 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1201 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1261 nnnnnnnnnn nnnnnnnnnn nnnnnatgca gaatgaagcc cgtcgtctgc gtgccgaacg
+     1321 ctggaaagcg gaaaatcagg aagggatggc tgaggtcgcc cggtttattg aaatgaacgg
+     1381 ctcttttgct gacgagaaca gggactggtg aaatgcagtt taaggtttac acctataaaa
+     1441 gagagagccg ttatcgtctg tttgtggatg tacagagtga tattattgac acgcccgggc
+     1501 gacggatggt gatccccctg gccagtgcac gtctgctgtc agataaagtc tcccgtgaac
+     1561 tttacccggt ggtgcatatc ggggatgaaa gctggcgcat gatgaccacc gatatggcca
+     1621 gtgtgccggt ctccgttatc ggggaagaag tggctgatct cagccaccgc gaaaatgaca
+     1681 tcaaaaacgc cattaacctg atgttctggg gaatataaat gtcaggctcc cttatacaca
+     1741 gccagtctgc aggtcgatac agtagaaatt acagaaactt tatcacgttt agtaagtata
+     1801 gaggctgaaa atccagatga agccgaacga cttgtaagag aaaagtataa gagttgtgaa
+     1861 attgttcttg atgcagatga ttttcaggac tatgacacta gcgtatatga ataggtagat
+     1921 gtttttattt tgtcacacaa aaaagaggct cgcacctctt tttcttattt ctttttatga
+     1981 tttaatacgg cattgaggac aatagcgagt aggctggata cgacgattcc gtttgagaag
+     2041 aacatttgga aggctgtcgg tcgactaagt tggcagcatc acccgaagaa catttggaag
+     2101 gctgtcggtc gactacaggt cactaatacc atctaagtag ttgattcata gtgactggat
+     2161 atgttgtgtt ttacagtatt atgtagtctg ttttttatgc aaaatctaat ttaatatatt
+     2221 gatatttata tcattttacg tttctcgttc tgcttttttg tacaaacttg gcattataaa
+     2281 aaagcattgc tcatcaattt gttgcaacga acaggtcact atcagtcaaa ataaaatcat
+     2341 tatttggggc ccgagatcca tgctagcgtt aacgcgagag tagggaactg ccaggcatca
+     2401 aataaaacga aaggctcagt cggaagactg ggcctttcgt tttatctgtt gtttgtcggt
+     2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
+     2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
+     2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
+     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_4_1392:1rc     2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1286..2675)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1286..1411
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1286..1408
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1413..1718
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     Domain_Search   1416..1712
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+     CDS             complement(2571..2675)
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      541 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      601 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      661 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      721 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      781 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      841 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      901 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      961 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1021 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1081 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1141 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1201 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1261 nnnnnnnnnn nnnnnnnnnn nnnnnatgca gaatgaagcc cgtcgtctgc gtgccgaacg
+     1321 ctggaaagcg gaaaatcagg aagggatggc tgaggtcgcc cggtttattg aaatgaacgg
+     1381 ctcttttgct gacgagaaca gggactggtg aaatgcagtt taaggtttac acctataaaa
+     1441 gagagagccg ttatcgtctg tttgtggatg tacagagtga tattattgac acgcccgggc
+     1501 gacggatggt gatccccctg gccagtgcac gtctgctgtc agataaagtc tcccgtgaac
+     1561 tttacccggt ggtgcatatc ggggatgaaa gctggcgcat gatgaccacc gatatggcca
+     1621 gtgtgccggt ctccgttatc ggggaagaag tggctgatct cagccaccgc gaaaatgaca
+     1681 tcaaaaacgc cattaacctg atgttctggg gaatataaat gtcaggctcc cttatacaca
+     1741 gccagtctgc aggtcgatac agtagaaatt acagaaactt tatcacgttt agtaagtata
+     1801 gaggctgaaa atccagatga agccgaacga cttgtaagag aaaagtataa gagttgtgaa
+     1861 attgttcttg atgcagatga ttttcaggac tatgacacta gcgtatatga ataggtagat
+     1921 gtttttattt tgtcacacaa aaaagaggct cgcacctctt tttcttattt ctttttatga
+     1981 tttaatacgg cattgaggac aatagcgagt aggctggata cgacgattcc gtttgagaag
+     2041 aacatttgga aggctgtcgg tcgactaagt tggcagcatc acccgaagaa catttggaag
+     2101 gctgtcggtc gactacaggt cactaatacc atctaagtag ttgattcata gtgactggat
+     2161 atgttgtgtt ttacagtatt atgtagtctg ttttttatgc aaaatctaat ttaatatatt
+     2221 gatatttata tcattttacg tttctcgttc tgcttttttg tacaaacttg gcattataaa
+     2281 aaagcattgc tcatcaattt gttgcaacga acaggtcact atcagtcaaa ataaaatcat
+     2341 tatttggggc ccgagatcca tgctagcgtt aacgcgagag tagggaactg ccaggcatca
+     2401 aataaaacga aaggctcagt cggaagactg ggcctttcgt tttatctgtt gtttgtcggt
+     2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
+     2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
+     2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
+     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_1_1606:4470    2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          103..2967
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(103..762)
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      complement(106..258)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     Domainator      complement(136..741)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     CDS             1413..2174
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domain_Search   1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      1791..2144
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             2875..2967
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /translation="MLVRGAEPMEKRQQRGLFTVPGLLLAFCSHV"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnttacgccc cgccctgcca
+      121 ctcatcgcag tactgttgta attcattaag cattctgccg acatggaagc catcacagac
+      181 ggcatgatga acctgaatcg ccagcggcat cagcaccttg tcgccttgcg tataatattt
+      241 gcccatggtg aaaacggggg cgaagaagtt gtccatattg gccacgttta aatcaaaact
+      301 ggtgaaactc acccagggat tggctgagac gaaaaacata ttctcaataa accctttagg
+      361 gaaataggcc aggttttcac cgtaacacgc cacatcttgc gaatatatgt gtagaaactg
+      421 ccggaaatcg tcgtggtatt cactccagag cgatgaaaac gtttcagttt gctcatggaa
+      481 aacggtgtaa caagggtgaa cactatccca tatcaccagc tcaccgtctt tcattgccat
+      541 acggaattcc ggatgagcat tcatcaggcg ggcaagaatg tgaataaagg ccggataaaa
+      601 cttgtgctta tttttcttta cggtctttaa aaaggccgta atatccagct gaacggtctg
+      661 gttataggta cattgagcaa ctgactgaaa tgcctcaaaa tgttctttac gatgccattg
+      721 ggatatatca acggtggtat atccagtgat ttttttctcc attttagctt ccttagctcc
+      781 tgaaaatctc gataactcaa aaaatacgcc cggtagtgat cttatttcat tatggtgaaa
+      841 gttggaacct cttacgtgcc gatcaacgtc tcattttcgc caaaagttgg cccagggctt
+      901 cccggtatca acagggacac caggatttat ttattctgcg aagtgatctt ccgtcacagg
+      961 tatttattcg gcgcaaagtg cgtcgggtga tgctgccaac ttagtcgact acaggtcact
+     1021 aataccatct aagtagttga ttcatagtga ctggatatgt tgtgttttac agtattatgt
+     1081 agtctgtttt ttatgcaaaa tctaatttaa tatattgata tttatatcat tttacgtttc
+     1141 tcgttcagct ttcttgtaca aagtgggcat tataagaaag cattgcttat caatttgttg
+     1201 caacgaacag gtcactatca gtcaaaataa aatcattatt tgccatccag ctgcagctct
+     1261 ggcccgtgtc tcaaaatctc tgatgttaca ttgcacaaga taaaaatata tcatcatgaa
+     1321 caataaaact gtctgcttac ataaacagta atacaagggg tgttatgagc catattcaac
+     1381 gggaaacgtc gaggccgcga ttaaattcca acatggatgc tgatttatat gggtataaat
+     1441 gggctcgcga taatgtcggg caatcaggtg cgacaatcta tcgcttgtat gggaagcccg
+     1501 atgcgccaga gttgtttctg aaacatggca aaggtagcgt tgccaatgat gttacagatg
+     1561 agatggtcag actaaactgg ctgacggaat ttatgcctct tccgaccatc aagcatttta
+     1621 tccgtactcc tgatgatgca tggttactca ccactgcgat ccccggaaaa acagcattcc
+     1681 aggtattaga agaatatcct gattcaggtg aaaatattgt tgatgcgctg gcagtgttcc
+     1741 tgcgccggtt gcattcgatt cctgtttgta attgtccttt taacagcgat cgcgtatttc
+     1801 gtctcgctca ggcgcaatca cgaatgaata acggtttggt tgatgcgagt gattttgatg
+     1861 acgagcgtaa tggctggcct gttgaacaag tctggaaaga aatgcataaa cttttgccat
+     1921 tctcaccgga ttcagtcgtc actcatggtg atttctcact tgataacctt atttttgacg
+     1981 aggggaaatt aataggttgt attgatgttg gacgagtcgg aatcgcagac cgataccagg
+     2041 atcttgccat cctatggaac tgcctcggtg agttttctcc ttcattacag aaacggcttt
+     2101 ttcaaaaata tggtattgat aatcctgata tgaataaatt gcagtttcat ttgatgctcg
+     2161 atgagttttt ctaatcagaa ttggttaatt ggttgtaaca ctggcagagc attacgctga
+     2221 cttgacggga cggcgcaagc tcatgaccaa aatcccttaa cgtgagtttt cgttccactg
+     2281 agcgtcagac cccgtagaaa agatcaaagg atcttcttga gatccttttt ttctgcgcgt
+     2341 aatctgctgc ttgcaaacaa aaaaaccacc gctaccagcg gtggtttgtt tgccggatca
+     2401 agagctacca actctttttc cgaaggtaac tggcttcagc agagcgcaga taccaaatac
+     2461 tgtccttcta gtgtagccgt agttaggcca ccacttcaag aactctgtag caccgcctac
+     2521 atacctcgct ctgctaatcc tgttaccagt ggctgctgcc agtggcgata agtcgtgtct
+     2581 taccgggttg gactcaagac gatagttacc ggataaggcg cagcggtcgg gctgaacggg
+     2641 gggttcgtgc acacagccca gcttggagcg aacgacctac accgaactga gatacctaca
+     2701 gcgtgagcta tgagaaagcg ccacgcttcc cgaagggaga aaggcggaca ggtatccggt
+     2761 aagcggcagg gtcggaacag gagagcgcac gagggagctt ccagggggaa acgcctggta
+     2821 tctttatagt cctgtcgggt ttcgccacct ctgacttgag cgtcgatttt tgtgatgctc
+     2881 gtcagggggg cggagcctat ggaaaaacgc cagcaacgcg gcctttttac ggttcctggc
+     2941 cttttgctgg ccttttgctc acatgtt
+//
+LOCUS       pDONR201_2_1606:4470    2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          103..2967
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(103..762)
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      complement(106..258)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     Domainator      complement(136..741)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     CDS             1413..2174
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domain_Search   1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      1791..2144
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             2875..2967
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /translation="MLVRGAEPMEKRQQRGLFTVPGLLLAFCSHV"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnttacgccc cgccctgcca
+      121 ctcatcgcag tactgttgta attcattaag cattctgccg acatggaagc catcacagac
+      181 ggcatgatga acctgaatcg ccagcggcat cagcaccttg tcgccttgcg tataatattt
+      241 gcccatggtg aaaacggggg cgaagaagtt gtccatattg gccacgttta aatcaaaact
+      301 ggtgaaactc acccagggat tggctgagac gaaaaacata ttctcaataa accctttagg
+      361 gaaataggcc aggttttcac cgtaacacgc cacatcttgc gaatatatgt gtagaaactg
+      421 ccggaaatcg tcgtggtatt cactccagag cgatgaaaac gtttcagttt gctcatggaa
+      481 aacggtgtaa caagggtgaa cactatccca tatcaccagc tcaccgtctt tcattgccat
+      541 acggaattcc ggatgagcat tcatcaggcg ggcaagaatg tgaataaagg ccggataaaa
+      601 cttgtgctta tttttcttta cggtctttaa aaaggccgta atatccagct gaacggtctg
+      661 gttataggta cattgagcaa ctgactgaaa tgcctcaaaa tgttctttac gatgccattg
+      721 ggatatatca acggtggtat atccagtgat ttttttctcc attttagctt ccttagctcc
+      781 tgaaaatctc gataactcaa aaaatacgcc cggtagtgat cttatttcat tatggtgaaa
+      841 gttggaacct cttacgtgcc gatcaacgtc tcattttcgc caaaagttgg cccagggctt
+      901 cccggtatca acagggacac caggatttat ttattctgcg aagtgatctt ccgtcacagg
+      961 tatttattcg gcgcaaagtg cgtcgggtga tgctgccaac ttagtcgact acaggtcact
+     1021 aataccatct aagtagttga ttcatagtga ctggatatgt tgtgttttac agtattatgt
+     1081 agtctgtttt ttatgcaaaa tctaatttaa tatattgata tttatatcat tttacgtttc
+     1141 tcgttcagct ttcttgtaca aagtgggcat tataagaaag cattgcttat caatttgttg
+     1201 caacgaacag gtcactatca gtcaaaataa aatcattatt tgccatccag ctgcagctct
+     1261 ggcccgtgtc tcaaaatctc tgatgttaca ttgcacaaga taaaaatata tcatcatgaa
+     1321 caataaaact gtctgcttac ataaacagta atacaagggg tgttatgagc catattcaac
+     1381 gggaaacgtc gaggccgcga ttaaattcca acatggatgc tgatttatat gggtataaat
+     1441 gggctcgcga taatgtcggg caatcaggtg cgacaatcta tcgcttgtat gggaagcccg
+     1501 atgcgccaga gttgtttctg aaacatggca aaggtagcgt tgccaatgat gttacagatg
+     1561 agatggtcag actaaactgg ctgacggaat ttatgcctct tccgaccatc aagcatttta
+     1621 tccgtactcc tgatgatgca tggttactca ccactgcgat ccccggaaaa acagcattcc
+     1681 aggtattaga agaatatcct gattcaggtg aaaatattgt tgatgcgctg gcagtgttcc
+     1741 tgcgccggtt gcattcgatt cctgtttgta attgtccttt taacagcgat cgcgtatttc
+     1801 gtctcgctca ggcgcaatca cgaatgaata acggtttggt tgatgcgagt gattttgatg
+     1861 acgagcgtaa tggctggcct gttgaacaag tctggaaaga aatgcataaa cttttgccat
+     1921 tctcaccgga ttcagtcgtc actcatggtg atttctcact tgataacctt atttttgacg
+     1981 aggggaaatt aataggttgt attgatgttg gacgagtcgg aatcgcagac cgataccagg
+     2041 atcttgccat cctatggaac tgcctcggtg agttttctcc ttcattacag aaacggcttt
+     2101 ttcaaaaata tggtattgat aatcctgata tgaataaatt gcagtttcat ttgatgctcg
+     2161 atgagttttt ctaatcagaa ttggttaatt ggttgtaaca ctggcagagc attacgctga
+     2221 cttgacggga cggcgcaagc tcatgaccaa aatcccttaa cgtgagtttt cgttccactg
+     2281 agcgtcagac cccgtagaaa agatcaaagg atcttcttga gatccttttt ttctgcgcgt
+     2341 aatctgctgc ttgcaaacaa aaaaaccacc gctaccagcg gtggtttgtt tgccggatca
+     2401 agagctacca actctttttc cgaaggtaac tggcttcagc agagcgcaga taccaaatac
+     2461 tgtccttcta gtgtagccgt agttaggcca ccacttcaag aactctgtag caccgcctac
+     2521 atacctcgct ctgctaatcc tgttaccagt ggctgctgcc agtggcgata agtcgtgtct
+     2581 taccgggttg gactcaagac gatagttacc ggataaggcg cagcggtcgg gctgaacggg
+     2641 gggttcgtgc acacagccca gcttggagcg aacgacctac accgaactga gatacctaca
+     2701 gcgtgagcta tgagaaagcg ccacgcttcc cgaagggaga aaggcggaca ggtatccggt
+     2761 aagcggcagg gtcggaacag gagagcgcac gagggagctt ccagggggaa acgcctggta
+     2821 tctttatagt cctgtcgggt ttcgccacct ctgacttgag cgtcgatttt tgtgatgctc
+     2881 gtcagggggg cggagcctat ggaaaaacgc cagcaacgcg gcctttttac ggttcctggc
+     2941 cttttgctgg ccttttgctc acatgtt
+//
+LOCUS       pDONR201_3_1606:4470    2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          103..2967
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(103..762)
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      complement(106..258)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     Domainator      complement(136..741)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     CDS             1413..2174
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domain_Search   1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      1791..2144
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             2875..2967
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /translation="MLVRGAEPMEKRQQRGLFTVPGLLLAFCSHV"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnttacgccc cgccctgcca
+      121 ctcatcgcag tactgttgta attcattaag cattctgccg acatggaagc catcacagac
+      181 ggcatgatga acctgaatcg ccagcggcat cagcaccttg tcgccttgcg tataatattt
+      241 gcccatggtg aaaacggggg cgaagaagtt gtccatattg gccacgttta aatcaaaact
+      301 ggtgaaactc acccagggat tggctgagac gaaaaacata ttctcaataa accctttagg
+      361 gaaataggcc aggttttcac cgtaacacgc cacatcttgc gaatatatgt gtagaaactg
+      421 ccggaaatcg tcgtggtatt cactccagag cgatgaaaac gtttcagttt gctcatggaa
+      481 aacggtgtaa caagggtgaa cactatccca tatcaccagc tcaccgtctt tcattgccat
+      541 acggaattcc ggatgagcat tcatcaggcg ggcaagaatg tgaataaagg ccggataaaa
+      601 cttgtgctta tttttcttta cggtctttaa aaaggccgta atatccagct gaacggtctg
+      661 gttataggta cattgagcaa ctgactgaaa tgcctcaaaa tgttctttac gatgccattg
+      721 ggatatatca acggtggtat atccagtgat ttttttctcc attttagctt ccttagctcc
+      781 tgaaaatctc gataactcaa aaaatacgcc cggtagtgat cttatttcat tatggtgaaa
+      841 gttggaacct cttacgtgcc gatcaacgtc tcattttcgc caaaagttgg cccagggctt
+      901 cccggtatca acagggacac caggatttat ttattctgcg aagtgatctt ccgtcacagg
+      961 tatttattcg gcgcaaagtg cgtcgggtga tgctgccaac ttagtcgact acaggtcact
+     1021 aataccatct aagtagttga ttcatagtga ctggatatgt tgtgttttac agtattatgt
+     1081 agtctgtttt ttatgcaaaa tctaatttaa tatattgata tttatatcat tttacgtttc
+     1141 tcgttcagct ttcttgtaca aagtgggcat tataagaaag cattgcttat caatttgttg
+     1201 caacgaacag gtcactatca gtcaaaataa aatcattatt tgccatccag ctgcagctct
+     1261 ggcccgtgtc tcaaaatctc tgatgttaca ttgcacaaga taaaaatata tcatcatgaa
+     1321 caataaaact gtctgcttac ataaacagta atacaagggg tgttatgagc catattcaac
+     1381 gggaaacgtc gaggccgcga ttaaattcca acatggatgc tgatttatat gggtataaat
+     1441 gggctcgcga taatgtcggg caatcaggtg cgacaatcta tcgcttgtat gggaagcccg
+     1501 atgcgccaga gttgtttctg aaacatggca aaggtagcgt tgccaatgat gttacagatg
+     1561 agatggtcag actaaactgg ctgacggaat ttatgcctct tccgaccatc aagcatttta
+     1621 tccgtactcc tgatgatgca tggttactca ccactgcgat ccccggaaaa acagcattcc
+     1681 aggtattaga agaatatcct gattcaggtg aaaatattgt tgatgcgctg gcagtgttcc
+     1741 tgcgccggtt gcattcgatt cctgtttgta attgtccttt taacagcgat cgcgtatttc
+     1801 gtctcgctca ggcgcaatca cgaatgaata acggtttggt tgatgcgagt gattttgatg
+     1861 acgagcgtaa tggctggcct gttgaacaag tctggaaaga aatgcataaa cttttgccat
+     1921 tctcaccgga ttcagtcgtc actcatggtg atttctcact tgataacctt atttttgacg
+     1981 aggggaaatt aataggttgt attgatgttg gacgagtcgg aatcgcagac cgataccagg
+     2041 atcttgccat cctatggaac tgcctcggtg agttttctcc ttcattacag aaacggcttt
+     2101 ttcaaaaata tggtattgat aatcctgata tgaataaatt gcagtttcat ttgatgctcg
+     2161 atgagttttt ctaatcagaa ttggttaatt ggttgtaaca ctggcagagc attacgctga
+     2221 cttgacggga cggcgcaagc tcatgaccaa aatcccttaa cgtgagtttt cgttccactg
+     2281 agcgtcagac cccgtagaaa agatcaaagg atcttcttga gatccttttt ttctgcgcgt
+     2341 aatctgctgc ttgcaaacaa aaaaaccacc gctaccagcg gtggtttgtt tgccggatca
+     2401 agagctacca actctttttc cgaaggtaac tggcttcagc agagcgcaga taccaaatac
+     2461 tgtccttcta gtgtagccgt agttaggcca ccacttcaag aactctgtag caccgcctac
+     2521 atacctcgct ctgctaatcc tgttaccagt ggctgctgcc agtggcgata agtcgtgtct
+     2581 taccgggttg gactcaagac gatagttacc ggataaggcg cagcggtcgg gctgaacggg
+     2641 gggttcgtgc acacagccca gcttggagcg aacgacctac accgaactga gatacctaca
+     2701 gcgtgagcta tgagaaagcg ccacgcttcc cgaagggaga aaggcggaca ggtatccggt
+     2761 aagcggcagg gtcggaacag gagagcgcac gagggagctt ccagggggaa acgcctggta
+     2821 tctttatagt cctgtcgggt ttcgccacct ctgacttgag cgtcgatttt tgtgatgctc
+     2881 gtcagggggg cggagcctat ggaaaaacgc cagcaacgcg gcctttttac ggttcctggc
+     2941 cttttgctgg ccttttgctc acatgtt
+//
+LOCUS       pDONR201_4_1606:4470    2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          103..2967
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             complement(103..762)
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      complement(106..258)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     Domainator      complement(136..741)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     CDS             1413..2174
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 8.1e-27, 90.5) & TCAD9 (Ternary complex associated domain 9, 1.2e-02, 10.5)"
+     Domainator      1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domain_Search   1452..2150
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="8.1e-27"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      1791..2144
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="1.2e-02"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+     CDS             2875..2967
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /translation="MLVRGAEPMEKRQQRGLFTVPGLLLAFCSHV"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnttacgccc cgccctgcca
+      121 ctcatcgcag tactgttgta attcattaag cattctgccg acatggaagc catcacagac
+      181 ggcatgatga acctgaatcg ccagcggcat cagcaccttg tcgccttgcg tataatattt
+      241 gcccatggtg aaaacggggg cgaagaagtt gtccatattg gccacgttta aatcaaaact
+      301 ggtgaaactc acccagggat tggctgagac gaaaaacata ttctcaataa accctttagg
+      361 gaaataggcc aggttttcac cgtaacacgc cacatcttgc gaatatatgt gtagaaactg
+      421 ccggaaatcg tcgtggtatt cactccagag cgatgaaaac gtttcagttt gctcatggaa
+      481 aacggtgtaa caagggtgaa cactatccca tatcaccagc tcaccgtctt tcattgccat
+      541 acggaattcc ggatgagcat tcatcaggcg ggcaagaatg tgaataaagg ccggataaaa
+      601 cttgtgctta tttttcttta cggtctttaa aaaggccgta atatccagct gaacggtctg
+      661 gttataggta cattgagcaa ctgactgaaa tgcctcaaaa tgttctttac gatgccattg
+      721 ggatatatca acggtggtat atccagtgat ttttttctcc attttagctt ccttagctcc
+      781 tgaaaatctc gataactcaa aaaatacgcc cggtagtgat cttatttcat tatggtgaaa
+      841 gttggaacct cttacgtgcc gatcaacgtc tcattttcgc caaaagttgg cccagggctt
+      901 cccggtatca acagggacac caggatttat ttattctgcg aagtgatctt ccgtcacagg
+      961 tatttattcg gcgcaaagtg cgtcgggtga tgctgccaac ttagtcgact acaggtcact
+     1021 aataccatct aagtagttga ttcatagtga ctggatatgt tgtgttttac agtattatgt
+     1081 agtctgtttt ttatgcaaaa tctaatttaa tatattgata tttatatcat tttacgtttc
+     1141 tcgttcagct ttcttgtaca aagtgggcat tataagaaag cattgcttat caatttgttg
+     1201 caacgaacag gtcactatca gtcaaaataa aatcattatt tgccatccag ctgcagctct
+     1261 ggcccgtgtc tcaaaatctc tgatgttaca ttgcacaaga taaaaatata tcatcatgaa
+     1321 caataaaact gtctgcttac ataaacagta atacaagggg tgttatgagc catattcaac
+     1381 gggaaacgtc gaggccgcga ttaaattcca acatggatgc tgatttatat gggtataaat
+     1441 gggctcgcga taatgtcggg caatcaggtg cgacaatcta tcgcttgtat gggaagcccg
+     1501 atgcgccaga gttgtttctg aaacatggca aaggtagcgt tgccaatgat gttacagatg
+     1561 agatggtcag actaaactgg ctgacggaat ttatgcctct tccgaccatc aagcatttta
+     1621 tccgtactcc tgatgatgca tggttactca ccactgcgat ccccggaaaa acagcattcc
+     1681 aggtattaga agaatatcct gattcaggtg aaaatattgt tgatgcgctg gcagtgttcc
+     1741 tgcgccggtt gcattcgatt cctgtttgta attgtccttt taacagcgat cgcgtatttc
+     1801 gtctcgctca ggcgcaatca cgaatgaata acggtttggt tgatgcgagt gattttgatg
+     1861 acgagcgtaa tggctggcct gttgaacaag tctggaaaga aatgcataaa cttttgccat
+     1921 tctcaccgga ttcagtcgtc actcatggtg atttctcact tgataacctt atttttgacg
+     1981 aggggaaatt aataggttgt attgatgttg gacgagtcgg aatcgcagac cgataccagg
+     2041 atcttgccat cctatggaac tgcctcggtg agttttctcc ttcattacag aaacggcttt
+     2101 ttcaaaaata tggtattgat aatcctgata tgaataaatt gcagtttcat ttgatgctcg
+     2161 atgagttttt ctaatcagaa ttggttaatt ggttgtaaca ctggcagagc attacgctga
+     2221 cttgacggga cggcgcaagc tcatgaccaa aatcccttaa cgtgagtttt cgttccactg
+     2281 agcgtcagac cccgtagaaa agatcaaagg atcttcttga gatccttttt ttctgcgcgt
+     2341 aatctgctgc ttgcaaacaa aaaaaccacc gctaccagcg gtggtttgtt tgccggatca
+     2401 agagctacca actctttttc cgaaggtaac tggcttcagc agagcgcaga taccaaatac
+     2461 tgtccttcta gtgtagccgt agttaggcca ccacttcaag aactctgtag caccgcctac
+     2521 atacctcgct ctgctaatcc tgttaccagt ggctgctgcc agtggcgata agtcgtgtct
+     2581 taccgggttg gactcaagac gatagttacc ggataaggcg cagcggtcgg gctgaacggg
+     2641 gggttcgtgc acacagccca gcttggagcg aacgacctac accgaactga gatacctaca
+     2701 gcgtgagcta tgagaaagcg ccacgcttcc cgaagggaga aaggcggaca ggtatccggt
+     2761 aagcggcagg gtcggaacag gagagcgcac gagggagctt ccagggggaa acgcctggta
+     2821 tctttatagt cctgtcgggt ttcgccacct ctgacttgag cgtcgatttt tgtgatgctc
+     2881 gtcagggggg cggagcctat ggaaaaacgc cagcaacgcg gcctttttac ggttcctggc
+     2941 cttttgctgg ccttttgctc acatgtt
+//
+LOCUS       pDONR201_1_2266:958rc   2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(539..1845)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             539..1198
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      560..1165
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1043..1195
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             1413..1538
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     Domain_Search   1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1540..1845
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1543..1839
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnat
+      541 ggagaaaaaa atcactggat ataccaccgt tgatatatcc caatggcatc gtaaagaaca
+      601 ttttgaggca tttcagtcag ttgctcaatg tacctataac cagaccgttc agctggatat
+      661 tacggccttt ttaaagaccg taaagaaaaa taagcacaag ttttatccgg cctttattca
+      721 cattcttgcc cgcctgatga atgctcatcc ggaattccgt atggcaatga aagacggtga
+      781 gctggtgata tgggatagtg ttcacccttg ttacaccgtt ttccatgagc aaactgaaac
+      841 gttttcatcg ctctggagtg aataccacga cgatttccgg cagtttctac acatatattc
+      901 gcaagatgtg gcgtgttacg gtgaaaacct ggcctatttc cctaaagggt ttattgagaa
+      961 tatgtttttc gtctcagcca atccctgggt gagtttcacc agttttgatt taaacgtggc
+     1021 caatatggac aacttcttcg cccccgtttt caccatgggc aaatattata cgcaaggcga
+     1081 caaggtgctg atgccgctgg cgattcaggt tcatcatgcc gtctgtgatg gcttccatgt
+     1141 cggcagaatg cttaatgaat tacaacagta ctgcgatgag tggcagggcg gggcgtaatc
+     1201 gcgtggatcc ggcttactaa aagccagata acagtatgcg tatttgcgcg ctgatttttg
+     1261 cggtataaga atatatactg atatgtatac ccgaagtatg tcaaaaagag gtgtgctatg
+     1321 aagcagcgta ttacagtgac agttgacagc gacagctatc agttgctcaa ggcatatatg
+     1381 atgtcaatat ctccggtctg gtaagcacaa ccatgcagaa tgaagcccgt cgtctgcgtg
+     1441 ccgaacgctg gaaagcggaa aatcaggaag ggatggctga ggtcgcccgg tttattgaaa
+     1501 tgaacggctc ttttgctgac gagaacaggg actggtgaaa tgcagtttaa ggtttacacc
+     1561 tataaaagag agagccgtta tcgtctgttt gtggatgtac agagtgatat tattgacacg
+     1621 cccgggcgac ggatggtgat ccccctggcc agtgcacgtc tgctgtcaga taaagtctcc
+     1681 cgtgaacttt acccggtggt gcatatcggg gatgaaagct ggcgcatgat gaccaccgat
+     1741 atggccagtg tgccggtctc cgttatcggg gaagaagtgg ctgatctcag ccaccgcgaa
+     1801 aatgacatca aaaacgccat taacctgatg ttctggggaa tataannnnn nnnnnnnnnn
+     1861 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1921 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1981 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2041 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2101 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2161 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2221 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2281 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2341 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2401 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_2_2266:958rc   2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(539..1845)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             539..1198
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      560..1165
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1043..1195
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             1413..1538
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     Domain_Search   1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1540..1845
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1543..1839
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnat
+      541 ggagaaaaaa atcactggat ataccaccgt tgatatatcc caatggcatc gtaaagaaca
+      601 ttttgaggca tttcagtcag ttgctcaatg tacctataac cagaccgttc agctggatat
+      661 tacggccttt ttaaagaccg taaagaaaaa taagcacaag ttttatccgg cctttattca
+      721 cattcttgcc cgcctgatga atgctcatcc ggaattccgt atggcaatga aagacggtga
+      781 gctggtgata tgggatagtg ttcacccttg ttacaccgtt ttccatgagc aaactgaaac
+      841 gttttcatcg ctctggagtg aataccacga cgatttccgg cagtttctac acatatattc
+      901 gcaagatgtg gcgtgttacg gtgaaaacct ggcctatttc cctaaagggt ttattgagaa
+      961 tatgtttttc gtctcagcca atccctgggt gagtttcacc agttttgatt taaacgtggc
+     1021 caatatggac aacttcttcg cccccgtttt caccatgggc aaatattata cgcaaggcga
+     1081 caaggtgctg atgccgctgg cgattcaggt tcatcatgcc gtctgtgatg gcttccatgt
+     1141 cggcagaatg cttaatgaat tacaacagta ctgcgatgag tggcagggcg gggcgtaatc
+     1201 gcgtggatcc ggcttactaa aagccagata acagtatgcg tatttgcgcg ctgatttttg
+     1261 cggtataaga atatatactg atatgtatac ccgaagtatg tcaaaaagag gtgtgctatg
+     1321 aagcagcgta ttacagtgac agttgacagc gacagctatc agttgctcaa ggcatatatg
+     1381 atgtcaatat ctccggtctg gtaagcacaa ccatgcagaa tgaagcccgt cgtctgcgtg
+     1441 ccgaacgctg gaaagcggaa aatcaggaag ggatggctga ggtcgcccgg tttattgaaa
+     1501 tgaacggctc ttttgctgac gagaacaggg actggtgaaa tgcagtttaa ggtttacacc
+     1561 tataaaagag agagccgtta tcgtctgttt gtggatgtac agagtgatat tattgacacg
+     1621 cccgggcgac ggatggtgat ccccctggcc agtgcacgtc tgctgtcaga taaagtctcc
+     1681 cgtgaacttt acccggtggt gcatatcggg gatgaaagct ggcgcatgat gaccaccgat
+     1741 atggccagtg tgccggtctc cgttatcggg gaagaagtgg ctgatctcag ccaccgcgaa
+     1801 aatgacatca aaaacgccat taacctgatg ttctggggaa tataannnnn nnnnnnnnnn
+     1861 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1921 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1981 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2041 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2101 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2161 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2221 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2281 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2341 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2401 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_3_2266:958rc   2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(539..1845)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             539..1198
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      560..1165
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1043..1195
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             1413..1538
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     Domain_Search   1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1540..1845
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1543..1839
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnat
+      541 ggagaaaaaa atcactggat ataccaccgt tgatatatcc caatggcatc gtaaagaaca
+      601 ttttgaggca tttcagtcag ttgctcaatg tacctataac cagaccgttc agctggatat
+      661 tacggccttt ttaaagaccg taaagaaaaa taagcacaag ttttatccgg cctttattca
+      721 cattcttgcc cgcctgatga atgctcatcc ggaattccgt atggcaatga aagacggtga
+      781 gctggtgata tgggatagtg ttcacccttg ttacaccgtt ttccatgagc aaactgaaac
+      841 gttttcatcg ctctggagtg aataccacga cgatttccgg cagtttctac acatatattc
+      901 gcaagatgtg gcgtgttacg gtgaaaacct ggcctatttc cctaaagggt ttattgagaa
+      961 tatgtttttc gtctcagcca atccctgggt gagtttcacc agttttgatt taaacgtggc
+     1021 caatatggac aacttcttcg cccccgtttt caccatgggc aaatattata cgcaaggcga
+     1081 caaggtgctg atgccgctgg cgattcaggt tcatcatgcc gtctgtgatg gcttccatgt
+     1141 cggcagaatg cttaatgaat tacaacagta ctgcgatgag tggcagggcg gggcgtaatc
+     1201 gcgtggatcc ggcttactaa aagccagata acagtatgcg tatttgcgcg ctgatttttg
+     1261 cggtataaga atatatactg atatgtatac ccgaagtatg tcaaaaagag gtgtgctatg
+     1321 aagcagcgta ttacagtgac agttgacagc gacagctatc agttgctcaa ggcatatatg
+     1381 atgtcaatat ctccggtctg gtaagcacaa ccatgcagaa tgaagcccgt cgtctgcgtg
+     1441 ccgaacgctg gaaagcggaa aatcaggaag ggatggctga ggtcgcccgg tttattgaaa
+     1501 tgaacggctc ttttgctgac gagaacaggg actggtgaaa tgcagtttaa ggtttacacc
+     1561 tataaaagag agagccgtta tcgtctgttt gtggatgtac agagtgatat tattgacacg
+     1621 cccgggcgac ggatggtgat ccccctggcc agtgcacgtc tgctgtcaga taaagtctcc
+     1681 cgtgaacttt acccggtggt gcatatcggg gatgaaagct ggcgcatgat gaccaccgat
+     1741 atggccagtg tgccggtctc cgttatcggg gaagaagtgg ctgatctcag ccaccgcgaa
+     1801 aatgacatca aaaacgccat taacctgatg ttctggggaa tataannnnn nnnnnnnnnn
+     1861 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1921 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1981 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2041 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2101 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2161 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2221 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2281 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2341 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2401 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//
+LOCUS       pDONR201_4_2266:958rc   2967 bp    DNA              UNK 27-DEC-2023
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(539..1845)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             539..1198
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 4.0e-100, 329.7) & Condensation (Condensation domain, 6.0e-03, 11.2)"
+     Domainator      560..1165
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="4.0e-100"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      1043..1195
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="6.0e-03"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+     CDS             1413..1538
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 1.4e-14, 50.2)"
+     Domainator      1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     Domain_Search   1413..1535
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="1.4e-14"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1540..1845
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 4.4e-31, 103.1)"
+     Domainator      1543..1839
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+       61 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      121 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      181 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      241 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      301 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      361 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      421 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+      481 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnat
+      541 ggagaaaaaa atcactggat ataccaccgt tgatatatcc caatggcatc gtaaagaaca
+      601 ttttgaggca tttcagtcag ttgctcaatg tacctataac cagaccgttc agctggatat
+      661 tacggccttt ttaaagaccg taaagaaaaa taagcacaag ttttatccgg cctttattca
+      721 cattcttgcc cgcctgatga atgctcatcc ggaattccgt atggcaatga aagacggtga
+      781 gctggtgata tgggatagtg ttcacccttg ttacaccgtt ttccatgagc aaactgaaac
+      841 gttttcatcg ctctggagtg aataccacga cgatttccgg cagtttctac acatatattc
+      901 gcaagatgtg gcgtgttacg gtgaaaacct ggcctatttc cctaaagggt ttattgagaa
+      961 tatgtttttc gtctcagcca atccctgggt gagtttcacc agttttgatt taaacgtggc
+     1021 caatatggac aacttcttcg cccccgtttt caccatgggc aaatattata cgcaaggcga
+     1081 caaggtgctg atgccgctgg cgattcaggt tcatcatgcc gtctgtgatg gcttccatgt
+     1141 cggcagaatg cttaatgaat tacaacagta ctgcgatgag tggcagggcg gggcgtaatc
+     1201 gcgtggatcc ggcttactaa aagccagata acagtatgcg tatttgcgcg ctgatttttg
+     1261 cggtataaga atatatactg atatgtatac ccgaagtatg tcaaaaagag gtgtgctatg
+     1321 aagcagcgta ttacagtgac agttgacagc gacagctatc agttgctcaa ggcatatatg
+     1381 atgtcaatat ctccggtctg gtaagcacaa ccatgcagaa tgaagcccgt cgtctgcgtg
+     1441 ccgaacgctg gaaagcggaa aatcaggaag ggatggctga ggtcgcccgg tttattgaaa
+     1501 tgaacggctc ttttgctgac gagaacaggg actggtgaaa tgcagtttaa ggtttacacc
+     1561 tataaaagag agagccgtta tcgtctgttt gtggatgtac agagtgatat tattgacacg
+     1621 cccgggcgac ggatggtgat ccccctggcc agtgcacgtc tgctgtcaga taaagtctcc
+     1681 cgtgaacttt acccggtggt gcatatcggg gatgaaagct ggcgcatgat gaccaccgat
+     1741 atggccagtg tgccggtctc cgttatcggg gaagaagtgg ctgatctcag ccaccgcgaa
+     1801 aatgacatca aaaacgccat taacctgatg ttctggggaa tataannnnn nnnnnnnnnn
+     1861 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1921 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1981 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2041 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2101 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2161 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2221 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2281 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2341 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2401 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2461 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2521 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
+//

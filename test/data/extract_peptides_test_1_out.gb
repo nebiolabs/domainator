@@ -1,0 +1,1128 @@
+LOCUS       pDONR201_1                35 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..35
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..35
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /source_contig="pDONR201_1"
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2               102 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..102)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..102
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 1.1e-32, 103.1)"
+                     /source_contig="pDONR201_1"
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3                42 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..42)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.4e-16"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1..42
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 3.4e-16, 50.2)"
+                     /source_contig="pDONR201_1"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4               220 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..220)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..220
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /domainator_pdonr_hmms="Condensation (Condensation domain, 1.4e-04, 11.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 3.7e-03, 7.3) & CAT (Chloramphenicol acetyltransferase, 9.6e-102, 329.7) & Condensation (Condensation domain, 7.9e-01, -1.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 4.7e-03, 7.0)"
+                     /source_contig="pDONR201_1"
+     Domainator      8..209
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.6e-102"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      11..90
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="4.7e-03"
+                     /score="7.0"
+                     /name="2-oxoacid_dh"
+                     /identity="18.6"
+                     /cds_id="2265_-1_1606"
+                     /rstart="23"
+                     /rend="92"
+                     /rlen="233"
+     Domainator      23..103
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="7.9e-01"
+                     /score="-1.2"
+                     /name="Condensation"
+                     /identity="25.0"
+                     /cds_id="2265_-1_1606"
+                     /rstart="46"
+                     /rend="69"
+                     /rlen="457"
+     Domainator      168..217
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="3.7e-03"
+                     /score="7.3"
+                     /name="2-oxoacid_dh"
+                     /identity="35.5"
+                     /cds_id="2265_-1_1606"
+                     /rstart="197"
+                     /rend="227"
+                     /rlen="233"
+     Domainator      169..219
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="1.4e-04"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5               254 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..254
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..254
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 1.9e-28, 90.5) & TCAD9 (Ternary complex associated domain 9, 2.9e-04, 10.5)"
+                     /source_contig="pDONR201_1"
+     Domainator      14..246
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="1.9e-28"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      127..244
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="2.9e-04"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6                31 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..31
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..31
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /source_contig="pDONR201_1"
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//
+LOCUS       pDONR201_1                35 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..35
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..35
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /source_contig="pDONR201_2"
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2               102 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..102)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..102
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 1.1e-32, 103.1)"
+                     /source_contig="pDONR201_2"
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3                42 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..42)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.4e-16"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1..42
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 3.4e-16, 50.2)"
+                     /source_contig="pDONR201_2"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4               220 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..220)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..220
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /domainator_pdonr_hmms="Condensation (Condensation domain, 1.4e-04, 11.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 3.7e-03, 7.3) & CAT (Chloramphenicol acetyltransferase, 9.6e-102, 329.7) & Condensation (Condensation domain, 7.9e-01, -1.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 4.7e-03, 7.0)"
+                     /source_contig="pDONR201_2"
+     Domainator      8..209
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.6e-102"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      11..90
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="4.7e-03"
+                     /score="7.0"
+                     /name="2-oxoacid_dh"
+                     /identity="18.6"
+                     /cds_id="2265_-1_1606"
+                     /rstart="23"
+                     /rend="92"
+                     /rlen="233"
+     Domainator      23..103
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="7.9e-01"
+                     /score="-1.2"
+                     /name="Condensation"
+                     /identity="25.0"
+                     /cds_id="2265_-1_1606"
+                     /rstart="46"
+                     /rend="69"
+                     /rlen="457"
+     Domainator      168..217
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="3.7e-03"
+                     /score="7.3"
+                     /name="2-oxoacid_dh"
+                     /identity="35.5"
+                     /cds_id="2265_-1_1606"
+                     /rstart="197"
+                     /rend="227"
+                     /rlen="233"
+     Domainator      169..219
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="1.4e-04"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5               254 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..254
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..254
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 1.9e-28, 90.5) & TCAD9 (Ternary complex associated domain 9, 2.9e-04, 10.5)"
+                     /source_contig="pDONR201_2"
+     Domainator      14..246
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="1.9e-28"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      127..244
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="2.9e-04"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6                31 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_2.
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..31
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..31
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /source_contig="pDONR201_2"
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//
+LOCUS       pDONR201_1                35 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..35
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..35
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /source_contig="pDONR201_3"
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2               102 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..102)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..102
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 1.1e-32, 103.1)"
+                     /source_contig="pDONR201_3"
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3                42 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..42)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.4e-16"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1..42
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 3.4e-16, 50.2)"
+                     /source_contig="pDONR201_3"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4               220 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..220)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..220
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /domainator_pdonr_hmms="Condensation (Condensation domain, 1.4e-04, 11.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 3.7e-03, 7.3) & CAT (Chloramphenicol acetyltransferase, 9.6e-102, 329.7) & Condensation (Condensation domain, 7.9e-01, -1.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 4.7e-03, 7.0)"
+                     /source_contig="pDONR201_3"
+     Domainator      8..209
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.6e-102"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      11..90
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="4.7e-03"
+                     /score="7.0"
+                     /name="2-oxoacid_dh"
+                     /identity="18.6"
+                     /cds_id="2265_-1_1606"
+                     /rstart="23"
+                     /rend="92"
+                     /rlen="233"
+     Domainator      23..103
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="7.9e-01"
+                     /score="-1.2"
+                     /name="Condensation"
+                     /identity="25.0"
+                     /cds_id="2265_-1_1606"
+                     /rstart="46"
+                     /rend="69"
+                     /rlen="457"
+     Domainator      168..217
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="3.7e-03"
+                     /score="7.3"
+                     /name="2-oxoacid_dh"
+                     /identity="35.5"
+                     /cds_id="2265_-1_1606"
+                     /rstart="197"
+                     /rend="227"
+                     /rlen="233"
+     Domainator      169..219
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="1.4e-04"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5               254 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..254
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..254
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 1.9e-28, 90.5) & TCAD9 (Ternary complex associated domain 9, 2.9e-04, 10.5)"
+                     /source_contig="pDONR201_3"
+     Domainator      14..246
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="1.9e-28"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      127..244
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="2.9e-04"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6                31 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_3.
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..31
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..31
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /source_contig="pDONR201_3"
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//
+LOCUS       pDONR201_1                35 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..35
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..35
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /phase="0"
+                     /name="pDONR201_1"
+                     /cds_id="2_1_106"
+                     /source_contig="pDONR201_4"
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2               102 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..102)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..102
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="50"
+                     /length="306"
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /phase="0"
+                     /name="pDONR201_2"
+                     /cds_id="1264_-1_959"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 1.1e-32, 103.1)"
+                     /source_contig="pDONR201_4"
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3                42 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..42)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.4e-16"
+                     /score="50.2"
+                     /name="CcdA"
+                     /identity="48.8"
+                     /cds_id="1391_-1_1266"
+                     /rstart="31"
+                     /rend="71"
+                     /rlen="71"
+     CDS             1..42
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="54"
+                     /length="126"
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /phase="0"
+                     /name="pDONR201_3"
+                     /cds_id="1391_-1_1266"
+                     /domainator_pdonr_hmms="CcdA (Post-segregation antitoxin CcdA, 3.4e-16, 50.2)"
+                     /source_contig="pDONR201_4"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4               220 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..220)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..220
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="45"
+                     /length="660"
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /phase="0"
+                     /name="pDONR201_4"
+                     /cds_id="2265_-1_1606"
+                     /domainator_pdonr_hmms="Condensation (Condensation domain, 1.4e-04, 11.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 3.7e-03, 7.3) & CAT (Chloramphenicol acetyltransferase, 9.6e-102, 329.7) & Condensation (Condensation domain, 7.9e-01, -1.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 4.7e-03, 7.0)"
+                     /source_contig="pDONR201_4"
+     Domainator      8..209
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.6e-102"
+                     /score="329.7"
+                     /name="CAT"
+                     /identity="55.9"
+                     /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="204"
+                     /rlen="204"
+     Domainator      11..90
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="4.7e-03"
+                     /score="7.0"
+                     /name="2-oxoacid_dh"
+                     /identity="18.6"
+                     /cds_id="2265_-1_1606"
+                     /rstart="23"
+                     /rend="92"
+                     /rlen="233"
+     Domainator      23..103
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="7.9e-01"
+                     /score="-1.2"
+                     /name="Condensation"
+                     /identity="25.0"
+                     /cds_id="2265_-1_1606"
+                     /rstart="46"
+                     /rend="69"
+                     /rlen="457"
+     Domainator      168..217
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="3.7e-03"
+                     /score="7.3"
+                     /name="2-oxoacid_dh"
+                     /identity="35.5"
+                     /cds_id="2265_-1_1606"
+                     /rstart="197"
+                     /rend="227"
+                     /rlen="233"
+     Domainator      169..219
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="1.4e-04"
+                     /score="11.2"
+                     /name="Condensation"
+                     /identity="31.2"
+                     /cds_id="2265_-1_1606"
+                     /rstart="133"
+                     /rend="164"
+                     /rlen="457"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5               254 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..254
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..254
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /complete="true"
+                     /gc="43"
+                     /length="762"
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /phase="0"
+                     /name="pDONR201_5"
+                     /cds_id="2916_1_3677"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 1.9e-28, 90.5) & TCAD9 (Ternary complex associated domain 9, 2.9e-04, 10.5)"
+                     /source_contig="pDONR201_4"
+     Domainator      14..246
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="1.9e-28"
+                     /score="90.5"
+                     /name="APH"
+                     /identity="23.0"
+                     /cds_id="2916_1_3677"
+                     /rstart="38"
+                     /rend="233"
+                     /rlen="239"
+     Domainator      127..244
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="2.9e-04"
+                     /score="10.5"
+                     /name="TCAD9"
+                     /identity="28.3"
+                     /cds_id="2916_1_3677"
+                     /rstart="305"
+                     /rend="350"
+                     /rlen="437"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6                31 aa                     UNK 16-APR-2024
+DEFINITION  pDONR201_4.
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..31
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..31
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /phase="0"
+                     /name="pDONR201_6"
+                     /cds_id="4378_1_4470"
+                     /source_contig="pDONR201_4"
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//

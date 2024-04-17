@@ -1,0 +1,15 @@
+name: domainator
+channels:
+  - defaults
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.10
+  - pip>=23.3
+  - setuptools>=61.0.0
+  - coverage~=6.3.2
+  - cd-hit~=4.8.1
+  - diamond~=2.0.14
+  - hmmer~=3.3.2
+  - pip:
+    - -e .[test]

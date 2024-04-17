@@ -1,0 +1,115 @@
+LOCUS       JABFVH010000506_extraction        2688 bp    DNA     linear   UNA 03-DEC-2023
+DEFINITION  MAG: Hamadaea sp. isolate Bin2.21
+            NODE_751_length_24542_cov_3.697117, whole genome shotgun sequence.
+ACCESSION   JABFVH010000506
+VERSION     JABFVH010000506.1
+KEYWORDS    .
+SOURCE      Hamadaea sp. (soil metagenome)
+  ORGANISM  Hamadaea sp.
+            Bacteria; Actinobacteria; Micromonosporales; Micromonosporaceae;
+            Hamadaea.
+FEATURES             Location/Qualifiers
+     source          <1..2688
+                     /organism="Hamadaea sp."
+                     /mol_type="genomic DNA"
+                     /submitter_seqid="NODE_751_length_24542_cov_3.697117"
+                     /isolate="Bin2.21"
+                     /isolation_source="control oxisol soil plot 2"
+                     /db_xref="taxon:2024425"
+                     /environmental_sample
+                     /country="USA: Poamoho, Hawaii"
+                     /lat_lon="21.5416 N 158.0875 W"
+                     /collection_date="2015-11-30"
+                     /metagenome_source="soil metagenome"
+                     /note="metagenomic"
+                     /label="metagenomic source Hamadaea sp."
+     gene            complement(280..780)
+                     /locus_tag="HOV79_30120"
+                     /label="gene"
+     CDS             complement(280..780)
+                     /locus_tag="HOV79_30120"
+                     /inference="COORDINATES: protein motif:HMM:NF025786.1"
+                     /note="Derived by automated computational analysis using
+                     gene prediction method: Protein Homology."
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="NUT37324.1"
+                     /translation="MILNAIIHREWKYAETSAEMAVLVTQVMEDLRHEGVVTIGGLDY
+                     PTAGETARLAFSENRHSGEYDWPAKELVVAVNTETGYGALTWRSVGTVAGGDLVHETW
+                     VSENPEPPEADPRVVADPHVPTFHDRRNALPLMRIREALEEYCRVGTGDRPRNIAWTR
+                     PVNQRV"
+                     /label="hypothetical protein CDS"
+     gene            complement(803..>2688)
+                     /locus_tag="HOV79_30125"
+                     /label="gene"
+     CDS             complement(803..>2688)
+                     /locus_tag="HOV79_30125"
+                     /inference="COORDINATES: protein
+                     motif:HMM:NF019227.1,HMM:NF025784.1"
+                     /note="Derived by automated computational analysis using
+                     gene prediction method: Protein Homology."
+                     /codon_start=3
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="NUT37325.1"
+                     /translation="AEAAAAAAADALAAQQSVAAAAQSAAVAAQEAARASAAAARTAQ
+                     LNAQAQQDAALAAQYAAEAANEAAAAVAAADEAERDAAAARQAAQQAEDAAAAARAAA
+                     DQAERDAAAAEEAAQHALADAQQAQDAAALAQENADAQARAALGTSSPTGEAGVQALP
+                     RVNAEVVSRTVIQCPPLTDSDYCEFTVTYRITGSIDYVLVTCPDFNDLYCPGEQITDH
+                     LKSQPVDMTHEQLVQLTREDINDLLKRLATSLISDYVDCAKGLGILDGKAGETPDNWG
+                     VSCAWVAADLVLPAVAAVIARSIKALRIAMRTGDGIVEAYTALKATEISAGTLAKIGD
+                     DVYRTVLNFCLGHSFAADTPVLMADHSFKPIGEVVPGDAVLAFDPASGQSVAGTVTRQ
+                     FVNKDTRLTDVTVRGDNGDLAVLNTTPTHPFWVEGTVSGWVAAQDLDPGDPLRTADGQ
+                     RATVVSERTFDGAQTMYDLTVEDAHTYYVGVGDAGVLVHNATCPTWVYNALSALRTKA
+                     LTSGRLFAPNGTELYTEIRSGTDASTSAIDTYLKTVPGWPSNADGFWVATHAETKYAW
+                     WMRNNGVKDADIVINNVDGPCAGQYSCPMAVQAILPEGSKVRIWWPGRTTPMEVIGTG
+                     VLP"
+                     /label="hypothetical protein CDS"
+ORIGIN      
+        1 cgcggcgtgc ctggcgttgc cgctctgcca aacgctgcga agggccagca tgcgggtcgc
+       61 agcagcacac ccccatcgtg cggctgatca tcgacgcgac cggactggcc gacacgatcg
+      121 gtcttgggaa cagcatcgcc gaagcgatcg cacgcggccc agatgcgggc aggtcgcagc
+      181 acgccaaccg cggccacatc ccgctgcgcc gccactcccg ctgctgggct ggcgtccaca
+      241 caaccggata ggcccagagt ccgtgcgctg gagtgagtct cagacgcgct ggttgaccgg
+      301 gcgagtccac gcgatgttgc gcgggcggtc gcccgttccg acgcggcagt attcctcgag
+      361 ggcctcacgg atccgcatca gcggtagcgc gttgcgccgg tcatggaacg tcggcacgtg
+      421 aggatccgcc acgactcgtg gatcggcctc ggggggctcc gggttttccg aaacccacgt
+      481 ctcatgaacc aggtcacccc cggcgaccgt gccgacagac ctccacgtca gcgcgccgta
+      541 gccggtctcc gtgttcaccg cgacgaccag ttccttggcc ggccagtcgt actcaccact
+      601 gtgtcggttc tcggagaagg ccaagcgcgc tgtctcgccg gcggtcggat agtcaagccc
+      661 tcctattgtc acgacgcctt cgtgcctgag gtcctccatg acctgcgtca ccaggactgc
+      721 catttcggcg gacgtctccg cgtacttcca ttctcgatgg atgatggcgt tgaggatcac
+      781 gcctgtcgtc ctttccacat gttcagggca gcacgccggt gccgatgact tccattggcg
+      841 tggtgcgtcc cggccaccat atcctgacct tggatccctc aggcaggatg gcctggaccg
+      901 ccatcgggca gctgtattgt ccagcgcacg gcccatcgac attgttgatg acaatgtccg
+      961 cgtctttgac gccgttgttg cgcatccacc acgcatactt ggtttcggca tgggttgcga
+     1021 cccagaatcc gtcggcgttg ctcggccacc cgggcacggt cttgagatat gtatcgatgg
+     1081 ccgacgtcga cgcgtcagta ccgctccgga tctcggtgta gagctccgtg ccgtttggtg
+     1141 cgaacaaccg accgctggtg agggccttgg tacgcagtgc cgacagcgcg ttgtacaccc
+     1201 acgtcgggca ggtcgcgttg tgcacgagca cgccggcgtc gccgactcct acgtagtagg
+     1261 tgtgggcatc ctcgaccgtc aggtcgtaca tcgtctgcgc accgtcgaag gtgcgctctg
+     1321 acactacggt ggcgcgctga ccgtcggcgg tccgcagcgg gtcgcccggg tcaaggtcct
+     1381 gtgccgcgac ccagcccgac accgtgccct cgacccagaa cggatgggtt ggcgtggtgt
+     1441 tgaggactgc gaggtcgccg ttgtcaccgc ggacggtgac gtcggtcagt ctcgtgtcct
+     1501 tgttgacgaa ctggcgtgtc accgtcccgg cgaccgattg gccgctggcg ggatcgaagg
+     1561 ccagcaccgc atcgccggga acgacctcgc cgatgggttt gaaggagtgg tccgccataa
+     1621 ggaccggcgt gtctgcggca aagctgtggc cgagacagaa gttcaggact gtccgataga
+     1681 cgtcgtcgcc gatcttggcg agagtgcccg ccgagatttc ggtcgccttg agcgccgtgt
+     1741 acgcctcgac gatgccgtcg cccgtgcgca tggcgatgcg caacgccttg atcgagcgag
+     1801 cgatgacggc cgcgacagcg ggcaacacca ggtcggcggc gacccatgcg cacgacacgc
+     1861 cccagttgtc gggcgtctca cccgccttgc cgtcgagtat tccgagcccc ttggcgcagt
+     1921 ctacgtagtc gctgatcaac gaggtggcca ggcgcttgag cagatcgttg atgtcctcgc
+     1981 gcgtgagctg tacgagctgc tcatgcgtca tgtccaccgg ttgtgacttg agatgatcgg
+     2041 tgatctgctc gccggggcag taaagatcat tgaagtccgg acaggtgacc agcacgtagt
+     2101 cgatcgagcc cgtgatccgg taggtgacgg tgaattcgca gtagtccgag tcggtcagcg
+     2161 gcggacactg aatcaccgtc cggctgacga cttcggcgtt cacccgcggc aacgcctgaa
+     2221 cgcccgcctc gccagtcggc gagctcgtcc cgagggccgc acgggcctgc gcgtcggcat
+     2281 tctcctgcgc gagcgccgcc gcgtcctggg cctgctgggc atcggccaaa gcgtgctgtg
+     2341 cagcctcctc ggcggctgcg gcgtcccgct cggcctgatc agctgccgca cgagcggcgg
+     2401 cggccgcatc ctcggcctgc tgcgctgctt gccgggccgc ggcggcatca cgttcggcct
+     2461 cgtccgccgc cgcgacggcg gccgcagcct cgttcgccgc ctcagccgcg tactgggcag
+     2521 ccagcgccgc atcctgctgg gcctgggcgt tgagctgcgc ggtccgcgcc gctgccgcag
+     2581 atgctctcgc ggcctcctgc gctgcgaccg ccgccgactg cgctgcggcg gcaacgctct
+     2641 gctgtgcggc gagtgcatct gcggcagcgg ccgctgcggc ctcggcgg
+//

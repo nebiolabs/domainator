@@ -1,0 +1,64 @@
+<!doctype html><html lang='en'>
+<head>
+<meta charset="UTF-8" />
+<title>Enum Report</title>
+<link href="https://unpkg.com/tabulator-tables@5.4.3/dist/css/tabulator.min.css" rel="stylesheet">
+<script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.4.3/dist/js/tabulator.min.js"></script>
+</head>
+
+<body>
+<div>
+    <button id="download-csv">Download CSV</button>
+    <button id="download-html">Download HTML</button>
+    <button id="download-json">Download JSON</button>
+</div>
+<div id="enum_report_table"></div>
+<script>
+var tabledata = [
+{id:0,"contig":"pDONR201_2", "cds":" ", "domain":"CcdB", "domains":"CcdB", "sequence":"QFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDKVSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWG", "length":99, "architecture":"CcdB", "score":103.0, },
+{id:1,"contig":"pDONR201_3", "cds":" ", "domain":"CcdA", "domains":"CcdA", "sequence":"MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW", "length":41, "architecture":"CcdA", "score":50.1, },
+{id:2,"contig":"pDONR201_4", "cds":" ", "domain":"CAT", "domains":"CAT", "sequence":"VDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFLKTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSSLWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANMDNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYC", "length":202, "architecture":"CAT", "score":329.7, },
+{id:3,"contig":"pDONR201_4", "cds":" ", "domain":"Condensation", "domains":"Condensation", "sequence":"EKKITGYTTVDISQWHRKEHFEAFQSVAQCTY", "length":32, "architecture":"Condensation", "score":11.2, },
+{id:4,"contig":"pDONR201_4", "cds":" ", "domain":"2-oxoacid_dh", "domains":"2-oxoacid_dh", "sequence":"TGYTTVDISQWHRKEHFEAFQSVAQCTYNQT", "length":31, "architecture":"2-oxoacid_dh", "score":7.3, },
+{id:5,"contig":"pDONR201_4", "cds":" ", "domain":"2-oxoacid_dh", "domains":"2-oxoacid_dh", "sequence":"GFIENMFFVSANPWVSFTSFDLNVANMDNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVC", "length":60, "architecture":"2-oxoacid_dh", "score":7.0, },
+{id:6,"contig":"pDONR201_4", "cds":" ", "domain":"Condensation", "domains":"Condensation", "sequence":"IENMFFVSANPWVSFTSFDLN", "length":21, "architecture":"Condensation", "score":-1.2, },
+{id:7,"contig":"pDONR201_5", "cds":" ", "domain":"APH", "domains":"APH", "sequence":"TDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVDALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKEMHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFSPSLQKRLFQKYGIDNP", "length":191, "architecture":"APH", "score":90.5, },
+{id:8,"contig":"pDONR201_5", "cds":" ", "domain":"TCAD9", "domains":"TCAD9", "sequence":"SVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCL", "length":45, "architecture":"TCAD9", "score":10.5, },
+];
+    var table = new Tabulator("#enum_report_table", {
+    data:tabledata,
+    pagination:"local",
+    paginationSize:25,
+    paginationSizeSelector:[25, 50, 100, 1000],
+    movableColumns:true,
+    paginationCounter:"rows",
+    maxHeight:100,
+    columns:[
+{"title": "contig", "field": "contig", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "cds", "field": "cds", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "domain", "field": "domain", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "domains", "field": "domains", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "sequence", "field": "sequence", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "length", "field": "length", "width": 150, "sorter": "number", "tooltip": true},
+{"title": "architecture", "field": "architecture", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "score", "field": "score", "width": 150, "sorter": "number", "tooltip": true},
+    ],
+});
+
+//trigger download of data.csv file
+document.getElementById("download-csv").addEventListener("click", function(){
+    table.download("csv", "data.csv");
+});
+
+//trigger download of data.json file
+document.getElementById("download-json").addEventListener("click", function(){
+    table.download("json", "data.json");
+});
+
+//trigger download of data.html file
+document.getElementById("download-html").addEventListener("click", function(){
+    table.download("html", "data.html", {style:true});
+});
+
+</script>
+</body></html>

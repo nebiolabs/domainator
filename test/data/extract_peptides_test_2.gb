@@ -1,0 +1,616 @@
+LOCUS       pDONR201_1_1              35 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2_1             102 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /name="CcdB"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.0"
+                     /cds_id="958_-1_1264"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3_1              42 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /name="CcdA"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.8e-16"
+                     /score="50.1"
+                     /cds_id="1265_-1_1391"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4_1             220 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      11..212
+                     /program="hmmsearch"
+                     /name="CAT"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.7e-102"
+                     /score="329.7"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      2..33
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.00015"
+                     /score="11.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      6..36
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0037"
+                     /score="7.3"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      137..196
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0047"
+                     /score="7.0"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      139..159
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.81"
+                     /score="-1.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5_1             254 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      48..238
+                     /program="hmmsearch"
+                     /name="APH"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="2e-28"
+                     /score="90.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+     Domainator      174..218
+                     /program="hmmsearch"
+                     /name="TCAD9"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="0.00029"
+                     /score="10.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6_1              31 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//
+LOCUS       pDONR201_1_2              35 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2_2             102 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /name="CcdB"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.0"
+                     /cds_id="958_-1_1264"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3_2              42 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /name="CcdA"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.8e-16"
+                     /score="50.1"
+                     /cds_id="1265_-1_1391"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4_2             220 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      11..212
+                     /program="hmmsearch"
+                     /name="CAT"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.7e-102"
+                     /score="329.7"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      2..33
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.00015"
+                     /score="11.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      6..36
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0037"
+                     /score="7.3"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      137..196
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0047"
+                     /score="7.0"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      139..159
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.81"
+                     /score="-1.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5_2             254 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      48..238
+                     /program="hmmsearch"
+                     /name="APH"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="2e-28"
+                     /score="90.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+     Domainator      174..218
+                     /program="hmmsearch"
+                     /name="TCAD9"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="0.00029"
+                     /score="10.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6_2              31 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//
+LOCUS       pDONR201_1_3              35 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2_3             102 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /name="CcdB"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.0"
+                     /cds_id="958_-1_1264"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3_3              42 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /name="CcdA"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.8e-16"
+                     /score="50.1"
+                     /cds_id="1265_-1_1391"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4_3             220 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      11..212
+                     /program="hmmsearch"
+                     /name="CAT"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.7e-102"
+                     /score="329.7"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      2..33
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.00015"
+                     /score="11.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      6..36
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0037"
+                     /score="7.3"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      137..196
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0047"
+                     /score="7.0"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      139..159
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.81"
+                     /score="-1.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5_3             254 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      48..238
+                     /program="hmmsearch"
+                     /name="APH"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="2e-28"
+                     /score="90.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+     Domainator      174..218
+                     /program="hmmsearch"
+                     /name="TCAD9"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="0.00029"
+                     /score="10.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6_3              31 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//
+LOCUS       pDONR201_1_4              35 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 fpalspdsvd nritasqeef vetqkghpsg wpsa*
+//
+LOCUS       pDONR201_2_4             102 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_2
+VERSION     pDONR201_2
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..100
+                     /program="hmmsearch"
+                     /name="CcdB"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.0"
+                     /cds_id="958_-1_1264"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//
+LOCUS       pDONR201_3_4              42 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_3
+VERSION     pDONR201_3
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..41
+                     /program="hmmsearch"
+                     /name="CcdA"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.8e-16"
+                     /score="50.1"
+                     /cds_id="1265_-1_1391"
+                     /database="Pfam-A"
+ORIGIN
+        1 mqnearrlra erwkaenqeg maevarfiem ngsfadenrd w*
+//
+LOCUS       pDONR201_4_4             220 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_4
+VERSION     pDONR201_4
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      11..212
+                     /program="hmmsearch"
+                     /name="CAT"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.7e-102"
+                     /score="329.7"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      2..33
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.00015"
+                     /score="11.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      6..36
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0037"
+                     /score="7.3"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      137..196
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0047"
+                     /score="7.0"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      139..159
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.81"
+                     /score="-1.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+ORIGIN
+        1 mekkitgytt vdisqwhrke hfeafqsvaq ctynqtvqld itaflktvkk nkhkfypafi
+       61 hilarlmnah pefrmamkdg elviwdsvhp cytvfheqte tfsslwseyh ddfrqflhiy
+      121 sqdvacygen layfpkgfie nmffvsanpw vsftsfdlnv anmdnffapv ftmgkyytqg
+      181 dkvlmplaiq vhhavcdgfh vgrmlnelqq ycdewqgga*
+//
+LOCUS       pDONR201_5_4             254 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_5
+VERSION     pDONR201_5
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      48..238
+                     /program="hmmsearch"
+                     /name="APH"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="2e-28"
+                     /score="90.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+     Domainator      174..218
+                     /program="hmmsearch"
+                     /name="TCAD9"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="0.00029"
+                     /score="10.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+ORIGIN
+        1 mdadlygykw ardnvgqsga tiyrlygkpd apelflkhgk gsvandvtde mvrlnwltef
+       61 mplptikhfi rtpddawllt taipgktafq vleeypdsge nivdalavfl rrlhsipvcn
+      121 cpfnsdrvfr laqaqsrmnn glvdasdfdd erngwpveqv wkemhkllpf spdsvvthgd
+      181 fsldnlifde gkligcidvg rvgiadryqd lailwnclge fspslqkrlf qkygidnpdm
+      241 nklqfhlmld eff*
+//
+LOCUS       pDONR201_6_4              31 aa                     UNK 19-OCT-2021
+DEFINITION  different description that will mess up your output!
+ACCESSION   pDONR201_6
+VERSION     pDONR201_6
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 mlvrgaepme krqqrglftv pglllafcsh v
+//

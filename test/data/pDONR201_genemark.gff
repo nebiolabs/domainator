@@ -1,0 +1,15 @@
+##gff-version 2
+# GeneMark.hmm-2 prokaryotic version: 1.24
+# File with sequence: pDONR201.fasta
+# File with MetaGeneMark parameters: /mnt/rbg/programs/srj_nextflow/workflows/metagenemark/resources/mgm_11.mod
+# translation table: 11
+# output date start: Wed Sep 22 12:11:10 2021
+
+##sequence-region pDONR201 1 4470
+pDONR201	GeneMark.hmm2	CDS	2	106	5.09	+	0	gene_id pDONR201_1; gene_type bacteria; partial 10; gc 49; length 105;
+pDONR201	GeneMark.hmm2	CDS	959	1264	20.71	-	0	gene_id pDONR201_2; gene_type bacteria; complete; gc 50; length 306;
+pDONR201	GeneMark.hmm2	CDS	1266	1391	5.68	-	0	gene_id pDONR201_3; gene_type bacteria; complete; gc 54; length 126;
+pDONR201	GeneMark.hmm2	CDS	1606	2265	41.74	-	0	gene_id pDONR201_4; gene_type bacteria; complete; gc 45; length 660;
+pDONR201	GeneMark.hmm2	CDS	2916	3677	51.92	+	0	gene_id pDONR201_5; gene_type bacteria; complete; gc 43; length 762;
+pDONR201	GeneMark.hmm2	CDS	4378	4470	2.26	+	0	gene_id pDONR201_6; gene_type bacteria; partial 01; gc 56; length 93;
+# pDONR201	total_logodd	127.403	average_length	342	average_density	1.34

@@ -1,0 +1,78 @@
+query	reference	score
+2-oxoacid_dh	2-oxoacid_dh	146.40
+1         eqeeervplsgirkaiakrlteskqeiphftlsdevdvtallalrkelkedeakeekakltlldflikavalAlkefPelnasvdeeekeivlkkhvniGvAvatprGLlvPviknadkkslleiakelkelaeraregklkpedleggtftisNlGmlGvtsftPiinppqvaIlgvgrikerpvvkegelvarkvmplslsaDHRvidGaeaarFlntlkkllenpeelll       233
+          .......++..+|+.+.+.|..+...+|++.....++++.+..++...+.........+.++..++++++..|+..+|.+++.++.....+.....++||+|++.+.||++|+++.++...+..+...+..+...++..++...++.+++++++|+|.++...+.|+++.++.+|++++.....+++....+.....+.+++++|||+++|+....|+..++.+++++..++.          
+1         eqeeervplsgirkaiakrlteskqeiphftlsdevdvtallalrkelkedeakeekakltlldflikavalAlkefPelnasvdeeekeivlkkhvniGvAvatprGLlvPviknadkkslleiakelkelaeraregklkpedleggtftisNlGmlGvtsftPiinppqvaIlgvgrikerpvvkegelvarkvmplslsaDHRvidGaeaarFlntlkkllenpeelll       233
+
+
+
+APH	APH	119.66
+1         evrelsggasnrnylvttpagryvlrrnpparaaeeierehallrlLakagvpvPevlaldtdaeelgllfalleglpgeslerklsaaqlpellealgeflaaLhqvdpaalpladelaqylellrqlesatkrllaselldlleeleeqvlaallallpaelptvllHgDlhpgNllvdpddgrvtGviDfedaglgpplyDlavllrawtseldpellaalvrayleagrarlaal       239
+          .++.+.++.++++|++.+..++++++.....+....+..+++.++.++..++++|++++.+++....++.+.+++++++...+......+...++..++++++++|++.....+..+..............+........+.+....+..++++++...++...+.+++|+|++.+|++++.++.++.|+|||+++..+++.+|+++++..|.....+.+...+.+.+....+..++.+          
+1         evrelsggasnrnylvttpagryvlrrnpparaaeeierehallrlLakagvpvPevlaldtdaeelgllfalleglpgeslerklsaaqlpellealgeflaaLhqvdpaalpladelaqylellrqlesatkrllaselldlleeleeqvlaallallpaelptvllHgDlhpgNllvdpddgrvtGviDfedaglgpplyDlavllrawtseldpellaalvrayleagrarlaal       239
+
+
+
+APH	TCAD9	27.21
+166       tvllHgDlhpgNllvdpddgrvtGviDfedaglgp-plyDlavl       208
+          ....|+|++..|+++.  ......+|||....... ...|++++          
+305       tssvHGDLNprNiLla--eedrvyLIDfartreggpllsDlAwL       346
+
+
+
+CAT	CAT	143.71
+1         fklidletwerkehfehylkvvkctysltvelditalkkeikkkklkvypaliyllarvvnkhkefrmalkdegelgyWdklnPvytvfnketetfssiwteydedfaefyksyaadlaeysektklfPkgnllentlnvsslPWvsftsfnlnvaneedyllPiftlgkykkeedkillPvaiqvhhavcdGyhaarlinelq       204
+          +..++++.|.++.+|..|.....|+|..+..++++.....++....+.|+..+|.+..+++....|++.+........|+..+|.|+++....++|..+|+.+..++..|.......+..+.....++|+....++.+.++..||++|.+|++++.....|+.|++++++|.....++++|+++++||++|||||..++++.++          
+1         fklidletwerkehfehylkvvkctysltvelditalkkeikkkklkvypaliyllarvvnkhkefrmalkdegelgyWdklnPvytvfnketetfssiwteydedfaefyksyaadlaeysektklfPkgnllentlnvsslPWvsftsfnlnvaneedyllPiftlgkykkeedkillPvaiqvhhavcdGyhaarlinelq       204
+
+
+
+CAT	Condensation	13.24
+182       vaiqvhhavcdGyhaarlinelq       204
+          +...+||.+.||.....+...+.          
+133       lllsvHHiivDGvSlgillrdla       155
+
+
+
+CcdA	CcdA	60.93
+1         KkavnvslnadllaearalgiNlSatleeaLaeevkrekaerwkeenreaieaynrfiekhGlfaDeyRsF        71
+          |+.+|++++.+++..++.+.+|+|.+++..|...+++.+.+.|.++++..++.+|.+++++|.|+|++|.|          
+1         KkavnvslnadllaearalgiNlSatleeaLaeevkrekaerwkeenreaieaynrfiekhGlfaDeyRsF        71
+
+
+
+CcdB	CcdB	59.86
+1         qFdvYrnpskskkaipylldvqsdlldelatrvvvPLlsaselskvakrLnPvlevegesvvlltqelasvpakaLgkkvaslseerdeiiaALDllltG       100
+          +|.+|.+........+|++++|++.+.....++|+|+............+.|.+.+....+.+.+..+..+....+...+.++......+..|+|.++.|          
+1         qFdvYrnpskskkaipylldvqsdlldelatrvvvPLlsaselskvakrLnPvlevegesvvlltqelasvpakaLgkkvaslseerdeiiaALDllltG       100
+
+
+
+Condensation	Condensation	267.28
+1         vqdeyplspaQkrmwflekleeessaynmqavlklegeldlerlekalqelierhdaLRtvfleeengepvQvileerevelevleisdleeseeeeaieefaqkdlqepfdLekgpLfraalfkiaenrlllllsvHHiivDGvSlgillrdlaklYqqlekgeelplpqktpYkdyaeweqqyleskdlekeeaYWseqlegelpvlqLpkdkarpakrsfkadrlsikldeeteeklrklakeqgvtlndvllaalgllLskytgqddivvgteisgReseikdiermvGlFvntlPlridvkeaktfselikrvkedllkaephqgypleeLvkdlelqrkesrspLfdpvfsfenylgqeseeeesqlselklsvssveaeeeskydlsleasetngkltikieYntslFdeetierflerlkelleqviehpeqklselkllsdaekekLl       457
+          .+..++++.+|+++|++.+......+|++..++.....++...++.++..++.++|++|+.+..+..+.++|.+.....+.+..+.+.+......+..+..+.++..+..+++...+++++.++...+...++++.+||+++||+|+.++.+++...|.....+..........|.+|+.+.+++..+...++...||.+.+........||..........+..+...+.+.......+...++.+++++..++++++.++|++++.+.++++++..++|..+...++.++|+|+|++|+++......++...++.++.....+..++.+++..+.......+....+.+++..+.++|+..+....+.....................|++.+.+....+.+.+.+.|++..|...++..+.+++...+.+++.++........++.+.+.+.+.          
+1         vqdeyplspaQkrmwflekleeessaynmqavlklegeldlerlekalqelierhdaLRtvfleeengepvQvileerevelevleisdleeseeeeaieefaqkdlqepfdLekgpLfraalfkiaenrlllllsvHHiivDGvSlgillrdlaklYqqlekgeelplpqktpYkdyaeweqqyleskdlekeeaYWseqlegelpvlqLpkdkarpakrsfkadrlsikldeeteeklrklakeqgvtlndvllaalgllLskytgqddivvgteisgReseikdiermvGlFvntlPlridvkeaktfselikrvkedllkaephqgypleeLvkdlelqrkesrspLfdpvfsfenylgqeseeeesqlselklsvssveaeeeskydlsleasetngkltikieYntslFdeetierflerlkelleqviehpeqklselkllsdaekekLl       457
+
+
+
+Condensation	CAT	13.24
+133       lllsvHHiivDGvSlgillrdla       155
+          +...+||.+.||.....+...+.          
+182       vaiqvhhavcdGyhaarlinelq       204
+
+
+
+TCAD9	TCAD9	244.69
+1         dqvevvrvLtgGrSGaqVlevtvfvkeknqalrhVlKigsaseiakEweAyqrliqpllnalfatIiavsesvlengdqvldelgavvYshagqfagepgeklrsLedlfqealrgpeaadravallerlletllnllYagateeplqtlreelnsrLGpdlvvevkevdseqlvvypdDllqakmssysaseynskvagilvsvelsrlevkvrgprlsavdddvrvevllsggalseleeqgdefleGsvvatranlrlrllkeledelvleetllevdglqlahPfaalrsaLtealearvtssvHGDLNprNiLlaeedrvyLIDfartreggpllsDlAwLevnLlrtvladrldlqellrLqrlLalasrllelealaealagesealakafrllaaiRrfarkqyplerrelwwreylaaLllaahrtLk       437
+          ..+.+++.+.+|+||+.|+++.......+....+|+|++....+.+|+.+|+++++...+..+..|......+............+++|.++....+.....+.+|.++++......++.+.+...++.++..+...+|...............+..||.++.+++..+......+..+|.....+.............+....+.+.+..............+.+.+.|...................|.++.+|...+...+....+.....+....+++..+.||+.++...|......+..+.+|||||.+|||+.+.+..|+|||.++......+.|+|||+..++++.++...++..++++++.|.....+.........+......+..++++++++|..+...++......||.+|..++..+++++|+          
+1         dqvevvrvLtgGrSGaqVlevtvfvkeknqalrhVlKigsaseiakEweAyqrliqpllnalfatIiavsesvlengdqvldelgavvYshagqfagepgeklrsLedlfqealrgpeaadravallerlletllnllYagateeplqtlreelnsrLGpdlvvevkevdseqlvvypdDllqakmssysaseynskvagilvsvelsrlevkvrgprlsavdddvrvevllsggalseleeqgdefleGsvvatranlrlrllkeledelvleetllevdglqlahPfaalrsaLtealearvtssvHGDLNprNiLlaeedrvyLIDfartreggpllsDlAwLevnLlrtvladrldlqellrLqrlLalasrllelealaealagesealakafrllaaiRrfarkqyplerrelwwreylaaLllaahrtLk       437
+
+
+
+TCAD9	APH	27.21
+305       tssvHGDLNprNiLla--eedrvyLIDfartreggpllsDlAwL       346
+          ....|+|++..|+++.  ......+|||....... ...|++++          
+166       tvllHgDlhpgNllvdpddgrvtGviDfedaglgp-plyDlavl       208
+
+
+

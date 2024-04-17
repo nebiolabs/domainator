@@ -1,0 +1,55 @@
+<!doctype html><html lang='en'>
+<head>
+<meta charset="UTF-8" />
+<title>Enum Report</title>
+<link href="https://unpkg.com/tabulator-tables@5.4.3/dist/css/tabulator.min.css" rel="stylesheet">
+<script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.4.3/dist/js/tabulator.min.js"></script>
+</head>
+
+<body>
+<div>
+    <button id="download-csv">Download CSV</button>
+    <button id="download-html">Download HTML</button>
+    <button id="download-json">Download JSON</button>
+</div>
+<div id="enum_report_table"></div>
+<script>
+var tabledata = [
+{id:0,"contig":"pDONR201_2", "cds":" ", "domain":"\"CcdB\"", "domains":"\"CcdB\"", "sequence":"QFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDKVSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWG", "length":99, "architecture":"\"CcdB\"", "score":103.0, },
+];
+    var table = new Tabulator("#enum_report_table", {
+    data:tabledata,
+    pagination:"local",
+    paginationSize:25,
+    paginationSizeSelector:[25, 50, 100, 1000],
+    movableColumns:true,
+    paginationCounter:"rows",
+    columns:[
+{"title": "contig", "field": "contig", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "cds", "field": "cds", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "domain", "field": "domain", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "domains", "field": "domains", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "sequence", "field": "sequence", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "length", "field": "length", "width": 150, "sorter": "number", "tooltip": true},
+{"title": "architecture", "field": "architecture", "width": 150, "sorter": "string", "tooltip": true},
+{"title": "score", "field": "score", "width": 150, "sorter": "number", "tooltip": true},
+    ],
+});
+
+//trigger download of data.csv file
+document.getElementById("download-csv").addEventListener("click", function(){
+    table.download("csv", "data.csv");
+});
+
+//trigger download of data.json file
+document.getElementById("download-json").addEventListener("click", function(){
+    table.download("json", "data.json");
+});
+
+//trigger download of data.html file
+document.getElementById("download-html").addEventListener("click", function(){
+    table.download("html", "data.html", {style:true});
+});
+
+</script>
+</body></html>

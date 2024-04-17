@@ -1,0 +1,103 @@
+LOCUS       sp|P0AGD1|SODC_ECOLI     173 aa                     UNK 06-JUN-2023
+DEFINITION  sp|P0AGD1|SODC_ECOLI Superoxide dismutase [Cu-Zn] OS=Escherichia
+            coli (strain K12) OX=562 GN=sodC PE=1 SV=1.
+ACCESSION   sp|P0AGD1|SODC_ECOLI
+VERSION     sp|P0AGD1|SODC_ECOLI
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domain_Search   1..173
+                     /program="phmmer"
+                     /database="swissprot_CuSOD_subset"
+                     /description="Superoxide dismutase [Cu-Zn] OS=Escherichia coli (strain K12) OX=562 GN=sodC PE=1 SV=1"
+                     /evalue="2.0e-114"
+                     /score="375.2"
+                     /name="sp|P0AGD1|SODC_ECOLI"
+                     /identity="100.0"
+                     /cds_id="0_1_173"
+                     /rstart="3"
+                     /rend="79"
+                     /rlen="100"
+     Domainator      1..173
+                     /program="phmmer"
+                     /database="swissprot_CuSOD_subset"
+                     /description="Superoxide dismutase [Cu-Zn] OS=Escherichia coli (strain K12) OX=562 GN=sodC PE=1 SV=1"
+                     /evalue="2.0e-114"
+                     /score="375.2"
+                     /name="sp|P0AGD1|SODC_ECOLI"
+                     /identity="100.0"
+                     /cds_id="0_1_173"
+                     /rstart="3"
+                     /rend="79"
+                     /rlen="100"
+     Domainator      14..173
+                     /program="phmmer"
+                     /database="swissprot_CuSOD_subset"
+                     /description="Superoxide dismutase-like protein YojM OS=Bacillus subtilis (strain 168) OX=1423 GN=yojM PE=1 SV=1"
+                     /evalue="6.5e-13"
+                     /score="44.8"
+                     /name="sp|O31851|YOJM_BACSU"
+                     /identity="38.1"
+                     /cds_id="0_1_173"
+                     /rstart="3"
+                     /rend="79"
+                     /rlen="100"
+ORIGIN
+        1 mkrfslaila lvvatgaqaa sekvemnlvt sqgvgqsigs vtitetdkgl efspdlkalp
+       61 pgehgfhiha kgscqpatkd gkasaaesag ghldpqntgk hegpegaghl gdlpalvvnn
+      121 dgkatdavia prlksldeik dkalmvhvgg dnmsdqpkpl ggggeryacg vik
+//
+LOCUS       sp|O31851|YOJM_BACSU     196 aa                     UNK 06-JUN-2023
+DEFINITION  sp|O31851|YOJM_BACSU Superoxide dismutase-like protein YojM
+            OS=Bacillus subtilis (strain 168) OX=1423 GN=yojM PE=1 SV=1.
+ACCESSION   sp|O31851|YOJM_BACSU
+VERSION     sp|O31851|YOJM_BACSU
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domain_Search   1..196
+                     /program="phmmer"
+                     /database="swissprot_CuSOD_subset"
+                     /description="Superoxide dismutase-like protein YojM OS=Bacillus subtilis (strain 168) OX=1423 GN=yojM PE=1 SV=1"
+                     /evalue="6.8e-135"
+                     /score="442.9"
+                     /name="sp|O31851|YOJM_BACSU"
+                     /identity="100.0"
+                     /cds_id="0_1_196"
+                     /rstart="3"
+                     /rend="79"
+                     /rlen="100"
+     Domainator      1..196
+                     /program="phmmer"
+                     /database="swissprot_CuSOD_subset"
+                     /description="Superoxide dismutase-like protein YojM OS=Bacillus subtilis (strain 168) OX=1423 GN=yojM PE=1 SV=1"
+                     /evalue="6.8e-135"
+                     /score="442.9"
+                     /name="sp|O31851|YOJM_BACSU"
+                     /identity="100.0"
+                     /cds_id="0_1_196"
+                     /rstart="3"
+                     /rend="79"
+                     /rlen="100"
+     Domainator      36..190
+                     /program="phmmer"
+                     /database="swissprot_CuSOD_subset"
+                     /description="Superoxide dismutase [Cu-Zn] OS=Escherichia coli (strain K12) OX=562 GN=sodC PE=1 SV=1"
+                     /evalue="9.8e-13"
+                     /score="44.3"
+                     /name="sp|P0AGD1|SODC_ECOLI"
+                     /identity="37.4"
+                     /cds_id="0_1_196"
+                     /rstart="3"
+                     /rend="79"
+                     /rlen="100"
+ORIGIN
+        1 mhrllllmml talgvagcgq kkppdppnrv pekkvvetsa fghhvqlvnr egkavgfiei
+       61 kesddegldi hisanslrpg aslgfhiyek gscvrpdfes aggpfnplnk ehgfnnpmgh
+      121 hagdlpnlev gadgkvdvim napdtslkkg sklnildedg safiiheqad dyltnpsgns
+      181 garivcgall gnnekq
+//

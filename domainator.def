@@ -1,0 +1,14 @@
+Bootstrap: docker
+From: continuumio/miniconda3:23.10.0-1
+
+%files
+./src /opt/domainator/src
+./conda_env.yml /opt/domainator
+./test /opt/domainator/test
+./pyproject.toml /opt/domainator
+
+%post
+# apt-get update
+cd /opt/domainator
+# mamba update -n base -c conda-forge -c defaults conda
+conda env update --name base --file conda_env.yml

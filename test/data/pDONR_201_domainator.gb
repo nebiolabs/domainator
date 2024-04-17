@@ -1,0 +1,250 @@
+LOCUS       pDONR201_1              4470 bp    DNA              UNK 24-SEP-2021
+DEFINITION  pDONR201_1.
+ACCESSION   pDONR201_1
+VERSION     pDONR201_1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     CDS             2..106
+                     /source="GeneMark.hmm2"
+                     /score="5.09"
+                     /seqid="pDONR201_1"
+                     /frame="0"
+                     /gene_id="pDONR201_1"
+                     /gene_type="bacteria"
+                     /partial="10"
+                     /gc="49"
+                     /length="105"
+                     /cds_id="1_1_106"
+                     /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
+     CDS             complement(959..1264)
+                     /source="GeneMark.hmm2"
+                     /score="20.71"
+                     /seqid="pDONR201_1"
+                     /frame="0"
+                     /gene_id="pDONR201_2"
+                     /gene_type="bacteria"
+                     /gc="50"
+                     /length="306"
+                     /domainator_Pfam-A="CcdB (CcdB protein,
+                     1e-32, 103.0)"
+                     /cds_id="958_-1_1264"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+     CDS             complement(1266..1391)
+                     /source="GeneMark.hmm2"
+                     /score="5.68"
+                     /seqid="pDONR201_1"
+                     /frame="0"
+                     /gene_id="pDONR201_3"
+                     /gene_type="bacteria"
+                     /gc="54"
+                     /length="126"
+                     /domainator_Pfam-A="CcdA
+                     (Post-segregation antitoxin CcdA, 3.6e-16, 50.1)"
+                     /cds_id="1265_-1_1391"
+                     /translation="MQNEARRLRAERWKAENQEGMAEVARFIEMNGSFADENRDW*"
+     CDS             complement(1606..2265)
+                     /source="GeneMark.hmm2"
+                     /score="41.74"
+                     /seqid="pDONR201_1"
+                     /frame="0"
+                     /gene_id="pDONR201_4"
+                     /gene_type="bacteria"
+                     /gc="45"
+                     /length="660"
+                     /domainator_Pfam-A="CAT (Chloramphenicol
+                     acetyltransferase, 8.6e-102, 329.7) & Condensation
+                     (Condensation domain, 5e-05, 11.2) & 2-oxoacid_dh
+                     (2-oxoacid dehydrogenases acyltransferase (catalytic
+                     domain), 7e-06, 7.3) & 2-oxoacid_dh (2-oxoacid
+                     dehydrogenases acyltransferase (catalytic domain), 7e-06,
+                     7.0) & Condensation (Condensation domain, 5e-05, -1.2)"
+                     /cds_id="1605_-1_2265"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+     CDS             2916..3677
+                     /source="GeneMark.hmm2"
+                     /score="51.92"
+                     /seqid="pDONR201_1"
+                     /frame="0"
+                     /gene_id="pDONR201_5"
+                     /gene_type="bacteria"
+                     /gc="43"
+                     /length="762"
+                     /domainator_Pfam-A="APH
+                     (Phosphotransferase enzyme family, 1.8e-28, 90.5) & TCAD9
+                     (Ternary complex associated domain 9, 0.00022, 10.5)"
+                     /cds_id="2915_1_3677"
+                     /translation="MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVAN
+                     DVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTAFQVLEEYPDSGENIVD
+                     ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
+                     MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
+                     PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+     CDS             4378..4470
+                     /source="GeneMark.hmm2"
+                     /score="2.26"
+                     /seqid="pDONR201_1"
+                     /frame="0"
+                     /gene_id="pDONR201_6"
+                     /gene_type="bacteria"
+                     /partial="01"
+                     /gc="56"
+                     /length="93"
+                     /cds_id="4377_1_4470"
+                     /translation="MLVRGAEPMEKRQQRGLFTVPGLLLAFCSHV"
+     Domainator      complement(965..1261)
+                     /program="hmmsearch"
+                     /name="CcdB"
+                     /description="CcdB protein"
+                     /evalue="1.1e-32"
+                     /score="103.0"
+                     /cds_id="958_-1_1264"
+                     /database="Pfam-A"
+     Domainator      complement(1269..1391)
+                     /program="hmmsearch"
+                     /name="CcdA"
+                     /description="Post-segregation antitoxin CcdA"
+                     /evalue="3.8e-16"
+                     /score="50.1"
+                     /cds_id="1265_-1_1391"
+                     /database="Pfam-A"
+     Domainator      complement(1639..2244)
+                     /program="hmmsearch"
+                     /name="CAT"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="9.7e-102"
+                     /score="329.7"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      complement(1612..1707)
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.00015"
+                     /score="11.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      complement(1624..1716)
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0037"
+                     /score="7.3"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      complement(2017..2196)
+                     /program="hmmsearch"
+                     /name="2-oxoacid_dh"
+                     /description="2-oxoacid dehydrogenases acyltransferase
+                     (catalytic domain)"
+                     /evalue="0.0047"
+                     /score="7.0"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      complement(2023..2085)
+                     /program="hmmsearch"
+                     /name="Condensation"
+                     /description="Condensation domain"
+                     /evalue="0.81"
+                     /score="-1.2"
+                     /cds_id="1605_-1_2265"
+                     /database="Pfam-A"
+     Domainator      3057..3629
+                     /program="hmmsearch"
+                     /name="APH"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="2e-28"
+                     /score="90.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+     Domainator      3435..3569
+                     /program="hmmsearch"
+                     /name="TCAD9"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="0.00029"
+                     /score="10.5"
+                     /cds_id="2915_1_3677"
+                     /database="Pfam-A"
+ORIGIN
+        1 ctttcctgcg ttatcccctg attctgtgga taaccgtatt accgctagcc aggaagagtt
+       61 tgtagaaacg caaaaaggcc atccgtcagg atggccttct gcttagtttg atgcctggca
+      121 gtttatggcg ggcgtcctgc ccgccaccct ccgggccgtt gcttcacaac gttcaaatcc
+      181 gctcccggcg gatttgtcct actcaggaga gcgttcaccg acaaacaaca gataaaacga
+      241 aaggcccagt cttccgactg agcctttcgt tttatttgat gcctggcagt tccctactct
+      301 cgcgttaacg ctagcatgga tctcgggccc caaataatga ttttattttg actgatagtg
+      361 acctgttcgt tgcaacaaat tgatgagcaa tgctttttta taatgccaag tttgtacaaa
+      421 aaagcagaac gagaaacgta aaatgatata aatatcaata tattaaatta gattttgcat
+      481 aaaaaacaga ctacataata ctgtaaaaca caacatatcc agtcactatg aatcaactac
+      541 ttagatggta ttagtgacct gtagtcgacc gacagccttc caaatgttct tcgggtgatg
+      601 ctgccaactt agtcgaccga cagccttcca aatgttcttc tcaaacggaa tcgtcgtatc
+      661 cagcctactc gctattgtcc tcaatgccgt attaaatcat aaaaagaaat aagaaaaaga
+      721 ggtgcgagcc tcttttttgt gtgacaaaat aaaaacatct acctattcat atacgctagt
+      781 gtcatagtcc tgaaaatcat ctgcatcaag aacaatttca caactcttat acttttctct
+      841 tacaagtcgt tcggcttcat ctggattttc agcctctata cttactaaac gtgataaagt
+      901 ttctgtaatt tctactgtat cgacctgcag actggctgtg tataagggag cctgacattt
+      961 atattcccca gaacatcagg ttaatggcgt ttttgatgtc attttcgcgg tggctgagat
+     1021 cagccacttc ttccccgata acggagaccg gcacactggc catatcggtg gtcatcatgc
+     1081 gccagctttc atccccgata tgcaccaccg ggtaaagttc acgggagact ttatctgaca
+     1141 gcagacgtgc actggccagg gggatcacca tccgtcgccc gggcgtgtca ataatatcac
+     1201 tctgtacatc cacaaacaga cgataacggc tctctctttt ataggtgtaa accttaaact
+     1261 gcatttcacc agtccctgtt ctcgtcagca aaagagccgt tcatttcaat aaaccgggcg
+     1321 acctcagcca tcccttcctg attttccgct ttccagcgtt cggcacgcag acgacgggct
+     1381 tcattctgca tggttgtgct taccagaccg gagatattga catcatatat gccttgagca
+     1441 actgatagct gtcgctgtca actgtcactg taatacgctg cttcatagca cacctctttt
+     1501 tgacatactt cgggtataca tatcagtata tattcttata ccgcaaaaat cagcgcgcaa
+     1561 atacgcatac tgttatctgg cttttagtaa gccggatcca cgcgattacg ccccgccctg
+     1621 ccactcatcg cagtactgtt gtaattcatt aagcattctg ccgacatgga agccatcaca
+     1681 gacggcatga tgaacctgaa tcgccagcgg catcagcacc ttgtcgcctt gcgtataata
+     1741 tttgcccatg gtgaaaacgg gggcgaagaa gttgtccata ttggccacgt ttaaatcaaa
+     1801 actggtgaaa ctcacccagg gattggctga gacgaaaaac atattctcaa taaacccttt
+     1861 agggaaatag gccaggtttt caccgtaaca cgccacatct tgcgaatata tgtgtagaaa
+     1921 ctgccggaaa tcgtcgtggt attcactcca gagcgatgaa aacgtttcag tttgctcatg
+     1981 gaaaacggtg taacaagggt gaacactatc ccatatcacc agctcaccgt ctttcattgc
+     2041 catacggaat tccggatgag cattcatcag gcgggcaaga atgtgaataa aggccggata
+     2101 aaacttgtgc ttatttttct ttacggtctt taaaaaggcc gtaatatcca gctgaacggt
+     2161 ctggttatag gtacattgag caactgactg aaatgcctca aaatgttctt tacgatgcca
+     2221 ttgggatata tcaacggtgg tatatccagt gatttttttc tccattttag cttccttagc
+     2281 tcctgaaaat ctcgataact caaaaaatac gcccggtagt gatcttattt cattatggtg
+     2341 aaagttggaa cctcttacgt gccgatcaac gtctcatttt cgccaaaagt tggcccaggg
+     2401 cttcccggta tcaacaggga caccaggatt tatttattct gcgaagtgat cttccgtcac
+     2461 aggtatttat tcggcgcaaa gtgcgtcggg tgatgctgcc aacttagtcg actacaggtc
+     2521 actaatacca tctaagtagt tgattcatag tgactggata tgttgtgttt tacagtatta
+     2581 tgtagtctgt tttttatgca aaatctaatt taatatattg atatttatat cattttacgt
+     2641 ttctcgttca gctttcttgt acaaagtggg cattataaga aagcattgct tatcaatttg
+     2701 ttgcaacgaa caggtcacta tcagtcaaaa taaaatcatt atttgccatc cagctgcagc
+     2761 tctggcccgt gtctcaaaat ctctgatgtt acattgcaca agataaaaat atatcatcat
+     2821 gaacaataaa actgtctgct tacataaaca gtaatacaag gggtgttatg agccatattc
+     2881 aacgggaaac gtcgaggccg cgattaaatt ccaacatgga tgctgattta tatgggtata
+     2941 aatgggctcg cgataatgtc gggcaatcag gtgcgacaat ctatcgcttg tatgggaagc
+     3001 ccgatgcgcc agagttgttt ctgaaacatg gcaaaggtag cgttgccaat gatgttacag
+     3061 atgagatggt cagactaaac tggctgacgg aatttatgcc tcttccgacc atcaagcatt
+     3121 ttatccgtac tcctgatgat gcatggttac tcaccactgc gatccccgga aaaacagcat
+     3181 tccaggtatt agaagaatat cctgattcag gtgaaaatat tgttgatgcg ctggcagtgt
+     3241 tcctgcgccg gttgcattcg attcctgttt gtaattgtcc ttttaacagc gatcgcgtat
+     3301 ttcgtctcgc tcaggcgcaa tcacgaatga ataacggttt ggttgatgcg agtgattttg
+     3361 atgacgagcg taatggctgg cctgttgaac aagtctggaa agaaatgcat aaacttttgc
+     3421 cattctcacc ggattcagtc gtcactcatg gtgatttctc acttgataac cttatttttg
+     3481 acgaggggaa attaataggt tgtattgatg ttggacgagt cggaatcgca gaccgatacc
+     3541 aggatcttgc catcctatgg aactgcctcg gtgagttttc tccttcatta cagaaacggc
+     3601 tttttcaaaa atatggtatt gataatcctg atatgaataa attgcagttt catttgatgc
+     3661 tcgatgagtt tttctaatca gaattggtta attggttgta acactggcag agcattacgc
+     3721 tgacttgacg ggacggcgca agctcatgac caaaatccct taacgtgagt tttcgttcca
+     3781 ctgagcgtca gaccccgtag aaaagatcaa aggatcttct tgagatcctt tttttctgcg
+     3841 cgtaatctgc tgcttgcaaa caaaaaaacc accgctacca gcggtggttt gtttgccgga
+     3901 tcaagagcta ccaactcttt ttccgaaggt aactggcttc agcagagcgc agataccaaa
+     3961 tactgtcctt ctagtgtagc cgtagttagg ccaccacttc aagaactctg tagcaccgcc
+     4021 tacatacctc gctctgctaa tcctgttacc agtggctgct gccagtggcg ataagtcgtg
+     4081 tcttaccggg ttggactcaa gacgatagtt accggataag gcgcagcggt cgggctgaac
+     4141 ggggggttcg tgcacacagc ccagcttgga gcgaacgacc tacaccgaac tgagatacct
+     4201 acagcgtgag ctatgagaaa gcgccacgct tcccgaaggg agaaaggcgg acaggtatcc
+     4261 ggtaagcggc agggtcggaa caggagagcg cacgagggag cttccagggg gaaacgcctg
+     4321 gtatctttat agtcctgtcg ggtttcgcca cctctgactt gagcgtcgat ttttgtgatg
+     4381 ctcgtcaggg gggcggagcc tatggaaaaa cgccagcaac gcggcctttt tacggttcct
+     4441 ggccttttgc tggccttttg ctcacatgtt
+//

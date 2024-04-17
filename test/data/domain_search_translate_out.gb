@@ -1,0 +1,35 @@
+LOCUS       1264_-1_959              102 aa                     UNK 27-DEC-2023
+DEFINITION  Gateway donor vector.
+ACCESSION   1264_-1_959
+VERSION     1264_-1_959
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          complement(1..102)
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     CDS             1..102
+                     /invitrogen="""1060000"
+                     /label="ccdB"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /cds_id="1264_-1_959"
+                     /source_contig="pDONR201"
+     Domain_Search   2..100
+                     /program="hmmsearch"
+                     /database="CcdB"
+                     /description="CcdB protein"
+                     /evalue="4.4e-31"
+                     /score="103.1"
+                     /name="CcdB"
+                     /identity="39.0"
+                     /cds_id="1264_-1_959"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
+ORIGIN
+        1 mqfkvytykr esryrlfvdv qsdiidtpgr rmviplasar llsdkvsrel ypvvhigdes
+       61 wrmmttdmas vpvsvigeev adlshrendi knainlmfwg i*
+//

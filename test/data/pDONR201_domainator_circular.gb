@@ -1,0 +1,206 @@
+LOCUS       pDONR201                4470 bp    DNA     circular UNA 14-NOV-2017
+DEFINITION  Gateway donor vector.
+ACCESSION   urn.local...v2-dgufz7r
+VERSION     urn.local...v2-dgufz7r
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     source          1..4470
+                     /invitrogen="""584"
+                     /label="Invitrogen vector 584"
+     terminator      73..100
+                     /invitrogen="""2590000"
+                     /label="rrnB T2 transcription terminator"
+     terminator      232..275
+                     /invitrogen="""2580000"
+                     /label="rrnB T1 transcription terminator"
+     primer_bind     300..324
+                     /invitrogen="""1991000"
+                     /Sequence="TCGCGTTAACGCTAGCATGGATCTC"
+                     /Hairpin_Tm="60.1"
+                     /Tm="65.1"
+                     /Self_Dimer_Tm="40.2"
+                     /%GC="52.0"
+                     /label="pDONR201 forward primer"
+     attP1           331..531
+                     /label="attP1"
+     CDS             complement(959..1264)
+                     /invitrogen="""1060000"
+                     /label="ccdB"
+                     /translation="MQFKVYTYKRESRYRLFVDVQSDIIDTPGRRMVIPLASARLLSDK
+                     VSRELYPVVHIGDESWRMMTTDMASVPVSVIGEEVADLSHRENDIKNAINLMFWGI*"
+                     /cds_id="958_-1_1264"
+                     /domainator_pdonr_hmms="CcdB (CcdB protein, 1.3e-33, 103.1)"
+     CDS             complement(1606..2265)
+                     /invitrogen="""1080000"
+                     /label="Cm(R)"
+                     /cds_id="1605_-1_2265"
+                     /translation="MEKKITGYTTVDISQWHRKEHFEAFQSVAQCTYNQTVQLDITAFL
+                     KTVKKNKHKFYPAFIHILARLMNAHPEFRMAMKDGELVIWDSVHPCYTVFHEQTETFSS
+                     LWSEYHDDFRQFLHIYSQDVACYGENLAYFPKGFIENMFFVSANPWVSFTSFDLNVANM
+                     DNFFAPVFTMGKYYTQGDKVLMPLAIQVHHAVCDGFHVGRMLNELQQYCDEWQGGA*"
+                     /domainator_pdonr_hmms="CAT (Chloramphenicol acetyltransferase, 1.2e-102, 329.7) & Condensation (Condensation domain, 1.8e-05, 11.2) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 4.6e-04, 7.3) & 2-oxoacid_dh (2-oxoacid dehydrogenases acyltransferase (catalytic domain), 5.8e-04, 7.0) & Condensation (Condensation domain, 9.9e-02, -1.2)"
+     attP2           complement(2545..2745)
+                     /label="attP2"
+     misc_feature    complement(2769..2792)
+                     /invitrogen="""1992000"
+                     /Sequence="GTAACATCAGAGATTTTGAGACAC"
+                     /Hairpin_Tm="None"
+                     /Tm="55.8"
+                     /Self_Dimer_Tm="None"
+                     /%GC="37.5"
+                     /label="pDONR201 reverse primer"
+                     /note="Geneious type: primer_bind_reverse"
+     CDS             2868..3677
+                     /invitrogen="""1210000"
+                     /label="Kan(R)"
+                     /cds_id="2867_1_3677"
+                     /translation="MSHIQRETSRPRLNSNMDADLYGYKWARDNVGQSGATIYRLYGKP
+                     DAPELFLKHGKGSVANDVTDEMVRLNWLTEFMPLPTIKHFIRTPDDAWLLTTAIPGKTA
+                     FQVLEEYPDSGENIVDALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASD
+                     FDDERNGWPVEQVWKEMHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIAD
+                     RYQDLAILWNCLGEFSPSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
+                     /domainator_pdonr_hmms="APH (Phosphotransferase enzyme family, 3.0e-29, 90.2) & TCAD9 (Ternary complex associated domain 9, 4.1e-05, 10.4)"
+     Domainator      complement(1639..2244)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Chloramphenicol acetyltransferase"
+                     /evalue="1.2e-102"
+                     /score="329.7"
+                     /name="CAT"
+                     /cds_id="1605_-1_2265"
+     Domainator      complement(1609..1761)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="1.8e-05"
+                     /score="11.2"
+                     /name="Condensation"
+                     /cds_id="1605_-1_2265"
+     Domainator      complement(1615..1764)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="4.6e-04"
+                     /score="7.3"
+                     /name="2-oxoacid_dh"
+                     /cds_id="1605_-1_2265"
+     Domainator      complement(1996..2235)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="2-oxoacid dehydrogenases acyltransferase (catalytic domain)"
+                     /evalue="5.8e-04"
+                     /score="7.0"
+                     /name="2-oxoacid_dh"
+                     /cds_id="1605_-1_2265"
+     Domainator      complement(1957..2199)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Condensation domain"
+                     /evalue="9.9e-02"
+                     /score="-1.2"
+                     /name="Condensation"
+                     /cds_id="1605_-1_2265"
+     Domainator      2955..3653
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Phosphotransferase enzyme family"
+                     /evalue="3.0e-29"
+                     /score="90.2"
+                     /name="APH"
+                     /cds_id="2867_1_3677"
+     Domainator      3294..3647
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="Ternary complex associated domain 9"
+                     /evalue="4.1e-05"
+                     /score="10.4"
+                     /name="TCAD9"
+                     /cds_id="2867_1_3677"
+     Domainator      complement(965..1261)
+                     /program="hmmsearch"
+                     /database="pdonr_hmms"
+                     /description="CcdB protein"
+                     /evalue="1.3e-33"
+                     /score="103.1"
+                     /name="CcdB"
+                     /cds_id="958_-1_1264"
+ORIGIN
+        1 ctttcctgcg ttatcccctg attctgtgga taaccgtatt accgctagcc aggaagagtt
+       61 tgtagaaacg caaaaaggcc atccgtcagg atggccttct gcttagtttg atgcctggca
+      121 gtttatggcg ggcgtcctgc ccgccaccct ccgggccgtt gcttcacaac gttcaaatcc
+      181 gctcccggcg gatttgtcct actcaggaga gcgttcaccg acaaacaaca gataaaacga
+      241 aaggcccagt cttccgactg agcctttcgt tttatttgat gcctggcagt tccctactct
+      301 cgcgttaacg ctagcatgga tctcgggccc caaataatga ttttattttg actgatagtg
+      361 acctgttcgt tgcaacaaat tgatgagcaa tgctttttta taatgccaag tttgtacaaa
+      421 aaagcagaac gagaaacgta aaatgatata aatatcaata tattaaatta gattttgcat
+      481 aaaaaacaga ctacataata ctgtaaaaca caacatatcc agtcactatg aatcaactac
+      541 ttagatggta ttagtgacct gtagtcgacc gacagccttc caaatgttct tcgggtgatg
+      601 ctgccaactt agtcgaccga cagccttcca aatgttcttc tcaaacggaa tcgtcgtatc
+      661 cagcctactc gctattgtcc tcaatgccgt attaaatcat aaaaagaaat aagaaaaaga
+      721 ggtgcgagcc tcttttttgt gtgacaaaat aaaaacatct acctattcat atacgctagt
+      781 gtcatagtcc tgaaaatcat ctgcatcaag aacaatttca caactcttat acttttctct
+      841 tacaagtcgt tcggcttcat ctggattttc agcctctata cttactaaac gtgataaagt
+      901 ttctgtaatt tctactgtat cgacctgcag actggctgtg tataagggag cctgacattt
+      961 atattcccca gaacatcagg ttaatggcgt ttttgatgtc attttcgcgg tggctgagat
+     1021 cagccacttc ttccccgata acggagaccg gcacactggc catatcggtg gtcatcatgc
+     1081 gccagctttc atccccgata tgcaccaccg ggtaaagttc acgggagact ttatctgaca
+     1141 gcagacgtgc actggccagg gggatcacca tccgtcgccc gggcgtgtca ataatatcac
+     1201 tctgtacatc cacaaacaga cgataacggc tctctctttt ataggtgtaa accttaaact
+     1261 gcatttcacc agtccctgtt ctcgtcagca aaagagccgt tcatttcaat aaaccgggcg
+     1321 acctcagcca tcccttcctg attttccgct ttccagcgtt cggcacgcag acgacgggct
+     1381 tcattctgca tggttgtgct taccagaccg gagatattga catcatatat gccttgagca
+     1441 actgatagct gtcgctgtca actgtcactg taatacgctg cttcatagca cacctctttt
+     1501 tgacatactt cgggtataca tatcagtata tattcttata ccgcaaaaat cagcgcgcaa
+     1561 atacgcatac tgttatctgg cttttagtaa gccggatcca cgcgattacg ccccgccctg
+     1621 ccactcatcg cagtactgtt gtaattcatt aagcattctg ccgacatgga agccatcaca
+     1681 gacggcatga tgaacctgaa tcgccagcgg catcagcacc ttgtcgcctt gcgtataata
+     1741 tttgcccatg gtgaaaacgg gggcgaagaa gttgtccata ttggccacgt ttaaatcaaa
+     1801 actggtgaaa ctcacccagg gattggctga gacgaaaaac atattctcaa taaacccttt
+     1861 agggaaatag gccaggtttt caccgtaaca cgccacatct tgcgaatata tgtgtagaaa
+     1921 ctgccggaaa tcgtcgtggt attcactcca gagcgatgaa aacgtttcag tttgctcatg
+     1981 gaaaacggtg taacaagggt gaacactatc ccatatcacc agctcaccgt ctttcattgc
+     2041 catacggaat tccggatgag cattcatcag gcgggcaaga atgtgaataa aggccggata
+     2101 aaacttgtgc ttatttttct ttacggtctt taaaaaggcc gtaatatcca gctgaacggt
+     2161 ctggttatag gtacattgag caactgactg aaatgcctca aaatgttctt tacgatgcca
+     2221 ttgggatata tcaacggtgg tatatccagt gatttttttc tccattttag cttccttagc
+     2281 tcctgaaaat ctcgataact caaaaaatac gcccggtagt gatcttattt cattatggtg
+     2341 aaagttggaa cctcttacgt gccgatcaac gtctcatttt cgccaaaagt tggcccaggg
+     2401 cttcccggta tcaacaggga caccaggatt tatttattct gcgaagtgat cttccgtcac
+     2461 aggtatttat tcggcgcaaa gtgcgtcggg tgatgctgcc aacttagtcg actacaggtc
+     2521 actaatacca tctaagtagt tgattcatag tgactggata tgttgtgttt tacagtatta
+     2581 tgtagtctgt tttttatgca aaatctaatt taatatattg atatttatat cattttacgt
+     2641 ttctcgttca gctttcttgt acaaagtggg cattataaga aagcattgct tatcaatttg
+     2701 ttgcaacgaa caggtcacta tcagtcaaaa taaaatcatt atttgccatc cagctgcagc
+     2761 tctggcccgt gtctcaaaat ctctgatgtt acattgcaca agataaaaat atatcatcat
+     2821 gaacaataaa actgtctgct tacataaaca gtaatacaag gggtgttatg agccatattc
+     2881 aacgggaaac gtcgaggccg cgattaaatt ccaacatgga tgctgattta tatgggtata
+     2941 aatgggctcg cgataatgtc gggcaatcag gtgcgacaat ctatcgcttg tatgggaagc
+     3001 ccgatgcgcc agagttgttt ctgaaacatg gcaaaggtag cgttgccaat gatgttacag
+     3061 atgagatggt cagactaaac tggctgacgg aatttatgcc tcttccgacc atcaagcatt
+     3121 ttatccgtac tcctgatgat gcatggttac tcaccactgc gatccccgga aaaacagcat
+     3181 tccaggtatt agaagaatat cctgattcag gtgaaaatat tgttgatgcg ctggcagtgt
+     3241 tcctgcgccg gttgcattcg attcctgttt gtaattgtcc ttttaacagc gatcgcgtat
+     3301 ttcgtctcgc tcaggcgcaa tcacgaatga ataacggttt ggttgatgcg agtgattttg
+     3361 atgacgagcg taatggctgg cctgttgaac aagtctggaa agaaatgcat aaacttttgc
+     3421 cattctcacc ggattcagtc gtcactcatg gtgatttctc acttgataac cttatttttg
+     3481 acgaggggaa attaataggt tgtattgatg ttggacgagt cggaatcgca gaccgatacc
+     3541 aggatcttgc catcctatgg aactgcctcg gtgagttttc tccttcatta cagaaacggc
+     3601 tttttcaaaa atatggtatt gataatcctg atatgaataa attgcagttt catttgatgc
+     3661 tcgatgagtt tttctaatca gaattggtta attggttgta acactggcag agcattacgc
+     3721 tgacttgacg ggacggcgca agctcatgac caaaatccct taacgtgagt tttcgttcca
+     3781 ctgagcgtca gaccccgtag aaaagatcaa aggatcttct tgagatcctt tttttctgcg
+     3841 cgtaatctgc tgcttgcaaa caaaaaaacc accgctacca gcggtggttt gtttgccgga
+     3901 tcaagagcta ccaactcttt ttccgaaggt aactggcttc agcagagcgc agataccaaa
+     3961 tactgtcctt ctagtgtagc cgtagttagg ccaccacttc aagaactctg tagcaccgcc
+     4021 tacatacctc gctctgctaa tcctgttacc agtggctgct gccagtggcg ataagtcgtg
+     4081 tcttaccggg ttggactcaa gacgatagtt accggataag gcgcagcggt cgggctgaac
+     4141 ggggggttcg tgcacacagc ccagcttgga gcgaacgacc tacaccgaac tgagatacct
+     4201 acagcgtgag ctatgagaaa gcgccacgct tcccgaaggg agaaaggcgg acaggtatcc
+     4261 ggtaagcggc agggtcggaa caggagagcg cacgagggag cttccagggg gaaacgcctg
+     4321 gtatctttat agtcctgtcg ggtttcgcca cctctgactt gagcgtcgat ttttgtgatg
+     4381 ctcgtcaggg gggcggagcc tatggaaaaa cgccagcaac gcggcctttt tacggttcct
+     4441 ggccttttgc tggccttttg ctcacatgtt
+//

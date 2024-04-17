@@ -1,0 +1,620 @@
+LOCUS       FeSOD_A0A1F4ZT98|unreviewed|Superoxide 196 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A1F4ZT98|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A1F4ZT98|unreviewed|Superoxide
+VERSION     FeSOD_A0A1F4ZT98|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..86
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.1e-26"
+                     /score="89.0"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_196"
+     Domainator      92..192
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="2.0e-40"
+                     /score="133.0"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_196"
+ORIGIN
+        1 mftlpplpyp tnalepyldt qtleihfgkh hatylknlnd llpeksdadl ipvlqhlddl
+       61 pqdirvkvrn naggvynhnl ywqcmspksk spsprllssi esgfgtldaf kekfsqaalt
+      121 hfgsgwawlv kgtkgleivt tpnqdspvst gltpilgldv wehayylkyq nrrveyiqaw
+      181 wnvvnwdyvs slladr
+//
+LOCUS       FeSOD_A0A067LT26|unreviewed|Superoxide 208 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A067LT26|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A067LT26|unreviewed|Superoxide
+VERSION     FeSOD_A0A067LT26|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      3..84
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="3.4e-33"
+                     /score="109.9"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_208"
+     Domainator      91..193
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="1.6e-35"
+                     /score="117.3"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_208"
+ORIGIN
+        1 madytlvdlp ydysalepsi sgrimelhhd khhktyvdga ntalvklqea rdagdltfvn
+       61 klqkdlafnl aghvnhtvfw nnlspdggdk ptgelaaaid effgsydkfq ahftasalgi
+      121 qgsgwsilaw dslgqkliie qlydhqgnla aatvpillld mwehafyldy vnvkadyvka
+      181 fwnivnwadv qarfdaartk tqglflls
+//
+LOCUS       FeSOD_A0A2E1RF15|unreviewed|Superoxide 191 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A2E1RF15|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A2E1RF15|unreviewed|Superoxide
+VERSION     FeSOD_A0A2E1RF15|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..82
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="5.1e-33"
+                     /score="109.4"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_191"
+     Domainator      89..190
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="6.8e-41"
+                     /score="134.5"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_191"
+ORIGIN
+        1 mahqlpelpy skdalsphis aetldyhhgk hhnayvtkln aaiegtehae ksieelvktt
+       61 sgglfnnaaq hynhsfywnc lapnaggsat gtvgemissk wgsfdkfked fsnagaanfg
+      121 sgwtwlvkna sgdleivntd daecpltegh tplltmdvwe hayyvdyrna rpkyieafwn
+      181 lvnwdfvnsn l
+//
+LOCUS       FeSOD_A0A538G8K1|unreviewed|Superoxide 201 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A538G8K1|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A538G8K1|unreviewed|Superoxide
+VERSION     FeSOD_A0A538G8K1|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..89
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.6e-32"
+                     /score="107.7"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_201"
+     Domainator      96..196
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="6.8e-40"
+                     /score="131.3"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_201"
+ORIGIN
+        1 maysvpplay dfdalephid aqtmeihhdk hhgayvtnln aalegtewmd rpiesvlasl
+       61 dvipedkrta vrnnggghan htffweimgp ngggepsgal adaiadtfgg ldqlktqvnd
+      121 agvkrfgsgw twlvwdgtgl avkstpnqds pvmdsdvpll gidvwehayy lryqnrrpdy
+      181 laawwnvvnw eavatryeaa k
+//
+LOCUS       FeSOD_A0A6L8W9C4|unreviewed|Superoxide 195 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A6L8W9C4|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A6L8W9C4|unreviewed|Superoxide
+VERSION     FeSOD_A0A6L8W9C4|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..85
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.8e-30"
+                     /score="101.2"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_195"
+     Domainator      92..193
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="6.2e-40"
+                     /score="131.4"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_195"
+ORIGIN
+        1 mafelpplpy akdalaphis entldfhygk hhnayvtnln glledgdsrs leeimkdtag
+       61 daakagvfnn aaqvwnhtfy whsmkpnggg kptgaiadki nedfgsyekf aeefkaagat
+      121 qfgsgwawlv ldggklkvtk tpnaacpltd gakplltmdv wehayyldyq narpkymetf
+      181 leslvnwdfa nenlg
+//
+LOCUS       FeSOD_A0A2H0YVA1|unreviewed|Superoxide 193 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A2H0YVA1|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A2H0YVA1|unreviewed|Superoxide
+VERSION     FeSOD_A0A2H0YVA1|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..92
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="5.8e-29"
+                     /score="96.4"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_193"
+     Domainator      97..192
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="4.4e-36"
+                     /score="119.1"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_193"
+ORIGIN
+        1 mkyelpklny aydalepyld aqtmeihhsk hhqaytdnfn kalaehpdla empveellak
+       61 vnelsikdrd knalrnhggg yynhklfwei mdpankkdes likdietefg svdsfkeqfs
+      121 etaktllgsg wawlardkeg klhvyglpnq dspfqkghtp iicldvweha yylkyqnrrp
+      181 eyienwwnvl kli
+//
+LOCUS       FeSOD_R7J7P3|unreviewed|Superoxide 190 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_R7J7P3|unreviewed|Superoxide.
+ACCESSION   FeSOD_R7J7P3|unreviewed|Superoxide
+VERSION     FeSOD_R7J7P3|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..81
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="5.6e-28"
+                     /score="93.2"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_190"
+     Domainator      88..188
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="6.9e-38"
+                     /score="124.9"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_190"
+ORIGIN
+        1 mhqmpklpye mealaplmsk etfdfhygkh lqtyvnnlnk livgtpyenl eleqivcqad
+       61 ggiynnaaqt wnhtfffqll tpeqpslpdd laglltrdfg svdqfkedft kaalglfgsg
+      121 wvwlvlgkdg klsllptpna gnplkdglkp llvidvweha yyidyrnnra afieafwklv
+      181 nwekvadllg
+//
+LOCUS       FeSOD_B8LFE6|unreviewed|Superoxide 210 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_B8LFE6|unreviewed|Superoxide.
+ACCESSION   FeSOD_B8LFE6|unreviewed|Superoxide
+VERSION     FeSOD_B8LFE6|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      3..85
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="5.9e-32"
+                     /score="106.0"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_210"
+     Domainator      92..195
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="1.3e-34"
+                     /score="114.4"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_210"
+ORIGIN
+        1 maeytlpdlp ydyaalephi sgrimelhht khhatyvkga ndtldklaea radgsiagkv
+       61 yglsatlsfh lgghtnhsif wknlspnggd kpegdlaaai ddqfggfdkf qahftaaatt
+      121 lqgsgwailg ydtiggklvi lqltdqsdni paaiipvvml ddmwehafyl dyqnvkpdyv
+      181 kawwnvvnwa daaerlgrat sqgkglivpa
+//
+LOCUS       FeSOD_A0A1C0AS03|unreviewed|Superoxide 204 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A1C0AS03|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A1C0AS03|unreviewed|Superoxide
+VERSION     FeSOD_A0A1C0AS03|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..83
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.9e-32"
+                     /score="107.6"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_204"
+     Domainator      90..192
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="1.7e-35"
+                     /score="117.2"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_204"
+ORIGIN
+        1 mtytlpdldy dygalaphia peimelhhsk hhaayvkgin daleqlaaar ekgdlgavnk
+       61 lskdaafhlg ghinhsvfwk nmspdgggrp dgelasaide yfgsfdgfqk hfnavangiq
+      121 gsgwsmlvwd tlgqrmninq lfdqqgnlpa gqipllqldm wehafylqyk nvkgdyvtaw
+      181 wnvvnwtdvt erfarakaas aglv
+//
+LOCUS       FeSOD_A0A2M8Q2V9|unreviewed|Superoxide 203 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A2M8Q2V9|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A2M8Q2V9|unreviewed|Superoxide
+VERSION     FeSOD_A0A2M8Q2V9|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..89
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="3.8e-34"
+                     /score="113.0"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_203"
+     Domainator      96..197
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="8.2e-45"
+                     /score="147.1"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_203"
+ORIGIN
+        1 mafelpplpy aydalephid artmeihhdk hhagyvskln saiagtewes ksideilrni
+       61 nsvpedirva vqnnggghan hslfweimgp ngggspsgal aeainaafgs fdafkekfsn
+      121 aaasrfgsgw awlvvddagn lavystanqd spymqghtpi lgldvwehay ylnyqnrrpd
+      181 yiaafwnvvn wdavaekfaa akk
+//
+LOCUS       FeSOD_A0A2E1VW30|unreviewed|Superoxide 190 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A2E1VW30|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A2E1VW30|unreviewed|Superoxide
+VERSION     FeSOD_A0A2E1VW30|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..80
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="5.9e-29"
+                     /score="96.3"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_190"
+     Domainator      87..189
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="6.9e-39"
+                     /score="128.1"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_190"
+ORIGIN
+        1 mayelpalpy gendlaphit aetiqyhygk hhaayvgkln elldgddsks leeliqstdg
+       61 gvfnnaaqvw nhtfywncmk pggggapsgd laaaierdfg sydafvtkfk aaamarfgsg
+      121 wawlvadadg klsvvetlna gnpmtdglkp lltcdvweha yyidfrnarp kyldvffdsl
+      181 vnwdfvasnl
+//
+LOCUS       FeSOD_A0A1V4UH29|unreviewed|Superoxide 205 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A1V4UH29|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A1V4UH29|unreviewed|Superoxide
+VERSION     FeSOD_A0A1V4UH29|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      6..87
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="9.9e-32"
+                     /score="105.2"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_205"
+     Domainator      96..198
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="1.1e-36"
+                     /score="121.0"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_205"
+ORIGIN
+        1 mepnrsytlp klpydysala psiseeqlri hhtkhhqgyv nganaiyekl dktrkdggdi
+       61 dqkatlkels fhvggfllha lywenmapag qgggvpkgal gsriekefgs fdqfkkefta
+      121 aansvegsgw aaltycqktg rlllmqiekh nvhvfpsfsv lmvvdvweha yyidykndra
+      181 kylenfwnii nwdavnsrle kalkg
+//
+LOCUS       FeSOD_A0A7V9SPC9|unreviewed|Superoxide 208 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A7V9SPC9|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A7V9SPC9|unreviewed|Superoxide
+VERSION     FeSOD_A0A7V9SPC9|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      5..86
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="8.0e-33"
+                     /score="108.7"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_208"
+     Domainator      93..195
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="8.0e-31"
+                     /score="102.2"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_208"
+ORIGIN
+        1 mptevyelpd lsydysalep hinarimelh hdkhhatyvk gantalekla evratgdfat
+       61 iamleknlaf nvsghvlhsi fwtnlspngg gepdgelata ltdtfggfeh frkqmneaaa
+      121 tvqgagwala swepiaqrli vqqvhdhqgn hgqgtiplla idawehayyl qyenrkteff
+      181 davwnvvswg dvearfkaar naelirqt
+//
+LOCUS       FeSOD_R7F5H2|unreviewed|Superoxide 198 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_R7F5H2|unreviewed|Superoxide.
+ACCESSION   FeSOD_R7F5H2|unreviewed|Superoxide
+VERSION     FeSOD_R7F5H2|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      3..82
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="2.0e-19"
+                     /score="65.8"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_198"
+     Domainator      89..191
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="2.7e-34"
+                     /score="113.3"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_198"
+ORIGIN
+        1 mikkinleyp ldslepyysr etlnihyntl yvgyvdntni tleklekark ernfenikcl
+       61 eknlsffgsg vilhelffen mgpaipsspd inlmeqinkd fgsfelfkeq ftesskvvea
+      121 sgwnllvwvp rfnkleiiqc ekhqdltlwn ckpilvldmw ehsyflqyka nrgeyikafw
+      181 niinwnnvnk rfrntiky
+//
+LOCUS       FeSOD_A0A2N5YS14|unreviewed|Superoxide 189 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A2N5YS14|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A2N5YS14|unreviewed|Superoxide
+VERSION     FeSOD_A0A2N5YS14|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      1..81
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="9.3e-32"
+                     /score="105.3"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_189"
+     Domainator      88..188
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="2.1e-42"
+                     /score="139.4"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_189"
+ORIGIN
+        1 mfelpklpye fnslepkisa ktvefhytkh hqvyvnklng liegtdyagk tleeiiktse
+       61 ggifnnaaqv wnhtfywegf gpnpqsapsg klaeminetf gsfekfkeef stkaatlfgs
+      121 gwawlvldng qlkitgtsna gsplteghkp iltcdvweha yyldyqnlrp kyienfwelv
+      181 dwkkiegri
+//
+LOCUS       FeSOD_A0A0F6MY72|unreviewed|Superoxide 201 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A0F6MY72|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A0F6MY72|unreviewed|Superoxide
+VERSION     FeSOD_A0A0F6MY72|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..88
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.3e-28"
+                     /score="95.3"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_201"
+     Domainator      95..196
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="3.0e-39"
+                     /score="129.2"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_201"
+ORIGIN
+        1 mafelpslpf dqdalesskm santlsyhhg khhaayvknl naaiegtdma nmsleeiika
+       61 tyndpsksgi fnnaaqvwnh sffwkclkpn gggqptgala dkiqadfgsf dafiqefkna
+      121 aatqfgsgwa wlvldngtlk vtktanavnp mvegktpllt ldvwehayyl dfqnarpgfi
+      181 dnfienlvnw dfvaenlasa s
+//
+LOCUS       FeSOD_A0A060HP82|unreviewed|Superoxide 215 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A060HP82|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A060HP82|unreviewed|Superoxide
+VERSION     FeSOD_A0A060HP82|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      11..100
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.3e-30"
+                     /score="101.7"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_215"
+     Domainator      107..212
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="8.9e-40"
+                     /score="130.9"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_215"
+ORIGIN
+        1 mprrpshlma nftlpqlpya ydalephida ttmqihhtkh hqaytdglnk algsldakfq
+       61 smdavdilkn idtvpenarg avnfhgggyn nhtlfwnnmk kggggepsge ladaikkafg
+      121 sfadfktkfq tdsvaiqgsg wgwlvknasg gvqfitmpnq tspwtrwkae kltpllgldv
+      181 wehsyylkyq nrradyvtaw wnvvnwdeva krfka
+//
+LOCUS       FeSOD_A0A4P7WS39|unreviewed|Superoxide 198 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A4P7WS39|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A4P7WS39|unreviewed|Superoxide
+VERSION     FeSOD_A0A4P7WS39|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      4..88
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="2.2e-27"
+                     /score="91.3"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_198"
+     Domainator      95..196
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="2.4e-39"
+                     /score="129.6"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_198"
+ORIGIN
+        1 mkithqlpel pfnksalnpi iteetfdyhy gkhhaayvnn latliqdtel infsiediik
+       61 kgfyeknasl fnnaaqhwsh tffwnclspn ggkapvgrit elitrdfgsf elfkdqfsna
+      121 aiklfgcgwa wlvqdendkl eiiamkeaqt plilnkkpil tldvwehayy idyknarpkf
+      181 vegfwdivnw dfanknvi
+//
+LOCUS       FeSOD_A0A076JJX0|unreviewed|Superoxide 206 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_A0A076JJX0|unreviewed|Superoxide.
+ACCESSION   FeSOD_A0A076JJX0|unreviewed|Superoxide
+VERSION     FeSOD_A0A076JJX0|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      3..84
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.3e-33"
+                     /score="111.3"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_206"
+     Domainator      91..193
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="3.2e-34"
+                     /score="113.1"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_206"
+ORIGIN
+        1 mpvytlpelp ydysalepyv sgkimelhhd khhqayvnga nqaleqihda aesgnvaqsn
+       61 lleknlafnl aghknhtifw knmapsigqe ptgelkaaie dqfgsfegfq ryfesmcagi
+      121 qgsgwavlaw dslgerlvtl qmydhqgnlp vtifplilld lwehayyldy lnvradyvka
+      181 wwhivnweda skrfdevrnl ntnlvk
+//
+LOCUS       FeSOD_G8R729|unreviewed|Superoxide 202 aa                     UNK 06-MAY-2023
+DEFINITION  FeSOD_G8R729|unreviewed|Superoxide.
+ACCESSION   FeSOD_G8R729|unreviewed|Superoxide
+VERSION     FeSOD_G8R729|unreviewed|Superoxide
+KEYWORDS    .
+SOURCE      
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     Domainator      2..85
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, alpha-hairpin domain"
+                     /evalue="1.7e-32"
+                     /score="107.7"
+                     /name="Sod_Fe_N"
+                     /cds_id="0_1_202"
+     Domainator      92..197
+                     /program="hmmsearch"
+                     /database="FeSOD_pfam"
+                     /description="Iron/manganese superoxide dismutases, C-terminal domain"
+                     /evalue="2.4e-42"
+                     /score="139.2"
+                     /name="Sod_Fe_C"
+                     /cds_id="0_1_202"
+ORIGIN
+        1 msfelpdlpy sksalepyid aqtmeihhdk hhagyttkln daiegtelek qsiedilknv
+       61 skhsggvrnn gggyynhslf wsimgpdagg dptgdvgaai ddafgsyenf ktefsnaaat
+      121 rfgsgwawli vngegklevt sspnqdnplm dvaekkgtpi lgldvwehay ylkyqnkrpd
+      181 yisaffnvin wdevnrrfae ak
+//
