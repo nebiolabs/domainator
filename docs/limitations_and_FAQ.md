@@ -2,7 +2,6 @@
 ## Large reference databases
 Domainator currently loads reference databases into memory, so it is not suitable for large reference databases, for example it is suitable for annotating using Pfam as a reference with ~30,000 profiles, but not NCBI nr with millions of sequences.
 
-
 # Frequently asked questions
 
 ![Detective Domainic](media/detective_Domainic_transparent_background.png)

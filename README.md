@@ -15,11 +15,11 @@ Domainator provides several dozen discrete, flexible programs that can be compos
 
 Domainator uses the GenBank file format as a carrier of both sequence and annotation data. Independence from a fixed set of sequence sources and the co-location of sequences and all their annotation data in a single file increases data portability and decreases complexity for end-users. Domainator can add functional annotations to sequences by comparison either to HMM-profiles, protein sequences, or both at the same time. For example, in a single call to domainate, a set of genome or metagenome contigs can be annotated with hits to Pfam HMM-profiles and hits to REBASE Gold Standard protein sequences at the same time.
 
-The individual programs that make up Domainator can be roughly classified into six categories corresponding to their typical roles in workflows. The first steps in most workflows typically involve passing sequence data through one or more filters.
+The individual programs that make up Domainator can be roughly classified into six categories corresponding to their typical roles in workflows. The first steps in most workflows typically involve passing sequence data through one or more editors.
 
-__Filters__ are programs whose output format is the same as their input format. Each individual filter performs a simple task, but they can be combined in arbitrarily long chains to accomplish complex transformations. Examples are domain_search, which outputs a subset of the input sequences, based on the presence of a hit to a reference sequence or profile; domainate, which outputs all the input sequence but adds domain annotations based on hits to reference sequences; deduplicate_genbank, which performs similarity clustering using CD-HIT  or usearch  and outputs only the cluster representatives input sequences; and select_by_cds, which extracts genome neighborhoods around domains of interest. 
+__Editors__ are programs whose output format is the same as their input format. Each individual editor performs a simple task, but they can be combined in arbitrarily long chains to accomplish complex transformations. Examples are domain_search, which outputs a subset of the input sequences, based on the presence of a hit to a reference sequence or profile; domainate, which outputs all the input sequence but adds domain annotations based on hits to reference sequences; deduplicate_genbank, which performs similarity clustering using CD-HIT  or usearch  and outputs only the cluster representatives input sequences; and select_by_cds, which extracts genome neighborhoods around domains of interest. 
 
-__In Domainator programs, perhaps differently from other software, the file being filtered is supplied via the `-i` argument and criteria for filtering is supplied via other arguments, such as the `-r` argument for reference sequences or hmm profiles. For example searching for hits to a query in the UniProt database may be accomplished via `domain_search.py -i uniprot.fasta -r query.hmm -o hits.gb`, similarly annotating a set of contigs with Pfam annotations may be accomplished with `domainate.py -i unannotated.gb -r pfam-A.hmm -o annotated.gb` .__
+__In Domainator programs, perhaps differently from other software, the file being edited is supplied via the `-i` argument and criteria for editing is supplied via other arguments, such as the `-r` argument for reference sequences or hmm profiles. For example searching for hits to a query in the UniProt database may be accomplished via `domain_search.py -i uniprot.fasta -r query.hmm -o hits.gb`, similarly annotating a set of contigs with Pfam annotations may be accomplished with `domainate.py -i unannotated.gb -r pfam-A.hmm -o annotated.gb` .__
 
 __Summary report programs__ summarize data into graphs and statistics, for example, the number of sequences in a file and the count of each kind of domain. Record-wise report programs produce tab-separated files, for example where each row corresponds to a genome contig, a protein, or a domain, and values are data such as length, taxonomy ID, domain content, etc. 
 
@@ -183,7 +183,7 @@ Pfam-A.hmm.h3m
 Pfam-A.hmm.h3p 
 ```
 
-## Run Domainator
+## Run Domainator to annotate contigs with Pfam
 
 Activate the domainator conda environment
 ```
@@ -196,28 +196,35 @@ If domainator has been installed according to the instructions above, it should 
 
 To run domainator on a single file
 ```
-domainator.py --cpu 4 -i your_genbank.gb -r Pfam-A.hmm -o output.gb
+domainator.py --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm -o domainator_output.gb
 ```
 
 To run domainator on multiple files
 ```
-mkdir domainator_outdir
-domainator.py --cpu 4 -o output.gb -r Pfam-A.hmm -i folder_with_your_genbanks/*.gb
+domainator.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i folder_with_your_genbanks/*.gb
 ```
 
 or
 
 ```
-domainator.py --cpu 4 -o output.gb -r Pfam-A.hmm -i your_genbank_1.gb your_genbank_2.gb 
+domainator.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i your_genbank_1.gb your_genbank_2.gb 
 ```
 
 You can also search multiple domain databases at once by supplying multiple hmm files via the `-r` option
 
 You can also run the domainator program sequentially, meaning you can run an already annotated genbank file through the domainator program again with a different domain database.
 
+### Visualizing output
+```
+summary_report.py -i domainator_output.gb --html domain_summary.html
+enum_report.py -i domainator_output.gb --by contig --name --taxname superkingdom genus species self --length --domains --html enum_report.html -o enum_report.tsv
+plot_contigs.py -i domainator_output.gb --html contigs_plot.html
+```
+
+
 ## Using Domainator as a python library
 
-Most executables in Domainator are based on a core function that acts as a filter on BioPython SeqRecord objects. So you can chain them within python scripts, keeping sequences as SeqRecords instead of writing and reading Genbank files.
+Most executables in Domainator are based on a core function that acts as a editors on BioPython SeqRecord objects. So you can chain them within python scripts, keeping sequences as SeqRecords instead of writing and reading Genbank files.
 Chaining the functions will be similar to piping the output of one program to another, but will be faster because superfluous conversions from Genbank to SeqRecord and back again will be avoided. A caveat is that you lose some input and output validation (See also [Interoperability with BioPython](#Interoperability-with-BioPython)). 
 
 The general way to access these functions is `from domainator.[script_name] import [script_name]`. 
@@ -227,18 +234,20 @@ The general way to access these functions is `from domainator.[script_name] impo
 Domainator is not directly intercompatible with BioPython. It uses `SeqRecord` objects derived from BioPython `SeqRecords`, but with some changes and extensions. A modified and extended subset of BioPython is included with Domainator as `domainator.Bio`. For reading and writing domainator-compatible sequence files we strongly recommend using the `domainator.utils.parse_seqfiles` and `domainator.utils.write_genbank` functions, respectively.
 
 
+## More documentation
+- [File Formats](docs/file_formats.md)
+- [Basic Examples](docs/examples.md)
+- [Advanced examples](https://github.com/nebiolabs/domainator_examples)
+- [Developing Domainator](docs/developing_domainator.md)
+- [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
+- [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
+
+
 ## projects that domainator draws inspiration from
   - [BigScape/Corason](https://bigscape-corason.secondarymetabolites.org/)
   - [EFI](https://efi.igb.illinois.edu/)
   - [pydna](https://github.com/BjornFJohansson/pydna)
   - [antiSMASH](https://github.com/antismash/antismash)
-
-## More documentation
-- [File Formats](docs/file_formats.md)
-- [Examples](docs/examples.md)
-- [Developing Domainator](docs/developing_domainator.md)
-- [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
-- [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
 
 
 ## Contributors

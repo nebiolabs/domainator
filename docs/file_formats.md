@@ -10,6 +10,8 @@ Domainator produces and understands some feature types particular to it.
 
 `Domainator` features are domain annotations added to genbank files by `domainate.py` or `domain_search.py`. The `cds_id` qualifier is particularly critical as it links the `Domainator` feature to a `CDS` feature. Domainator adds a `cds_id` qualifier to any `CDS` feature lacking one. The `cds_id` is expected to be unique within a contig. The general format for an automatically generated `cds_id` is `[start coordinate]_[strand]_[end coordinate]`. Multi-part CDSs, for example CDSs containing introns or crossing the origin are handled in a somewhat more complicated way, as special cases, with the goal being to maintain a one-cds_id to one_cds relation.
 
+`rstart`, `rend` are the start and end coordinates of the local alignment in the "reference" (i.e. profile). `rlen` is the total length of the reference profile, so you can get an idea of how the local alignment is oriented with respect to the entire reference profile/sequence.
+
 ```javascript
      Domainator      560..1165
                      /program="hmmsearch"
@@ -20,7 +22,11 @@ Domainator produces and understands some feature types particular to it.
                      /name="CAT"
                      /identity="55.9"
                      /cds_id="2265_-1_1606"
+                     /rstart="1"
+                     /rend="100"
+                     /rlen="100"
 ```
+
 
 `Domain_Search` features are added by `domain_search.py`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domain_search.py`, and there are exactly one per contig on sequences returned by `domain_search.py`. Other programs, such as `extract_domains.py`, `select_by_cds.py`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, typically by using the `--search_hits` command line argument.
 
@@ -42,7 +48,7 @@ If no taxid is noted in either place, the Taxid will be assigned [32644](https:/
 
 ### Differences from BioPython in internal storing of Genbank records
 
-`domainator.utils.parse_seqfiles` always assigns a `molecule_type` attribute to sequence records. For genbank files, it also swaps the `record.name` field and `record.id` field before returning the record. The `write_genbank` function swaps them back before writing.
+`domainator.utils.parse_seqfiles` always assigns a `molecule_type` attribute to sequence records. For genbank files, it also swaps the `record.name` field and `record.id` field before returning the record. The `write_genbank` function swaps them back before writing. There are also some bugfixes in the parser relative to the Biopython parser to handle weird edge-case genbank files we've run into.
 
 ```python 
     id = record.id
