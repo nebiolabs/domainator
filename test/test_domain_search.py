@@ -14,7 +14,7 @@ def test_domain_search_one_file(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--add_annotations"]
         main(args)
         assert os.path.isfile(out)
         
@@ -82,7 +82,7 @@ def test_no_annotations_whole_contig_keep_direction(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--no_annotations", "--whole_contig", "--keep_direction"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--whole_contig", "--keep_direction"]
         main(args)
         assert os.path.isfile(out)
         
@@ -94,7 +94,7 @@ def test_pad_cds_range(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--cpu", "1"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--cpu", "1", "--add_annotations"] 
         main(args)
         assert os.path.isfile(out)
         
@@ -106,7 +106,7 @@ def test_pad_cds_range_top_hits(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--cpu", "1", "--max_hits", "5"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--cpu", "1", "--max_hits", "5", "--add_annotations"]
         main(args)
         assert os.path.isfile(out)
         
@@ -118,7 +118,7 @@ def test_deduplicate(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--whole_contig", "--cpu", "1", "--deduplicate", "--no_annotations", "--keep_direction"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--whole_contig", "--cpu", "1", "--deduplicate", "--keep_direction"]
         main(args)
         assert os.path.isfile(out)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -147,7 +147,7 @@ def test_domain_search_one_file_translate(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--translate", "--no_annotations"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--translate"]
         main(args)
         assert os.path.isfile(out)
         
@@ -218,7 +218,7 @@ def test_domain_search_min_evalue(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "--min_evalue", "3.5e-27", "-Z", "0"]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "--min_evalue", "3.5e-27", "-Z", "0", "--add_annotations"]
 
         main(args)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -279,7 +279,7 @@ def test_decoys_nucleotide_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cpu", "1", "--no_annotations", "--keep_direction", "--decoys", "CAT", "APH"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cpu", "1", "--keep_direction", "--decoys", "CAT", "APH"]
         main(args)
         assert os.path.isfile(out)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -291,7 +291,7 @@ def test_decoys_translate_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cpu", "1", "--no_annotations", "--keep_direction", "--decoys", "CAT", "APH", "--translate"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cpu", "1", "--keep_direction", "--decoys", "CAT", "APH", "--translate"]
         main(args)
         assert os.path.isfile(out)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -303,7 +303,7 @@ def test_decoys_proteins_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cpu", "1", "--no_annotations", "--keep_direction", "--decoys", "CAT", "APH", "--translate"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cpu", "1", "--keep_direction", "--decoys", "CAT", "APH", "--translate"]
         main(args)
         assert os.path.isfile(out)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -337,7 +337,7 @@ def test_domain_search_range_up_down_1(params, expected_hit_size, shared_datadir
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000" ] + params
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--add_annotations" ] + params
         main(args)
         assert os.path.isfile(out)
         

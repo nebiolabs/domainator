@@ -29,12 +29,12 @@ from domainator.Taxonomy import NCBITaxonomy
 
 class _domain_search_worker():
     
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, no_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None):
+    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None):
 
         self.z = z
         self.evalue = evalue
         self.max_overlap = max_overlap
-        self.no_annotations = no_annotations
+        self.add_annotations = add_annotations
         self.cds_range = cds_range
         self.kb_range = kb_range
         self.whole_contig = whole_contig
@@ -67,7 +67,7 @@ class _domain_search_worker():
                 z: Z parameter to pass to hmmsearch/phmmer
                 evalue: The threshold E value for hmmer hit
                 max_overlap: The maximum fractional of overlap to be allowed between domains
-                no_annotations: if True, then don't add any new annotations to the sequences, just return the hits with existing annotations.
+                add_annotations: When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.
                 cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the CDS hits
                 kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output.
                 whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
@@ -83,7 +83,7 @@ class _domain_search_worker():
                 z=self.z,
                 evalue=self.evalue,
                 max_overlap=self.max_overlap,
-                no_annotations=self.no_annotations,
+                no_annotations=not self.add_annotations,
                 cpu=1,
                 batch_size=self.batch_size,
                 hits_only=True,
@@ -145,7 +145,7 @@ class _partition_seqfile_worker():
         return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
     
 
-def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, no_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None):
+def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None):
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 
@@ -157,7 +157,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         max_hits: The maximum number of CDSs to be returned
         max_overlap: The maximum fractional of overlap to be allowed between domains
         cpu: number of threads to use. Must be at least 2.
-        no_annotations: if True, then don't add any new annotations to the sequences, just return the hits with existing annotations.
+        add_annotations: if True, then add new domainate annotations .
         cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the CDS hits
         kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output.
         whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
@@ -184,7 +184,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         exclude_taxids = set(exclude_taxids)
 
     out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, no_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names)
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names)
 
     with Pool(processes=cpu - 1) as pool:
         # hits are lists of SeqRecords
@@ -274,8 +274,8 @@ def main(argv):
                         help="the number of cores of the cpu which are used at a time to run the search [default: use all available cores]")
     parser.add_argument('--max_overlap', type=float, default=1,
                         help="the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. [default 1]")
-    parser.add_argument('--no_annotations', action='store_true', default=False,
-                        help="when activated, new annotations will not be added to the file. This is useful if you are just trying to extract a set of contigs for annotation in a later step.")
+    parser.add_argument('--add_annotations', action='store_true', default=False,
+                        help="When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.")
     parser.add_argument('--deduplicate', action='store_true', default=False,
                         help="by default if the same region is extracted for multiple hits then both will be kept. Set this option to eliminate redundancies.")
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
@@ -394,7 +394,7 @@ def main(argv):
         max_hits=max_hits,
         max_overlap=params.max_overlap,
         cpu=cpus,
-        no_annotations=params.no_annotations,
+        add_annotations=params.add_annotations,
         cds_range=cds_range,
         kb_range=kb_range,
         whole_contig=whole_contig,
