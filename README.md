@@ -112,14 +112,14 @@ Go to the [Domainator github page](https://github.com/seanrjohnson/domainator) a
 
 Extract the zip file. In a terminal, navigate to the newly extracted folder and install the package with the command:
 
-```
+```bash
 conda env create -f conda_env.yml
 ```
 
 This will create a new conda environment called "domainator".
 
 ### Step 2: Activate the environment before you install packages or run any script
-```
+```bash
 conda activate domainator
 ```
 
@@ -127,7 +127,7 @@ conda activate domainator
 
 Download and extract the new version, navigate to the folder and install with:
 
-```
+```bash
 conda env create --force -f conda_env.yml
 ```
 
@@ -137,18 +137,18 @@ This will delete the old `domainator` conda environment and replace it with the 
 
 Navigate to the directory containing this README file. It should also contain a file called `apptainer.def`. In that directory execute the command:
 
-```
+```bash
 apptainer build domainator.sif domainator.def
 ```
 
 Or (if you have singularity not apptainer)
 
-```
+```bash
 singularity build domainator.sif domainator.def
 ```
 
 Then to execute domainator commands, prefix any command with 
-```
+```bash
 apptainer exec domainator.sif [command here]
 # for example:
 apptainer exec domainator.sif domainate.py -i test/data/pDONR201_multi_genemark.gb -r test/data/pdonr_hmms.hmm -o example_out.gb
@@ -157,12 +157,12 @@ apptainer exec domainator.sif domainate.py -i test/data/pDONR201_multi_genemark.
 ## Run Domainator to annotate contigs with Pfam
 
 Activate the domainator conda environment
-```
+```bash
 conda activate domainator
 ```
 
 To run domainator on a single file
-```
+```bash
 # download and extract Pfam
 wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
 gunzip Pfam-A.hmm.gz
@@ -172,7 +172,7 @@ domainate.py --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm -o domai
 ```
 
 ### Visualizing output
-```
+```bash
 summary_report.py -i domainator_output.gb --html domain_summary.html
 enum_report.py -i domainator_output.gb --by contig --name --taxname superkingdom genus species self --length --domains --html enum_report.html -o enum_report.tsv
 plot_contigs.py -i domainator_output.gb --html contigs_plot.html
