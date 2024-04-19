@@ -196,18 +196,18 @@ If domainator has been installed according to the instructions above, it should 
 
 To run domainator on a single file
 ```
-domainator.py --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm -o domainator_output.gb
+domainate.py --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm -o domainator_output.gb
 ```
 
 To run domainator on multiple files
 ```
-domainator.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i folder_with_your_genbanks/*.gb
+domainate.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i folder_with_your_genbanks/*.gb
 ```
 
 or
 
 ```
-domainator.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i your_genbank_1.gb your_genbank_2.gb 
+domainate.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i your_genbank_1.gb your_genbank_2.gb 
 ```
 
 You can also search multiple domain databases at once by supplying multiple hmm files via the `-r` option

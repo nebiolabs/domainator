@@ -2,6 +2,9 @@
 ## Large reference databases
 Domainator currently loads reference databases into memory, so it is not suitable for large reference databases, for example it is suitable for annotating using Pfam as a reference with ~30,000 profiles, but not NCBI nr with millions of sequences.
 
+## Contigs vs genomes
+A major limitation of Domainator is that it operates on the contig level, not the genome level. So for example, when reporting taxonomy, fragmented genome assemblies will be counted multiple times, once for each contig in the assembly.
+
 # Frequently asked questions
 
 ![Detective Domainic](media/detective_Domainic_transparent_background.png)
