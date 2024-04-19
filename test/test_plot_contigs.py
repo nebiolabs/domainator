@@ -46,3 +46,14 @@ def test_plot_contigs_4(shared_datadir):
         assert "BX548174_369054:361090rc" in output_text
         assert not ('"type": "source"' in output_text)
         assert '<b>taxid_species</b>: <span style=\\"color:#' in output_text
+
+def test_plot_contigs_protein_1(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        # output_dir = "test_out"
+        input = str(shared_datadir / "FeSOD_20_pfam.gb")
+        output = output_dir + "/contigs.html"
+        plot_contigs.main(["-i", input, "--html", output])
+        output_text = open(output).read()
+        assert "<title>Domainator Contigs Plot</title>" in output_text
+        assert "FeSOD_A0A1F4ZT98|unreviewed|Superoxide" in output_text
+        assert not ('"type": "source"' in output_text)

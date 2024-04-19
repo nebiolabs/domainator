@@ -26,7 +26,9 @@ import pandas as pd
 from domainator.utils import get_palette
 
 def normalize_strand(strand:int) -> str:
-    if int(strand) == -1:
+    if strand is None:
+        return "+"
+    elif int(strand) == -1:
         return "-"
     else:
         return "+"
@@ -489,6 +491,7 @@ def main(argv):
     
     # TODO: allow user to supply a color table, like build_ssn.py
     #TODO: option to embed d3.js (v7) in the html file for offline use
+    # TODO: change defaults for proteins?
     
 
     parser.add_argument('--config', action=ActionConfigFile)
