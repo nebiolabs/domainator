@@ -1,6 +1,6 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.6.5
+Version 0.7.0
 
 [//]: # (remember to update version in domainator/__init__.py also)
 
@@ -154,35 +154,6 @@ apptainer exec domainator.sif [command here]
 apptainer exec domainator.sif domainate.py -i test/data/pDONR201_multi_genemark.gb -r test/data/pdonr_hmms.hmm -o example_out.gb
 ```
 
-## Download and prepare pfam database
-Step 1: create a new folder for pfam database
-```
-mkdir pfam
-cd pfam
-```
-Step 2: inside the pfam folder download the latest `Pfam-A.hmm.gz` file from the Pfam website [https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/](https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/) and uncompress the profile database
-
-```
-wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
-gunzip Pfam-A.hmm.gz
-```
-
-You can copy it to your pfam directory and go to step 3
-
-(optional) Step 3: Create an indexed pfam database using the `hmmpress` command. This is not required, but may lead to small increases in search speed.
-
-```
-hmmpress Pfam-A.hmm
-```
-
-This will create 4 new files in the same directory:
-```
-Pfam-A.hmm.h3f
-Pfam-A.hmm.h3i
-Pfam-A.hmm.h3m
-Pfam-A.hmm.h3p 
-```
-
 ## Run Domainator to annotate contigs with Pfam
 
 Activate the domainator conda environment
@@ -190,29 +161,15 @@ Activate the domainator conda environment
 conda activate domainator
 ```
 
-This will change the parenthesis at the beginning of each line from (base) to (domainator) and allow you to properly run the program.
-
-If domainator has been installed according to the instructions above, it should be possible to call it from any directory without referencing it's entire path
-
 To run domainator on a single file
 ```
+# download and extract Pfam
+wget https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
+gunzip Pfam-A.hmm.gz
+
+# run Domainator
 domainate.py --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm -o domainator_output.gb
 ```
-
-To run domainator on multiple files
-```
-domainate.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i folder_with_your_genbanks/*.gb
-```
-
-or
-
-```
-domainate.py --cpu 4 --max_overlap 0.6 -o domainator_output.gb -r Pfam-A.hmm -i your_genbank_1.gb your_genbank_2.gb 
-```
-
-You can also search multiple domain databases at once by supplying multiple hmm files via the `-r` option
-
-You can also run the domainator program sequentially, meaning you can run an already annotated genbank file through the domainator program again with a different domain database.
 
 ### Visualizing output
 ```
@@ -221,6 +178,7 @@ enum_report.py -i domainator_output.gb --by contig --name --taxname superkingdom
 plot_contigs.py -i domainator_output.gb --html contigs_plot.html
 ```
 
+For more examples see: [Basic Examples](docs/examples.md), and [Advanced examples](https://github.com/nebiolabs/domainator_examples).
 
 ## Using Domainator as a python library
 
