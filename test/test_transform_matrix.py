@@ -107,3 +107,5 @@ def test_transform_matrix_2(shared_datadir):
 
         compare_data_matrix(dense_output_matrix, expected_matrix)
 
+
+#TODO: test more conversion modes

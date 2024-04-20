@@ -14,11 +14,17 @@ import numpy as np
 from domainator.utils import get_file_type
 import warnings
 
+def is_sparse(matrix):
+    """
+    Check if a matrix is sparse.
+    """
+    return type(matrix) is scipy.sparse.dok_array or type(matrix) is scipy.sparse.coo_array or type(matrix) is scipy.sparse.csr_array
+
 def norm_score(array, row_lengths=None, col_lengths=None):
     """
         score / min(row_max, col_max)
     """
-    if type(array) is scipy.sparse.dok_array: #sparse matrix
+    if is_sparse(array): #sparse matrix
         array = scipy.sparse.coo_matrix(array) 
         rowmaxes = dict()
         max_coo = array.max(axis=1)
@@ -41,7 +47,7 @@ def row_norm_score(array, row_lengths=None, col_lengths=None):
     """
         score / row_max
     """
-    if type(array) is scipy.sparse.dok_array: #sparse matrix
+    if is_sparse(array): #sparse matrix
         array = scipy.sparse.coo_matrix(array) 
         rowmaxes = dict()
         max_coo = array.max(axis=1)
@@ -70,7 +76,8 @@ def efi_score(array, row_lengths=None, col_lengths=None):
     if row_lengths is None or col_lengths is None:
         raise ValueError("Row and column lengths must be provided for EFI score.")
 
-    if type(array) is scipy.sparse.dok_array: #sparse matrix
+    if is_sparse(array): #sparse matrix
+        array = scipy.sparse.dok_array(array) #TODO: maybe there is a more efficient way to do this without duplicating the data
         out = scipy.sparse.dok_array(array.shape,dtype=np.float64)
 
         for (r,c),v in array.items():
@@ -89,7 +96,7 @@ def efi_score_dist(array, row_lengths=None, col_lengths=None):
         1 - (efi_score / min(row_max, col_max))
     """
     out = efi_score(array, row_lengths=row_lengths, col_lengths=col_lengths)
-    if type(out) is scipy.sparse.dok_array or type(out) is scipy.sparse.coo_array or type(out) is scipy.sparse.csr_array: #sparse matrix
+    if is_sparse(out): #sparse matrix
             out = out.toarray()
     return 1 - (out/(np.minimum( out.max(axis=1)[:,np.newaxis], out.max(axis=0)[np.newaxis,:] ) ) )
         
@@ -99,7 +106,7 @@ def score_dist(array, row_lengths=None, col_lengths=None):
     """
     1 - (score / min(row_max, col_max))
     """
-    if type(array) is scipy.sparse.dok_array or type(array) is scipy.sparse.coo_array or type(array) is scipy.sparse.csr_array: #sparse matrix
+    if is_sparse(array): #sparse matrix
         array = array.toarray()
         # raise ValueError("Sparse distance matrices not implemented.")
         # array = scipy.sparse.coo_matrix(array) 
