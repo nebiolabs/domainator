@@ -26,6 +26,8 @@ SCORE_COLUMN="TREE_DIST"
 # https://docs.scipy.org/doc/scipy/reference/cluster.hierarchy.html
 
 
+# TODO: add options for coloring the xgmml file, like build_ssn.py
+
 def clean_name_for_newick(name, quiet=False):
   """
     converts all: " " (space), ";" (semicolon), ":" (colon), "," (comma), "()" (parentheses), "'" (quote) characters to "_" in a string

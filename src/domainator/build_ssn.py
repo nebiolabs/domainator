@@ -111,7 +111,9 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     
     if color_table_out is not None:
         with open(color_table_out, "w") as out:
-            for domain, color in color_table.items():
+            color_table_items = list(color_table.items())
+            color_table_items.sort(key=lambda x: x[0]) # sort lexically
+            for domain, color in color_table_items:
                 out.write(f"{domain}\t{color}\n")
 
 
@@ -145,7 +147,7 @@ def main(argv):
                         help="write a cytoscape xgmml file of the projection.")
 
     parser.add_argument('--cluster', required=False, default=False, action="store_true",
-                        help="Creates a new metadata column called 'SSN_cluster', replacing that column from the metadata file if already present. Finds clusters by following connectivity, assigns each cluster a distinct arbitrary integer.")
+                        help="Creates a new metadata column called 'SSN_cluster', replacing that column from the metadata file if already present. Finds clusters by following connectivity, assigns each cluster a distinct integer, based on size rank, bigger clusters get smaller numbers.")
 
     parser.add_argument('--cluster_tsv', required=False, type=str, default=None,
                         help="Path to write a tsv file will mapping each sequence to its cluster. If set, then --cluster is automatically activated. If --no_cluster_header not set, then the file will have header contig cluster.")
