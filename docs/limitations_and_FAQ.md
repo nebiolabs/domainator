@@ -5,6 +5,19 @@ Domainator currently loads reference databases into memory, so it is not suitabl
 ## Contigs vs genomes
 A major limitation of Domainator is that it operates on the contig level, not the genome level. So for example, when reporting taxonomy, fragmented genome assemblies will be counted multiple times, once for each contig in the assembly.
 
+## Scores and E-values
+Domainator uses scores and evalues somewhat inconsistently. Some programs allow filtering by evalue, others allow filtering by local alignment scores. It would be nice to be more consistent about that. Also domainator evalues are typically not adjusted by database size. Z = 1000 by default in most cases. One possible solution could be to stop using evalues and scores all together, and do most operations in the space of EFI scores.
+
+## plot_contigs.py handling of large contigs and large lists of contigs
+
+plot_contigs.py output looks best when the contigs are of sizes in the range of kb to 10s of kb, and when there are a fewer than about 300 of them.
+
+For whole genomes, [genome_notebook](https://github.com/dbikard/genomenotebook) might work better.
+
+[Geneious Prime](https://www.geneious.com/) works very well for visualizing Domainator annotations, but is commercial software.
+
+We welcome any other recommendations for contig visualization software.
+
 # Frequently asked questions
 
 ![Detective Domainic](media/detective_Domainic_transparent_background.png)
