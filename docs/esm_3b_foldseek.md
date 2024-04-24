@@ -21,7 +21,7 @@ cd esmologs
 conda env create --name domainator_esmologs --file conda_env.yml
 
 cd ..
-git clone https://github.com/seanrjohnson/domainator.git
+git clone https://github.com/nebiolabs/domainator.git
 cd domainator
 conda env update --name domainator_esmologs --file conda_env.yml
 
@@ -33,7 +33,7 @@ cd ..
 ## install via Apptainer/Singularity
 
 ```bash
-git clone https://github.com/seanrjohnson/domainator.git
+git clone https://github.com/nebiolabs/domainator.git
 cd domainator
 
 apptainer build domainator_esmologs.sif domainator_esmologs.def

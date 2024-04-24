@@ -108,7 +108,7 @@ or
 
 ### Step 1: Download, extract, and install the domainator package
 
-Go to the [Domainator github page](https://github.com/seanrjohnson/domainator) and download and extract the zip file for the latest release (see the right side of the github page).
+Go to the [Domainator github page](https://github.com/nebiolabs/domainator) and download and extract the zip file for the latest release (see the right side of the github page).
 
 Extract the zip file. In a terminal, navigate to the newly extracted folder and install the package with the command:
 

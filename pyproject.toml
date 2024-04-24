@@ -40,7 +40,7 @@ test = ["pytest >=7.4.2",
 # add dependency for Foldseek/ESM2 related stuff.
 
 [project.urls]
-Bug_Tracker = "https://github.com/seanrjohnson/domainator/issues"
+Bug_Tracker = "https://github.com/nebiolabs/domainator/issues"
 
 
 [tool.setuptools]
