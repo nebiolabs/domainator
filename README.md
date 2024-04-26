@@ -6,8 +6,28 @@ Version 0.7.0
 
 A flexible and modular software suite for domain-based gene neighborhood and protein search, extraction, and clustering.
 
+# Contents
+ - [Overview and key concepts](#Overview-and-key-concepts)
+ - [Program descriptions](#Program-descriptions)
+ - [Requirements](#Requirements)
+ - [Installation](#Installation)
+   - [Conda](#Conda)
+   - [Apptainer (Singularity)](#Apptainer-(Singularity))
+ - [Updating](#Updating)
+ - [Examples](#Examples)
+ - [Using Domainator as a python library](#Using-Domainator-as-a-python-library)
+ - [Credits](#Credits)
 
-[Examples and additional documentation](docs/README.md)
+## Detailed documentation
+- [Index](docs/README.md)
+  - [File Formats](docs/file_formats.md)
+  - [Basic Examples](docs/examples.md)
+  - [Advanced examples](https://github.com/nebiolabs/domainator_examples)
+  - [Developing Domainator](docs/developing_domainator.md)
+  - [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
+  - [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
+
+
 
 # Overview and key concepts
 
@@ -95,7 +115,7 @@ Domainator is developed on Linux, and has been tested on Mac. It probably won't 
 
 __NOTE:__ For Installation with ESM-2 3B 3Di and foldseek integration, see [here](docs/esm_3b_foldseek.md)
 
-## Via conda
+## Conda
 
 ### Step 0: Install miniconda
 If you don't already have a conda distribution installed, install one, such as miniconda.
@@ -108,7 +128,7 @@ or
 
 ### Step 1: Download, extract, and install the domainator package
 
-Go to the [Domainator github page](https://github.com/nebiolabs/domainator) and download and extract the zip file for the latest release (see the right side of the github page).
+Go to the [Domainator github page](https://github.com/nebiolabs/domainator) and download and extract the zip file for the latest release (see the right side of the github page), or download it via `git clone`.
 
 Extract the zip file. In a terminal, navigate to the newly extracted folder and install the package with the command:
 
@@ -122,16 +142,6 @@ This will create a new conda environment called "domainator".
 ```bash
 conda activate domainator
 ```
-
-### Updating
-
-Download and extract the new version, navigate to the folder and install with:
-
-```bash
-conda env create --force -f conda_env.yml
-```
-
-This will delete the old `domainator` conda environment and replace it with the updated version.
 
 ## Apptainer (Singularity)
 
@@ -154,6 +164,18 @@ apptainer exec domainator.sif [command here]
 apptainer exec domainator.sif domainate.py -i test/data/pDONR201_multi_genemark.gb -r test/data/pdonr_hmms.hmm -o example_out.gb
 ```
 
+# Updating
+
+Download and extract the new version, navigate to the folder and install with:
+
+```bash
+conda env create --force -f conda_env.yml
+```
+
+This will delete the old `domainator` conda environment and replace it with the updated version.
+
+# Examples
+
 ## Run Domainator to annotate contigs with Pfam
 
 Activate the domainator conda environment
@@ -171,7 +193,7 @@ gunzip Pfam-A.hmm.gz
 domainate.py --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm -o domainator_output.gb
 ```
 
-### Visualizing output
+## Visualizing output
 ```bash
 summary_report.py -i domainator_output.gb --html domain_summary.html
 enum_report.py -i domainator_output.gb --by contig --name --taxname superkingdom genus species self --length --domains --html enum_report.html -o enum_report.tsv
@@ -180,8 +202,9 @@ plot_contigs.py -i domainator_output.gb --html contigs_plot.html
 
 For more examples see: [Basic Examples](docs/examples.md), and [Advanced examples](https://github.com/nebiolabs/domainator_examples).
 
-## Using Domainator as a python library
+# Using Domainator as a python library
 
+## Basics
 Most executables in Domainator are based on a core function that acts as a editors on BioPython SeqRecord objects. So you can chain them within python scripts, keeping sequences as SeqRecords instead of writing and reading Genbank files.
 Chaining the functions will be similar to piping the output of one program to another, but will be faster because superfluous conversions from Genbank to SeqRecord and back again will be avoided. A caveat is that you lose some input and output validation (See also [Interoperability with BioPython](#Interoperability-with-BioPython)). 
 
@@ -191,31 +214,22 @@ The general way to access these functions is `from domainator.[script_name] impo
 
 Domainator is not directly intercompatible with BioPython. It uses `SeqRecord` objects derived from BioPython `SeqRecords`, but with some changes and extensions. A modified and extended subset of BioPython is included with Domainator as `domainator.Bio`. For reading and writing domainator-compatible sequence files we strongly recommend using the `domainator.utils.parse_seqfiles` and `domainator.utils.write_genbank` functions, respectively.
 
+# Credits
 
-## More documentation
-- [File Formats](docs/file_formats.md)
-- [Basic Examples](docs/examples.md)
-- [Advanced examples](https://github.com/nebiolabs/domainator_examples)
-- [Developing Domainator](docs/developing_domainator.md)
-- [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
-- [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
+## Please cite
 
 
-## projects that domainator draws inspiration from
+## Projects that domainator draws inspiration from
   - [BigScape/Corason](https://bigscape-corason.secondarymetabolites.org/)
   - [EFI](https://efi.igb.illinois.edu/)
   - [pydna](https://github.com/BjornFJohansson/pydna)
   - [antiSMASH](https://github.com/antismash/antismash)
-
+  - [HMMER3](https://github.com/EddyRivasLab/hmmer)
+    - [pyHMMER](https://github.com/althonos/pyhmmer)
 
 ## Contributors
-
-Sean Johnson 
-
-Peter Weigele
-
-Zhiyi Sun 
-
-Andrew Ge
-
-Yu-Cheng Lin
+ - Sean Johnson 
+ - Peter Weigele
+ - Zhiyi Sun 
+ - Andrew Ge
+ - Yu-Cheng Lin
