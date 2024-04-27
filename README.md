@@ -217,6 +217,7 @@ Domainator is not directly intercompatible with BioPython. It uses `SeqRecord` o
 # Credits
 
 ## Please cite
+Johnson, Sean R., Peter Weigele, Alexey Fomenkov, Andrew Ge, Anna Vincze, Richard J. Roberts, and Zhiyi Sun. “Domainator, a Flexible Software Suite for Domain-Based Annotation and Neighborhood Analysis, Identifies Proteins Involved in Antiviral Systems.” bioRxiv, April 26, 2024. [https://doi.org/10.1101/2024.04.23.590562](https://doi.org/10.1101/2024.04.23.590562).
 
 
 ## Projects that domainator draws inspiration from
