@@ -27,7 +27,8 @@ A flexible and modular software suite for domain-based gene neighborhood and pro
   - [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
   - [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
 
-
+# Questions, comments, bug reports, and feature requests
+Please use our [discussions page](https://github.com/nebiolabs/domainator/discussions) or [create an issue](https://github.com/nebiolabs/domainator/issues)
 
 # Overview and key concepts
 
@@ -217,6 +218,7 @@ Domainator is not directly intercompatible with BioPython. It uses `SeqRecord` o
 # Credits
 
 ## Please cite
+Johnson, Sean R., Peter Weigele, Alexey Fomenkov, Andrew Ge, Anna Vincze, Richard J. Roberts, and Zhiyi Sun. “Domainator, a Flexible Software Suite for Domain-Based Annotation and Neighborhood Analysis, Identifies Proteins Involved in Antiviral Systems.” bioRxiv, April 26, 2024. [https://doi.org/10.1101/2024.04.23.590562](https://doi.org/10.1101/2024.04.23.590562).
 
 
 ## Projects that domainator draws inspiration from
