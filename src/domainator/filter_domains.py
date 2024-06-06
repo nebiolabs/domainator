@@ -8,7 +8,7 @@ based on percentage overlap between domains and evalues of domains.
 import argparse
 import sys
 from domainator.utils import list_and_file_to_dict_keys, write_genbank, parse_seqfiles
-from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
+from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from typing import List, Tuple, Optional, Set, Iterable, Dict
 from domainator.Bio.SeqFeature import SeqFeature
 
@@ -47,7 +47,7 @@ def domain_overlap(hits:Dict[int, SeqFeature], allowed_fraction_overlap):
     return out
 
 
-def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[str]], databases_filter:Optional[Set[str]], selected_domains:Optional[Set[str]])-> Dict[str, Dict[int, SeqFeature]]: # 
+def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[str]], databases_filter:Optional[Set[str]], selected_domains:Optional[Set[str]], feature_types:Optional[Set[str]]=None )-> Dict[str, Dict[int, SeqFeature]]: # 
     """
     Finds all the annotations in a contig of the genbank which meet 
     the new evalue and max overlap requirements
@@ -64,6 +64,7 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
         databases_filter: str or None
             the name of the databases which you want to filter annotations from, by default will filter all annoatations.
         selected_domains: set of strings or None. If not None, then only keep domains with names in this set.
+        feature_types: set of strings or None. Whether to filter Domainator, or Domain_search annotations, or both. None is equivalent to {"Domainator"}.
         
     Returns:
         a dictionary mapping the number of the coding sequence to a list of tuples 
@@ -71,8 +72,10 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
     """
     kept_annotations = {} # {cds_id: {id: feature}}
     overlap_annotations = {} # {cds_id: {id: feature}}
+    if feature_types is None:
+        feature_types = {DOMAIN_FEATURE_NAME}
     for feature in rec.features:
-        if feature.type != DOMAIN_FEATURE_NAME:  # skip over non-domainator features
+        if feature.type not in feature_types:  # skip over non-domainator features
             continue
         # set the key for each CDS in the contig
         cds_id = feature.qualifiers['cds_id'][0]
@@ -118,7 +121,7 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
             kept_annotations[cds_id][feature_id] = overlap_annotations[cds_id][feature_id]
     return kept_annotations
 
-def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Optional[Set[str]]=None, databases_filter:Optional[Set[str]]=None, selected_domains=None):
+def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Optional[Set[str]]=None, databases_filter:Optional[Set[str]]=None, selected_domains=None, annotation_type="all"):
     """
     The main function which iterates through genbank files to find the domainator annotations
     to be removed
@@ -132,13 +135,26 @@ def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Option
             database to filter from, if None, then filter all databases together
         selected_domains: set of strings or None. If not None, then only keep domains with names in this set.
     """
+    feature_types = set()
+    if annotation_type == "domain_search":
+        feature_types.add(DOMAIN_SEARCH_BEST_HIT_NAME)
+    elif annotation_type == "domainator":
+        feature_types.add(DOMAIN_FEATURE_NAME)
+    elif annotation_type == "all":
+        feature_types.add(DOMAIN_FEATURE_NAME)
+        feature_types.add(DOMAIN_SEARCH_BEST_HIT_NAME)
+    else:
+        raise ValueError(f"Invalid annotation type: {annotation_type}")
+
+
+
     for rec in sequence_iterator:
         keep = find_kept_annotations(
-            evalue, max_overlap, rec, databases_keep, databases_filter, selected_domains)
+            evalue, max_overlap, rec, databases_keep, databases_filter, selected_domains, feature_types)
 
         new_features = []
         for feature in rec.features:
-            if feature.type == DOMAIN_FEATURE_NAME:
+            if feature.type in feature_types:
                 if feature.qualifiers['cds_id'][0] in keep and id(feature) in keep[feature.qualifiers['cds_id'][0]]:
                     new_features.append(feature)
             else:
@@ -179,7 +195,10 @@ def main(argv):
 
     parser.add_argument('--databases_filter', type=str, default=None, nargs="+",
                        help="The name of the database which you want to filter annotations from, by default will filter all annoatations according to evalue, domains, and max_overlap. Domains from other databases will be left as-is.")
-
+    
+    parser.add_argument('--annotation_type', type=str, default="all", choices={"domainator", "domain_search", "all"},
+                       help="Which type of annotations to filter (domainator, domain_search, all). Default: domainator")
+    
 
     params = parser.parse_args(argv)
 
@@ -218,7 +237,8 @@ def main(argv):
                 max_overlap=max_overlap,
                 databases_keep=databases_keep,
                 databases_filter=databases_filter,
-                selected_domains=selected_domains
+                selected_domains=selected_domains,
+                annotation_type=params.annotation_type
                 ),
         out)
 

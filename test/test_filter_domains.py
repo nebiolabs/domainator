@@ -4,13 +4,13 @@ import tempfile
 import pytest
 from domainator.Bio import SeqIO
 from domainator.Bio.Seq import Seq
-from domainator import DOMAIN_FEATURE_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator.Bio.SeqRecord import SeqRecord
 
 # Mocking a SeqFeature
-def mock_seq_feature(start, end, score, evalue, db, name, cds_id):
+def mock_seq_feature(start, end, score, evalue, db, name, cds_id, annotation_type=DOMAIN_FEATURE_NAME):
     location = FeatureLocation(start, end)
     qualifiers = {
         'score': [str(score)],
@@ -19,7 +19,7 @@ def mock_seq_feature(start, end, score, evalue, db, name, cds_id):
         'name': [name],
         'cds_id': [cds_id]
     }
-    return SeqFeature(location=location, type=DOMAIN_FEATURE_NAME, qualifiers=qualifiers)
+    return SeqFeature(location=location, type=annotation_type, qualifiers=qualifiers)
 
 # Mocking a SeqRecord
 def mock_seq_record(features):
@@ -79,6 +79,43 @@ def test_filter_domains_high_evalue_1():
     result = list(filter_domains(sequence_iterator, 0.05, 1.0, None, None, None))
     assert len(result[0].features) == 1  # Only one feature should be kept due to evalue filtering
 
+
+def test_domain_type_filtering_1():
+    features = [
+        mock_seq_feature(100, 200, 50, 0.001, "db1", "domain1", "cds1", DOMAIN_FEATURE_NAME),
+        mock_seq_feature(150, 250, 60, 0.1, "db1", "domain2", "cds1", DOMAIN_SEARCH_BEST_HIT_NAME),
+        mock_seq_feature(150, 250, 60, 0.1, "db1", "domain3", "cds1", DOMAIN_SEARCH_BEST_HIT_NAME)
+    ]
+    record = mock_seq_record(features)
+    result = find_kept_annotations(100, 1.0, record, None, None, None, {DOMAIN_FEATURE_NAME})
+    assert len(result["cds1"]) == 1
+    assert list(result["cds1"].values())[0].qualifiers['name'][0] == "domain1"
+
+def test_domain_type_filtering_2():
+    features = [
+        mock_seq_feature(100, 200, 50, 0.001, "db1", "domain1", "cds1", DOMAIN_FEATURE_NAME),
+        mock_seq_feature(150, 250, 60, 0.1, "db1", "domain2", "cds1", DOMAIN_SEARCH_BEST_HIT_NAME),
+        mock_seq_feature(150, 250, 60, 0.1, "db1", "domain3", "cds1", DOMAIN_SEARCH_BEST_HIT_NAME)
+    ]
+    record = mock_seq_record(features)
+    result = find_kept_annotations(100, 1.0, record, None, None, None, {DOMAIN_SEARCH_BEST_HIT_NAME})
+    assert len(result["cds1"]) == 2
+    assert list(result["cds1"].values())[0].qualifiers['name'][0] == "domain2"
+    assert list(result["cds1"].values())[1].qualifiers['name'][0] == "domain3"
+
+def test_domain_type_filtering_3():
+    features = [
+        mock_seq_feature(100, 200, 50, 0.001, "db1", "domain1", "cds1", DOMAIN_FEATURE_NAME),
+        mock_seq_feature(150, 250, 60, 0.1, "db1", "domain2", "cds1", DOMAIN_SEARCH_BEST_HIT_NAME),
+        mock_seq_feature(150, 250, 60, 0.1, "db1", "domain3", "cds1", DOMAIN_SEARCH_BEST_HIT_NAME)
+    ]
+    record = mock_seq_record(features)
+    result = find_kept_annotations(100, 1.0, record, None, None, None, {DOMAIN_SEARCH_BEST_HIT_NAME, DOMAIN_FEATURE_NAME})
+    assert len(result["cds1"]) == 3
+    assert list(result["cds1"].values())[0].qualifiers['name'][0] == "domain1"
+    assert list(result["cds1"].values())[1].qualifiers['name'][0] == "domain2"
+    assert list(result["cds1"].values())[2].qualifiers['name'][0] == "domain3"
+
 def test_main_1(tmpdir):
     # Create a temporary input file
     input_file = tmpdir.join("input.gb")
@@ -130,5 +167,52 @@ def test_filter_domainator_2(shared_datadir):
             if feature.type == "CDS":
                 assert "domainator_Pfam-A" not in feature.qualifiers
 
+def test_filter_domainator_3(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        outfile = output_dir + "/out.gb"
+        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", str("-1000"), "--annotation_type", "domainator"]
+        main(arguments)
+        assert Path(outfile).is_file()
+        recs = list(SeqIO.parse(outfile, "genbank"))
+        assert len(recs) == 5
+        for rec in recs:
+            search_hits_count = 0
+            for feature in rec.features:
+                assert feature.type != DOMAIN_FEATURE_NAME
+                if feature.type == "CDS":
+                    assert "domainator_Pfam-A" not in feature.qualifiers
+                if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
+                    search_hits_count += 1
+            assert search_hits_count == 1
 
+def test_filter_domainator_4(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        outfile = output_dir + "/out.gb"
+        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", str("-1000"), "--annotation_type", "domain_search"]
+        main(arguments)
+        assert Path(outfile).is_file()
+        recs = list(SeqIO.parse(outfile, "genbank"))
+        assert len(recs) == 5
+        for rec in recs:
+            domainator_hits_count = 0
+            for feature in rec.features:
+                assert feature.type != DOMAIN_SEARCH_BEST_HIT_NAME
+ 
+                if feature.type == DOMAIN_FEATURE_NAME:
+                    domainator_hits_count += 1
+            assert domainator_hits_count > 0
+
+def test_filter_domainator_5(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        outfile = output_dir + "/out.gb"
+        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", str("-1000"), "--annotation_type", "all"]
+        main(arguments)
+        assert Path(outfile).is_file()
+        recs = list(SeqIO.parse(outfile, "genbank"))
+        assert len(recs) == 5
+        for rec in recs:
+             for feature in rec.features:
+                assert feature.type not in {DOMAIN_SEARCH_BEST_HIT_NAME, DOMAIN_FEATURE_NAME}
+                if feature.type == "CDS":
+                    assert "domainator_Pfam-A" not in feature.qualifiers
 #TODO: more tests
