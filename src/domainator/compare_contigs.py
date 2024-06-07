@@ -40,11 +40,15 @@ class ContigMetric(ABC):
         pass
 
 class JaccardIndex(ContigMetric):
-    def __init__(self, weight: float = 0.0):
+    def __init__(self, weight: float = 0.0, databases=None):
         self.weight = weight
+        self.databases = databases
     
-    def get_contig_data(self, recs):
+    def get_contig_data(self, recs, databases=None):
         """
+            recs: a list of SeqRecords
+            databases: a set of database names to keep, if None, keep all databases
+
             store the domain content for the contig
         """
         out = OrderedDict()
@@ -54,14 +58,16 @@ class JaccardIndex(ContigMetric):
             
             for feature in contig.features:
                 if feature.type == DOMAIN_FEATURE_NAME:
+                    if databases is not None and feature.qualifiers["database"][0] not in databases:
+                        continue
                     domain_name = feature.qualifiers["name"][0]
                     out[contig.id].add(domain_name)
-    
+
         return out
 
 
     def compute(self, recs, k):
-        contig_data = self.get_contig_data(recs)
+        contig_data = self.get_contig_data(recs, self.databases)
         for query_id, query_domains in contig_data.items():
             tmp_out = list()
             for target_id, target_domains in contig_data.items():
@@ -86,11 +92,12 @@ class JaccardIndex(ContigMetric):
 
 
 class AdjacencyIndex(ContigMetric):
-    def __init__(self, weight: float = 0.0):
+    def __init__(self, weight: float = 0.0, databases=None):
         self.weight = weight
+        self.databases = databases
         #self.contig_data = OrderedDict()
     
-    def get_contig_data(self, recs):
+    def get_contig_data(self, recs, databases=None):
         """
             store the domain content for the contig
         """
@@ -103,15 +110,17 @@ class AdjacencyIndex(ContigMetric):
             last_feature = None
             for feature in contig.features:
                 if feature.type == DOMAIN_FEATURE_NAME:
+                    if databases is not None and feature.qualifiers["database"][0] not in databases:
+                        continue
                     domain_name = feature.qualifiers["name"][0]
                     if last_feature is not None:
                         #out[contig.id].add(tuple(sorted([domain_name,last_feature])))  
-                        out[contig.id].add(tuple([domain_name,last_feature])) # If we don't sort alphabetically, we are assuming that the contigs are oriented in the same way, which might be a bad assumption?
+                        out[contig.id].add(tuple([domain_name, last_feature])) # If we don't sort alphabetically, we are assuming that the contigs are oriented in the same way, which might be a bad assumption?
                     last_feature = domain_name
         return out
     
     def compute(self, recs, k):
-        contig_data = self.get_contig_data(recs)
+        contig_data = self.get_contig_data(recs, self.databases)
         for query_id, query_domains in contig_data.items():
             tmp_out = list()
             for target_id, target_domains in contig_data.items():
@@ -342,25 +351,27 @@ def main(argv):
         else:
             reports.append(GenbankOutput(params.output))
 
+    databases=None
+    if params.databases is not None:
+        databases = set(params.databases)
+
     metrics = list()
     if params.ji != 0.0:
-        metrics.append(JaccardIndex(params.ji))
+        metrics.append(JaccardIndex(params.ji, databases=databases))
     if params.ai != 0.0:
-        metrics.append(AdjacencyIndex(params.ai))
+        metrics.append(AdjacencyIndex(params.ai, databases=databases))
     # if params.dss != 0.0:
     #     reports["dss"] = params.dss
     if len(metrics) == 0:
         raise ValueError("Please specify a non-zero weight for at least one metric.")
 
-    databases=None
-    if params.databases is not None:
-        databases = set(params.databases)
+
         
     ## figure out if we are using every contig or just certain, named contigs ##
     contigs_needed = list_and_file_to_dict_keys(params.contigs, params.contigs_file)
     
     # Run
-    compare_contigs(genbanks, metrics, reports, params.k, contigs=contigs_needed, name_by_order=params.name_by_order, databases=databases)
+    compare_contigs(genbanks, metrics, reports, params.k, contigs=contigs_needed, name_by_order=params.name_by_order)
 
 def _entrypoint():
     main(sys.argv[1:])

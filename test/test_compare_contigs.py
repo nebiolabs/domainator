@@ -101,8 +101,11 @@ def test_compare_contigs_database_1(shared_datadir):
         assert dense_matrix.data[2,2] == dense_matrix.data[2,3]
         assert dense_matrix.data[3,2] == dense_matrix.data[3,3]
         
+        gb_out_text = open(out_gb).read()
+        assert "pdonr_hmms_1" in gb_out_text
+        assert "pdonr_hmms_2" in gb_out_text
+        
         genbanks = list(utils.parse_seqfiles([out_gb]))
         for i in range(len(genbanks)): #TODO: this is a bad test because it doesn't test changes in order, because in this case the output is the same order as the input.
             prefix = str(i).zfill(1)
             assert genbanks[i].id.startswith(prefix+"_")
-            
