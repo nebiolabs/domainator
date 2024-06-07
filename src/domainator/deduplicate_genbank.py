@@ -36,10 +36,11 @@ class ClusterProgram(ABC):
     cluster_assignment_path: str
 
 
-    def __init__(self, params, bin_path):
+    def __init__(self, params, bin_path, log_handle=sys.stderr):
 
         if bin_path is not None:
             self.bin_path = bin_path
+        self.log_handle = log_handle
         self.search_args = [self.bin_path] + self.search_args
         add_params_to_args_list(self.search_args, params)
 
@@ -52,7 +53,7 @@ class ClusterProgram(ABC):
 
         if out.returncode != 0:
             print(
-                f'Error executing clustering program: {self.search_args}', file=sys.stderr)
+                f'Error executing clustering program: {self.search_args}', file=self.log_handle)
             exit(1)
     
     @abstractmethod
@@ -67,13 +68,13 @@ class ClusterProgram(ABC):
         return reduced_names
 
 class USearch(ClusterProgram):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "usearch"
         self.input_fasta_path = input_fasta_path
         self.cluster_output_fasta_path = Path(input_fasta_path).parents[0] / "output.fasta"
         self.cluster_assignment_path = Path(input_fasta_path).parents[0] / "output.uc"
         self.search_args = ['-sort', 'length', '-threads', str(int(cpus)), '-cluster_fast', input_fasta_path, "-id", str(id), "-centroids", self.cluster_output_fasta_path, "-uc", self.cluster_assignment_path]
-        super().__init__(params, bin_path)
+        super().__init__(params, bin_path, log_handle=log_handle)
     
     def get_cluster_counts(self):
         out = dict()
@@ -88,13 +89,13 @@ class USearch(ClusterProgram):
 
 
 class CdHit(ClusterProgram, ABC):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, word_size=10):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, word_size=10, log_handle=sys.stderr):
         self.input_fasta_path = input_fasta_path
         self.cluster_output_fasta_path = Path(input_fasta_path).parents[0] / "output.fasta"
         self.cluster_assignment_path = Path(input_fasta_path).parents[0] / "output.fasta.clstr"
         self.word_size = word_size
         self.search_args = ['-n', str(self.word_size), '-M', "0", '-T', str(int(cpus)), "-d", "0", "-c", str(id), "-i", input_fasta_path, "-o", self.cluster_output_fasta_path]
-        super().__init__(params, bin_path)
+        super().__init__(params, bin_path, log_handle=log_handle)
     def get_cluster_counts(self):
         out = dict()
         with open(self.cluster_assignment_path, "r") as cluster_file:
@@ -118,7 +119,7 @@ class CdHit(ClusterProgram, ABC):
 
 
 class CdHitProtein(CdHit):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "cd-hit"
         word_size = 5
         if id > 0.7:
@@ -132,10 +133,10 @@ class CdHitProtein(CdHit):
         else:
             raise ValueError("For cd-hit on protein sequences, id must be >= 0.4")
 
-        super().__init__(input_fasta_path, id, params, bin_path=bin_path, add_count=add_count, cpus=cpus, word_size=word_size)
+        super().__init__(input_fasta_path, id, params, bin_path=bin_path, add_count=add_count, cpus=cpus, word_size=word_size, log_handle=log_handle)
 
 class CdHitEST(CdHit):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "cd-hit-est"
         word_size = 10
         if id > 0.95:
@@ -151,13 +152,13 @@ class CdHitEST(CdHit):
         else:
             raise ValueError("For cd-hit on nucleotide sequences, id must be >= 0.8")
 
-        super().__init__(input_fasta_path, id, params, bin_path=bin_path, add_count=add_count, cpus=cpus, word_size=word_size)
+        super().__init__(input_fasta_path, id, params, bin_path=bin_path, add_count=add_count, cpus=cpus, word_size=word_size, log_handle=log_handle)
    
 # class HashDedup(ClusterProgram):
 #     pass
 # TODO
 
-def run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1):
+def run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
     """
         algorithm: which program to use to cluster
 
@@ -173,11 +174,13 @@ def run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_c
 
         cpus: number of cpus to use
 
+        log_handle: where to write log messages
+
     """
 
     search_classes = {"cd-hit":CdHitProtein, "usearch": USearch, "cd-hit-est": CdHitEST}
     
-    search = search_classes[algorithm](input_fasta_path, id, params, bin_path, add_count, cpus)
+    search = search_classes[algorithm](input_fasta_path, id, params, bin_path, add_count, cpus, log_handle=log_handle)
 
     search.run()
 
@@ -196,7 +199,7 @@ class HashHit():
     cluster_count: int = 0
 
 
-def deduplicate_genbank(genbanks, algorithm, params, id, bin_path, add_count, cpus, fasta_type="protein"):
+def deduplicate_genbank(genbanks, algorithm, params, id, bin_path, add_count, cpus, fasta_type="protein", log_handle=sys.stderr):
     """
       input: 
             genbanks: list of genbank files to cluster sequences from
@@ -238,7 +241,7 @@ def deduplicate_genbank(genbanks, algorithm, params, id, bin_path, add_count, cp
             #run clustering algorithm
             if algorithm == "cd-hit" and seqtype != "protein":
                 algorithm = "cd-hit-est"
-            reduced_names, cluster_counts = run_clustering(algorithm, input_fasta_path, id, params, bin_path, add_count, cpus)
+            reduced_names, cluster_counts = run_clustering(algorithm, input_fasta_path, id, params, bin_path, add_count, cpus, log_handle=log_handle)
 
     #write reduced set of sequences to a genbank file
     input_ct = 0
@@ -252,7 +255,7 @@ def deduplicate_genbank(genbanks, algorithm, params, id, bin_path, add_count, cp
                 rec.id = rec.id + f"-{cluster_counts[i_str]}"
 
             yield rec
-    print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=sys.stderr)
+    print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=log_handle)
    
 def main(argv):
     parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
@@ -262,6 +265,9 @@ def main(argv):
 
     parser.add_argument('-o', '--output', default=None, required=False,
                         help="The name of the output file. If not supplied, writes to stdout.")
+    
+    parser.add_argument('--log', default=None, required=False,
+                        help="The name of the log file. If not supplied, writes to stderr.")
 
     parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
@@ -303,6 +309,12 @@ def main(argv):
         out = sys.stdout
     else:
         out = open(params.output, "w")
+    
+    if params.log is None:
+        log = sys.stderr
+    else:
+        log = open(params.log, "w")
+
 
     genbanks = params.input
 
@@ -331,7 +343,8 @@ def main(argv):
             params.bin_path,
             add_count,
             cpus,
-            params.fasta_type)
+            params.fasta_type,
+            log_handle=log)
 
     if params.fasta_out:
         SeqIO.write(deduplicate_iterator, out, "fasta")
@@ -340,6 +353,9 @@ def main(argv):
     
     if params.output is not None:
         out.close()
+    
+    if params.log is not None:
+        log.close()
 
 def _entrypoint():
     main(sys.argv[1:])
