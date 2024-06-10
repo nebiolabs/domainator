@@ -153,3 +153,24 @@ def test_color_genbank_color_table_out_2(shared_datadir):
         assert color_table_dict["CAT"] == "#F77468"
         assert len(set(color_table_dict.values())) == 7
 
+def test_color_genbank_databases_1(shared_datadir):
+    
+    with tempfile.TemporaryDirectory() as output_dir:
+        output_dir = "test_out"
+        out = output_dir + "/tmp_colored_genbank.gb"
+        
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--color_domains", "--databases", "pdonr_hmms_1"])
+        assert Path(out).is_file()
+        cds_colors = {"1264_-1_959": "#FF0000", "2916_1_3677": "#00FF00", "2265_-1_1606": "#0000FF"}
+        domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF"}
+        seen = 0
+        for rec in utils.parse_seqfiles([out]):
+            for feature in rec.features:
+                if feature.type == DOMAIN_FEATURE_NAME:
+                    if feature.qualifiers['database'][0] == "pdonr_hmms_1":
+                        if feature.qualifiers['name'][0] in domain_colors:
+                            seen += 1
+                            assert feature.qualifiers['Color'][0] == domain_colors[feature.qualifiers['name'][0]]
+                    else:
+                        assert not ('Color' in feature.qualifiers)
+        assert seen == 6

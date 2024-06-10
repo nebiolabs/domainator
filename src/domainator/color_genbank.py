@@ -64,7 +64,7 @@ def read_color_table(color_table):
     
     return out
 
-def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings=False, search_hit_color=None, clear=False):
+def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings=False, search_hit_color=None, clear=False, databases=None):
     """
         input: 
             record: SeqRecord containing CDS and domain annotations from Domainator program
@@ -74,6 +74,7 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
             disable_warnings: if True, then don't warn when a CDS gets multiple colors. NOT IMPLEMENTED
             search_hit_color: if not None, then color search_hit annotations with this color.
             clear: if True, then remove all color annotations from the genbank file before adding any new ones.
+            databases: if not None, then only use domains from these databases for determining color.
 
         output:
             modifies the SeqRecord to add "Color" qualifiers
@@ -88,6 +89,8 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
             if "Color" in feature.qualifiers:
                 del feature.qualifiers['Color']
         if feature.type == DOMAIN_FEATURE_NAME:
+            if databases is not None and feature.qualifiers['database'][0] not in databases:
+                continue
             if feature.qualifiers['name'][0] in color_map:
                 if "domains" in color_targets:
                     feature.qualifiers['Color'] = [ color_map[feature.qualifiers['name'][0]] ]
@@ -102,6 +105,7 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
                     # elif not disable_warnings:
                     #     warnings.warn(f"cds {cds_id} in {record.id} has more than one color annotation")
         if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
+            # TODO: should "databases" be applied here?
             if search_hit_color is not None:
                 if "domains" in color_targets:
                     feature.qualifiers['Color'] = [search_hit_color]
@@ -153,7 +157,7 @@ class AutoColormap:
 
         
 
-def color_genbank(records, color_table, color_targets, search_hit_color=None, clear=False, color_table_out=None):
+def color_genbank(records, color_table, color_targets, search_hit_color=None, clear=False, color_table_out=None, databases=None):
     """
       input: 
         records: an iterator of SeqRecords
@@ -162,6 +166,8 @@ def color_genbank(records, color_table, color_targets, search_hit_color=None, cl
         color_targets: a set or list containing "domains", "cdss", or both. Specifying which type of feature to color.
         search_hit_color: if not None, then color search_hit annotations with this color.
         clear: if True, then remove all color annotations from the genbank file before adding any new ones.
+        color_table_out: if not None, then write the updated color table to this file.
+        databases: if not None, then only use domains from these databases for determining color.
     """
     disable_multiple_colors_warning = False
     if color_table is not None:
@@ -171,7 +177,7 @@ def color_genbank(records, color_table, color_targets, search_hit_color=None, cl
         color_map = AutoColormap()
 
     for rec in records:
-        color_seqrecord_by_domain(rec, color_map, color_targets, disable_multiple_colors_warning, search_hit_color=search_hit_color, clear=clear)
+        color_seqrecord_by_domain(rec, color_map, color_targets, disable_multiple_colors_warning, search_hit_color=search_hit_color, clear=clear, databases=databases)
         yield rec
     
     if color_table_out is not None:
@@ -201,6 +207,9 @@ def main(argv):
     parser.add_argument("--clear", action="store_true", default=False,
                         help="if set, then remove all color annotations from the genbank file before adding any new ones.")
 
+    parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
+                        help="Domain databases to use for coloring. default: all databases.")
+    
     #TODO: maybe just color the top 16 or so most common domains, and give everything else the same color? Or have like 5 colors split among all of the less common domains.
     color_selection = parser.add_mutually_exclusive_group() # TODO: change this from mutually exclusive to just a list of options on one parameter, 
     color_selection.add_argument("--color_domains", action="store_true", default=False, 
@@ -247,6 +256,11 @@ def main(argv):
     if search_hit_color is not None:
         search_hit_color = normalize_color_hex(search_hit_color)
 
+    databases=None
+    if params.databases is not None:
+        databases = set(params.databases)
+
+
     # Run
     write_genbank(color_genbank(
             parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override),
@@ -254,7 +268,8 @@ def main(argv):
             color_targets,
             search_hit_color,
             params.clear,
-            color_table_out=params.color_table_out
+            color_table_out=params.color_table_out,
+            databases=databases
             ), 
         out)
     
