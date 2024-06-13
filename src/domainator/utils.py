@@ -157,6 +157,8 @@ def get_cds_name(feature): #(contig_id, feature):
         return feature.qualifiers["locus_tag"][0]
     elif "gene" in feature.qualifiers:
         return feature.qualifiers["gene"][0]
+    elif "protein_id" in feature.qualifiers:
+        return feature.qualifiers["protein_id"][0]
     else:
         return get_cds_unique_name(feature)
         #return contig_id + "_" + get_cds_unique_name(feature)
