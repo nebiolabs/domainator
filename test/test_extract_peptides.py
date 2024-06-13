@@ -132,7 +132,7 @@ def test_extract_peptides_end_of_contig(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/peptides.gb"
-        extract_peptides.main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-o", out, "--strand", "r"])
+        extract_peptides.main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-o", out, "--strand", "r", "--name_field", "locus_tag"])
         recs = list(SeqIO.parse(out, "genbank"))
         assert len(recs) == 2
         rec_ids = {rec.id for rec in recs}

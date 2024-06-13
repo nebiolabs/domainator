@@ -150,18 +150,14 @@ def get_cds_unique_name(feature):
         name_parts = ["_".join( (str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable)) ) for p in feature.location.parts]
         return " ".join(name_parts) # space so it can be split into multiple lines when writing genbank files
 
-def get_cds_name(feature): #(contig_id, feature):
-    if "gene_id" in feature.qualifiers:
-        return feature.qualifiers["gene_id"][0]
-    elif "locus_tag" in feature.qualifiers:
-        return feature.qualifiers["locus_tag"][0]
-    elif "gene" in feature.qualifiers:
-        return feature.qualifiers["gene"][0]
-    elif "protein_id" in feature.qualifiers:
-        return feature.qualifiers["protein_id"][0]
-    else:
-        return get_cds_unique_name(feature)
-        #return contig_id + "_" + get_cds_unique_name(feature)
+def get_cds_name(feature, precedence=None): #(contig_id, feature):
+    if precedence is None:
+        precedence = ["gene_id", "locus_tag", "gene", "protein_id"]
+
+    for p in precedence:
+        if p in feature.qualifiers:
+            return feature.qualifiers[p][0]
+    return get_cds_unique_name(feature)
 
 
 class TaxonomyData:
@@ -205,7 +201,7 @@ class DomainatorCDS():
     domain_search_feature: SeqFeature = None
 
     @classmethod
-    def list_from_contig(cls, contig, domain_evalue=float("inf"), domain_score=float("-inf"), skip_pseudo=False):
+    def list_from_contig(cls, contig, domain_evalue=float("inf"), domain_score=float("-inf"), skip_pseudo=False, name_precedence=None):
         """
             returns a list of DomainatorCDS objects from a contig SeqRecord
         """
@@ -217,7 +213,7 @@ class DomainatorCDS():
                 if skip_pseudo and ("pseudo" in feature.qualifiers or "pseudogene" in feature.qualifiers):
                     continue
                 cds_num = get_cds_unique_name(feature)
-                name = get_cds_name(feature)
+                name = get_cds_name(feature, name_precedence)
                 if cds_num not in name_to_idx:
                     #cds_rec = get_seq_record(start, end, name, strand, contig.seq)
                     cdss.append(DomainatorCDS(name, cds_num, i, feature))

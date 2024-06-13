@@ -44,7 +44,7 @@ def dna_to_peptide_location(location):
     end = int(location.end) // 3
     return FeatureLocation(start, end, strand=location.strand)
 
-def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss, keep_cds_feature=True, cds_id_type="name", search_hits=False, strand=None, unannotated=False, _from_domain_search=False, extract_all=False, invert=False, _domain_search_negatives:Optional[Set[str]]=None, databases=None, keep_name=False):
+def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss, keep_cds_feature=True, cds_id_type="name", search_hits=False, strand=None, unannotated=False, _from_domain_search=False, extract_all=False, invert=False, _domain_search_negatives:Optional[Set[str]]=None, databases=None, keep_name=False, name_field=None):
     """
         Extracts all peptide sequences from each SeqRecord in records.
         Yields the extracted peptides as SeqRecord objects.
@@ -69,8 +69,12 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
     # TODO: if fasta_out is set, we can skip all the annotation propagation, because it won't be used. This should speed things up for that case.
     
     databases = set(databases) if databases is not None else None
+    name_precedence = ["protein_id", "gene_id", "locus_tag", "gene"]
+    if name_field is not None:
+        name_precedence = [name_field] + ["protein_id", "gene_id", "locus_tag", "gene"]
+
     for contig in records:
-        cdss = DomainatorCDS.list_from_contig(contig, evalue, skip_pseudo=True)
+        cdss = DomainatorCDS.list_from_contig(contig, evalue, skip_pseudo=True, name_precedence=name_precedence)
         source_features = get_sources(contig)
         if _from_domain_search:
             hit_scores = contig.get_hit_scores()
@@ -190,6 +194,10 @@ def main(argv):
                        "they were reverse complemented. Set this option to keep contigs with their original names. "
                        "WARNING: if you aren't careful, this can easily result in duplicate names.")
 
+    parser.add_argument('--name_field', type=str, default=None,
+                        help='The CDS qualifier to preferentially use as the name of the peptide.'
+                        ' If not supplied, then qualifiers will be checked in order of: ["protein_id", "gene_id", "locus_tag", "gene"]')
+
     parser.add_argument('-e', '--evalue', default=100000000,
                         help="the evalue cutoff for domain annotations to be put onto the new genbank file")
     
@@ -241,6 +249,7 @@ def main(argv):
                     invert=params.invert,
                     databases=params.databases,
                     keep_name = params.keep_name,
+                    name_field = params.name_field
                     )
 
     if params.fasta_out:
