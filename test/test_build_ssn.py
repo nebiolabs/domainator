@@ -69,7 +69,7 @@ def test_build_ssn_3(shared_datadir):
 def test_build_ssn_4(shared_datadir):
     input_file = "FeSOD_dist.tsv"
     with tempfile.TemporaryDirectory() as output_dir:
-        output_dir = "test_out"
+        # output_dir = "test_out"
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"

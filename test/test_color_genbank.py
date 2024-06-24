@@ -156,7 +156,7 @@ def test_color_genbank_color_table_out_2(shared_datadir):
 def test_color_genbank_databases_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
-        output_dir = "test_out"
+        # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
         color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--color_domains", "--databases", "pdonr_hmms_1"])
