@@ -64,7 +64,7 @@ predict_from_ESM2_to_3Di.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o F
 fasta2foldseek.py --aa domainator/test/data/foldseek/FeSOD_20.fasta --tdi FeSOD_20.3di.fasta -o FeSOD
 
 # run domainate.py with the foldseek reference database. In this example, our query is the same file we used to make the database, but it could be any fasta or genbank file.
-domainate.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3Di_checkpoint ESM-2_3B_3Di.pt --esm2_3Di_device cuda:0
+domainate.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3Di_weights ESM-2_3B_3Di.pt --esm2_3Di_device cuda:0
 ```
 
 ## Apptainer/Singularity
@@ -78,6 +78,6 @@ apptainer exec --nv domainator/domainator_esmologs.sif predict_from_ESM2_to_3Di.
 apptainer exec domainator/domainator_esmologs.sif fasta2foldseek.py --aa domainator/test/data/foldseek/FeSOD_20.fasta --tdi FeSOD_20.3di.fasta -o FeSOD
 
 # run domainate.py with the foldseek reference database. In this example, our query is the same file we used to make the database, but it could be any fasta or genbank file.
-apptainer exec --nv domainator/domainator_esmologs.sif domainate.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3Di_checkpoint ESM-2_3B_3Di.pt --device cuda:0
+apptainer exec --nv domainator/domainator_esmologs.sif domainate.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3Di_weights ESM-2_3B_3Di.pt --device cuda:0
 ```
 
