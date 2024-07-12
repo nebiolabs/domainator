@@ -209,7 +209,7 @@ def main(argv):
         matrix.data_type = "score"
     
     if matrix.data_type != "score" and matrix.data_type != params.mode:
-        raise ValueError(f"Input matrix format is '{matrix.data_type}', but --mode is '{params.mode}'. Transforming between data types is only supported from s 'score' matrix.")
+        raise ValueError(f"Input matrix format is '{matrix.data_type}', but --mode is '{params.mode}'. Transforming between data types is only supported from a 'score' matrix.")
 
 
     if matrix.data_type == "score" and matrix.data_type != params.mode:
