@@ -170,7 +170,7 @@ apptainer exec domainator.sif domainate.py -i test/data/pDONR201_multi_genemark.
 Download and extract the new version, navigate to the folder and install with:
 
 ```bash
-conda env create --force -f conda_env.yml
+conda env create --yes -f conda_env.yml
 ```
 
 This will delete the old `domainator` conda environment and replace it with the updated version.
