@@ -29,7 +29,7 @@ plot_contigs.py -i annotated.gb --html contigs_plot.html
 
 nucleotide fasta input
 ```bash
-domainate.py --gene_call all --cpu 4 -i example_files/pDONR201_multi.fasta -r example_files/example_hmms.hmm -o annotated.gb --max_overlap 0.6
+domainate.py  --fasta_type nucleotide --gene_call all --cpu 4 -i example_files/pDONR201_multi.fasta -r example_files/example_hmms.hmm -o annotated.gb --max_overlap 0.6
 plot_contigs.py -i annotated.gb --html contigs_plot.html
 ```
 
