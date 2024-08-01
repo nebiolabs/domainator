@@ -18,11 +18,11 @@
 ### TODO: maybe make the histograms selective, like skip if there is only one of the other domain.
 
 ### TODO: maybe make the output just a single html file instead of a directory?
-
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import argparse
 import sys
 from pathlib import Path
-import warnings
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd

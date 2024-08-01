@@ -5,6 +5,8 @@ Build a sequence similarity network and do analysis related to that.
 
 # TODO: MSA column for cystoscape cluster
 # TODO: nothing here is very memory efficient. How big of a problem is that?
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import argparse
 from os import PathLike
 import sys

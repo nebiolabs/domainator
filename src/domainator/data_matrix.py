@@ -3,7 +3,8 @@
 The DataMatrix class is an abstraction around dense and sparse matrices
 
 """
-
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 from os import PathLike
 import pandas as pd
 import scipy.sparse
@@ -11,7 +12,6 @@ import numpy as np
 import h5py
 from typing import Dict, List, Tuple, Union, Optional
 from domainator.utils import get_file_type
-import warnings
 
 #TODO: switch to scipy sparse array instead of sparse matrix
 #TODO: use hdf5plugin to blosc compress datasets: http://www.silx.org/doc/hdf5plugin/latest/usage.html

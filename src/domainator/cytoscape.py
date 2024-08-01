@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import numpy as np
 import html
 import seaborn as sns

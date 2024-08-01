@@ -3,7 +3,8 @@
    For matrices with any data type, can convert from dense to sparse, or sparse to dense, or change the datatype.
 """
 
-
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import argparse
 import sys
 
@@ -12,7 +13,6 @@ from domainator import __version__, RawAndDefaultsFormatter
 import scipy.sparse
 import numpy as np
 from domainator.utils import get_file_type
-import warnings
 
 def is_sparse(matrix):
     """

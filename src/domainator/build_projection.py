@@ -3,10 +3,11 @@
     output can be images, coordinates, or Cytoscape xgmml files.
 
 """
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import argparse
 import sys
 from pathlib import Path
-import warnings
 import pandas as pd
 import seaborn as sns
 from sklearn.manifold import TSNE

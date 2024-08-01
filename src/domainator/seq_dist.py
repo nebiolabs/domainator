@@ -4,13 +4,14 @@ Typically the input and reference will be the same sequence file, creating a pai
 An hmm file can also be used as a reference to make a table of profile scores for each input peptide.
 
 """
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 
 import argparse
 import heapq
 import sys
 import subprocess
 import tempfile
-import warnings
 from domainator.Bio import SeqIO
 from collections import OrderedDict,namedtuple, defaultdict
 import numpy as np

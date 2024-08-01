@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 from domainator import seq_dist
 import tempfile
 import pandas as pd
