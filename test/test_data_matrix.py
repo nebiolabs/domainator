@@ -1,5 +1,5 @@
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 import pytest
 from domainator.data_matrix import DataMatrix
 import scipy.sparse

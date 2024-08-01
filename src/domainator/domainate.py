@@ -8,7 +8,7 @@ NOTES: genbank files that contain translation annotations in their CDS features 
        set is larger than your system memory (this may change in future versions).
 """
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 import sys
 import argparse
 from typing import NamedTuple, List, Dict, Set, Tuple, Optional, Union, Iterable, Iterator

@@ -2,7 +2,7 @@
 
 """
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 from domainator.Bio import SeqIO, BiopythonParserWarning, BiopythonWarning
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition

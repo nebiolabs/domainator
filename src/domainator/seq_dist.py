@@ -5,7 +5,7 @@ An hmm file can also be used as a reference to make a table of profile scores fo
 
 """
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 
 import argparse
 import heapq

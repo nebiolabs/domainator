@@ -19,7 +19,7 @@
 
 ### TODO: maybe make the output just a single html file instead of a directory?
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 import argparse
 import sys
 from pathlib import Path

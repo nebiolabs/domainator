@@ -6,7 +6,7 @@ ji, ai, and dss metrics are similar to and inspired by the metrics used in the B
 Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. “A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data.” Nature Chemical Biology 16, no. 1 (January 2020): 60–68. https://doi.org/10.1038/s41589-019-0400-9.
 """
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 import sys
 import argparse
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, get_file_type

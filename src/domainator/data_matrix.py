@@ -4,7 +4,7 @@ The DataMatrix class is an abstraction around dense and sparse matrices
 
 """
 import warnings
-warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
+warnings.filterwarnings("ignore", module='numpy')
 from os import PathLike
 import pandas as pd
 import scipy.sparse
