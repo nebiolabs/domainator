@@ -2,6 +2,8 @@
 # Domainator Basic Examples
 These are simplest-case examples. For more complex examples, see the [companion repository](https://github.com/nebiolabs/domainator_examples).
 
+Many of the examples below are also included in an executable [Google Colab notebook](https://colab.research.google.com/github/nebiolabs/domainator_examples/blob/main/colab_notebooks/Domainator.ipynb)
+
 ## Download and prepare example data
 These data are used in the examples below
 

@@ -22,6 +22,7 @@ A flexible and modular software suite for domain-based gene neighborhood and pro
 - [Index](docs/README.md)
   - [File Formats](docs/file_formats.md)
   - [Basic Examples](docs/examples.md)
+    - [As a Google Colab notebook](https://colab.research.google.com/github/nebiolabs/domainator_examples/blob/main/colab_notebooks/Domainator.ipynb)
   - [Advanced examples](https://github.com/nebiolabs/domainator_examples)
   - [Developing Domainator](docs/developing_domainator.md)
   - [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
