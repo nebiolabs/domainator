@@ -1,7 +1,8 @@
 """Generates Trees from distance matrices
     
 """
-
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import argparse
 from os import PathLike
 import sys

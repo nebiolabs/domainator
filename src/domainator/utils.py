@@ -1,7 +1,8 @@
 """Miscellaneous common functions for Domainator
 
 """
-
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 from domainator.Bio import SeqIO, BiopythonParserWarning, BiopythonWarning
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition
@@ -17,7 +18,6 @@ from typing import Dict, Iterable, List, Set, Union, Tuple
 
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from typing import List, Optional
-import warnings
 from collections import defaultdict, OrderedDict
 import functools
 import sys

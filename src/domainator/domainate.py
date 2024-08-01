@@ -7,6 +7,8 @@ NOTES: genbank files that contain translation annotations in their CDS features 
        domainate.py stores the entire reference set (usually the hmm database) in memory, so it is not suitable for cases where the reference 
        set is larger than your system memory (this may change in future versions).
 """
+import warnings
+warnings.filterwarnings("ignore", message="The value of the smallest subnormal for <class 'numpy.float64'> type is zero.")
 import sys
 import argparse
 from typing import NamedTuple, List, Dict, Set, Tuple, Optional, Union, Iterable, Iterator
@@ -17,7 +19,6 @@ from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, get_file_type, read_pyhmmer_peptide_fastas, filter_by_taxonomy
 import pyhmmer
 from domainator import __version__, RawAndDefaultsFormatter
-import warnings
 import pyrodigal
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy
