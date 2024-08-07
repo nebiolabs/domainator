@@ -113,6 +113,36 @@ def test_domainator_multi_hmm_2(shared_datadir):
         compare_seqfiles(out, ref_file, skip_qualifiers={"identity", "accession"})
 
 
+def test_domainator_multi_hmm_3(shared_datadir):
+    query_seqs = shared_datadir / "pDONR201_multi_genemark.gb"
+    hmms = [str(shared_datadir / "pdonr_hmms_1.hmm"), str(shared_datadir / "pdonr_hmms_2.hmm")]
+    ref_file = shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm.gb"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        # output_dir = "test_out"
+        out = output_dir + "/out3.gb"
+        args = ['--input'] + [str(query_seqs)] + [ "-r"] + hmms + ["-o", str(out), "-e", "10", "-Z", "0", "--max_overlap", "0.6"]
+
+        main(args)
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 4
+
+def test_domainator_multi_hmm_4(shared_datadir):
+    query_seqs = shared_datadir / "pDONR201_multi_genemark.gb"
+    hmms = [str(shared_datadir / "pdonr_hmms_1.hmm"), str(shared_datadir / "pdonr_hmms_2.hmm")]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        # output_dir = "test_out"
+        out = output_dir + "/out4.gb"
+        args = ['--input'] + [str(query_seqs)] + [ "-r"] + hmms + ["-o", str(out), "-e", "10", "-Z", "0", "--max_overlap", "0.6", "--overlap_by_db"]
+        main(args)
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 7
+ 
 
 def test_domain_overlap():
     hits = [SearchResult('0', '1', 'PF01', 2, 3, 1, 10,"db", 80.0, 1, 10, 10), #SearchResult(name,desc,evalue,score,start,end,database)

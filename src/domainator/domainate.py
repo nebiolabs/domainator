@@ -141,14 +141,18 @@ def foldseek_hits_to_search_results(hits, references, evalue, db_name, min_evalu
     
 
 
-def read_references(reference_files: Optional[List[str]], foldseek: Optional[List[str]]) -> Dict[str, Dict[str, Union[ Dict[str, pyhmmer.plan7.HMM], Dict[str, pyhmmer.easel.DigitalSequence]]]]:
+def read_references(reference_files: Optional[List[str]], foldseek: Optional[List[str]]) -> Dict[str, Dict[str, Union[ Dict[str, pyhmmer.plan7.HMM], Dict[str, pyhmmer.easel.DigitalSequence], str]]]:
     """
     Args: 
         reference_files: list of str
             a list of hmm or fasta files
 
-    Returns: dict of dicts of dicts of pyhmmer.Plan7.HMM objects (hmmsearch) or pyhmmer.easel.DigitalSequence objects (phmmer).
+    Returns: dict of dicts of dicts of pyhmmer.Plan7.HMM objects (hmmsearch),
+                pyhmmer.easel.DigitalSequence objects (phmmer), 
+                paths to foldseek databases.
             algorithm: db_name: seq_or_profile_name: HMM or DigitalSequence
+            or
+            "foldseek": db_name: db_path
 
     """
 
@@ -314,7 +318,7 @@ def get_prot_list(contig, unique_id):
 def get_pyhmmer_digital_sequence(name, prot):
     return pyhmmer.easel.TextSequence(name=bytes(name, encoding='utf8'),sequence=prot).digitize(pyhmmer.easel.Alphabet.amino())
 
-def filter_by_overlap(hits, allowed_percent_overlap, presorted=False):
+def filter_by_overlap(hits, allowed_percent_overlap, presorted=False, by_db=False):
     """
     Removes domains that overlap another domain with a higher bitscore at a percentage
     higher than that of the allowed percent overlap
@@ -334,22 +338,36 @@ def filter_by_overlap(hits, allowed_percent_overlap, presorted=False):
     no_overlap_hits = []
     if not presorted:
         hits.sort(key=lambda x: x.score, reverse=True)  # sort by bitscore
-    # Add the first hit as this is the one with the highest bitscore
-    no_overlap_hits.append(hits[0])
-    for i in range(1, len(hits)):
-        # Number of non-overlapping hits the current hit does not overlap with
+    
+    no_overlap_hits = dict()
+
+    
+    for i in range(0, len(hits)):
+        if by_db:
+            i_db = hits[i].database
+        else:
+            i_db = None
+        
+        # Add the first hit as this is the one with the highest bitscore
+        if i_db not in no_overlap_hits:
+            no_overlap_hits[i_db] = [hits[i]]
+            continue
+           # Number of non-overlapping hits the current hit does not overlap with
+        
         non_overlap_count = 0
-        for j in range(0, len(no_overlap_hits)):
-            # Does this hit overlap the current kept hits
-            if not utils.regions_overlap((no_overlap_hits[j].start, no_overlap_hits[j].end), (hits[i].start, hits[i].end), allowed_percent_overlap):
+        for j in range(0, len(no_overlap_hits[i_db])):
+            if not utils.regions_overlap((no_overlap_hits[i_db][j].start, no_overlap_hits[i_db][j].end), (hits[i].start, hits[i].end), allowed_percent_overlap):
                 non_overlap_count += 1
+
         # If it does not overlap all of the kept hits then add it to the list of kept hists
-        if non_overlap_count == len(no_overlap_hits):
-            no_overlap_hits.append(hits[i])
+        if non_overlap_count == len(no_overlap_hits[i_db]):
+            no_overlap_hits[i_db].append(hits[i])
+    # flatten no_overlap_hits
+    no_overlap_hits = [hit for sublist in no_overlap_hits.values() for hit in sublist]
     return no_overlap_hits
 
 
-def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max_hits:int, max_overlap:float, no_annotations:bool, best_annotation:bool):
+def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max_hits:int, max_overlap:float, no_annotations:bool, best_annotation:bool, overlap_by_db:bool=False):
     """add annoations to a protein contig
 
     Args:
@@ -359,6 +377,7 @@ def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max
         max_overlap (float): the maximum fractional of overlap between domains to be included in the annotated contig. If >= 1, then no overlap filtering will be done.
         no_annotations (bool): if true, then no annotations will be added to the contig
         best_annotation (bool): if True then add a special Domainator annotation to each peptide or CDS with the best hit from this search.
+        overlap_by_db (bool): if True, then filter by overlap by database. If False, then filter by overlap by all databases.
     """
     hits_list.sort(key=lambda x: x.score, reverse=True)
     contig.set_hit_best_score(hits_list[0].score)
@@ -379,7 +398,7 @@ def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max
                                     'rstart': [f"{hit.rstart}"], 'rend': [f"{hit.rend}"], 'rlen': [f"{hit.rlen}"]})
         contig.features.append(f)
     if not no_annotations:
-        for hit in filter_by_overlap(hits_list[:max_hits], max_overlap,  presorted=True):
+        for hit in filter_by_overlap(hits_list[:max_hits], max_overlap,  presorted=True, by_db=overlap_by_db):
             # Create new domain feature with information on the HMMER hit
             location = FeatureLocation(hit.start, hit.end, strand=1)
             #namedtuple("SearchResult", ["name", "desc", "evalue", "score", "start", "end", "database"])
@@ -397,8 +416,8 @@ def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max
 
 #contig.features, cds_index, seq_group_index, contig_index, db_index, database_names, hits, max_hits, max_overlap
 #contig, contigs_list[contig_id], max_hits, max_overlap
-def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResult]] , max_hits:int, max_overlap:float, no_annotations:bool, best_annotation:bool):
-    """add annoations to a nucleaic acid contig
+def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResult]] , max_hits:int, max_overlap:float, no_annotations:bool, best_annotation:bool, overlap_by_db:bool=False):
+    """add annoations to a nucleic acid contig
 
     Args:
         contig (SeqRecord): SeqRecord to add annotations to
@@ -407,6 +426,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
         max_overlap (float): the maximum fractional of overlap between domains to be included in the annotated contig. If >= 1, then no overlap filtering will be done.
         no_annotations (bool): if true, then no annotations will be added to the contig
         best_annotation (bool): if True then add a special Domainator annotation to each peptide or CDS with the best hit from this search.
+        overlap_by_db (bool): if True, then filter by overlap by database. If False, then filter by overlap by all databases.
     """
     hit_scores = dict()
     best_hits = dict()
@@ -437,7 +457,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
             contig.features.append(f)
         
         if not no_annotations:
-            for hit in filter_by_overlap(hits[feature_id][:max_hits], max_overlap, presorted=True):
+            for hit in filter_by_overlap(hits[feature_id][:max_hits], max_overlap, presorted=True, by_db=overlap_by_db):
                 # Create new domain feature with information on the HMMER hit
                 annot_length = (hit.end - hit.start) * 3
                 try:
@@ -465,16 +485,37 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
     contig.set_hit_names(best_hits)
         
 
-def domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False):
-    
+def domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False):
+    """
+
+    Args:
+        contigs_list (_type_): 
+        proteins_list (_type_): 
+        foldseek_list (_type_):
+        reference_groups (_type_): 
+        evalue (_type_): 
+        cpu (_type_): 
+        z (_type_): 
+        hits_only (_type_): 
+        no_annotations (_type_): 
+        max_hits (_type_): 
+        max_overlap (_type_): 
+        best_annotation (_type_): 
+        min_evalue (float, optional): . Defaults to 0.0.
+        max_mode (bool, optional): . Defaults to False.
+        overlap_by_db (bool, optional): Defaults to False.
+
+    Returns:
+        : 
+    """
     hits =  run_search(proteins_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
         if contig.annotations['molecule_type'] == "protein":
-            add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation)
+            add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
         else:
-            add_nucleic_acid_annotations(contig, hits[contig_id], max_hits, max_overlap, no_annotations, best_annotation)
+            add_nucleic_acid_annotations(contig, hits[contig_id], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
 
     if hits_only:
         return_contigs = list(hits.keys())
@@ -506,7 +547,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         rec.features.append(feature)
         i += 1
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -561,7 +602,6 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
 
         esm2_3Di_device: device to run esm2_3Di on. [default: None]
 
-
     """
 
     if references is None and foldseek is None:
@@ -604,7 +644,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index)])
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode)
+            return_contigs = domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
             for contig_id in range(len(contigs_list)):
                 if contig_id in return_contigs:
                     yield contigs_list[contig_id]
@@ -613,7 +653,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode)
+    return_contigs = domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
     #for contig_id in range(len(contigs_list)): #TODO: why did I think this more complicated loop was a good idea?
     #    if contig_id in return_contigs:
     for contig_id in return_contigs:
@@ -672,6 +712,8 @@ def main(argv):
                         help="the number of cores of the cpu which are used at a time to run the search [default: use all available cores]")
     parser.add_argument('--max_overlap', type=float, default=1,
                         help="the maximum fractional of overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.")
+    parser.add_argument("--overlap_by_db", action='store_true', default=False,
+                        help="If activated, then overlap filtering will be done by database, rather than all together.")
     parser.add_argument('--hits_only', action='store_true', default=False,
                         help="when activated, the ouptut will only have contigs with at least one domain annotation. In many cases, domain_search.py will be faster and more appropriate.")
     parser.add_argument('--no_annotations', action='store_true', default=False,
@@ -754,7 +796,8 @@ def main(argv):
             max_mode=params.max_mode,
             foldseek=params.foldseek,
             esm2_3Di_weights=params.esm2_3Di_weights,
-            esm2_3Di_device=params.esm2_3Di_device
+            esm2_3Di_device=params.esm2_3Di_device,
+            overlap_by_db=params.overlap_by_db,
         ),
         out)
 
