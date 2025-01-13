@@ -1,6 +1,5 @@
 name: domainator
 channels:
-  - defaults
   - conda-forge
   - bioconda
 dependencies:
