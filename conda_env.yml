@@ -10,5 +10,6 @@ dependencies:
   - cd-hit~=4.8.1
   - diamond>=2.0.0
   - hmmer~=3.3.2
+  - usearch
   - pip:
     - -e .[test]
