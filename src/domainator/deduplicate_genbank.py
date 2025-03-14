@@ -4,7 +4,7 @@ Runs a clustering algorithm, such as cdhit or usearch on sequences from a genban
 The "hash" algorithm is a faster way to deduplicate exact duplicates, by hashing the sequences and eliminating hash duplicates.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import sys
 import argparse
 from typing import List
@@ -18,9 +18,6 @@ from pathlib import Path
 import psutil
 import hashlib
 from domainator import __version__, RawAndDefaultsFormatter
-
-#TODO: support vsearch for nucleotide clustering.
-
 
 def add_params_to_args_list(arg_list, params):
     for k,v in params.items():
@@ -57,7 +54,7 @@ class ClusterProgram(ABC):
             exit(1)
     
     @abstractmethod
-    def get_cluster_counts(self):
+    def get_cluster_members(self):
         pass
 
     def get_reduced_names(self):
@@ -68,7 +65,7 @@ class ClusterProgram(ABC):
         return reduced_names
 
 class USearch(ClusterProgram):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "usearch"
         self.input_fasta_path = input_fasta_path
         self.cluster_output_fasta_path = Path(input_fasta_path).parents[0] / "output.fasta"
@@ -76,50 +73,55 @@ class USearch(ClusterProgram):
         self.search_args = ['-sort', 'length', '-threads', str(int(cpus)), '-cluster_fast', input_fasta_path, "-id", str(id), "-centroids", self.cluster_output_fasta_path, "-uc", self.cluster_assignment_path]
         super().__init__(params, bin_path, log_handle=log_handle)
     
-    def get_cluster_counts(self):
+    def get_cluster_members(self):
         out = dict()
         with open(self.cluster_assignment_path, "r") as cluster_file:
             for line in cluster_file:
+                line=line.strip()
                 parts = line.split("\t")
-                if parts[0] == "C":
-                    center = parts[8]
-                    num_seqs = parts[2]
-                    out[center] = num_seqs
+                if parts[0] == "H":
+                    if parts[9] not in out:
+                        out[parts[9]] = list()
+                    out[parts[9]].append(parts[8])
+                elif parts[0] == "S":
+                    if parts[8] not in out:
+                        out[parts[8]] = list()
+                    out[parts[8]].append(parts[8])
         return out
 
 
 class CdHit(ClusterProgram, ABC):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, word_size=10, log_handle=sys.stderr):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, cpus=1, word_size=10, log_handle=sys.stderr):
         self.input_fasta_path = input_fasta_path
         self.cluster_output_fasta_path = Path(input_fasta_path).parents[0] / "output.fasta"
         self.cluster_assignment_path = Path(input_fasta_path).parents[0] / "output.fasta.clstr"
         self.word_size = word_size
         self.search_args = ['-n', str(self.word_size), '-M', "0", '-T', str(int(cpus)), "-d", "0", "-c", str(id), "-i", input_fasta_path, "-o", self.cluster_output_fasta_path]
         super().__init__(params, bin_path, log_handle=log_handle)
-    def get_cluster_counts(self):
+    def get_cluster_members(self):
         out = dict()
         with open(self.cluster_assignment_path, "r") as cluster_file:
             center = None
-            members = 0
+            members = []
             for line in cluster_file:
                 if line[0] == ">":
                     if center != None:
                         out[center] = members
                     
                     center = None
-                    members = 0
+                    members = []
                 else:
                     parts = line.split()
                     if parts[3] == "*": # cluster center
                         center = parts[2][1:-3]
-                    members += 1
+                    members.append(parts[2][1:-3])
 
             out[center] = members
         return out
 
 
 class CdHitProtein(CdHit):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "cd-hit"
         word_size = 5
         if id > 0.7:
@@ -133,10 +135,10 @@ class CdHitProtein(CdHit):
         else:
             raise ValueError("For cd-hit on protein sequences, id must be >= 0.4")
 
-        super().__init__(input_fasta_path, id, params, bin_path=bin_path, add_count=add_count, cpus=cpus, word_size=word_size, log_handle=log_handle)
+        super().__init__(input_fasta_path, id, params, bin_path=bin_path, cpus=cpus, word_size=word_size, log_handle=log_handle)
 
 class CdHitEST(CdHit):
-    def __init__(self, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "cd-hit-est"
         word_size = 10
         if id > 0.95:
@@ -152,7 +154,7 @@ class CdHitEST(CdHit):
         else:
             raise ValueError("For cd-hit on nucleotide sequences, id must be >= 0.8")
 
-        super().__init__(input_fasta_path, id, params, bin_path=bin_path, add_count=add_count, cpus=cpus, word_size=word_size, log_handle=log_handle)
+        super().__init__(input_fasta_path, id, params, bin_path=bin_path, cpus=cpus, word_size=word_size, log_handle=log_handle)
    
 # class HashDedup(ClusterProgram):
 #     pass
@@ -180,82 +182,105 @@ def run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_c
 
     search_classes = {"cd-hit":CdHitProtein, "usearch": USearch, "cd-hit-est": CdHitEST}
     
-    search = search_classes[algorithm](input_fasta_path, id, params, bin_path, add_count, cpus, log_handle=log_handle)
+    search = search_classes[algorithm](input_fasta_path, id, params, bin_path, cpus, log_handle=log_handle)
 
     search.run()
 
     reduced_names = search.get_reduced_names()
 
-    cluster_counts = None
+    cluster_members = None
     if add_count is not None:
-        cluster_counts = search.get_cluster_counts()
+        cluster_members = search.get_cluster_members()
 
 
-    return reduced_names, cluster_counts
+    return reduced_names, cluster_members
     
 @dataclass
 class HashHit():
     rep_name: str
-    cluster_count: int = 0
+    cluster_members: list[str] = field(default_factory=list)
 
+class DeduplicateGenbank():
+    def __init__(self):
+        self._cluster_members = None
 
-def deduplicate_genbank(genbanks, algorithm, params, id, bin_path, add_count, cpus, fasta_type="protein", log_handle=sys.stderr):
-    """
-      input: 
-            genbanks: list of genbank files to cluster sequences from
-            algorithm: which program to use for clustering
-            params: a dict of additional command line arguments to pass to the clustering algorithm
-    """
+    @property
+    def cluster_members(self):
+        if self._cluster_members is None:
+            raise ValueError("cluster_members not set. Please run deduplicate_genbank first.")
+        else:
+            return self._cluster_members
 
-    #dict of algorithm names to functions that will run the algorithm, the functions must take three arguments, input_fasta_path,cluster_output_fasta_path,params
+    def deduplicate_genbank(self, genbanks, algorithm, params, id, bin_path, add_count, cpus, fasta_type="protein", log_handle=sys.stderr):
+        """
+        input: 
+                genbanks: list of genbank files to cluster sequences from
+                algorithm: which program to use for clustering
+                params: a dict of additional command line arguments to pass to the clustering algorithm
+        """
 
-    if algorithm == "hash": #TODO: multiprocessing
-        if id != 1:
-            raise ValueError(f"hash algorithm only valid for id = 1, not {id}.")
-        seen = dict()
+        #dict of algorithm names to functions that will run the algorithm, the functions must take three arguments, input_fasta_path,cluster_output_fasta_path,params
+
+        if algorithm == "hash": #TODO: multiprocessing
+            if id != 1:
+                raise ValueError(f"hash algorithm only valid for id = 1, not {id}.")
+            seen = dict()
+            for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
+                seq_hash = hashlib.sha256(str(rec.seq).upper().strip('*').encode("utf-8")).hexdigest()
+                if seq_hash not in seen:
+                    seen[seq_hash] = HashHit(str(i))
+                seen[seq_hash].cluster_members.append(str(i))
+            reduced_names = {x.rep_name for x in seen.values()}
+            cluster_members = {x.rep_name: x.cluster_members for x in seen.values()}
+                
+
+        else: #not hash algorithm
+            with tempfile.TemporaryDirectory() as output_dir:
+                # output_dir = "test_out"
+                input_fasta_path = output_dir + "/input.fasta"
+
+                seqtype = None
+                #convert input to fasta
+                with open(input_fasta_path, "w") as input_handle:
+                    for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
+                        if seqtype is None:
+                            seqtype = rec.annotations['molecule_type']
+                        rec.id = str(i)
+                        rec.description = ""
+                        rec.name = ""
+                        rec.seq = Seq.Seq(str(rec.seq).upper().replace("*", "f"))
+                        SeqIO.write([rec],input_handle,"fasta") 
+                
+                #run clustering algorithm
+                if algorithm == "cd-hit" and seqtype != "protein":
+                    algorithm = "cd-hit-est"
+                reduced_names, cluster_members = run_clustering(algorithm, input_fasta_path, id, params, bin_path, add_count, cpus, log_handle=log_handle)
+
+        #write reduced set of sequences to a genbank file
+        input_ct = 0
+        idx_to_original_name = list()
+        idx_to_center_name = dict()
+
         for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
-            seq_hash = hashlib.sha256(str(rec.seq).upper().strip('*').encode("utf-8")).hexdigest()
-            if seq_hash not in seen:
-                seen[seq_hash] = HashHit(str(i))
-            seen[seq_hash].cluster_count += 1
-        reduced_names = {x.rep_name for x in seen.values()}
-        cluster_counts = {x.rep_name: x.cluster_count for x in seen.values()}
-            
+            i_str = str(i)
+            input_ct += 1
+            idx_to_original_name.append(rec.id)
+            if i_str in reduced_names:
+                if add_count == "prefix":
+                    rec.id = f"{len(cluster_members[i_str])}-" + rec.id
+                elif add_count == "suffix":
+                    rec.id = rec.id + f"-{len(cluster_members[i_str])}"
+                idx_to_center_name[i] = rec.id
+                yield rec
+        
+        self._cluster_members = list()
+        for center_i_str, members_i_strs in cluster_members.items():
+            center_i = int(center_i_str)
+            member_names = [idx_to_original_name[int(i)] for i in members_i_strs]
+            self._cluster_members.append((idx_to_center_name[int(center_i)], member_names))
 
-    else: #not hash algorithm
-        with tempfile.TemporaryDirectory() as output_dir:
-            input_fasta_path = output_dir + "/input.fasta"
 
-            seqtype = None
-            #convert input to fasta
-            with open(input_fasta_path, "w") as input_handle:
-                for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
-                    if seqtype is None:
-                        seqtype = rec.annotations['molecule_type']
-                    rec.id = str(i)
-                    rec.description = ""
-                    rec.name = ""
-                    rec.seq = Seq.Seq(str(rec.seq).upper().replace("*", "f"))
-                    SeqIO.write([rec],input_handle,"fasta") 
-            
-            #run clustering algorithm
-            if algorithm == "cd-hit" and seqtype != "protein":
-                algorithm = "cd-hit-est"
-            reduced_names, cluster_counts = run_clustering(algorithm, input_fasta_path, id, params, bin_path, add_count, cpus, log_handle=log_handle)
-
-    #write reduced set of sequences to a genbank file
-    input_ct = 0
-    for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
-        i_str = str(i)
-        input_ct += 1
-        if i_str in reduced_names:
-            if add_count == "prefix":
-                rec.id = f"{cluster_counts[i_str]}-" + rec.id
-            elif add_count == "suffix":
-                rec.id = rec.id + f"-{cluster_counts[i_str]}"
-
-            yield rec
-    print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=log_handle)
+        print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=log_handle)
    
 def main(argv):
     parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
@@ -273,7 +298,7 @@ def main(argv):
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
 
     parser.add_argument("--algorithm", type=str, default="cd-hit", choices={"cd-hit", "usearch", "hash"},
-                        help="Which clustering algorithm to use.") #add cdhit-est, and usearch 
+                        help="Which clustering algorithm to use.")
 
     parser.add_argument("--bin_path", type=str, default=None,
                         help="If the executable for the algorithm you're using isn't in the system path, you can provide the full path to the executable here.")
@@ -296,6 +321,12 @@ def main(argv):
 
     parser.add_argument('--fasta_out', action='store_true', default=False,
                         help="makes output a fasta file when activated")
+    
+    parser.add_argument('--cluster_table', default=None, required=False,
+                        help="If supplied, then write a tab separated table with columns: representative, contigs.")
+    
+    parser.add_argument('--cluster_sep', default=' ; ', required=False,
+                        help="Separator to separate individual contig names in the second column of the cluster table. Default: ' ; '")
 
     params = parser.parse_args(argv)
    
@@ -334,8 +365,9 @@ def main(argv):
     if params.id < 0 or params.id > 1:
         raise ValueError(f"id must be between 0 and 1, not {params.id}")
 
+    dedup = DeduplicateGenbank()
     # Run
-    deduplicate_iterator = deduplicate_genbank(
+    deduplicate_iterator = dedup.deduplicate_genbank(
             genbanks, 
             params.algorithm, 
             algorithm_parameters, 
@@ -351,6 +383,12 @@ def main(argv):
     else:
         write_genbank(deduplicate_iterator, out, default_molecule_type=params.fasta_type)
     
+    if params.cluster_table is not None:
+        with open(params.cluster_table, "w") as cluster_table_out:
+            print("representative\tcontigs", file=cluster_table_out)
+            for representative, contigs in dedup.cluster_members:
+                print(f"{representative}\t{params.cluster_sep.join(contigs)}", file=cluster_table_out)
+
     if params.output is not None:
         out.close()
     
