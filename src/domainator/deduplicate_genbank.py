@@ -189,8 +189,8 @@ def run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_c
     reduced_names = search.get_reduced_names()
 
     cluster_members = None
-    if add_count is not None:
-        cluster_members = search.get_cluster_members()
+    # if add_count is not None:
+    cluster_members = search.get_cluster_members()
 
 
     return reduced_names, cluster_members
