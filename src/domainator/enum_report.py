@@ -402,6 +402,8 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
         list: one line of output
     """
     contig_name = rec.id
+    # Preserve the source filename if it exists
+    source_filename = rec.annotations.get("_source_filename", "")
     sub_recs = list()
     locs = list()
     if by == "contig":
@@ -418,6 +420,8 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
             for i in range(len(cdss)):
                 if by == "cds":
                     cds_rec = slice_record_from_location(rec, cdss[i].feature.location, sources + [cdss[i].feature] + cdss[i].domain_features, truncate_features=True) #  get_cds_neighborhood(rec, cdss, i) # extract a single CDS.
+                    if source_filename:
+                        cds_rec.annotations["_source_filename"] = source_filename
                     sub_recs.append(cds_rec)
                     locs.append(cdss[i].feature.location)
                     cds_names.append(cdss[i].name)
@@ -426,6 +430,8 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                     for domain in cds_summary.domain_features:
                         domain_name = domain.qualifiers["name"][0]
                         domain_rec = slice_record_from_location(rec, domain.location, sources + [domain], truncate_features=True)
+                        if source_filename:
+                            domain_rec.annotations["_source_filename"] = source_filename
                         cds_names.append(cds_summary.name)
                         domain_names.append(domain_name)
                         sub_recs.append(domain_rec)
@@ -440,6 +446,8 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                 for feature in rec.features:
                     if feature.type == DOMAIN_FEATURE_NAME:
                         domain_rec = slice_record_from_location(rec, feature.location, sources + [feature], truncate_features=True)
+                        if source_filename:
+                            domain_rec.annotations["_source_filename"] = source_filename
                         cds_names.append(" ")        
                         domain_names.append(feature.qualifiers["name"][0])
                         sub_recs.append(domain_rec)
@@ -464,6 +472,38 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
             else:
                 out_line.append(analysis_result)
         yield out_line
+
+def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None):
+    """
+    Wrapper around parse_seqfiles that adds the source filename to each record's annotations.
+    
+    Args:
+        seqfiles: a list of genbank or fasta paths
+        contigs: a dict where keys are the names of desired contigs, and values are None. Or None.
+        filetype_override: if supplied then don't try to guess filetype from the extension
+        
+    Yields:
+        SeqRecord objects with '_source_filename' added to annotations
+    """
+    from domainator.utils import open_if_is_name
+    
+    for file in seqfiles:
+        # Determine the filename to store
+        filename = None
+        try:
+            # If it's a file path or Path object, convert to string
+            filename = str(file)
+        except:
+            # If it's already a file handle, try to get the name
+            if hasattr(file, 'name'):
+                filename = file.name
+            else:
+                filename = "<stdin>"
+        
+        # Parse records from this file
+        for rec in parse_seqfiles([file], contigs, filetype_override):
+            rec.annotations["_source_filename"] = filename
+            yield rec
 
 def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None):
     """
@@ -492,6 +532,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
                 "score": {"columns": ["score"], "column_types": ["float"], "function":  lambda rec,loc,tax: get_domain_scores_sum(rec)}, 
                 "identity": {"columns": ["identity"], "column_types": ["float"], "function":  lambda rec,loc,tax: get_domain_identities_sum(rec)}, 
                 "definition": {"columns": ["definition"], "column_types": ["str"], "function": lambda rec,loc,tax: rec.description}, 
+                "filename": {"columns": ["filename"], "column_types": ["str"], "function": lambda rec,loc,tax: rec.annotations.get("_source_filename", "")}, 
                 "cds_count": {"columns": ["cds_count"], "column_types": ["int"], "function": lambda rec,loc,tax: count_feature(rec, "CDS")}, 
                 "domain_count": {"columns": ["domain_count"], "column_types": ["int"], "function": lambda rec,loc,tax: count_feature(rec, DOMAIN_FEATURE_NAME)}, 
                 "domain_search": {"columns": ["best_query", "query_description", "query_start", "query_end", "query_length", "match_start", "match_end", "match_strand", "match_score", "match_identity"], 
@@ -621,6 +662,9 @@ def main(argv):
     parser.add_argument('--definition', action='append_const', dest=COLS_ARG_NAME, const="definition",
                         help="report sequence definition line from the genbank file.")
     
+    parser.add_argument('--filename', action='append_const', dest=COLS_ARG_NAME, const="filename",
+                        help="report the filename of the input file from which the record originated.")
+    
     parser.add_argument('--domain_search', action='append_const', dest=COLS_ARG_NAME, const="domain_search",
                         help="This is a composite metric that will return multiple columns: best_query, query_description, query_start, query_end, query_length, match_start, match_end, match_strand, match_score, match_identity.")
     
@@ -694,9 +738,17 @@ def main(argv):
     if params.databases is not None:
         databases = set(params.databases)
 
+    # Determine whether to track filenames
+    use_filename_tracking = "filename" in analysis_names
+    
+    # Choose the appropriate record parser
+    if use_filename_tracking:
+        records_iter = parse_seqfiles_with_filenames(genbanks, target_contigs, filetype_override=filetype_override)
+    else:
+        records_iter = parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override)
 
     # Run
-    enum_report(parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override),
+    enum_report(records_iter,
                 params.by,
                 analyses,
                 out,

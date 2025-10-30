@@ -423,3 +423,145 @@ def test_enum_report_database_1(shared_datadir):
 #                 assert f"pDONR201_{l_num}" == l[0]
 #                 assert l[1] == "4"
 #                 assert len(l) == 2
+
+
+def test_enum_report_filename_contig_1(shared_datadir):
+    """
+    Test that the --filename option correctly tracks source filenames in contig mode
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"), 
+                         "-o", out, "--filename", "--domains"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 3  # header + 2 contigs
+            for i, l in enumerate(lines):
+                lines[i] = lines[i].rstrip("\r\n").split("\t")
+            
+            assert lines[0] == ["contig", "filename", "domains"]
+            assert lines[1][0] == "Staphylococcus_phage_phiSA12_-_NC_023573.1"
+            assert lines[1][1] == str(shared_datadir / "206.gb")
+            assert lines[1][2] == ""
+            
+            assert lines[2][0] == "pDONR201_1265:958rc"
+            assert lines[2][1] == str(shared_datadir / "ccdb.gb")
+            assert lines[2][2] == "CcdB"
+
+
+def test_enum_report_filename_cds_1(shared_datadir):
+    """
+    Test that the --filename option correctly tracks source filenames in CDS mode
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), 
+                         str(shared_datadir / "simple_genpept.gb"),
+                         "-o", out, "--filename", "--domains", "--by", "cds"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            # 4 contigs * 6 CDSs each = 24, plus 5 protein sequences = 29, plus header = 30
+            assert len(lines) == 30
+            for i, l in enumerate(lines):
+                lines[i] = lines[i].rstrip("\r\n").split("\t")
+            
+            assert lines[0] == ["contig", "cds", "filename", "domains"]
+            
+            # Check first file records
+            for i in range(1, 25):  # First 24 data lines are from pDONR201
+                assert lines[i][2] == str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")
+            
+            # Check second file records
+            for i in range(25, 30):  # Last 5 data lines are from simple_genpept
+                assert lines[i][2] == str(shared_datadir / "simple_genpept.gb")
+            
+            # Verify specific CDS entries
+            assert lines[1][0] == "pDONR201_1"
+            assert lines[1][1] == "pDONR201_1"
+            assert lines[1][3] == ""
+            
+            assert lines[2][0] == "pDONR201_1"
+            assert lines[2][1] == "pDONR201_2"
+            assert lines[2][3] == "CcdB"
+
+
+def test_enum_report_filename_domain_1(shared_datadir):
+    """
+    Test that the --filename option correctly tracks source filenames in domain mode
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "ccdb.gb"), str(shared_datadir / "simple_genpept.gb"),
+                         "-o", out, "--filename", "--domains", "--by", "domain"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            # 1 domain from ccdb.gb + 9 domains from simple_genpept.gb + header = 11
+            assert len(lines) == 11
+            for i, l in enumerate(lines):
+                lines[i] = lines[i].rstrip("\r\n").split("\t")
+            
+            assert lines[0] == ["contig", "cds", "domain", "filename", "domains"]
+            
+            # Check first file record
+            assert lines[1][0] == "pDONR201_1265:958rc"
+            assert lines[1][1] == "1264_-1_959"
+            assert lines[1][2] == "CcdB"
+            assert lines[1][3] == str(shared_datadir / "ccdb.gb")
+            assert lines[1][4] == "CcdB"
+            
+            # Check second file records
+            for i in range(2, 11):
+                assert lines[i][3] == str(shared_datadir / "simple_genpept.gb")
+
+
+def test_enum_report_filename_with_other_options_1(shared_datadir):
+    """
+    Test that --filename works correctly with other analysis options
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"),
+                         "-o", out, "--filename", "--domains", "--length", "--definition", "--cds_count"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 3
+            for i, l in enumerate(lines):
+                lines[i] = lines[i].rstrip("\r\n").split("\t")
+            
+            assert lines[0] == ["contig", "filename", "domains", "length", "definition", "cds_count"]
+            
+            # Verify all columns are present and filename is in correct position
+            assert len(lines[1]) == 6
+            assert len(lines[2]) == 6
+            assert lines[1][1] == str(shared_datadir / "206.gb")
+            assert lines[2][1] == str(shared_datadir / "ccdb.gb")
+
+
+def test_enum_report_no_filename_1(shared_datadir):
+    """
+    Test that without --filename option, no filename column appears and no heading column is added
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"),
+                         "-o", out, "--domains"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 3
+            for i, l in enumerate(lines):
+                lines[i] = lines[i].rstrip("\r\n").split("\t")
+            
+            # Verify filename column is NOT present
+            assert lines[0] == ["contig", "domains"]
+            assert len(lines[1]) == 2
+            assert len(lines[2]) == 2
