@@ -73,3 +73,46 @@ def test_convert_to_sparse():
     matrix.convert_to_sparse()
     assert matrix.sparse
     assert matrix.data.shape == (3, 3)
+
+# Test iter_data order and zeros for synthetic data
+def test_iter_data_order_and_zeros_fake():
+    """
+    Ensure iter_data for sparse and dense matrices never iterates over zeros and always matches order (synthetic data).
+    """
+    data = np.array([[1, 0, 2], [0, 3, 0], [4, 0, 5]])
+    row_names = ['A', 'B', 'C']
+    col_names = ['X', 'Y', 'Z']
+
+    dense_matrix = DataMatrix(data, row_names, col_names)
+    sparse_matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+
+    dense_iter = [(r, c, v) for r, c, v in dense_matrix.iter_data() if v != 0]
+    sparse_iter = [(r, c, v) for r, c, v in sparse_matrix.iter_data()]
+
+    # Check that sparse never iterates over zeros
+    assert all(v != 0 for r, c, v in sparse_iter), "Sparse matrix should not iterate over zeros"
+    # Check that dense (filtered) and sparse have same order and values
+    assert dense_iter == sparse_iter, f"Dense and sparse iter_data results differ: {dense_iter} vs {sparse_iter}"
+
+# Test iter_data order and zeros for real FeSOD files
+def test_iter_data_order_and_zeros_real(shared_datadir):
+    """
+    Ensure iter_data for sparse and dense matrices never iterates over zeros and always matches order (real FeSOD files).
+    """
+    dense_file = shared_datadir / "FeSOD_dist.dense.hdf5"
+    sparse_file = shared_datadir / "FeSOD_dist.sparse.hdf5"
+
+    dense_matrix = DataMatrix.from_file(dense_file)
+    sparse_matrix = DataMatrix.from_file(sparse_file)
+
+    dense_iter = [(r, c, v) for r, c, v in dense_matrix.iter_data() if v != 0]
+    sparse_iter = [(r, c, v) for r, c, v in sparse_matrix.iter_data()]
+
+    # Check that sparse never iterates over zeros
+    assert all(v != 0 for r, c, v in sparse_iter), "Sparse matrix should not iterate over zeros"
+    # Check that dense (filtered) and sparse have same order and values
+    assert dense_iter == sparse_iter, f"Dense and sparse iter_data results differ: {dense_iter[:10]} vs {sparse_iter[:10]}"
+
+
+
+

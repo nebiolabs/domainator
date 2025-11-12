@@ -4,7 +4,7 @@
 
 #TODO: deduplicate symmetric matrices. For example, only take the values from the lower triangualr matrix and ignore the upper triangular matrix of symmetric matrices.
 #TODO: ignore the diagonal of symmetric matrices.
-#TODO: add cumulative distribution plot for example to help picking a threshold with a convenient number of edges.
+#TODO: add cumulative distribution plot for example to help picking a threshold with a convenient number of edges, or clusters
 
 import argparse
 import sys
