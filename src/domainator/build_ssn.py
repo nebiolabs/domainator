@@ -21,6 +21,7 @@ import numpy as np
 from domainator.utils import get_palette
 from domainator.color_genbank import read_color_table
 
+# TODO: MST-mode, only writes edges if they are in the maximum-spanning-tree of the graph. This allows for much smaller files, while preserving all of the clusters.
 
 SCORE_COLUMN="SSN_SCORE"
 CLUSTER_COLUMN="SSN_cluster"

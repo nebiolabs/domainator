@@ -345,7 +345,61 @@ class DataMatrix():
 
         out = list()
 
-        if not self.sparse or not skip_zeros or agg is not None:  # dense matrix or we want every value, inlcuding zeros, or we are doing an agg.
+        if self.sparse and agg is not None:
+            # Optimized path for sparse matrices with aggregation
+            # Collect positions where at least one of (r,c) or (c,r) is non-zero
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+            
+            # Use a set to track positions we need to process
+            positions_to_process = set()
+            
+            # Iterate through non-zero elements and add triangular positions
+            for r in range(self.data.shape[0]):
+                for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
+                    c = self.data.indices[ind]
+                    
+                    # Determine triangular bounds for current row
+                    if side == "lower":
+                        start_c = 0
+                        end_c = r + 1 if include_diagonal else r
+                    else:  # upper
+                        start_c = r if include_diagonal else r + 1
+                        end_c = self.data.shape[1]
+                    
+                    # If (r,c) is in the triangular region, add it
+                    if start_c <= c < end_c:
+                        positions_to_process.add((r, c))
+                    
+                    # If (c,r) would be in the triangular region, add it
+                    # This handles cases where the complement has a non-zero value
+                    if side == "lower":
+                        comp_start_c = 0
+                        comp_end_c = c + 1 if include_diagonal else c
+                    else:  # upper
+                        comp_start_c = c if include_diagonal else c + 1
+                        comp_end_c = self.data.shape[1]
+                    
+                    if comp_start_c <= r < comp_end_c:
+                        positions_to_process.add((c, r))
+            
+            # Process collected positions
+            for r, c in sorted(positions_to_process):
+                value = self.data[r, c]
+                symmetric_value = self.data[c, r]
+                
+                # When skip_zeros is True with agg, only skip if BOTH values are zero
+                if skip_zeros and value == 0 and symmetric_value == 0:
+                    continue
+                
+                agg_value = agg(value, symmetric_value)
+                
+                if index_style == "name":
+                    out.append((self.rows[r], self.columns[c], agg_value))
+                else:
+                    out.append((r, c, agg_value))
+        
+        elif not self.sparse or not skip_zeros:  # dense matrix or we want every value, including zeros
             for r in range(self.data.shape[0]):
                 if side == "lower":
                     # Lower triangular: column index <= row index
@@ -375,7 +429,7 @@ class DataMatrix():
                         out.append((self.rows[r], self.columns[c], value))
                     else:
                         out.append((r, c, value))
-        else:  # sparse matrix
+        else:  # sparse matrix without agg
             self.data.eliminate_zeros()
             self.data.sort_indices()
 
