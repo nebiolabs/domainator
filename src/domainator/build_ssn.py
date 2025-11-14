@@ -63,13 +63,16 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     """
     
     if not matrix.symmetric:
-        raise ValueError("Input not symmetric. Can only build an SSN from a symmetric matrix.")
+        raise ValueError("Input does not have symmetric axis labels. Can only build an SSN from a symmetric matrix.")
     
+    # if not matrix.symmetric_values:
+    #     raise ValueError("Input not symmetric data values. Can only build an SSN from a symmetric matrix.")
+
     if cluster_tsv is not None:
         cluster = True
     # find edges
     edge_data=dict() # (source, target): score
-    for source,target,score in matrix.iter_data():
+    for source,target,score in matrix.triangular(skip_zeros=True, agg=max):
         if score > lb:
             if source != target: #don't write self-edges
                 if target < source:

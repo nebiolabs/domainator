@@ -14,7 +14,7 @@ import re
 ])
 def test_build_ssn(input_file, expected_output, shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        # output_dir = "test_out"
+        output_dir = "test_out"
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"

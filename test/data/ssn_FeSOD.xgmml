@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<graph label="FeSOD_dist.dense.hdf5_out" xmlns="http://www.cs.rpi.edu/XGMML">
+<graph label="FeSOD_dist.tsv_out" xmlns="http://www.cs.rpi.edu/XGMML">
   <node id="n0" label="n0">
     <att type="string" name="Description" value="FeSOD_A0A1F4ZT98|unreviewed|Superoxide" />
     <att type="integer" name="SSN_cluster" value="1" />
@@ -223,136 +223,136 @@
   <edge id="e0" label="e0" source="n0" target="n3">
     <att type="real" name="SSN_SCORE" value="199.0" />
   </edge>
-  <edge id="e1" label="e1" source="n0" target="n5">
-    <att type="real" name="SSN_SCORE" value="191.0" />
-  </edge>
-  <edge id="e2" label="e2" source="n0" target="n9">
-    <att type="real" name="SSN_SCORE" value="216.0" />
-  </edge>
-  <edge id="e3" label="e3" source="n0" target="n19">
-    <att type="real" name="SSN_SCORE" value="187.0" />
-  </edge>
-  <edge id="e4" label="e4" source="n1" target="n7">
-    <att type="real" name="SSN_SCORE" value="267.0" />
-  </edge>
-  <edge id="e5" label="e5" source="n1" target="n8">
-    <att type="real" name="SSN_SCORE" value="275.0" />
-  </edge>
-  <edge id="e6" label="e6" source="n1" target="n12">
-    <att type="real" name="SSN_SCORE" value="244.0" />
-  </edge>
-  <edge id="e7" label="e7" source="n1" target="n18">
-    <att type="real" name="SSN_SCORE" value="271.0" />
-  </edge>
-  <edge id="e8" label="e8" source="n2" target="n4">
+  <edge id="e1" label="e1" source="n2" target="n4">
     <att type="real" name="SSN_SCORE" value="240.0" />
   </edge>
-  <edge id="e9" label="e9" source="n2" target="n10">
-    <att type="real" name="SSN_SCORE" value="233.0" />
-  </edge>
-  <edge id="e10" label="e10" source="n2" target="n14">
-    <att type="real" name="SSN_SCORE" value="233.0" />
-  </edge>
-  <edge id="e11" label="e11" source="n2" target="n17">
-    <att type="real" name="SSN_SCORE" value="234.0" />
-  </edge>
-  <edge id="e12" label="e12" source="n9" target="n3">
-    <att type="real" name="SSN_SCORE" value="279.0" />
-  </edge>
-  <edge id="e13" label="e13" source="n16" target="n3">
-    <att type="real" name="SSN_SCORE" value="202.0" />
-  </edge>
-  <edge id="e14" label="e14" source="n3" target="n19">
-    <att type="real" name="SSN_SCORE" value="231.0" />
-  </edge>
-  <edge id="e15" label="e15" source="n10" target="n4">
-    <att type="real" name="SSN_SCORE" value="258.0" />
-  </edge>
-  <edge id="e16" label="e16" source="n14" target="n4">
-    <att type="real" name="SSN_SCORE" value="237.0" />
-  </edge>
-  <edge id="e17" label="e17" source="n15" target="n4">
-    <att type="real" name="SSN_SCORE" value="275.0" />
-  </edge>
-  <edge id="e18" label="e18" source="n5" target="n3">
-    <att type="real" name="SSN_SCORE" value="184.0" />
-  </edge>
-  <edge id="e19" label="e19" source="n5" target="n9">
-    <att type="real" name="SSN_SCORE" value="208.0" />
-  </edge>
-  <edge id="e20" label="e20" source="n5" target="n19">
-    <att type="real" name="SSN_SCORE" value="192.0" />
-  </edge>
-  <edge id="e21" label="e21" source="n2" target="n6">
-    <att type="real" name="SSN_SCORE" value="192.0" />
-  </edge>
-  <edge id="e22" label="e22" source="n10" target="n6">
-    <att type="real" name="SSN_SCORE" value="199.0" />
-  </edge>
-  <edge id="e23" label="e23" source="n14" target="n6">
-    <att type="real" name="SSN_SCORE" value="209.0" />
-  </edge>
-  <edge id="e24" label="e24" source="n17" target="n6">
+  <edge id="e2" label="e2" source="n0" target="n5">
     <att type="real" name="SSN_SCORE" value="191.0" />
   </edge>
-  <edge id="e25" label="e25" source="n8" target="n7">
-    <att type="real" name="SSN_SCORE" value="264.0" />
+  <edge id="e3" label="e3" source="n5" target="n3">
+    <att type="real" name="SSN_SCORE" value="184.0" />
   </edge>
-  <edge id="e26" label="e26" source="n12" target="n7">
-    <att type="real" name="SSN_SCORE" value="216.0" />
+  <edge id="e4" label="e4" source="n2" target="n6">
+    <att type="real" name="SSN_SCORE" value="192.0" />
   </edge>
-  <edge id="e27" label="e27" source="n18" target="n7">
-    <att type="real" name="SSN_SCORE" value="238.0" />
-  </edge>
-  <edge id="e28" label="e28" source="n8" target="n12">
-    <att type="real" name="SSN_SCORE" value="234.0" />
-  </edge>
-  <edge id="e29" label="e29" source="n18" target="n8">
-    <att type="real" name="SSN_SCORE" value="248.0" />
-  </edge>
-  <edge id="e30" label="e30" source="n2" target="n9">
-    <att type="real" name="SSN_SCORE" value="214.0" />
-  </edge>
-  <edge id="e31" label="e31" source="n16" target="n9">
-    <att type="real" name="SSN_SCORE" value="226.0" />
-  </edge>
-  <edge id="e32" label="e32" source="n9" target="n19">
+  <edge id="e5" label="e5" source="n1" target="n7">
     <att type="real" name="SSN_SCORE" value="271.0" />
   </edge>
-  <edge id="e33" label="e33" source="n10" target="n14">
-    <att type="real" name="SSN_SCORE" value="222.0" />
+  <edge id="e6" label="e6" source="n1" target="n8">
+    <att type="real" name="SSN_SCORE" value="279.0" />
   </edge>
-  <edge id="e34" label="e34" source="n15" target="n10">
-    <att type="real" name="SSN_SCORE" value="243.0" />
+  <edge id="e7" label="e7" source="n8" target="n7">
+    <att type="real" name="SSN_SCORE" value="264.0" />
   </edge>
-  <edge id="e35" label="e35" source="n11" target="n7">
-    <att type="real" name="SSN_SCORE" value="177.0" />
+  <edge id="e8" label="e8" source="n0" target="n9">
+    <att type="real" name="SSN_SCORE" value="216.0" />
   </edge>
-  <edge id="e36" label="e36" source="n18" target="n12">
-    <att type="real" name="SSN_SCORE" value="219.0" />
+  <edge id="e9" label="e9" source="n2" target="n9">
+    <att type="real" name="SSN_SCORE" value="214.0" />
   </edge>
-  <edge id="e37" label="e37" source="n15" target="n14">
-    <att type="real" name="SSN_SCORE" value="224.0" />
+  <edge id="e10" label="e10" source="n9" target="n3">
+    <att type="real" name="SSN_SCORE" value="287.0" />
   </edge>
-  <edge id="e38" label="e38" source="n15" target="n2">
-    <att type="real" name="SSN_SCORE" value="231.0" />
-  </edge>
-  <edge id="e39" label="e39" source="n16" target="n0">
-    <att type="real" name="SSN_SCORE" value="177.0" />
-  </edge>
-  <edge id="e40" label="e40" source="n16" target="n19">
-    <att type="real" name="SSN_SCORE" value="213.0" />
-  </edge>
-  <edge id="e41" label="e41" source="n17" target="n4">
-    <att type="real" name="SSN_SCORE" value="205.0" />
-  </edge>
-  <edge id="e42" label="e42" source="n10" target="n17">
-    <att type="real" name="SSN_SCORE" value="203.0" />
-  </edge>
-  <edge id="e43" label="e43" source="n15" target="n17">
+  <edge id="e11" label="e11" source="n5" target="n9">
     <att type="real" name="SSN_SCORE" value="208.0" />
   </edge>
-  <edge id="e44" label="e44" source="n2" target="n19">
+  <edge id="e12" label="e12" source="n2" target="n10">
+    <att type="real" name="SSN_SCORE" value="233.0" />
+  </edge>
+  <edge id="e13" label="e13" source="n10" target="n4">
+    <att type="real" name="SSN_SCORE" value="258.0" />
+  </edge>
+  <edge id="e14" label="e14" source="n10" target="n6">
+    <att type="real" name="SSN_SCORE" value="199.0" />
+  </edge>
+  <edge id="e15" label="e15" source="n11" target="n7">
+    <att type="real" name="SSN_SCORE" value="177.0" />
+  </edge>
+  <edge id="e16" label="e16" source="n1" target="n12">
+    <att type="real" name="SSN_SCORE" value="247.0" />
+  </edge>
+  <edge id="e17" label="e17" source="n12" target="n7">
+    <att type="real" name="SSN_SCORE" value="216.0" />
+  </edge>
+  <edge id="e18" label="e18" source="n8" target="n12">
+    <att type="real" name="SSN_SCORE" value="234.0" />
+  </edge>
+  <edge id="e19" label="e19" source="n2" target="n14">
+    <att type="real" name="SSN_SCORE" value="233.0" />
+  </edge>
+  <edge id="e20" label="e20" source="n14" target="n4">
+    <att type="real" name="SSN_SCORE" value="237.0" />
+  </edge>
+  <edge id="e21" label="e21" source="n14" target="n6">
+    <att type="real" name="SSN_SCORE" value="209.0" />
+  </edge>
+  <edge id="e22" label="e22" source="n10" target="n14">
+    <att type="real" name="SSN_SCORE" value="222.0" />
+  </edge>
+  <edge id="e23" label="e23" source="n15" target="n2">
+    <att type="real" name="SSN_SCORE" value="231.0" />
+  </edge>
+  <edge id="e24" label="e24" source="n15" target="n4">
+    <att type="real" name="SSN_SCORE" value="275.0" />
+  </edge>
+  <edge id="e25" label="e25" source="n15" target="n10">
+    <att type="real" name="SSN_SCORE" value="243.0" />
+  </edge>
+  <edge id="e26" label="e26" source="n15" target="n14">
+    <att type="real" name="SSN_SCORE" value="224.0" />
+  </edge>
+  <edge id="e27" label="e27" source="n16" target="n0">
+    <att type="real" name="SSN_SCORE" value="177.0" />
+  </edge>
+  <edge id="e28" label="e28" source="n16" target="n3">
+    <att type="real" name="SSN_SCORE" value="205.0" />
+  </edge>
+  <edge id="e29" label="e29" source="n16" target="n9">
+    <att type="real" name="SSN_SCORE" value="226.0" />
+  </edge>
+  <edge id="e30" label="e30" source="n2" target="n17">
+    <att type="real" name="SSN_SCORE" value="234.0" />
+  </edge>
+  <edge id="e31" label="e31" source="n17" target="n4">
+    <att type="real" name="SSN_SCORE" value="205.0" />
+  </edge>
+  <edge id="e32" label="e32" source="n17" target="n6">
+    <att type="real" name="SSN_SCORE" value="191.0" />
+  </edge>
+  <edge id="e33" label="e33" source="n10" target="n17">
+    <att type="real" name="SSN_SCORE" value="203.0" />
+  </edge>
+  <edge id="e34" label="e34" source="n15" target="n17">
+    <att type="real" name="SSN_SCORE" value="208.0" />
+  </edge>
+  <edge id="e35" label="e35" source="n1" target="n18">
+    <att type="real" name="SSN_SCORE" value="277.0" />
+  </edge>
+  <edge id="e36" label="e36" source="n18" target="n7">
+    <att type="real" name="SSN_SCORE" value="239.0" />
+  </edge>
+  <edge id="e37" label="e37" source="n18" target="n8">
+    <att type="real" name="SSN_SCORE" value="249.0" />
+  </edge>
+  <edge id="e38" label="e38" source="n18" target="n12">
+    <att type="real" name="SSN_SCORE" value="222.0" />
+  </edge>
+  <edge id="e39" label="e39" source="n0" target="n19">
+    <att type="real" name="SSN_SCORE" value="187.0" />
+  </edge>
+  <edge id="e40" label="e40" source="n2" target="n19">
     <att type="real" name="SSN_SCORE" value="218.0" />
+  </edge>
+  <edge id="e41" label="e41" source="n3" target="n19">
+    <att type="real" name="SSN_SCORE" value="231.0" />
+  </edge>
+  <edge id="e42" label="e42" source="n5" target="n19">
+    <att type="real" name="SSN_SCORE" value="192.0" />
+  </edge>
+  <edge id="e43" label="e43" source="n9" target="n19">
+    <att type="real" name="SSN_SCORE" value="271.0" />
+  </edge>
+  <edge id="e44" label="e44" source="n16" target="n19">
+    <att type="real" name="SSN_SCORE" value="213.0" />
   </edge>
 </graph>

@@ -133,13 +133,63 @@ class DataMatrix():
         return self.rows == self.columns
 
     @property
-    def symmetric_values(self, significance) -> bool:
+    def symmetric_values(self) -> bool:
         """
             Returns True if the matrix has symmetric values (i.e., the matrix is symmetric in its data).
+            Uses np.isclose to allow for floating point imprecision.
+            
+            For sparse matrices, uses an optimized approach that first checks if the 
+            non-zero pattern is symmetric before comparing values.
         """
         if not self.symmetric:
             return False # If it doesn't have symmetric labels, then it can't have symmetric values.
-        raise NotImplementedError("Checking symmetric values not yet implemented")
+        
+        # Check if matrix values are symmetric: M[i,j] == M[j,i] for all i,j
+        
+        if self.sparse:
+            # For sparse matrices, optimize by checking non-zero structure first
+            # Get upper and lower triangular non-zero elements (excluding diagonal)
+            upper_triangular = self.triangular(side='upper', include_diagonal=False, skip_zeros=True, index_style='index')
+            lower_triangular = self.triangular(side='lower', include_diagonal=False, skip_zeros=True, index_style='index')
+            
+            # First, check if the number of non-zeros is the same
+            if len(upper_triangular) != len(lower_triangular):
+                return False
+            
+            # For symmetric matrix: upper[i,j] should equal lower[j,i]
+            # Since both lists are sorted by (row, col), we can create a sorted list
+            # of transposed lower triangular positions for comparison
+            
+            # Create list of (col, row, value) from lower triangular - this gives us the transpose
+            # Then sort it the same way as upper triangular (by row, then col)
+            lower_transposed = [(l_c, l_r, l_v) for l_r, l_c, l_v in lower_triangular]
+            lower_transposed.sort()  # Sort by (row, col) which is now (l_c, l_r)
+            
+            # Now compare element by element
+            for (u_r, u_c, u_v), (lt_r, lt_c, lt_v) in zip(upper_triangular, lower_transposed):
+                # Check positions match
+                if (u_r, u_c) != (lt_r, lt_c):
+                    return False
+                # Check values match (with floating point tolerance)
+                if not np.isclose(u_v, lt_v):
+                    return False
+            
+            return True
+        else:
+            # For dense matrices, check all upper triangular elements
+            # We only need to check the upper triangular part against the lower triangular part
+            upper_triangular = self.triangular(side='upper', include_diagonal=False, skip_zeros=False, index_style='index')
+            
+            # For each upper triangular element (i,j), check if it equals the corresponding lower element (j,i)
+            for row_idx, col_idx, value in upper_triangular:
+                # Get the corresponding element in the lower triangular (transpose position)
+                transpose_value = self.data[col_idx, row_idx]
+                
+                # Use np.isclose to handle floating point imprecision
+                if not np.isclose(value, transpose_value):
+                    return False
+            
+            return True
 
     def __len__(self):
         return self.data.shape[0]
@@ -220,39 +270,64 @@ class DataMatrix():
             self.data = scipy.sparse.csr_array((f[self._SPARSE_VALUES_DATASET][:], f[self._SPARSE_CSR_INDICES_DATASET][:], f[self._SPARSE_CSR_INDPTR_DATASET][:]), (len(self.rows), len(self.columns)) )
 
     
-    def iter_data(self): #TODO: figure out why sparse matrices iterate in a different order than dense matrices. For example, FeSOD_dist.dense.hdf5 vs FeSOD_dist.sparse.hdf5
+    def iter_data(self, index_style="name", skip_zeros=True):
         """
             yields (row_name, column_name, value).
             for dense matrices iterates over every value in the matrix
-            for sparse matrices, skips data that is not represented in the data structure.
-        """
+            for sparse matrices, skips zeros.
 
-        if not self.sparse:
+            Iterates in a row-first manner. That is, all values in row 0, then all values in row 1, etc.
+        """
+        
+        index_style = index_style.lower()
+        if index_style not in {"name", "index"}:
+            raise ValueError("index_style must be 'name' or 'index'.")
+
+
+        if not self.sparse: # it's a dense matrix
             for r in range(self.data.shape[0]):
                 for c in range(self.data.shape[1]):
-                    yield self.rows[r], self.columns[c], self.data[r,c]
+                    value = self.data[r,c]
+                    if not skip_zeros or value != 0:
+                        if index_style == "name":
+                            yield self.rows[r], self.columns[c], value
+                        else:
+                            yield r, c, value
+        else: # sparse
+            if skip_zeros: # we can iterate over just the non-zeros
+                self.data.eliminate_zeros()
+                self.data.sort_indices()
+                #https://stackoverflow.com/questions/4319014/iterating-through-a-scipy-sparse-vector-or-matrix
+                for r in range(self.data.shape[0]):
+                    for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
+                        c = self.data.indices[ind]
+                        if index_style == "name":
+                            yield self.rows[r], self.columns[c], self.data.data[ind]
+                        else:
+                            yield r, c, self.data.data[ind]
+            else: # we have to iterate over the entire matrix
+                for r in range(self.data.shape[0]):
+                    for c in range(self.data.shape[1]):
+                        value = self.data[r,c]
+                        if index_style == "name":
+                            yield self.rows[r], self.columns[c], value
+                        else:
+                            yield r, c, value
+                    
 
-        else: 
-            self.data.eliminate_zeros()
-            self.data.sort_indices()
-            #https://stackoverflow.com/questions/4319014/iterating-through-a-scipy-sparse-vector-or-matrix
-            for r in range(self.data.shape[0]):
-                for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
-                    yield self.rows[r], self.columns[self.data.indices[ind]], self.data.data[ind]
-
-    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name"):
+    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
         """
             Iterate over the triangular part of the matrix.
 
             side: can be "lower" or "upper".
             index_style: can be "name" or "index".
+            skip_zeros: if True then don't return rows with zero as the value.
+            agg: a function taking two values as arguments, if supplied, then replaces each returned value with the 
+                result of agg(value, symmetric_complement).
+                if a value is zero, but the complement is not zero, then the result of agg is returned even when skip_zeros is true (unless it is also zero)
 
-            If iterating over the "lower", then outer loop is row.
-            If iterating over the "upper", then outer loop is column.
-
-            This allows the outputs to be directly compared without additional sorting, just swap row_name and column_name.
-
-            returns [(row_name, column_name, value),]
+            results sorted by row_index, then column_index
+            returns [(row_{name|col}, column_{name|col}, value),]
         
         """
 
@@ -260,44 +335,76 @@ class DataMatrix():
             raise NotImplementedError(f"Triangular only supported for square matrices. Not ({self.data.shape[0]}, {self.data.shape[1]}")
 
         side = side.lower()
-        if side == "lower":
-            loop_1_i = 0 # row_indexes
-            loop_2_i = 1 # column_indexes
-        elif side == "upper":
-            loop_1_i = 1 # column_indexes
-            loop_2_i = 0 # row_indexes
-        else:
+        if side not in {"upper", "lower"}:
             raise ValueError("side must be 'lower' or 'upper'")
 
         index_style = index_style.lower()
+        if index_style not in {"name", "index"}:
+            raise ValueError("index_style must be 'name' or 'index'.")
 
 
         out = list()
-        if include_diagonal:
-            max_mod = -1
-        else:
-            max_mod = 0
-        
 
-        if not self.sparse:
-            for i in range(1+max_mod, self.data.shape[loop_1_i]):
-                for j in range(0, i+1+max_mod):
-                    if side == "lower":
-                        row_idx = i
-                        col_idx = j
-                        
+        if not self.sparse or not skip_zeros or agg is not None:  # dense matrix or we want every value, inlcuding zeros, or we are doing an agg.
+            for r in range(self.data.shape[0]):
+                if side == "lower":
+                    # Lower triangular: column index <= row index
+                    start_c = 0
+                    end_c = r + 1 if include_diagonal else r
+                else:  # upper
+                    # Upper triangular: column index >= row index
+                    start_c = r if include_diagonal else r + 1
+                    end_c = self.data.shape[1]
+                
+                for c in range(start_c, end_c):
+                    value = self.data[r, c]
+                    
+                    # Apply aggregation if agg function is provided
+                    if agg is not None:
+                        # Get the symmetric complement (transpose position)
+                        symmetric_value = self.data[c, r]
+                        # When skip_zeros is True with agg, only skip if BOTH values are zero
+                        if skip_zeros and value == 0 and symmetric_value == 0:
+                            continue
+                        value = agg(value, symmetric_value)
+                    elif skip_zeros and value == 0:
+                        # Without agg, skip if value is zero
+                        continue
+                    
+                    if index_style == "name":
+                        out.append((self.rows[r], self.columns[c], value))
                     else:
-                        row_idx = j
-                        col_idx = i
-                    value = self.data[i,j]
-                    if not skip_zeros or value != 0:
-                        if index_style == "name":
-                            out_row = self.rows[row_idx]
-                            out_col = self.rows[col_idx]
-                        else:
-                            out_row = row_idx
-                            out_col = col_idx
-                        out.append((out_row, out_col, value))
+                        out.append((r, c, value))
+        else:  # sparse matrix
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+
+            for r in range(self.data.shape[0]):
+                if side == "lower":
+                    # Lower triangular: column index <= row index
+                    start_c = 0
+                    end_c = r + 1 if include_diagonal else r
+                else:  # upper
+                    # Upper triangular: column index >= row index
+                    start_c = r if include_diagonal else r + 1
+                    end_c = self.data.shape[1]
+                
+                if skip_zeros:
+                    # Only iterate over non-zero values in the triangular region
+                    for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
+                        c = self.data.indices[ind]
+                        
+                        # Check if this column is in the triangular region
+                        if start_c <= c < end_c:
+                            value = self.data.data[ind]
+    
+                            if index_style == "name":
+                                out.append((self.rows[r], self.columns[c], value))
+                            else:
+                                out.append((r, c, value))
+                else:
+                    assert False # This case should have been handled above, treating the sparse matrix like a dense matrix.
+        return out
         
 
     def itervalues(self):
