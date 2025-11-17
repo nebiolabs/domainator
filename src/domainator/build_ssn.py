@@ -43,6 +43,7 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
         new_labels[labels == label] = i
     return new_labels
 
+
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
               xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None):
     """build a sequence similarity network from a matrix
@@ -118,7 +119,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     if color_table_out is not None:
         with open(color_table_out, "w") as out:
             color_table_items = list(color_table.items())
-            color_table_items.sort(key=lambda x: x[0]) # sort lexically
+            color_table_items.sort(key=lambda x: (x[0] is None, x[0])) # sort lexically
             for domain, color in color_table_items:
                 out.write(f"{domain}\t{color}\n")
 
