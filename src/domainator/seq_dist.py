@@ -7,7 +7,7 @@ An hmm file can also be used as a reference to make a table of profile scores fo
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import heapq
 import sys
 import subprocess
@@ -299,7 +299,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
 
 def main(argv):
     #TODO: support for nucleotide sequences? (see compare_contigs.py)
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     parser.add_argument('-i', '--input', type=str, required=True,
                         help="Input query file.")
 
@@ -344,6 +344,8 @@ def main(argv):
 
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="how many cpu threads to use. Default: use all available cores.")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

@@ -20,7 +20,7 @@
 ### TODO: maybe make the output just a single html file instead of a directory?
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -541,7 +541,7 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
         domain_table_df.to_csv(domains_table, sep="\t", index=False)
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument("-i", "--input", default=None, nargs='+', type=str, help="name of input genbank files.")
     
@@ -583,6 +583,7 @@ def main(argv):
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Ignore domain annotations not from these databases. default: consider all databases.")
 
+    parser.add_argument('--config', action=ActionConfigFile)
 
     # TODO: domain scores histogram #for command line, maybe use bashplotlib
     # TODO: domain_search scores histogram

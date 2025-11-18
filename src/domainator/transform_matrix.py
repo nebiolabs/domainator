@@ -5,7 +5,7 @@
 
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
 from domainator.data_matrix import DataMatrix
@@ -159,7 +159,7 @@ def transform_matrix(array, mode, row_lengths=None, col_lengths=None):
         return MODES[mode](array, row_lengths=row_lengths, col_lengths=col_lengths)
     
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument("-i", "--input", default=None, required=True, type=str, help="name of input matrix file.")
 
@@ -174,6 +174,8 @@ def main(argv):
     parser.add_argument("--mode", type=str, required=False, default="norm_score", choices=set(MODES.keys()), 
                         help="what kind of values should be in the output matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: norm_score")
     
+    parser.add_argument('--config', action=ActionConfigFile)
+
     # TODO: option to supply row and/or column lengths if not supplied in the input matrix.
 
     # TODO: option to supply row and/or column names to override those in the input matrix.

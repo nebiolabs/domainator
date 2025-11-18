@@ -5,7 +5,7 @@
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 from pathlib import Path
 import pandas as pd
@@ -166,7 +166,7 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, required=False,
@@ -210,6 +210,8 @@ def main(argv):
     parser.add_argument('--3d', action='store_true', default=False,
                         help="if set, then makes 3d projections. default: 2d projections.")
     
+    parser.add_argument('--config', action=ActionConfigFile)
+
     #TODO: add a way to generate an interactive html output, could be with plotly. You could store the metadata as mouseover notes.
 
 

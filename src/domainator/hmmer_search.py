@@ -16,7 +16,7 @@ Söding, Johannes. “Protein Homology Detection by HMM–HMM Comparison.” Bio
 """
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='numpy') # suppress "UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero."
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from dataclasses import dataclass
 import sys
 import numpy as np
@@ -433,7 +433,7 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     parser.add_argument('-i', '--input', type=str, required=False, nargs='+',
                         help="Input query files. One or more hmm text files with one or more hmmer3 profiles. Default: stdin.\nIf -i and -r are different, -i will typically be the bigger of the two, as it is what is being filtered.")
     
@@ -452,6 +452,7 @@ def main(argv):
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="how many cpu threads to use. Default: use all available cores")
 
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

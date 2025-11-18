@@ -3,7 +3,7 @@
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from os import PathLike
 import sys
 from domainator.build_projection import write_cytoscape_xgmml
@@ -146,7 +146,7 @@ def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, 
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, required=False,
@@ -166,6 +166,8 @@ def main(argv):
     
     parser.add_argument('--quiet', action="store_true", required=False, default=False, 
                         help="Suppress warnings.")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     # parser.add_argument('--svg', type=str, required=True, default=None, #TODO: what other kinds of output might be useful?
     #                     help="write an image of the tree in svg format.")

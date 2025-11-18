@@ -7,10 +7,10 @@ Steinegger, Martin, Markus Meier, Milot Mirdita, Harald Vöhringer, Stephan J. H
 
 and
 
-Söding, Johannes. “Protein Homology Detection by HMM–HMM Comparison.” Bioinformatics 21, no. 7 (April 1, 2005): 951–60. https://doi.org/10.1093/bioinformatics/bti125.
+Söding, Johannes. "Protein Homology Detection by HMM–HMM Comparison." Bioinformatics 21, no. 7 (April 1, 2005): 951–60. https://doi.org/10.1093/bioinformatics/bti125.
 
 """
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 import pyhmmer
 from typing import Iterable, TextIO
@@ -67,7 +67,7 @@ def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     parser.add_argument('-i', '--input', type=str, required=True, nargs='+',
                         help="Input query files. One or more hmm text files with one or more hmmer3 profiles.")
     parser.add_argument('-r', "--reference", type=str, required=True, nargs='+',
@@ -88,6 +88,7 @@ def main(argv):
     parser.add_argument('--cpu', type=int, default=8, required=False,
                         help="how many cpu threads to use. Default: 8")
 
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

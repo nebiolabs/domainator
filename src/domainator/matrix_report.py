@@ -1,6 +1,6 @@
 """ reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for generating similatity networks.
 """
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
 from domainator.data_matrix import DataMatrix, MaxTree
@@ -514,7 +514,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle):
         output.write_footer()
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument("-i", "--input", default=None, required=True, type=str, help="name of input matrix file.")
     
@@ -524,6 +524,8 @@ def main(argv):
     parser.add_argument('--html', default=None, required=False,
                         help="html file to write output to.")
     
+    parser.add_argument('--config', action=ActionConfigFile)
+
     params = parser.parse_args(argv)
 
     if params.output is None and params.html is None:

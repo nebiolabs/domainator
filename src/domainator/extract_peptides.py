@@ -14,7 +14,7 @@ Criteria are combined with the following logic:
 """
 
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import List, Optional, Dict, Set
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, CompoundLocation
@@ -153,7 +153,7 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
                 yield rec
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
                        help="Genbank filenames. If not supplied, reads from stdin.")
@@ -203,6 +203,8 @@ def main(argv):
     
     parser.add_argument('--fasta_out', action='store_true', default=False,
                         help="makes output a fasta file when activated")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
    

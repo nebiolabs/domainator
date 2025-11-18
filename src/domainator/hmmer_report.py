@@ -5,7 +5,7 @@ write a tab-separated file
 """
 
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import list_and_file_to_dict_keys, read_hmms
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
@@ -126,7 +126,7 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
         writer.write_footer()
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
                         help="hmm filenames. If not supplied then reads from to stdin.")
@@ -156,9 +156,11 @@ def main(argv):
     parser.add_argument('--consensus', action='append_const', dest=COLS_ARG_NAME, const="consensus",
                         help="return the consensus residue line of the profile, if set..")
     
-    parser.add_argument('--append', type=str, nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
+    parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
                         help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
     
+    parser.add_argument('--config', action=ActionConfigFile)
+
     params = parser.parse_args(argv)
    
     ### Figure out what input and output files ####

@@ -5,7 +5,7 @@ followed by a list of offset\trecords pairs to divide the sequence file.
 
 Seeking to each offset and reading the specified number of records will result in reading the entire file once.
 """
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator import utils
@@ -91,8 +91,8 @@ def partition_seqfile(input_path, partitions=None, cdss_per_partition=None):
     return cds_count, out_list
 
 
-def main(args):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def main(argv):
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', default=None, type=str, required=True,
                        help="the genbank or fasta file to split the contig names of. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.")
@@ -104,7 +104,10 @@ def main(args):
                         help="The number of partitions to divide the ids into, roughly evenly.")
     overwrite_group.add_argument('--cdss_per_partition', type=int, default=None,
                         help="The approximate number of ids to write to each partition. Partitioning algorithm is greedy, it adds records until the CDS count is met or exceeded, then goes to the next start pointer.")
-    params = parser.parse_args(args)
+
+    parser.add_argument('--config', action=ActionConfigFile)
+
+    params = parser.parse_args(argv)
 
     if params.output is None:
         out = sys.stdout

@@ -8,7 +8,7 @@ can write a fasta or a genbank file
 """
 
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.Bio import SeqIO
 from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, slice_record, get_sources, pad_location, DomainatorCDS
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
@@ -99,7 +99,7 @@ def extract_unannotated(records, evalue=None, score=None, keep_direction=False, 
                 yield out_rec 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', required=False,
                         default=None,
@@ -140,6 +140,7 @@ def main(argv):
     parser.add_argument('--fasta_out', action='store_true', default=False,
                         help="makes output a fasta file when activated")
 
+    parser.add_argument('--config', action=ActionConfigFile)
         
     params = parser.parse_args(argv)
    

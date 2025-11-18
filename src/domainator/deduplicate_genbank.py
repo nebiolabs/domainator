@@ -6,7 +6,7 @@ The "hash" algorithm is a faster way to deduplicate exact duplicates, by hashing
 
 from dataclasses import dataclass, field
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import List
 from domainator.Bio import SeqIO, Seq
 from domainator.utils import parse_seqfiles, write_genbank
@@ -283,7 +283,7 @@ class DeduplicateGenbank():
         print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=log_handle)
    
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', default=None, required=True, #reads the input multiple times, so it needs to be a file.
                         help="Genbank or fasta filenames.")
@@ -327,6 +327,8 @@ def main(argv):
     
     parser.add_argument('--cluster_sep', default=' ; ', required=False,
                         help="Separator to separate individual contig names in the second column of the cluster table. Default: ' ; '")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
    

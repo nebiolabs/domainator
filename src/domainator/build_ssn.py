@@ -7,7 +7,7 @@ Build a sequence similarity network and do analysis related to that.
 # TODO: nothing here is very memory efficient. How big of a problem is that?
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from os import PathLike
 import sys
 from domainator.cytoscape import write_cytoscape_xgmml
@@ -132,7 +132,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, required=False,
@@ -174,6 +174,7 @@ def main(argv):
                         "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
                         "the minimum necessary to preserve the clusters.")
 
+    parser.add_argument('--config', action=ActionConfigFile)
 
 
 

@@ -10,7 +10,7 @@ NOTES: genbank files that contain translation annotations in their CDS features 
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import NamedTuple, List, Dict, Set, Tuple, Optional, Union, Iterable, Iterator
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
@@ -660,7 +660,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
         yield contigs_list[contig_id]
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
 
     parser.add_argument('-i', '--input', default=None, required=True,
@@ -732,6 +732,8 @@ def main(argv):
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None]. "
                         "If you supply a nucleotide fasta file, be sure to also specify --fasta_type nucleotide. "
                         "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

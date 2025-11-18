@@ -1,7 +1,7 @@
 """
     Convert a GenBank file to a FASTA file.
 """
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 from domainator.Bio import SeqIO
 from domainator import __version__, RawAndDefaultsFormatter
@@ -11,13 +11,15 @@ from domainator.utils import parse_seqfiles
 # allow specification of various paramters, such as species, accession, etc.
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
                        help="Genbank filenames. If not supplied, reads from stdin.")
 
     parser.add_argument('-o', '--output', default=None, required=False,
                         help="the name of the output fasta file. If not supplied writes to stdout.")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

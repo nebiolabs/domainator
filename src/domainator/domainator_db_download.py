@@ -23,7 +23,7 @@
         2759 : eukaryota
 """
 
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import gzip
 import requests
 from domainator.Bio import SeqIO
@@ -618,7 +618,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
         )
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     parser.add_argument("--db", type=str.lower, choices={"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks", "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all", "swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}, help="Database to download")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output filename")
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
@@ -642,6 +642,8 @@ def main(argv):
     parser.add_argument("--after", type=str, default=None, help="For ncbi databases, only download records after this date. Format is YYYY-MM-DD.")
     parser.add_argument('--cpu', type=int, default=0,
                         help="the number of cores of the cpu which are used at a time to download ncbi records [default: use all available cores]")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

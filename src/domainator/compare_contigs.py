@@ -3,12 +3,12 @@
 Takes a genbank file annotated with domainator and calculates similarities between contigs and writes reports.
 
 ji, ai, and dss metrics are similar to and inspired by the metrics used in the BigScape method:
-Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. “A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data.” Nature Chemical Biology 16, no. 1 (January 2020): 60–68. https://doi.org/10.1038/s41589-019-0400-9.
+Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. "A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data." Nature Chemical Biology 16, no. 1 (January 2020): 60–68. https://doi.org/10.1038/s41589-019-0400-9.
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, get_file_type
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -278,7 +278,7 @@ def compare_contigs(genbanks, metrics, reports, k, contigs, name_by_order, datab
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', default=None, required=True, help="Genbank filenames.")
 
@@ -317,6 +317,8 @@ def main(argv):
     parser.add_argument("--dense_text", type=str, default=None, help="Write a dense distance matrix tsv file to this path.")
     
     parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
 
     params = parser.parse_args(argv)

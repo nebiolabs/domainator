@@ -5,7 +5,7 @@ based on percentage overlap between domains and evalues of domains.
 
 """
 
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 from domainator.utils import list_and_file_to_dict_keys, write_genbank, parse_seqfiles
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
@@ -165,7 +165,7 @@ def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Option
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', required=False,
                        default=None,
@@ -199,6 +199,7 @@ def main(argv):
     parser.add_argument('--annotation_type', type=str, default="all", choices={"domainator", "domain_search", "all"},
                        help="Which type of annotations to filter (domainator, domain_search, all). Default: domainator")
     
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

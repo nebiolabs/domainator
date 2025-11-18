@@ -12,7 +12,7 @@ If neither is set, then hits will be written on the fly and not sorted.
 """
 
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import  parse_seqfiles, write_genbank, list_and_file_to_dict_keys
 from domainator import __version__
 from domainator import select_by_cds
@@ -221,7 +221,7 @@ def get_input_molecule_types(input_files: List[str], default_molecule_type="prot
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', default=None, required=True,
                        nargs='+', type=str,
@@ -319,6 +319,8 @@ def main(argv):
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] "
                         "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
+
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 

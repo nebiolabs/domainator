@@ -6,6 +6,7 @@ write a tab-separated file
 
 import sys
 import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
@@ -592,7 +593,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
         writer.write_footer()
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
                         help="Genbank filenames. If not supplied then reads from to stdin.")
@@ -678,19 +679,20 @@ def main(argv):
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
 
-    parser.add_argument('--qualifier', type=str, nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="qualifier",
+    parser.add_argument('--qualifier', nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="qualifier",
                         help="Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'.")
-    parser.add_argument('--feature_count', type=str, nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="feature_count",
+    parser.add_argument('--feature_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="feature_count",
                         help="Reports the number of features of this type.")
     # parser.add_argument('--qualifier_count', type=str, nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, #TODO: implement this using DynamicArg
     #                     help="Supply two strings, an feature type and a qualifier name. Report the number of instances of this feature-qualifier combination.")
     
-    parser.add_argument('--append', type=str, nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
+    parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
                         help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
 
     parser.add_argument('--column_names', nargs='+', default=None, required=False, type=str,
                         help="If supplied, then this list will be used instead of the default column names.")
     
+    parser.add_argument('--config', action=ActionConfigFile)
 
 
 

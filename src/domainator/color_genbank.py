@@ -11,7 +11,7 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 """
 
 import sys
-import argparse
+from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, open_if_is_name
 import warnings
 import re
@@ -186,7 +186,7 @@ def color_genbank(records, color_table, color_targets, search_hit_color=None, cl
                 out.write(f"{domain}\t{color}\n")
 
 def main(argv):
-    parser = argparse.ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', nargs='+', default=None, required=False,
                         help="Genbank filenames. If not supplied, reads from stdin.")
@@ -217,6 +217,7 @@ def main(argv):
     color_selection.add_argument("--color_both", action="store_true", default=False, 
                                 help="if set, then color domain and CDS annotations annotations (by default only CDS annotations will be colored)")
  
+    parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
    
