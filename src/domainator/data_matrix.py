@@ -709,3 +709,167 @@ class DataMatrix():
                 print(row_names[idx] + "\t" + "\t".join([str(x) for x in np.nditer(matrix[idx])]), file=outfile)
 
         outfile.close()
+
+
+class MaxTree():
+    """ 
+        Holds a maximum spanning tree from a DataMatrix
+    
+        When skip_zeros is True, but there is no MST without going through 0-weight edges, then the "MaxTree" will actually be several unconnected sub-trees.
+
+    """
+
+    def __init__(self, matrix:DataMatrix, skip_zeros=True):
+        triangular = matrix.triangular(agg=max, index_style="index", skip_zeros=skip_zeros) #list of tuples: i, j, value 
+
+       
+        
+        self.n_nodes = len(matrix)
+        self.edges = np.zeros((len(triangular), 4)) # node_i, node_j, edge_value, edges between this and next mst_edge (if 0, then this is not an mst_edge)
+
+        # Handle empty case (single node or empty matrix)
+        if len(triangular) > 0:
+            self.edges[:,0:3] = triangular
+
+        del triangular
+        np.take(self.edges, np.argsort(self.edges[:, 2])[::-1], axis=0, out=self.edges) # sort highest to lowest by value
+
+        # calculate_max_spanning_tree using union-find
+        self.mst = list() #np.zeros((max(0, self.n_nodes - 1),), dtype=int) # indexes of edges in the mst
+        parent = np.arange(self.n_nodes, dtype=int)  # Union-find parent array
+        
+        def find(x):
+            """Find root with path compression"""
+            if parent[x] != x:
+                parent[x] = find(parent[x])
+            return parent[x]
+        
+        def union(x, y):
+            """Union two sets"""
+            root_x = find(x)
+            root_y = find(y)
+            if root_x != root_y:
+                parent[root_x] = root_y
+                return True
+            return False
+        
+        edge_count = 0
+        #mst_i = 0
+        for edge_i in range(len(self.edges)):
+            node_1 = int(self.edges[edge_i, 0])
+            node_2 = int(self.edges[edge_i, 1])
+            edge_count += 1
+            
+            # Only add edge if it connects different components
+            if union(node_1, node_2):
+                self.edges[edge_i, 3] = edge_count
+                self.mst.append(edge_i)
+                #mst_i += 1
+                edge_count = 0
+                
+                # if mst_i == self.n_nodes - 1:
+                #     break  # MST is complete
+        self.mst = np.array(self.mst)
+
+        self.edges_by_threshold = self._edges_by_threshold()
+        self.cluster_count_by_threshold = self._cluster_count_by_threshold()
+        self.cluster_count_by_edge_count = self._cluster_count_by_edge_count()
+
+    @property
+    def mst_edges(self) -> List[Tuple[int,int,float]]: # (node_i, node_j, edge_value)
+        """
+        Returns the edges in the maximum spanning tree.
+        
+        Returns:
+            List[Tuple[int,int,float]]: List of MST edges as (node_i, node_j, edge_value) tuples
+        """
+        mst_edge_list = []
+        for mst_idx in self.mst:
+            edge = self.edges[mst_idx]
+            mst_edge_list.append((int(edge[0]), int(edge[1]), float(edge[2])))
+        return mst_edge_list
+        
+
+    def _edges_by_threshold(self):
+        """
+        Returns array of (edge_count, threshold) pairs.
+        Each row represents the cumulative edge count and threshold at each MST edge.
+        """
+        edges_by_threshold = np.zeros((len(self.mst), 2)) # edge_count, threshold
+        edges_count = 0
+        for i in range(len(self.mst)):
+            mst_edge_idx = self.mst[i]
+            edges_count += int(self.edges[mst_edge_idx, 3])
+            threshold = self.edges[mst_edge_idx, 2]
+            edges_by_threshold[i, 0] = edges_count
+            edges_by_threshold[i, 1] = threshold
+        return edges_by_threshold
+
+    def _cluster_count_by_threshold(self):
+        """
+        Returns array of (threshold, cluster_count) pairs.
+        For each MST edge threshold, calculates how many clusters would result
+        if we only include edges with values >= that threshold.
+        """
+        cluster_counts = np.zeros((len(self.mst) + 1, 2))  # threshold, cluster_count
+        
+        # Start with all nodes as separate clusters
+        cluster_counts[0, 0] = float('inf')  # threshold = infinity
+        cluster_counts[0, 1] = self.n_nodes  # all nodes separate
+        
+        # Process MST edges from highest to lowest threshold
+        for i in range(len(self.mst)):
+            mst_edge_idx = self.mst[i]
+            threshold = self.edges[mst_edge_idx, 2]
+            # Each MST edge reduces cluster count by 1
+            cluster_counts[i + 1, 0] = threshold
+            cluster_counts[i + 1, 1] = self.n_nodes - (i + 1)
+        
+        return cluster_counts
+
+    def _cluster_count_by_edge_count(self):
+        """
+        Returns array of (edge_count, cluster_count) pairs.
+        For each cumulative edge count, calculates the number of clusters.
+        This includes non-MST edges between MST edges.
+        """
+        edges_by_thresh = self.edges_by_threshold
+        
+        if len(edges_by_thresh) == 0:
+            return np.array([[0, self.n_nodes]])
+        
+        # Calculate cluster counts
+        result = []
+        result.append([0, self.n_nodes])  # Start with 0 edges, all nodes separate
+        
+        for i in range(len(edges_by_thresh)):
+            edge_count = int(edges_by_thresh[i, 0])
+            # Each MST edge reduces cluster count by 1
+            cluster_count = self.n_nodes - (i + 1)
+            result.append([edge_count, cluster_count])
+        
+        return np.array(result)
+
+    def export_for_interactive_viz(self):
+        """
+        Export minimal data structure for client-side cluster computation.
+        Returns dict with MST edges for JavaScript to rebuild clusters on-demand.
+        
+        Returns:
+            dict with:
+            - n_nodes: int
+            - mst_edges: [[node1, node2, value], ...] sorted by value descending
+        """
+        mst_edges = []
+        for i in range(len(self.mst)):
+            edge_idx = self.mst[i]
+            mst_edges.append([
+                int(self.edges[edge_idx, 0]),
+                int(self.edges[edge_idx, 1]),
+                float(self.edges[edge_idx, 2])
+            ])
+        
+        return {
+            'n_nodes': int(self.n_nodes),
+            'mst_edges': mst_edges
+        }
