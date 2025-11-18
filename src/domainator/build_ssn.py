@@ -11,7 +11,7 @@ import argparse
 from os import PathLike
 import sys
 from domainator.cytoscape import write_cytoscape_xgmml
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, MaxTree
 from scipy.sparse.csgraph import connected_components
 import pandas as pd
 from pathlib import Path
@@ -45,7 +45,7 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
 
 
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None):
+              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False):
     """build a sequence similarity network from a matrix
 
     Args:
@@ -58,7 +58,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         cluster_tsv (Union[str, PathLike], optional): write a metadata tab-separated file with the cluster ids to this path. Defaults to None.
         no_cluster_header (bool, optional): If True, then the cluster tsv file will not have a header. Defaults to False.
         color_table_out (str, optional): write a color table to this path. Defaults to None.
-
+        mst (bool, optional): If True, then write 
 
     Raises:
         ValueError: if the input does not have symmetric row and column labels
@@ -74,7 +74,14 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         cluster = True
     # find edges
     edge_data=dict() # (source, target): score
-    for source,target,score in matrix.triangular(skip_zeros=True, agg=max):
+    if mst:
+        tree = MaxTree(matrix)
+        # Convert indices to names
+        edge_iter = [(matrix.rows[source_idx], matrix.rows[target_idx], score) 
+                     for source_idx, target_idx, score in tree.mst_edges]
+    else:
+        edge_iter = matrix.triangular(skip_zeros=True, agg=max)
+    for source,target,score in edge_iter:
         if score > lb:
             if source != target: #don't write self-edges
                 if target < source:
@@ -162,6 +169,11 @@ def main(argv):
     parser.add_argument('--no_cluster_header', action="store_true", required=False, default=False,
                         help="If set, then the tsv file will not have a header. Only relevant if --cluster_tsv is set.")
 
+    parser.add_argument('--mst', action="store_true", required=False, default=False,
+                        help="If set, then only include edges that are part of the maximum spanning tree of the graph. " \
+                        "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
+                        "the minimum necessary to preserve the clusters.")
+
 
 
 
@@ -188,9 +200,13 @@ def main(argv):
     color_table = None
     if params.color_table:
         color_table = read_color_table(params.color_table)
+    
     # Run
     # params.metric,
-    build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table, params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out)
+    build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table,
+              params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
+              params.mst
+              )
 
 
 def _entrypoint():
