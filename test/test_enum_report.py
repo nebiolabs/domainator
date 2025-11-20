@@ -565,3 +565,44 @@ def test_enum_report_no_filename_1(shared_datadir):
             assert lines[0] == ["contig", "domains"]
             assert len(lines[1]) == 2
             assert len(lines[2]) == 2
+
+def test_enum_report_config_file_1(shared_datadir):
+    """
+    Test that enum_report can read parameters from a config file using --config
+    """
+    import json
+    
+    with tempfile.TemporaryDirectory() as output_dir:
+        # Create a config file with various parameters
+        config_file = output_dir + "/config.yaml"
+        out = output_dir + "/enum_report.tsv"
+        
+        # Note: arguments with action='append_const' and dest='output_cols' 
+        # need to be specified using --flag syntax in command line
+        # or as a list in the config file
+        config_content = f"""input:
+  - {str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")}
+output: {out}
+"""
+        
+        with open(config_file, 'w') as f:
+            f.write(config_content)
+        
+        # Run enum_report with config file and additional command-line args
+        # The append_const arguments work better from command line
+        enum_report.main(["--config", config_file, "--domains", "--sequence", "--length", "--topology"])
+        
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 5
+            assert lines[0].strip().split("\t") == ["contig","domains","sequence","length","topology"]
+            for l_num in range(1,len(lines)):
+                l = lines[l_num]
+                l = l.strip().split("\t")
+                assert f"pDONR201_{l_num}" == l[0]
+                assert l[1] == "2-oxoacid_dh; APH; CAT; CcdA; CcdB; Condensation; TCAD9"
+                assert l[3] == "4470"
+                assert l[4] == "linear"
+                assert len(l) == 5
