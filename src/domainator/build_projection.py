@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import json
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, SparseDataMatrix
 from domainator.cytoscape import write_cytoscape_xgmml
 import scipy as sp
 from domainator.color_genbank import read_color_table
@@ -61,7 +61,7 @@ def check_coords(n_components, data_matrix: DataMatrix):
             raise ValueError(f"Input matrix should have columns should be (in order) {[XCOLNAME,YCOLNAME,ZCOLNAME]}, not: {mat_columns}")
     
     data = data_matrix.data
-    if data_matrix.sparse:
+    if isinstance(data_matrix, SparseDataMatrix):
         data = data.toarray()
 
     return data
@@ -85,7 +85,7 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
         color_table_out: tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.
 
     """
-    sparse = data_matrix.sparse
+    is_sparse = isinstance(data_matrix, SparseDataMatrix)
     n_components=2
     columns=[XCOLNAME,YCOLNAME]
     if three_dee:
@@ -100,7 +100,7 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
         if 'init' not in algorithm_parameters:
             algorithm_parameters["init"] = 'pca'
         data = data_matrix.data
-        if sparse:
+        if is_sparse:
             if len(data_matrix.columns) > 50:
                 #TODO: maybe warn that we're doing a dimenisionality reduction
                 data = TruncatedSVD(n_components=50).fit_transform(data_matrix.data)
@@ -113,14 +113,14 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
                 algorithm_parameters["perplexity"] = 30 # TODO: what should the default be?
         embedded = TSNE(n_components=n_components, **algorithm_parameters).fit_transform(data)
     elif algorithm == "pca":
-        if sparse:
+        if is_sparse:
             #TODO: maybe warn that we're doing TruncatedSVD instead of PCA
             embedded = TruncatedSVD(n_components=n_components).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
         else:
             embedded = PCA(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.data)
     elif algorithm == "umap":
         #doesn't matter if it's sparse or not umap will take it!
-        if sparse:
+        if is_sparse:
             embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
         else:    
             embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.data)

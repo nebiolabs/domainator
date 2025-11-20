@@ -64,7 +64,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         ValueError: if the input does not have symmetric row and column labels
     """
     
-    if not matrix.symmetric:
+    if not matrix.symmetric_labels:
         raise ValueError("Input does not have symmetric axis labels. Can only build an SSN from a symmetric matrix.")
     
     # if not matrix.symmetric_values:

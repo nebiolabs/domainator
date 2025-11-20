@@ -1,26 +1,73 @@
 """
+DataMatrix: Unified interface for dense and sparse matrices.
 
-The DataMatrix class is an abstraction around dense and sparse matrices
+This module provides an abstract base class DataMatrix with two concrete implementations:
+- DenseDataMatrix: Uses numpy.ndarray for storage (best for matrices with many non-zeros)
+- SparseDataMatrix: Uses scipy.sparse.csr_array for storage (best for matrices with many zeros)
+
+The abstraction allows code to work with both dense and sparse matrices through a common
+interface, with each implementation optimized for its storage format.
+
+Key Features:
+    - Polymorphic interface: Methods work on both dense and sparse matrices
+    - Type-based dispatch: Use isinstance() to check matrix type
+    - Factory pattern: DataMatrix.from_file() returns the appropriate subclass
+    - Conversion methods: convert_to_sparse() and convert_to_dense()
+    - HDF5 persistence: Efficient binary storage with metadata
+    - Row/column labels: String identifiers for matrix axes
+    - Optional sequence lengths: Support for biological sequence data
+    - Value label: an string describing the kind of data stored in the matrix, (e.g. e-values, score, etc.)
+
+Usage:
+    # Load from file (returns appropriate subclass)
+    matrix = DataMatrix.from_file("distances.hdf5")
+    
+    # Create directly
+    dense = DenseDataMatrix(data_array, row_names, col_names)
+    sparse = SparseDataMatrix(sparse_array, row_names, col_names)
+    
+    # Check type
+    if isinstance(matrix, SparseDataMatrix):
+        matrix = matrix.convert_to_dense()
+    
+    # Iterate over values
+    for row, col, value in matrix.iter_data():
+        print(f"{row} vs {col}: {value}")
 
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from os import PathLike
+from pathlib import Path
 import pandas as pd
 import scipy.sparse
 import numpy as np
 import h5py
-from typing import Dict, List, Tuple, Union, Optional
-from domainator.utils import get_file_type
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple, Union, Optional, Iterator
 
 #TODO: use hdf5plugin to blosc compress datasets: http://www.silx.org/doc/hdf5plugin/latest/usage.html
 
 UTF8_h5py_encoding = h5py.string_dtype(encoding='utf-8')
 
-#TODO: maybe sub-classes for dense vs sparse?
-#TODO: maybe add an attr for value label
+def _get_file_type(filename: Union[PathLike, str]) -> Optional[str]:
+    """Detect file type from extension.
+    
+    Args:
+        filename: Path to file
+    
+    Returns:
+        File type string ('hdf5') or None if not recognized
+    """
+    extension_map = {
+        "hdf5": "hdf5",
+        "hdf": "hdf5",
+        "h5": "hdf5",
+    }
+    file_extension = Path(filename).suffix[1:].lower()
+    return extension_map.get(file_extension)
 
-class DataMatrix():
+class DataMatrix(ABC):
     """
     Class used to abstract access to sparse and dense matrices
 
@@ -52,7 +99,7 @@ class DataMatrix():
     """{DENSE, SPARSE_CSR}"""
     _SYMMETRIC_LABELS_ATTR="SYMMETRIC_LABELS"
     """if the x-axis and y-axis have the same labels"""
-    _DOMAINATOR_MATRIX_FILE_VERSION_ATTR="DOMAINATOR_MATRIX_FILE_VERSION"
+    _MATRIX_FILE_VERSION_ATTR="MATRIX_FILE_VERSION"
     _DATA_TYPE_ATTR="DATA_TYPE"
     """(optional) single string value describing the type of data in the matrix (e.g. 'score', 'norm_score', 'row_norm_score', 'score_dist', 'bool', 'efi_score')"""
 
@@ -63,65 +110,66 @@ class DataMatrix():
 
 
     
-    _DOMAINATOR_MATRIX_FILE_VERSION = "1.0"  #TODO: increment after any breaking changes
+    _MATRIX_FILE_VERSION = "1.0"  #TODO: increment after any breaking changes
 
-    def __init__(self, data=None, row_names:List[str]=None, col_names:List[str]=None, row_lengths:Optional[List[int]]=None, col_lengths:Optional[List[int]]=None, data_type:str=None):
+    def __init__(self, row_names:List[str], col_names:List[str], row_lengths:Optional[np.ndarray]=None, col_lengths:Optional[np.ndarray]=None, data_type:str=None):
         """
-            
+        Base class initialization - common to all matrix types.
+        Subclasses should call this via super().__init__()
         
+        Args:
+            row_names: List of row labels (typically gene/sequence names)
+            col_names: List of column labels (typically gene/sequence names)
+            row_lengths: Optional sequence lengths for rows as numpy array (will be converted if not)
+            col_lengths: Optional sequence lengths for columns as numpy array (will be converted if not)
+            data_type: Optional string describing the data type (e.g., 'score', 'norm_score', 'score_dist')
+        
+        Attributes:
+            rows: List of row labels
+            columns: List of column labels
+            row_to_idx: Dictionary mapping row names to indices
+            column_to_idx: Dictionary mapping column names to indices (same as row_to_idx if symmetric)
+            row_lengths: Sequence lengths for rows as numpy array, or None
+            column_lengths: Sequence lengths for columns as numpy array, or None
+            data_type: String describing data type, empty string if not specified
         """
+        # Validate and set up row/column names
+        self.rows = list(row_names)
+        self.columns = list(col_names)
+        self.row_to_idx = {v:i for i,v in enumerate(row_names)}
+        self.data_type = str(data_type) if data_type is not None else ""
 
-        # define instance attributes
-        self.sparse = False
-        self.rows = None # row names
-        self.columns = None # column names
-        self.row_lengths = None # (optional) int list representing the lengths of the sequences in the rows. Used for some statistics, like efi_score
-        self.column_lengths = None # (optional) int array (not used if SYMMETRIC LABELS is True)
-        self.row_to_idx = None # row name to rows_idx (inverse of self.rows)
-        self.column_to_idx = None # col name to rows_idx (inverse of self.cols)
-        self.data_type = "" # single string value describing the type of data in the matrix (e.g. 'score', 'norm_score', 'row_norm_score', 'score_dist', 'bool', 'efi_score')
-        self.data = None # numpy array or scipy sparse_csr array
-
-        if data is None:
-            self.data = np.zeros((0,0))
+        if row_names == col_names:
+            self.column_to_idx = self.row_to_idx
         else:
-            rows_list, cols_list = self.validate_matrix_data(data, row_names, col_names, row_lengths, col_lengths)
-            self.rows = rows_list
-            self.columns = cols_list
-            # self.row_lengths = list(row_lengths) if row_lengths is not None else None
-            # self.column_lengths = list(col_lengths) if col_lengths is not None else None
-            self.row_to_idx = {v:i for i,v in enumerate(row_names)}
-            self.data_type = str(data_type) if data_type is not None else ""
+            self.column_to_idx = {v:i for i,v in enumerate(col_names)}
 
-            if row_names == col_names:
-                self.column_to_idx = self.row_to_idx
+        if row_lengths is not None:
+            # Always store as numpy array for consistency and mathematical operations
+            if not isinstance(row_lengths, np.ndarray):
+                self.row_lengths = np.array(row_lengths)
             else:
-                self.column_to_idx = {v:i for i,v in enumerate(col_names)} 
-
-            if row_lengths is not None:
                 self.row_lengths = row_lengths.copy()
-                if col_lengths == row_lengths:
-                    self.column_lengths = self.row_lengths
+            
+            if col_lengths is row_lengths or (col_lengths is not None and np.array_equal(row_lengths, col_lengths)):
+                self.column_lengths = self.row_lengths
+            else:
+                if not isinstance(col_lengths, np.ndarray):
+                    self.column_lengths = np.array(col_lengths)
                 else:
                     self.column_lengths = col_lengths.copy()
-
-            if scipy.sparse.issparse(data):
-                self.sparse = True
-                if not isinstance(type(data), scipy.sparse.csr_array):
-                    self.data = scipy.sparse.csr_array(data)
-                else:
-                    self.data = data.copy() 
-                self.data.eliminate_zeros()
-                self.data.sort_indices()
-            else: #dense
-                self.data = data.copy()
+        else:
+            self.row_lengths = None
+            self.column_lengths = None
 
     @property
+    @abstractmethod
     def shape(self):
-        return self.data.shape
+        """Return the shape of the matrix"""
+        pass
     
     @property
-    def size(self):
+    def size(self) -> int:
         """
             Returns:
                 int: number of values in the matrix
@@ -129,406 +177,183 @@ class DataMatrix():
         return np.prod(self.shape)
 
     @property
-    def symmetric(self):
+    def symmetric_labels(self) -> bool:
+        """Returns True if row and column labels are identical."""
         return self.rows == self.columns
 
     @property
+    def symmetric(self) -> bool:
+        """Returns True if both labels and values are symmetric."""
+        return self.symmetric_labels and self.symmetric_values
+
+    @property
+    @abstractmethod
     def symmetric_values(self) -> bool:
         """
             Returns True if the matrix has symmetric values (i.e., the matrix is symmetric in its data).
             Uses np.isclose to allow for floating point imprecision.
-            
-            For sparse matrices, uses an optimized approach that first checks if the 
-            non-zero pattern is symmetric before comparing values.
         """
-        if not self.symmetric:
-            return False # If it doesn't have symmetric labels, then it can't have symmetric values.
-        
-        # Check if matrix values are symmetric: M[i,j] == M[j,i] for all i,j
-        
-        if self.sparse:
-            # For sparse matrices, optimize by checking non-zero structure first
-            # Get upper and lower triangular non-zero elements (excluding diagonal)
-            upper_triangular = self.triangular(side='upper', include_diagonal=False, skip_zeros=True, index_style='index')
-            lower_triangular = self.triangular(side='lower', include_diagonal=False, skip_zeros=True, index_style='index')
-            
-            # First, check if the number of non-zeros is the same
-            if len(upper_triangular) != len(lower_triangular):
-                return False
-            
-            # For symmetric matrix: upper[i,j] should equal lower[j,i]
-            # Since both lists are sorted by (row, col), we can create a sorted list
-            # of transposed lower triangular positions for comparison
-            
-            # Create list of (col, row, value) from lower triangular - this gives us the transpose
-            # Then sort it the same way as upper triangular (by row, then col)
-            lower_transposed = [(l_c, l_r, l_v) for l_r, l_c, l_v in lower_triangular]
-            lower_transposed.sort()  # Sort by (row, col) which is now (l_c, l_r)
-            
-            # Now compare element by element
-            for (u_r, u_c, u_v), (lt_r, lt_c, lt_v) in zip(upper_triangular, lower_transposed):
-                # Check positions match
-                if (u_r, u_c) != (lt_r, lt_c):
-                    return False
-                # Check values match (with floating point tolerance)
-                if not np.isclose(u_v, lt_v):
-                    return False
-            
-            return True
-        else:
-            # For dense matrices, check all upper triangular elements
-            # We only need to check the upper triangular part against the lower triangular part
-            upper_triangular = self.triangular(side='upper', include_diagonal=False, skip_zeros=False, index_style='index')
-            
-            # For each upper triangular element (i,j), check if it equals the corresponding lower element (j,i)
-            for row_idx, col_idx, value in upper_triangular:
-                # Get the corresponding element in the lower triangular (transpose position)
-                transpose_value = self.data[col_idx, row_idx]
-                
-                # Use np.isclose to handle floating point imprecision
-                if not np.isclose(value, transpose_value):
-                    return False
-            
-            return True
+        pass
 
-    def __len__(self):
-        return self.data.shape[0]
+    def __len__(self) -> int:
+        """Return number of rows in the matrix."""
+        return self.shape[0]
+    
+    def __repr__(self) -> str:
+        """Return detailed string representation for debugging."""
+        return (f"{self.__class__.__name__}(shape={self.shape}, "
+                f"symmetric_labels={self.symmetric_labels}, data_type='{self.data_type}')")
+    
+    def __str__(self) -> str:
+        """Return readable string representation."""
+        return f"{self.__class__.__name__}{self.shape}"
+
+    @classmethod
+    def _validate_hdf5_attributes(cls, f: h5py.File):
+        """Validate required HDF5 attributes are present.
+        
+        Supports both old (DOMAINATOR_MATRIX_FILE_VERSION) and new (MATRIX_FILE_VERSION)
+        attribute names for backward compatibility.
+        
+        Args:
+            f: Open HDF5 file handle
+        
+        Raises:
+            ValueError: If required attributes are missing
+        """
+        # Check for version attribute (support both old and new names)
+        if cls._MATRIX_FILE_VERSION_ATTR not in f.attrs and "DOMAINATOR_MATRIX_FILE_VERSION" not in f.attrs:
+            raise ValueError(f"Required attribute '{cls._MATRIX_FILE_VERSION_ATTR}' not found in HDF5 file")
+        
+        # Check other required attributes
+        for attribute in (cls._ARRAY_TYPE_ATTR, cls._SYMMETRIC_LABELS_ATTR):
+            if attribute not in f.attrs:
+                raise ValueError(f"Required attribute '{attribute}' not found in HDF5 file")
 
     @classmethod
     def from_file(cls, matrix_file):
-        out = cls()
-        file_type = get_file_type(matrix_file)
-        if file_type == "hdf5": 
-            out._read_hdf5(matrix_file)
-        else: #assume dense tsv text file as parse as such
-            out._read_text_dense_matrix(matrix_file) 
-        return out
-
-    def _read_hdf5(self, matrix_file: Union[PathLike, str]):
-        
-        f = h5py.File(matrix_file)
-        
-        ### validate file format  ###
-        for attribute in (self._DOMAINATOR_MATRIX_FILE_VERSION_ATTR, self._ARRAY_TYPE_ATTR, self._SYMMETRIC_LABELS_ATTR):
-            if attribute not in f.attrs:
-                raise ValueError(f"attribute {attribute} not found in hdf5 file. Are you sure it is a Domainator formatted file?")
-        file_version = f.attrs[self._DOMAINATOR_MATRIX_FILE_VERSION_ATTR]
-        if file_version != self._DOMAINATOR_MATRIX_FILE_VERSION:
-            warnings.warn(f"Matrix file version ({file_version}) in file {matrix_file} does not match program-supported version ({self._DOMAINATOR_MATRIX_FILE_VERSION})")
-        array_type = f.attrs[self._ARRAY_TYPE_ATTR]
-        if array_type not in self._POSSIBLE_ARRAY_TYPES:
-            raise ValueError(f"Array type {array_type} not recognized")
-
-        if array_type == "DENSE":
-            for dataset_name in (self._ROW_LABELS_DATASET, self._DENSE_DATASET):
-                if dataset_name not in f:
-                    raise ValueError(f"expected dataset {self._DENSE_DATASET} not found in file {matrix_file}")
-        elif array_type == "SPARSE_CSR": # sparse
-            for dataset_name in (self._ROW_LABELS_DATASET, self._SPARSE_VALUES_DATASET, self._SPARSE_CSR_INDICES_DATASET, self._SPARSE_CSR_INDPTR_DATASET):
-                if dataset_name not in f:
-                    raise ValueError(f"expected dataset {dataset_name} not found in file {matrix_file}")
-
-        if not f.attrs[self._SYMMETRIC_LABELS_ATTR]:
-            if self._COL_LABELS_DATASET not in f:
-                raise ValueError(f"expected dataset {self._COL_LABELS_DATASET} not found in file {matrix_file}")
-        
-
-        ### store data ###
-        self.sparse = False
-        self.rows = None
-        self.columns = None
-        self.row_to_idx = None
-        self.column_to_idx = None
-        self.data = None
-        self.row_lengths = None
-        self.column_lengths = None
-        self.data_type = ""
-
-        if self._DATA_TYPE_ATTR in f.attrs:
-            self.data_type = f.attrs[self._DATA_TYPE_ATTR]
-
-        self.rows, self.row_to_idx = self.parse_axis_index(f[self._ROW_LABELS_DATASET])
-        if self._ROW_LENGTHS_DATASET in f:
-            self.row_lengths = f[self._ROW_LENGTHS_DATASET][:]
-            if f.attrs[self._SYMMETRIC_LABELS_ATTR]:
-                self.column_lengths = self.row_lengths
-            else:
-                self.column_lengths = f[self._COL_LENGTHS_DATASET][:]
-        
-
-        if f.attrs[self._SYMMETRIC_LABELS_ATTR]:
-            self.columns = self.rows
-            self.column_to_idx = self.row_to_idx
+        """
+        Factory method that returns the appropriate subclass (DenseDataMatrix or SparseDataMatrix)
+        based on the file content.
+        """
+        file_type = _get_file_type(matrix_file)
+        if file_type == "hdf5":
+            # Peek at the file to determine type
+            with h5py.File(matrix_file, 'r') as f:
+                array_type = f.attrs.get(cls._ARRAY_TYPE_ATTR, cls._DENSE)
+                
+                if array_type == cls._SPARSE_CSR:
+                    return SparseDataMatrix._from_hdf5(matrix_file)
+                else:
+                    return DenseDataMatrix._from_hdf5(matrix_file)
+        elif file_type is None:
+            # Assume dense tsv text file if extension not recognized
+            return DenseDataMatrix._from_text(matrix_file)
         else:
-            self.columns, self.column_to_idx = self.parse_axis_index(f[self._COL_LABELS_DATASET])
+            raise ValueError(f"Unrecognized file type: {file_type}")
 
-        if f.attrs[self._ARRAY_TYPE_ATTR] == "DENSE":
-            self.sparse = False
-            self.data = f[self._DENSE_DATASET][:]
-        elif f.attrs[self._ARRAY_TYPE_ATTR] == "SPARSE_CSR":
-            self.sparse = True
-            self.data = scipy.sparse.csr_array((f[self._SPARSE_VALUES_DATASET][:], f[self._SPARSE_CSR_INDICES_DATASET][:], f[self._SPARSE_CSR_INDPTR_DATASET][:]), (len(self.rows), len(self.columns)) )
+    @abstractmethod
+    def _read_hdf5(self, matrix_file: Union[PathLike, str]):
+        """
+        Read matrix from HDF5 file - implemented by subclasses.
+        
+        This method should not be called directly. Use the factory method
+        DataMatrix.from_file() instead, which returns the appropriate subclass.
+        
+        Args:
+            matrix_file: Path to HDF5 file
+        """
+        pass
 
-    
+    @abstractmethod
     def iter_data(self, index_style="name", skip_zeros=True):
         """
-            yields (row_name, column_name, value).
-            for dense matrices iterates over every value in the matrix
-            for sparse matrices, skips zeros.
-
-            Iterates in a row-first manner. That is, all values in row 0, then all values in row 1, etc.
-        """
+        Iterate over matrix values, yielding (row_identifier, col_identifier, value).
         
-        index_style = index_style.lower()
-        if index_style not in {"name", "index"}:
-            raise ValueError("index_style must be 'name' or 'index'.")
+        Args:
+            index_style: Either "name" (return row/column names) or "index" (return integer indices)
+            skip_zeros: If True, skip zero values (efficient for sparse matrices)
+        
+        Yields:
+            tuple: (row_identifier, col_identifier, value) where identifiers are strings 
+                   if index_style="name" or integers if index_style="index"
+        """
+        pass
 
-
-        if not self.sparse: # it's a dense matrix
-            for r in range(self.data.shape[0]):
-                for c in range(self.data.shape[1]):
-                    value = self.data[r,c]
-                    if not skip_zeros or value != 0:
-                        if index_style == "name":
-                            yield self.rows[r], self.columns[c], value
-                        else:
-                            yield r, c, value
-        else: # sparse
-            if skip_zeros: # we can iterate over just the non-zeros
-                self.data.eliminate_zeros()
-                self.data.sort_indices()
-                #https://stackoverflow.com/questions/4319014/iterating-through-a-scipy-sparse-vector-or-matrix
-                for r in range(self.data.shape[0]):
-                    for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
-                        c = self.data.indices[ind]
-                        if index_style == "name":
-                            yield self.rows[r], self.columns[c], self.data.data[ind]
-                        else:
-                            yield r, c, self.data.data[ind]
-            else: # we have to iterate over the entire matrix
-                for r in range(self.data.shape[0]):
-                    for c in range(self.data.shape[1]):
-                        value = self.data[r,c]
-                        if index_style == "name":
-                            yield self.rows[r], self.columns[c], value
-                        else:
-                            yield r, c, value
-                    
-
+    @abstractmethod
     def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
         """
-            Iterate over the triangular part of the matrix.
-
-            side: can be "lower" or "upper".
-            index_style: can be "name" or "index".
-            skip_zeros: if True then don't return rows with zero as the value.
-            agg: a function taking two values as arguments, if supplied, then replaces each returned value with the 
-                result of agg(value, symmetric_complement).
-                if a value is zero, but the complement is not zero, then the result of agg is returned even when skip_zeros is true (unless it is also zero)
-
-            results sorted by row_index, then column_index
-            returns [(row_{name|col}, column_{name|col}, value),]
+        Return triangular part of the matrix as a list of tuples.
         
-        """
-
-        if self.data.shape[0] != self.data.shape[1]:
-            raise NotImplementedError(f"Triangular only supported for square matrices. Not ({self.data.shape[0]}, {self.data.shape[1]}")
-
-        side = side.lower()
-        if side not in {"upper", "lower"}:
-            raise ValueError("side must be 'lower' or 'upper'")
-
-        index_style = index_style.lower()
-        if index_style not in {"name", "index"}:
-            raise ValueError("index_style must be 'name' or 'index'.")
-
-
-        out = list()
-
-        if self.sparse and agg is not None:
-            # Optimized path for sparse matrices with aggregation
-            # Collect positions where at least one of (r,c) or (c,r) is non-zero
-            self.data.eliminate_zeros()
-            self.data.sort_indices()
-            
-            # Use a set to track positions we need to process
-            positions_to_process = set()
-            
-            # Iterate through non-zero elements and add triangular positions
-            for r in range(self.data.shape[0]):
-                for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
-                    c = self.data.indices[ind]
-                    
-                    # Determine triangular bounds for current row
-                    if side == "lower":
-                        start_c = 0
-                        end_c = r + 1 if include_diagonal else r
-                    else:  # upper
-                        start_c = r if include_diagonal else r + 1
-                        end_c = self.data.shape[1]
-                    
-                    # If (r,c) is in the triangular region, add it
-                    if start_c <= c < end_c:
-                        positions_to_process.add((r, c))
-                    
-                    # If (c,r) would be in the triangular region, add it
-                    # This handles cases where the complement has a non-zero value
-                    if side == "lower":
-                        comp_start_c = 0
-                        comp_end_c = c + 1 if include_diagonal else c
-                    else:  # upper
-                        comp_start_c = c if include_diagonal else c + 1
-                        comp_end_c = self.data.shape[1]
-                    
-                    if comp_start_c <= r < comp_end_c:
-                        positions_to_process.add((c, r))
-            
-            # Process collected positions
-            for r, c in sorted(positions_to_process):
-                value = self.data[r, c]
-                symmetric_value = self.data[c, r]
-                
-                # When skip_zeros is True with agg, only skip if BOTH values are zero
-                if skip_zeros and value == 0 and symmetric_value == 0:
-                    continue
-                
-                agg_value = agg(value, symmetric_value)
-                
-                if index_style == "name":
-                    out.append((self.rows[r], self.columns[c], agg_value))
-                else:
-                    out.append((r, c, agg_value))
+        Only works for square matrices. Returns values from either upper or lower triangle.
         
-        elif not self.sparse or not skip_zeros:  # dense matrix or we want every value, including zeros
-            for r in range(self.data.shape[0]):
-                if side == "lower":
-                    # Lower triangular: column index <= row index
-                    start_c = 0
-                    end_c = r + 1 if include_diagonal else r
-                else:  # upper
-                    # Upper triangular: column index >= row index
-                    start_c = r if include_diagonal else r + 1
-                    end_c = self.data.shape[1]
-                
-                for c in range(start_c, end_c):
-                    value = self.data[r, c]
-                    
-                    # Apply aggregation if agg function is provided
-                    if agg is not None:
-                        # Get the symmetric complement (transpose position)
-                        symmetric_value = self.data[c, r]
-                        # When skip_zeros is True with agg, only skip if BOTH values are zero
-                        if skip_zeros and value == 0 and symmetric_value == 0:
-                            continue
-                        value = agg(value, symmetric_value)
-                    elif skip_zeros and value == 0:
-                        # Without agg, skip if value is zero
-                        continue
-                    
-                    if index_style == "name":
-                        out.append((self.rows[r], self.columns[c], value))
-                    else:
-                        out.append((r, c, value))
-        else:  # sparse matrix without agg
-            self.data.eliminate_zeros()
-            self.data.sort_indices()
-
-            for r in range(self.data.shape[0]):
-                if side == "lower":
-                    # Lower triangular: column index <= row index
-                    start_c = 0
-                    end_c = r + 1 if include_diagonal else r
-                else:  # upper
-                    # Upper triangular: column index >= row index
-                    start_c = r if include_diagonal else r + 1
-                    end_c = self.data.shape[1]
-                
-                if skip_zeros:
-                    # Only iterate over non-zero values in the triangular region
-                    for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
-                        c = self.data.indices[ind]
-                        
-                        # Check if this column is in the triangular region
-                        if start_c <= c < end_c:
-                            value = self.data.data[ind]
-    
-                            if index_style == "name":
-                                out.append((self.rows[r], self.columns[c], value))
-                            else:
-                                out.append((r, c, value))
-                else:
-                    assert False # This case should have been handled above, treating the sparse matrix like a dense matrix.
-        return out
-        
-
-    def itervalues(self):
-        """ yield values from the matrix one by one by row then column.
-        
-        """
-
-        for r in range(self.shape[0]):
-            for c in range(self.shape[1]):
-                yield self.data[r,c]
-    
-    def save(self, file):
-        """write the matrix to an hdf5 file
-
         Args:
-            file (path or string): 
+            side: "lower" or "upper" triangle
+            include_diagonal: If True, include diagonal elements
+            skip_zeros: If True, exclude zero values from results
+            index_style: Either "name" (return row/column names) or "index" (return integer indices)
+            agg: Optional aggregation function to combine symmetric positions (e.g., lambda a,b: max(a,b)).
+                 When provided, applies agg(value, transpose_value) for each position.
+        
+        Returns:
+            list: List of tuples (row_identifier, col_identifier, value)
+        
+        Raises:
+            NotImplementedError: If matrix is not square
         """
+        pass
 
-        if self.sparse:
-            self.write_sparse(self.data, file, self.row_to_idx, self.column_to_idx)
-        else: # dense
-            self.write_dense(self.data, file, self.row_to_idx, self.column_to_idx)
-
-
-    def convert_to_sparse(self):
-        """Inplace conversion to csr sparse
-           
-
+    @abstractmethod
+    def itervalues(self) -> Iterator[float]:
         """
-        if self.sparse:
-            pass
-        else:
-            self.sparse = True
-            self.data = scipy.sparse.csr_array(self.data)
-            self.data.eliminate_zeros()
-
-    def convert_to_dense(self):
-        """Inplace conversion to dense
-
+        Yield all values from the matrix one by one, row by row, column by column.
+        
+        Yields:
+            Numeric values from the matrix in row-major order
         """
-        if self.sparse:
-            self.sparse = False
-            self.data = self.data.toarray()
-        else:
-            pass
+        pass
 
-    def toarray(self):
-        if self.sparse:
-            return self.data.toarray()
-        else:
-            return self.data
+    @abstractmethod
+    def convert_to_sparse(self) -> 'SparseDataMatrix':
+        """
+        Convert to sparse representation.
+        
+        Returns:
+            SparseDataMatrix: A new sparse matrix (if dense) or self (if already sparse)
+        """
+        pass
 
-    def _read_text_dense_matrix(self, matrix_file: Union[PathLike, str]):
-        self.sparse = False
-        try:
-            mat_file = pd.read_csv(matrix_file, sep="\t", index_col=0)
-        except UnicodeDecodeError:
-            raise ValueError(f"Expecting utf-8 encoded matrix file, but found invalid unicode byte. You may be trying to pass in an hdf5 file, but using an unrecognized extension.")
-        self.rows = list(mat_file.index)
-        self.columns = list(mat_file.columns)
+    @abstractmethod
+    def convert_to_dense(self) -> 'DenseDataMatrix':
+        """
+        Convert to dense representation.
+        
+        Returns:
+            DenseDataMatrix: A new dense matrix (if sparse) or self (if already dense)
+        """
+        pass
 
-        self.row_to_idx = {v:i for i,v in enumerate(self.rows)}
-        self.column_to_idx = {v:i for i,v in enumerate(self.columns)}
-
-        if all(a == b for a,b in zip(self.rows, self.columns)):
-            self.columns = self.rows
-
-        self.data = mat_file.to_numpy()
+    @abstractmethod
+    def toarray(self) -> np.ndarray:
+        """
+        Return matrix as a dense numpy array.
+        
+        Returns:
+            np.ndarray: 2D numpy array with all matrix values (zeros included)
+        """
+        pass
 
     def write(self, file_name: Union[PathLike, str], output_type: str = "dense"):
+        """
+        Write the matrix to a file in the specified format.
+        
+        Args:
+            file_name: Path to the output file
+            output_type: Format to write - "dense" (HDF5), "sparse" (HDF5), or "dense_text" (TSV)
+        
+        Raises:
+            ValueError: If output_type is not recognized
+        """
         if output_type == "dense":
             self.write_dense(self.data, file_name, self.rows, self.columns, self.row_lengths, self.column_lengths, self.data_type)
         elif output_type == "sparse":
@@ -547,7 +372,7 @@ class DataMatrix():
 
 
     @classmethod
-    def write_sparse(cls, matrix, file_name, row_names, col_names, row_lengths=None, col_lengths=None, data_type=""):
+    def write_sparse(cls, matrix, file_name, row_names, col_names, row_lengths:Optional[np.ndarray]=None, col_lengths:Optional[np.ndarray]=None, data_type=""):
         """Writes a dok sparse matrix to an hdf5 file
         
         """
@@ -561,31 +386,29 @@ class DataMatrix():
         matrix.eliminate_zeros() # remove zeros, so that the sparse file is as small as possible
         matrix.sort_indices() # sort indices so iteration happens by row and column in order
 
-        f = h5py.File(file_name, 'w')
-        f.attrs[cls._DOMAINATOR_MATRIX_FILE_VERSION_ATTR] = cls._DOMAINATOR_MATRIX_FILE_VERSION
-        f.attrs[cls._ARRAY_TYPE_ATTR] = cls._SPARSE_CSR
+        with h5py.File(file_name, 'w') as f:
+            f.attrs[cls._MATRIX_FILE_VERSION_ATTR] = cls._MATRIX_FILE_VERSION
+            f.attrs[cls._ARRAY_TYPE_ATTR] = cls._SPARSE_CSR
 
-        f.create_dataset(cls._SPARSE_VALUES_DATASET, data=matrix.data)
-        f.create_dataset(cls._SPARSE_CSR_INDICES_DATASET, data=matrix.indices)
-        f.create_dataset(cls._SPARSE_CSR_INDPTR_DATASET, data=matrix.indptr)
+            f.create_dataset(cls._SPARSE_VALUES_DATASET, data=matrix.data)
+            f.create_dataset(cls._SPARSE_CSR_INDICES_DATASET, data=matrix.indices)
+            f.create_dataset(cls._SPARSE_CSR_INDPTR_DATASET, data=matrix.indptr)
 
-        f.create_dataset(cls._ROW_LABELS_DATASET, data=row_names, dtype=UTF8_h5py_encoding)
-        
-        if row_lengths is not None:
-            f.create_dataset(cls._ROW_LENGTHS_DATASET, data=row_lengths)
+            f.create_dataset(cls._ROW_LABELS_DATASET, data=row_names, dtype=UTF8_h5py_encoding)
+            
+            if row_lengths is not None:
+                f.create_dataset(cls._ROW_LENGTHS_DATASET, data=row_lengths)
 
 
-        if row_names is col_names and row_lengths is col_lengths:
-            f.attrs[cls._SYMMETRIC_LABELS_ATTR] = True
-        else:
-            f.attrs[cls._SYMMETRIC_LABELS_ATTR] = False
-            f.create_dataset(cls._COL_LABELS_DATASET, data=col_names, dtype=UTF8_h5py_encoding)
-            if col_lengths is not None:
-                f.create_dataset(cls._COL_LENGTHS_DATASET, data=col_lengths)
+            if row_names is col_names and row_lengths is col_lengths:
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = True
+            else:
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = False
+                f.create_dataset(cls._COL_LABELS_DATASET, data=col_names, dtype=UTF8_h5py_encoding)
+                if col_lengths is not None:
+                    f.create_dataset(cls._COL_LENGTHS_DATASET, data=col_lengths)
 
-        f.attrs[cls._DATA_TYPE_ATTR] = data_type
-        
-        f.close()
+            f.attrs[cls._DATA_TYPE_ATTR] = data_type
 
 
     @staticmethod
@@ -606,7 +429,7 @@ class DataMatrix():
         return out
 
     @classmethod
-    def validate_matrix_data(cls, matrix: Union[np.array, scipy.sparse.sparray], row_names:List[str], col_names:List[str], row_lens:Optional[List[int]]=None, col_lens:Optional[List[int]]=None) -> Tuple[List[str], List[str]]:
+    def validate_matrix_data(cls, matrix: Union[np.array, scipy.sparse.sparray], row_names:List[str], col_names:List[str], row_lens:Optional[np.ndarray]=None, col_lens:Optional[np.ndarray]=None) -> Tuple[List[str], List[str]]:
         """Check for consistency between a matrix and row/column labels
 
         Args:
@@ -646,7 +469,7 @@ class DataMatrix():
 
 
     @classmethod
-    def write_dense(cls, matrix:Union[np.array, scipy.sparse.sparray], file_name: Union[PathLike, str], row_names:List[str], col_names:List[str], row_lengths:Optional[List[int]]=None, col_lengths:Optional[List[int]]=None, data_type:Optional[str]=""):
+    def write_dense(cls, matrix:Union[np.array, scipy.sparse.sparray], file_name: Union[PathLike, str], row_names:List[str], col_names:List[str], row_lengths:Optional[np.ndarray]=None, col_lengths:Optional[np.ndarray]=None, data_type:Optional[str]=""):
         """Writes a dense matrix to an hdf5 file.
         
         Args:
@@ -662,32 +485,30 @@ class DataMatrix():
         row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names)
         
 
-        f = h5py.File(file_name, 'w')
-        f.attrs[cls._DOMAINATOR_MATRIX_FILE_VERSION_ATTR] = cls._DOMAINATOR_MATRIX_FILE_VERSION
-        f.attrs[cls._ARRAY_TYPE_ATTR] = cls._DENSE
-        f.create_dataset(cls._DENSE_DATASET, data=matrix)
-        
-        
-        f.create_dataset(cls._ROW_LABELS_DATASET, data=row_names, dtype=UTF8_h5py_encoding)
-        
-        if row_lengths is not None:
-            f.create_dataset(cls._ROW_LENGTHS_DATASET, data=row_lengths)
-
-
-        if row_names is col_names and row_lengths is col_lengths:
-            f.attrs[cls._SYMMETRIC_LABELS_ATTR] = True
-        else:
-            f.attrs[cls._SYMMETRIC_LABELS_ATTR] = False
-            f.create_dataset(cls._COL_LABELS_DATASET, data=col_names, dtype=UTF8_h5py_encoding)
-            if col_lengths is not None:
-                f.create_dataset(cls._COL_LENGTHS_DATASET, data=col_lengths)
-
-        f.attrs[cls._DATA_TYPE_ATTR] = data_type
+        with h5py.File(file_name, 'w') as f:
+            f.attrs[cls._MATRIX_FILE_VERSION_ATTR] = cls._MATRIX_FILE_VERSION
+            f.attrs[cls._ARRAY_TYPE_ATTR] = cls._DENSE
+            f.create_dataset(cls._DENSE_DATASET, data=matrix)
             
-        f.close()
+            
+            f.create_dataset(cls._ROW_LABELS_DATASET, data=row_names, dtype=UTF8_h5py_encoding)
+            
+            if row_lengths is not None:
+                f.create_dataset(cls._ROW_LENGTHS_DATASET, data=row_lengths)
+
+
+            if row_names is col_names and row_lengths is col_lengths:
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = True
+            else:
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = False
+                f.create_dataset(cls._COL_LABELS_DATASET, data=col_names, dtype=UTF8_h5py_encoding)
+                if col_lengths is not None:
+                    f.create_dataset(cls._COL_LENGTHS_DATASET, data=col_lengths)
+
+            f.attrs[cls._DATA_TYPE_ATTR] = data_type
 
     @classmethod
-    def write_dense_text(cls, matrix:Union[np.array, scipy.sparse.sparray], file_name: Union[PathLike, str], row_names:List[str], col_names:List[str], row_lengths:Optional[List[int]]=None, col_lengths:Optional[List[int]]=None, data_type:Optional[str]=""):
+    def write_dense_text(cls, matrix:Union[np.array, scipy.sparse.sparray], file_name: Union[PathLike, str], row_names:List[str], col_names:List[str], row_lengths:Optional[np.ndarray]=None, col_lengths:Optional[np.ndarray]=None, data_type:Optional[str]=""):
         """Writes a dense matrix to a text file.
         
         Args:
@@ -711,12 +532,527 @@ class DataMatrix():
         outfile.close()
 
 
-class MaxTree():
-    """ 
-        Holds a maximum spanning tree from a DataMatrix
+class DenseDataMatrix(DataMatrix):
+    """
+    Dense matrix implementation using numpy arrays.
     
-        When skip_zeros is True, but there is no MST without going through 0-weight edges, then the "MaxTree" will actually be several unconnected sub-trees.
+    This class stores matrix data as a numpy.ndarray, optimized for matrices
+    with many non-zero values. For matrices with many zeros, consider using
+    SparseDataMatrix instead.
+    
+    Attributes:
+        data: numpy.ndarray containing the matrix values
+        rows: List of row labels (inherited from DataMatrix)
+        columns: List of column labels (inherited from DataMatrix)
+        row_to_idx: Dictionary mapping row names to indices (inherited)
+        column_to_idx: Dictionary mapping column names to indices (inherited)
+        row_lengths: Optional numpy array of sequence lengths for rows (inherited)
+        column_lengths: Optional numpy array of sequence lengths for columns (inherited)
+        data_type: String describing data type (inherited)
+    """
+    
+    def __init__(self, data: np.ndarray, row_names: List[str], col_names: List[str], 
+                 row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None, 
+                 data_type: str = None):
+        """
+        Initialize a dense data matrix.
+        
+        Args:
+            data: 2D numpy array or array-like object (will be copied). If sparse, 
+                  will be converted to dense via toarray()
+            row_names: List of row labels, length must match data.shape[0]
+            col_names: List of column labels, length must match data.shape[1]
+            row_lengths: Optional sequence lengths for rows (array-like, stored as numpy array)
+            col_lengths: Optional sequence lengths for columns (array-like, stored as numpy array)
+            data_type: Optional string describing the data type (e.g., 'score', 'norm_score')
+        
+        Raises:
+            ValueError: If data dimensions don't match label lengths
+        """
+        # Validate before calling super().__init__
+        DataMatrix.validate_matrix_data(data, row_names, col_names, row_lengths, col_lengths)
+        super().__init__(row_names, col_names, row_lengths, col_lengths, data_type)
+        
+        if scipy.sparse.issparse(data):
+            self.data = data.toarray()
+        else:
+            self.data = np.array(data, copy=True)
+    
+    @property
+    def shape(self):
+        return self.data.shape
+    
+    @property
+    def symmetric_values(self) -> bool:
+        """Check if matrix values are symmetric."""
+        if not self.symmetric_labels:
+            return False
+        
+        # Check upper triangular against lower triangular
+        upper_triangular = self.triangular(side='upper', include_diagonal=False, skip_zeros=False, index_style='index')
+        
+        for row_idx, col_idx, value in upper_triangular:
+            transpose_value = self.data[col_idx, row_idx]
+            if not np.isclose(value, transpose_value):
+                return False
+        
+        return True
+    
+    @classmethod
+    def _from_hdf5(cls, matrix_file: Union[PathLike, str]) -> 'DenseDataMatrix':
+        """Load a dense matrix from HDF5 file."""
+        with h5py.File(matrix_file, 'r') as f:
+            # Validate file format
+            cls._validate_hdf5_attributes(f)
+            
+            if f.attrs[cls._ARRAY_TYPE_ATTR] != cls._DENSE:
+                raise ValueError(f"Expected DENSE matrix, got {f.attrs[cls._ARRAY_TYPE_ATTR]}")
+            
+            # Load data
+            data = f[cls._DENSE_DATASET][:]
+            row_names, _ = cls.parse_axis_index(f[cls._ROW_LABELS_DATASET])
+            
+            if f.attrs[cls._SYMMETRIC_LABELS_ATTR]:
+                col_names = row_names
+            else:
+                col_names, _ = cls.parse_axis_index(f[cls._COL_LABELS_DATASET])
+            
+            row_lengths = f[cls._ROW_LENGTHS_DATASET][:] if cls._ROW_LENGTHS_DATASET in f else None
+            col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
+            data_type = f.attrs.get(cls._DATA_TYPE_ATTR, "")
+            
+            return cls(data, row_names, col_names, row_lengths, col_lengths, data_type)
+    
+    @classmethod
+    def _from_text(cls, matrix_file: Union[PathLike, str]) -> 'DenseDataMatrix':
+        """Load a dense matrix from text file."""
+        try:
+            mat_file = pd.read_csv(matrix_file, sep="\t", index_col=0)
+        except UnicodeDecodeError:
+            raise ValueError(f"Expecting utf-8 encoded matrix file, but found invalid unicode byte.")
+        
+        row_names = list(mat_file.index)
+        col_names = list(mat_file.columns)
+        data = mat_file.to_numpy()
+        
+        return cls(data, row_names, col_names)
+    
+    def _read_hdf5(self, matrix_file: Union[PathLike, str]):
+        """Not used - handled by _from_hdf5 classmethod"""
+        raise NotImplementedError("Use DenseDataMatrix._from_hdf5() instead")
+    
+    def iter_data(self, index_style="name", skip_zeros=True):
+        """Iterate over all values in the dense matrix."""
+        index_style = index_style.lower()
+        if index_style not in {"name", "index"}:
+            raise ValueError("index_style must be 'name' or 'index'.")
+        
+        for r in range(self.data.shape[0]):
+            for c in range(self.data.shape[1]):
+                value = self.data[r, c]
+                if not skip_zeros or value != 0:
+                    if index_style == "name":
+                        yield self.rows[r], self.columns[c], value
+                    else:
+                        yield r, c, value
+    
+    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+        """Get triangular part of the matrix."""
+        if self.data.shape[0] != self.data.shape[1]:
+            raise NotImplementedError(f"Triangular only supported for square matrices")
+        
+        side = side.lower()
+        if side not in {"upper", "lower"}:
+            raise ValueError("side must be 'lower' or 'upper'")
+        
+        index_style = index_style.lower()
+        if index_style not in {"name", "index"}:
+            raise ValueError("index_style must be 'name' or 'index'.")
+        
+        out = []
+        
+        for r in range(self.data.shape[0]):
+            if side == "lower":
+                start_c = 0
+                end_c = r + 1 if include_diagonal else r
+            else:  # upper
+                start_c = r if include_diagonal else r + 1
+                end_c = self.data.shape[1]
+            
+            for c in range(start_c, end_c):
+                value = self.data[r, c]
+                
+                if agg is not None:
+                    symmetric_value = self.data[c, r]
+                    if skip_zeros and value == 0 and symmetric_value == 0:
+                        continue
+                    value = agg(value, symmetric_value)
+                elif skip_zeros and value == 0:
+                    continue
+                
+                if index_style == "name":
+                    out.append((self.rows[r], self.columns[c], value))
+                else:
+                    out.append((r, c, value))
+        
+        return out
+    
+    def itervalues(self) -> Iterator[float]:
+        """Yield all values row by row."""
+        for r in range(self.shape[0]):
+            for c in range(self.shape[1]):
+                yield self.data[r, c]
+    
+    def convert_to_sparse(self) -> 'SparseDataMatrix':
+        """Convert to sparse representation."""
+        return SparseDataMatrix(
+            scipy.sparse.csr_array(self.data),
+            self.rows, self.columns,
+            self.row_lengths, self.column_lengths,
+            self.data_type
+        )
+    
+    def convert_to_dense(self) -> 'DenseDataMatrix':
+        """Return self (already dense)."""
+        return self
+    
+    def toarray(self) -> np.ndarray:
+        """Return as numpy array."""
+        return self.data
 
+
+class SparseDataMatrix(DataMatrix):
+    """
+    Sparse matrix implementation using scipy CSR (Compressed Sparse Row) arrays.
+    
+    This class stores matrix data as a scipy.sparse.csr_array, optimized for matrices
+    with many zero values. The sparse storage format saves memory and accelerates
+    operations that skip zeros. For dense matrices (many non-zeros), use DenseDataMatrix.
+    
+    The CSR format is particularly efficient for row-based operations and arithmetic.
+    Zeros are automatically eliminated and indices are sorted during initialization.
+    
+    Attributes:
+        data: scipy.sparse.csr_array containing the sparse matrix
+        rows: List of row labels (inherited from DataMatrix)
+        columns: List of column labels (inherited from DataMatrix)
+        row_to_idx: Dictionary mapping row names to indices (inherited)
+        column_to_idx: Dictionary mapping column names to indices (inherited)
+        row_lengths: Optional numpy array of sequence lengths for rows (inherited)
+        column_lengths: Optional numpy array of sequence lengths for columns (inherited)
+        data_type: String describing data type (inherited)
+    """
+    
+    def __init__(self, data: scipy.sparse.csr_array, row_names: List[str], col_names: List[str],
+                 row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None,
+                 data_type: str = None):
+        """
+        Initialize a sparse data matrix.
+        
+        The input data is converted to CSR format if needed, and zeros are eliminated
+        with indices sorted for efficiency.
+        
+        Args:
+            data: Scipy sparse matrix or array-like object. Will be converted to 
+                  scipy.sparse.csr_array format and copied. Dense arrays will be converted to sparse.
+            row_names: List of row labels, length must match data.shape[0]
+            col_names: List of column labels, length must match data.shape[1]
+            row_lengths: Optional sequence lengths for rows (array-like, stored as numpy array)
+            col_lengths: Optional sequence lengths for columns (array-like, stored as numpy array)
+            data_type: Optional string describing the data type (e.g., 'score', 'norm_score')
+        
+        Raises:
+            ValueError: If data dimensions don't match label lengths
+        """
+        # Validate before calling super().__init__
+        DataMatrix.validate_matrix_data(data, row_names, col_names, row_lengths, col_lengths)
+        super().__init__(row_names, col_names, row_lengths, col_lengths, data_type)
+        
+        if not scipy.sparse.issparse(data):
+            self.data = scipy.sparse.csr_array(data)
+        elif not isinstance(data, scipy.sparse.csr_array):
+            self.data = scipy.sparse.csr_array(data)
+        else:
+            self.data = data.copy()
+        
+        self.data.eliminate_zeros()
+        self.data.sort_indices()
+    
+    @property
+    def shape(self) -> Tuple[int, int]:
+        """Return shape of the matrix as (rows, columns)."""
+        return self.data.shape
+    
+    @property
+    def nnz(self) -> int:
+        """Return number of non-zero elements (efficient for sparse matrices)."""
+        return self.data.nnz
+    
+    @property
+    def symmetric_values(self) -> bool:
+        """Check if matrix values are symmetric (optimized for sparse)."""
+        if not self.symmetric_labels:
+            return False
+        
+        # Get upper and lower triangular non-zero elements
+        upper_triangular = self.triangular(side='upper', include_diagonal=False, skip_zeros=True, index_style='index')
+        lower_triangular = self.triangular(side='lower', include_diagonal=False, skip_zeros=True, index_style='index')
+        
+        if len(upper_triangular) != len(lower_triangular):
+            return False
+        
+        # Create transposed lower triangular for comparison
+        lower_transposed = [(l_c, l_r, l_v) for l_r, l_c, l_v in lower_triangular]
+        lower_transposed.sort()
+        
+        # Compare element by element
+        for (u_r, u_c, u_v), (lt_r, lt_c, lt_v) in zip(upper_triangular, lower_transposed):
+            if (u_r, u_c) != (lt_r, lt_c):
+                return False
+            if not np.isclose(u_v, lt_v):
+                return False
+        
+        return True
+    
+    @classmethod
+    def _from_hdf5(cls, matrix_file: Union[PathLike, str]) -> 'SparseDataMatrix':
+        """Load a sparse matrix from HDF5 file."""
+        with h5py.File(matrix_file, 'r') as f:
+            # Validate file format
+            cls._validate_hdf5_attributes(f)
+            
+            if f.attrs[cls._ARRAY_TYPE_ATTR] != cls._SPARSE_CSR:
+                raise ValueError(f"Expected SPARSE_CSR matrix, got {f.attrs[cls._ARRAY_TYPE_ATTR]}")
+            
+            # Load data
+            row_names, _ = cls.parse_axis_index(f[cls._ROW_LABELS_DATASET])
+            
+            if f.attrs[cls._SYMMETRIC_LABELS_ATTR]:
+                col_names = row_names
+            else:
+                col_names, _ = cls.parse_axis_index(f[cls._COL_LABELS_DATASET])
+            
+            data = scipy.sparse.csr_array(
+                (f[cls._SPARSE_VALUES_DATASET][:], 
+                 f[cls._SPARSE_CSR_INDICES_DATASET][:], 
+                 f[cls._SPARSE_CSR_INDPTR_DATASET][:]), 
+                (len(row_names), len(col_names))
+            )
+            
+            row_lengths = f[cls._ROW_LENGTHS_DATASET][:] if cls._ROW_LENGTHS_DATASET in f else None
+            col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
+            data_type = f.attrs.get(cls._DATA_TYPE_ATTR, "")
+            
+            return cls(data, row_names, col_names, row_lengths, col_lengths, data_type)
+    
+    def _read_hdf5(self, matrix_file: Union[PathLike, str]):
+        """Not used - handled by _from_hdf5 classmethod"""
+        raise NotImplementedError("Use SparseDataMatrix._from_hdf5() instead")
+    
+    def iter_data(self, index_style="name", skip_zeros=True):
+        """Iterate over values in the sparse matrix."""
+        index_style = index_style.lower()
+        if index_style not in {"name", "index"}:
+            raise ValueError("index_style must be 'name' or 'index'.")
+        
+        if skip_zeros:
+            # Iterate only over non-zero values (efficient for sparse)
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+            
+            for r in range(self.data.shape[0]):
+                for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
+                    c = self.data.indices[ind]
+                    if index_style == "name":
+                        yield self.rows[r], self.columns[c], self.data.data[ind]
+                    else:
+                        yield r, c, self.data.data[ind]
+        else:
+            # Have to iterate over entire matrix including zeros
+            for r in range(self.data.shape[0]):
+                for c in range(self.data.shape[1]):
+                    value = self.data[r, c]
+                    if index_style == "name":
+                        yield self.rows[r], self.columns[c], value
+                    else:
+                        yield r, c, value
+    
+    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+        """Get triangular part of the matrix (optimized for sparse)."""
+        if self.data.shape[0] != self.data.shape[1]:
+            raise NotImplementedError(f"Triangular only supported for square matrices")
+        
+        side = side.lower()
+        if side not in {"upper", "lower"}:
+            raise ValueError("side must be 'lower' or 'upper'")
+        
+        index_style = index_style.lower()
+        if index_style not in {"name", "index"}:
+            raise ValueError("index_style must be 'name' or 'index'.")
+        
+        out = []
+        
+        if agg is not None and skip_zeros:
+            # Optimized path for sparse with aggregation
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+            
+            positions_to_process = set()
+            
+            # Collect positions where at least one of (r,c) or (c,r) is non-zero
+            for r in range(self.data.shape[0]):
+                for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
+                    c = self.data.indices[ind]
+                    
+                    if side == "lower":
+                        start_c, end_c = 0, r + 1 if include_diagonal else r
+                    else:
+                        start_c, end_c = r if include_diagonal else r + 1, self.data.shape[1]
+                    
+                    if start_c <= c < end_c:
+                        positions_to_process.add((r, c))
+                    
+                    # Check complement
+                    if side == "lower":
+                        comp_start_c, comp_end_c = 0, c + 1 if include_diagonal else c
+                    else:
+                        comp_start_c, comp_end_c = c if include_diagonal else c + 1, self.data.shape[1]
+                    
+                    if comp_start_c <= r < comp_end_c:
+                        positions_to_process.add((c, r))
+            
+            for r, c in sorted(positions_to_process):
+                value = self.data[r, c]
+                symmetric_value = self.data[c, r]
+                
+                if skip_zeros and value == 0 and symmetric_value == 0:
+                    continue
+                
+                agg_value = agg(value, symmetric_value)
+                
+                if index_style == "name":
+                    out.append((self.rows[r], self.columns[c], agg_value))
+                else:
+                    out.append((r, c, agg_value))
+        
+        elif skip_zeros:
+            # Sparse without agg - only iterate non-zeros
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+            
+            for r in range(self.data.shape[0]):
+                if side == "lower":
+                    start_c, end_c = 0, r + 1 if include_diagonal else r
+                else:
+                    start_c, end_c = r if include_diagonal else r + 1, self.data.shape[1]
+                
+                for ind in range(self.data.indptr[r], self.data.indptr[r+1]):
+                    c = self.data.indices[ind]
+                    
+                    if start_c <= c < end_c:
+                        value = self.data.data[ind]
+                        
+                        if index_style == "name":
+                            out.append((self.rows[r], self.columns[c], value))
+                        else:
+                            out.append((r, c, value))
+        
+        else:
+            # Need all values including zeros - use dense logic
+            for r in range(self.data.shape[0]):
+                if side == "lower":
+                    start_c, end_c = 0, r + 1 if include_diagonal else r
+                else:
+                    start_c, end_c = r if include_diagonal else r + 1, self.data.shape[1]
+                
+                for c in range(start_c, end_c):
+                    value = self.data[r, c]
+                    
+                    if agg is not None:
+                        symmetric_value = self.data[c, r]
+                        value = agg(value, symmetric_value)
+                    
+                    if index_style == "name":
+                        out.append((self.rows[r], self.columns[c], value))
+                    else:
+                        out.append((r, c, value))
+        
+        return out
+    
+    def itervalues(self) -> Iterator[float]:
+        """Yield all values row by row."""
+        for r in range(self.shape[0]):
+            for c in range(self.shape[1]):
+                yield self.data[r, c]
+    
+    def convert_to_sparse(self) -> 'SparseDataMatrix':
+        """Return self (already sparse)."""
+        return self
+    
+    def convert_to_dense(self) -> 'DenseDataMatrix':
+        """Convert to dense representation."""
+        return DenseDataMatrix(
+            self.data.toarray(),
+            self.rows, self.columns,
+            self.row_lengths, self.column_lengths,
+            self.data_type
+        )
+    
+    def toarray(self) -> np.ndarray:
+        """Return as numpy array."""
+        return self.data.toarray()
+
+
+class MaxTree():
+    """Maximum Spanning Tree (MST) from a DataMatrix.
+    
+    A Maximum Spanning Tree is a subgraph that connects all nodes with the maximum
+    total edge weight while avoiding cycles. This is useful for clustering and
+    visualization of similarity/distance matrices.
+    
+    The MST is computed using Kruskal's algorithm with union-find for cycle detection.
+    Edges are processed from highest to lowest weight, and only edges connecting
+    different components are added to the tree.
+    
+    Use Cases:
+        - Hierarchical clustering: Cut tree at different thresholds to create clusters
+        - Network visualization: Display most significant relationships
+        - Sequence similarity networks: Connect most similar sequences
+    
+    Args:
+        matrix: DataMatrix containing edge weights (typically similarity or distance scores)
+        skip_zeros: If True, zero-weight edges are excluded. When there is no connected
+                   MST without zero edges, the result will be a forest (multiple trees).
+    
+    Attributes:
+        n_nodes: Number of nodes in the graph
+        edges: Array of shape (n_edges, 4) containing [node_i, node_j, weight, gap_count]
+               where gap_count is the number of edges between consecutive MST edges
+        mst: Array of indices indicating which edges are in the MST
+        edges_by_threshold: Array of (edge_count, threshold) pairs for MST edges
+        cluster_count_by_threshold: Array of (threshold, cluster_count) showing how
+                                   clusters form at different thresholds
+        cluster_count_by_edge_count: Array of (edge_count, cluster_count) including
+                                    non-MST edges between MST edges
+    
+    Properties:
+        mst_edges: List of (node_i, node_j, weight) tuples for MST edges only
+    
+    Methods:
+        export_for_interactive_viz: Export minimal structure for client-side clustering
+    
+    Example:
+        >>> matrix = DataMatrix.from_file("similarities.hdf5")
+        >>> tree = MaxTree(matrix, skip_zeros=True)
+        >>> # Get clusters at a specific threshold
+        >>> mst_edges = tree.mst_edges
+        >>> # Find how many clusters at different thresholds
+        >>> threshold_clusters = tree.cluster_count_by_threshold
+    
+    Note:
+        When skip_zeros=True and the matrix is disconnected (contains at least one pair of nodes with no path),
+        the resulting MST will be a forest of multiple disconnected trees, one per
+        connected component.
     """
 
     def __init__(self, matrix:DataMatrix, skip_zeros=True):

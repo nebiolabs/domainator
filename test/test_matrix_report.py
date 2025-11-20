@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from domainator import matrix_report
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, DenseDataMatrix
 from domainator.matrix_report import MaxTree
 import tempfile
 import pytest
@@ -48,7 +48,7 @@ class TestInteractiveHTML:
             [5, 8, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         viz_data = tree.export_for_interactive_viz()
@@ -77,7 +77,7 @@ class TestInteractiveHTML:
             [3, 6, 9, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         with tempfile.TemporaryDirectory() as output_dir:
             input_file = os.path.join(output_dir, "test_matrix.hdf5")

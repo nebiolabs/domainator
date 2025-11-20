@@ -7,7 +7,7 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from os import PathLike
 import sys
 from domainator.build_projection import write_cytoscape_xgmml
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, SparseDataMatrix
 import pandas as pd
 from pathlib import Path
 from domainator import __version__, RawAndDefaultsFormatter
@@ -116,9 +116,9 @@ def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, 
         newick_file: path to write the newick file to
     """
 
-    if data_matrix.sparse:
+    if isinstance(data_matrix, SparseDataMatrix):
         warnings.warn(f"Input is a sparse matrix. Distance matrices are usually not sparse. You may want to rerun seq_dist with --mode score_dist and output to --dense or --dense_text.")
-        data_matrix.convert_to_dense()
+        data_matrix = data_matrix.convert_to_dense()
     if algorithm == "upgma":
         linkage_matrix = hierarchy.average(squareform(data_matrix.data, checks=False))
     

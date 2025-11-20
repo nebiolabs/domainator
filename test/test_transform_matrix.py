@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import scipy
 import scipy.sparse
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, DenseDataMatrix
 from helpers import compare_iterables
 import pytest
 
@@ -63,8 +63,8 @@ def test_transform_matrix_1(output_mode, expected, shared_datadir):
         row_lengths = [1, 2, 3, 4, 5]
         col_lengths = [7, 8, 9, 10, 11]
 
-        matrix = DataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
-        expected_matrix = DataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
+        matrix = DenseDataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
+        expected_matrix = DenseDataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
         matrix.write(input_file, "dense")
         transform_matrix.main(["-i", input_file, "--dense", dense_out, "--sparse", sparse_out, "--mode", output_mode])
         dense_output_matrix = DataMatrix.from_file(dense_out)
@@ -101,8 +101,8 @@ def test_transform_matrix_2(shared_datadir):
         row_lengths = [1, 2, 3, 4, 5]
         col_lengths = [7, 8, 9, 10, 11]
 
-        matrix = DataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
-        expected_matrix = DataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
+        matrix = DenseDataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
+        expected_matrix = DenseDataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
         matrix.write(input_file, "dense")
         transform_matrix.main(["-i", input_file, "--dense", dense_out, "--mode", output_mode])
         dense_output_matrix = DataMatrix.from_file(dense_out)

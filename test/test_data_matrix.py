@@ -1,37 +1,39 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree
 import scipy.sparse
 import numpy as np
 import pytest_datadir
 
 # Test initialization of DataMatrix
 def test_init():
-    # Test case 1: Initialize with data
+    # Test case 1: Initialize DenseDataMatrix with data
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['X', 'Y', 'Z']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     assert matrix.shape == (3, 3)
     assert matrix.size == 9
-    assert not matrix.sparse
+    assert isinstance(matrix, DenseDataMatrix)
     assert matrix.rows == row_names
     assert matrix.columns == col_names
     assert matrix.row_lengths is None
     assert matrix.column_lengths is None
     assert matrix.data_type == ""
 
-    # Test case 2: Initialize without data
-    matrix = DataMatrix()
-    assert matrix.shape == (0, 0)
-    assert matrix.size == 0
-    assert not matrix.sparse
-    assert matrix.rows is None
-    assert matrix.columns is None
+    # Test case 2: Initialize SparseDataMatrix with data
+    sparse_data = scipy.sparse.csr_array(data)
+    matrix = SparseDataMatrix(sparse_data, row_names, col_names)
+    assert matrix.shape == (3, 3)
+    assert matrix.size == 9
+    assert isinstance(matrix, SparseDataMatrix)
+    assert matrix.rows == row_names
+    assert matrix.columns == col_names
     assert matrix.row_lengths is None
     assert matrix.column_lengths is None
     assert matrix.data_type == ""
+
 
 # Test from_file method of DataMatrix
 
@@ -47,7 +49,10 @@ def test_from_file(shared_datadir, filename, sparse):
     matrix = DataMatrix.from_file(matrix_file)
     assert matrix.shape == (3, 3)
     assert matrix.size == 9
-    assert matrix.sparse is sparse
+    if sparse:
+        assert isinstance(matrix, SparseDataMatrix)
+    else:
+        assert isinstance(matrix, DenseDataMatrix)
     assert matrix.rows == ['A', 'B', 'C']
     assert matrix.columns == ['X', 'Y', 'Z']
     assert matrix.row_lengths is None
@@ -61,18 +66,18 @@ def test_convert_to_sparse():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['X', 'Y', 'Z']
-    matrix = DataMatrix(data, row_names, col_names)
-    matrix.convert_to_sparse()
-    assert matrix.sparse
-    assert matrix.data.shape == (3, 3)
+    matrix = DenseDataMatrix(data, row_names, col_names)
+    sparse_matrix = matrix.convert_to_sparse()
+    assert isinstance(sparse_matrix, SparseDataMatrix)
+    assert sparse_matrix.shape == (3, 3)
 
-    # Test case 2: Convert already sparse matrix to sparse
-    matrix = DataMatrix()
-    matrix.sparse = True
-    matrix.data = scipy.sparse.csr_matrix([[1, 0, 0], [0, 2, 0], [0, 0, 3]])
-    matrix.convert_to_sparse()
-    assert matrix.sparse
-    assert matrix.data.shape == (3, 3)
+    # Test case 2: Convert already sparse matrix to sparse (returns self)
+    sparse_data = scipy.sparse.csr_array([[1, 0, 0], [0, 2, 0], [0, 0, 3]])
+    matrix = SparseDataMatrix(sparse_data, ['A', 'B', 'C'], ['X', 'Y', 'Z'])
+    result = matrix.convert_to_sparse()
+    assert result is matrix
+    assert isinstance(result, SparseDataMatrix)
+    assert result.shape == (3, 3)
 
 # Test iter_data order and zeros for synthetic data
 def test_iter_data_order_and_zeros_fake():
@@ -83,8 +88,8 @@ def test_iter_data_order_and_zeros_fake():
     row_names = ['A', 'B', 'C']
     col_names = ['X', 'Y', 'Z']
 
-    dense_matrix = DataMatrix(data, row_names, col_names)
-    sparse_matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    dense_matrix = DenseDataMatrix(data, row_names, col_names)
+    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
 
     dense_iter = [(r, c, v) for r, c, v in dense_matrix.iter_data() if v != 0]
     sparse_iter = [(r, c, v) for r, c, v in sparse_matrix.iter_data()]
@@ -120,7 +125,7 @@ def test_triangular_dense():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Test lower triangular without diagonal
     result = matrix.triangular(side='lower', include_diagonal=False, skip_zeros=True)
@@ -149,7 +154,7 @@ def test_triangular_sparse():
     data = np.array([[1, 0, 3], [0, 5, 0], [7, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     # Test lower triangular without diagonal, skip zeros
     result = matrix.triangular(side='lower', include_diagonal=False, skip_zeros=True)
@@ -173,9 +178,9 @@ def test_triangular_include_zeros():
     data = np.array([[1, 0, 3], [0, 5, 0], [7, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    
-    dense_matrix = DataMatrix(data, row_names, col_names)
-    sparse_matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+
+    dense_matrix = DenseDataMatrix(data, row_names, col_names)
+    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     # Test lower triangular with diagonal, including zeros
     dense_result = dense_matrix.triangular(side='lower', include_diagonal=True, skip_zeros=False)
@@ -199,7 +204,7 @@ def test_triangular_index_style():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Test with index_style='name' (default)
     result_name = matrix.triangular(side='lower', include_diagonal=True, skip_zeros=True, index_style='name')
@@ -229,8 +234,8 @@ def test_triangular_dense_sparse_consistency():
     row_names = ['A', 'B', 'C', 'D']
     col_names = ['A', 'B', 'C', 'D']
     
-    dense = DataMatrix(data, row_names, col_names)
-    sparse = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    dense = DenseDataMatrix(data, row_names, col_names)
+    sparse = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     # Test all combinations
     for side in ['lower', 'upper']:
@@ -249,7 +254,7 @@ def test_triangular_non_square_error():
     data = np.array([[1, 2, 3], [4, 5, 6]])
     row_names = ['A', 'B']
     col_names = ['X', 'Y', 'Z']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     with pytest.raises(NotImplementedError, match="Triangular only supported for square matrices"):
         matrix.triangular()
@@ -261,7 +266,7 @@ def test_triangular_invalid_parameters():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Test invalid side
     with pytest.raises(ValueError, match="side must be 'lower' or 'upper'"):
@@ -281,7 +286,7 @@ def test_triangular_sorting():
                      [13, 14, 15, 16]])
     row_names = ['A', 'B', 'C', 'D']
     col_names = ['A', 'B', 'C', 'D']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Test lower triangular with diagonal
     result = matrix.triangular(side='lower', include_diagonal=True, skip_zeros=True, index_style='index')
@@ -305,7 +310,7 @@ def test_symmetric_values_dense_symmetric():
     data = np.array([[1, 2, 3], [2, 5, 6], [3, 6, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     assert matrix.symmetric_values is True, "Symmetric matrix should return True"
 
@@ -316,7 +321,7 @@ def test_symmetric_values_dense_non_symmetric():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     assert matrix.symmetric_values is False, "Non-symmetric matrix should return False"
 
@@ -327,7 +332,7 @@ def test_symmetric_values_sparse_symmetric():
     data = np.array([[1, 0, 3], [0, 5, 0], [3, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     assert matrix.symmetric_values is True, "Symmetric sparse matrix should return True"
 
@@ -338,7 +343,7 @@ def test_symmetric_values_sparse_non_symmetric_values():
     data = np.array([[1, 0, 3], [0, 5, 0], [7, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     assert matrix.symmetric_values is False, "Sparse matrix with asymmetric values should return False"
 
@@ -349,7 +354,7 @@ def test_symmetric_values_sparse_non_symmetric_structure():
     data = np.array([[1, 2, 3], [0, 5, 0], [0, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     assert matrix.symmetric_values is False, "Sparse matrix with asymmetric structure should return False"
 
@@ -363,7 +368,7 @@ def test_symmetric_values_floating_point_tolerance():
                      [3.7, 6.3 + 1e-10, 9.0]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     assert matrix.symmetric_values is True, "Matrix with tiny floating point errors should be considered symmetric"
     
@@ -371,7 +376,7 @@ def test_symmetric_values_floating_point_tolerance():
     data = np.array([[1.0, 2.5, 3.7], 
                      [2.5, 5.0, 6.3], 
                      [3.7, 6.3 + 0.01, 9.0]])
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     assert matrix.symmetric_values is False, "Matrix with significant differences should not be considered symmetric"
 
@@ -382,7 +387,7 @@ def test_symmetric_values_non_symmetric_labels():
     data = np.array([[1, 2, 3], [2, 5, 6], [3, 6, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['X', 'Y', 'Z']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     assert matrix.symmetric_values is False, "Matrix with non-symmetric labels should return False"
 
@@ -395,8 +400,8 @@ def test_symmetric_values_dense_sparse_consistency():
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
     
-    dense = DataMatrix(data_symmetric, row_names, col_names)
-    sparse = DataMatrix(scipy.sparse.csr_array(data_symmetric), row_names, col_names)
+    dense = DenseDataMatrix(data_symmetric, row_names, col_names)
+    sparse = SparseDataMatrix(scipy.sparse.csr_array(data_symmetric), row_names, col_names)
     
     assert dense.symmetric_values == sparse.symmetric_values == True, \
         "Dense and sparse symmetric matrices should both return True"
@@ -404,8 +409,8 @@ def test_symmetric_values_dense_sparse_consistency():
     # Test with non-symmetric data
     data_non_symmetric = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     
-    dense = DataMatrix(data_non_symmetric, row_names, col_names)
-    sparse = DataMatrix(scipy.sparse.csr_array(data_non_symmetric), row_names, col_names)
+    dense = DenseDataMatrix(data_non_symmetric, row_names, col_names)
+    sparse = SparseDataMatrix(scipy.sparse.csr_array(data_non_symmetric), row_names, col_names)
     
     assert dense.symmetric_values == sparse.symmetric_values == False, \
         "Dense and sparse non-symmetric matrices should both return False"
@@ -417,7 +422,7 @@ def test_triangular_agg_dense():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Test with sum aggregation
     result = matrix.triangular(side='lower', include_diagonal=False, skip_zeros=True, agg=lambda a, b: a + b)
@@ -450,7 +455,7 @@ def test_triangular_agg_sparse():
     data = np.array([[1, 0, 3], [0, 5, 0], [7, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     # Test with sum aggregation
     result = matrix.triangular(side='lower', include_diagonal=False, skip_zeros=True, agg=lambda a, b: a + b)
@@ -471,7 +476,7 @@ def test_triangular_agg_average():
     data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Test with average aggregation
     result = matrix.triangular(side='upper', include_diagonal=False, skip_zeros=True, 
@@ -493,8 +498,8 @@ def test_triangular_agg_dense_sparse_consistency():
     row_names = ['A', 'B', 'C', 'D']
     col_names = ['A', 'B', 'C', 'D']
     
-    dense = DataMatrix(data, row_names, col_names)
-    sparse = DataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+    dense = DenseDataMatrix(data, row_names, col_names)
+    sparse = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
     
     # Test with sum aggregation
     dense_result = dense.triangular(side='lower', include_diagonal=False, skip_zeros=True, 
@@ -514,7 +519,7 @@ def test_triangular_agg_skip_zeros_edge_case():
                      [0, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
     
     # Without agg: skips when value is zero
     result_no_agg = matrix.triangular(side='lower', include_diagonal=False, skip_zeros=True)
@@ -549,7 +554,7 @@ def test_triangular_agg_skip_zeros_edge_case():
                      [0, 0, 9]])
     row_names = ['A', 'B', 'C']
     col_names = ['A', 'B', 'C']
-    matrix = DataMatrix(data, row_names, col_names)
+    matrix = DenseDataMatrix(data, row_names, col_names)
 
     matrix.convert_to_sparse()
     
@@ -592,7 +597,7 @@ class TestMaxTree:
             [5, 8, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -614,7 +619,7 @@ class TestMaxTree:
             [3, 6, 9, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -637,7 +642,7 @@ class TestMaxTree:
             [0, 0, 0, 7, 0]
         ])
         row_names = ['A', 'B', 'C', 'D', 'E']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -655,7 +660,7 @@ class TestMaxTree:
             [0, 0, 10, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -695,7 +700,7 @@ class TestMaxTree:
             [5, 8, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         result = tree.edges_by_threshold
@@ -717,7 +722,7 @@ class TestMaxTree:
             [3, 6, 9, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         result = tree.edges_by_threshold
@@ -737,7 +742,7 @@ class TestMaxTree:
             [5, 8, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         result = tree.cluster_count_by_threshold
@@ -770,7 +775,7 @@ class TestMaxTree:
             [3, 6, 9, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         result = tree.cluster_count_by_threshold
@@ -791,7 +796,7 @@ class TestMaxTree:
             [5, 8, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         result = tree.cluster_count_by_edge_count
@@ -825,7 +830,7 @@ class TestMaxTree:
             [3, 6, 9, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         result = tree.cluster_count_by_edge_count
@@ -851,7 +856,7 @@ class TestMaxTree:
         """Test MaxTree with single node (edge case)"""
         data = np.array([[0]])
         row_names = ['A']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -866,7 +871,7 @@ class TestMaxTree:
             [5, 0]
         ])
         row_names = ['A', 'B']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -894,7 +899,7 @@ class TestMaxTree:
         ])
         row_names = ['A', 'B', 'C', 'D']
         sparse_data = scipy.sparse.csr_array(data)
-        matrix = DataMatrix(sparse_data, row_names, row_names)
+        matrix = SparseDataMatrix(sparse_data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -914,7 +919,7 @@ class TestMaxTree:
             [5, 5, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
@@ -936,7 +941,7 @@ class TestMaxTree:
             [8, 2, 7, 1, 0]
         ])
         row_names = ['A', 'B', 'C', 'D', 'E']
-        matrix = DataMatrix(data, row_names, row_names)
+        matrix = DenseDataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         
