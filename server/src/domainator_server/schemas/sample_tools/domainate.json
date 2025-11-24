@@ -1,0 +1,14 @@
+{
+  "id": "domainate",
+  "display_name": "Annotate domains",
+  "category": "Annotation",
+  "description": "Annotate GenBank records with domain calls",
+  "runner": "module",
+  "entry_point": "domainator.domainate",
+  "parameters": [
+    {"name": "Input sequences", "parameter": "input", "type": "file", "file_types": ["genbank", "fasta"], "required": true, "multiple": true},
+    {"name": "Reference databases", "parameter": "references", "type": "file", "file_types": ["hmm"], "required": true, "multiple": true},
+    {"name": "Output file", "parameter": "output", "type": "output", "required": true},
+    {"name": "CPU", "parameter": "cpu", "type": "integer", "default": 4}
+  ]
+}

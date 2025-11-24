@@ -1,0 +1,15 @@
+{
+  "id": "genome_annotation",
+  "display_name": "Genome Annotation Workflow",
+  "category": "Workflows",
+  "description": "Mock workflow that simulates annotation output",
+  "runner": "python",
+  "entry_point": "domainator_server/workflows/genome_annotation.py",
+  "parameters": [
+    {"name": "input", "type": "file", "required": true},
+    {"name": "output", "type": "output", "default": "workflow_result.txt"}
+  ],
+  "expected_outputs": [
+    {"name": "workflow_result", "type": "txt"}
+  ]
+}

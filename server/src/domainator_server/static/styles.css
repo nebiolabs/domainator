@@ -1,0 +1,236 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background-color: #f4f6f8;
+  color: #1d1d1f;
+  line-height: 1.5;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background-color: #111827;
+  color: #f9fafb;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.brand .tagline {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e5e7eb;
+}
+
+#messages {
+  min-height: 1.5rem;
+  max-width: 320px;
+  text-align: right;
+  font-size: 0.95rem;
+}
+
+#messages.info {
+  color: #bfdbfe;
+}
+
+#messages.success {
+  color: #bbf7d0;
+}
+
+#messages.error {
+  color: #fecaca;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.panel {
+  background-color: #ffffff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+#upload-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+#upload-form button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  background-color: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+#upload-form button:hover {
+  background-color: #1d4ed8;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.data-table tbody tr:hover {
+  background-color: #f3f4f6;
+}
+
+.delete-button {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  background-color: #ef4444;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.delete-button:hover {
+  background-color: #dc2626;
+}
+
+.tool-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.tool-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  background-color: #f9fafb;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.tool-card:hover,
+.tool-card.active {
+  border-color: #2563eb;
+}
+
+.tool-card h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+}
+
+.tool-card .category {
+  font-size: 0.8rem;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tool-detail form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tool-detail label {
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.tool-detail .param-help {
+  font-weight: 400;
+  color: #6b7280;
+  font-size: 0.78rem;
+}
+
+.tool-detail input,
+.tool-detail select,
+.tool-detail textarea {
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  font-size: 0.9rem;
+}
+
+.tool-detail button {
+  align-self: flex-start;
+  padding: 0.6rem 1.2rem;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.tool-detail button:hover {
+  background-color: #1d4ed8;
+}
+
+.job-status {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.job-status.running {
+  color: #2563eb;
+}
+
+.job-status.completed {
+  color: #047857;
+}
+
+.job-status.failed {
+  color: #b91c1c;
+}
+
+.job-status.cancelled {
+  color: #92400e;
+}
+
+.log-link,
+.download-link {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.log-link:hover,
+.download-link:hover {
+  text-decoration: underline;
+}

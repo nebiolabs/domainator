@@ -66,7 +66,7 @@ Domainator data matrix hdf5 files have the following attributes:
 ```python
 ARRAY_TYPE: {DENSE, SPARSE_CSR} # indicates whether the hdf5 file describes a dense or sparse matrix. Sparse matrices are stored in Compressed Sparse Row format.
 SYMMETRIC_LABELS: {True, False} # indicates whether the x and y axis labels are the same
-DOMAINATOR_MATRIX_FILE_VERSION: str # will be incremented on any backwards-compatibility-breaking changes to the matrix format.
+MATRIX_FILE_VERSION: str # will be incremented on any backwards-compatibility-breaking changes to the matrix format.
 (optional) DATA_TYPE: str # describes the type of data in the matrix (e.g. 'score', 'norm_score', 'row_norm_score', 'score_dist', 'bool', 'efi_score')
 ```
 

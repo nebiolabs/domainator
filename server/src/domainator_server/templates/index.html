@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Domainator Server</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <h1>Domainator Server</h1>
+      <p class="tagline">Run tools and workflows from your browser.</p>
+    </div>
+    <div id="messages" role="status" aria-live="polite"></div>
+  </header>
+
+  <main class="layout">
+    <section class="panel" id="upload-panel">
+      <h2>Upload Files</h2>
+      <form id="upload-form">
+        <input type="file" id="file-input" name="files" multiple>
+        <button type="submit">Upload</button>
+      </form>
+      <p class="hint">Uploaded files become available to tool parameters that expect inputs.</p>
+    </section>
+
+    <section class="panel" id="files-panel">
+      <h2>Stored Files</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Size</th>
+            <th>Uploaded</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="files-body"></tbody>
+      </table>
+    </section>
+
+    <section class="panel" id="tools-panel">
+      <h2>Tools</h2>
+      <input type="search" id="tool-filter" placeholder="Filter tools by name or category">
+      <div id="tool-list" class="tool-list"></div>
+    </section>
+
+    <section class="panel" id="tool-detail-panel">
+      <h2>Tool Details</h2>
+      <div id="tool-detail" class="tool-detail">
+        <p>Select a tool to see parameters.</p>
+      </div>
+    </section>
+
+    <section class="panel" id="jobs-panel">
+      <h2>Jobs</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Status</th>
+            <th>Updated</th>
+            <th>Outputs</th>
+            <th>Logs</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
