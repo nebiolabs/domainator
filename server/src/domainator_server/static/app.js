@@ -393,9 +393,9 @@ function renderToolDetail(tool) {
   form.id = "tool-form";
   form.dataset.toolId = tool.id;
 
-  const params = Array.isArray(tool.parameters) ? tool.parameters : [];
+  const params = Array.isArray(tool.parameters) ? tool.parameters.filter(Boolean) : [];
   const advancedParams = Array.isArray(tool.advanced_parameters)
-    ? tool.advanced_parameters
+    ? tool.advanced_parameters.filter(Boolean)
     : [];
 
   if (!params.length && !advancedParams.length) {
@@ -419,11 +419,16 @@ function renderToolDetail(tool) {
     const wrapper = document.createElement("div");
     wrapper.className = "advanced-parameters-body";
     advancedParams.forEach(param => {
-      wrapper.appendChild(buildParameterField(param));
+      const field = buildParameterField(param);
+      if (field) {
+        wrapper.appendChild(field);
+      }
     });
-    advanced.appendChild(wrapper);
 
-    form.appendChild(advanced);
+    if (wrapper.children.length) {
+      advanced.appendChild(wrapper);
+      form.appendChild(advanced);
+    }
   }
 
   const submit = document.createElement("button");
@@ -503,6 +508,20 @@ function buildInputForParameter(param, fieldKey) {
     }
     input.dataset.required = param.required ? "1" : "0";
     return input;
+  }
+
+  if (param.multiple && (type === "string" || type === "")) {
+    const textarea = document.createElement("textarea");
+    textarea.name = fieldKey;
+    textarea.rows = 3;
+    textarea.dataset.required = param.required ? "1" : "0";
+    textarea.dataset.multiline = "newline";
+    if (Array.isArray(defaultValue)) {
+      textarea.value = defaultValue.join("\n");
+    } else if (defaultValue !== undefined && defaultValue !== null) {
+      textarea.value = String(defaultValue);
+    }
+    return textarea;
   }
 
   if (type === "file") {
@@ -660,6 +679,12 @@ function buildParameterPayload(tool, form) {
     }
 
     const required = input.dataset.required === "1";
+    if (input instanceof HTMLTextAreaElement && input.dataset.multiline === "newline") {
+      value = String(value || "")
+        .split(/\r?\n/)
+        .map(entry => entry.trim())
+        .filter(entry => entry.length > 0);
+    }
     const isEmpty = value === "" || value === undefined || value === null || (Array.isArray(value) && value.length === 0);
     const displayName = param.display_name || param.name || fieldKey;
     if (required && isEmpty) {

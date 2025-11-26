@@ -1,0 +1,146 @@
+{
+  "id": "summary_report",
+  "display_name": "Summary Report",
+  "category": "Domainator",
+  "description": "From a domainator-annotated genbank file, calculates contig stats and domain frequency stats.",
+  "runner": "module",
+  "entry_point": "domainator.summary_report",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "name of input genbank files.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Text file to write output to.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Html",
+      "parameter": "html",
+      "help": "html file to write output to.",
+      "type": "string",
+      "flags": [
+        "--html"
+      ]
+    },
+    {
+      "name": "Domains Table",
+      "parameter": "domains_table",
+      "help": "Write a tab-separated table of domain frequencies to this file. Headers are: domain, database, count, description, avg score.",
+      "type": "string",
+      "flags": [
+        "--domains_table"
+      ]
+    },
+    {
+      "name": "Co Occurence Fraction",
+      "parameter": "co_occurence_fraction",
+      "help": "Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the fraction of contigs containing the row-domain that also include the column-domain (so the matrix is assymetric).",
+      "type": "string",
+      "flags": [
+        "--co_occurence_fraction"
+      ]
+    },
+    {
+      "name": "Co Occurence Count",
+      "parameter": "co_occurence_count",
+      "help": "Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the number of contigs containing both the row-domain and the column-domain (so the matrix is symmetric).",
+      "type": "string",
+      "flags": [
+        "--co_occurence_count"
+      ]
+    },
+    {
+      "name": "Taxonomy",
+      "parameter": "taxonomy",
+      "help": "Write a summary of the taxonomic origins of the contigs.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy"
+      ]
+    },
+    {
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy_update"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "Only consider contigs with these names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "text file containing names of contigs to select.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "calculate distance graphs for domains with these names",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains to calculate distance graphs for.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Ignore domain annotations not from these databases. default: consider all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

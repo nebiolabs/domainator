@@ -1,0 +1,257 @@
+{
+  "id": "select_by_contig",
+  "display_name": "Select By Contig",
+  "category": "Domainator",
+  "description": "Create a new genbank file with a subset of contigs from the input\n\nFrom a domainator-annotated genbank file, extracts a subset of contigs based on selection criteria.\n\nSelection criteria are combined as follows:\n\n(contig length within specified bounds [length_lb, length_ub])\nAND \n(contig matches specified taxonomy filters)\nAND # INVERT applies to this list of criteria\n(\n   (contig name in specified list [contigs, contigs_file])\nOR (contig name matches specified regex [contigs_regex])\nOR (contig definition matches specified regex [definition_regex]) \nOR (contig sequence matches specified regex [sequence_regex])\nOR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) \nOR (contig contains a combination of domains that match the specified boolean expression [domain_expr])\nOR (contig contains no domains [unannotated])\n)\nAND\n(total number of selected contigs is less than or equal to specified maximum [first])\n\nIf --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. That is, length and first are still applied, \nbut the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.",
+  "runner": "module",
+  "entry_point": "domainator.select_by_contig",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "genbank output file name. If not supplied writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "Only consider contigs with these names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "text file containing names of contigs to select.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Contigs Regex",
+      "parameter": "contigs_regex",
+      "help": "Only consider contigs with names matching this regex.",
+      "type": "string",
+      "flags": [
+        "--contigs_regex"
+      ]
+    },
+    {
+      "name": "Definition Regex",
+      "parameter": "definition_regex",
+      "help": "only keep contigs with a definition that matches this regex.",
+      "type": "string",
+      "flags": [
+        "--definition_regex"
+      ]
+    },
+    {
+      "name": "Sequence Regex",
+      "parameter": "sequence_regex",
+      "help": "only keep contigs with a sequence that matches this regex.",
+      "type": "string",
+      "flags": [
+        "--sequence_regex"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Include domains with these names",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains to include.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    },
+    {
+      "name": "Domain Expr",
+      "parameter": "domain_expr",
+      "help": "a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains",
+      "type": "string",
+      "flags": [
+        "--domain_expr"
+      ]
+    },
+    {
+      "name": "Domain Type",
+      "parameter": "domain_type",
+      "help": "The type of domain to consider, domain, search, both. Default: domain",
+      "type": "string",
+      "choices": [
+        "both",
+        "domain",
+        "search"
+      ],
+      "default": "domain",
+      "flags": [
+        "--domain_type"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Consider only domains from these databases when filtering by domain. default: all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Unannotated",
+      "parameter": "unannotated",
+      "help": "Select contigs with no domain annotations.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--unannotated"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "the evalue cutoff for domain annotations to be considered when selecting by domain.",
+      "type": "string",
+      "default": 100000000.0,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Fasta Out",
+      "parameter": "fasta_out",
+      "help": "makes output a fasta file when activated",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--fasta_out"
+      ]
+    },
+    {
+      "name": "Include Taxids",
+      "parameter": "include_taxids",
+      "help": "Space separated list of taxids to include",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--include_taxids"
+      ]
+    },
+    {
+      "name": "Exclude Taxids",
+      "parameter": "exclude_taxids",
+      "help": "Space separated list of taxids to exclude",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--exclude_taxids"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy_update"
+      ]
+    },
+    {
+      "name": "First",
+      "parameter": "first",
+      "help": "If set then stop after returning this many contigs.",
+      "type": "string",
+      "flags": [
+        "--first"
+      ]
+    },
+    {
+      "name": "Length Lb",
+      "parameter": "length_lb",
+      "help": "skip contigs smaller than this. In units of bp (aa for protein input).",
+      "type": "string",
+      "flags": [
+        "--length_lb"
+      ]
+    },
+    {
+      "name": "Length Ub",
+      "parameter": "length_ub",
+      "help": "skip contigs larger than this. In units of bp (aa for protein input).",
+      "type": "string",
+      "flags": [
+        "--length_ub"
+      ]
+    },
+    {
+      "name": "Search Score Lb",
+      "parameter": "search_score_lb",
+      "help": "Skip contigs with a domain_search annotation score smaller than this.",
+      "type": "string",
+      "flags": [
+        "--search_score_lb"
+      ]
+    },
+    {
+      "name": "Search Score Ub",
+      "parameter": "search_score_ub",
+      "help": "Skip contigs with a domain_search annotation score larger than this.",
+      "type": "string",
+      "flags": [
+        "--search_score_ub"
+      ]
+    },
+    {
+      "name": "Invert",
+      "parameter": "invert",
+      "help": "Invert the selection criteria. i.e. return contigs that do not match the selection criteria.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--invert"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

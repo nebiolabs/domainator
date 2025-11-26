@@ -1,0 +1,49 @@
+{
+  "id": "partition_seqfile",
+  "display_name": "Partition Seqfile",
+  "category": "Domainator",
+  "description": "Find record offsets in a sequence file\n\nGiven an input sequence file, writes the total count of CDSs/protein sequences,\nfollowed by a list of offset\trecords pairs to divide the sequence file.\n\nSeeking to each offset and reading the specified number of records will result in reading the entire file once.",
+  "runner": "module",
+  "entry_point": "domainator.partition_seqfile",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "the genbank or fasta file to split the contig names of. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Name of output file. Default: stdout",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Partitions",
+      "parameter": "partitions",
+      "help": "The number of partitions to divide the ids into, roughly evenly.",
+      "type": "integer",
+      "flags": [
+        "--partitions"
+      ]
+    },
+    {
+      "name": "Cdss Per Partition",
+      "parameter": "cdss_per_partition",
+      "help": "The approximate number of ids to write to each partition. Partitioning algorithm is greedy, it adds records until the CDS count is met or exceeded, then goes to the next start pointer.",
+      "type": "integer",
+      "flags": [
+        "--cdss_per_partition"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

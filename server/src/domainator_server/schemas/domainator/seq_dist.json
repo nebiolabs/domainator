@@ -1,0 +1,155 @@
+{
+  "id": "seq_dist",
+  "display_name": "Seq Dist",
+  "category": "Domainator",
+  "description": "Calculates similarity scores between protein sequences. \n\nTypically the input and reference will be the same sequence file, creating a pairwise similarity matrix. \nAn hmm file can also be used as a reference to make a table of profile scores for each input peptide.",
+  "runner": "module",
+  "entry_point": "domainator.seq_dist",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Input query file.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Input Type",
+      "parameter": "input_type",
+      "help": "File type for the sequence file",
+      "type": "file",
+      "choices": [
+        "genbank",
+        "fasta",
+        "hmm"
+      ],
+      "flags": [
+        "--input_type"
+      ]
+    },
+    {
+      "name": "Reference",
+      "parameter": "reference",
+      "help": "Reference file.",
+      "type": "string",
+      "flags": [
+        "-r",
+        "--reference"
+      ]
+    },
+    {
+      "name": "Reference Type",
+      "parameter": "reference_type",
+      "help": "File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.",
+      "type": "string",
+      "choices": [
+        "genbank",
+        "fasta",
+        "hmm"
+      ],
+      "flags": [
+        "--reference_type"
+      ]
+    },
+    {
+      "name": "Dense",
+      "parameter": "dense",
+      "help": "Write a dense distance matrix hdf5 file to this path.",
+      "type": "string",
+      "flags": [
+        "--dense"
+      ]
+    },
+    {
+      "name": "Dense Text",
+      "parameter": "dense_text",
+      "help": "Write a dense distance matrix tsv file to this path.",
+      "type": "string",
+      "flags": [
+        "--dense_text"
+      ]
+    },
+    {
+      "name": "Sparse",
+      "parameter": "sparse",
+      "help": "Write a sparse distance matrix hdf5 file to this path.",
+      "type": "string",
+      "flags": [
+        "--sparse"
+      ]
+    },
+    {
+      "name": "Lb",
+      "parameter": "lb",
+      "help": "Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).",
+      "type": "string",
+      "default": 0,
+      "flags": [
+        "--lb"
+      ]
+    },
+    {
+      "name": "K",
+      "parameter": "k",
+      "help": "Include at most this many non-zero entries in the matrix for each input sequence. Default: Include all hits.",
+      "type": "string",
+      "flags": [
+        "-k"
+      ]
+    },
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)",
+      "type": "string",
+      "choices": [
+        "diamond_vs",
+        "diamond_mors",
+        "diamond_us",
+        "hmmer",
+        "diamond_s",
+        "hmmer_compare",
+        "diamond_d",
+        "diamond_f",
+        "diamond_mids"
+      ],
+      "default": "diamond_us",
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
+      "name": "Mode",
+      "parameter": "mode",
+      "help": "what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score",
+      "type": "string",
+      "choices": [
+        "score",
+        "score_dist",
+        "row_norm_score",
+        "efi_score",
+        "efi_score_dist",
+        "bool",
+        "norm_score"
+      ],
+      "default": "score",
+      "flags": [
+        "--mode"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "how many cpu threads to use. Default: use all available cores.",
+      "type": "string",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

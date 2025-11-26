@@ -1,0 +1,86 @@
+{
+  "id": "transform_matrix",
+  "display_name": "Transform Matrix",
+  "category": "Domainator",
+  "description": "Transforms score matrix into various kinds of normalized martices.\n   \n   For matrices with any data type, can convert from dense to sparse, or sparse to dense, or change the datatype.",
+  "runner": "module",
+  "entry_point": "domainator.transform_matrix",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "name of input matrix file.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Input Type",
+      "parameter": "input_type",
+      "help": "If the type of the input matrix is not specified, specify the type of input matrix. Default: None",
+      "type": "file",
+      "choices": [
+        "efi_score",
+        "score",
+        "score_dist",
+        "efi_score_dist",
+        "bool",
+        "norm_score",
+        "row_norm_score",
+        null
+      ],
+      "flags": [
+        "--input_type"
+      ]
+    },
+    {
+      "name": "Dense",
+      "parameter": "dense",
+      "help": "Write a dense distance matrix hdf5 file to this path.",
+      "type": "string",
+      "flags": [
+        "--dense"
+      ]
+    },
+    {
+      "name": "Dense Text",
+      "parameter": "dense_text",
+      "help": "Write a dense distance matrix tsv file to this path.",
+      "type": "string",
+      "flags": [
+        "--dense_text"
+      ]
+    },
+    {
+      "name": "Sparse",
+      "parameter": "sparse",
+      "help": "Write a sparse distance matrix hdf5 file to this path.",
+      "type": "string",
+      "flags": [
+        "--sparse"
+      ]
+    },
+    {
+      "name": "Mode",
+      "parameter": "mode",
+      "help": "what kind of values should be in the output matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: norm_score",
+      "type": "string",
+      "choices": [
+        "score",
+        "score_dist",
+        "row_norm_score",
+        "efi_score",
+        "efi_score_dist",
+        "bool",
+        "norm_score"
+      ],
+      "default": "norm_score",
+      "flags": [
+        "--mode"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

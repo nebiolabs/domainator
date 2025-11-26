@@ -1,0 +1,82 @@
+{
+  "id": "hmmer_compare",
+  "display_name": "Hmmer Compare",
+  "category": "Domainator",
+  "description": "Aligns and calculates alignment scores between hmmer3 profiles \n\nKind of like hhsearch except much slower and for hmmer3 profiles instead of hhsuite profiles.\n\nAdapted from pseudocode in:\nSteinegger, Martin, Markus Meier, Milot Mirdita, Harald V\u00f6hringer, Stephan J. Haunsberger, and Johannes S\u00f6ding. \u201cHH-Suite3 for Fast Remote Homology Detection and Deep Protein Annotation.\u201d BMC Bioinformatics 20, no. 1 (September 14, 2019): 473. https://doi.org/10.1186/s12859-019-3019-7.\n\nand\n\nS\u00f6ding, Johannes. \"Protein Homology Detection by HMM\u2013HMM Comparison.\" Bioinformatics 21, no. 7 (April 1, 2005): 951\u201360. https://doi.org/10.1093/bioinformatics/bti125.",
+  "runner": "module",
+  "entry_point": "domainator.hmmer_compare",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Input query files. One or more hmm text files with one or more hmmer3 profiles.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Reference",
+      "parameter": "reference",
+      "help": "Reference files. One or more hmm text files with one or more hmmer3 profiles.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "-r",
+        "--reference"
+      ]
+    },
+    {
+      "name": "Score Cutoff",
+      "parameter": "score_cutoff",
+      "help": "Report alignments with scores greater than or equal to this.",
+      "type": "string",
+      "default": 0,
+      "flags": [
+        "--score_cutoff"
+      ]
+    },
+    {
+      "name": "K",
+      "parameter": "k",
+      "help": "Include at most this many of the top hits for each query. Default: Include all hits.",
+      "type": "string",
+      "flags": [
+        "-k"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "File to write the scores and alignments to.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Alignments",
+      "parameter": "alignments",
+      "help": "when activated, will write the alignments to the output.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--alignments"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "how many cpu threads to use. Default: 8",
+      "type": "string",
+      "default": 8,
+      "flags": [
+        "--cpu"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

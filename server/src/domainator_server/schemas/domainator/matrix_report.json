@@ -1,0 +1,40 @@
+{
+  "id": "matrix_report",
+  "display_name": "Matrix Report",
+  "category": "Domainator",
+  "description": "reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for generating similatity networks.",
+  "runner": "module",
+  "entry_point": "domainator.matrix_report",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "name of input matrix file.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Text file to write output to.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Html",
+      "parameter": "html",
+      "help": "html file to write output to.",
+      "type": "string",
+      "flags": [
+        "--html"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

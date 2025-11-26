@@ -23,8 +23,8 @@
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
-        "nucleotide",
-        "protein"
+        "protein",
+        "nucleotide"
       ],
       "default": "protein",
       "flags": [
@@ -127,7 +127,6 @@
       "parameter": "max_mode",
       "help": "Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
       "type": "boolean",
-      "multiple": true,
       "default": false,
       "flags": [
         "--max_mode"
@@ -168,7 +167,6 @@
       "parameter": "taxonomy_update",
       "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
       "type": "boolean",
-      "multiple": true,
       "default": false,
       "flags": [
         "--taxonomy_update"
@@ -199,7 +197,6 @@
       "parameter": "overlap_by_db",
       "help": "If activated, then overlap filtering will be done by database, rather than all together.",
       "type": "boolean",
-      "multiple": true,
       "default": false,
       "flags": [
         "--overlap_by_db"
@@ -210,7 +207,6 @@
       "parameter": "hits_only",
       "help": "when activated, the ouptut will only have contigs with at least one domain annotation. In many cases, domain_search.py will be faster and more appropriate.",
       "type": "boolean",
-      "multiple": true,
       "default": false,
       "flags": [
         "--hits_only"
@@ -221,7 +217,6 @@
       "parameter": "no_annotations",
       "help": "when activated, new annotations will not be added to the file. This is useful if you are just trying to extract a set of contigs for annotation in a later step.",
       "type": "boolean",
-      "multiple": true,
       "default": false,
       "flags": [
         "--no_annotations"
@@ -268,5 +263,6 @@
         "--gene_call"
       ]
     }
-  ]
+  ],
+  "advanced_parameters": []
 }

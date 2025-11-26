@@ -1,0 +1,72 @@
+{
+  "id": "hmmer_build",
+  "display_name": "Hmmer Build",
+  "category": "Domainator",
+  "description": "Script to build a HMM profile from a multiple sequence alignment (MSA).\n    Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.",
+  "runner": "module",
+  "entry_point": "domainator.hmmer_build",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Path of input msa. If not supplied, reads from stdin. Acceptable formats are the same as for hmmbuild.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "hmm output file path. If not supplied writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Name",
+      "parameter": "name",
+      "help": "Name of the HMM profile.",
+      "type": "string",
+      "flags": [
+        "--name"
+      ]
+    },
+    {
+      "name": "Acc",
+      "parameter": "acc",
+      "help": "Accession of the HMM profile.",
+      "type": "string",
+      "flags": [
+        "--acc"
+      ]
+    },
+    {
+      "name": "Desc",
+      "parameter": "desc",
+      "help": "Description of the HMM profile.",
+      "type": "string",
+      "flags": [
+        "--desc"
+      ]
+    },
+    {
+      "name": "Alphabet",
+      "parameter": "alphabet",
+      "help": "_EMPTY_HELP_",
+      "type": "string",
+      "choices": [
+        "dna",
+        "rna",
+        "amino"
+      ],
+      "flags": [
+        "--alphabet"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

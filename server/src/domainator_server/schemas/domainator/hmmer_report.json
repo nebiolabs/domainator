@@ -1,0 +1,115 @@
+{
+  "id": "hmmer_report",
+  "display_name": "Hmmer Report",
+  "category": "Domainator",
+  "description": "Generate an enumerated report\nTakes a genbank file which has been annotated using the domainator program, write tabulated descriptions of each contig, CDS, or domain.\n\nwrite a tab-separated file",
+  "runner": "module",
+  "entry_point": "domainator.hmmer_report",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "hmm filenames. If not supplied then reads from to stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "The name of the output tsv file.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Html",
+      "parameter": "html",
+      "help": "Write a table in html format to this file.",
+      "type": "string",
+      "flags": [
+        "--html"
+      ]
+    },
+    {
+      "name": "Html Max Height",
+      "parameter": "html_max_height",
+      "help": "Max height in pixels to set the html output to.",
+      "type": "string",
+      "flags": [
+        "--html_max_height"
+      ]
+    },
+    {
+      "name": "Column Names",
+      "parameter": "column_names",
+      "help": "If supplied, then this list will be used instead of the default column names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--column_names"
+      ]
+    },
+    {
+      "name": "Source",
+      "parameter": "output_cols",
+      "help": "report the name of the hmm file.",
+      "type": "output",
+      "flags": [
+        "--source"
+      ]
+    },
+    {
+      "name": "Acc",
+      "parameter": "output_cols",
+      "help": "report the start coordinate of the feature.",
+      "type": "output",
+      "flags": [
+        "--acc"
+      ]
+    },
+    {
+      "name": "Desc",
+      "parameter": "output_cols",
+      "help": "return the end coordinate of the feature.",
+      "type": "output",
+      "flags": [
+        "--desc"
+      ]
+    },
+    {
+      "name": "Length",
+      "parameter": "output_cols",
+      "help": "return the length of the profile (i.e. the number of nodes).",
+      "type": "output",
+      "flags": [
+        "--length"
+      ]
+    },
+    {
+      "name": "Consensus",
+      "parameter": "output_cols",
+      "help": "return the consensus residue line of the profile, if set..",
+      "type": "output",
+      "flags": [
+        "--consensus"
+      ]
+    },
+    {
+      "name": "Append",
+      "parameter": "output_cols",
+      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.",
+      "type": "output",
+      "multiple": true,
+      "flags": [
+        "--append"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

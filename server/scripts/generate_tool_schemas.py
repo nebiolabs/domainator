@@ -134,8 +134,8 @@ def action_to_parameter(action) -> Optional[Dict[str, Any]]:
     multiple = False
     if action.nargs in ("+", "*"):
         multiple = True
-    elif isinstance(action.nargs, int) and action.nargs != 1:
-        multiple = True
+    elif isinstance(action.nargs, int):
+        multiple = action.nargs > 1
     if multiple:
         parameter["multiple"] = True
 
@@ -189,6 +189,7 @@ def build_schema(tool_id: str, target: str) -> Dict[str, Any]:
         "runner": "module",
         "entry_point": cli_module_name,
         "parameters": parameters,
+        "advanced_parameters": [],
     }
     return schema
 

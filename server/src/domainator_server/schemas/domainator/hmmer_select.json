@@ -1,0 +1,88 @@
+{
+  "id": "hmmer_select",
+  "display_name": "Hmmer Select",
+  "category": "Domainator",
+  "description": "Find profiles in an hmm file.\n\nSearch through an hmm file to find profiles with names or descriptions matching a specified regex or string, or containing a specified string.\n\nAll specifications are treated as \"OR\" with relation to each other. So any profile that matches any of the specifications will be returned.",
+  "runner": "module",
+  "entry_point": "domainator.hmmer_select",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of input hmm files. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "genbank output file name. If not supplied writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Regex",
+      "parameter": "regex",
+      "help": "What regex(es) to search.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--regex"
+      ]
+    },
+    {
+      "name": "Exact",
+      "parameter": "exact",
+      "help": "What exact string(s) to search. Target must match exactly with no additions at either end.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--exact"
+      ]
+    },
+    {
+      "name": "Contains",
+      "parameter": "contains",
+      "help": "What string(s) to search. Target must contain this as a substring.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--contains"
+      ]
+    },
+    {
+      "name": "Field",
+      "parameter": "field",
+      "help": "whether to search the NAME field, the DESC field, the ACC field, or all three.",
+      "type": "string",
+      "choices": [
+        "acc",
+        "all",
+        "desc",
+        "name"
+      ],
+      "default": "all",
+      "flags": [
+        "--field"
+      ]
+    },
+    {
+      "name": "Case Sensitive",
+      "parameter": "case_sensitive",
+      "help": "If set, then the search is case sensitive. Otherwise it is case insensitive.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--case_sensitive"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

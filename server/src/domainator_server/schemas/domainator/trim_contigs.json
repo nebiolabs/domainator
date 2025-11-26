@@ -1,0 +1,143 @@
+{
+  "id": "trim_contigs",
+  "display_name": "Trim Contigs",
+  "category": "Domainator",
+  "description": "Trim contigs based on CDS or domain names or presence of domains in CDSs.\n\nCircular contigs are linearized before trimming.\n\nTypically used for nucleotide sequences, but can be used for protein sequences as well, if you use the 'kb' options to mean 1000 amino acids. CDS and domain options are not supported for protein sequences.",
+  "runner": "module",
+  "entry_point": "domainator.trim_contigs",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "genbank output file name. If not supplied, writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Kb Both",
+      "parameter": "kb_both",
+      "help": "How many kb to trim from both sides of each contig.",
+      "type": "string",
+      "flags": [
+        "--kb_both"
+      ]
+    },
+    {
+      "name": "Kb Left",
+      "parameter": "kb_left",
+      "help": "How many kb to trim from the left side of each contig.",
+      "type": "string",
+      "flags": [
+        "--kb_left"
+      ]
+    },
+    {
+      "name": "Kb Right",
+      "parameter": "kb_right",
+      "help": "How many kb to trim from the right side of each contigs.",
+      "type": "string",
+      "flags": [
+        "--kb_right"
+      ]
+    },
+    {
+      "name": "Cds Both",
+      "parameter": "cds_both",
+      "help": "How many CDSs to trim from both sides of each contig.",
+      "type": "string",
+      "flags": [
+        "--cds_both"
+      ]
+    },
+    {
+      "name": "Cds Left",
+      "parameter": "cds_left",
+      "help": "How many CDSs to trim from the left side of each contig.",
+      "type": "string",
+      "flags": [
+        "--cds_left"
+      ]
+    },
+    {
+      "name": "Cds Right",
+      "parameter": "cds_right",
+      "help": "How many CDSs to trim from the right side of each contig.",
+      "type": "string",
+      "flags": [
+        "--cds_right"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "Only return contigs with these names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "text file containing names of contigs to return.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Trim CDSs containing domains with these names from the ends of each contig.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "No Domain",
+      "parameter": "no_domain",
+      "help": "Trim CDSs containing no domain annotations from the ends of each contig.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--no_domain"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains to trim contigs containing.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    },
+    {
+      "name": "Domain Expr",
+      "parameter": "domain_expr",
+      "help": "a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains for CDSs to trim",
+      "type": "string",
+      "flags": [
+        "--domain_expr"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

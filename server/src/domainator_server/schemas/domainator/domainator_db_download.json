@@ -1,0 +1,182 @@
+{
+  "id": "domainator_db_download",
+  "display_name": "Domainator Db Download",
+  "category": "Domainator",
+  "description": "Download databases from the internet in formats appropriate for domainator.\n    Including the following databases:\n    - Uniprot (includes Trembl and SwissProt) (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)\n    - Trembl (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)\n    - SwissProt (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)\n    - ncbi_complete_genome_proks: NCBI genomes where assembly_level is \"Complete Genome\". (excluding eukaryotes)\n    - ncbi_complete_genome_nonredundant_proks: non-redundant NCBI genomes where assembly_level is \"Complete Genome\". (excluding eukaryotes)\n    - ncbi_representative_proks : representative and reference genomes from the NCBI database (excluding eukaryotes)\n    - ncbi_representative_all : representative and reference genomes from the NCBI database (all taxa, including eukaryotes)\n    - ncbi_nonredundant_proks : non-redundant genomes from the NCBI database (excluding eukaryotes)\n    - ncbi_nonredundant_all : non-redundant genomes from the NCBI database (all taxa, including eukaryotes)\n    - ncbi_all : all genomes from the NCBI database including duplicates of the same species (all taxa, including eukaryotes). Can produce very large files, up to 10 TB or more, so use with caution.\n \n\n    Key taxa:\n        81490 : prokaryotic environmental samples\n        408169 : metagenomes\n        2 : bacteria\n        2157 : archaea\n        10239 : viruses\n        \n        2759 : eukaryota",
+  "runner": "module",
+  "entry_point": "domainator.domainator_db_download",
+  "parameters": [
+    {
+      "name": "Db",
+      "parameter": "db",
+      "help": "Database to download",
+      "type": "string",
+      "choices": [
+        "uniprot_gb",
+        "ncbi_all",
+        "swissprot_gb",
+        "trembl",
+        "ncbi_complete_genome_nonredundant_proks",
+        "ncbi_complete_genome_proks",
+        "ncbi_representative_all",
+        "swissprot",
+        "ncbi_nonredundant_all",
+        "ncbi_nonredundant_proks",
+        "uniprot",
+        "ncbi_representative_proks",
+        "trembl_gb"
+      ],
+      "flags": [
+        "--db"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Output filename",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Include Taxids",
+      "parameter": "include_taxids",
+      "help": "Space separated list of taxids to include",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--include_taxids"
+      ]
+    },
+    {
+      "name": "Exclude Taxids",
+      "parameter": "exclude_taxids",
+      "help": "Space separated list of taxids to exclude",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--exclude_taxids"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Skip Taxonomy Update",
+      "parameter": "skip_taxonomy_update",
+      "help": "By default, if taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version. Setting this flag will skip this check.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--skip_taxonomy_update"
+      ]
+    },
+    {
+      "name": "Success Rec Log",
+      "parameter": "success_rec_log",
+      "help": "Path to log file for successfully written records. If not specified, successfully written records will not be logged.",
+      "type": "string",
+      "flags": [
+        "--success_rec_log"
+      ]
+    },
+    {
+      "name": "Exclude Accessions",
+      "parameter": "exclude_accessions",
+      "help": "Exclude genbank records with these accessions. Should be versionless (i.e. without the '.' and number after the '.')",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--exclude_accessions"
+      ]
+    },
+    {
+      "name": "Exclude Accessions File",
+      "parameter": "exclude_accessions_file",
+      "help": "text file containing accessions genbank records to exclude. Should be versionless (i.e. without the '.' and number after the '.')",
+      "type": "file",
+      "flags": [
+        "--exclude_accessions_file"
+      ]
+    },
+    {
+      "name": "Ncbi Summary",
+      "parameter": "ncbi_summary",
+      "help": "Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt.",
+      "type": "string",
+      "flags": [
+        "--ncbi_summary"
+      ]
+    },
+    {
+      "name": "Gene Call",
+      "parameter": "gene_call",
+      "help": "When activated, for nucleotide databases, such as Genbank, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None].",
+      "type": "string",
+      "choices": [
+        "all",
+        "unannotated"
+      ],
+      "flags": [
+        "--gene_call"
+      ]
+    },
+    {
+      "name": "Num Recs",
+      "parameter": "num_recs",
+      "help": "Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.",
+      "type": "string",
+      "flags": [
+        "--num_recs"
+      ]
+    },
+    {
+      "name": "Append",
+      "parameter": "append",
+      "help": "Append to existing file",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--append"
+      ]
+    },
+    {
+      "name": "Before",
+      "parameter": "before",
+      "help": "For ncbi databases, only download records before this date. Format is YYYY-MM-DD.",
+      "type": "string",
+      "flags": [
+        "--before"
+      ]
+    },
+    {
+      "name": "After",
+      "parameter": "after",
+      "help": "For ncbi databases, only download records after this date. Format is YYYY-MM-DD.",
+      "type": "string",
+      "flags": [
+        "--after"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "the number of cores of the cpu which are used at a time to download ncbi records [default: use all available cores]",
+      "type": "string",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

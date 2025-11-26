@@ -1,0 +1,354 @@
+{
+  "id": "enum_report",
+  "display_name": "Enum Report",
+  "category": "Domainator",
+  "description": "Generate an enumerated report\nTakes a genbank file which has been annotated using the domainator program, write tabulated descriptions of each contig, CDS, or domain.\n\nwrite a tab-separated file",
+  "runner": "module",
+  "entry_point": "domainator.enum_report",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Genbank filenames. If not supplied then reads from to stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "The name of the output tsv file.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Html",
+      "parameter": "html",
+      "help": "Write a table in html format to this file.",
+      "type": "string",
+      "flags": [
+        "--html"
+      ]
+    },
+    {
+      "name": "Html Max Height",
+      "parameter": "html_max_height",
+      "help": "Max height in pixels to set the html output to.",
+      "type": "string",
+      "flags": [
+        "--html_max_height"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only examine contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only examine contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "By",
+      "parameter": "by",
+      "help": "One line in output for every by contig, cds or domain. For protein genbanks, contig and cds are treated the same. default: by contig",
+      "type": "string",
+      "choices": [
+        "cds",
+        "contig",
+        "domain"
+      ],
+      "default": "contig",
+      "flags": [
+        "--by"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Ignore domain annotations not from these databases. default: consider all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "output_cols",
+      "help": "report domain content as alphabetical and semicolon-separated, only listing duplicates once.",
+      "type": "output",
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domain Descriptions",
+      "parameter": "output_cols",
+      "help": "report domain content as alphabetical and semicolon-separated, only listing duplicates once.",
+      "type": "output",
+      "flags": [
+        "--domain_descriptions"
+      ]
+    },
+    {
+      "name": "Score",
+      "parameter": "output_cols",
+      "help": "report report the sum of domain scores.",
+      "type": "output",
+      "flags": [
+        "--score"
+      ]
+    },
+    {
+      "name": "Identity",
+      "parameter": "output_cols",
+      "help": "report report the sum of domain identities.",
+      "type": "output",
+      "flags": [
+        "--identity"
+      ]
+    },
+    {
+      "name": "Architecture",
+      "parameter": "output_cols",
+      "help": "report domains in order of appearance of start position in the sequence and semicolon-separated.",
+      "type": "output",
+      "flags": [
+        "--architecture"
+      ]
+    },
+    {
+      "name": "Architecture Detailed",
+      "parameter": "output_cols",
+      "help": "report domain architecture in order of appearance of start position in the sequence. Within each CDS, domains are separated by a '/'. CDSs are separated by a ';'. CDSs with no domains are represented by 'no_domains'.",
+      "type": "output",
+      "flags": [
+        "--architecture_detailed"
+      ]
+    },
+    {
+      "name": "Start",
+      "parameter": "output_cols",
+      "help": "report the start coordinate of the feature.",
+      "type": "output",
+      "flags": [
+        "--start"
+      ]
+    },
+    {
+      "name": "End",
+      "parameter": "output_cols",
+      "help": "report the end coordinate of the feature.",
+      "type": "output",
+      "flags": [
+        "--end"
+      ]
+    },
+    {
+      "name": "Strand",
+      "parameter": "output_cols",
+      "help": "report the strand of the feature.",
+      "type": "output",
+      "flags": [
+        "--strand"
+      ]
+    },
+    {
+      "name": "Length",
+      "parameter": "output_cols",
+      "help": "report the (contig, cds, or domain) length as a column in the output.",
+      "type": "output",
+      "flags": [
+        "--length"
+      ]
+    },
+    {
+      "name": "Topology",
+      "parameter": "output_cols",
+      "help": "report the topology in the output (typically only makes sense when using --by contig).",
+      "type": "output",
+      "flags": [
+        "--topology"
+      ]
+    },
+    {
+      "name": "Sequence",
+      "parameter": "output_cols",
+      "help": "report the (contig, cds, or domain) sequence as a column in the output.",
+      "type": "output",
+      "flags": [
+        "--sequence"
+      ]
+    },
+    {
+      "name": "Cds Count",
+      "parameter": "output_cols",
+      "help": "report the number of CDSs as a column in the output",
+      "type": "output",
+      "flags": [
+        "--cds_count"
+      ]
+    },
+    {
+      "name": "Domain Count",
+      "parameter": "output_cols",
+      "help": "report the number of domains as a column in the output",
+      "type": "output",
+      "flags": [
+        "--domain_count"
+      ]
+    },
+    {
+      "name": "Definition",
+      "parameter": "output_cols",
+      "help": "report sequence definition line from the genbank file.",
+      "type": "output",
+      "flags": [
+        "--definition"
+      ]
+    },
+    {
+      "name": "Filename",
+      "parameter": "output_cols",
+      "help": "report the filename of the input file from which the record originated.",
+      "type": "output",
+      "flags": [
+        "--filename"
+      ]
+    },
+    {
+      "name": "Domain Search",
+      "parameter": "output_cols",
+      "help": "This is a composite metric that will return multiple columns: best_query, query_description, query_start, query_end, query_length, match_start, match_end, match_strand, match_score, match_identity.",
+      "type": "output",
+      "flags": [
+        "--domain_search"
+      ]
+    },
+    {
+      "name": "Taxid Lineage",
+      "parameter": "output_cols",
+      "help": "a semicolon separated list of taxids from the root to the taxid of the sequence.",
+      "type": "output",
+      "flags": [
+        "--taxid_lineage"
+      ]
+    },
+    {
+      "name": "Taxname Lineage",
+      "parameter": "output_cols",
+      "help": "a semicolon separated list of taxnames from the root to the taxid of the sequence.",
+      "type": "output",
+      "flags": [
+        "--taxname_lineage"
+      ]
+    },
+    {
+      "name": "Rank Lineage",
+      "parameter": "output_cols",
+      "help": "a semicolon separated list of ranks from the root to the taxid of the sequence.",
+      "type": "output",
+      "flags": [
+        "--rank_lineage"
+      ]
+    },
+    {
+      "name": "Taxid",
+      "parameter": "output_cols",
+      "help": "The taxid at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxid available for the record, the column will be named 'taxid_[rank]",
+      "type": "output",
+      "multiple": true,
+      "flags": [
+        "--taxid"
+      ]
+    },
+    {
+      "name": "Taxname",
+      "parameter": "output_cols",
+      "help": "The taxname at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxname available for the record, the column will be named 'taxname_[rank]",
+      "type": "output",
+      "multiple": true,
+      "flags": [
+        "--taxname"
+      ]
+    },
+    {
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy_update"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Qualifier",
+      "parameter": "output_cols",
+      "help": "Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'.",
+      "type": "output",
+      "multiple": true,
+      "flags": [
+        "--qualifier"
+      ]
+    },
+    {
+      "name": "Feature Count",
+      "parameter": "output_cols",
+      "help": "Reports the number of features of this type.",
+      "type": "output",
+      "flags": [
+        "--feature_count"
+      ]
+    },
+    {
+      "name": "Append",
+      "parameter": "output_cols",
+      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.",
+      "type": "output",
+      "multiple": true,
+      "flags": [
+        "--append"
+      ]
+    },
+    {
+      "name": "Column Names",
+      "parameter": "column_names",
+      "help": "If supplied, then this list will be used instead of the default column names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--column_names"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

@@ -1,0 +1,128 @@
+{
+  "id": "compare_contigs",
+  "display_name": "Compare Contigs",
+  "category": "Domainator",
+  "description": "Calculates similarity metrics for gene neighborhoods\n\nTakes a genbank file annotated with domainator and calculates similarities between contigs and writes reports.\n\nji, ai, and dss metrics are similar to and inspired by the metrics used in the BigScape method:\nNavarro-Mu\u00f1oz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. \"A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data.\" Nature Chemical Biology 16, no. 1 (January 2020): 60\u201368. https://doi.org/10.1038/s41589-019-0400-9.",
+  "runner": "module",
+  "entry_point": "domainator.compare_contigs",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Genbank filenames.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Name of genbank output, contigs will be sorted hierarchically within the output genbank. If not supplied then no genbank output will be generated. To write to stdout, use '-'. default: None",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Name By Order",
+      "parameter": "name_by_order",
+      "help": "Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--name_by_order"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only annotate contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "K",
+      "parameter": "k",
+      "help": "for each metric, return scores for this many of the top hits, and consider all other hits to be zero. default: count all comparisons.",
+      "type": "string",
+      "flags": [
+        "-k"
+      ]
+    },
+    {
+      "name": "Ji",
+      "parameter": "ji",
+      "help": "weighting for jaccard index metric, a comparison of all distinct types of domains in the contigs. When two contigs have no domains, their ji is 1.0.",
+      "type": "string",
+      "default": 0.5,
+      "flags": [
+        "--ji"
+      ]
+    },
+    {
+      "name": "Ai",
+      "parameter": "ai",
+      "help": "weighting for adjacency index metric, a comparison of shared domain pairs in the contigs. When two contigs have 0 or 1 domains, their ai is 1.0.",
+      "type": "string",
+      "default": 0.5,
+      "flags": [
+        "--ai"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Domain databases to use for domain content comparison. default: all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Dense",
+      "parameter": "dense",
+      "help": "Write a dense distance matrix hdf5 file to this path.",
+      "type": "string",
+      "flags": [
+        "--dense"
+      ]
+    },
+    {
+      "name": "Dense Text",
+      "parameter": "dense_text",
+      "help": "Write a dense distance matrix tsv file to this path.",
+      "type": "string",
+      "flags": [
+        "--dense_text"
+      ]
+    },
+    {
+      "name": "Sparse",
+      "parameter": "sparse",
+      "help": "Write a sparse distance matrix hdf5 file to this path.",
+      "type": "string",
+      "flags": [
+        "--sparse"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

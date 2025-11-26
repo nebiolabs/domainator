@@ -1,0 +1,100 @@
+{
+  "id": "plot_contigs",
+  "display_name": "Plot Contigs",
+  "category": "Domainator",
+  "description": "Create graphical representations of the contigs and their annotations.\n\nIt works best for relatively small datasets, of a few megabases or a few hundred contigs.\n\nWARNING: THIS IS A WORK IN PROGRESS. THE API MAY CHANGE.",
+  "runner": "module",
+  "entry_point": "domainator.plot_contigs",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Html",
+      "parameter": "html",
+      "help": "name of output html file",
+      "type": "string",
+      "flags": [
+        "--html"
+      ]
+    },
+    {
+      "name": "Height",
+      "parameter": "height",
+      "help": "height of the contig plot, in pixels",
+      "type": "string",
+      "default": 2400,
+      "flags": [
+        "--height"
+      ]
+    },
+    {
+      "name": "Width",
+      "parameter": "width",
+      "help": "width of the contig plot, in pixels",
+      "type": "string",
+      "default": 1200,
+      "flags": [
+        "--width"
+      ]
+    },
+    {
+      "name": "Types",
+      "parameter": "types",
+      "help": "Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search'.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--types"
+      ]
+    },
+    {
+      "name": "Feature Height",
+      "parameter": "feature_height",
+      "help": "height of the feature arrows, in pixels.",
+      "type": "string",
+      "default": 50,
+      "flags": [
+        "--feature_height"
+      ]
+    },
+    {
+      "name": "Feature Font Size",
+      "parameter": "feature_font_size",
+      "help": "font size of the feature labels, in pixels.",
+      "type": "string",
+      "default": 26,
+      "flags": [
+        "--feature_font_size"
+      ]
+    },
+    {
+      "name": "Metadata",
+      "parameter": "metadata",
+      "help": "tab separated files of additional contig metadata.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--metadata"
+      ]
+    },
+    {
+      "name": "Color By",
+      "parameter": "color_by",
+      "help": "Color the contig lines in the plot based on this column of the metadata table.",
+      "type": "string",
+      "flags": [
+        "--color_by"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

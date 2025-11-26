@@ -1,0 +1,266 @@
+{
+  "id": "select_by_cds",
+  "display_name": "Select By Cds",
+  "category": "Domainator",
+  "description": "Extract contig regions around selected CDSs\n\nTakes a domain-annotated genbank file and extracts regions of contigs based on contig or CDS name or presence of specified domains within individual CDSs.\n\nSpecify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.\n\nif target_cdss, target_domains or domain_expr is specified then selection logic is:\n\n    contigs & (target_cdss or target_domains or domain_expr or unannotated)\n\notherwise:\n    return every cds in contigs",
+  "runner": "module",
+  "entry_point": "domainator.select_by_cds",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "genbank output file name. If not supplied, writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Kb Range",
+      "parameter": "kb_range",
+      "help": "How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS.",
+      "type": "string",
+      "flags": [
+        "--kb_range"
+      ]
+    },
+    {
+      "name": "Kb Up",
+      "parameter": "kb_up",
+      "help": "How many kb upstream of the selected CDS to extract. Starting from the end of the CDS.",
+      "type": "string",
+      "flags": [
+        "--kb_up"
+      ]
+    },
+    {
+      "name": "Kb Down",
+      "parameter": "kb_down",
+      "help": "How many kb downstream of the selected CDS to extract. Starting from the end of the CDS.",
+      "type": "string",
+      "flags": [
+        "--kb_down"
+      ]
+    },
+    {
+      "name": "Cds Range",
+      "parameter": "cds_range",
+      "help": "How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs.",
+      "type": "string",
+      "flags": [
+        "--cds_range"
+      ]
+    },
+    {
+      "name": "Cds Up",
+      "parameter": "cds_up",
+      "help": "How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS.",
+      "type": "string",
+      "flags": [
+        "--cds_up"
+      ]
+    },
+    {
+      "name": "Cds Down",
+      "parameter": "cds_down",
+      "help": "How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS.",
+      "type": "string",
+      "flags": [
+        "--cds_down"
+      ]
+    },
+    {
+      "name": "Whole Contig",
+      "parameter": "whole_contig",
+      "help": "If set, then return the entire matching contigs.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--whole_contig"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "Only extract regions from contigs with these names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "text file containing names of contigs to extract from.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Cds",
+      "parameter": "cds",
+      "help": "Include CDSs with these names (additive with --domains)",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--cds"
+      ]
+    },
+    {
+      "name": "Cds File",
+      "parameter": "cds_file",
+      "help": "text file containing names of CDSs to include.",
+      "type": "file",
+      "flags": [
+        "--cds_file"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Include domains with these names",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains to include.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    },
+    {
+      "name": "Domain Expr",
+      "parameter": "domain_expr",
+      "help": "a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains",
+      "type": "string",
+      "flags": [
+        "--domain_expr"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Consider only domains from these databases when filtering by domain. default: all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Strand",
+      "parameter": "strand",
+      "help": "Only extract regions around CDSs on the specified strand.",
+      "type": "string",
+      "choices": [
+        "f",
+        "r"
+      ],
+      "flags": [
+        "--strand"
+      ]
+    },
+    {
+      "name": "Unannotated",
+      "parameter": "unannotated",
+      "help": "Select contigs with no domain annotations.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--unannotated"
+      ]
+    },
+    {
+      "name": "Search Hits",
+      "parameter": "search_hits",
+      "help": "Select CDSs that are marked as search hits (from domain_search.py).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--search_hits"
+      ]
+    },
+    {
+      "name": "Pad",
+      "parameter": "pad",
+      "help": "If set, then ends of sequences will be padded so that the focus CDS aligns.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--pad"
+      ]
+    },
+    {
+      "name": "Keep Direction",
+      "parameter": "keep_direction",
+      "help": "by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_direction"
+      ]
+    },
+    {
+      "name": "Skip Deduplicate",
+      "parameter": "skip_deduplicate",
+      "help": "by default if the same region is extracted for multiple hits, then only one will be kept. Set this option to retain redundancies (which might be useful if you are counting hits), but will result in duplicated contig names, which could be a problem for downstream domainator applications.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--skip_deduplicate"
+      ]
+    },
+    {
+      "name": "Max Region Overlap",
+      "parameter": "max_region_overlap",
+      "help": "the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.",
+      "type": "string",
+      "default": 1.0,
+      "flags": [
+        "--max_region_overlap"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "the evalue cutoff for domain annotations to be put onto the new genbank file",
+      "type": "string",
+      "default": 100000000,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Invert",
+      "parameter": "invert",
+      "help": "Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--invert"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

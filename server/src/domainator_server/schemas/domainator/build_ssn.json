@@ -1,0 +1,131 @@
+{
+  "id": "build_ssn",
+  "display_name": "Build Ssn",
+  "category": "Domainator",
+  "description": "Generates Sequence Similarity Networks\n    \nBuild a sequence similarity network and do analysis related to that.",
+  "runner": "module",
+  "entry_point": "domainator.build_ssn",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "pairwise similarity (or distance) scores. In the network, nodes will be derived from row and column names, and edges will be added between pairs of rows and columns meeting the threshold criteria. Format can be tab-separated text, or Domainator hdf5.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "tsv",
+        "hdf",
+        "h5",
+        "hdf5"
+      ]
+    },
+    {
+      "name": "Lb",
+      "parameter": "lb",
+      "help": "exclude all edges with weights less than or equal to this value. This should be >= 0.",
+      "type": "number",
+      "default": 0,
+      "flags": [
+        "--lb"
+      ]
+    },
+    {
+      "name": "Metadata",
+      "parameter": "metadata",
+      "help": "tab separated files of sequence metadata.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--metadata"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Color By",
+      "parameter": "color_by",
+      "help": "Color the points in the output image based on this column of the metadata table.",
+      "type": "string",
+      "flags": [
+        "--color_by"
+      ]
+    },
+    {
+      "name": "Color Table",
+      "parameter": "color_table",
+      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000",
+      "type": "file",
+      "flags": [
+        "--color_table"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Xgmml",
+      "parameter": "xgmml",
+      "help": "write a cytoscape xgmml file of the projection.",
+      "type": "output",
+      "flags": [
+        "--xgmml"
+      ]
+    },
+    {
+      "name": "Cluster",
+      "parameter": "cluster",
+      "help": "Creates a new metadata column called 'SSN_cluster', replacing that column from the metadata file if already present. Finds clusters by following connectivity, assigns each cluster a distinct integer, based on size rank, bigger clusters get smaller numbers.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--cluster"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Color Table Out",
+      "parameter": "color_table_out",
+      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",
+      "type": "output",
+      "flags": [
+        "--color_table_out"
+      ]
+    },
+    {
+      "name": "Cluster Tsv",
+      "parameter": "cluster_tsv",
+      "help": "Path to write a tsv file will mapping each sequence to its cluster. If set, then --cluster is automatically activated. If --no_cluster_header not set, then the file will have header contig cluster.",
+      "type": "string",
+      "flags": [
+        "--cluster_tsv"
+      ]
+    },
+    {
+      "name": "No Cluster Header",
+      "parameter": "no_cluster_header",
+      "help": "If set, then the tsv file will not have a header. Only relevant if --cluster_tsv is set.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--no_cluster_header"
+      ]
+    },
+    {
+      "name": "Mst",
+      "parameter": "mst",
+      "help": "If set, then only include edges that are part of the maximum spanning tree of the graph. The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to the minimum necessary to preserve the clusters.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--mst"
+      ]
+    }
+  ]
+
+
+}

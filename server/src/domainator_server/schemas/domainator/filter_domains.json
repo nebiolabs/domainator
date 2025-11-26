@@ -1,0 +1,128 @@
+{
+  "id": "filter_domains",
+  "display_name": "Filter Domains",
+  "category": "Domainator",
+  "description": "Filter domain anntations\n\nTakes a genbank file which has been annotated through the domainator program and filters domainator annotations,\nbased on percentage overlap between domains and evalues of domains.",
+  "runner": "module",
+  "entry_point": "domainator.filter_domains",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "the genbank filenames to be filtered. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "output genbank filename. If not supplied writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "threshold E value for the domain hit",
+      "type": "string",
+      "default": 100000000,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Max Overlap",
+      "parameter": "max_overlap",
+      "help": "the maximum fraction of overlap between domains to be included in the annotated genbank.",
+      "type": "string",
+      "default": 1.0,
+      "flags": [
+        "-m",
+        "--max_overlap"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only annotate contigs with ids in this list. Additive with --contigs_file. default: annotate all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: annotate all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Remove all domains NOT matching these names",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains to include. (all domains not matching this list will be removed).",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    },
+    {
+      "name": "Databases Keep",
+      "parameter": "databases_keep",
+      "help": "Remove annotations from all databases except these. Applied before other filters, such as domains, evalue, and max_overlap. By default will keep all annotations from all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases_keep"
+      ]
+    },
+    {
+      "name": "Databases Filter",
+      "parameter": "databases_filter",
+      "help": "The name of the database which you want to filter annotations from, by default will filter all annoatations according to evalue, domains, and max_overlap. Domains from other databases will be left as-is.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases_filter"
+      ]
+    },
+    {
+      "name": "Annotation Type",
+      "parameter": "annotation_type",
+      "help": "Which type of annotations to filter (domainator, domain_search, all). Default: domainator",
+      "type": "string",
+      "choices": [
+        "all",
+        "domainator",
+        "domain_search"
+      ],
+      "default": "all",
+      "flags": [
+        "--annotation_type"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

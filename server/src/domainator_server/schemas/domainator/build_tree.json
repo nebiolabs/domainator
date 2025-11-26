@@ -1,0 +1,82 @@
+{
+  "id": "build_tree",
+  "display_name": "Build Tree",
+  "category": "Domainator",
+  "description": "Generates Trees from distance matrices",
+  "runner": "module",
+  "entry_point": "domainator.build_tree",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "pairwise distances. Format can be tab-separated text, or Domainator dense hdf5.",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "tsv",
+        "hdf",
+        "h5",
+        "hdf5"
+      ]
+    },
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "Which clustering algorithm to use.",
+      "type": "string",
+      "choices": [
+        "upgma"
+      ],
+      "default": "upgma",
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
+      "name": "Metadata",
+      "parameter": "metadata",
+      "help": "Tab separated files of sequence metadata. These data will be added to the xgmml output.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--metadata"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Xgmml",
+      "parameter": "xgmml",
+      "help": "write a cytoscape xgmml file of the tree.",
+      "type": "output",
+      "flags": [
+        "--xgmml"
+      ]
+    },
+    {
+      "name": "Newick",
+      "parameter": "newick",
+      "help": "write a newick file of the tree.",
+      "type": "output",
+      "flags": [
+        "--newick"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Quiet",
+      "parameter": "quiet",
+      "help": "Suppress warnings.",
+      "type": "boolean",
+      "default": true,
+      "flags": [
+        "--quiet"
+      ]
+    }
+  ]
+}

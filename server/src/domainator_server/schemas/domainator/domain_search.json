@@ -1,0 +1,346 @@
+{
+  "id": "domain_search",
+  "display_name": "Domain Search",
+  "category": "Domainator",
+  "description": "Search for matches to hmm profiles\n\nFor searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries (profiles or protein sequences).\n\nReturns the contigs with hits, possibly truncated to the neighborhood around the hits.\n\nWhen --max_hits is specified, it applies to the entire search, not individual queries. Thus if you supply 5 query profiles and --max_hits 100, \nat most 100 hits will be returned (not 500). \n\nWhen max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.\nIf neither is set, then hits will be written on the fly and not sorted.",
+  "runner": "module",
+  "entry_point": "domainator.domain_search",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Fasta Type",
+      "parameter": "fasta_type",
+      "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
+      "type": "string",
+      "choices": [
+        "protein",
+        "nucleotide"
+      ],
+      "default": "protein",
+      "flags": [
+        "--fasta_type"
+      ]
+    },
+    {
+      "name": "References",
+      "parameter": "references",
+      "help": "the names of the HMM files with profiles to search. Or protein query files.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "-r",
+        "--references"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "output genbank filename. If not supplied, writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Z",
+      "parameter": "Z",
+      "help": "Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. Default: 1000\nSet to 0 to use the number actual target sequences (currently this does does not account for taxonomic filtering).Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.",
+      "type": "string",
+      "default": 1000,
+      "flags": [
+        "-Z"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "threshold E value for the domain hit. Must be <=10. [default 0.001]",
+      "type": "string",
+      "default": 0.001,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Min Evalue",
+      "parameter": "min_evalue",
+      "help": "hits with E value lower than this will be filtered out. Not frequently used. Use only if you want to eliminate close matches. Must be >=0. [default 0]",
+      "type": "string",
+      "default": 0.0,
+      "flags": [
+        "--min_evalue"
+      ]
+    },
+    {
+      "name": "Max Mode",
+      "parameter": "max_mode",
+      "help": "Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--max_mode"
+      ]
+    },
+    {
+      "name": "Max Hits",
+      "parameter": "max_hits",
+      "help": "the maximum number of CDSs returned by the search. Prioritized by bitscore of best scoring profile. [default: return all hits passing the evalue threshold]",
+      "type": "string",
+      "flags": [
+        "--max_hits"
+      ]
+    },
+    {
+      "name": "Include Taxids",
+      "parameter": "include_taxids",
+      "help": "Space separated list of taxids to include",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--include_taxids"
+      ]
+    },
+    {
+      "name": "Exclude Taxids",
+      "parameter": "exclude_taxids",
+      "help": "Space separated list of taxids to exclude",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--exclude_taxids"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy_update"
+      ]
+    },
+    {
+      "name": "Decoys",
+      "parameter": "decoys",
+      "help": "Names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--decoys"
+      ]
+    },
+    {
+      "name": "Decoys File",
+      "parameter": "decoys_file",
+      "help": "text file containing names of decoy domains.",
+      "type": "file",
+      "flags": [
+        "--decoys_file"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",
+      "type": "string",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    },
+    {
+      "name": "Max Overlap",
+      "parameter": "max_overlap",
+      "help": "the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. [default 1]",
+      "type": "string",
+      "default": 1,
+      "flags": [
+        "--max_overlap"
+      ]
+    },
+    {
+      "name": "Add Annotations",
+      "parameter": "add_annotations",
+      "help": "When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--add_annotations"
+      ]
+    },
+    {
+      "name": "Deduplicate",
+      "parameter": "deduplicate",
+      "help": "by default if the same region is extracted for multiple hits then both will be kept. Set this option to eliminate redundancies.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--deduplicate"
+      ]
+    },
+    {
+      "name": "Max Region Overlap",
+      "parameter": "max_region_overlap",
+      "help": "the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.",
+      "type": "string",
+      "default": 1.0,
+      "flags": [
+        "--max_region_overlap"
+      ]
+    },
+    {
+      "name": "Translate",
+      "parameter": "translate",
+      "help": "by default, nucleotide databases will return nucleotide hits. When --translate is set, CDS hits will be translated before writing. Note that --translate is incompatble with neighborhood extraction.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--translate"
+      ]
+    },
+    {
+      "name": "Kb Range",
+      "parameter": "kb_range",
+      "help": "How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS.",
+      "type": "string",
+      "flags": [
+        "--kb_range"
+      ]
+    },
+    {
+      "name": "Kb Up",
+      "parameter": "kb_up",
+      "help": "How many kb upstream of the selected CDS to extract. Starting from the end of the CDS.",
+      "type": "string",
+      "flags": [
+        "--kb_up"
+      ]
+    },
+    {
+      "name": "Kb Down",
+      "parameter": "kb_down",
+      "help": "How many kb downstream of the selected CDS to extract. Starting from the end of the CDS.",
+      "type": "string",
+      "flags": [
+        "--kb_down"
+      ]
+    },
+    {
+      "name": "Cds Range",
+      "parameter": "cds_range",
+      "help": "How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs.",
+      "type": "string",
+      "flags": [
+        "--cds_range"
+      ]
+    },
+    {
+      "name": "Cds Up",
+      "parameter": "cds_up",
+      "help": "How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS.",
+      "type": "string",
+      "flags": [
+        "--cds_up"
+      ]
+    },
+    {
+      "name": "Cds Down",
+      "parameter": "cds_down",
+      "help": "How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS.",
+      "type": "string",
+      "flags": [
+        "--cds_down"
+      ]
+    },
+    {
+      "name": "Whole Contig",
+      "parameter": "whole_contig",
+      "help": "If set, then return the entire matching contigs.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--whole_contig"
+      ]
+    },
+    {
+      "name": "Strand",
+      "parameter": "strand",
+      "help": "Only extract regions around CDSs on the specified strand.",
+      "type": "string",
+      "choices": [
+        "f",
+        "r"
+      ],
+      "flags": [
+        "--strand"
+      ]
+    },
+    {
+      "name": "Pad",
+      "parameter": "pad",
+      "help": "If set, then ends of sequences will be padded so that the focus CDS aligns.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--pad"
+      ]
+    },
+    {
+      "name": "Keep Direction",
+      "parameter": "keep_direction",
+      "help": "by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_direction"
+      ]
+    },
+    {
+      "name": "Batch Size",
+      "parameter": "batch_size",
+      "help": "Approximately how many protein sequences to search at one time in a batch.",
+      "type": "string",
+      "default": 10000,
+      "flags": [
+        "--batch_size"
+      ]
+    },
+    {
+      "name": "Gene Call",
+      "parameter": "gene_call",
+      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
+      "type": "string",
+      "choices": [
+        "all",
+        "unannotated"
+      ],
+      "flags": [
+        "--gene_call"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

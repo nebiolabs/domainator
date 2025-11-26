@@ -1,0 +1,132 @@
+{
+  "id": "color_genbank",
+  "display_name": "Color Genbank",
+  "category": "Domainator",
+  "description": "add colors to domains or CDS annotations in genbank files\n\nTakes a genbank file which has been annotated using the domainator program, adds color annotations to the sequence features.\n\nDomains are colored based on domain name.\n\nCDSs are colored based on the associated domains, prioritized by domain score.\n\nIf a color_table is provided, then the colors in the table will be used, otherwise a random color will be assigned to each domain.",
+  "runner": "module",
+  "entry_point": "domainator.color_genbank",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Genbank filenames. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "the name of the output genbank file.",
+      "type": "output",
+      "required": true,
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only color contigs with ids in this list (other contigs will be excluded from output). Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only color contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    },
+    {
+      "name": "Color Table",
+      "parameter": "color_table",
+      "help": "tab separated file with two columns and no header, columns are: domain id, hex color. For example: CCDB   cc0000",
+      "type": "file",
+      "flags": [
+        "--color_table"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Color Table Out",
+      "parameter": "color_table_out",
+      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",
+      "type": "output",
+      "flags": [
+        "--color_table_out"
+      ]
+    },
+    {
+      "name": "Search Hit Color",
+      "parameter": "search_hit_color",
+      "help": "color to use for search hit annotations.",
+      "type": "string",
+      "flags": [
+        "--search_hit_color"
+      ]
+    },
+    {
+      "name": "Clear",
+      "parameter": "clear",
+      "help": "if set, then remove all color annotations from the genbank file before adding any new ones.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--clear"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Domain databases to use for coloring. default: all databases.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Color Domains",
+      "parameter": "color_domains",
+      "help": "if set, then color domain annotations instead of CDS annotations (by default CDS annotations will be colored)",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--color_domains"
+      ]
+    },
+    {
+      "name": "Color Both",
+      "parameter": "color_both",
+      "help": "if set, then color domain and CDS annotations annotations (by default only CDS annotations will be colored)",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--color_both"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

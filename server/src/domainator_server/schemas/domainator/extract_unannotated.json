@@ -1,0 +1,140 @@
+{
+  "id": "extract_unannotated",
+  "display_name": "Extract Unannotated",
+  "category": "Domainator",
+  "description": "Extract unannotated regions\n\nTakes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts regions not containing them.\n\nThis tool is currently only supports protein sequences, support for nucleic acids may be added someday.\n\ncan write a fasta or a genbank file",
+  "runner": "module",
+  "entry_point": "domainator.extract_unannotated",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Genbank filenames. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "the name of the output file. If not supplied, writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "the evalue cutoff (max) for domain annotations to be considered. default: no cutoff.",
+      "type": "string",
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Score",
+      "parameter": "score",
+      "help": "the score cutoff (min) for domain annotations to be considered. default: no cutoff.",
+      "type": "string",
+      "flags": [
+        "--score"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Only consider domains from these databases. default: all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Search Hits",
+      "parameter": "search_hits",
+      "help": "Consider domains that are marked as search hits (from domain_search.py).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--search_hits"
+      ]
+    },
+    {
+      "name": "Keep Direction",
+      "parameter": "keep_direction",
+      "help": "by default extracted regions will be flipped so that the source CDS will be on the forward strand. Set this option to not reverse complement anything. In the rare case of a split CDS with parts on different strands, the strand of the first part will be considered.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_direction"
+      ]
+    },
+    {
+      "name": "Keep Name",
+      "parameter": "keep_name",
+      "help": "by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_name"
+      ]
+    },
+    {
+      "name": "Largest",
+      "parameter": "largest",
+      "help": "Extract only the largest unannotated region from each protein, providing it passes the length cutoff specified by '--lb'",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--largest"
+      ]
+    },
+    {
+      "name": "Lb",
+      "parameter": "lb",
+      "help": "Extract unannotated regions of at least this length from each protein. default: no cutoff.",
+      "type": "string",
+      "flags": [
+        "--lb"
+      ]
+    },
+    {
+      "name": "Fasta Out",
+      "parameter": "fasta_out",
+      "help": "makes output a fasta file when activated",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--fasta_out"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

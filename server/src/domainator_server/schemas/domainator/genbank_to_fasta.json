@@ -1,0 +1,32 @@
+{
+  "id": "genbank_to_fasta",
+  "display_name": "Genbank To Fasta",
+  "category": "Domainator",
+  "description": "Convert a GenBank file to a FASTA file.",
+  "runner": "module",
+  "entry_point": "domainator.genbank_to_fasta",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Genbank filenames. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "the name of the output fasta file. If not supplied writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

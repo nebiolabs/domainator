@@ -1,0 +1,183 @@
+{
+  "id": "extract_peptides",
+  "display_name": "Extract Peptides",
+  "category": "Domainator",
+  "description": "Converts annotated CDSs into annotated protein sequences\n\nTakes a domainator-annotated genbank file \nCreates peptide genbank or fasta files with the domainator annotations from the CDSs found in the original\ngenbank file\n\nBy default, extracts peptides from all CDSs in the genbank file.\n\nIf any criteria are supplied, then only peptides from CDSs that meet the criteria will be extracted.\n\nCriteria are combined with the following logic:\n    (all OR target_CDSs OR target_domains OR unannotated OR search_hits) AND (target_contigs OR strand)",
+  "runner": "module",
+  "entry_point": "domainator.extract_peptides",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Genbank filenames. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "the name of the output genbank file. If not supplied writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only look for peptides on contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only look for peptides on contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Only extract peptides containing these domains",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains, where peptides containing these domains will be extracted.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Consider only domains from these databases when filtering by domain. default: all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Unannotated",
+      "parameter": "unannotated",
+      "help": "extract peptides from CDSs with no domain annotations.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--unannotated"
+      ]
+    },
+    {
+      "name": "Search Hits",
+      "parameter": "search_hits",
+      "help": "extract peptides from the search hits (from domain_search.py).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--search_hits"
+      ]
+    },
+    {
+      "name": "Strand",
+      "parameter": "strand",
+      "help": "Only extract peptides from CDSs on the specified strand.",
+      "type": "string",
+      "choices": [
+        "f",
+        "r"
+      ],
+      "flags": [
+        "--strand"
+      ]
+    },
+    {
+      "name": "Invert",
+      "parameter": "invert",
+      "help": "Invert the CDS selection criteria. i.e. return peptides from CDSs that don't match the CDS selection criteria. (Only applies to CDS selection, not contig selection)",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--invert"
+      ]
+    },
+    {
+      "name": "Cdss",
+      "parameter": "cdss",
+      "help": "only look for peptides on cdss with these names",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--cdss"
+      ]
+    },
+    {
+      "name": "Cdss File",
+      "parameter": "cdss_file",
+      "help": "only look for peptides on cdss with names listed in this text file.",
+      "type": "file",
+      "flags": [
+        "--cdss_file"
+      ]
+    },
+    {
+      "name": "Keep Name",
+      "parameter": "keep_name",
+      "help": "by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_name"
+      ]
+    },
+    {
+      "name": "Name Field",
+      "parameter": "name_field",
+      "help": "The CDS qualifier to preferentially use as the name of the peptide. If not supplied, then qualifiers will be checked in order of: [\"protein_id\", \"gene_id\", \"locus_tag\", \"gene\"]",
+      "type": "string",
+      "flags": [
+        "--name_field"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "the evalue cutoff for domain annotations to be put onto the new genbank file",
+      "type": "string",
+      "default": 100000000,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Fasta Out",
+      "parameter": "fasta_out",
+      "help": "makes output a fasta file when activated",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--fasta_out"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

@@ -44,7 +44,7 @@ class ServerConfig:
             self.python_executable = self._infer_python()
         if self.schema_dirs is None:
             base_schema = Path(__file__).resolve().parent / "schemas"
-            self.schema_dirs = [base_schema / "sample_tools", base_schema / "sample_workflows"]
+            self.schema_dirs = [base_schema / "domainator", base_schema / "workflows"]
 
     @property
     def paths(self) -> ServerPaths:

@@ -1,0 +1,143 @@
+{
+  "id": "build_projection",
+  "display_name": "Build Projection",
+  "category": "Domainator",
+  "description": "generates 2d or 3d umap, tsne, or pca projections from dense or sparse matrices.\n\n    output can be images, coordinates, or Cytoscape xgmml files.",
+  "runner": "module",
+  "entry_point": "domainator.build_projection",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "The matrix that you want to project into 2D or 3D space, rows are observations (typically gene names), columns are features (typically similarity to other genes, or hmm profile scores). If passing in a coords matrix, use this (and not --sparse).",
+      "type": "file",
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "tsv",
+        "hdf",
+        "h5",
+        "hdf5"
+      ]
+    },
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "Which projection algorithm to use.",
+      "type": "string",
+      "choices": [
+        "umap",
+        "pca",
+        "coords",
+        "tsne"
+      ],
+      "default": "pca",
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
+      "name": "Metadata",
+      "parameter": "metadata",
+      "help": "tab separated files of sequence metadata.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--metadata"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Color By",
+      "parameter": "color_by",
+      "help": "Color the points in the output image based on this column of the metadata table.",
+      "type": "string",
+      "flags": [
+        "--color_by"
+      ]
+    },
+    {
+      "name": "Color Table",
+      "parameter": "color_table",
+      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000",
+      "type": "file",
+      "flags": [
+        "--color_table"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Png Out",
+      "parameter": "png_out",
+      "help": "write a png file of the projection.",
+      "type": "output",
+      "flags": [
+        "--png_out"
+      ]
+    },
+    {
+      "name": "Xgmml",
+      "parameter": "xgmml",
+      "help": "write a Cytoscape xgmml file of the projection.",
+      "type": "output",
+      "flags": [
+        "--xgmml"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Color Table Out",
+      "parameter": "color_table_out",
+      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",
+      "type": "output",
+      "flags": [
+        "--color_table_out"
+      ]
+    },
+    {
+      "name": "Coords Out",
+      "parameter": "coords_out",
+      "help": "write a tsv file with the projected coordinates.",
+      "type": "output",
+      "flags": [
+        "--coords_out"
+      ]
+    },
+    {
+      "name": "Params",
+      "parameter": "params",
+      "help": "additional parameters to pass to the algorithm, in the form of a json dict.",
+      "type": "string",
+      "flags": [
+        "--params"
+      ]
+    },
+    {
+      "name": "Scale",
+      "parameter": "scale",
+      "help": "scale the largest axis so that the difference between the largest and smallest value is this. Default: 1000",
+      "type": "number",
+      "default": 1000,
+      "flags": [
+        "--scale"
+      ]
+    },
+    {
+      "name": "3D",
+      "parameter": "3d",
+      "help": "if set, then makes 3d projections. default: 2d projections.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--3d"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "color_table_to_legend",
+  "display_name": "Color Table To Legend",
+  "category": "Domainator",
+  "description": "Generates an SVG legend based on a color table.\nThe color table is a tsv file that maps annotations to hex color codes.\nThe generated SVG file contains rectangles filled with the corresponding colors and text labels for each annotation.",
+  "runner": "module",
+  "entry_point": "domainator.color_table_to_legend",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of color table files. If not supplied, reads from stdin.\n\n                        Files are tab separated with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ]
+    },
+    {
+      "name": "Svg",
+      "parameter": "svg",
+      "help": "name of output svg file",
+      "type": "string",
+      "flags": [
+        "--svg"
+      ]
+    },
+    {
+      "name": "Title",
+      "parameter": "title",
+      "help": "Title of the legend. Default: 'Legend'",
+      "type": "string",
+      "default": "Legend",
+      "flags": [
+        "--title"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}
