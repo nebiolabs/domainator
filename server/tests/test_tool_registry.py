@@ -41,3 +41,25 @@ def test_tool_registry_duplicate_ids_raise(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         ToolRegistry([schema_dir])
+
+
+def test_tool_registry_ignores_comment_lines(tmp_path: Path) -> None:
+    schema_dir = tmp_path / "schemas"
+    schema_dir.mkdir()
+    schema_path = schema_dir / "commented.json"
+    schema_path.write_text(
+        "// leading comment\n"
+        "{\n"
+        "  \"id\": \"commented\",\n"
+        "  // mid comment\n"
+        "  \"runner\": \"python\",\n"
+        "  \"entry_point\": \"tool.py\",\n"
+        "  \"parameters\": []\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    registry = ToolRegistry([schema_dir])
+    schema = registry.get("commented")
+    assert schema is not None
+    assert schema["runner"] == "python"

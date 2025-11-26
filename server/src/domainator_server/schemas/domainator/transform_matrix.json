@@ -22,14 +22,14 @@
       "help": "If the type of the input matrix is not specified, specify the type of input matrix. Default: None",
       "type": "file",
       "choices": [
-        "efi_score",
-        "score",
+        null,
         "score_dist",
-        "efi_score_dist",
-        "bool",
+        "efi_score",
         "norm_score",
+        "efi_score_dist",
+        "score",
         "row_norm_score",
-        null
+        "bool"
       ],
       "flags": [
         "--input_type"
@@ -39,7 +39,7 @@
       "name": "Dense",
       "parameter": "dense",
       "help": "Write a dense distance matrix hdf5 file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--dense"
       ]
@@ -48,7 +48,7 @@
       "name": "Dense Text",
       "parameter": "dense_text",
       "help": "Write a dense distance matrix tsv file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--dense_text"
       ]
@@ -57,7 +57,7 @@
       "name": "Sparse",
       "parameter": "sparse",
       "help": "Write a sparse distance matrix hdf5 file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--sparse"
       ]
@@ -69,12 +69,12 @@
       "type": "string",
       "choices": [
         "score",
-        "score_dist",
-        "row_norm_score",
-        "efi_score",
-        "efi_score_dist",
         "bool",
-        "norm_score"
+        "score_dist",
+        "efi_score",
+        "norm_score",
+        "efi_score_dist",
+        "row_norm_score"
       ],
       "default": "norm_score",
       "flags": [

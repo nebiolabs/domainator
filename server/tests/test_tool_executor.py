@@ -242,3 +242,84 @@ def test_executor_loads_existing_manifests(tmp_path: Path, schema_dir: Path, too
     assert restored.output_artifacts == job.output_artifacts
     assert restored.config_path is not None
     assert restored.config_path.exists()
+
+
+def test_executor_aggregates_append_const_and_dynamic(tmp_path: Path, schema_dir: Path, tool_script: Path) -> None:
+    schema_payload = {
+        "id": "enum",
+        "runner": "python",
+        "entry_point": str(tool_script),
+        "parameters": [
+            {
+                "name": "Domains",
+                "parameter": "output_cols__domains",
+                "type": "boolean",
+                "behavior": "append_const",
+                "append_const": {"target": "output_cols", "value": "domains"},
+                "target_parameter": "output_cols",
+            },
+            {
+                "name": "Taxid",
+                "parameter": "output_cols__taxid",
+                "type": "dynamic",
+                "behavior": "dynamic",
+                "dynamic_action": {"target": "output_cols", "const": "taxid", "nargs": "+"},
+                "target_parameter": "output_cols",
+            },
+        ],
+    }
+    with (schema_dir / "enum.json").open("w", encoding="utf-8") as handle:
+        json.dump(schema_payload, handle)
+
+    config = ServerConfig(data_dir=tmp_path / "data")
+    registry = ToolRegistry([schema_dir])
+    file_manager = FileManager(config)
+    executor = ToolExecutor(config, registry, file_manager)
+
+    parameters = executor._prepare_parameters(
+        "enum",
+        {
+            "output_cols__domains": True,
+            "output_cols__taxid": [["genus", "species"], ["family"]],
+        },
+        tmp_path,
+    )
+
+    assert "output_cols" in parameters
+    assert parameters["output_cols"] == [
+        "domains",
+        ["taxid", ["genus", "species"]],
+        ["taxid", ["family"]],
+    ]
+
+
+def test_executor_rejects_invalid_dynamic_group(tmp_path: Path, schema_dir: Path, tool_script: Path) -> None:
+    schema_payload = {
+        "id": "enum",
+        "runner": "python",
+        "entry_point": str(tool_script),
+        "parameters": [
+            {
+                "name": "Taxid",
+                "parameter": "output_cols__taxid",
+                "type": "dynamic",
+                "behavior": "dynamic",
+                "dynamic_action": {"target": "output_cols", "const": "taxid", "nargs": 2},
+                "target_parameter": "output_cols",
+            },
+        ],
+    }
+    with (schema_dir / "enum.json").open("w", encoding="utf-8") as handle:
+        json.dump(schema_payload, handle)
+
+    config = ServerConfig(data_dir=tmp_path / "data")
+    registry = ToolRegistry([schema_dir])
+    file_manager = FileManager(config)
+    executor = ToolExecutor(config, registry, file_manager)
+
+    with pytest.raises(ValueError):
+        executor._prepare_parameters(
+            "enum",
+            {"output_cols__taxid": [["genus"]]},
+            tmp_path,
+        )

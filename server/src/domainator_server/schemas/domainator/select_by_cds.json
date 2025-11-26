@@ -31,7 +31,7 @@
       "name": "Kb Range",
       "parameter": "kb_range",
       "help": "How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--kb_range"
       ]
@@ -40,7 +40,7 @@
       "name": "Kb Up",
       "parameter": "kb_up",
       "help": "How many kb upstream of the selected CDS to extract. Starting from the end of the CDS.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--kb_up"
       ]
@@ -49,7 +49,7 @@
       "name": "Kb Down",
       "parameter": "kb_down",
       "help": "How many kb downstream of the selected CDS to extract. Starting from the end of the CDS.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--kb_down"
       ]
@@ -58,7 +58,7 @@
       "name": "Cds Range",
       "parameter": "cds_range",
       "help": "How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--cds_range"
       ]
@@ -67,7 +67,7 @@
       "name": "Cds Up",
       "parameter": "cds_up",
       "help": "How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--cds_up"
       ]
@@ -76,7 +76,7 @@
       "name": "Cds Down",
       "parameter": "cds_down",
       "help": "How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--cds_down"
       ]
@@ -234,7 +234,7 @@
       "name": "Max Region Overlap",
       "parameter": "max_region_overlap",
       "help": "the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.",
-      "type": "string",
+      "type": "number",
       "default": 1.0,
       "flags": [
         "--max_region_overlap"
@@ -244,7 +244,7 @@
       "name": "Evalue",
       "parameter": "evalue",
       "help": "the evalue cutoff for domain annotations to be put onto the new genbank file",
-      "type": "string",
+      "type": "number",
       "default": 100000000,
       "flags": [
         "-e",

@@ -107,9 +107,9 @@
       "help": "The type of domain to consider, domain, search, both. Default: domain",
       "type": "string",
       "choices": [
+        "search",
         "both",
-        "domain",
-        "search"
+        "domain"
       ],
       "default": "domain",
       "flags": [
@@ -140,7 +140,7 @@
       "name": "Evalue",
       "parameter": "evalue",
       "help": "the evalue cutoff for domain annotations to be considered when selecting by domain.",
-      "type": "string",
+      "type": "number",
       "default": 100000000.0,
       "flags": [
         "-e",
@@ -161,7 +161,7 @@
       "name": "Include Taxids",
       "parameter": "include_taxids",
       "help": "Space separated list of taxids to include",
-      "type": "string",
+      "type": "integer",
       "multiple": true,
       "flags": [
         "--include_taxids"
@@ -171,7 +171,7 @@
       "name": "Exclude Taxids",
       "parameter": "exclude_taxids",
       "help": "Space separated list of taxids to exclude",
-      "type": "string",
+      "type": "integer",
       "multiple": true,
       "flags": [
         "--exclude_taxids"
@@ -201,7 +201,7 @@
       "name": "First",
       "parameter": "first",
       "help": "If set then stop after returning this many contigs.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--first"
       ]
@@ -210,7 +210,7 @@
       "name": "Length Lb",
       "parameter": "length_lb",
       "help": "skip contigs smaller than this. In units of bp (aa for protein input).",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--length_lb"
       ]
@@ -219,7 +219,7 @@
       "name": "Length Ub",
       "parameter": "length_ub",
       "help": "skip contigs larger than this. In units of bp (aa for protein input).",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--length_ub"
       ]
@@ -228,7 +228,7 @@
       "name": "Search Score Lb",
       "parameter": "search_score_lb",
       "help": "Skip contigs with a domain_search annotation score smaller than this.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--search_score_lb"
       ]
@@ -237,7 +237,7 @@
       "name": "Search Score Ub",
       "parameter": "search_score_ub",
       "help": "Skip contigs with a domain_search annotation score larger than this.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--search_score_ub"
       ]

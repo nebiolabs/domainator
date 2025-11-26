@@ -35,29 +35,6 @@
       ]
     },
     {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only color contigs with ids in this list (other contigs will be excluded from output). Additive with --contigs_file. default: all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only color contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
-      ],
-      "file_types": [
-        "txt"
-      ]
-    },
-    {
       "name": "Color Table",
       "parameter": "color_table",
       "help": "tab separated file with two columns and no header, columns are: domain id, hex color. For example: CCDB   cc0000",
@@ -67,15 +44,6 @@
       ],
       "file_types": [
         "tsv"
-      ]
-    },
-    {
-      "name": "Color Table Out",
-      "parameter": "color_table_out",
-      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",
-      "type": "output",
-      "flags": [
-        "--color_table_out"
       ]
     },
     {
@@ -97,16 +65,7 @@
         "--clear"
       ]
     },
-    {
-      "name": "Databases",
-      "parameter": "databases",
-      "help": "Domain databases to use for coloring. default: all databases.",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--databases"
-      ]
-    },
+
     {
       "name": "Color Domains",
       "parameter": "color_domains",
@@ -128,5 +87,48 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only color contigs with ids in this list (other contigs will be excluded from output). Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only color contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    },  
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Domain databases to use for coloring. default: all databases.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Color Table Out",
+      "parameter": "color_table_out",
+      "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",
+      "type": "output",
+      "flags": [
+        "--color_table_out"
+      ]
+    }
+  ]
 }

@@ -63,10 +63,10 @@
       "help": "whether to search the NAME field, the DESC field, the ACC field, or all three.",
       "type": "string",
       "choices": [
-        "acc",
-        "all",
         "desc",
-        "name"
+        "acc",
+        "name",
+        "all"
       ],
       "default": "all",
       "flags": [

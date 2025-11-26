@@ -15,6 +15,12 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
       ]
     },
     {
@@ -25,45 +31,6 @@
       "flags": [
         "-o",
         "--output"
-      ]
-    },
-    {
-      "name": "Name By Order",
-      "parameter": "name_by_order",
-      "help": "Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--name_by_order"
-      ]
-    },
-    {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only annotate contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
-      ]
-    },
-    {
-      "name": "K",
-      "parameter": "k",
-      "help": "for each metric, return scores for this many of the top hits, and consider all other hits to be zero. default: count all comparisons.",
-      "type": "string",
-      "flags": [
-        "-k"
       ]
     },
     {
@@ -90,39 +57,79 @@
       "name": "Databases",
       "parameter": "databases",
       "help": "Domain databases to use for domain content comparison. default: all databases.",
-      "type": "file",
+      "type": "str",
       "multiple": true,
       "flags": [
         "--databases"
       ]
     },
     {
-      "name": "Dense",
-      "parameter": "dense",
-      "help": "Write a dense distance matrix hdf5 file to this path.",
-      "type": "string",
+      "name": "Sparse",
+      "parameter": "sparse",
+      "help": "Write a sparse distance matrix hdf5 file to this path.",
+      "type": "output",
       "flags": [
-        "--dense"
+        "--sparse"
       ]
     },
     {
       "name": "Dense Text",
       "parameter": "dense_text",
       "help": "Write a dense distance matrix tsv file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--dense_text"
       ]
-    },
-    {
-      "name": "Sparse",
-      "parameter": "sparse",
-      "help": "Write a sparse distance matrix hdf5 file to this path.",
-      "type": "string",
-      "flags": [
-        "--sparse"
-      ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only annotate contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ]
+    },
+    {
+      "name": "Name By Order",
+      "parameter": "name_by_order",
+      "help": "Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--name_by_order"
+      ]
+    },
+    {
+      "name": "K",
+      "parameter": "k",
+      "help": "for each metric, return scores for this many of the top hits, and consider all other hits to be zero. default: count all comparisons.",
+      "type": "integer",
+      "flags": [
+        "-k"
+      ]
+    },
+    {
+      "name": "Dense",
+      "parameter": "dense",
+      "help": "Write a dense distance matrix hdf5 file to this path.",
+      "type": "output",
+      "flags": [
+        "--dense"
+      ]
+    }
+  ]
 }

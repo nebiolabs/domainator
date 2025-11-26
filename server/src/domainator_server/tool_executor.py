@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -197,7 +198,26 @@ class ToolExecutor:
                 continue
             param_type = str(definition.get("type", "")).lower()
             multiple = bool(definition.get("multiple"))
-            target_key = definition.get("parameter") or definition.get("name") or key
+            behavior = definition.get("behavior")
+            target_key = (
+                definition.get("target_parameter")
+                or (definition.get("append_const") or {}).get("target")
+                or (definition.get("dynamic_action") or {}).get("target")
+                or definition.get("parameter")
+                or definition.get("name")
+                or key
+            )
+
+            if behavior == "append_const":
+                if self._ensure_boolean(value, False):
+                    self._append_to_list(resolved, target_key, [definition.get("append_const", {}).get("value")])
+                continue
+
+            if behavior == "dynamic":
+                groups = self._coerce_dynamic_values(definition, value)
+                self._append_to_list(resolved, target_key, groups)
+                continue
+
             if param_type == "file":
                 resolved[target_key] = self._resolve_file_value(value, multiple)
             elif param_type == "output":
@@ -209,6 +229,19 @@ class ToolExecutor:
             else:
                 resolved[target_key] = self._ensure_sequence(value, multiple)
         return resolved
+
+    def _append_to_list(self, resolved: Dict[str, object], key: str, values: Iterable[object]) -> None:
+        items = [item for item in values if item is not None]
+        if not items:
+            return
+        existing = resolved.get(key)
+        if existing is None:
+            resolved[key] = list(items)
+            return
+        if not isinstance(existing, list):
+            existing = [existing]
+        existing.extend(items)
+        resolved[key] = existing
 
     def _ensure_sequence(self, value: object, multiple: bool) -> object:
         if multiple:
@@ -253,6 +286,74 @@ class ToolExecutor:
         if multiple:
             return [_convert(entry) for entry in self._as_iterable(value)]
         return _convert(value)
+
+    def _coerce_dynamic_values(self, definition: dict, value: object) -> List[List[object]]:
+        meta = definition.get("dynamic_action") or {}
+        const_value = meta.get("const")
+        nargs = meta.get("nargs")
+        if const_value is None:
+            return []
+
+        groups: List[List[object]] = []
+        raw_groups: List[List[object]]
+
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            lines = [line.strip() for line in value.splitlines() if line.strip()]
+            raw_groups = [re.split(r"[\s,]+", line) for line in lines]
+        elif isinstance(value, (list, tuple)):
+            if value and all(isinstance(item, (list, tuple)) for item in value):
+                raw_groups = [list(item) for item in value]
+            else:
+                raw_groups = [list(value)]
+        else:
+            raw_groups = [[value]]
+
+        for group in raw_groups:
+            cleaned = [self._clean_scalar(item) for item in group if item is not None and str(item).strip() != ""]
+            if not cleaned:
+                continue
+            if not self._validate_dynamic_group(cleaned, nargs):
+                requirement = self._describe_dynamic_requirement(nargs)
+                name = definition.get("name") or definition.get("parameter") or "dynamic parameter"
+                raise ValueError(f"{name} expects {requirement}")
+            groups.append([const_value, cleaned])
+        return groups
+
+    @staticmethod
+    def _validate_dynamic_group(group: List[object], nargs: object) -> bool:
+        if not group:
+            return False
+        if nargs in (None, "*"):
+            return True
+        if nargs == "+":
+            return len(group) >= 1
+        if nargs == "?":
+            return len(group) <= 1
+        try:
+            count = int(nargs)
+        except (TypeError, ValueError):
+            return True
+        if count <= 0:
+            return True
+        return len(group) == count
+
+    @staticmethod
+    def _describe_dynamic_requirement(nargs: object) -> str:
+        if nargs in (None, "*"):
+            return "any number of values"
+        if nargs == "+":
+            return "at least one value"
+        if nargs == "?":
+            return "zero or one value"
+        try:
+            count = int(nargs)
+        except (TypeError, ValueError):
+            return "valid values"
+        if count <= 0:
+            return "valid values"
+        return "exactly one value" if count == 1 else f"exactly {count} values"
 
     def _resolve_file_value(self, value: object, multiple: bool) -> Union[str, List[str]]:
         def _resolve_single(item: object) -> str:

@@ -21,7 +21,7 @@
       "name": "Html",
       "parameter": "html",
       "help": "name of output html file",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--html"
       ]
@@ -30,7 +30,7 @@
       "name": "Height",
       "parameter": "height",
       "help": "height of the contig plot, in pixels",
-      "type": "string",
+      "type": "integer",
       "default": 2400,
       "flags": [
         "--height"
@@ -40,7 +40,7 @@
       "name": "Width",
       "parameter": "width",
       "help": "width of the contig plot, in pixels",
-      "type": "string",
+      "type": "integer",
       "default": 1200,
       "flags": [
         "--width"
@@ -60,7 +60,7 @@
       "name": "Feature Height",
       "parameter": "feature_height",
       "help": "height of the feature arrows, in pixels.",
-      "type": "string",
+      "type": "integer",
       "default": 50,
       "flags": [
         "--feature_height"
@@ -70,7 +70,7 @@
       "name": "Feature Font Size",
       "parameter": "feature_font_size",
       "help": "font size of the feature labels, in pixels.",
-      "type": "string",
+      "type": "integer",
       "default": 26,
       "flags": [
         "--feature_font_size"

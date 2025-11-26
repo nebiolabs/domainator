@@ -31,7 +31,7 @@
       "name": "Kb Both",
       "parameter": "kb_both",
       "help": "How many kb to trim from both sides of each contig.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--kb_both"
       ]
@@ -40,7 +40,7 @@
       "name": "Kb Left",
       "parameter": "kb_left",
       "help": "How many kb to trim from the left side of each contig.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--kb_left"
       ]
@@ -49,7 +49,7 @@
       "name": "Kb Right",
       "parameter": "kb_right",
       "help": "How many kb to trim from the right side of each contigs.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--kb_right"
       ]
@@ -58,7 +58,7 @@
       "name": "Cds Both",
       "parameter": "cds_both",
       "help": "How many CDSs to trim from both sides of each contig.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--cds_both"
       ]
@@ -67,7 +67,7 @@
       "name": "Cds Left",
       "parameter": "cds_left",
       "help": "How many CDSs to trim from the left side of each contig.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--cds_left"
       ]
@@ -76,7 +76,7 @@
       "name": "Cds Right",
       "parameter": "cds_right",
       "help": "How many CDSs to trim from the right side of each contig.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--cds_right"
       ]

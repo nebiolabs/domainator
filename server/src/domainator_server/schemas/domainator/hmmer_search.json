@@ -42,7 +42,7 @@
       "name": "Score Cutoff",
       "parameter": "score_cutoff",
       "help": "Report alignments with scores greater than or equal to this.",
-      "type": "string",
+      "type": "number",
       "default": 10.0,
       "flags": [
         "--score_cutoff"
@@ -52,7 +52,7 @@
       "name": "Max Hits",
       "parameter": "max_hits",
       "help": "The maximum number of hmms returned by the search. Prioritized by bitscore of best scoring profile. Default: return all hits passing the score cutoff.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--max_hits"
       ]
@@ -61,7 +61,7 @@
       "name": "Cpu",
       "parameter": "cpu",
       "help": "how many cpu threads to use. Default: use all available cores",
-      "type": "string",
+      "type": "integer",
       "default": 0,
       "flags": [
         "--cpu"

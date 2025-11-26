@@ -31,7 +31,7 @@
       "name": "Html",
       "parameter": "html",
       "help": "Write a table in html format to this file.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--html"
       ]
@@ -40,7 +40,7 @@
       "name": "Html Max Height",
       "parameter": "html_max_height",
       "help": "Max height in pixels to set the html output to.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--html_max_height"
       ]
@@ -57,58 +57,94 @@
     },
     {
       "name": "Source",
-      "parameter": "output_cols",
+      "parameter": "output_cols__source",
       "help": "report the name of the hmm file.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--source"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "source"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Acc",
-      "parameter": "output_cols",
+      "parameter": "output_cols__acc",
       "help": "report the start coordinate of the feature.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--acc"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "acc"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Desc",
-      "parameter": "output_cols",
+      "parameter": "output_cols__desc",
       "help": "return the end coordinate of the feature.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--desc"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "desc"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Length",
-      "parameter": "output_cols",
+      "parameter": "output_cols__length",
       "help": "return the length of the profile (i.e. the number of nodes).",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--length"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "length"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Consensus",
-      "parameter": "output_cols",
+      "parameter": "output_cols__consensus",
       "help": "return the consensus residue line of the profile, if set..",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--consensus"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "consensus"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Append",
-      "parameter": "output_cols",
-      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.",
-      "type": "output",
-      "multiple": true,
+      "parameter": "output_cols__append",
+      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows. Enter one entry per line; separate multiple values with spaces or commas.",
+      "type": "dynamic",
       "flags": [
         "--append"
-      ]
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "append",
+        "nargs": 3
+      },
+      "target_parameter": "output_cols"
     }
   ],
   "advanced_parameters": []

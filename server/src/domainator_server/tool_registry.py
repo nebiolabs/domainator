@@ -22,6 +22,16 @@ class ToolRegistry:
         self._schemas: Dict[str, ToolSchema] = {}
         self.refresh()
 
+    @staticmethod
+    def _strip_json_comments(raw: str) -> str:
+        lines: List[str] = []
+        for line in raw.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("//"):
+                continue
+            lines.append(line)
+        return "\n".join(lines)
+
     def refresh(self) -> None:
         schemas: Dict[str, ToolSchema] = {}
         for directory in self._schema_dirs:
@@ -30,7 +40,8 @@ class ToolRegistry:
             for path in directory.rglob(f"*{_SCHEMA_EXT}"):
                 try:
                     with path.open("r", encoding="utf-8") as handle:
-                        payload = json.load(handle)
+                        raw = handle.read()
+                    payload = json.loads(self._strip_json_comments(raw))
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"Invalid JSON schema: {path}") from exc
                 tool_id = payload.get("id")

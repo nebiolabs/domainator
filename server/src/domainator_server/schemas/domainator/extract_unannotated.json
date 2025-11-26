@@ -51,7 +51,7 @@
       "name": "Evalue",
       "parameter": "evalue",
       "help": "the evalue cutoff (max) for domain annotations to be considered. default: no cutoff.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "-e",
         "--evalue"
@@ -61,7 +61,7 @@
       "name": "Score",
       "parameter": "score",
       "help": "the score cutoff (min) for domain annotations to be considered. default: no cutoff.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--score"
       ]
@@ -120,7 +120,7 @@
       "name": "Lb",
       "parameter": "lb",
       "help": "Extract unannotated regions of at least this length from each protein. default: no cutoff.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--lb"
       ]

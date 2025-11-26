@@ -1,3 +1,4 @@
+//TODO: keep curating starting here
 {
   "id": "enum_report",
   "display_name": "Enum Report",
@@ -31,7 +32,7 @@
       "name": "Html",
       "parameter": "html",
       "help": "Write a table in html format to this file.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--html"
       ]
@@ -40,7 +41,7 @@
       "name": "Html Max Height",
       "parameter": "html_max_height",
       "help": "Max height in pixels to set the html output to.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--html_max_height"
       ]
@@ -92,203 +93,335 @@
     },
     {
       "name": "Domains",
-      "parameter": "output_cols",
+      "parameter": "output_cols__domains",
       "help": "report domain content as alphabetical and semicolon-separated, only listing duplicates once.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--domains"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "domains"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Domain Descriptions",
-      "parameter": "output_cols",
+      "parameter": "output_cols__domain_descriptions",
       "help": "report domain content as alphabetical and semicolon-separated, only listing duplicates once.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--domain_descriptions"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "domain_descriptions"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Score",
-      "parameter": "output_cols",
+      "parameter": "output_cols__score",
       "help": "report report the sum of domain scores.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--score"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "score"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Identity",
-      "parameter": "output_cols",
+      "parameter": "output_cols__identity",
       "help": "report report the sum of domain identities.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--identity"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "identity"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Architecture",
-      "parameter": "output_cols",
+      "parameter": "output_cols__architecture",
       "help": "report domains in order of appearance of start position in the sequence and semicolon-separated.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--architecture"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "architecture"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Architecture Detailed",
-      "parameter": "output_cols",
+      "parameter": "output_cols__architecture_detailed",
       "help": "report domain architecture in order of appearance of start position in the sequence. Within each CDS, domains are separated by a '/'. CDSs are separated by a ';'. CDSs with no domains are represented by 'no_domains'.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--architecture_detailed"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "architecture_detailed"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Start",
-      "parameter": "output_cols",
+      "parameter": "output_cols__start",
       "help": "report the start coordinate of the feature.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--start"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "start"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "End",
-      "parameter": "output_cols",
+      "parameter": "output_cols__end",
       "help": "report the end coordinate of the feature.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--end"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "end"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Strand",
-      "parameter": "output_cols",
+      "parameter": "output_cols__strand",
       "help": "report the strand of the feature.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--strand"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "strand"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Length",
-      "parameter": "output_cols",
+      "parameter": "output_cols__length",
       "help": "report the (contig, cds, or domain) length as a column in the output.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--length"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "length"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Topology",
-      "parameter": "output_cols",
+      "parameter": "output_cols__topology",
       "help": "report the topology in the output (typically only makes sense when using --by contig).",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--topology"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "topology"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Sequence",
-      "parameter": "output_cols",
+      "parameter": "output_cols__sequence",
       "help": "report the (contig, cds, or domain) sequence as a column in the output.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--sequence"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "sequence"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Cds Count",
-      "parameter": "output_cols",
+      "parameter": "output_cols__cds_count",
       "help": "report the number of CDSs as a column in the output",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--cds_count"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "cds_count"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Domain Count",
-      "parameter": "output_cols",
+      "parameter": "output_cols__domain_count",
       "help": "report the number of domains as a column in the output",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--domain_count"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "domain_count"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Definition",
-      "parameter": "output_cols",
+      "parameter": "output_cols__definition",
       "help": "report sequence definition line from the genbank file.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--definition"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "definition"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Filename",
-      "parameter": "output_cols",
+      "parameter": "output_cols__filename",
       "help": "report the filename of the input file from which the record originated.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--filename"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "filename"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Domain Search",
-      "parameter": "output_cols",
+      "parameter": "output_cols__domain_search",
       "help": "This is a composite metric that will return multiple columns: best_query, query_description, query_start, query_end, query_length, match_start, match_end, match_strand, match_score, match_identity.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--domain_search"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "domain_search"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Taxid Lineage",
-      "parameter": "output_cols",
+      "parameter": "output_cols__taxid_lineage",
       "help": "a semicolon separated list of taxids from the root to the taxid of the sequence.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--taxid_lineage"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "taxid_lineage"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Taxname Lineage",
-      "parameter": "output_cols",
+      "parameter": "output_cols__taxname_lineage",
       "help": "a semicolon separated list of taxnames from the root to the taxid of the sequence.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--taxname_lineage"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "taxname_lineage"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Rank Lineage",
-      "parameter": "output_cols",
+      "parameter": "output_cols__rank_lineage",
       "help": "a semicolon separated list of ranks from the root to the taxid of the sequence.",
-      "type": "output",
+      "type": "boolean",
       "flags": [
         "--rank_lineage"
-      ]
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "rank_lineage"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Taxid",
-      "parameter": "output_cols",
-      "help": "The taxid at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxid available for the record, the column will be named 'taxid_[rank]",
-      "type": "output",
-      "multiple": true,
+      "parameter": "output_cols__taxid",
+      "help": "The taxid at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxid available for the record, the column will be named 'taxid_[rank] Enter one entry per line; separate multiple values with spaces or commas.",
+      "type": "dynamic",
       "flags": [
         "--taxid"
-      ]
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "taxid",
+        "nargs": "+"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Taxname",
-      "parameter": "output_cols",
-      "help": "The taxname at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxname available for the record, the column will be named 'taxname_[rank]",
-      "type": "output",
-      "multiple": true,
+      "parameter": "output_cols__taxname",
+      "help": "The taxname at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxname available for the record, the column will be named 'taxname_[rank] Enter one entry per line; separate multiple values with spaces or commas.",
+      "type": "dynamic",
       "flags": [
         "--taxname"
-      ]
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "taxname",
+        "nargs": "+"
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Taxonomy Update",
@@ -312,32 +445,51 @@
     },
     {
       "name": "Qualifier",
-      "parameter": "output_cols",
-      "help": "Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'.",
-      "type": "output",
-      "multiple": true,
+      "parameter": "output_cols__qualifier",
+      "help": "Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'. Enter one entry per line; separate multiple values with spaces or commas.",
+      "type": "dynamic",
       "flags": [
         "--qualifier"
-      ]
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "qualifier",
+        "nargs": 2
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Feature Count",
-      "parameter": "output_cols",
-      "help": "Reports the number of features of this type.",
-      "type": "output",
+      "parameter": "output_cols__feature_count",
+      "help": "Reports the number of features of this type. Enter one entry per line; separate multiple values with spaces or commas.",
+      "type": "dynamic",
       "flags": [
         "--feature_count"
-      ]
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "feature_count",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Append",
-      "parameter": "output_cols",
-      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.",
-      "type": "output",
-      "multiple": true,
+      "parameter": "output_cols__append",
+      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows. Enter one entry per line; separate multiple values with spaces or commas.",
+      "type": "dynamic",
       "flags": [
         "--append"
-      ]
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "append",
+        "nargs": 3
+      },
+      "target_parameter": "output_cols"
     },
     {
       "name": "Column Names",

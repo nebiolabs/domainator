@@ -51,7 +51,7 @@
       "name": "Evalue",
       "parameter": "evalue",
       "help": "the evalue cutoff (max) for domain annotations to be extracted",
-      "type": "string",
+      "type": "number",
       "flags": [
         "-e",
         "--evalue"
@@ -61,7 +61,7 @@
       "name": "Score",
       "parameter": "score",
       "help": "the score cutoff (min) for domain annotations to be extracted",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--score"
       ]
@@ -109,7 +109,7 @@
       "name": "Pad Up",
       "parameter": "pad_up",
       "help": "extract this many additional residues (or bases) upstream of the hit region.",
-      "type": "string",
+      "type": "integer",
       "default": 0,
       "flags": [
         "--pad_up"
@@ -119,7 +119,7 @@
       "name": "Pad Down",
       "parameter": "pad_down",
       "help": "extract this many additional residues (or bases) downstream of the hit region.",
-      "type": "string",
+      "type": "integer",
       "default": 0,
       "flags": [
         "--pad_down"

@@ -9,19 +9,23 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "names of color table files. If not supplied, reads from stdin.\n\n                        Files are tab separated with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000",
+      "help": "names of color table files. \n\n Files are tab separated with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "tsv"
       ]
     },
     {
       "name": "Svg",
       "parameter": "svg",
       "help": "name of output svg file",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--svg"
       ]

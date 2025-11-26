@@ -30,7 +30,7 @@
       "name": "Html",
       "parameter": "html",
       "help": "html file to write output to.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--html"
       ]

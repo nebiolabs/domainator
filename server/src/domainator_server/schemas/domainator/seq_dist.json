@@ -22,9 +22,9 @@
       "help": "File type for the sequence file",
       "type": "file",
       "choices": [
-        "genbank",
+        "hmm",
         "fasta",
-        "hmm"
+        "genbank"
       ],
       "flags": [
         "--input_type"
@@ -46,9 +46,9 @@
       "help": "File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.",
       "type": "string",
       "choices": [
-        "genbank",
+        "hmm",
         "fasta",
-        "hmm"
+        "genbank"
       ],
       "flags": [
         "--reference_type"
@@ -58,7 +58,7 @@
       "name": "Dense",
       "parameter": "dense",
       "help": "Write a dense distance matrix hdf5 file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--dense"
       ]
@@ -67,7 +67,7 @@
       "name": "Dense Text",
       "parameter": "dense_text",
       "help": "Write a dense distance matrix tsv file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--dense_text"
       ]
@@ -76,7 +76,7 @@
       "name": "Sparse",
       "parameter": "sparse",
       "help": "Write a sparse distance matrix hdf5 file to this path.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--sparse"
       ]
@@ -85,7 +85,7 @@
       "name": "Lb",
       "parameter": "lb",
       "help": "Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).",
-      "type": "string",
+      "type": "number",
       "default": 0,
       "flags": [
         "--lb"
@@ -95,7 +95,7 @@
       "name": "K",
       "parameter": "k",
       "help": "Include at most this many non-zero entries in the matrix for each input sequence. Default: Include all hits.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "-k"
       ]
@@ -106,15 +106,15 @@
       "help": "Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)",
       "type": "string",
       "choices": [
-        "diamond_vs",
-        "diamond_mors",
-        "diamond_us",
-        "hmmer",
-        "diamond_s",
-        "hmmer_compare",
-        "diamond_d",
         "diamond_f",
-        "diamond_mids"
+        "diamond_us",
+        "diamond_mids",
+        "hmmer",
+        "diamond_vs",
+        "diamond_d",
+        "hmmer_compare",
+        "diamond_mors",
+        "diamond_s"
       ],
       "default": "diamond_us",
       "flags": [
@@ -128,12 +128,12 @@
       "type": "string",
       "choices": [
         "score",
-        "score_dist",
-        "row_norm_score",
-        "efi_score",
-        "efi_score_dist",
         "bool",
-        "norm_score"
+        "score_dist",
+        "efi_score",
+        "norm_score",
+        "efi_score_dist",
+        "row_norm_score"
       ],
       "default": "score",
       "flags": [
@@ -144,7 +144,7 @@
       "name": "Cpu",
       "parameter": "cpu",
       "help": "how many cpu threads to use. Default: use all available cores.",
-      "type": "string",
+      "type": "integer",
       "default": 0,
       "flags": [
         "--cpu"

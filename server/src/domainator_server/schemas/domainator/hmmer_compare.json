@@ -32,7 +32,7 @@
       "name": "Score Cutoff",
       "parameter": "score_cutoff",
       "help": "Report alignments with scores greater than or equal to this.",
-      "type": "string",
+      "type": "number",
       "default": 0,
       "flags": [
         "--score_cutoff"
@@ -42,7 +42,7 @@
       "name": "K",
       "parameter": "k",
       "help": "Include at most this many of the top hits for each query. Default: Include all hits.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "-k"
       ]
@@ -71,7 +71,7 @@
       "name": "Cpu",
       "parameter": "cpu",
       "help": "how many cpu threads to use. Default: 8",
-      "type": "string",
+      "type": "integer",
       "default": 8,
       "flags": [
         "--cpu"

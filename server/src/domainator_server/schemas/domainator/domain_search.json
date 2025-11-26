@@ -15,6 +15,16 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
       ]
     },
     {
@@ -23,8 +33,8 @@
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
-        "protein",
-        "nucleotide"
+        "nucleotide",
+        "protein"
       ],
       "default": "protein",
       "flags": [
@@ -35,11 +45,17 @@
       "name": "References",
       "parameter": "references",
       "help": "the names of the HMM files with profiles to search. Or protein query files.",
-      "type": "string",
+      "type": "file",
       "multiple": true,
       "flags": [
         "-r",
         "--references"
+      ],
+      "file_types": [
+        "hmm",
+        "fasta",
+        "faa",
+        "fa"
       ]
     },
     {
@@ -53,20 +69,10 @@
       ]
     },
     {
-      "name": "Z",
-      "parameter": "Z",
-      "help": "Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. Default: 1000\nSet to 0 to use the number actual target sequences (currently this does does not account for taxonomic filtering).Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.",
-      "type": "string",
-      "default": 1000,
-      "flags": [
-        "-Z"
-      ]
-    },
-    {
       "name": "Evalue",
       "parameter": "evalue",
       "help": "threshold E value for the domain hit. Must be <=10. [default 0.001]",
-      "type": "string",
+      "type": "number",
       "default": 0.001,
       "flags": [
         "-e",
@@ -74,10 +80,148 @@
       ]
     },
     {
+      "name": "Max Hits",
+      "parameter": "max_hits",
+      "help": "the maximum number of CDSs returned by the search. Prioritized by bitscore of best scoring profile. [default: return all hits passing the evalue threshold]",
+      "type": "integer",
+      "flags": [
+        "--max_hits"
+      ]
+    },
+    {
+      "name": "Include Taxids",
+      "parameter": "include_taxids",
+      "help": "Space separated list of taxids to include",
+      "type": "integer",
+      "multiple": true,
+      "flags": [
+        "--include_taxids"
+      ]
+    },
+    {
+      "name": "Exclude Taxids",
+      "parameter": "exclude_taxids",
+      "help": "Space separated list of taxids to exclude",
+      "type": "integer",
+      "multiple": true,
+      "flags": [
+        "--exclude_taxids"
+      ]
+    },
+    {
+      "name": "Threads",
+      "parameter": "cpu",
+      "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    },
+    {
+      "name": "Translate",
+      "parameter": "translate",
+      "help": "by default, nucleotide databases will return nucleotide hits. When --translate is set, CDS hits will be translated before writing. Note that --translate is incompatble with neighborhood extraction.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--translate"
+      ]
+    },
+    {
+      "name": "Kb Range",
+      "parameter": "kb_range",
+      "help": "How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS.",
+      "type": "number",
+      "flags": [
+        "--kb_range"
+      ]
+    },
+    {
+      "name": "Kb Up",
+      "parameter": "kb_up",
+      "help": "How many kb upstream of the selected CDS to extract. Starting from the end of the CDS.",
+      "type": "number",
+      "flags": [
+        "--kb_up"
+      ]
+    },
+    {
+      "name": "Kb Down",
+      "parameter": "kb_down",
+      "help": "How many kb downstream of the selected CDS to extract. Starting from the end of the CDS.",
+      "type": "number",
+      "flags": [
+        "--kb_down"
+      ]
+    },
+    {
+      "name": "Cds Range",
+      "parameter": "cds_range",
+      "help": "How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs.",
+      "type": "integer",
+      "flags": [
+        "--cds_range"
+      ]
+    },
+    {
+      "name": "Cds Up",
+      "parameter": "cds_up",
+      "help": "How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS.",
+      "type": "integer",
+      "flags": [
+        "--cds_up"
+      ]
+    },
+    {
+      "name": "Cds Down",
+      "parameter": "cds_down",
+      "help": "How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS.",
+      "type": "integer",
+      "flags": [
+        "--cds_down"
+      ]
+    },
+    {
+      "name": "Whole Contig",
+      "parameter": "whole_contig",
+      "help": "If set, then return the entire matching contigs.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--whole_contig"
+      ]
+    },
+    {
+      "name": "Gene Call",
+      "parameter": "gene_call",
+      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
+      "type": "string",
+      "choices": [
+        "all",
+        "unannotated"
+      ],
+      "flags": [
+        "--gene_call"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Z",
+      "parameter": "Z",
+      "help": "Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. Default: 1000\nSet to 0 to use the number actual target sequences (currently this does does not account for taxonomic filtering).Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.",
+      "type": "integer",
+      "default": 1000,
+      "flags": [
+        "-Z"
+      ]
+    },
+    {
       "name": "Min Evalue",
       "parameter": "min_evalue",
       "help": "hits with E value lower than this will be filtered out. Not frequently used. Use only if you want to eliminate close matches. Must be >=0. [default 0]",
-      "type": "string",
+      "type": "number",
       "default": 0.0,
       "flags": [
         "--min_evalue"
@@ -91,35 +235,6 @@
       "default": false,
       "flags": [
         "--max_mode"
-      ]
-    },
-    {
-      "name": "Max Hits",
-      "parameter": "max_hits",
-      "help": "the maximum number of CDSs returned by the search. Prioritized by bitscore of best scoring profile. [default: return all hits passing the evalue threshold]",
-      "type": "string",
-      "flags": [
-        "--max_hits"
-      ]
-    },
-    {
-      "name": "Include Taxids",
-      "parameter": "include_taxids",
-      "help": "Space separated list of taxids to include",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--include_taxids"
-      ]
-    },
-    {
-      "name": "Exclude Taxids",
-      "parameter": "exclude_taxids",
-      "help": "Space separated list of taxids to exclude",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--exclude_taxids"
       ]
     },
     {
@@ -162,20 +277,10 @@
       ]
     },
     {
-      "name": "Cpu",
-      "parameter": "cpu",
-      "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",
-      "type": "string",
-      "default": 0,
-      "flags": [
-        "--cpu"
-      ]
-    },
-    {
       "name": "Max Overlap",
       "parameter": "max_overlap",
       "help": "the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. [default 1]",
-      "type": "string",
+      "type": "number",
       "default": 1,
       "flags": [
         "--max_overlap"
@@ -205,84 +310,10 @@
       "name": "Max Region Overlap",
       "parameter": "max_region_overlap",
       "help": "the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.",
-      "type": "string",
+      "type": "number",
       "default": 1.0,
       "flags": [
         "--max_region_overlap"
-      ]
-    },
-    {
-      "name": "Translate",
-      "parameter": "translate",
-      "help": "by default, nucleotide databases will return nucleotide hits. When --translate is set, CDS hits will be translated before writing. Note that --translate is incompatble with neighborhood extraction.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--translate"
-      ]
-    },
-    {
-      "name": "Kb Range",
-      "parameter": "kb_range",
-      "help": "How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS.",
-      "type": "string",
-      "flags": [
-        "--kb_range"
-      ]
-    },
-    {
-      "name": "Kb Up",
-      "parameter": "kb_up",
-      "help": "How many kb upstream of the selected CDS to extract. Starting from the end of the CDS.",
-      "type": "string",
-      "flags": [
-        "--kb_up"
-      ]
-    },
-    {
-      "name": "Kb Down",
-      "parameter": "kb_down",
-      "help": "How many kb downstream of the selected CDS to extract. Starting from the end of the CDS.",
-      "type": "string",
-      "flags": [
-        "--kb_down"
-      ]
-    },
-    {
-      "name": "Cds Range",
-      "parameter": "cds_range",
-      "help": "How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs.",
-      "type": "string",
-      "flags": [
-        "--cds_range"
-      ]
-    },
-    {
-      "name": "Cds Up",
-      "parameter": "cds_up",
-      "help": "How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS.",
-      "type": "string",
-      "flags": [
-        "--cds_up"
-      ]
-    },
-    {
-      "name": "Cds Down",
-      "parameter": "cds_down",
-      "help": "How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS.",
-      "type": "string",
-      "flags": [
-        "--cds_down"
-      ]
-    },
-    {
-      "name": "Whole Contig",
-      "parameter": "whole_contig",
-      "help": "If set, then return the entire matching contigs.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--whole_contig"
       ]
     },
     {
@@ -322,25 +353,11 @@
       "name": "Batch Size",
       "parameter": "batch_size",
       "help": "Approximately how many protein sequences to search at one time in a batch.",
-      "type": "string",
+      "type": "integer",
       "default": 10000,
       "flags": [
         "--batch_size"
       ]
-    },
-    {
-      "name": "Gene Call",
-      "parameter": "gene_call",
-      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
-      "type": "string",
-      "choices": [
-        "all",
-        "unannotated"
-      ],
-      "flags": [
-        "--gene_call"
-      ]
     }
-  ],
-  "advanced_parameters": []
+  ]
 }

@@ -28,15 +28,6 @@
       ]
     },
     {
-      "name": "Log",
-      "parameter": "log",
-      "help": "The name of the log file. If not supplied, writes to stderr.",
-      "type": "string",
-      "flags": [
-        "--log"
-      ]
-    },
-    {
       "name": "Fasta Type",
       "parameter": "fasta_type",
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
@@ -66,19 +57,10 @@
       ]
     },
     {
-      "name": "Bin Path",
-      "parameter": "bin_path",
-      "help": "If the executable for the algorithm you're using isn't in the system path, you can provide the full path to the executable here.",
-      "type": "file",
-      "flags": [
-        "--bin_path"
-      ]
-    },
-    {
       "name": "Id",
       "parameter": "id",
       "help": "Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter or to usearach as the -id parameter.",
-      "type": "string",
+      "type": "number",
       "flags": [
         "--id"
       ]
@@ -104,10 +86,10 @@
       ]
     },
     {
-      "name": "Cpu",
+      "name": "Cores",
       "parameter": "cpu",
       "help": "The number of threads to use for deduplication [default: use all available cores]",
-      "type": "string",
+      "type": "integer",
       "default": 0,
       "flags": [
         "--cpu"
@@ -136,7 +118,7 @@
       "name": "Cluster Table",
       "parameter": "cluster_table",
       "help": "If supplied, then write a tab separated table with columns: representative, contigs.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--cluster_table"
       ]
@@ -152,5 +134,24 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Log",
+      "parameter": "log",
+      "help": "The name of the log file. If not supplied, writes to stderr.",
+      "type": "output",
+      "flags": [
+        "--log"
+      ]
+    },
+    {
+      "name": "Bin Path",
+      "parameter": "bin_path",
+      "help": "If the executable for the algorithm you're using isn't in the system path, you can provide the full path to the executable here.",
+      "type": "string",
+      "flags": [
+        "--bin_path"
+      ]
+    }
+  ]
 }

@@ -449,6 +449,27 @@ function buildInputForParameter(param, fieldKey) {
   const defaultValue = param.default;
   const choiceList = Array.isArray(param.choices) ? param.choices : null;
 
+  if (param.behavior === "dynamic") {
+    const textarea = document.createElement("textarea");
+    textarea.name = fieldKey;
+    textarea.rows = 3;
+    textarea.dataset.required = param.required ? "1" : "0";
+    textarea.dataset.behavior = "dynamic";
+    textarea.placeholder = "One entry per line; separate values with spaces or commas.";
+    if (Array.isArray(defaultValue) && defaultValue.length) {
+      const lines = defaultValue
+        .map(entry => {
+          if (Array.isArray(entry)) {
+            return entry.join(", ");
+          }
+          return String(entry ?? "");
+        })
+        .filter(item => item.length > 0);
+      textarea.value = lines.join("\n");
+    }
+    return textarea;
+  }
+
   if (choiceList && choiceList.length && type !== "file" && type !== "boolean") {
     const select = document.createElement("select");
     select.name = fieldKey;
@@ -510,7 +531,13 @@ function buildInputForParameter(param, fieldKey) {
     return input;
   }
 
-  if (param.multiple && (type === "string" || type === "")) {
+  if (
+    param.multiple &&
+    !choiceList &&
+    type !== "file" &&
+    type !== "output" &&
+    type !== "boolean"
+  ) {
     const textarea = document.createElement("textarea");
     textarea.name = fieldKey;
     textarea.rows = 3;
@@ -666,7 +693,9 @@ function buildParameterPayload(tool, form) {
     const type = (param.type || "").toLowerCase();
     let value;
 
-    if (type === "boolean") {
+    if (param.behavior === "dynamic") {
+      value = parseDynamicParameter(input, param);
+    } else if (type === "boolean") {
       value = input.checked;
     } else if (input instanceof HTMLSelectElement && input.multiple) {
       value = Array.from(input.selectedOptions)
@@ -715,6 +744,9 @@ function buildParameterPayload(tool, form) {
 }
 
 function coerceParameterValue(param, raw) {
+  if (param.behavior === "dynamic") {
+    return raw;
+  }
   if (Array.isArray(raw)) {
     return raw.map(entry => coerceParameterValue(param, entry));
   }
@@ -756,6 +788,72 @@ function coerceParameterValue(param, raw) {
     return Boolean(raw);
   }
   return raw;
+}
+
+function parseDynamicParameter(input, param) {
+  if (!(input instanceof HTMLTextAreaElement)) {
+    return [];
+  }
+  const raw = input.value || "";
+  const lines = raw
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (!lines.length) {
+    return [];
+  }
+
+  const groups = lines.map(line => line.split(/[,\s]+/).map(token => token.trim()).filter(Boolean));
+
+  const meta = param.dynamic_action || {};
+  const nargs = meta.nargs;
+  const requirement = describeDynamicRequirement(nargs);
+  groups.forEach((group, index) => {
+    if (!validateDynamicGroup(group, nargs)) {
+      const label = param.display_name || param.name || param.parameter || `parameter at line ${index + 1}`;
+      throw new Error(`${label} expects ${requirement}; problem near line ${index + 1}.`);
+    }
+  });
+
+  return groups;
+}
+
+function validateDynamicGroup(group, nargs) {
+  if (!group.length) {
+    return false;
+  }
+  if (nargs === undefined || nargs === null || nargs === "*") {
+    return true;
+  }
+  if (nargs === "+") {
+    return group.length >= 1;
+  }
+  if (nargs === "?") {
+    return group.length <= 1;
+  }
+  const count = Number(nargs);
+  if (Number.isFinite(count) && count > 0) {
+    return group.length === count;
+  }
+  return true;
+}
+
+function describeDynamicRequirement(nargs) {
+  if (nargs === undefined || nargs === null || nargs === "*") {
+    return "any number of values";
+  }
+  if (nargs === "+") {
+    return "at least one value";
+  }
+  if (nargs === "?") {
+    return "zero or one value";
+  }
+  const count = Number(nargs);
+  if (Number.isFinite(count) && count > 0) {
+    return count === 1 ? "exactly one value" : `exactly ${count} values`;
+  }
+  return "valid values";
 }
 
 async function handleToolSubmit(tool, form) {

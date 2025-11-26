@@ -15,6 +15,16 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
       ]
     },
     {
@@ -23,8 +33,8 @@
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
-        "protein",
-        "nucleotide"
+        "nucleotide",
+        "protein"
       ],
       "default": "protein",
       "flags": [
@@ -35,47 +45,25 @@
       "name": "References",
       "parameter": "references",
       "help": "the names of the HMM files with profiles to search. Or reference protein fasta files.",
-      "type": "string",
+      "type": "file",
       "multiple": true,
       "flags": [
         "-r",
         "--references"
-      ]
-    },
-    {
-      "name": "Foldseek",
-      "parameter": "foldseek",
-      "help": "Foldseek database files.",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--foldseek"
-      ]
-    },
-    {
-      "name": "Esm2 3Di Weights",
-      "parameter": "esm2_3Di_weights",
-      "help": "checkpoint file for esm2_3Di model.",
-      "type": "string",
-      "flags": [
-        "--esm2_3Di_weights"
-      ]
-    },
-    {
-      "name": "Esm2 3Di Device",
-      "parameter": "esm2_3Di_device",
-      "help": "device to use for esm2_3Di model.",
-      "type": "string",
-      "default": "cuda:0",
-      "flags": [
-        "--esm2_3Di_device"
+      ],
+      "file_types": [
+        "hmm",
+        "fasta",
+        "faa",
+        "fa"
       ]
     },
     {
       "name": "Output",
       "parameter": "output",
-      "help": "output genbank filename. If not supplied, writes to stdout.",
+      "help": "output genbank filename.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"
@@ -85,7 +73,7 @@
       "name": "Z",
       "parameter": "Z",
       "help": "Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. Default: 1000\nSet to 0 to use the number actual target sequences (currently this does does not account for taxonomic filtering).Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.",
-      "type": "string",
+      "type": "integer",
       "default": 1000,
       "flags": [
         "-Z"
@@ -95,7 +83,7 @@
       "name": "Evalue",
       "parameter": "evalue",
       "help": "threshold E value for the domain hit. Must be <=10. [default 0.001]",
-      "type": "string",
+      "type": "number",
       "default": 0.001,
       "flags": [
         "-e",
@@ -103,40 +91,20 @@
       ]
     },
     {
-      "name": "Min Evalue",
-      "parameter": "min_evalue",
-      "help": "hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. [default 0]",
-      "type": "string",
-      "default": 0.0,
-      "flags": [
-        "--min_evalue"
-      ]
-    },
-    {
       "name": "Max Domains",
       "parameter": "max_domains",
       "help": "the maximum number of domains to be reported per CDS. If not specified, then no max_domains filter is applied.",
-      "type": "string",
+      "type": "integer",
       "default": 0,
       "flags": [
         "--max_domains"
       ]
     },
     {
-      "name": "Max Mode",
-      "parameter": "max_mode",
-      "help": "Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--max_mode"
-      ]
-    },
-    {
       "name": "Include Taxids",
       "parameter": "include_taxids",
       "help": "Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.",
-      "type": "string",
+      "type": "integer",
       "multiple": true,
       "flags": [
         "--include_taxids"
@@ -146,10 +114,54 @@
       "name": "Exclude Taxids",
       "parameter": "exclude_taxids",
       "help": "Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.",
-      "type": "string",
+      "type": "integer",
       "multiple": true,
       "flags": [
         "--exclude_taxids"
+      ]
+    },
+    {
+      "name": "Threads",
+      "parameter": "cpu",
+      "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    },
+    {
+      "name": "Max Overlap",
+      "parameter": "max_overlap",
+      "help": "the maximum fractional of overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.",
+      "type": "number",
+      "default": 1,
+      "flags": [
+        "--max_overlap"
+      ]
+    },
+    {
+      "name": "Gene Call",
+      "parameter": "gene_call",
+      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None]. If you supply a nucleotide fasta file, be sure to also specify --fasta_type nucleotide. Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
+      "type": "string",
+      "choices": [
+        "all",
+        "unannotated"
+      ],
+      "flags": [
+        "--gene_call"
+      ]
+    }
+  ],
+  "advanced_parameters": [    {
+      "name": "Min Evalue",
+      "parameter": "min_evalue",
+      "help": "hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. [default 0]",
+      "type": "number",
+      "default": 0.0,
+      "flags": [
+        "--min_evalue"
       ]
     },
     {
@@ -173,23 +185,13 @@
       ]
     },
     {
-      "name": "Cpu",
-      "parameter": "cpu",
-      "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",
-      "type": "string",
-      "default": 0,
+      "name": "Max Mode",
+      "parameter": "max_mode",
+      "help": "Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
+      "type": "boolean",
+      "default": false,
       "flags": [
-        "--cpu"
-      ]
-    },
-    {
-      "name": "Max Overlap",
-      "parameter": "max_overlap",
-      "help": "the maximum fractional of overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.",
-      "type": "string",
-      "default": 1,
-      "flags": [
-        "--max_overlap"
+        "--max_mode"
       ]
     },
     {
@@ -226,7 +228,7 @@
       "name": "Batch Size",
       "parameter": "batch_size",
       "help": "How many protein sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.",
-      "type": "string",
+      "type": "integer",
       "default": 10000,
       "flags": [
         "--batch_size"
@@ -236,7 +238,7 @@
       "name": "Offset",
       "parameter": "offset",
       "help": "File offset to start reading records at. (Note that this usually only makes sense when there is just a single input file). Default: start at the top of the file",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--offset"
       ]
@@ -245,24 +247,40 @@
       "name": "Recs To Read",
       "parameter": "recs_to_read",
       "help": "Stop after reading this many records. Default: read all the records",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--recs_to_read"
       ]
-    },
-    {
-      "name": "Gene Call",
-      "parameter": "gene_call",
-      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None]. If you supply a nucleotide fasta file, be sure to also specify --fasta_type nucleotide. Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
-      "type": "string",
-      "choices": [
-        "all",
-        "unannotated"
-      ],
-      "flags": [
-        "--gene_call"
-      ]
     }
-  ],
-  "advanced_parameters": []
+  ]
 }
+
+    // {
+    //   "name": "Foldseek",
+    //   "parameter": "foldseek",
+    //   "help": "Foldseek database files.",
+    //   "type": "string",
+    //   "multiple": true,
+    //   "flags": [
+    //     "--foldseek"
+    //   ]
+    // },
+    // {
+    //   "name": "Esm2 3Di Weights",
+    //   "parameter": "esm2_3Di_weights",
+    //   "help": "Path to checkpoint file for esm2_3Di model.",
+    //   "type": "string",
+    //   "flags": [
+    //     "--esm2_3Di_weights"
+    //   ]
+    // },
+    //  {
+    //   "name": "Esm2 3Di Device",
+    //   "parameter": "esm2_3Di_device",
+    //   "help": "device to use for esm2_3Di model.",
+    //   "type": "string",
+    //   "default": "cuda:0",
+    //   "flags": [
+    //     "--esm2_3Di_device"
+    //   ]
+    // },

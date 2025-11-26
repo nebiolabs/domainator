@@ -5,11 +5,21 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import re
 import sys
-from argparse import SUPPRESS, _StoreFalseAction, _StoreTrueAction
+import typing
+from argparse import SUPPRESS, _AppendConstAction, _StoreFalseAction, _StoreTrueAction
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, get_args, get_origin
+
+try:  # Python 3.10+
+    from types import UnionType as TypesUnionType  # type: ignore[attr-defined]
+except ImportError:  # Python < 3.10
+    TypesUnionType = None  # type: ignore[assignment]
+
+TYPING_ANNOTATED = getattr(typing, "Annotated", None)
+TYPING_LITERAL = getattr(typing, "Literal", None)
 from unittest import mock
 
 try:  # Python 3.11+
@@ -74,22 +84,93 @@ def friendly_tool_name(tool_id: str) -> str:
     return tool_id.replace(".py", "").replace("_", " ").title()
 
 
+def _slugify(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        text = "_".join(str(v) for v in value)
+    else:
+        text = str(value)
+    text = re.sub(r"[^0-9a-zA-Z]+", "_", text).strip("_")
+    return text.lower() or "option"
+
+
+def _resolve_type_hint(annotation: Any) -> Optional[type]:
+    if annotation is None or annotation is Any:
+        return None
+    if isinstance(annotation, type):
+        return annotation
+
+    origin = get_origin(annotation)
+    if origin is None:
+        return annotation if isinstance(annotation, type) else None
+
+    if origin in (list, tuple, set, frozenset):
+        args = get_args(annotation)
+        if args:
+            return _resolve_type_hint(args[0])
+        return None
+
+    if origin is dict:
+        args = get_args(annotation)
+        if len(args) == 2:
+            return _resolve_type_hint(args[1])
+        return None
+
+    if origin is typing.Union or (TypesUnionType is not None and origin is TypesUnionType):
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]  # noqa: E721
+        if len(args) == 1:
+            return _resolve_type_hint(args[0])
+        return None
+
+    if TYPING_ANNOTATED is not None and origin is TYPING_ANNOTATED:
+        args = get_args(annotation)
+        if args:
+            return _resolve_type_hint(args[0])
+        return None
+
+    if TYPING_LITERAL is not None and origin is TYPING_LITERAL:
+        args = get_args(annotation)
+        if args:
+            return type(args[0])
+        return None
+
+    return origin if isinstance(origin, type) else None
+
+
+def _infer_action_base_type(action) -> Optional[type]:
+    if isinstance(action, (_StoreTrueAction, _StoreFalseAction)):
+        return bool
+
+    hint = _resolve_type_hint(getattr(action, "_typehint", None))
+    if hint is None:
+        hint = _resolve_type_hint(getattr(action, "type", None))
+
+    return hint if isinstance(hint, type) else None
+
+
 def guess_parameter_type(action) -> str:
     dest = action.dest or ""
     dest_lower = dest.lower()
     option_lower = " ".join(action.option_strings or ()).lower()
 
-    if isinstance(action, (_StoreTrueAction, _StoreFalseAction)):
+    base_type = _infer_action_base_type(action)
+
+    if base_type is bool:
         return "boolean"
-    if action.type is int:
-        return "integer"
-    if action.type is float:
-        return "number"
+    if base_type is not None:
+        # bool is a subclass of int, so check explicitly before integers
+        if issubclass(base_type, bool):
+            return "boolean"
+        if issubclass(base_type, int):
+            return "integer"
+        if issubclass(base_type, float):
+            return "number"
+        if issubclass(base_type, Path):
+            return "file"
     if "output" in dest_lower or dest_lower.endswith("_out"):
         return "output"
     if any(keyword in dest_lower for keyword in ("file", "path", "dir", "input", "database")):
         return "file"
-    if any(keyword in option_lower for keyword in ("--output", "--out")):
+    if any(keyword in option_lower for keyword in ("--output", "--out", "--sparse", "--dense", "--dense_text", "--html", "--xgmml")):
         return "output"
     if any(keyword in option_lower for keyword in ("--file", "--path", "--dir", "--input")):
         return "file"
@@ -120,6 +201,47 @@ def action_to_parameter(action) -> Optional[Dict[str, Any]]:
         return None
     if any(opt in {"-h", "--help"} for opt in action.option_strings or () ):
         return None
+
+    # jsonargparse appends special flags multiple times; generate unique parameter ids when needed
+    def _base_parameter_dict(name: str, parameter: str, help_text: str, param_type: str) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "name": name,
+            "parameter": parameter,
+            "help": help_text,
+            "type": param_type,
+        }
+        if getattr(action, "option_strings", None):
+            data["flags"] = list(action.option_strings)
+        return data
+
+    if isinstance(action, _AppendConstAction):
+        target = action.dest or friendly_parameter_name(action)
+        const_value = coerce_json(action.const)
+        parameter_id = f"{target}__{_slugify(const_value)}"
+        help_text = (action.help or "").strip() or "Include this column in the report."
+        parameter = _base_parameter_dict(friendly_parameter_name(action), parameter_id, help_text, "boolean")
+        parameter["behavior"] = "append_const"
+        parameter["append_const"] = {"target": action.dest, "value": const_value}
+        parameter["target_parameter"] = action.dest
+        if action.default is not None and action.default is not SUPPRESS:
+            parameter["default"] = bool(action.default)
+        return parameter
+
+    if action.__class__.__name__.lower() == "dynamicarg":
+        target = action.dest or friendly_parameter_name(action)
+        parameter_id = f"{target}__{_slugify(action.const)}"
+        help_text = (action.help or "").strip()
+        guidance = "Enter one entry per line; separate multiple values with spaces or commas."
+        help_combined = f"{help_text} {guidance}" if help_text else guidance
+        parameter = _base_parameter_dict(friendly_parameter_name(action), parameter_id, help_combined, "dynamic")
+        parameter["behavior"] = "dynamic"
+        parameter["dynamic_action"] = {
+            "target": action.dest,
+            "const": coerce_json(action.const),
+            "nargs": action.nargs,
+        }
+        parameter["target_parameter"] = action.dest
+        return parameter
 
     parameter: Dict[str, Any] = {
         "name": friendly_parameter_name(action),

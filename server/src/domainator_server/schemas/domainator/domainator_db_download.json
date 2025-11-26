@@ -12,19 +12,19 @@
       "help": "Database to download",
       "type": "string",
       "choices": [
-        "uniprot_gb",
+        "trembl_gb",
         "ncbi_all",
-        "swissprot_gb",
-        "trembl",
-        "ncbi_complete_genome_nonredundant_proks",
-        "ncbi_complete_genome_proks",
         "ncbi_representative_all",
         "swissprot",
-        "ncbi_nonredundant_all",
-        "ncbi_nonredundant_proks",
-        "uniprot",
         "ncbi_representative_proks",
-        "trembl_gb"
+        "ncbi_nonredundant_all",
+        "uniprot_gb",
+        "ncbi_nonredundant_proks",
+        "trembl",
+        "swissprot_gb",
+        "ncbi_complete_genome_proks",
+        "uniprot",
+        "ncbi_complete_genome_nonredundant_proks"
       ],
       "flags": [
         "--db"
@@ -44,7 +44,7 @@
       "name": "Include Taxids",
       "parameter": "include_taxids",
       "help": "Space separated list of taxids to include",
-      "type": "string",
+      "type": "integer",
       "multiple": true,
       "flags": [
         "--include_taxids"
@@ -54,7 +54,7 @@
       "name": "Exclude Taxids",
       "parameter": "exclude_taxids",
       "help": "Space separated list of taxids to exclude",
-      "type": "string",
+      "type": "integer",
       "multiple": true,
       "flags": [
         "--exclude_taxids"
@@ -84,7 +84,7 @@
       "name": "Success Rec Log",
       "parameter": "success_rec_log",
       "help": "Path to log file for successfully written records. If not specified, successfully written records will not be logged.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--success_rec_log"
       ]
@@ -106,15 +106,21 @@
       "type": "file",
       "flags": [
         "--exclude_accessions_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
       "name": "Ncbi Summary",
       "parameter": "ncbi_summary",
       "help": "Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt.",
-      "type": "string",
+      "type": "file",
       "flags": [
         "--ncbi_summary"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
@@ -134,7 +140,7 @@
       "name": "Num Recs",
       "parameter": "num_recs",
       "help": "Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.",
-      "type": "string",
+      "type": "integer",
       "flags": [
         "--num_recs"
       ]
@@ -149,6 +155,18 @@
         "--append"
       ]
     },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "the number of cores of the cpu which are used at a time to download ncbi records [default: use all available cores]",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    }
+  ],
+  "advanced_parameters": [
     {
       "name": "Before",
       "parameter": "before",
@@ -166,17 +184,6 @@
       "flags": [
         "--after"
       ]
-    },
-    {
-      "name": "Cpu",
-      "parameter": "cpu",
-      "help": "the number of cores of the cpu which are used at a time to download ncbi records [default: use all available cores]",
-      "type": "string",
-      "default": 0,
-      "flags": [
-        "--cpu"
-      ]
     }
-  ],
-  "advanced_parameters": []
+  ]
 }

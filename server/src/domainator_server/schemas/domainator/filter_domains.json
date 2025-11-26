@@ -31,7 +31,7 @@
       "name": "Evalue",
       "parameter": "evalue",
       "help": "threshold E value for the domain hit",
-      "type": "string",
+      "type": "number",
       "default": 100000000,
       "flags": [
         "-e",
@@ -42,7 +42,7 @@
       "name": "Max Overlap",
       "parameter": "max_overlap",
       "help": "the maximum fraction of overlap between domains to be included in the annotated genbank.",
-      "type": "string",
+      "type": "number",
       "default": 1.0,
       "flags": [
         "-m",
@@ -114,9 +114,9 @@
       "help": "Which type of annotations to filter (domainator, domain_search, all). Default: domainator",
       "type": "string",
       "choices": [
-        "all",
+        "domain_search",
         "domainator",
-        "domain_search"
+        "all"
       ],
       "default": "all",
       "flags": [
