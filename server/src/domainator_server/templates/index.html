@@ -8,37 +8,40 @@
 </head>
 <body>
   <header class="top-bar">
-    <div class="brand">
-      <h1>Domainator Server</h1>
-      <p class="tagline">Run tools and workflows from your browser.</p>
+    <div class="top-bar-left">
+      <div class="brand">
+        <h1>Domainator Server</h1>
+        <p class="tagline">Run tools and workflows from your browser.</p>
+      </div>
     </div>
-    <div id="messages" role="status" aria-live="polite"></div>
-  </header>
-
-  <main class="layout">
-    <section class="panel" id="upload-panel">
-      <h2>Upload Files</h2>
+    <div class="top-bar-right">
       <form id="upload-form">
+        <label class="visually-hidden" for="file-input">Upload files</label>
         <input type="file" id="file-input" name="files" multiple>
         <button type="submit">Upload</button>
       </form>
-      <p class="hint">Uploaded files become available to tool parameters that expect inputs.</p>
-    </section>
+      <p class="hint upload-hint">Uploaded files become available to tool parameters that expect inputs.</p>
+      <div id="messages" role="status" aria-live="polite"></div>
+    </div>
+  </header>
 
+  <main class="layout">
     <section class="panel" id="files-panel">
       <h2>Stored Files</h2>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Size</th>
-            <th>Uploaded</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="files-body"></tbody>
-      </table>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Size</th>
+              <th>Uploaded</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="files-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="panel" id="tools-panel">
@@ -56,18 +59,21 @@
 
     <section class="panel" id="jobs-panel">
       <h2>Jobs</h2>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Status</th>
-            <th>Updated</th>
-            <th>Outputs</th>
-            <th>Logs</th>
-          </tr>
-        </thead>
-        <tbody id="jobs-body"></tbody>
-      </table>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Outputs</th>
+              <th>Config</th>
+              <th>Logs</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-body"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 

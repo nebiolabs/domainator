@@ -41,6 +41,7 @@ class Job:
     log_path: Optional[Path] = None
     work_dir: Optional[Path] = None
     updated_at: Optional[float] = None
+    config_path: Optional[Path] = None
     _log_handle: Optional[TextIO] = field(default=None, repr=False)
 
 
@@ -50,6 +51,7 @@ class ToolExecutor:
         self.registry = registry
         self.file_manager = file_manager
         self.jobs: Dict[str, Job] = {}
+        self._load_existing_jobs()
 
     def execute_tool(self, tool_name: str, parameters: Dict[str, object]) -> str:
         job_id = self._generate_job_id()
@@ -72,6 +74,7 @@ class ToolExecutor:
         self.jobs[job_id] = job
         cfg_path = self._write_args_file(resolved_parameters, work_dir)
         job.parameters = resolved_parameters
+        job.config_path = cfg_path
         self._write_job_manifest(job)
         command = self._build_command(tool_name, cfg_path)
 
@@ -326,6 +329,7 @@ class ToolExecutor:
                 )
             except Exception:
                 continue
+            file_type = artifact.file_type or (abs_path.suffix.lower()[1:] if abs_path.suffix else None)
             artifacts.append(
                 {
                     "file_id": artifact.file_id,
@@ -333,6 +337,7 @@ class ToolExecutor:
                     "path": str(artifact.path),
                     "size": artifact.size,
                     "relative_path": relative,
+                    "type": file_type,
                 }
             )
         return artifacts
@@ -355,7 +360,58 @@ class ToolExecutor:
             "log_file": str(job.log_path) if job.log_path else None,
             "work_dir": str(job.work_dir) if job.work_dir else None,
             "updated_at": job.updated_at,
+            "config_path": str(job.config_path) if job.config_path else None,
         }
         manifest_path = manifest_dir / "job.json"
         with manifest_path.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
+
+    def _load_existing_jobs(self) -> None:
+        jobs_dir = self.config.paths.jobs_dir
+        if not jobs_dir.exists():
+            return
+        for manifest_path in jobs_dir.glob("*/job.json"):
+            try:
+                with manifest_path.open("r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            except Exception:
+                continue
+
+            job_id = data.get("job_id")
+            if not job_id or job_id in self.jobs:
+                continue
+
+            status_value = data.get("status", JobStatus.FAILED.value)
+            try:
+                status = JobStatus(status_value)
+            except ValueError:
+                status = JobStatus.FAILED
+
+            job = Job(
+                job_id=job_id,
+                tool_name=data.get("tool", ""),
+                parameters=data.get("parameters") or {},
+                status=status,
+                started_at=data.get("started_at"),
+                completed_at=data.get("completed_at"),
+                output_files=data.get("output_files") or [],
+                output_artifacts=data.get("output_artifacts") or [],
+                error=data.get("error"),
+                log_path=Path(data["log_file"]) if data.get("log_file") else None,
+                work_dir=Path(data["work_dir"]) if data.get("work_dir") else None,
+                updated_at=data.get("updated_at"),
+                config_path=Path(data["config_path"]) if data.get("config_path") else None,
+            )
+
+            if job.work_dir is None:
+                job.work_dir = self.config.paths.outputs_dir / job_id
+
+            self.jobs[job_id] = job
+
+            if job.status in {JobStatus.RUNNING, JobStatus.QUEUED}:
+                job.status = JobStatus.FAILED
+                if not job.error:
+                    job.error = "Job interrupted by server restart"
+                job.completed_at = job.completed_at or time.time()
+                job.updated_at = time.time()
+                self._write_job_manifest(job)

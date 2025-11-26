@@ -93,6 +93,22 @@ def test_job_updates_endpoint(job_client):
     assert artifacts
     file_id = artifacts[0]["file_id"]
 
+    assert final_state.get("config_file")
+    config_resp = client.get(f"/api/jobs/{job_id}/config")
+    assert config_resp.status_code == 200
+    config_payload = json.loads(config_resp.data.decode("utf-8"))
+    assert Path(config_payload.get("output")).name == "result.txt"
+
+    view_response = client.get(f"/api/files/{file_id}/view")
+    assert view_response.status_code == 200
+    assert view_response.data == b"ok"
+    assert "attachment" not in (view_response.headers.get("Content-Disposition", "").lower())
+
+    job_view = client.get(f"/api/jobs/{job_id}/outputs/result.txt/view")
+    assert job_view.status_code == 200
+    assert job_view.data == b"ok"
+    assert "attachment" not in (job_view.headers.get("Content-Disposition", "").lower())
+
     file_listing = client.get(f"/api/files/{file_id}")
     assert file_listing.status_code == 200
     download = client.get(f"/api/files/{file_id}/download")

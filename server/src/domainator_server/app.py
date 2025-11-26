@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from flask import Flask, jsonify, render_template, request, send_file
 
@@ -39,6 +39,18 @@ def create_app(config: ServerConfig, schema_dirs: Iterable[Path] | None = None) 
 
     def error_response(message: str, status: int = 400):
         return jsonify({"error": message}), status
+
+    def resolve_job_output(job_id: str, filename: str) -> tuple[Optional[Job], Optional[Path]]:
+        job = executor.get_job(job_id)
+        if not job or not job.work_dir:
+            return None, None
+        work_dir = Path(job.work_dir).resolve()
+        target = (work_dir / filename).resolve()
+        if work_dir not in target.parents and target != work_dir:
+            return job, None
+        if not target.exists() or not target.is_file():
+            return job, None
+        return job, target
 
     @app.get("/api/files")
     def list_files():
@@ -79,6 +91,16 @@ def create_app(config: ServerConfig, schema_dirs: Iterable[Path] | None = None) 
         if not artifact.path.exists():
             return error_response("file missing on disk", 410)
         return send_file(artifact.path, as_attachment=True, download_name=artifact.original_name)
+
+    @app.get("/api/files/<file_id>/view")
+    def view_file(file_id: str):
+        try:
+            artifact = file_manager.get_upload(file_id)
+        except FileNotFoundError:
+            return error_response("file not found", 404)
+        if not artifact.path.exists():
+            return error_response("file missing on disk", 410)
+        return send_file(artifact.path, as_attachment=False)
 
     @app.delete("/api/files/<file_id>")
     def delete_file(file_id: str):
@@ -149,18 +171,36 @@ def create_app(config: ServerConfig, schema_dirs: Iterable[Path] | None = None) 
             return error_response("log not available", 404)
         return send_file(job.log_path, mimetype="text/plain")
 
+    @app.get("/api/jobs/<job_id>/config")
+    def job_config(job_id: str):
+        job = executor.get_job(job_id)
+        if not job:
+            return error_response("not found", 404)
+        if not job.config_path:
+            return error_response("config not available", 404)
+        config_path = Path(job.config_path)
+        if not config_path.exists() or not config_path.is_file():
+            return error_response("config not available", 404)
+        download_name = f"{job.job_id}.config.json"
+        return send_file(config_path, as_attachment=True, download_name=download_name)
+
     @app.get("/api/jobs/<job_id>/outputs/<path:filename>")
     def job_output(job_id: str, filename: str):
-        job = executor.get_job(job_id)
-        if not job or not job.work_dir:
+        job, target = resolve_job_output(job_id, filename)
+        if not job:
             return error_response("not found", 404)
-        work_dir = Path(job.work_dir).resolve()
-        target = (work_dir / filename).resolve()
-        if work_dir not in target.parents and target != work_dir:
-            return error_response("output not found", 404)
-        if not target.exists() or not target.is_file():
+        if not target:
             return error_response("output not found", 404)
         return send_file(target, as_attachment=True, download_name=target.name)
+
+    @app.get("/api/jobs/<job_id>/outputs/<path:filename>/view")
+    def job_output_view(job_id: str, filename: str):
+        job, target = resolve_job_output(job_id, filename)
+        if not job:
+            return error_response("not found", 404)
+        if not target:
+            return error_response("output not found", 404)
+        return send_file(target, as_attachment=False)
 
     @app.get("/api/jobs/updates")
     def job_updates():
@@ -191,4 +231,5 @@ def serialize_job(job: Job) -> dict:
         "log_file": str(job.log_path) if job.log_path else None,
         "work_dir": str(job.work_dir) if job.work_dir else None,
         "updated_at": job.updated_at,
+        "config_file": str(job.config_path) if job.config_path else None,
     }

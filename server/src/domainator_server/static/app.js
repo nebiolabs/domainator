@@ -6,6 +6,57 @@ const state = {
   activeToolId: null,
 };
 
+const PREVIEWABLE_TYPES = new Set([
+  "html",
+  "htm",
+  "svg",
+  "txt",
+  "text",
+  "json",
+  "csv",
+  "tsv",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "pdf",
+]);
+
+function getExtension(value) {
+  if (!value) {
+    return "";
+  }
+  const lastDot = value.lastIndexOf(".");
+  if (lastDot < 0 || lastDot === value.length - 1) {
+    return "";
+  }
+  return value.slice(lastDot + 1).toLowerCase();
+}
+
+function isPreviewableFile(name, type) {
+  const normalizedType = (type || "").toLowerCase();
+  if (normalizedType && PREVIEWABLE_TYPES.has(normalizedType)) {
+    return true;
+  }
+  const extension = getExtension((name || "").toLowerCase());
+  if (PREVIEWABLE_TYPES.has(extension)) {
+    return true;
+  }
+  if (!extension && normalizedType === "") {
+    return false;
+  }
+  if (normalizedType.includes("html")) {
+    return true;
+  }
+  if (normalizedType.includes("svg")) {
+    return true;
+  }
+  if (normalizedType.startsWith("image/")) {
+    return true;
+  }
+  return false;
+}
+
 let messageTimer = null;
 let pollTimer = null;
 let isPolling = false;
@@ -146,12 +197,24 @@ function renderFiles() {
     row.appendChild(uploadedCell);
 
     const actionCell = document.createElement("td");
+    const isPreviewable = isPreviewableFile(file.original_name, file.type);
+    if (isPreviewable) {
+      const viewLink = document.createElement("a");
+      viewLink.href = `/api/files/${file.file_id}/view`;
+      viewLink.textContent = "View";
+      viewLink.className = "view-link";
+      viewLink.target = "_blank";
+      viewLink.rel = "noopener";
+      actionCell.appendChild(viewLink);
+      actionCell.appendChild(document.createTextNode(" "));
+    }
     const downloadLink = document.createElement("a");
     downloadLink.href = `/api/files/${file.file_id}/download`;
     downloadLink.textContent = "Download";
     downloadLink.className = "download-link";
     downloadLink.target = "_blank";
     actionCell.appendChild(downloadLink);
+    actionCell.appendChild(document.createTextNode(" "));
 
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
@@ -286,6 +349,9 @@ function renderToolDetail(tool) {
     const label = document.createElement("label");
     const name = document.createElement("span");
     name.textContent = `${displayName}${param.required ? " *" : ""}`;
+      if (param.help) {
+        name.title = param.help;
+      }
     label.appendChild(name);
 
     let input = buildInputForParameter(param, fieldKey);
@@ -298,6 +364,13 @@ function renderToolDetail(tool) {
         label.appendChild(warn);
       }
     }
+
+      if (param.help) {
+        const inlineHelp = document.createElement("span");
+        inlineHelp.className = "param-help";
+        inlineHelp.textContent = param.help;
+        label.appendChild(inlineHelp);
+      }
 
     if (param.description) {
       const help = document.createElement("span");
@@ -325,6 +398,57 @@ function renderToolDetail(tool) {
 function buildInputForParameter(param, fieldKey) {
   const type = (param.type || "").toLowerCase();
   const defaultValue = param.default;
+  const choiceList = Array.isArray(param.choices) ? param.choices : null;
+
+  if (choiceList && choiceList.length && type !== "file" && type !== "boolean") {
+    const select = document.createElement("select");
+    select.name = fieldKey;
+    select.dataset.required = param.required ? "1" : "0";
+    select.multiple = Boolean(param.multiple);
+
+    if (!select.multiple) {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = param.required ? "Select an option" : "Optional";
+      placeholder.selected = defaultValue === undefined || defaultValue === null || defaultValue === "";
+      select.appendChild(placeholder);
+    }
+
+    choiceList.forEach(choice => {
+      let value = choice;
+      let label = choice;
+      if (choice && typeof choice === "object") {
+        value = choice.value ?? choice.id ?? choice.name ?? choice.label ?? "";
+        label = choice.label ?? choice.display_name ?? choice.name ?? value;
+      }
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = String(label);
+      select.appendChild(option);
+    });
+
+    if (select.multiple) {
+      const defaults = Array.isArray(defaultValue)
+        ? defaultValue.map(entry => String(entry))
+        : defaultValue !== undefined && defaultValue !== null
+          ? [String(defaultValue)]
+          : [];
+      if (defaults.length) {
+        Array.from(select.options).forEach(option => {
+          if (defaults.includes(option.value)) {
+            option.selected = true;
+          }
+        });
+      }
+      if (choiceList.length) {
+        select.size = Math.min(Math.max(choiceList.length, 2), 8);
+      }
+    } else if (defaultValue !== undefined && defaultValue !== null) {
+      select.value = String(defaultValue);
+    }
+
+    return select;
+  }
 
   if (type === "boolean") {
     const input = document.createElement("input");
@@ -681,9 +805,16 @@ function renderJobs() {
     if (artifactList.length) {
       artifactList.forEach((artifact, index) => {
         const link = document.createElement("a");
-        link.href = `/api/files/${encodeURIComponent(artifact.file_id)}/download`;
+        const artifactName = artifact.name || artifact.relative_path || artifact.file_id;
+        const artifactType = artifact.type || artifact.file_type || null;
+        const previewable = isPreviewableFile(artifactName, artifactType);
+        if (previewable) {
+          link.href = `/api/files/${encodeURIComponent(artifact.file_id)}/view`;
+        } else {
+          link.href = `/api/files/${encodeURIComponent(artifact.file_id)}/download`;
+        }
         link.className = "download-link";
-        link.textContent = artifact.name || artifact.file_id;
+        link.textContent = artifactName;
         link.target = "_blank";
         link.rel = "noopener";
         outputsCell.appendChild(link);
@@ -694,7 +825,8 @@ function renderJobs() {
     } else if (Array.isArray(job.output_files) && job.output_files.length) {
       job.output_files.forEach((file, index) => {
         const link = document.createElement("a");
-        link.href = buildJobOutputUrl(job.job_id, file);
+        const previewable = isPreviewableFile(file, null);
+        link.href = buildJobOutputUrl(job.job_id, file, previewable ? "view" : "download");
         link.className = "download-link";
         link.textContent = file.split(/[\\/]/).pop();
         link.target = "_blank";
@@ -708,6 +840,18 @@ function renderJobs() {
       outputsCell.textContent = job.status === "completed" ? "No outputs" : "";
     }
     row.appendChild(outputsCell);
+
+    const configCell = document.createElement("td");
+    if (job.config_file) {
+      const link = document.createElement("a");
+      link.href = `/api/jobs/${encodeURIComponent(job.job_id)}/config`;
+      link.className = "download-link";
+      link.textContent = "Download";
+      link.target = "_blank";
+      link.rel = "noopener";
+      configCell.appendChild(link);
+    }
+    row.appendChild(configCell);
 
     const logsCell = document.createElement("td");
     if (job.log_file) {
@@ -816,7 +960,7 @@ function formatBytes(bytes) {
   return `${value.toFixed(exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 }
 
-function buildJobOutputUrl(jobId, relativePath) {
+function buildJobOutputUrl(jobId, relativePath, mode = "download") {
   if (!relativePath) {
     return "#";
   }
@@ -825,5 +969,9 @@ function buildJobOutputUrl(jobId, relativePath) {
     .split("/")
     .map(segment => encodeURIComponent(segment))
     .join("/");
-  return `/api/jobs/${encodeURIComponent(jobId)}/outputs/${encodedPath}`;
+  const base = `/api/jobs/${encodeURIComponent(jobId)}/outputs/${encodedPath}`;
+  if (mode === "view") {
+    return `${base}/view`;
+  }
+  return base;
 }

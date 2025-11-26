@@ -206,3 +206,39 @@ def test_executor_sanitizes_output_filename(tmp_path: Path, schema_dir: Path) ->
     assert secure_filename(output_path.name) == output_path.name
     assert output_path.is_file()
     assert ".." not in output_path.parts
+
+
+def test_executor_loads_existing_manifests(tmp_path: Path, schema_dir: Path, tool_script: Path) -> None:
+    _write_schema(schema_dir, "echo", tool_script)
+    config = ServerConfig(data_dir=tmp_path / "data")
+
+    registry = ToolRegistry([schema_dir])
+    file_manager = FileManager(config)
+    executor = ToolExecutor(config, registry, file_manager)
+
+    job_id = executor.execute_tool("echo", {"output": "result.txt"})
+
+    for _ in range(20):
+        executor.poll_jobs()
+        job = executor.get_job(job_id)
+        if job and job.status != JobStatus.RUNNING:
+            break
+        time.sleep(0.1)
+
+    job = executor.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.COMPLETED
+    assert job.output_artifacts
+
+    # Recreate executor to force manifest reload
+    registry_reloaded = ToolRegistry([schema_dir])
+    file_manager_reloaded = FileManager(config)
+    executor_reloaded = ToolExecutor(config, registry_reloaded, file_manager_reloaded)
+
+    restored = executor_reloaded.get_job(job_id)
+    assert restored is not None
+    assert restored.status == JobStatus.COMPLETED
+    assert restored.output_files == job.output_files
+    assert restored.output_artifacts == job.output_artifacts
+    assert restored.config_path is not None
+    assert restored.config_path.exists()
