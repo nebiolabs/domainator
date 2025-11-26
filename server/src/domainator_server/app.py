@@ -113,7 +113,7 @@ def create_app(config: ServerConfig, schema_dirs: Iterable[Path] | None = None) 
 
     @app.get("/api/tools")
     def list_tools():
-        schemas = [schema.payload for schema in registry.list() if schema.category != "Workflows"]
+        schemas = [schema.payload for schema in registry.list()]
         return jsonify(schemas)
 
     @app.get("/api/tools/<tool_id>")
@@ -122,11 +122,6 @@ def create_app(config: ServerConfig, schema_dirs: Iterable[Path] | None = None) 
         if not schema:
             return error_response("not found", 404)
         return jsonify(schema)
-
-    @app.get("/api/workflows")
-    def list_workflows():
-        workflows = [schema.payload for schema in registry.list() if schema.category == "Workflows"]
-        return jsonify(workflows)
 
     @app.post("/api/tools/<tool_id>/execute")
     def execute_tool(tool_id: str):

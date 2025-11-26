@@ -116,7 +116,7 @@ def coerce_json(value: Any) -> Any:
 
 
 def action_to_parameter(action) -> Optional[Dict[str, Any]]:
-    if action.dest in {"help", "config"}:
+    if action.dest in {"help", "config", "print_config"}:
         return None
     if any(opt in {"-h", "--help"} for opt in action.option_strings or () ):
         return None

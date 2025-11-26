@@ -2,7 +2,7 @@
   "id": "domainate",
   "display_name": "Domainate",
   "category": "Domainator",
-  "description": "Annotate sequence files with hmm profiles",
+  "description": "Annotate sequence files with hmm profiles\n\nFor each CDS or protein in the input file, run the hmmer3 against the target domain hmm database to annotate all the different known/detectable domains in the CDS.\nHits with E value lower than the threshold (default 10) will be added to the annotation in genbank output file as a new \"feature\"\n\nNOTES: genbank files that contain translation annotations in their CDS features will run much faster than those without translation annotations.\n       domainate.py stores the entire reference set (usually the hmm database) in memory, so it is not suitable for cases where the reference \n       set is larger than your system memory (this may change in future versions).",
   "runner": "module",
   "entry_point": "domainator.domainate",
   "parameters": [
@@ -35,7 +35,7 @@
       "name": "References",
       "parameter": "references",
       "help": "the names of the HMM files with profiles to search. Or reference protein fasta files.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "-r",
@@ -266,15 +266,6 @@
       ],
       "flags": [
         "--gene_call"
-      ]
-    },
-    {
-      "name": "Print Config",
-      "parameter": "print_config",
-      "help": "Print the configuration after applying all other arguments and exit. The optional flags customizes the output and are one or more keywords separated by comma. The supported flags are: comments, skip_default, skip_null.",
-      "type": "string",
-      "flags": [
-        "--print_config"
       ]
     }
   ]

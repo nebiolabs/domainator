@@ -152,7 +152,27 @@ async function refreshTools() {
       throw new Error("Failed to fetch tools");
     }
     const data = await response.json();
-    state.tools = Array.isArray(data) ? data : [];
+    const tools = Array.isArray(data) ? data.slice() : [];
+    tools.sort((a, b) => {
+      const aName = (a?.display_name || a?.id || "").toLowerCase();
+      const bName = (b?.display_name || b?.id || "").toLowerCase();
+      if (aName < bName) {
+        return -1;
+      }
+      if (aName > bName) {
+        return 1;
+      }
+      const aId = a?.id || "";
+      const bId = b?.id || "";
+      if (aId < bId) {
+        return -1;
+      }
+      if (aId > bId) {
+        return 1;
+      }
+      return 0;
+    });
+    state.tools = tools;
     if (!state.tools.some(tool => tool.id === state.activeToolId)) {
       state.activeToolId = null;
     }
@@ -292,8 +312,11 @@ function renderTools() {
 
     if (tool.description) {
       const desc = document.createElement("p");
-      desc.textContent = tool.description;
-      card.appendChild(desc);
+      const firstLine = tool.description.split(/\r?\n/, 1)[0].trim();
+      if (firstLine) {
+        desc.textContent = firstLine;
+        card.appendChild(desc);
+      }
     }
 
     container.appendChild(card);
@@ -346,6 +369,7 @@ function renderToolDetail(tool) {
   if (tool.description) {
     const desc = document.createElement("p");
     desc.textContent = tool.description;
+    desc.style.whiteSpace = "pre-wrap";
     summary.appendChild(desc);
   }
   container.appendChild(summary);
@@ -355,51 +379,37 @@ function renderToolDetail(tool) {
   form.dataset.toolId = tool.id;
 
   const params = Array.isArray(tool.parameters) ? tool.parameters : [];
-  if (!params.length) {
+  const advancedParams = Array.isArray(tool.advanced_parameters)
+    ? tool.advanced_parameters
+    : [];
+
+  if (!params.length && !advancedParams.length) {
     const note = document.createElement("p");
     note.textContent = "This tool does not expose configurable parameters.";
     form.appendChild(note);
   }
 
   params.forEach(param => {
-    const fieldKey = param.parameter || param.name;
-    const displayName = param.display_name || param.name || fieldKey;
-
-    const label = document.createElement("label");
-    const name = document.createElement("span");
-    name.textContent = `${displayName}${param.required ? " *" : ""}`;
-      if (param.help) {
-        name.title = param.help;
-      }
-    label.appendChild(name);
-
-    let input = buildInputForParameter(param, fieldKey);
-    if (input) {
-      label.appendChild(input);
-      if (input.dataset && input.dataset.warning) {
-        const warn = document.createElement("span");
-        warn.className = "param-help";
-        warn.textContent = input.dataset.warning;
-        label.appendChild(warn);
-      }
-    }
-
-      if (param.help) {
-        const inlineHelp = document.createElement("span");
-        inlineHelp.className = "param-help";
-        inlineHelp.textContent = param.help;
-        label.appendChild(inlineHelp);
-      }
-
-    if (param.description) {
-      const help = document.createElement("span");
-      help.className = "param-help";
-      help.textContent = param.description;
-      label.appendChild(help);
-    }
-
-    form.appendChild(label);
+    form.appendChild(buildParameterField(param));
   });
+
+  if (advancedParams.length) {
+    const advanced = document.createElement("details");
+    advanced.className = "advanced-parameters";
+
+    const summary = document.createElement("summary");
+    summary.textContent = "Advanced Parameters";
+    advanced.appendChild(summary);
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "advanced-parameters-body";
+    advancedParams.forEach(param => {
+      wrapper.appendChild(buildParameterField(param));
+    });
+    advanced.appendChild(wrapper);
+
+    form.appendChild(advanced);
+  }
 
   const submit = document.createElement("button");
   submit.type = "submit";
@@ -564,11 +574,54 @@ function buildInputForParameter(param, fieldKey) {
   return input;
 }
 
+function buildParameterField(param) {
+  const fieldKey = param.parameter || param.name;
+  const displayName = param.display_name || param.name || fieldKey;
+
+  const label = document.createElement("label");
+  const name = document.createElement("span");
+  name.textContent = `${displayName}${param.required ? " *" : ""}`;
+  if (param.help) {
+    name.title = param.help;
+  }
+  label.appendChild(name);
+
+  const input = buildInputForParameter(param, fieldKey);
+  if (input) {
+    label.appendChild(input);
+    if (input.dataset && input.dataset.warning) {
+      const warn = document.createElement("span");
+      warn.className = "param-help";
+      warn.textContent = input.dataset.warning;
+      label.appendChild(warn);
+    }
+  }
+
+  if (param.help) {
+    const inlineHelp = document.createElement("span");
+    inlineHelp.className = "param-help";
+    inlineHelp.textContent = param.help;
+    label.appendChild(inlineHelp);
+  }
+
+  if (param.description) {
+    const help = document.createElement("span");
+    help.className = "param-help";
+    help.textContent = param.description;
+    label.appendChild(help);
+  }
+
+  return label;
+}
+
 function buildParameterPayload(tool, form) {
   const params = {};
   const missing = [];
   const errors = [];
-  const schemaParams = Array.isArray(tool.parameters) ? tool.parameters : [];
+  const schemaParams = [
+    ...(Array.isArray(tool.parameters) ? tool.parameters : []),
+    ...(Array.isArray(tool.advanced_parameters) ? tool.advanced_parameters : []),
+  ];
 
   schemaParams.forEach(param => {
     const fieldKey = param.parameter || param.name;

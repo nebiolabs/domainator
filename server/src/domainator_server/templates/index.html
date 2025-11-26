@@ -10,14 +10,19 @@
   <header class="top-bar">
     <div class="top-bar-left">
       <div class="brand">
-        <h1>Domainator Server</h1>
-        <p class="tagline">Run tools and workflows from your browser.</p>
+        <img
+          src="{{ url_for('static', filename='Domainator_logo.svg') }}"
+          alt="Domainator"
+          class="brand-logo"
+        >
+        <p class="tagline">   </p>
       </div>
     <nav class="top-bar-controls" id="panel-controls" role="group" aria-label="Toggle panels">
       <button type="button" class="panel-toggle" data-panel="files-panel" data-label="Stored Files" aria-pressed="true">Files</button>
       <button type="button" class="panel-toggle" data-panel="tools-panel" data-label="Tools" aria-pressed="true">Tools</button>
       <button type="button" class="panel-toggle" data-panel="tool-detail-panel" data-label="Tool Details" aria-pressed="true">Details</button>
       <button type="button" class="panel-toggle" data-panel="jobs-panel" data-label="Jobs" aria-pressed="true">Jobs</button>
+      <button type="button" class="panel-toggle documentation-button" id="documentation-button" aria-pressed="false">Documentation</button>
     </nav>
     </div>
 

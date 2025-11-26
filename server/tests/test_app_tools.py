@@ -21,16 +21,12 @@ def client(flask_app):
     return flask_app.test_client()
 
 
-def test_list_tools_and_workflows(client):
+def test_list_tools(client):
     resp = client.get("/api/tools")
     assert resp.status_code == 200
     tools = resp.get_json()
     assert isinstance(tools, list)
-
-    wf_resp = client.get("/api/workflows")
-    assert wf_resp.status_code == 200
-    workflows = wf_resp.get_json()
-    ids = {wf["id"] for wf in workflows}
+    ids = {tool["id"] for tool in tools}
     assert "genome_annotation" in ids
 
     detail = client.get("/api/tools/genome_annotation")
