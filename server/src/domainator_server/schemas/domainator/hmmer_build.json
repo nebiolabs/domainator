@@ -56,7 +56,7 @@
     {
       "name": "Alphabet",
       "parameter": "alphabet",
-      "help": "_EMPTY_HELP_",
+      "help": "Alphabet of the input MSA. If not supplied, inferred from the input.",
       "type": "string",
       "choices": [
         "dna",

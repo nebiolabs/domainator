@@ -15,6 +15,12 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
       ]
     },
     {
@@ -25,26 +31,6 @@
       "flags": [
         "-o",
         "--output"
-      ]
-    },
-    {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
       ]
     },
     {
@@ -136,5 +122,27 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    }]
 }

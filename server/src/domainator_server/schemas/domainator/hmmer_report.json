@@ -15,6 +15,9 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "hmm"
       ]
     },
     {
@@ -34,25 +37,6 @@
       "type": "output",
       "flags": [
         "--html"
-      ]
-    },
-    {
-      "name": "Html Max Height",
-      "parameter": "html_max_height",
-      "help": "Max height in pixels to set the html output to.",
-      "type": "integer",
-      "flags": [
-        "--html_max_height"
-      ]
-    },
-    {
-      "name": "Column Names",
-      "parameter": "column_names",
-      "help": "If supplied, then this list will be used instead of the default column names.",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--column_names"
       ]
     },
     {
@@ -147,5 +131,23 @@
       "target_parameter": "output_cols"
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [    {
+      "name": "Html Max Height",
+      "parameter": "html_max_height",
+      "help": "Max height in pixels to set the html output to.",
+      "type": "integer",
+      "flags": [
+        "--html_max_height"
+      ]
+    },
+    {
+      "name": "Column Names",
+      "parameter": "column_names",
+      "help": "If supplied, then this list will be used instead of the default column names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--column_names"
+      ]
+    }]
 }

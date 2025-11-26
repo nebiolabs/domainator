@@ -9,23 +9,30 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "Input query files. One or more hmm text files with one or more hmmer3 profiles. Default: stdin.\nIf -i and -r are different, -i will typically be the bigger of the two, as it is what is being filtered.",
+      "help": "Input query files. One or more hmm text files with one or more hmmer3 profiles.\nIf -i and -r are different, -i will typically be the bigger of the two, as it is what is being filtered.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "hmm"
       ]
     },
     {
       "name": "Reference",
       "parameter": "reference",
       "help": "Reference files. One or more hmm text files with one or more hmmer3 profiles.\nIf -i and -r are different, -r will typically be the smaller of the two, as it is used as a filtering criterion.",
-      "type": "string",
+      "type": "file",
       "multiple": true,
       "flags": [
         "-r",
         "--reference"
+      ],
+            "file_types": [
+        "hmm"
       ]
     },
     {
@@ -58,7 +65,7 @@
       ]
     },
     {
-      "name": "Cpu",
+      "name": "Threads",
       "parameter": "cpu",
       "help": "how many cpu threads to use. Default: use all available cores",
       "type": "integer",

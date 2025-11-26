@@ -1,4 +1,3 @@
-//TODO: keep curating starting here
 {
   "id": "enum_report",
   "display_name": "Enum Report",
@@ -10,13 +9,24 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "Genbank filenames. If not supplied then reads from to stdin.",
+      "help": "Genbank filenames.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
-      ]
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
+      ]      
     },
     {
       "name": "Output",
@@ -35,35 +45,6 @@
       "type": "output",
       "flags": [
         "--html"
-      ]
-    },
-    {
-      "name": "Html Max Height",
-      "parameter": "html_max_height",
-      "help": "Max height in pixels to set the html output to.",
-      "type": "integer",
-      "flags": [
-        "--html_max_height"
-      ]
-    },
-    {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only examine contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only examine contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
       ]
     },
     {
@@ -424,26 +405,6 @@
       "target_parameter": "output_cols"
     },
     {
-      "name": "Taxonomy Update",
-      "parameter": "taxonomy_update",
-      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--taxonomy_update"
-      ]
-    },
-    {
-      "name": "Ncbi Taxonomy Path",
-      "parameter": "ncbi_taxonomy_path",
-      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
-      "type": "file",
-      "default": "/tmp/ncbi_taxonomy",
-      "flags": [
-        "--ncbi_taxonomy_path"
-      ]
-    },
-    {
       "name": "Qualifier",
       "parameter": "output_cols__qualifier",
       "help": "Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'. Enter one entry per line; separate multiple values with spaces or commas.",
@@ -474,6 +435,50 @@
         "nargs": 1
       },
       "target_parameter": "output_cols"
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Html Max Height",
+      "parameter": "html_max_height",
+      "help": "Max height in pixels to set the html output to.",
+      "type": "integer",
+      "flags": [
+        "--html_max_height"
+      ]
+    },
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only examine contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only examine contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    },
+    {
+      "name": "Column Names",
+      "parameter": "column_names",
+      "help": "If supplied, then this list will be used instead of the default column names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--column_names"
+      ]
     },
     {
       "name": "Append",
@@ -492,15 +497,24 @@
       "target_parameter": "output_cols"
     },
     {
-      "name": "Column Names",
-      "parameter": "column_names",
-      "help": "If supplied, then this list will be used instead of the default column names.",
-      "type": "string",
-      "multiple": true,
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
       "flags": [
-        "--column_names"
+        "--taxonomy_update"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
       ]
     }
-  ],
-  "advanced_parameters": []
+  ]
 }

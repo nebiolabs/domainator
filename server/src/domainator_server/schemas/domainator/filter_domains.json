@@ -9,12 +9,19 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "the genbank filenames to be filtered. If not supplied, reads from stdin.",
+      "help": "the genbank filenames to be filtered.",
       "type": "file",
+      "required": true,
       "multiple": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
       ]
     },
     {
@@ -50,26 +57,6 @@
       ]
     },
     {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only annotate contigs with ids in this list. Additive with --contigs_file. default: annotate all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: annotate all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
-      ]
-    },
-    {
       "name": "Domains",
       "parameter": "domains",
       "help": "Remove all domains NOT matching these names",
@@ -86,13 +73,16 @@
       "type": "file",
       "flags": [
         "--domains_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
       "name": "Databases Keep",
       "parameter": "databases_keep",
       "help": "Remove annotations from all databases except these. Applied before other filters, such as domains, evalue, and max_overlap. By default will keep all annotations from all databases.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases_keep"
@@ -102,7 +92,7 @@
       "name": "Databases Filter",
       "parameter": "databases_filter",
       "help": "The name of the database which you want to filter annotations from, by default will filter all annoatations according to evalue, domains, and max_overlap. Domains from other databases will be left as-is.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases_filter"
@@ -124,5 +114,30 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only annotate contigs with ids in this list. Additive with --contigs_file. default: annotate all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: annotate all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    }
+
+  ]
 }

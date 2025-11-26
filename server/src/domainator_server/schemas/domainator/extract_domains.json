@@ -9,42 +9,29 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "Genbank filenames. If not supplied, reads from stdin.",
+      "help": "Genbank filenames.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank"
       ]
     },
     {
       "name": "Output",
       "parameter": "output",
-      "help": "the name of the output file. If not supplied, writes to stdout.",
+      "help": "the name of the output file.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"
-      ]
-    },
-    {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
       ]
     },
     {
@@ -83,13 +70,16 @@
       "type": "file",
       "flags": [
         "--domains_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
       "name": "Databases",
       "parameter": "databases",
       "help": "Domain databases to use for domain extraction. default: all databases.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases"
@@ -166,5 +156,27 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    }]
 }

@@ -15,6 +15,9 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "hmm"
       ]
     },
     {
@@ -26,6 +29,9 @@
       "flags": [
         "-r",
         "--reference"
+      ],
+      "file_types": [
+        "hmm"
       ]
     },
     {
@@ -68,7 +74,7 @@
       ]
     },
     {
-      "name": "Cpu",
+      "name": "Threads",
       "parameter": "cpu",
       "help": "how many cpu threads to use. Default: 8",
       "type": "integer",

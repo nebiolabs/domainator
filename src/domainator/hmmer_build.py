@@ -44,7 +44,9 @@ def main(argv):
                             help="Accession of the HMM profile.")
     parser.add_argument("--desc", default=None, required=False, type=str,
                             help="Description of the HMM profile.")
-    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices={"amino", "dna", "rna"},)
+    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices={"amino", "dna", "rna"},
+                            help="Alphabet of the input MSA. If not supplied, inferred from the input."
+                        )
 
     parser.add_argument("--config", action=ActionConfigFile)
 

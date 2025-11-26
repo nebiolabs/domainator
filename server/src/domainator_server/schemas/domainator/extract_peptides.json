@@ -9,61 +9,30 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "Genbank filenames. If not supplied, reads from stdin.",
+      "help": "Genbank filenames.",
       "type": "file",
+      "required": true,
       "multiple": true,
       "flags": [
         "-i",
         "--input"
-      ]
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
+      ]      
     },
     {
       "name": "Output",
       "parameter": "output",
-      "help": "the name of the output genbank file. If not supplied writes to stdout.",
+      "help": "the name of the output genbank file.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"
-      ]
-    },
-    {
-      "name": "Contigs",
-      "parameter": "contigs",
-      "help": "only look for peptides on contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
-      "type": "string",
-      "multiple": true,
-      "default": [],
-      "flags": [
-        "--contigs"
-      ]
-    },
-    {
-      "name": "Contigs File",
-      "parameter": "contigs_file",
-      "help": "only look for peptides on contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
-      "type": "file",
-      "flags": [
-        "--contigs_file"
-      ]
-    },
-    {
-      "name": "Domains",
-      "parameter": "domains",
-      "help": "Only extract peptides containing these domains",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--domains"
-      ]
-    },
-    {
-      "name": "Domains File",
-      "parameter": "domains_file",
-      "help": "text file containing names of domains, where peptides containing these domains will be extracted.",
-      "type": "file",
-      "flags": [
-        "--domains_file"
       ]
     },
     {
@@ -179,5 +148,48 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Contigs",
+      "parameter": "contigs",
+      "help": "only look for peptides on contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
+      "type": "string",
+      "multiple": true,
+      "default": [],
+      "flags": [
+        "--contigs"
+      ]
+    },
+    {
+      "name": "Contigs File",
+      "parameter": "contigs_file",
+      "help": "only look for peptides on contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.",
+      "type": "file",
+      "flags": [
+        "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Only extract peptides containing these domains",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of domains, where peptides containing these domains will be extracted.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ]
+    }
+  ]
 }
