@@ -4,6 +4,7 @@ const state = {
   jobs: {},
   lastJobUpdate: 0,
   activeToolId: null,
+  collapsedPanels: new Set(),
 };
 
 const PREVIEWABLE_TYPES = new Set([
@@ -63,6 +64,7 @@ let isPolling = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   bindEventHandlers();
+  initializePanelControls();
   refreshAll();
   startPolling();
 });
@@ -76,6 +78,21 @@ function bindEventHandlers() {
   const toolFilter = document.getElementById("tool-filter");
   if (toolFilter) {
     toolFilter.addEventListener("input", () => renderTools());
+  }
+
+  const panelControls = document.getElementById("panel-controls");
+  if (panelControls) {
+    panelControls.addEventListener("click", event => {
+      const button = event.target.closest("button[data-panel]");
+      if (!button) {
+        return;
+      }
+      const panelId = button.getAttribute("data-panel");
+      if (!panelId) {
+        return;
+      }
+      togglePanel(panelId);
+    });
   }
 
   const toolList = document.getElementById("tool-list");
@@ -290,6 +307,8 @@ function selectTool(toolId) {
     renderToolDetail(null);
     return;
   }
+  openPanel("tool-detail-panel");
+  scrollWindowToTop();
   if (state.activeToolId === toolId) {
     return;
   }
@@ -655,6 +674,7 @@ async function handleToolSubmit(tool, form) {
     return;
   }
 
+  openPanel("jobs-panel");
   setMessage("Submitting job…", "info");
   try {
     const response = await fetch(`/api/tools/${encodeURIComponent(tool.id)}/execute`, {
@@ -974,4 +994,81 @@ function buildJobOutputUrl(jobId, relativePath, mode = "download") {
     return `${base}/view`;
   }
   return base;
+}
+
+function initializePanelControls() {
+  const buttons = document.querySelectorAll("button[data-panel]");
+  buttons.forEach(button => {
+    const panelId = button.getAttribute("data-panel");
+    if (!panelId) {
+      return;
+    }
+    const panel = document.getElementById(panelId);
+    if (!panel) {
+      return;
+    }
+    button.dataset.label = button.dataset.label || button.textContent.trim();
+    if (panel.classList.contains("collapsed")) {
+      state.collapsedPanels.add(panelId);
+    } else {
+      state.collapsedPanels.delete(panelId);
+    }
+    updatePanelToggleButton(panelId);
+  });
+}
+
+function setPanelState(panelId, open) {
+  const panel = document.getElementById(panelId);
+  if (!panel) {
+    return;
+  }
+  const isOpen = !panel.classList.contains("collapsed");
+  if (open === isOpen) {
+    return;
+  }
+  if (open) {
+    panel.classList.remove("collapsed");
+    panel.removeAttribute("aria-hidden");
+    state.collapsedPanels.delete(panelId);
+  } else {
+    panel.classList.add("collapsed");
+    panel.setAttribute("aria-hidden", "true");
+    state.collapsedPanels.add(panelId);
+  }
+  updatePanelToggleButton(panelId);
+}
+
+function togglePanel(panelId) {
+  const shouldOpen = state.collapsedPanels.has(panelId);
+  setPanelState(panelId, shouldOpen);
+}
+
+function openPanel(panelId) {
+  setPanelState(panelId, true);
+}
+
+function scrollWindowToTop() {
+  const prefersReducedMotion =
+    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (prefersReducedMotion) {
+    window.scrollTo(0, 0);
+  } else {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+}
+
+function updatePanelToggleButton(panelId) {
+  const button = document.querySelector(`button[data-panel="${panelId}"]`);
+  if (!button) {
+    return;
+  }
+  const isCollapsed = state.collapsedPanels.has(panelId);
+  const baseLabel = button.dataset.label || button.textContent.trim() || panelId;
+  button.setAttribute("aria-pressed", String(!isCollapsed));
+  button.setAttribute(
+    "aria-label",
+    `${baseLabel} panel ${isCollapsed ? "collapsed" : "expanded"}`
+  );
+  button.title = `${isCollapsed ? "Show" : "Hide"} ${baseLabel}`;
+  button.classList.toggle("is-collapsed", isCollapsed);
 }
