@@ -357,3 +357,21 @@ body {
 .view-link:hover {
   text-decoration: underline;
 }
+
+.cancel-button {
+  margin-left: 0.5rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 0.5rem;
+  border: 1px solid #f87171;
+  background-color: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.cancel-button:hover {
+  background-color: #fecaca;
+  border-color: #f87171;
+  color: #7f1d1d;
+}

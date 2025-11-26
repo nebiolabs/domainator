@@ -120,6 +120,21 @@ function bindEventHandlers() {
       deleteFile(fileId);
     });
   }
+
+  const jobsBody = document.getElementById("jobs-body");
+  if (jobsBody) {
+    jobsBody.addEventListener("click", event => {
+      const button = event.target.closest("button[data-cancel]");
+      if (!button) {
+        return;
+      }
+      const jobId = button.getAttribute("data-cancel");
+      if (!jobId) {
+        return;
+      }
+      cancelJob(jobId);
+    });
+  }
 }
 
 async function refreshAll() {
@@ -935,10 +950,43 @@ function renderJobs() {
       link.target = "_blank";
       logsCell.appendChild(link);
     }
+    if (job.status === "running" || job.status === "queued") {
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.textContent = "Cancel";
+      cancelButton.className = "cancel-button";
+      cancelButton.setAttribute("data-cancel", job.job_id);
+      logsCell.appendChild(cancelButton);
+    }
     row.appendChild(logsCell);
 
     body.appendChild(row);
   });
+}
+
+async function cancelJob(jobId) {
+  if (!jobId) {
+    return;
+  }
+  try {
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const message = payload.error || "Failed to cancel job";
+      throw new Error(message);
+    }
+    setMessage(`Job ${jobId} cancelled.`, "success");
+    const job = await response.json().catch(() => null);
+    if (job) {
+      updateJobs([job]);
+    } else {
+      fetchJob(jobId);
+    }
+  } catch (error) {
+    setMessage(error.message, "error", 6000);
+  }
 }
 
 function startPolling() {
