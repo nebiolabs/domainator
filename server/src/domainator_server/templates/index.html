@@ -13,20 +13,21 @@
         <h1>Domainator Server</h1>
         <p class="tagline">Run tools and workflows from your browser.</p>
       </div>
-    </div>
     <nav class="top-bar-controls" id="panel-controls" role="group" aria-label="Toggle panels">
       <button type="button" class="panel-toggle" data-panel="files-panel" data-label="Stored Files" aria-pressed="true">Files</button>
       <button type="button" class="panel-toggle" data-panel="tools-panel" data-label="Tools" aria-pressed="true">Tools</button>
       <button type="button" class="panel-toggle" data-panel="tool-detail-panel" data-label="Tool Details" aria-pressed="true">Details</button>
       <button type="button" class="panel-toggle" data-panel="jobs-panel" data-label="Jobs" aria-pressed="true">Jobs</button>
     </nav>
+    </div>
+
     <div class="top-bar-right">
       <form id="upload-form">
         <label class="visually-hidden" for="file-input">Upload files</label>
         <input type="file" id="file-input" name="files" multiple>
         <button type="submit">Upload</button>
       </form>
-      <p class="hint upload-hint">Uploaded files become available to tool parameters that expect inputs.</p>
+      <p class="hint upload-hint">Make files available to tools</p>
       <div id="messages" role="status" aria-live="polite"></div>
     </div>
   </header>
