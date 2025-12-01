@@ -1,6 +1,6 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.7.2
+Version 0.8.0
 
 [//]: # (remember to update version in domainator/__init__.py also)
 
@@ -15,6 +15,7 @@ A flexible and modular software suite for domain-based gene neighborhood and pro
    - [Apptainer (Singularity)](#Apptainer-(Singularity))
  - [Updating](#Updating)
  - [Examples](#Examples)
+ - [Domainator GUI](#Running-Domainator-through-the-bundled-web-interface)
  - [Using Domainator as a python library](#Using-Domainator-as-a-python-library)
  - [Credits](#Credits)
 
@@ -205,6 +206,16 @@ plot_contigs.py -i domainator_output.gb --html contigs_plot.html
 ```
 
 For more examples see: [Basic Examples](docs/examples.md), and [Advanced examples](https://github.com/nebiolabs/domainator_examples).
+
+# Running Domainator through the bundled web-interface
+
+Start the local server:
+```
+domainator-server --data-dir domainator_data
+```
+Replace the path with a writable directory to store uploads, jobs, and logs.
+
+Visit http://127.0.0.1:8080/ to open the browser UI. Use --host and --port to change the bind address.
 
 # Using Domainator as a python library
 
