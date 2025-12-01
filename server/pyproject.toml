@@ -7,7 +7,7 @@ name = "domainator-server"
 version = "0.1.0"
 description = "Domainator Web Server"
 readme = "README.md"
-authors = [{ name = "Nebio Labs", email = "dev@nebiolabs.org" }]
+authors = [{ name = "Sean Johnson", email = "sjohnson@nebiolabs.org" }]
 requires-python = ">=3.10"
 dependencies = [
     "Flask>=2.3",
