@@ -4,6 +4,7 @@
   "category": "Editors",
   "description": "Search for matches to hmm profiles\n\nFor searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries (profiles or protein sequences).\n\nReturns the contigs with hits, possibly truncated to the neighborhood around the hits.\n\nWhen --max_hits is specified, it applies to the entire search, not individual queries. Thus if you supply 5 query profiles and --max_hits 100, \nat most 100 hits will be returned (not 500). \n\nWhen max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.\nIf neither is set, then hits will be written on the fly and not sorted.",
   "runner": "module",
+  "priority": 2,
   "entry_point": "domainator.domain_search",
   "parameters": [
     {

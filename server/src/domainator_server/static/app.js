@@ -5,6 +5,13 @@ const state = {
   lastJobUpdate: 0,
   activeToolId: null,
   collapsedPanels: new Set(),
+  categoryConfig: {
+    order: [],
+    colors: {},
+    orderLookup: new Map(),
+    colorLookup: new Map(),
+    defaultColor: "#f9fafb",
+  },
 };
 
 const PREVIEWABLE_TYPES = new Set([
@@ -22,6 +29,242 @@ const PREVIEWABLE_TYPES = new Set([
   "gif",
   "pdf",
 ]);
+
+function normalizeCategory(category) {
+  if (!category || typeof category !== "string") {
+    return "\uffff";
+  }
+  return category.toLowerCase();
+}
+
+function getCategoryOrderIndex(category) {
+  if (!category || typeof category !== "string") {
+    return state.categoryConfig.order.length;
+  }
+  const index = state.categoryConfig.orderLookup.get(category.toLowerCase());
+  return index !== undefined ? index : state.categoryConfig.order.length;
+}
+
+function compareCategoryOrder(categoryA, categoryB) {
+  const indexA = getCategoryOrderIndex(categoryA);
+  const indexB = getCategoryOrderIndex(categoryB);
+  if (indexA !== indexB) {
+    return indexA - indexB;
+  }
+  const normalizedA = normalizeCategory(categoryA);
+  const normalizedB = normalizeCategory(categoryB);
+  if (normalizedA !== normalizedB) {
+    return normalizedA.localeCompare(normalizedB);
+  }
+  return 0;
+}
+
+function normalizeToolName(tool) {
+  return (tool?.display_name || tool?.id || "").toLowerCase();
+}
+
+function getToolPriority(tool) {
+  if (!tool || tool.priority === undefined || tool.priority === null) {
+    return null;
+  }
+  const value = Number(tool.priority);
+  return Number.isFinite(value) ? value : null;
+}
+
+function compareTools(a, b) {
+  const categoryComparison = compareCategoryOrder(a?.category, b?.category);
+  if (categoryComparison !== 0) {
+    return categoryComparison;
+  }
+
+  const priorityA = getToolPriority(a);
+  const priorityB = getToolPriority(b);
+  const hasPriorityA = priorityA !== null;
+  const hasPriorityB = priorityB !== null;
+  if (hasPriorityA && hasPriorityB) {
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+  } else if (hasPriorityA) {
+    return -1;
+  } else if (hasPriorityB) {
+    return 1;
+  }
+
+  const nameA = normalizeToolName(a);
+  const nameB = normalizeToolName(b);
+  if (nameA !== nameB) {
+    return nameA.localeCompare(nameB);
+  }
+  const idA = (a?.id || "").toLowerCase();
+  const idB = (b?.id || "").toLowerCase();
+  return idA.localeCompare(idB);
+}
+
+function applyCategoryConfig(config) {
+  const defaultColor =
+    typeof config?.default_color === "string" && config.default_color.trim()
+      ? config.default_color.trim()
+      : state.categoryConfig.defaultColor;
+
+  const seenOrder = new Set();
+  const order = Array.isArray(config?.order)
+    ? config.order
+        .map(item => (typeof item === "string" ? item.trim() : ""))
+        .filter(item => {
+          if (!item) {
+            return false;
+          }
+          const key = item.toLowerCase();
+          if (seenOrder.has(key)) {
+            return false;
+          }
+          seenOrder.add(key);
+          return true;
+        })
+    : [];
+
+  const colorsInput = config?.colors && typeof config.colors === "object" ? config.colors : {};
+  const colors = {};
+  const colorLookup = new Map();
+  Object.entries(colorsInput).forEach(([rawName, rawValue]) => {
+    if (typeof rawName !== "string") {
+      return;
+    }
+    const name = rawName.trim();
+    const value = typeof rawValue === "string" ? rawValue.trim() : "";
+    if (!name || !value) {
+      return;
+    }
+    colors[name] = value;
+    colorLookup.set(name.toLowerCase(), value);
+  });
+
+  const orderLookup = new Map();
+  order.forEach((name, index) => {
+    orderLookup.set(name.toLowerCase(), index);
+  });
+
+  state.categoryConfig = {
+    order,
+    colors,
+    orderLookup,
+    colorLookup,
+    defaultColor,
+  };
+}
+
+async function loadCategoryConfig() {
+  const url = "/static/tool-category-config.json";
+  try {
+    const response = await fetch(url, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    const config = await response.json();
+    applyCategoryConfig(config);
+  } catch (error) {
+    console.warn("Unable to load tool category configuration; using defaults.", error);
+    applyCategoryConfig({});
+  }
+}
+
+function clampColorValue(value) {
+  return Math.max(0, Math.min(255, value));
+}
+
+function parseHexColor(color) {
+  if (typeof color !== "string") {
+    return null;
+  }
+  const hex = color.trim();
+  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex);
+  if (!match) {
+    return null;
+  }
+  let value = match[1];
+  if (value.length === 3) {
+    value = value
+      .split("")
+      .map(char => char + char)
+      .join("");
+  }
+  const intValue = parseInt(value, 16);
+  return {
+    r: (intValue >> 16) & 0xff,
+    g: (intValue >> 8) & 0xff,
+    b: intValue & 0xff,
+  };
+}
+
+function parseRgbColor(color) {
+  if (typeof color !== "string") {
+    return null;
+  }
+  const match = /^rgba?\(([^)]+)\)$/i.exec(color.trim());
+  if (!match) {
+    return null;
+  }
+  const parts = match[1]
+    .split(",")
+    .map(part => part.trim())
+    .filter(Boolean);
+  if (parts.length < 3) {
+    return null;
+  }
+  const r = clampColorValue(Number.parseFloat(parts[0]));
+  const g = clampColorValue(Number.parseFloat(parts[1]));
+  const b = clampColorValue(Number.parseFloat(parts[2]));
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return null;
+  }
+  return { r, g, b };
+}
+
+function parseColor(color) {
+  return parseHexColor(color) || parseRgbColor(color);
+}
+
+function rgbToHex({ r, g, b }) {
+  const toHex = value => clampColorValue(Math.round(value)).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function darkenColor(color, amount = 0.16) {
+  const parsed = parseColor(color);
+  if (!parsed) {
+    return color;
+  }
+  const factor = 1 - amount;
+  return rgbToHex({
+    r: parsed.r * factor,
+    g: parsed.g * factor,
+    b: parsed.b * factor,
+  });
+}
+
+function getCategoryColors(category) {
+  let fill = state.categoryConfig.defaultColor;
+  if (typeof category === "string") {
+    const configured = state.categoryConfig.colorLookup.get(category.toLowerCase());
+    if (configured) {
+      fill = configured;
+    }
+  }
+  const border = darkenColor(fill, 0.18);
+  return {
+    fill,
+    border,
+  };
+}
+
+async function initializeApp() {
+  bindEventHandlers();
+  initializePanelControls();
+  await loadCategoryConfig();
+  await refreshAll();
+  startPolling();
+}
 
 function getExtension(value) {
   if (!value) {
@@ -63,10 +306,10 @@ let pollTimer = null;
 let isPolling = false;
 
 document.addEventListener("DOMContentLoaded", () => {
-  bindEventHandlers();
-  initializePanelControls();
-  refreshAll();
-  startPolling();
+  initializeApp().catch(error => {
+    console.error("Failed to initialize the Domainator interface.", error);
+    setMessage("Failed to initialize the interface. Please reload the page.", "error");
+  });
 });
 
 function bindEventHandlers() {
@@ -168,25 +411,7 @@ async function refreshTools() {
     }
     const data = await response.json();
     const tools = Array.isArray(data) ? data.slice() : [];
-    tools.sort((a, b) => {
-      const aName = (a?.display_name || a?.id || "").toLowerCase();
-      const bName = (b?.display_name || b?.id || "").toLowerCase();
-      if (aName < bName) {
-        return -1;
-      }
-      if (aName > bName) {
-        return 1;
-      }
-      const aId = a?.id || "";
-      const bId = b?.id || "";
-      if (aId < bId) {
-        return -1;
-      }
-      if (aId > bId) {
-        return 1;
-      }
-      return 0;
-    });
+    tools.sort(compareTools);
     state.tools = tools;
     if (!state.tools.some(tool => tool.id === state.activeToolId)) {
       state.activeToolId = null;
@@ -313,6 +538,10 @@ function renderTools() {
     if (tool.id === state.activeToolId) {
       card.classList.add("active");
     }
+
+    const { fill, border } = getCategoryColors(tool.category);
+    card.style.setProperty("--tool-card-fill", fill);
+    card.style.setProperty("--tool-card-border", border);
 
     const title = document.createElement("h3");
     title.textContent = tool.display_name || tool.id;

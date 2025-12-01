@@ -247,17 +247,18 @@ body {
 }
 
 .tool-card {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--tool-card-border, #d1d5db);
   border-radius: 0.75rem;
   padding: 0.75rem;
-  background-color: #f9fafb;
+  background-color: var(--tool-card-fill, #f9fafb);
   cursor: pointer;
-  transition: border-color 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .tool-card:hover,
 .tool-card.active {
-  border-color: #2563eb;
+  background-color: var(--tool-card-border, #d1d5db);
+  border-color: var(--tool-card-border, #d1d5db);
 }
 
 .tool-card h3 {

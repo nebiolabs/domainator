@@ -1,9 +1,10 @@
 {
   "id": "build_ssn",
-  "display_name": "Build Ssn",
+  "display_name": "Build SSN",
   "category": "Plots",
   "description": "Generates Sequence Similarity Networks\n    \nBuild a sequence similarity network and do analysis related to that.",
   "runner": "module",
+  "priority": 1,
   "entry_point": "domainator.build_ssn",
   "parameters": [
     {

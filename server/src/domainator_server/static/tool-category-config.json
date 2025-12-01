@@ -1,0 +1,19 @@
+{
+  "order": [
+    "Editors",
+    "Comparisons",
+    "Record-wise reports",
+    "Plots",
+    "Summary reports",
+    "Other"
+  ],
+  "colors": {
+    "Editors": "#bfdbfe",
+    "Comparisons": "#fde68a",
+    "Record-wise reports": "#fbcfe8",
+    "Plots": "#bbf7d0",
+    "Summary reports": "#ddd6fe",
+    "Other": "#e5e7eb"
+  },
+  "default_color": "#f9fafb"
+}

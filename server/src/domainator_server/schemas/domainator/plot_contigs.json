@@ -4,6 +4,7 @@
   "category": "Plots",
   "description": "Create graphical representations of the contigs and their annotations.\n\nIt works best for relatively small datasets, of a few megabases or a few hundred contigs.\n\nWARNING: THIS IS A WORK IN PROGRESS. THE API MAY CHANGE.",
   "runner": "module",
+  "priority": 3,
   "entry_point": "domainator.plot_contigs",
   "parameters": [
     {

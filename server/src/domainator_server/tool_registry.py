@@ -14,6 +14,7 @@ class ToolSchema:
     payload: dict
     source_path: Path
     category: Optional[str] = None
+    priority: Optional[float] = None
 
 
 class ToolRegistry:
@@ -50,7 +51,26 @@ class ToolRegistry:
                 if tool_id in schemas:
                     raise ValueError(f"Duplicate tool id '{tool_id}' from {path}")
                 category = payload.get("category")
-                schemas[tool_id] = ToolSchema(id=tool_id, payload=payload, source_path=path, category=category)
+                priority_value = payload.get("priority")
+                if priority_value is None:
+                    priority = None
+                else:
+                    try:
+                        priority = float(priority_value)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"Schema priority for '{tool_id}' must be numeric: {path}"
+                        ) from exc
+                if priority is not None:
+                    payload["priority"] = priority
+
+                schemas[tool_id] = ToolSchema(
+                    id=tool_id,
+                    payload=payload,
+                    source_path=path,
+                    category=category,
+                    priority=priority,
+                )
         self._schemas = schemas
 
     def list(self) -> List[ToolSchema]:

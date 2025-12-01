@@ -4,6 +4,7 @@
   "category": "Editors",
   "description": "Filter domain anntations\n\nTakes a genbank file which has been annotated through the domainator program and filters domainator annotations,\nbased on percentage overlap between domains and evalues of domains.",
   "runner": "module",
+  "priority": 5,
   "entry_point": "domainator.filter_domains",
   "parameters": [
     {

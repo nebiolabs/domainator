@@ -4,6 +4,7 @@
   "category": "Comparisons",
   "description": "Calculates similarity scores between protein sequences. \n\nTypically the input and reference will be the same sequence file, creating a pairwise similarity matrix. \nAn hmm file can also be used as a reference to make a table of profile scores for each input peptide.",
   "runner": "module",
+  "priority": 1,
   "entry_point": "domainator.seq_dist",
   "parameters": [
     {

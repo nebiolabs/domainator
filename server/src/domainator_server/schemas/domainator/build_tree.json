@@ -4,6 +4,7 @@
   "category": "Plots",
   "description": "Generates Trees from distance matrices",
   "runner": "module",
+  "priority": 2,
   "entry_point": "domainator.build_tree",
   "parameters": [
     {
