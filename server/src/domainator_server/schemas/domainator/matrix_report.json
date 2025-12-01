@@ -11,6 +11,7 @@
       "parameter": "input",
       "help": "name of input matrix file.",
       "type": "file",
+      "required": true,
       "flags": [
         "-i",
         "--input"

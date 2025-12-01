@@ -11,47 +11,42 @@
       "parameter": "input",
       "help": "Input query file.",
       "type": "file",
+      "required": true,
       "flags": [
         "-i",
         "--input"
-      ]
-    },
-    {
-      "name": "Input Type",
-      "parameter": "input_type",
-      "help": "File type for the sequence file",
-      "type": "file",
-      "choices": [
-        "hmm",
-        "fasta",
-        "genbank"
       ],
-      "flags": [
-        "--input_type"
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna",
+        "hmm"
       ]
     },
     {
       "name": "Reference",
       "parameter": "reference",
       "help": "Reference file.",
-      "type": "string",
+      "type": "file",
       "flags": [
         "-r",
         "--reference"
-      ]
-    },
-    {
-      "name": "Reference Type",
-      "parameter": "reference_type",
-      "help": "File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.",
-      "type": "string",
-      "choices": [
-        "hmm",
-        "fasta",
-        "genbank"
       ],
-      "flags": [
-        "--reference_type"
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna",
+        "hmm"
       ]
     },
     {
@@ -151,5 +146,33 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [    {
+      "name": "Input Type",
+      "parameter": "input_type",
+      "help": "File type for the sequence file",
+      "type": "file",
+      "choices": [
+        "hmm",
+        "fasta",
+        "genbank"
+      ],
+      "flags": [
+        "--input_type"
+      ]
+    },
+    {
+      "name": "Reference Type",
+      "parameter": "reference_type",
+      "help": "File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.",
+      "type": "string",
+      "choices": [
+        "hmm",
+        "fasta",
+        "genbank"
+      ],
+      "flags": [
+        "--reference_type"
+      ]
+    }  
+  ]
 }

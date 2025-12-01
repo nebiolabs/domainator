@@ -9,19 +9,31 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "help": "names of input genbank files.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
       ]
     },
     {
       "name": "Output",
       "parameter": "output",
-      "help": "genbank output file name. If not supplied writes to stdout.",
+      "help": "genbank output file name.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"
@@ -44,6 +56,9 @@
       "type": "file",
       "flags": [
         "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
@@ -90,6 +105,9 @@
       "type": "file",
       "flags": [
         "--domains_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
@@ -120,7 +138,7 @@
       "name": "Databases",
       "parameter": "databases",
       "help": "Consider only domains from these databases when filtering by domain. default: all databases.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases"
@@ -175,26 +193,6 @@
       "multiple": true,
       "flags": [
         "--exclude_taxids"
-      ]
-    },
-    {
-      "name": "Ncbi Taxonomy Path",
-      "parameter": "ncbi_taxonomy_path",
-      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
-      "type": "file",
-      "default": "/tmp/ncbi_taxonomy",
-      "flags": [
-        "--ncbi_taxonomy_path"
-      ]
-    },
-    {
-      "name": "Taxonomy Update",
-      "parameter": "taxonomy_update",
-      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--taxonomy_update"
       ]
     },
     {
@@ -253,5 +251,24 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy_update"
+      ]
+    }]
 }

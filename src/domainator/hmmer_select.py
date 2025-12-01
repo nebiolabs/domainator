@@ -129,7 +129,7 @@ def main(argv):
                           help="names of input hmm files. If not supplied, reads from stdin.")
 
     parser.add_argument("-o", "--output", default=None, required=False,  type=str,
-                        help="genbank output file name. If not supplied writes to stdout.")
+                        help="Hmm output file name. If not supplied writes to stdout.")
 
     parser.add_argument("--regex", default=None, required=False, type=str, nargs="+",
                         help="What regex(es) to search.")

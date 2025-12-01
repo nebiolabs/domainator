@@ -1,3 +1,4 @@
+//NOTE: not very useful for web interface, mainly for command line use.
 {
   "id": "partition_seqfile",
   "display_name": "Partition Seqfile",

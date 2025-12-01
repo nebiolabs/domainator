@@ -11,28 +11,16 @@
       "parameter": "input",
       "help": "name of input matrix file.",
       "type": "file",
+      "required": true,
       "flags": [
         "-i",
         "--input"
-      ]
-    },
-    {
-      "name": "Input Type",
-      "parameter": "input_type",
-      "help": "If the type of the input matrix is not specified, specify the type of input matrix. Default: None",
-      "type": "file",
-      "choices": [
-        null,
-        "score_dist",
-        "efi_score",
-        "norm_score",
-        "efi_score_dist",
-        "score",
-        "row_norm_score",
-        "bool"
       ],
-      "flags": [
-        "--input_type"
+      "file_types": [
+        "tsv",
+        "hdf",
+        "h5",
+        "hdf5"
       ]
     },
     {
@@ -76,11 +64,30 @@
         "efi_score_dist",
         "row_norm_score"
       ],
-      "default": "norm_score",
+      "default": "efi_score",
       "flags": [
         "--mode"
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [    {
+      "name": "Input Type",
+      "parameter": "input_type",
+      "help": "If the type of the input matrix is not specified, specify the type of input matrix. Default: None",
+      "type": "file",
+      "choices": [
+        null,
+        "score_dist",
+        "efi_score",
+        "norm_score",
+        "efi_score_dist",
+        "score",
+        "row_norm_score",
+        "bool"
+      ],
+      "flags": [
+        "--input_type"
+      ]
+    }
+  ]
 }

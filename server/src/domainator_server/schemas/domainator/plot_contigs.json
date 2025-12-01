@@ -9,12 +9,19 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "help": "names of input genbank files.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
       ]
     },
     {
@@ -26,6 +33,30 @@
         "--html"
       ]
     },
+    {
+      "name": "Metadata",
+      "parameter": "metadata",
+      "help": "tab separated files of additional contig metadata.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--metadata"
+      ],
+      "file_types": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "Color By",
+      "parameter": "color_by",
+      "help": "Color the contig lines in the plot based on this column of the metadata table.",
+      "type": "string",
+      "flags": [
+        "--color_by"
+      ]
+    }
+  ],
+  "advanced_parameters": [
     {
       "name": "Height",
       "parameter": "height",
@@ -44,16 +75,6 @@
       "default": 1200,
       "flags": [
         "--width"
-      ]
-    },
-    {
-      "name": "Types",
-      "parameter": "types",
-      "help": "Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search'.",
-      "type": "string",
-      "multiple": true,
-      "flags": [
-        "--types"
       ]
     },
     {
@@ -77,24 +98,14 @@
       ]
     },
     {
-      "name": "Metadata",
-      "parameter": "metadata",
-      "help": "tab separated files of additional contig metadata.",
+      "name": "Types",
+      "parameter": "types",
+      "help": "Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search'.",
       "type": "string",
       "multiple": true,
       "flags": [
-        "--metadata"
+        "--types"
       ]
-    },
-    {
-      "name": "Color By",
-      "parameter": "color_by",
-      "help": "Color the contig lines in the plot based on this column of the metadata table.",
-      "type": "string",
-      "flags": [
-        "--color_by"
-      ]
-    }
-  ],
-  "advanced_parameters": []
+    } 
+  ]
 }

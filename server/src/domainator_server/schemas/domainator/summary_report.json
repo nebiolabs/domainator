@@ -12,9 +12,20 @@
       "help": "name of input genbank files.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
       ]
     },
     {
@@ -49,7 +60,7 @@
       "name": "Co Occurence Fraction",
       "parameter": "co_occurence_fraction",
       "help": "Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the fraction of contigs containing the row-domain that also include the column-domain (so the matrix is assymetric).",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--co_occurence_fraction"
       ]
@@ -58,7 +69,7 @@
       "name": "Co Occurence Count",
       "parameter": "co_occurence_count",
       "help": "Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the number of contigs containing both the row-domain and the column-domain (so the matrix is symmetric).",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--co_occurence_count"
       ]
@@ -71,26 +82,6 @@
       "default": false,
       "flags": [
         "--taxonomy"
-      ]
-    },
-    {
-      "name": "Taxonomy Update",
-      "parameter": "taxonomy_update",
-      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--taxonomy_update"
-      ]
-    },
-    {
-      "name": "Ncbi Taxonomy Path",
-      "parameter": "ncbi_taxonomy_path",
-      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
-      "type": "file",
-      "default": "/tmp/ncbi_taxonomy",
-      "flags": [
-        "--ncbi_taxonomy_path"
       ]
     },
     {
@@ -110,6 +101,9 @@
       "type": "file",
       "flags": [
         "--contigs_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
@@ -129,18 +123,42 @@
       "type": "file",
       "flags": [
         "--domains_file"
+      ],
+      "file_types": [
+        "txt"
       ]
     },
     {
       "name": "Databases",
       "parameter": "databases",
       "help": "Ignore domain annotations not from these databases. default: consider all databases.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases"
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+        {
+      "name": "Taxonomy Update",
+      "parameter": "taxonomy_update",
+      "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--taxonomy_update"
+      ]
+    },
+    {
+      "name": "Ncbi Taxonomy Path",
+      "parameter": "ncbi_taxonomy_path",
+      "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
+      "type": "file",
+      "default": "/tmp/ncbi_taxonomy",
+      "flags": [
+        "--ncbi_taxonomy_path"
+      ]
+    }
+  ]
 }

@@ -1,4 +1,3 @@
-// continue curating here
 {
   "id": "hmmer_select",
   "display_name": "Hmmer Select",
@@ -10,18 +9,23 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "names of input hmm files. If not supplied, reads from stdin.",
+      "help": "names of input hmm files.",
       "type": "file",
       "multiple": true,
+      "required": true,
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "hmm"
       ]
     },
     {
       "name": "Output",
       "parameter": "output",
-      "help": "genbank output file name. If not supplied writes to stdout.",
+      "help": "Hmm output file name.",
+      "required": true,
       "type": "output",
       "flags": [
         "-o",
