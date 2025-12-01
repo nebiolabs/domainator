@@ -5,8 +5,8 @@ from pathlib import Path
 
 from werkzeug.datastructures import FileStorage
 
-from domainator_server.config import ServerConfig
-from domainator_server.file_manager import FileManager
+from domainator.server.config import ServerConfig
+from domainator.server.file_manager import FileManager
 
 
 def test_ingest_filestorage(tmp_path: Path) -> None:

@@ -27,6 +27,9 @@ dependencies = [
     "umap-learn >=0.5.4",
     "h5py >=3.9.0",
     "jsonargparse >=4.18.0",
+    "Flask >=2.3",
+    "Werkzeug >=2.3",
+    "jsonschema >=4.0",
     "psutil >=5.9.6",
     "tqdm >=4.65.0",
     "pyrodigal >=3.0.1",
@@ -35,6 +38,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+core = [
+    "pandas >=2.1.0",
+    "seaborn >=0.13.0",
+    "scipy >=1.11.2",
+    "pyhmmer >=0.10.2 ",
+    "umap-learn >=0.5.4",
+    "h5py >=3.9.0",
+    "jsonargparse >=4.18.0",
+    "psutil >=5.9.6",
+    "tqdm >=4.65.0",
+    "pyrodigal >=3.0.1",
+    "bashplotlib >=0.6.5",
+    "requests >=2.31.0"
+]
 test = ["pytest >=7.4.2", 
         "pytest-datadir~=1.4.1"]
 # add dependency for Foldseek/ESM2 related stuff.
@@ -45,6 +62,17 @@ Bug_Tracker = "https://github.com/nebiolabs/domainator/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.package-data]
+"domainator.server" = [
+    "static/*.css",
+    "static/*.js",
+    "static/*.json",
+    "static/*.svg",
+    "templates/*.html",
+    "schemas/**/*.json",
+]
 
 
 [tool.setuptools.dynamic]
@@ -81,3 +109,4 @@ version = {attr = "domainator.__version__"}
 "transform_matrix.py" = "domainator:transform_matrix._entrypoint"
 "plot_contigs.py" = "domainator:plot_contigs._entrypoint"
 "trim_contigs.py" = "domainator:trim_contigs._entrypoint"
+"domainator-server" = "domainator.server.cli:main"

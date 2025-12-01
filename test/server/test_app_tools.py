@@ -6,9 +6,9 @@ import pytest
 
 from unittest.mock import MagicMock
 
-from domainator_server.app import create_app
-from domainator_server.config import ServerConfig
-from domainator_server.tool_executor import Job, JobStatus
+from domainator.server.app import create_app
+from domainator.server.config import ServerConfig
+from domainator.server.tool_executor import Job, JobStatus
 
 
 @pytest.fixture()
@@ -30,11 +30,11 @@ def test_list_tools(client):
     tools = resp.get_json()
     assert isinstance(tools, list)
     ids = {tool["id"] for tool in tools}
-    assert "genome_annotation" in ids
+    assert "domainate" in ids
 
-    detail = client.get("/api/tools/genome_annotation")
+    detail = client.get("/api/tools/domainate")
     assert detail.status_code == 200
-    assert detail.get_json()["id"] == "genome_annotation"
+    assert detail.get_json()["id"] == "domainate"
 
 
 def test_cancel_job_endpoint(client, flask_app, tmp_path):

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from domainator_server.app import create_app
-from domainator_server.config import ServerConfig
+from domainator.server.app import create_app
+from domainator.server.config import ServerConfig
 
 SCRIPT = """#!/usr/bin/env python3
 import argparse

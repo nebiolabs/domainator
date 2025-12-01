@@ -13,10 +13,10 @@ Most Domainator CLIs already expose a `main(argv)` entry point that the server c
 
 ### Command
 
-Run the generator from the `server/` directory:
+Run the generator from the repository root:
 
 ```
-python scripts/generate_tool_schemas.py --pyproject ../pyproject.toml --output-dir src/domainator_server/schemas/generated/
+python scripts/server/generate_tool_schemas.py --pyproject pyproject.toml --output-dir src/domainator/server/schemas/generated/
 ```
 
 Key options:
@@ -29,7 +29,7 @@ Generated schemas can be committed directly or used as a starting point for manu
 
 ## 2. Author Schemas Manually
 
-Schemas live under `src/domainator_server/schemas/` and have the following shape:
+Schemas live under `src/domainator/server/schemas/` and have the following shape:
 
 ```
 {

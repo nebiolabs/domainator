@@ -4,7 +4,7 @@ import json
 import pytest
 from pathlib import Path
 
-from domainator_server.tool_registry import ToolRegistry
+from domainator.server.tool_registry import ToolRegistry
 
 
 def write_schema(directory: Path, tool_id: str, entry_point: str = "tool.py") -> Path:

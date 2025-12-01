@@ -27,6 +27,8 @@ A flexible and modular software suite for domain-based gene neighborhood and pro
   - [Developing Domainator](docs/developing_domainator.md)
   - [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
   - [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
+  - [Domainator Web UI](docs/server/overview.md)
+    - [Adding Tools](docs/server/adding_tools.md)
 
 # Questions, comments, bug reports, and feature requests
 Please use our [discussions page](https://github.com/nebiolabs/domainator/discussions) or [create an issue](https://github.com/nebiolabs/domainator/issues)

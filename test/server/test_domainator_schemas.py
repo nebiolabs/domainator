@@ -7,9 +7,9 @@ from typing import Callable, Dict
 
 import pytest
 
-from domainator_server.app import create_app
-from domainator_server.config import ServerConfig
-from domainator_server.tool_executor import JobStatus, ToolExecutor
+from domainator.server.app import create_app
+from domainator.server.config import ServerConfig
+from domainator.server.tool_executor import JobStatus, ToolExecutor
 from domainator.Bio import SeqIO
 
 

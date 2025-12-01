@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from domainator_server.config import ServerConfig
-from domainator_server.file_manager import FileManager
-from domainator_server.tool_executor import JobStatus, ToolExecutor
-from domainator_server.tool_registry import ToolRegistry
+from domainator.server.config import ServerConfig
+from domainator.server.file_manager import FileManager
+from domainator.server.tool_executor import JobStatus, ToolExecutor
+from domainator.server.tool_registry import ToolRegistry
 from werkzeug.utils import secure_filename
 
 
