@@ -1,7 +1,7 @@
 {
   "id": "summary_report",
   "display_name": "Summary Report",
-  "category": "Domainator",
+  "category": "Summary reports",
   "description": "From a domainator-annotated genbank file, calculates contig stats and domain frequency stats.",
   "runner": "module",
   "entry_point": "domainator.summary_report",

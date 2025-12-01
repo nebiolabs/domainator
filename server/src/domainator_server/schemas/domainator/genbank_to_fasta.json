@@ -1,7 +1,7 @@
 {
   "id": "genbank_to_fasta",
   "display_name": "Genbank To Fasta",
-  "category": "Domainator",
+  "category": "Other",
   "description": "Convert a GenBank file to a FASTA file.",
   "runner": "module",
   "entry_point": "domainator.genbank_to_fasta",

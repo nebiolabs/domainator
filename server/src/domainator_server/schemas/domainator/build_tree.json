@@ -1,7 +1,7 @@
 {
   "id": "build_tree",
   "display_name": "Build Tree",
-  "category": "Domainator",
+  "category": "Plots",
   "description": "Generates Trees from distance matrices",
   "runner": "module",
   "entry_point": "domainator.build_tree",

@@ -1,7 +1,7 @@
 {
   "id": "extract_domains",
   "display_name": "Extract Domains",
-  "category": "Domainator",
+  "category": "Editors",
   "description": "Extract domain-annotated regions\n\nTakes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts them from the contigs.\n\nThis tool is typically used with protein sequences, but can also be used with nucleic acid sequences.\nHandling of nucleic acids is less stable and will may change in future updates, so use with caution.\n\ncan write a fasta or a genbank file",
   "runner": "module",
   "entry_point": "domainator.extract_domains",

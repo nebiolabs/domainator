@@ -1,7 +1,7 @@
 {
   "id": "compare_contigs",
   "display_name": "Compare Contigs",
-  "category": "Domainator",
+  "category": "Comparisons",
   "description": "Calculates similarity metrics for gene neighborhoods\n\nTakes a genbank file annotated with domainator and calculates similarities between contigs and writes reports.\n\nji, ai, and dss metrics are similar to and inspired by the metrics used in the BigScape method:\nNavarro-Mu\u00f1oz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. \"A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data.\" Nature Chemical Biology 16, no. 1 (January 2020): 60\u201368. https://doi.org/10.1038/s41589-019-0400-9.",
   "runner": "module",
   "entry_point": "domainator.compare_contigs",

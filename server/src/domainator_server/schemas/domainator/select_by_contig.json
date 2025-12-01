@@ -1,7 +1,7 @@
 {
   "id": "select_by_contig",
   "display_name": "Select By Contig",
-  "category": "Domainator",
+  "category": "Editors",
   "description": "Create a new genbank file with a subset of contigs from the input\n\nFrom a domainator-annotated genbank file, extracts a subset of contigs based on selection criteria.\n\nSelection criteria are combined as follows:\n\n(contig length within specified bounds [length_lb, length_ub])\nAND \n(contig matches specified taxonomy filters)\nAND # INVERT applies to this list of criteria\n(\n   (contig name in specified list [contigs, contigs_file])\nOR (contig name matches specified regex [contigs_regex])\nOR (contig definition matches specified regex [definition_regex]) \nOR (contig sequence matches specified regex [sequence_regex])\nOR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) \nOR (contig contains a combination of domains that match the specified boolean expression [domain_expr])\nOR (contig contains no domains [unannotated])\n)\nAND\n(total number of selected contigs is less than or equal to specified maximum [first])\n\nIf --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. That is, length and first are still applied, \nbut the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.",
   "runner": "module",
   "entry_point": "domainator.select_by_contig",

@@ -1,7 +1,7 @@
 {
   "id": "hmmer_compare",
   "display_name": "Hmmer Compare",
-  "category": "Domainator",
+  "category": "Other",
   "description": "Aligns and calculates alignment scores between hmmer3 profiles \n\nKind of like hhsearch except much slower and for hmmer3 profiles instead of hhsuite profiles.\n\nAdapted from pseudocode in:\nSteinegger, Martin, Markus Meier, Milot Mirdita, Harald V\u00f6hringer, Stephan J. Haunsberger, and Johannes S\u00f6ding. \u201cHH-Suite3 for Fast Remote Homology Detection and Deep Protein Annotation.\u201d BMC Bioinformatics 20, no. 1 (September 14, 2019): 473. https://doi.org/10.1186/s12859-019-3019-7.\n\nand\n\nS\u00f6ding, Johannes. \"Protein Homology Detection by HMM\u2013HMM Comparison.\" Bioinformatics 21, no. 7 (April 1, 2005): 951\u201360. https://doi.org/10.1093/bioinformatics/bti125.",
   "runner": "module",
   "entry_point": "domainator.hmmer_compare",

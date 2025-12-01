@@ -1,7 +1,7 @@
 {
   "id": "build_projection",
   "display_name": "Build Projection",
-  "category": "Domainator",
+  "category": "Plots",
   "description": "generates 2d or 3d umap, tsne, or pca projections from dense or sparse matrices.\n\n    output can be images, coordinates, or Cytoscape xgmml files.",
   "runner": "module",
   "entry_point": "domainator.build_projection",

@@ -1,7 +1,7 @@
 {
   "id": "extract_peptides",
   "display_name": "Extract Peptides",
-  "category": "Domainator",
+  "category": "Editors",
   "description": "Converts annotated CDSs into annotated protein sequences\n\nTakes a domainator-annotated genbank file \nCreates peptide genbank or fasta files with the domainator annotations from the CDSs found in the original\ngenbank file\n\nBy default, extracts peptides from all CDSs in the genbank file.\n\nIf any criteria are supplied, then only peptides from CDSs that meet the criteria will be extracted.\n\nCriteria are combined with the following logic:\n    (all OR target_CDSs OR target_domains OR unannotated OR search_hits) AND (target_contigs OR strand)",
   "runner": "module",
   "entry_point": "domainator.extract_peptides",

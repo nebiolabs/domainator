@@ -1,7 +1,7 @@
 {
   "id": "color_genbank",
   "display_name": "Color Genbank",
-  "category": "Domainator",
+  "category": "Editors",
   "description": "add colors to domains or CDS annotations in genbank files\n\nTakes a genbank file which has been annotated using the domainator program, adds color annotations to the sequence features.\n\nDomains are colored based on domain name.\n\nCDSs are colored based on the associated domains, prioritized by domain score.\n\nIf a color_table is provided, then the colors in the table will be used, otherwise a random color will be assigned to each domain.",
   "runner": "module",
   "entry_point": "domainator.color_genbank",

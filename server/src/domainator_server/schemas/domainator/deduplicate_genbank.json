@@ -1,7 +1,7 @@
 {
   "id": "deduplicate_genbank",
   "display_name": "Deduplicate Genbank",
-  "category": "Domainator",
+  "category": "Editors",
   "description": "Remove redundant sequences from a genbank file\n\nRuns a clustering algorithm, such as cdhit or usearch on sequences from a genbank (or fasta) file to reduce redundancy.\nThe \"hash\" algorithm is a faster way to deduplicate exact duplicates, by hashing the sequences and eliminating hash duplicates.",
   "runner": "module",
   "entry_point": "domainator.deduplicate_genbank",

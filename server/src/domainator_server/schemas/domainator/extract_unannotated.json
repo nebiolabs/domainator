@@ -1,7 +1,7 @@
 {
   "id": "extract_unannotated",
   "display_name": "Extract Unannotated",
-  "category": "Domainator",
+  "category": "Editors",
   "description": "Extract unannotated regions\n\nTakes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts regions not containing them.\n\nThis tool is currently only supports protein sequences, support for nucleic acids may be added someday.\n\ncan write a fasta or a genbank file",
   "runner": "module",
   "entry_point": "domainator.extract_unannotated",

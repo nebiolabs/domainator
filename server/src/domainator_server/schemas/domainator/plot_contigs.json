@@ -1,7 +1,7 @@
 {
   "id": "plot_contigs",
   "display_name": "Plot Contigs",
-  "category": "Domainator",
+  "category": "Plots",
   "description": "Create graphical representations of the contigs and their annotations.\n\nIt works best for relatively small datasets, of a few megabases or a few hundred contigs.\n\nWARNING: THIS IS A WORK IN PROGRESS. THE API MAY CHANGE.",
   "runner": "module",
   "entry_point": "domainator.plot_contigs",
