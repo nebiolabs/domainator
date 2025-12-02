@@ -14,6 +14,9 @@ const state = {
   },
 };
 
+const DOCUMENTATION_URL =
+  "https://github.com/nebiolabs/domainator/tree/main/docs/server/README.md";
+
 const PREVIEWABLE_TYPES = new Set([
   "html",
   "htm",
@@ -335,6 +338,18 @@ function bindEventHandlers() {
         return;
       }
       togglePanel(panelId);
+    });
+  }
+
+  const documentationButton = document.getElementById("documentation-button");
+  if (documentationButton) {
+    documentationButton.addEventListener("click", () => {
+      const win = window.open(DOCUMENTATION_URL, "_blank");
+      if (win) {
+        win.opener = null;
+      } else {
+        window.location.href = DOCUMENTATION_URL;
+      }
     });
   }
 
