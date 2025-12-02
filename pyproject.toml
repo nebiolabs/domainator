@@ -109,4 +109,4 @@ version = {attr = "domainator.__version__"}
 "transform_matrix.py" = "domainator:transform_matrix._entrypoint"
 "plot_contigs.py" = "domainator:plot_contigs._entrypoint"
 "trim_contigs.py" = "domainator:trim_contigs._entrypoint"
-"domainator-server" = "domainator.server.cli:main"
+"domainator_server" = "domainator.server.cli:main"

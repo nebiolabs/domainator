@@ -211,7 +211,7 @@ For more examples see: [Basic Examples](docs/examples.md), and [Advanced example
 
 Start the local server:
 ```
-domainator-server --data-dir domainator_data
+domainator_server --data-dir domainator_data
 ```
 Replace the path with a writable directory to store uploads, jobs, and logs.
 

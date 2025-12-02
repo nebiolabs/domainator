@@ -7,8 +7,6 @@ schemas, executors, and file-management utilities as the CLI workflows.
 
 ## Features
 - Upload, catalogue, and download data sets through a simple file manager.
-- Discover available tools directly from the schema registry and inspect their
-  parameters.
 - Launch jobs that execute Domainator CLIs in the background and stream logs in
   real time.
 - Retrieve generated outputs and configuration files from the job workspace.
@@ -25,7 +23,7 @@ schemas, executors, and file-management utilities as the CLI workflows.
    included.
 2. Run the server:
    ```bash
-   domainator-server --data-dir /tmp/domainator_server
+   domainator_server --data-dir /tmp/domainator_server
    ```
    Replace the path with a writable directory to store uploads, jobs, and logs.
 3. Visit <http://127.0.0.1:8080/> to open the browser UI. Use `--host` and

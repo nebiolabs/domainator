@@ -340,7 +340,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         scripts = {name: scripts[name] for name in args.include}
 
     for tool_id, target in sorted(scripts.items()):
-        if tool_id == "domainator-server":
+        if tool_id == "domainator_server":
             continue
         schema = build_schema(tool_id, target)
         write_schema(schema, args.output_dir)
