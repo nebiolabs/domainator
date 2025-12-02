@@ -1,4 +1,4 @@
-"""Find profiles in an hmm file.
+"""Find profiles in an hmm file using text-based searches
 
 Search through an hmm file to find profiles with names or descriptions matching a specified regex or string, or containing a specified string.
 

@@ -1,7 +1,7 @@
-"""Generate an enumerated report
-Takes a genbank file which has been annotated using the domainator program, write tabulated descriptions of each contig, CDS, or domain.
+"""Writes record-wise information from Genbank files into tab-separated or html tables
 
-write a tab-separated file
+Takes a genbank file which has been annotated using Domainate, write tabulated descriptions of each contig, CDS, or domain.
+
 """
 
 import sys

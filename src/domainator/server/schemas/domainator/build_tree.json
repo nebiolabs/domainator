@@ -2,7 +2,7 @@
   "id": "build_tree",
   "display_name": "Build Tree",
   "category": "Plots",
-  "description": "Generates Trees from distance matrices",
+  "description": "Generates trees from distance matrices",
   "runner": "module",
   "priority": 2,
   "entry_point": "domainator.build_tree",

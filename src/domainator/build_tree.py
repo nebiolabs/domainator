@@ -1,4 +1,4 @@
-"""Generates Trees from distance matrices
+"""Generates trees from distance matrices
     
 """
 import warnings

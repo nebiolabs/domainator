@@ -1,7 +1,8 @@
-"""Calculates similarity scores between protein sequences. 
+"""Calculates similarity scores between protein sequences or HMM profiles
 
 Typically the input and reference will be the same sequence file, creating a pairwise similarity matrix. 
 An hmm file can also be used as a reference to make a table of profile scores for each input peptide.
+An hmm file can also be used as both input and reference to compare profile similarity.
 
 """
 import warnings

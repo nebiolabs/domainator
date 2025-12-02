@@ -1,4 +1,4 @@
-"""generates 2d or 3d umap, tsne, or pca projections from dense or sparse matrices.
+"""Generates 2d or 3d umap, tsne, or pca projections from dense or sparse matrices
 
     output can be images, coordinates, or Cytoscape xgmml files.
 

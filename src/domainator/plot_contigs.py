@@ -1,8 +1,6 @@
-"""Create graphical representations of the contigs and their annotations.
+"""Create graphical representations of the contigs and their annotations
 
 It works best for relatively small datasets, of a few megabases or a few hundred contigs.
-
-WARNING: THIS IS A WORK IN PROGRESS. THE API MAY CHANGE.
 
 """
 

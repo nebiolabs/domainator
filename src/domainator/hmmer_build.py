@@ -1,6 +1,7 @@
-"""
-    Script to build a HMM profile from a multiple sequence alignment (MSA).
-    Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.    
+"""Build an HMM profile from a multiple sequence alignment (MSA)
+    
+    Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.
+    Some of these options are not available in the standard hmmbuild tool from HMMER.
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 from pyhmmer.easel import MSAFile

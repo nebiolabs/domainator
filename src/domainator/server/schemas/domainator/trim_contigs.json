@@ -2,7 +2,7 @@
   "id": "trim_contigs",
   "display_name": "Trim Contigs",
   "category": "Editors",
-  "description": "Trim contigs based on CDS or domain names or presence of domains in CDSs.\n\nCircular contigs are linearized before trimming.\n\nTypically used for nucleotide sequences, but can be used for protein sequences as well, if you use the 'kb' options to mean 1000 amino acids. CDS and domain options are not supported for protein sequences.",
+  "description": "Trim contigs based on CDS or domain names or presence of domains in CDSs\n\nCircular contigs are linearized before trimming.\n\nTypically used for nucleotide sequences, but can be used for protein sequences as well, if you use the 'kb' options to mean 1000 amino acids. CDS and domain options are not supported for protein sequences.",
   "runner": "module",
   "entry_point": "domainator.trim_contigs",
   "parameters": [

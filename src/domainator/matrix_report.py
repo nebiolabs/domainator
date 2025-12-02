@@ -1,4 +1,4 @@
-""" reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for generating similatity networks.
+""" Reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for similarity networks
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys

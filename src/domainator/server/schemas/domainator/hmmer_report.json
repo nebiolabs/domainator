@@ -2,7 +2,7 @@
   "id": "hmmer_report",
   "display_name": "Hmmer Report",
   "category": "Record-wise reports",
-  "description": "Generate an enumerated report\nTakes a genbank file which has been annotated using the domainator program, write tabulated descriptions of each contig, CDS, or domain.\n\nwrite a tab-separated file",
+  "description": "Writes record-wise information from hmm files into tab-separated or html tables",
   "runner": "module",
   "entry_point": "domainator.hmmer_report",
   "parameters": [

@@ -2,7 +2,7 @@
   "id": "transform_matrix",
   "display_name": "Transform Matrix",
   "category": "Other",
-  "description": "Transforms score matrix into various kinds of normalized martices.\n   \n   For matrices with any data type, can convert from dense to sparse, or sparse to dense, or change the datatype.",
+  "description": "Transforms a score matrix into various kinds of normalized martices\n   \n   For matrices with any data type, can convert from dense to sparse, or sparse to dense, or change the datatype.",
   "runner": "module",
   "entry_point": "domainator.transform_matrix",
   "parameters": [

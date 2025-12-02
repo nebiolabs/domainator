@@ -1,4 +1,4 @@
-"""Filter an hmm database based on similarity to reference hmm profiles.
+"""Filter an hmm file based on similarity to reference hmm profiles
 
 If you want a distance matrix, use seq_dist.py with .hmm files for both inputs and outputs.
 

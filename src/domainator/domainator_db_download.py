@@ -1,5 +1,6 @@
 """
-    Download databases from the internet in formats appropriate for domainator.
+    Download sequence databases from the internet in formats appropriate for Domainator
+    
     Including the following databases:
     - Uniprot (includes Trembl and SwissProt) (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
     - Trembl (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
@@ -21,6 +22,8 @@
         10239 : viruses
         
         2759 : eukaryota
+
+    WARNING: Downloading large databases can take a long time and use a lot of disk space!
 """
 
 from jsonargparse import ArgumentParser, ActionConfigFile

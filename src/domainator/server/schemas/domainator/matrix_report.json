@@ -2,7 +2,7 @@
   "id": "matrix_report",
   "display_name": "Matrix Report",
   "category": "Summary reports",
-  "description": "reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for generating similatity networks.",
+  "description": "Reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for similarity networks",
   "runner": "module",
   "entry_point": "domainator.matrix_report",
   "parameters": [

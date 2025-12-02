@@ -1,4 +1,4 @@
-"""add colors to domains or CDS annotations in genbank files
+"""Add colors to domains or CDS annotations in genbank files
 
 Takes a genbank file which has been annotated using the domainator program, adds color annotations to the sequence features.
 

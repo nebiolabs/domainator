@@ -1,6 +1,6 @@
 {
   "id": "genbank_to_fasta",
-  "display_name": "Genbank To Fasta",
+  "display_name": "Convert a GenBank file to a FASTA file",
   "category": "Other",
   "description": "Convert a GenBank file to a FASTA file.",
   "runner": "module",

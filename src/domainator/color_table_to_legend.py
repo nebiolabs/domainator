@@ -1,4 +1,5 @@
-""" Generates an SVG legend based on a color table.
+""" Generates an SVG legend based on a color table
+
 The color table is a tsv file that maps annotations to hex color codes.
 The generated SVG file contains rectangles filled with the corresponding colors and text labels for each annotation.
 """

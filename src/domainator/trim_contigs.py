@@ -1,4 +1,4 @@
-"""Trim contigs based on CDS or domain names or presence of domains in CDSs.
+"""Trim contigs based on CDS or domain names or presence of domains in CDSs
 
 Circular contigs are linearized before trimming.
 

@@ -1,4 +1,4 @@
-""" From a domainator-annotated genbank file, calculates contig stats and domain frequency stats.
+""" From a domainator-annotated genbank file, calculates contig stats and domain frequency stats
 
 """
 

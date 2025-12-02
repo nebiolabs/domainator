@@ -1,4 +1,4 @@
-"""Transforms score matrix into various kinds of normalized martices.
+"""Transforms a score matrix into various kinds of normalized martices
    
    For matrices with any data type, can convert from dense to sparse, or sparse to dense, or change the datatype.
 """

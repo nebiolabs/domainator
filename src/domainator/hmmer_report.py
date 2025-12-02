@@ -1,7 +1,5 @@
-"""Generate an enumerated report
-Takes a genbank file which has been annotated using the domainator program, write tabulated descriptions of each contig, CDS, or domain.
+"""Writes record-wise information from hmm files into tab-separated or html tables
 
-write a tab-separated file
 """
 
 import sys

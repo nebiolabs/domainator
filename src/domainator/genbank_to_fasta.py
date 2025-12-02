@@ -1,5 +1,5 @@
 """
-    Convert a GenBank file to a FASTA file.
+    Convert a GenBank file to a FASTA file
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys

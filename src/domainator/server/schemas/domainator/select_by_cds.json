@@ -1,6 +1,6 @@
 {
   "id": "select_by_cds",
-  "display_name": "Select By Cds",
+  "display_name": "Select By CDS",
   "category": "Editors",
   "description": "Extract contig regions around selected CDSs\n\nTakes a domain-annotated genbank file and extracts regions of contigs based on contig or CDS name or presence of specified domains within individual CDSs.\n\nSpecify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.\n\nif target_cdss, target_domains or domain_expr is specified then selection logic is:\n\n    contigs & (target_cdss or target_domains or domain_expr or unannotated)\n\notherwise:\n    return every cds in contigs",
   "runner": "module",
