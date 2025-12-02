@@ -1,4 +1,4 @@
-name: domainator
+name: domainator2
 channels:
   - conda-forge
   - bioconda
@@ -6,10 +6,9 @@ dependencies:
   - python>=3.10
   - pip>=23.3
   - setuptools>=61.0.0
-  - cd-hit~=4.8.1
-  - diamond>=2.0.0
-  - hmmer~=3.3.2
-  - usearch
+  - cd-hit>=4.8.1,<5.0
+  - diamond>=2.0.0,<3.0
+  - hmmer>=3.3.2,<4.0
+  - usearch>=12.0_beta,<13.0
   - pip:
     - -e .[test]
-
