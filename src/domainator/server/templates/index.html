@@ -18,21 +18,35 @@
         >
         <p class="tagline">   </p>
       </div>
-    <nav class="top-bar-controls" id="panel-controls" role="group" aria-label="Toggle panels">
-      <button type="button" class="panel-toggle" data-panel="files-panel" data-label="Stored Files" aria-pressed="true">Files</button>
-      <button type="button" class="panel-toggle" data-panel="tools-panel" data-label="Tools" aria-pressed="true">Tools</button>
-      <button type="button" class="panel-toggle" data-panel="tool-detail-panel" data-label="Tool Details" aria-pressed="true">Details</button>
-      <button type="button" class="panel-toggle" data-panel="jobs-panel" data-label="Jobs" aria-pressed="true">Jobs</button>
-      <button type="button" class="panel-toggle documentation-button" id="documentation-button" aria-pressed="false">Documentation</button>
-    </nav>
+      <nav class="top-bar-controls" id="panel-controls" role="group" aria-label="Toggle panels">
+        <button type="button" class="panel-toggle" data-panel="files-panel" data-label="Stored Files" aria-pressed="true">Files</button>
+        <button type="button" class="panel-toggle" data-panel="tools-panel" data-label="Tools" aria-pressed="true">Tools</button>
+        <button type="button" class="panel-toggle" data-panel="tool-detail-panel" data-label="Tool Details" aria-pressed="true">Details</button>
+        <button type="button" class="panel-toggle" data-panel="jobs-panel" data-label="Jobs" aria-pressed="true">Jobs</button>
+        <button type="button" class="panel-toggle documentation-button" id="documentation-button" aria-pressed="false">Documentation</button>
+      </nav>
     </div>
-
+    
+    <div
+          id="drop-zone"
+          class="drop-zone"
+          role="button"
+          tabindex="0"
+          aria-label="Drag files here to upload or press Enter to choose files"
+        >
+          <span class="drop-zone-message">Drag files here to upload</span>
+          <span class="drop-zone-detail" id="drop-zone-detail">No files selected yet.</span>
+    </div>
+    
     <div class="top-bar-right">
-      <form id="upload-form">
-        <label class="visually-hidden" for="file-input">Upload files</label>
-        <input type="file" id="file-input" name="files" multiple>
-        <button type="submit">Upload</button>
-      </form>
+
+      <div class="upload-controls">
+        <form id="upload-form">
+          <label class="visually-hidden" for="file-input">Upload files</label>
+          <input type="file" id="file-input" name="files" multiple>
+          <button type="submit">Upload</button>
+        </form>
+      </div>
       <p class="hint upload-hint">Make files available to tools</p>
       <div id="messages" role="status" aria-live="polite"></div>
     </div>

@@ -52,11 +52,58 @@ body {
   min-width: 240px;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 0.5rem;
   margin-left: auto;
   align-self: stretch;
   justify-content: flex-end;
+}
+
+.upload-controls {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 1rem;
+  width: 100%;
+}
+
+.drop-zone {
+  flex: 1 1 220px;
+  min-height: 4.5rem;
+  border: 2px dashed #93c5fd;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  color: #1d4ed8;
+  background-color: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.drop-zone:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.drop-zone.is-active {
+  background-color: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.drop-zone-message {
+  font-weight: 600;
+}
+
+.drop-zone-detail {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #1e40af;
 }
 
 .visually-hidden {
@@ -375,4 +422,19 @@ body {
   background-color: #fecaca;
   border-color: #f87171;
   color: #7f1d1d;
+}
+
+@media (max-width: 960px) {
+  .upload-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .drop-zone {
+    flex: 1 1 auto;
+  }
+
+  .upload-hint {
+    text-align: left;
+  }
 }

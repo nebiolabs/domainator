@@ -14,6 +14,11 @@ const state = {
   },
 };
 
+const uploadState = {
+  files: [],
+  suppressInputChange: false,
+};
+
 const DOCUMENTATION_URL =
   "https://github.com/nebiolabs/domainator/tree/main/docs/server/README.md";
 
@@ -32,6 +37,154 @@ const PREVIEWABLE_TYPES = new Set([
   "gif",
   "pdf",
 ]);
+
+function supportsDataTransferConstructor() {
+  return typeof DataTransfer === "function";
+}
+
+function getUploadFileKey(file) {
+  if (!file) {
+    return "";
+  }
+  return [file.name, file.size, file.lastModified].join("::");
+}
+
+function syncFileInput() {
+  const input = document.getElementById("file-input");
+  if (!input) {
+    return;
+  }
+
+  uploadState.suppressInputChange = true;
+  try {
+    if (uploadState.files.length && supportsDataTransferConstructor()) {
+      const dataTransfer = new DataTransfer();
+      uploadState.files.forEach(file => {
+        try {
+          dataTransfer.items.add(file);
+        } catch (error) {
+          console.warn("Unable to add file to drop selection.", error);
+        }
+      });
+      input.files = dataTransfer.files;
+    } else if (!uploadState.files.length) {
+      input.value = "";
+    }
+  } finally {
+    uploadState.suppressInputChange = false;
+  }
+}
+
+function updateDropZoneSummary() {
+  const detail = document.getElementById("drop-zone-detail");
+  if (!detail) {
+    return;
+  }
+  if (!uploadState.files.length) {
+    detail.textContent = "No files selected yet.";
+    return;
+  }
+  if (uploadState.files.length === 1) {
+    detail.textContent = uploadState.files[0].name;
+    return;
+  }
+  const maxPreview = 3;
+  const preview = uploadState.files.slice(0, maxPreview).map(file => file.name);
+  const remaining = uploadState.files.length - preview.length;
+  detail.textContent =
+    remaining > 0 ? `${preview.join(", ")} + ${remaining} more` : preview.join(", ");
+}
+
+function addFilesToUpload(fileList) {
+  if (!fileList || !fileList.length) {
+    return 0;
+  }
+  const incoming = Array.from(fileList);
+  if (!incoming.length) {
+    return 0;
+  }
+  const existingKeys = new Set(uploadState.files.map(getUploadFileKey));
+  const added = [];
+  incoming.forEach(file => {
+    const key = getUploadFileKey(file);
+    if (key && !existingKeys.has(key)) {
+      uploadState.files.push(file);
+      existingKeys.add(key);
+      added.push(file);
+    }
+  });
+  if (added.length) {
+    syncFileInput();
+    updateDropZoneSummary();
+  }
+  return added.length;
+}
+
+function clearUploadSelection() {
+  uploadState.files = [];
+  syncFileInput();
+  updateDropZoneSummary();
+}
+
+function initializeDropZone() {
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+  if (!dropZone || !fileInput) {
+    return;
+  }
+
+  const preventDefaults = event => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const activate = () => dropZone.classList.add("is-active");
+  const deactivate = () => dropZone.classList.remove("is-active");
+
+  ["dragenter", "dragover"].forEach(eventName => {
+    dropZone.addEventListener(eventName, event => {
+      preventDefaults(event);
+      activate();
+    });
+  });
+
+  ["dragleave", "dragend"].forEach(eventName => {
+    dropZone.addEventListener(eventName, event => {
+      preventDefaults(event);
+      deactivate();
+    });
+  });
+
+  dropZone.addEventListener("drop", event => {
+    preventDefaults(event);
+    deactivate();
+    const files = event.dataTransfer?.files;
+    const added = addFilesToUpload(files);
+    if (added) {
+      setMessage(`${added} file${added === 1 ? "" : "s"} ready for upload.`, "success", 4000);
+    }
+  });
+
+  dropZone.addEventListener("click", () => fileInput.click());
+  dropZone.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener("change", () => {
+    if (uploadState.suppressInputChange) {
+      return;
+    }
+    const added = addFilesToUpload(fileInput.files);
+    if (!added) {
+      updateDropZoneSummary();
+    }
+  });
+
+  updateDropZoneSummary();
+}
 
 function normalizeCategory(category) {
   if (!category || typeof category !== "string") {
@@ -262,6 +415,7 @@ function getCategoryColors(category) {
 }
 
 async function initializeApp() {
+  initializeDropZone();
   bindEventHandlers();
   initializePanelControls();
   await loadCategoryConfig();
@@ -1146,14 +1300,17 @@ async function fetchJob(jobId) {
 async function handleUploadSubmit(event) {
   event.preventDefault();
   const input = document.getElementById("file-input");
-  if (!input || !input.files.length) {
+  const queuedFiles = uploadState.files.length
+    ? uploadState.files
+    : Array.from(input?.files || []);
+  if (!queuedFiles.length) {
     setMessage("Choose one or more files first.", "error");
     return;
   }
   const formData = new FormData();
-  for (const file of input.files) {
+  queuedFiles.forEach(file => {
     formData.append("files", file);
-  }
+  });
   setMessage("Uploading…", "info");
   try {
     const response = await fetch("/api/files/upload", {
@@ -1166,7 +1323,7 @@ async function handleUploadSubmit(event) {
       throw new Error(message);
     }
     await refreshFiles();
-    input.value = "";
+    clearUploadSelection();
     setMessage("Files uploaded successfully.", "success");
   } catch (error) {
     setMessage(error.message, "error", 6000);
