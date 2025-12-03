@@ -6,6 +6,8 @@ Version 0.8.0
 
 A flexible and modular software suite for domain-based gene neighborhood and protein search, extraction, and clustering.
 
+Domainator can be run as browser-based GUI, command line tools, or as a Python library.
+
 # Contents
  - [Overview and key concepts](#Overview-and-key-concepts)
  - [Program descriptions](#Program-descriptions)
@@ -55,6 +57,8 @@ __Comparison programs__  generate pairwise score or distance matrices between co
 __Plotting programs__ convert data into formats appropriate for graphical visualization, for example converting score matrices and tabular metadata into trees or similarity networks which can be viewed in Cytoscape  or other external visualization tools, depending on the data type.
 
 Finally, there are few programs that defy categorization, these programs perform functions such as downloading data from NCBI or UniProt, converting files between formats, or generating profile-profile alignments.
+
+![Screenshot of domainator GUI](docs/media/server_screenshot.png)
 
 ## Overview of Domainator components
 ![Overview of Domainator components image](docs/media/Overview_diagram.png)
