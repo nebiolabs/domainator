@@ -207,15 +207,17 @@ plot_contigs.py -i domainator_output.gb --html contigs_plot.html
 
 For more examples see: [Basic Examples](docs/examples.md), and [Advanced examples](https://github.com/nebiolabs/domainator_examples).
 
-# Running Domainator through the bundled web-interface
+# Running Domainator through the bundled web-interface GUI
 
 Start the local server:
 ```
-domainator_server --data-dir domainator_data
+domainator_server --port 8080
 ```
 Replace the path with a writable directory to store uploads, jobs, and logs.
 
-Visit http://127.0.0.1:8080/ to open the browser UI. Use --host and --port to change the bind address.
+Visit `http://127.0.0.1:8080/` to open the browser UI. Use --host and --port to change the bind address.
+
+For more information check out the [server documentation](docs/server/README.md)
 
 # Using Domainator as a python library
 

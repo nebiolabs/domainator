@@ -8,12 +8,12 @@
     "Other"
   ],
   "colors": {
-    "Editors": "#bfdbfe",
-    "Comparisons": "#fde68a",
-    "Record-wise reports": "#fbcfe8",
-    "Plots": "#bbf7d0",
-    "Summary reports": "#ddd6fe",
-    "Other": "#e5e7eb"
+    "Editors": "#dae8fc",
+    "Comparisons": "#e1d5e7",
+    "Record-wise reports": "#ffe6cc",
+    "Plots": "#f8cecc",
+    "Summary reports": "#fff2cc",
+    "Other": "#d5e8d4"
   },
   "default_color": "#f9fafb"
 }
