@@ -58,11 +58,11 @@ __Plotting programs__ convert data into formats appropriate for graphical visual
 
 Finally, there are few programs that defy categorization, these programs perform functions such as downloading data from NCBI or UniProt, converting files between formats, or generating profile-profile alignments.
 
-![Screenshot of domainator GUI](docs/media/server_screenshot.png)
-
 ## Overview of Domainator components
 ![Overview of Domainator components image](docs/media/Overview_diagram.png)
 *not all programs are shown
+
+![Screenshot of domainator GUI](docs/media/server_screenshot.png)
 
 ## Example genome mining workflow
 
