@@ -19,8 +19,9 @@
     {
       "name": "Output",
       "parameter": "output",
-      "help": "hmm output file path. If not supplied writes to stdout.",
+      "help": "hmm output file path.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"

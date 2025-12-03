@@ -20,8 +20,9 @@
     {
       "name": "Output",
       "parameter": "output",
-      "help": "the name of the output fasta file. If not supplied writes to stdout.",
+      "help": "the name of the output fasta file.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"

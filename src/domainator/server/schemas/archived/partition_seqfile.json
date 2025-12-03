@@ -20,8 +20,9 @@
     {
       "name": "Output",
       "parameter": "output",
-      "help": "Name of output file. Default: stdout",
+      "help": "Name of output file.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"

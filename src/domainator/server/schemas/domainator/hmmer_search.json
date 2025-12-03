@@ -38,8 +38,9 @@
     {
       "name": "Output",
       "parameter": "output",
-      "help": ".hmm file to write hit profiles to. Default: stdout",
+      "help": ".hmm file to write hit profiles to.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"

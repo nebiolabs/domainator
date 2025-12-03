@@ -28,8 +28,9 @@
     {
       "name": "Output",
       "parameter": "output",
-      "help": "output genbank filename. If not supplied writes to stdout.",
+      "help": "output genbank filename.",
       "type": "output",
+      "required": true,
       "flags": [
         "-o",
         "--output"
