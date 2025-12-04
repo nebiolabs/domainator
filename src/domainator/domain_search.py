@@ -13,13 +13,12 @@ If neither is set, then hits will be written on the fly and not sorted.
 
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import  parse_seqfiles, write_genbank, list_and_file_to_dict_keys
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
 from domainator import partition_seqfile
 from domainator import domainate, RawAndDefaultsFormatter
-from multiprocessing import Pool
 import heapq
 from typing import List, Tuple, Set, Optional
 from domainator import extract_peptides
@@ -186,7 +185,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     out_heap = []
     worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names)
 
-    with Pool(processes=cpu - 1) as pool:
+    with make_pool(processes=cpu - 1) as pool:
         # hits are lists of SeqRecords
         for hits in pool.imap_unordered(worker, partitions):
             
@@ -367,7 +366,7 @@ def main(argv):
         #TODO: this is broken for taxonomy filtering, because it doesn't filter for taxonomy. 
         cds_count = 0
         partitions = list()
-        with Pool(processes=cpus) as pool:
+        with make_pool(processes=cpus) as pool:
             for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), params.input):
                 cds_count += file_cds_count
                 partitions.extend(file_partitions)

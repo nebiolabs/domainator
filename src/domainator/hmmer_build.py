@@ -12,7 +12,7 @@ from typing import Optional,BinaryIO,Union
 import re
 
 def sanitize_string(s:str) -> str:
-    return re.sub("[^ \w\d_\-\.;:]", "_", s)
+    return re.sub(r"[^ \w\d_\-\.;:]", "_", s)
 
 def hmmer_build(file:Union[str,BinaryIO], alphabet:Optional[pyhmmer.easel.Alphabet]=None, name:Optional[str]=None, acc:Optional[str]=None, desc:Optional[str]=None) -> pyhmmer.plan7.HMM:
     with MSAFile(file, digital=True, alphabet=alphabet) as msa_file:

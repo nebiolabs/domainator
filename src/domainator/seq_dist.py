@@ -20,12 +20,11 @@ import scipy.stats
 import scipy.sparse
 import pyhmmer
 from typing import List
-from domainator.utils import get_file_type, parse_seqfiles
+from domainator.utils import get_file_type, parse_seqfiles, make_pool
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix
 from domainator.hmmer_search import compare_hmmer
 from domainator.transform_matrix import MODES
-from multiprocessing import Pool
 import psutil
 
 #TODO: maybe merge with compare_contigs.py? Domainatorify more than it is.
@@ -187,7 +186,7 @@ class _run_hmmer_compare_worker():
 def run_hmmer_compare(hmmer_queries, hmmer_targets, k, threads):
     
     worker = _run_hmmer_compare_worker(hmmer_targets,k)
-    with Pool(processes=threads) as pool:
+    with make_pool(processes=threads) as pool:
         for hits in pool.imap_unordered(worker, pyhmmer.plan7.HMMFile(hmmer_queries)):
             for hit in hits:
                 yield hit

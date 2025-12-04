@@ -25,8 +25,8 @@ from typing import List, Iterable, TextIO, Tuple, Union, Dict, Optional, BinaryI
 import os
 from pathlib import Path
 import heapq
-from multiprocessing import Pool
 from domainator import __version__, RawAndDefaultsFormatter
+from domainator.utils import make_pool
 from numba import jit
 import numba as nb
 import psutil
@@ -412,7 +412,7 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
     
     def run_comparison():
         for input_file in input_files:
-            with Pool(processes=cpu) as pool:
+            with make_pool(processes=cpu) as pool:
                 for hit in pool.imap(worker, pyhmmer.plan7.HMMFile(input_file), chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                     if hit is not None:
                         yield hit

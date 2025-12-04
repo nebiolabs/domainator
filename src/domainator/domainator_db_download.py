@@ -34,14 +34,13 @@ from domainator.Taxonomy import NCBITaxonomy
 from pathlib import Path
 import sys
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
-from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys
+from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager
 from domainator import __version__, RawAndDefaultsFormatter
 from typing import Dict, List, Set, Tuple, Union, Optional, Iterator
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
 import tqdm
 import datetime
 import tempfile
-from multiprocessing import Pool, Manager
 import psutil
 import functools
 from requests.adapters import HTTPAdapter
@@ -384,10 +383,10 @@ def process_genbank_accessions(genbank_accessions, output_file_path, gene_call, 
         success_log_handle = open(success_rec_log, "w")
         
 
-    with Manager() as manager:
+    with make_manager() as manager:
         lock = manager.Lock()
         records_written = manager.Value('i', 0)
-        with Pool(processes=cpus) as pool:
+        with make_pool(processes=cpus) as pool:
             for success in tqdm.tqdm(pool.imap_unordered(functools.partial(worker_process, output_file_path=output_file_path, gene_call=gene_call, num_recs=num_recs, records_written=records_written, lock=lock), genbank_accessions), total=len(genbank_accessions), desc="GenBank genomes", leave=True, dynamic_ncols=True):
                 with lock:
                     if success is not False and success_rec_log is not None:

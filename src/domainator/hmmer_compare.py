@@ -15,9 +15,9 @@ import sys
 import pyhmmer
 from typing import Iterable, TextIO
 import heapq
-from multiprocessing import Pool
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit
+from domainator.utils import make_pool
 
 class _hmmer_compare_worker():
     def __init__(self, hmmer_targets, alignment=False, k=None, score_cutoff=float("-inf")):
@@ -57,7 +57,7 @@ def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_
     
     for file in query_files:
         # file_name = os.path.basename(Path(file).stem)
-        with Pool(processes=cpu) as pool:
+        with make_pool(processes=cpu) as pool:
             for hits in pool.imap(worker, pyhmmer.plan7.HMMFile(file), chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                 for hit in hits:
                     print(sep.join( (hit.query_name,hit.reference_name,f"{round(hit.score,2):.2f}") ), file=out_handle)
