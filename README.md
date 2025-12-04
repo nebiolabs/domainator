@@ -8,6 +8,15 @@ A flexible and modular software suite for domain-based gene neighborhood and pro
 
 Domainator can be run as browser-based GUI, command line tools, or as a Python library.
 
+# Quickstart
+
+```
+conda create -n domainator -c conda-forge -c bioconda domainator python=3.12
+conda activate domainator
+domainator_server --port 8080
+```
+Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port` to change the bind address. Use `--data-dir` to specify a directory for file and job data (default: `$HOME/domainator_server`).
+
 # Contents
  - [Overview and key concepts](#Overview-and-key-concepts)
  - [Program descriptions](#Program-descriptions)
@@ -217,9 +226,7 @@ Start the local server:
 ```
 domainator_server --port 8080
 ```
-Replace the path with a writable directory to store uploads, jobs, and logs.
-
-Visit `http://127.0.0.1:8080/` to open the browser UI. Use --host and --port to change the bind address.
+Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port` to change the bind address. Use `--data-dir` to specify a directory for file and job data (default: `$HOME/domainator_server`).
 
 For more information check out the [server documentation](docs/server/README.md)
 
