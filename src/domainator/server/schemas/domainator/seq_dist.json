@@ -51,25 +51,7 @@
       ]
     },
     {
-      "name": "Dense",
-      "parameter": "dense",
-      "help": "Write a dense distance matrix hdf5 file to this path.",
-      "type": "output",
-      "flags": [
-        "--dense"
-      ]
-    },
-    {
-      "name": "Dense Text",
-      "parameter": "dense_text",
-      "help": "Write a dense distance matrix tsv file to this path.",
-      "type": "output",
-      "flags": [
-        "--dense_text"
-      ]
-    },
-    {
-      "name": "Sparse",
+      "name": "Sparse hdf5 Output",
       "parameter": "sparse",
       "help": "Write a sparse distance matrix hdf5 file to this path.",
       "type": "output",
@@ -174,6 +156,24 @@
       "flags": [
         "--reference_type"
       ]
-    }  
+    },
+    {
+      "name": "Dense hdf5 Output",
+      "parameter": "dense",
+      "help": "Write a dense distance matrix hdf5 file to this path.",
+      "type": "output",
+      "flags": [
+        "--dense"
+      ]
+    },
+    {
+      "name": "Dense Text Output",
+      "parameter": "dense_text",
+      "help": "Write a dense distance matrix tsv file to this path.",
+      "type": "output",
+      "flags": [
+        "--dense_text"
+      ]
+    }
   ]
 }

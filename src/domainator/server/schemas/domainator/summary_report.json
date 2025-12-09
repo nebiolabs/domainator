@@ -30,17 +30,7 @@
       ]
     },
     {
-      "name": "Output",
-      "parameter": "output",
-      "help": "Text file to write output to.",
-      "type": "output",
-      "flags": [
-        "-o",
-        "--output"
-      ]
-    },
-    {
-      "name": "Html",
+      "name": "Html Output",
       "parameter": "html",
       "help": "html file to write output to.",
       "type": "output",
@@ -141,7 +131,17 @@
     }
   ],
   "advanced_parameters": [
-        {
+    {
+      "name": "Text Output",
+      "parameter": "output",
+      "help": "Text file to write output to.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
       "name": "Taxonomy Update",
       "parameter": "taxonomy_update",
       "help": "If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.",

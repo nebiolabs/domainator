@@ -57,7 +57,7 @@
       "name": "Databases",
       "parameter": "databases",
       "help": "Domain databases to use for domain content comparison. default: all databases.",
-      "type": "str",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases"

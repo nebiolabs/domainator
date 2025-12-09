@@ -15,7 +15,18 @@
       "flags": [
         "-i",
         "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
       ]
+
     },
     {
       "name": "Output",
@@ -26,6 +37,16 @@
       "flags": [
         "-o",
         "--output"
+      ]
+    },
+    {
+      "name": "Fasta Out",
+      "parameter": "fasta_out",
+      "help": "makes output a fasta file when activated",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--fasta_out"
       ]
     },
     {
@@ -58,13 +79,16 @@
       ]
     },
     {
-      "name": "Id",
+      "name": "Identity Threshold",
       "parameter": "id",
       "help": "Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter or to usearach as the -id parameter.",
       "type": "number",
       "flags": [
         "--id"
-      ]
+      ],
+      "min": 0,
+      "max": 1,
+      "default": 1
     },
     {
       "name": "Prefix Count",
@@ -103,16 +127,6 @@
       "type": "string",
       "flags": [
         "--params"
-      ]
-    },
-    {
-      "name": "Fasta Out",
-      "parameter": "fasta_out",
-      "help": "makes output a fasta file when activated",
-      "type": "boolean",
-      "default": false,
-      "flags": [
-        "--fasta_out"
       ]
     },
     {

@@ -136,10 +136,13 @@
       "parameter": "max_overlap",
       "help": "the maximum fractional of overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.",
       "type": "number",
-      "default": 1,
+      "default": 0.6,
       "flags": [
         "--max_overlap"
-      ]
+      ],
+      "min": 0.0,
+      "max": 1.0
+
     },
     {
       "name": "Gene Call",

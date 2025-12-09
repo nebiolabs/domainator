@@ -39,7 +39,7 @@
       "name": "Databases",
       "parameter": "databases",
       "help": "Consider only domains from these databases when filtering by domain. default: all databases.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases"

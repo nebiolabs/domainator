@@ -57,7 +57,7 @@
       "name": "Databases",
       "parameter": "databases",
       "help": "Only consider domains from these databases. default: all databases.",
-      "type": "file",
+      "type": "string",
       "multiple": true,
       "flags": [
         "--databases"
