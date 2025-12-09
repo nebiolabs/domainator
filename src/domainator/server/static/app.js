@@ -1421,7 +1421,14 @@ async function handleUploadSubmit(event) {
 }
 
 async function deleteFile(fileId) {
-  if (!confirm("Delete this file?")) {
+  if (!fileId) {
+    return;
+  }
+  const file = state.files.find(entry => entry.file_id === fileId);
+  const promptMessage = file?.original_name
+    ? `Delete "${file.original_name}"?`
+    : "Delete this file?";
+  if (!confirm(promptMessage)) {
     return;
   }
   try {

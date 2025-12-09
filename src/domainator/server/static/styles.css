@@ -143,15 +143,15 @@ body {
 }
 
 #messages.info {
-  color: #bfdbfe;
+  color: #0073ff;
 }
 
 #messages.success {
-  color: #bbf7d0;
+  color: #00ff59;
 }
 
 #messages.error {
-  color: #fecaca;
+  color: #ff0000;
 }
 
 .layout {
