@@ -118,11 +118,21 @@
     {
       "name": "Combine",
       "parameter": "combine",
-      "help": "if set, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous.",
+      "help": "if set, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous. Cannot be used together with --splice.",
       "type": "boolean",
       "default": false,
       "flags": [
         "--combine"
+      ]
+    },
+    {
+      "name": "Splice",
+      "parameter": "splice",
+      "help": "if set, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together. Cannot be used together with --combine.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--splice"
       ]
     },
     {

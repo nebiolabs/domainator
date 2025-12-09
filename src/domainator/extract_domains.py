@@ -15,9 +15,9 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.Bio import SeqIO
 from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, slice_record, get_sources, pad_location
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.Bio.SeqFeature import FeatureLocation
+from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 
-def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pad_down=0, combine=False, keep_direction=False, keep_name=False, search_hits=False, databases=None):
+def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pad_down=0, combine=False, keep_direction=False, keep_name=False, search_hits=False, databases=None, splice=False):
     """
 
       input: 
@@ -32,9 +32,16 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
         keep_name: by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
         search_hits: if True, then only select domains that are marked as search hits (from domain_search.py).
         databases: if not None, then only select domains from these databases. default: all databases.
+        splice: if True, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together.s
     
       yields the extracted regions as SeqRecord objects
     """
+
+    if splice and combine:
+        raise ValueError("Cannot use --splice and --combine at the same time.")
+
+
+
     databases = set(databases) if databases is not None else None
     #TODO: ensure naming consistency with select_by_cds.
     for rec in records:
@@ -92,6 +99,64 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                     new_id += "rc"
                 if not keep_name:
                     contig_sections[-1].id = new_id
+
+            elif splice:
+                # delete all sequence not covered by selected domains and glue parts together.
+                splice_parts = list()
+                for domain in hit_domains:
+                    padded_location = pad_location(rec, domain.location, pad_up, pad_down)
+                    for part in padded_location.parts:
+                        strand = part.strand
+                        if keep_direction:
+                            strand = 1 if strand in (-1, None) else strand
+                        splice_parts.append(
+                            FeatureLocation(int(part.start), int(part.end), strand=strand)
+                        )
+
+                if not splice_parts:
+                    continue
+
+                merged_parts = CompoundLocation.merge_parts(splice_parts)
+
+                if len(merged_parts) == 1:
+                    splice_location = merged_parts[0]
+                else:
+                    splice_location = CompoundLocation(merged_parts, operator="join")
+
+                new_rec = slice_record_from_location(rec, splice_location, truncate_features=True) # slice_record_from_location handles maintaining source and taxonomy annotations.
+                if rec.annotations.get("topology", None) == "circular":
+                    new_rec.annotations["topology"] = "circular"
+
+                if not keep_name:
+                    new_id = new_rec.id
+                    if len(new_rec) != len(rec):
+                        if isinstance(splice_location, CompoundLocation):
+                            parts = splice_location.parts
+                            strand = splice_location.strand
+                        else:
+                            parts = [splice_location]
+                            strand = splice_location.strand
+
+                        min_start = min(int(part.start) for part in parts)
+                        max_end = max(int(part.end) for part in parts)
+
+                        if strand == -1:
+                            start_label = max_end
+                            end_label = min_start + 1
+                        else:
+                            start_label = min_start + 1
+                            end_label = max_end
+
+                        new_id = f"{new_id}_{start_label}:{end_label}"
+                        if (
+                            rec.annotations.get("molecule_type") != "protein"
+                            and strand == -1
+                            and not keep_direction
+                        ):
+                            new_id += "rc"
+                    new_rec.id = new_id
+
+                contig_sections.append(new_rec)
             
             else: # return single domains
                 for domain in hit_domains:
@@ -156,8 +221,11 @@ def main(argv):
     parser.add_argument("--pad_down", type=int, default=0, help="extract this many additional residues (or bases) downstream of the hit region.")
 
     parser.add_argument("--combine", action="store_true", default=False, help="if set, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. "
-                        "By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous.")
-
+                        "By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous. Cannot be used with --splice.")
+    
+    parser.add_argument("--splice", action="store_true", default=False, help="if set, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together. "
+                        "By default, each hit domain will be extracted separately. Cannot be used with --combine.")
+    
     parser.add_argument('--keep_direction', action='store_true', default=False,
                        help="by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine is active) is on the forward strand. Set this option to not reverse complement anything. In the rare case of a split domain with parts on different strands, the strand of the first part will be considered.")
 
@@ -203,7 +271,9 @@ def main(argv):
         params.keep_direction, 
         params.keep_name,
         search_hits=params.search_hits,
-        databases=params.databases)
+        databases=params.databases,
+        splice=params.splice,
+        )
 
     if params.fasta_out:
         SeqIO.write(extracted_domains_iterator, out, "fasta")

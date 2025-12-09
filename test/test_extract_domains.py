@@ -1,7 +1,12 @@
+import functools
 import io
 from domainator.Bio import SeqIO
+from domainator.Bio.Seq import Seq
+from domainator.Bio.SeqRecord import SeqRecord
+from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import extract_domains
 import tempfile
+from domainator import DOMAIN_FEATURE_NAME
 from domainator.utils import parse_seqfiles
 
 def test_extract_domains_1(shared_datadir):
@@ -185,3 +190,99 @@ def test_domain_database_1(shared_datadir):
         assert len(new_file[2]) == 699
         assert len(new_file[3]) == 699
         new_file[0].name = "pDONR201_1"
+
+
+def _build_test_record(seq_str, spans, strand=1):
+    record = SeqRecord(
+        Seq(seq_str),
+        id="test_rec",
+        name="test_rec",
+        description="test record",
+    )
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["organism"] = "synthetic construct"
+    source_feature = SeqFeature(
+        FeatureLocation(0, len(record.seq)),
+        type="source",
+        qualifiers={"organism": ["synthetic construct"]},
+    )
+    record.features.append(source_feature)
+    for start, end in spans:
+        record.features.append(
+            SeqFeature(
+                FeatureLocation(start, end, strand=strand),
+                type=DOMAIN_FEATURE_NAME,
+                qualifiers={
+                    "name": ["foo"],
+                    "database": ["dummy"],
+                    "evalue": ["1e-20"],
+                    "score": ["100"],
+                },
+            )
+        )
+    return record
+
+
+def test_extract_domains_splice_merges_overlaps():
+    record = _build_test_record("ACGT" * 10, [(5, 15), (14, 25)])
+    results = list(
+        extract_domains.extract_domains(
+            [record],
+            domains={"foo"},
+            pad_up=2,
+            pad_down=2,
+            splice=True,
+        )
+    )
+    assert len(results) == 1
+    stitched = results[0]
+    assert str(stitched.seq) == str(record.seq[3:27])
+    assert stitched.id == "test_rec_4:27"
+
+
+def test_extract_domains_splice_concatenates_without_duplication():
+    record = _build_test_record("ACGT" * 10, [(2, 6), (12, 16)])
+    results = list(
+        extract_domains.extract_domains(
+            [record],
+            domains={"foo"},
+            splice=True,
+        )
+    )
+    assert len(results) == 1
+    stitched = results[0]
+    expected = record.seq[2:6] + record.seq[12:16]
+    assert str(stitched.seq) == str(expected)
+    assert stitched.id == "test_rec_3:16"
+
+
+def test_extract_domains_splice_keep_name():
+    record = _build_test_record("ACGT" * 10, [(2, 6), (12, 16)])
+    results = list(
+        extract_domains.extract_domains(
+            [record],
+            domains={"foo"},
+            splice=True,
+            keep_name=True,
+        )
+    )
+    assert len(results) == 1
+    assert results[0].id == "test_rec"
+
+
+def test_extract_domains_splice_reverse_strand_marks_rc():
+    spans = [(2, 6), (12, 16)]
+    record = _build_test_record("ACGT" * 10, spans, strand=-1)
+    results = list(
+        extract_domains.extract_domains(
+            [record],
+            domains={"foo"},
+            splice=True,
+        )
+    )
+    assert len(results) == 1
+    stitched = results[0]
+    assert stitched.id.endswith("rc")
+    parts = [FeatureLocation(start, end, strand=-1).extract(record.seq) for start, end in spans]
+    expected = functools.reduce(lambda x, y: x + y, parts)
+    assert str(stitched.seq) == str(expected)
