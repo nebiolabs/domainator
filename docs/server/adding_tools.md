@@ -53,14 +53,18 @@ Each parameter entry supports:
 
 - `name`: human-friendly label.
 - `parameter`: the key passed to the CLI when the job runs (defaults to `name` if omitted).
-- `type`: `string`, `integer`, `number`, `boolean`, `file`, or `output`.
+- `type`: `string`, `integer`, `number`, `float`, `boolean`, `file`, or `output`. Use `number` for non-integer values; `float` is accepted as a synonym for backward compatibility.
 - `help`: short tip displayed inline in the form.
 - `required`: mark required inputs.
 - `multiple`: accept a list of values (UI renders a multi-select or collects repeated values).
 - `choices`: restrict to specific values.
 - `default`: pre-populated default.
+- `min` / `max`: numeric bounds applied to `number`, `float`, and `integer` parameters. Values outside the range trigger client-side validation and are rejected before submission.
+- `step`: increment for numeric inputs. Use whole numbers for integers, decimals such as `0.01` for fractional steps, or the string `any` when arbitrary precision (e.g., 0.85) should be accepted.
 - `flags`: optional list of CLI flags (for reference only).
 - `file_types`: optional list of MIME-like extensions that filter the file picker when `type` is `file`.
+
+Scientific notation (for example, `1e-10`) is accepted by `number`/`float` controls and is converted transparently to a Python `float` before execution.
 
 ### Tips
 

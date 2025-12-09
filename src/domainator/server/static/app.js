@@ -836,6 +836,7 @@ function renderToolDetail(tool) {
 
   form.addEventListener("submit", event => {
     event.preventDefault();
+    scrollWindowToTop();
     handleToolSubmit(tool, form);
   });
 
@@ -1009,7 +1010,7 @@ function buildInputForParameter(param, fieldKey) {
     return input;
   }
 
-  if (type === "integer" || type === "number" || type === "float") {
+  if (type === "integer") {
     const input = document.createElement("input");
     input.type = "number";
     input.name = fieldKey;
@@ -1017,8 +1018,51 @@ function buildInputForParameter(param, fieldKey) {
       input.value = defaultValue;
     }
     input.dataset.required = param.required ? "1" : "0";
-    if (type === "integer") {
-      input.step = "1";
+    const stepValue = Number(param.step);
+    const hasValidStep =
+      param.step !== undefined &&
+      param.step !== null &&
+      param.step !== "" &&
+      Number.isFinite(stepValue) &&
+      stepValue > 0;
+    input.step = hasValidStep ? String(param.step) : "1";
+    input.inputMode = "numeric";
+    if (param.min !== undefined && param.min !== null && param.min !== "") {
+      input.min = String(param.min);
+    }
+    if (param.max !== undefined && param.max !== null && param.max !== "") {
+      input.max = String(param.max);
+    }
+    return input;
+  }
+
+  if (type === "number" || type === "float") {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.name = fieldKey;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.inputMode = "decimal";
+    if (defaultValue !== undefined && defaultValue !== null) {
+      input.value = String(defaultValue);
+    }
+    input.dataset.required = param.required ? "1" : "0";
+    input.dataset.numericType = "float";
+    const stepValue = Number(param.step);
+    const hasValidStep =
+      param.step !== undefined &&
+      param.step !== null &&
+      param.step !== "" &&
+      Number.isFinite(stepValue) &&
+      stepValue > 0;
+    if (hasValidStep) {
+      input.dataset.step = String(param.step);
+    }
+    if (param.min !== undefined && param.min !== null && param.min !== "") {
+      input.dataset.min = String(param.min);
+    }
+    if (param.max !== undefined && param.max !== null && param.max !== "") {
+      input.dataset.max = String(param.max);
     }
     return input;
   }
@@ -1150,6 +1194,34 @@ function coerceParameterValue(param, raw) {
   }
 
   const type = (param.type || "").toLowerCase();
+  const displayName = param.display_name || param.name || param.parameter || "value";
+  const parseBound = bound => {
+    if (bound === undefined || bound === null || bound === "") {
+      return null;
+    }
+    const numeric = Number(bound);
+    return Number.isFinite(numeric) ? numeric : null;
+  };
+  const minBound = parseBound(param.min);
+  const maxBound = parseBound(param.max);
+  const stepValue = parseBound(param.step);
+  const hasStep = stepValue !== null && stepValue > 0;
+  const enforceNumericConstraints = value => {
+    if (minBound !== null && value < minBound) {
+      throw new Error(`${displayName} must be ≥ ${minBound}`);
+    }
+    if (maxBound !== null && value > maxBound) {
+      throw new Error(`${displayName} must be ≤ ${maxBound}`);
+    }
+    if (hasStep) {
+      const base = minBound !== null ? minBound : 0;
+      const remainder = Math.abs((value - base) / stepValue);
+      const epsilon = 1e-9;
+      if (Math.abs(Math.round(remainder) - remainder) > epsilon) {
+        throw new Error(`${displayName} must increment by ${stepValue}`);
+      }
+    }
+  };
 
   if (type === "file" || type === "output") {
     return raw;
@@ -1158,18 +1230,20 @@ function coerceParameterValue(param, raw) {
   if (type === "integer") {
     const value = Number(raw);
     if (!Number.isFinite(value)) {
-      throw new Error(`${param.display_name || param.name} must be a number`);
+      throw new Error(`${displayName} must be a number`);
     }
     if (!Number.isInteger(value)) {
-      throw new Error(`${param.display_name || param.name} must be an integer`);
+      throw new Error(`${displayName} must be an integer`);
     }
+    enforceNumericConstraints(value);
     return value;
   }
   if (type === "number" || type === "float") {
     const value = Number(raw);
     if (!Number.isFinite(value)) {
-      throw new Error(`${param.display_name || param.name} must be a number`);
+      throw new Error(`${displayName} must be a number`);
     }
+    enforceNumericConstraints(value);
     return value;
   }
   if (type === "boolean") {
