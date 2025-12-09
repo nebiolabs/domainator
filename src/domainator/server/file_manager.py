@@ -155,6 +155,37 @@ class FileManager:
                 self._remove_tree(item)
         target.rmdir()
 
+    def rename_upload(self, file_id: str, new_name: str) -> Artifact:
+        artifact = self.get_upload(file_id)
+        sanitized = self._sanitize_filename(new_name)
+        if not sanitized:
+            raise ValueError("invalid filename")
+
+        current_path = artifact.path
+        dest_path = current_path.parent / sanitized
+
+        if dest_path.exists() and dest_path != current_path:
+            raise FileExistsError(dest_path.name)
+
+        if dest_path != current_path:
+            current_path.rename(dest_path)
+
+        updated_type = self._guess_file_type(sanitized) or artifact.file_type
+        updated = Artifact(
+            file_id=artifact.file_id,
+            original_name=sanitized,
+            path=dest_path,
+            metadata_path=artifact.metadata_path,
+            size=dest_path.stat().st_size if dest_path.exists() else artifact.size,
+            file_type=updated_type,
+            uploaded_at=artifact.uploaded_at,
+            checksum=artifact.checksum,
+            description=artifact.description,
+        )
+
+        self._write_metadata(updated)
+        return updated
+
     def _write_metadata(self, artifact: Artifact) -> None:
         payload = artifact.to_payload()
         with artifact.metadata_path.open("w", encoding="utf-8") as handle:

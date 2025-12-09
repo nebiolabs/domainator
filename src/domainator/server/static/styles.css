@@ -278,6 +278,45 @@ body {
   background-color: #dc2626;
 }
 
+.rename-button {
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #93c5fd;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.rename-button:hover {
+  background-color: #dbeafe;
+  border-color: #60a5fa;
+  color: #1e3a8a;
+}
+
+#files-panel .view-link,
+#files-panel .download-link {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #bfdbfe;
+  background-color: #e0f2fe;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#files-panel .view-link:hover,
+#files-panel .download-link:hover {
+  background-color: #bfdbfe;
+  border-color: #60a5fa;
+  color: #1e3a8a;
+  box-shadow: 0 1px 2px rgba(30, 64, 175, 0.25);
+}
+
 .tool-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

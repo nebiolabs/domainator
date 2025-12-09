@@ -13,7 +13,7 @@ from typing import Dict, Iterable, List, Optional, TextIO, Union
 from uuid import uuid4
 
 from .config import ServerConfig
-from .file_manager import FileManager
+from .file_manager import Artifact, FileManager
 from werkzeug.utils import secure_filename
 
 from .tool_registry import ToolRegistry
@@ -442,6 +442,21 @@ class ToolExecutor:
                 }
             )
         return artifacts
+
+    def update_artifact_metadata(self, artifact: Artifact) -> None:
+        for job in self.jobs.values():
+            changed = False
+            for entry in job.output_artifacts:
+                if entry.get("file_id") != artifact.file_id:
+                    continue
+                entry["name"] = artifact.original_name
+                entry["path"] = str(artifact.path)
+                if artifact.file_type:
+                    entry["type"] = artifact.file_type
+                changed = True
+            if changed:
+                job.updated_at = time.time()
+                self._write_job_manifest(job)
 
     def _write_job_manifest(self, job: Job) -> None:
         if not job.work_dir:

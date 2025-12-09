@@ -521,11 +521,18 @@ function bindEventHandlers() {
   const filesBody = document.getElementById("files-body");
   if (filesBody) {
     filesBody.addEventListener("click", event => {
-      const button = event.target.closest("button[data-delete]");
-      if (!button) {
+      const renameButton = event.target.closest("button[data-rename]");
+      if (renameButton) {
+        const fileId = renameButton.getAttribute("data-rename");
+        const currentName = renameButton.getAttribute("data-current-name") || "";
+        renameStoredFile(fileId, currentName);
         return;
       }
-      const fileId = button.getAttribute("data-delete");
+      const deleteButton = event.target.closest("button[data-delete]");
+      if (!deleteButton) {
+        return;
+      }
+      const fileId = deleteButton.getAttribute("data-delete");
       if (!fileId) {
         return;
       }
@@ -536,11 +543,11 @@ function bindEventHandlers() {
   const jobsBody = document.getElementById("jobs-body");
   if (jobsBody) {
     jobsBody.addEventListener("click", event => {
-      const button = event.target.closest("button[data-cancel]");
-      if (!button) {
+      const cancelButton = event.target.closest("button[data-cancel]");
+      if (!cancelButton) {
         return;
       }
-      const jobId = button.getAttribute("data-cancel");
+      const jobId = cancelButton.getAttribute("data-cancel");
       if (!jobId) {
         return;
       }
@@ -660,6 +667,15 @@ function renderFiles() {
     downloadLink.className = "download-link";
     downloadLink.target = "_blank";
     actionCell.appendChild(downloadLink);
+    actionCell.appendChild(document.createTextNode(" "));
+
+    const renameButton = document.createElement("button");
+    renameButton.type = "button";
+    renameButton.textContent = "Rename";
+    renameButton.className = "rename-button";
+    renameButton.setAttribute("data-rename", file.file_id);
+    renameButton.setAttribute("data-current-name", file.original_name);
+    actionCell.appendChild(renameButton);
     actionCell.appendChild(document.createTextNode(" "));
 
     const deleteButton = document.createElement("button");
@@ -1422,6 +1438,39 @@ async function deleteFile(fileId) {
   }
 }
 
+async function renameStoredFile(fileId, currentName) {
+  if (!fileId) {
+    return;
+  }
+  const userInput = prompt("Enter a new name for this file:", currentName || "");
+  if (userInput === null) {
+    return;
+  }
+  const nextName = userInput.trim();
+  if (!nextName) {
+    setMessage("Name cannot be empty.", "error", 5000);
+    return;
+  }
+  try {
+    const response = await fetch(`/api/files/${encodeURIComponent(fileId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nextName }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const message = payload.error || "Rename failed";
+      throw new Error(message);
+    }
+    const updated = await response.json();
+    await refreshFiles();
+    await refreshJobs();
+    setMessage(`Renamed to ${updated.original_name}.`, "success");
+  } catch (error) {
+    setMessage(error.message, "error", 6000);
+  }
+}
+
 function updateJobs(jobs) {
   if (!Array.isArray(jobs) || !jobs.length) {
     renderJobs();
@@ -1489,24 +1538,32 @@ function renderJobs() {
     const outputsCell = document.createElement("td");
     const artifactList = Array.isArray(job.output_artifacts) ? job.output_artifacts : [];
     if (artifactList.length) {
-      artifactList.forEach((artifact, index) => {
-        const link = document.createElement("a");
-        const artifactName = artifact.name || artifact.relative_path || artifact.file_id;
+      artifactList.forEach(artifact => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "job-artifact";
+
+        const fileId = artifact.file_id;
+        const artifactName = artifact.name || artifact.relative_path || fileId || "output";
         const artifactType = artifact.type || artifact.file_type || null;
         const previewable = isPreviewableFile(artifactName, artifactType);
-        if (previewable) {
-          link.href = `/api/files/${encodeURIComponent(artifact.file_id)}/view`;
+
+        const link = document.createElement("a");
+        if (fileId) {
+          link.href = previewable
+            ? `/api/files/${encodeURIComponent(fileId)}/view`
+            : `/api/files/${encodeURIComponent(fileId)}/download`;
+        } else if (artifact.relative_path) {
+          link.href = buildJobOutputUrl(job.job_id, artifact.relative_path, previewable ? "view" : "download");
         } else {
-          link.href = `/api/files/${encodeURIComponent(artifact.file_id)}/download`;
+          link.href = "#";
         }
         link.className = "download-link";
         link.textContent = artifactName;
         link.target = "_blank";
         link.rel = "noopener";
-        outputsCell.appendChild(link);
-        if (index < artifactList.length - 1) {
-          outputsCell.appendChild(document.createElement("br"));
-        }
+        wrapper.appendChild(link);
+
+        outputsCell.appendChild(wrapper);
       });
     } else if (Array.isArray(job.output_files) && job.output_files.length) {
       job.output_files.forEach((file, index) => {
@@ -1532,7 +1589,7 @@ function renderJobs() {
       const link = document.createElement("a");
       link.href = `/api/jobs/${encodeURIComponent(job.job_id)}/config`;
       link.className = "download-link";
-      link.textContent = "Download";
+      link.textContent = "Config";
       link.target = "_blank";
       link.rel = "noopener";
       configCell.appendChild(link);
@@ -1543,7 +1600,7 @@ function renderJobs() {
     if (job.log_file) {
       const link = document.createElement("a");
       link.href = `/api/jobs/${job.job_id}/logs`;
-      link.textContent = "View";
+      link.textContent = "Log";
       link.className = "log-link";
       link.target = "_blank";
       logsCell.appendChild(link);

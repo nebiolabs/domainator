@@ -82,6 +82,23 @@ def create_app(config: ServerConfig, schema_dirs: Iterable[Path] | None = None) 
             return error_response("file not found", 404)
         return jsonify(artifact.to_payload())
 
+    @app.patch("/api/files/<file_id>")
+    def rename_file(file_id: str):
+        payload = request.get_json(silent=True) or {}
+        raw_name = payload.get("name") or payload.get("filename")
+        if not raw_name or not isinstance(raw_name, str):
+            return error_response("name is required", 400)
+        try:
+            artifact = file_manager.rename_upload(file_id, raw_name)
+        except FileNotFoundError:
+            return error_response("file not found", 404)
+        except FileExistsError:
+            return error_response("a file with that name already exists", 409)
+        except ValueError as exc:
+            return error_response(str(exc), 400)
+        executor.update_artifact_metadata(artifact)
+        return jsonify(artifact.to_payload())
+
     @app.get("/api/files/<file_id>/download")
     def download_file(file_id: str):
         try:
