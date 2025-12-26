@@ -150,9 +150,16 @@ Go to the [Domainator github page](https://github.com/nebiolabs/domainator) and 
 
 Extract the zip file. In a terminal, navigate to the newly extracted folder and install the package with the command:
 
+On Linux:
 ```bash
-conda env create -f conda_env.yml
+conda env create -f conda_env.yml #x86_64 systems such as most linux machines, and older Apple machines.
 ```
+
+On Mac:
+```bash
+conda env create -f conda_env_arm64.yml # ARM systems such as recent Apple machines, and a few linux machines.
+```
+
 
 This will create a new conda environment called "domainator".
 
