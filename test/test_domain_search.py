@@ -347,3 +347,59 @@ def test_domain_search_range_up_down_1(params, expected_hit_size, shared_datadir
 
 #TODO: test keeping annotations like source, organism, etc.
 
+
+def test_domain_search_single_pass(shared_datadir):
+    """Test the single-pass mode which uses raw text partitioning."""
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), 
+                "--max_overlap", str(1), "-Z", "1000", "--add_annotations", "--single_pass"]
+        main(args)
+        assert os.path.isfile(out)
+        
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        assert utils.count_peptides_in_record(new_file[0]) == 1
+        compare_seqfiles(out, shared_datadir / "ccdb.gb", skip_qualifiers={"accession"})
+
+
+def test_domain_search_single_pass_no_z(shared_datadir):
+    """Test single-pass mode with Z=0 falls back to offset-based mode with warning."""
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), 
+                "--max_overlap", str(1), "-Z", "0", "--single_pass"]
+        # Should issue a warning about single_pass with Z=0
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            main(args)
+            # Check that a warning was issued
+            assert any("single_pass" in str(warning.message).lower() for warning in w)
+        
+        assert os.path.isfile(out)
+        
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        assert utils.count_peptides_in_record(new_file[0]) == 1
+
+
+def test_domain_search_single_pass_multiple_files(shared_datadir):
+    """Test single-pass mode with multiple input files."""
+    gb1 = shared_datadir / "pDONR201.gb"
+    gb2 = shared_datadir / "pDONR201_multi_genemark.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(gb1), str(gb2), "-r", str(hmms), "--evalue", str(0.1), 
+                "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--single_pass"]
+        main(args)
+        assert os.path.isfile(out)
+        
+        new_file = list(SeqIO.parse(out, "genbank"))
+        # Should have 1 hit from pDONR201 and 4 hits from pDONR201_multi_genemark
+        assert len(new_file) == 5

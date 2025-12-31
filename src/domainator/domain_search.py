@@ -13,7 +13,7 @@ If neither is set, then hits will be written on the fly and not sorted.
 
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, parse_raw_text, i_partition_raw_records
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -142,6 +142,130 @@ class _partition_seqfile_worker():
     
     def __call__(self, input_file):
         return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
+
+
+class _domain_search_raw_worker():
+    """Worker that accepts raw text partitions instead of file offsets.
+    
+    This enables single-pass file reading with parallel parsing by:
+    - Having the main process read files once and batch raw text
+    - Passing raw text strings to workers (cheap to serialize)
+    - Workers parse raw text in parallel
+    
+    This approach eliminates double-reading and supports compressed files.
+    """
+    
+    def __init__(self, references: List, z: int, evalue: float, max_overlap: float, 
+                 add_annotations: bool, cds_range: Tuple, kb_range: Tuple, 
+                 whole_contig: bool, normalize_direction: bool, translate: bool, 
+                 gene_call: str = None, min_evalue: float = 0.0, 
+                 ncbi_taxonomy: Optional[NCBITaxonomy] = None, 
+                 include_taxids: Optional[Set[int]] = None, 
+                 exclude_taxids: Optional[Set[int]] = None, 
+                 fasta_type: str = "protein", max_mode: bool = False, 
+                 max_region_overlap=1.0, strand: Optional[str] = None, 
+                 decoy_names: Optional[Set[str]] = None):
+
+        self.z = z
+        self.evalue = evalue
+        self.max_overlap = max_overlap
+        self.add_annotations = add_annotations
+        self.cds_range = cds_range
+        self.kb_range = kb_range
+        self.whole_contig = whole_contig
+        self.normalize_direction = normalize_direction
+        self.references = references
+        self.translate = translate
+        self.gene_call = gene_call
+        self.min_evalue = min_evalue
+        self.ncbi_taxonomy = ncbi_taxonomy
+        self.include_taxids = include_taxids
+        self.exclude_taxids = exclude_taxids
+        self.fasta_type = fasta_type
+        self.max_mode = max_mode
+        self.max_region_overlap = max_region_overlap
+        self.strand = strand
+        self.decoy_names = decoy_names
+    
+    def __call__(self, partition):
+        """Process a raw text partition.
+        
+        Args:
+            partition: tuple of (raw_text: str, filetype: str)
+            
+        Returns:
+            list of SeqRecord hits
+        """
+        raw_text, filetype = partition
+        
+        # Determine default molecule type for fasta files
+        if filetype == 'fasta':
+            default_molecule_type = self.fasta_type
+        else:
+            default_molecule_type = 'protein'
+        
+        out = list()
+        
+        # Parse raw text into SeqRecords and pass to domainate (matches original worker pattern)
+        records_iterator = parse_raw_text(raw_text, filetype, default_molecule_type=default_molecule_type)
+        
+        for rec in domainate.domainate(
+                records_iterator,
+                references=self.references,
+                z=self.z,
+                evalue=self.evalue,
+                max_overlap=self.max_overlap,
+                no_annotations=not self.add_annotations,
+                cpu=1,
+                hits_only=True,
+                best_annotation=True,
+                gene_call=self.gene_call,
+                min_evalue=self.min_evalue,
+                ncbi_taxonomy=self.ncbi_taxonomy,
+                include_taxids=self.include_taxids,
+                exclude_taxids=self.exclude_taxids,
+                max_mode=self.max_mode,
+            ):
+            try:
+                if rec.annotations['molecule_type'] == "protein":
+                    if self.decoy_names is not None and rec.get_hit_names()[0] in self.decoy_names:
+                        continue
+                    rec.set_dist_to_start(0)
+                    out.append(rec)
+                else: # it's a nucleotide, so pass it through select_by_cds
+                    if not self.translate: 
+                        for region in select_by_cds.select_by_cds(
+                            (rec,),
+                            target_cdss=None,
+                            target_domains=None,
+                            domain_expr=None,
+                            cds_range=self.cds_range,
+                            kb_range=self.kb_range,
+                            whole_contig=self.whole_contig,
+                            normalize_direction=self.normalize_direction,
+                            max_region_overlap=self.max_region_overlap,
+                            strand=self.strand,
+                            _from_domain_search=True,
+                            _domain_search_negatives=self.decoy_names
+                            ):
+                                out.append(region)
+                    else: # self.translate == True, so we need to translate it
+                        for peptide in extract_peptides.extract_peptides(
+                            (rec,),
+                            evalue=100000000,
+                            target_domains=None,
+                            target_cdss=None,
+                            keep_cds_feature=True,
+                            strand=self.strand,
+                            _from_domain_search=True,
+                            _domain_search_negatives=self.decoy_names
+                            ):
+                                peptide.set_dist_to_start(0)
+                                out.append(peptide)
+            except Exception as e:
+                warnings.warn(f"Error processing {rec.id}.")
+                raise e
+        return out
     
 
 def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None):
@@ -198,6 +322,94 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
                     else:
                         heapq.heappushpop(out_heap, rec)
     
+    if len(out_heap) > 0:
+        out_heap.sort(reverse=True)
+        for rec in out_heap:
+            yield rec
+
+
+def domain_search_raw(input_paths, references, z, evalue, max_hits, max_overlap, cpu, 
+                      add_annotations, cds_range, kb_range, whole_contig, normalize_direction, 
+                      translate, cdss_per_partition, gene_call=None, min_evalue=0.0, 
+                      ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, 
+                      fasta_type="protein", max_mode=False, max_region_overlap=1.0, 
+                      strand=None, decoy_names=None):
+    """
+    Single-pass version of domain_search that eliminates double file reading.
+    
+    Instead of pre-scanning files for offsets and then having workers seek into files,
+    this function reads files once in the main process, batches raw text, and 
+    distributes text batches to workers for parallel parsing.
+    
+    Benefits:
+    - Eliminates double-reading (no separate offset scan + full parse)
+    - Works with compressed files (no seeking required)  
+    - Parallelizes parsing by distributing raw text to workers
+    - Raw text strings are cheap to serialize vs parsed SeqRecord objects
+
+    Args:
+        input_paths: list of paths to genbank or fasta files
+        references: A list of hmm or protein fasta file paths
+        z: Z parameter to pass to hmmsearch/phmmer
+        evalue: The threshold E value for hmmer hit
+        max_hits: The maximum number of CDSs to be returned
+        max_overlap: The maximum fractional of overlap to be allowed between domains
+        cpu: number of threads to use. Must be at least 2.
+        add_annotations: if True, then add new domainate annotations
+        cds_range: extract a contig region enclosing this many CDSs upstream and downstream
+        kb_range: extract a contig region enclosing this many kb upstream and downstream
+        whole_contig: extract the whole contigs containing the selected CDSs
+        normalize_direction: if True then reverse-complement if hit is on reverse strand
+        translate: if True then translate nucleotide hits into proteins
+        cdss_per_partition: target number of CDSs per batch
+        gene_call: 'all' or 'unannotated' to enable gene calling
+        min_evalue: minimum e-value filter
+        ncbi_taxonomy: an NCBITaxonomy object for taxonomy filtering
+        include_taxids: only keep contigs with a taxonomy id in this list
+        exclude_taxids: only keep contigs with a taxonomy id not in this list
+        fasta_type: "protein" or "nucleotide"
+        max_mode: if True, run hmmsearch in maximum sensitivity mode
+        max_region_overlap: maximum fractional overlap between output regions
+        strand: only extract regions around CDSs on the specified strand
+        decoy_names: set of decoy domain names
+        
+    Yields:
+        SeqRecords of the selected regions
+    """
+    if cpu < 2:
+        cpu = 2
+
+    if include_taxids is not None:
+        include_taxids = set(include_taxids)
+    if exclude_taxids is not None:
+        exclude_taxids = set(exclude_taxids)
+
+    out_heap = []
+    worker = _domain_search_raw_worker(
+        references, z, evalue, max_overlap, add_annotations, 
+        cds_range, kb_range, whole_contig, normalize_direction, translate, 
+        gene_call, min_evalue, 
+        ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, 
+        exclude_taxids=exclude_taxids, fasta_type=fasta_type, 
+        max_mode=max_mode, max_region_overlap=max_region_overlap, 
+        strand=strand, decoy_names=decoy_names
+    )
+
+    # Single-pass partitioning: read files once, batch raw text
+    partitions = i_partition_raw_records(input_paths, cdss_per_partition)
+
+    with make_pool(processes=cpu - 1) as pool:
+        # hits are lists of SeqRecords
+        for hits in pool.imap_unordered(worker, partitions):
+            for rec in hits:
+                if max_hits is None:
+                    yield rec
+                else:
+                    if len(out_heap) < max_hits:
+                        heapq.heappush(out_heap, rec)
+                    else:
+                        heapq.heappushpop(out_heap, rec)
+
     if len(out_heap) > 0:
         out_heap.sort(reverse=True)
         for rec in out_heap:
@@ -315,6 +527,13 @@ def main(argv):
     parser.add_argument("--batch_size", type=int, default=10000, required=False,
                         help="Approximately how many protein sequences to search at one time in a batch.")
 
+    parser.add_argument('--single_pass', action='store_true', default=False,
+                        help="Use single-pass file reading mode. This eliminates double file reading by "
+                             "reading files once and distributing raw text to workers for parallel parsing. "
+                             "This is faster when -Z is specified (the common case). "
+                             "When -Z 0 is used, single_pass provides no benefit since files must be read "
+                             "once to count CDSs and again to process; in this case, the flag is ignored.")
+
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] "
                         "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
@@ -359,22 +578,6 @@ def main(argv):
     if ("protein" in molecule_types or translate) and (kb_range is not None or cds_range is not None or whole_contig or pad):
         raise ValueError("Protein sequence output is not compatible with neighborhood extraction or padding.")
     
-
-
-    #partition the input files for parallelization later
-    if params.Z == 0: #if Z is none, then we must read through the entire input to count CDSs and get file offsets. Luckily we can do this in parallel if there are multiple inputs.
-        #TODO: this is broken for taxonomy filtering, because it doesn't filter for taxonomy. 
-        cds_count = 0
-        partitions = list()
-        with make_pool(processes=cpus) as pool:
-            for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), params.input):
-                cds_count += file_cds_count
-                partitions.extend(file_partitions)
-        Z = cds_count
-    else: #Z is pre-set, so partitions can be a lazy iterator.
-        partitions = partition_seqfile.i_partition_seqfiles(params.input, cdss_per_partition=params.batch_size)
-        Z = params.Z
-
     ncbi_taxonomy = None
     if params.include_taxids or params.exclude_taxids:
         # create the path to the NCBI taxonomy database
@@ -384,34 +587,122 @@ def main(argv):
 
     decoy_names = list_and_file_to_dict_keys(params.decoys, params.decoys_file, as_set=True)
 
+    # Choose between single-pass (raw text) mode and offset-based mode
+    if params.single_pass:
+        # Single-pass mode: read files once, distribute raw text to workers
+        # Note: single-pass only provides benefits when Z is pre-specified.
+        # When Z=0, we still need two passes (one to count CDSs, one to process).
+        if params.Z == 0:
+            # Z=0 requires counting CDSs first, so single_pass provides no benefit.
+            # Fall back to offset-based mode which is designed for this case.
+            warnings.warn("--single_pass with -Z 0 provides no benefit; falling back to offset-based partitioning. "
+                         "For single-pass benefits, specify -Z explicitly (e.g., -Z 1000).")
+            cds_count = 0
+            partitions = list()
+            with make_pool(processes=cpus) as pool:
+                for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), params.input):
+                    cds_count += file_cds_count
+                    partitions.extend(file_partitions)
+            Z = cds_count
+            records_iterator = domain_search(
+                partitions,
+                references=params.references,
+                z=Z,
+                evalue=params.evalue,
+                max_hits=max_hits,
+                max_overlap=params.max_overlap,
+                cpu=cpus,
+                add_annotations=params.add_annotations,
+                cds_range=cds_range,
+                kb_range=kb_range,
+                whole_contig=whole_contig,
+                normalize_direction=normalize_direction,
+                translate=translate,
+                gene_call=params.gene_call,
+                min_evalue=params.min_evalue,
+                ncbi_taxonomy=ncbi_taxonomy,
+                include_taxids=params.include_taxids,
+                exclude_taxids=params.exclude_taxids,
+                fasta_type=params.fasta_type,
+                max_mode=params.max_mode,
+                max_region_overlap=params.max_region_overlap,
+                strand=params.strand,
+                decoy_names=decoy_names
+            )
+        else:
+            Z = params.Z
+            records_iterator = domain_search_raw(
+                input_paths=params.input,
+                references=params.references,
+                z=Z,
+                evalue=params.evalue,
+                max_hits=max_hits,
+                max_overlap=params.max_overlap,
+                cpu=cpus,
+                add_annotations=params.add_annotations,
+                cds_range=cds_range,
+                kb_range=kb_range,
+                whole_contig=whole_contig,
+                normalize_direction=normalize_direction,
+                translate=translate,
+                cdss_per_partition=params.batch_size,
+                gene_call=params.gene_call,
+                min_evalue=params.min_evalue,
+                ncbi_taxonomy=ncbi_taxonomy,
+                include_taxids=params.include_taxids,
+                exclude_taxids=params.exclude_taxids,
+                fasta_type=params.fasta_type,
+                max_mode=params.max_mode,
+                max_region_overlap=params.max_region_overlap,
+                strand=params.strand,
+                decoy_names=decoy_names
+            )
+    else:
+        # Original offset-based mode
+        # Partition the input files for parallelization later
+        if params.Z == 0:  # if Z is none, then we must read through the entire input to count CDSs and get file offsets
+            # TODO: this is broken for taxonomy filtering, because it doesn't filter for taxonomy. 
+            cds_count = 0
+            partitions = list()
+            with make_pool(processes=cpus) as pool:
+                for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), params.input):
+                    cds_count += file_cds_count
+                    partitions.extend(file_partitions)
+            Z = cds_count
+        else:  # Z is pre-set, so partitions can be a lazy iterator.
+            partitions = partition_seqfile.i_partition_seqfiles(params.input, cdss_per_partition=params.batch_size)
+            Z = params.Z
+
+        records_iterator = domain_search(
+            partitions,
+            references=params.references,
+            z=Z,
+            evalue=params.evalue,
+            max_hits=max_hits,
+            max_overlap=params.max_overlap,
+            cpu=cpus,
+            add_annotations=params.add_annotations,
+            cds_range=cds_range,
+            kb_range=kb_range,
+            whole_contig=whole_contig,
+            normalize_direction=normalize_direction,
+            translate=translate,
+            gene_call=params.gene_call,
+            min_evalue=params.min_evalue,
+            ncbi_taxonomy=ncbi_taxonomy,
+            include_taxids=params.include_taxids,
+            exclude_taxids=params.exclude_taxids,
+            fasta_type=params.fasta_type,
+            max_mode=params.max_mode,
+            max_region_overlap=params.max_region_overlap,
+            strand=params.strand,
+            decoy_names=decoy_names
+        )
+
     ### Run
     seen = set()
     records = list()
-    for record in domain_search(
-        partitions,
-        references=params.references,
-        z=Z,
-        evalue=params.evalue,
-        max_hits=max_hits,
-        max_overlap=params.max_overlap,
-        cpu=cpus,
-        add_annotations=params.add_annotations,
-        cds_range=cds_range,
-        kb_range=kb_range,
-        whole_contig=whole_contig,
-        normalize_direction=normalize_direction,
-        translate=translate,
-        gene_call=params.gene_call,
-        min_evalue=params.min_evalue,
-        ncbi_taxonomy=ncbi_taxonomy,
-        include_taxids=params.include_taxids,
-        exclude_taxids=params.exclude_taxids,
-        fasta_type=params.fasta_type,
-        max_mode=params.max_mode,
-        max_region_overlap=params.max_region_overlap,
-        strand=params.strand,
-        decoy_names=decoy_names
-        ):
+    for record in records_iterator:
         #skip pad
         if not pad:
             if not deduplicate or (record.id not in seen):

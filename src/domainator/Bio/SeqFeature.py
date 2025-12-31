@@ -2505,6 +2505,8 @@ class ExactPosition(int, Position):
     ExactPosition(15)
     """
 
+    __slots__ = ()
+
     def __new__(cls, position, extension=0):
         """Create an ExactPosition object."""
         if extension != 0:
@@ -2842,6 +2844,8 @@ class BeforePosition(int, Position):
     like integers.
     """
 
+    __slots__ = ()
+
     # Subclasses int so can't use __init__
     def __new__(cls, position, extension=0):
         """Create a new instance in BeforePosition object."""
@@ -2898,6 +2902,8 @@ class AfterPosition(int, Position):
     Just remember that for equality and sorting the position objects act
     like integers.
     """
+
+    __slots__ = ()
 
     # Subclasses int so can't use __init__
     def __new__(cls, position, extension=0):

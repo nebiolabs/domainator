@@ -8,6 +8,7 @@
 
 import re
 import warnings
+from functools import lru_cache
 
 from domainator.Bio import BiopythonParserWarning
 from domainator.Bio.Seq import Seq
@@ -203,6 +204,15 @@ class FeatureValueCleaner:
         return "".join(translation_parts)
 
 
+@lru_cache(maxsize=8192)
+def _cached_exact_position(position):
+    """Return a cached ExactPosition object (PRIVATE).
+    
+    This caches the most common case of simple integer positions.
+    """
+    return SeqFeature.ExactPosition(position)
+
+
 def _pos(pos_str, offset=0):
     """Build a Position object (PRIVATE).
 
@@ -280,7 +290,7 @@ def _pos(pos_str, offset=0):
         assert pos_str.startswith("one-of(")
         assert pos_str[-1] == ")"
         parts = [
-            SeqFeature.ExactPosition(int(pos) + offset)
+            _cached_exact_position(int(pos) + offset)
             for pos in pos_str[7:-1].split(",")
         ]
         if offset == -1:
@@ -289,7 +299,8 @@ def _pos(pos_str, offset=0):
             default = max(int(pos) for pos in parts)
         return SeqFeature.OneOfPosition(default, choices=parts)
     else:
-        return SeqFeature.ExactPosition(int(pos_str) + offset)
+        # Most common case: simple integer position - use cached version
+        return _cached_exact_position(int(pos_str) + offset)
 
 
 def _loc(loc_str, expected_seq_length, strand, is_circular=False):

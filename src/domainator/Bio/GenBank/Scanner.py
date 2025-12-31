@@ -38,6 +38,34 @@ from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio import BiopythonParserWarning
 
+# Pre-interned common strings for memory efficiency
+_INTERNED_FEATURE_KEYS = {
+    sys.intern(s) for s in (
+        'CDS', 'gene', 'mRNA', 'tRNA', 'rRNA', 'ncRNA', 'misc_feature',
+        'source', 'exon', 'intron', 'sig_peptide', 'mat_peptide',
+        'transit_peptide', 'repeat_region', 'mobile_element',
+        'regulatory', 'misc_binding', 'protein_bind', 'Domainator',
+    )
+}
+
+_INTERNED_QUALIFIER_KEYS = {
+    sys.intern(s) for s in (
+        'locus_tag', 'gene', 'product', 'protein_id', 'translation',
+        'note', 'db_xref', 'codon_start', 'transl_table', 'EC_number',
+        'inference', 'function', 'old_locus_tag', 'pseudo', 'pseudogene',
+        'gene_synonym', 'mol_type', 'organism', 'strain', 'isolation_source',
+        'country', 'collection_date', 'host', 'color', 'evalue', 'score',
+        'name', 'description', 'qualifier', 'domain_name', 'domain_score',
+    )
+}
+
+def _intern_string(s, interned_set):
+    """Return interned version of string if in set, else original (PRIVATE)."""
+    interned = sys.intern(s)
+    if interned in interned_set:
+        return interned
+    return s
+
 
 class InsdcScanner:
     """Basic functions for breaking up a GenBank/EMBL file into sub sections.
@@ -320,6 +348,8 @@ class InsdcScanner:
                     # New qualifier
                     i = line.find("=")
                     key = line[1:i]  # does not work if i==-1
+                    # Intern common qualifier keys for memory efficiency
+                    key = _intern_string(key, _INTERNED_QUALIFIER_KEYS)
                     value = line[i + 1 :]  # we ignore 'value' if i==-1
                     if i and value.startswith(" ") and value.lstrip().startswith('"'):
                         warnings.warn(
@@ -329,7 +359,7 @@ class InsdcScanner:
                         value = value.lstrip()
                     if i == -1:
                         # Qualifier with no key, e.g. /pseudo
-                        key = line[1:]
+                        key = _intern_string(line[1:], _INTERNED_QUALIFIER_KEYS)
                         qualifiers.append((key, None))
                     elif not value:
                         # ApE can output /note=
@@ -360,6 +390,8 @@ class InsdcScanner:
                     if qualifiers[-1][1] is None:
                         raise StopIteration
                     qualifiers[-1] = (key, qualifiers[-1][1] + "\n" + line)
+            # Intern feature_key for memory efficiency
+            feature_key = _intern_string(feature_key, _INTERNED_FEATURE_KEYS)
             return feature_key, feature_location, qualifiers
         except StopIteration:
             # Bummer

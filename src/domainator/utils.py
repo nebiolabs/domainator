@@ -763,6 +763,223 @@ def i_get_offsets(input_path):
         raise ValueError(f"Filetype not recognized for input file: {input_path}")
 
 
+def _count_cdss_in_raw_genbank(raw_text):
+    """Count CDSs in raw GenBank text without full parsing (PRIVATE).
+    
+    Args:
+        raw_text: bytes or str, raw GenBank record(s) text
+        
+    Returns:
+        int: number of CDSs (or 1 for protein records)
+    """
+    if isinstance(raw_text, str):
+        raw_text = raw_text.encode('utf-8')
+    
+    # Check if it's a protein record (aa in LOCUS line)
+    first_line_end = raw_text.find(b'\n')
+    if first_line_end > 0:
+        first_line = raw_text[:first_line_end]
+        if b' aa ' in first_line:
+            return 1
+    
+    # Count CDS features for nucleotide records
+    return raw_text.count(b'\n     CDS ')
+
+
+def i_read_genbank_raw_records(input_handle):
+    """Read raw GenBank record text from a file handle.
+    
+    This reads GenBank records as raw text without parsing, which is fast.
+    Each record is yielded as (raw_text, cds_count) where raw_text is a string.
+    
+    Args:
+        input_handle: file handle opened in text mode, or a path string
+        
+    Yields:
+        tuple: (raw_text: str, cds_count: int) for each record
+    """
+    if isinstance(input_handle, str):
+        # It's a path, open it
+        with open(input_handle, 'r') as f:
+            yield from i_read_genbank_raw_records(f)
+        return
+    
+    current_record_lines = []
+    cds_count = 0
+    is_protein = False
+    
+    for line in input_handle:
+        if line.startswith('LOCUS '):
+            # If we have a previous record, yield it
+            if current_record_lines:
+                yield ''.join(current_record_lines), cds_count
+            
+            # Start new record
+            current_record_lines = [line]
+            # Check if protein (aa) or nucleotide (bp)
+            parts = line.split()
+            if len(parts) > 3 and parts[3] == 'aa':
+                is_protein = True
+                cds_count = 1
+            else:
+                is_protein = False
+                cds_count = 0
+        elif line.startswith('     CDS '):
+            current_record_lines.append(line)
+            if not is_protein:
+                cds_count += 1
+        else:
+            current_record_lines.append(line)
+    
+    # Yield the last record
+    if current_record_lines:
+        yield ''.join(current_record_lines), cds_count
+
+
+def i_read_fasta_raw_records(input_handle):
+    """Read raw FASTA record text from a file handle.
+    
+    Each record is yielded as (raw_text, 1) since FASTA records are always single proteins.
+    
+    Args:
+        input_handle: file handle opened in text mode, or a path string
+        
+    Yields:
+        tuple: (raw_text: str, 1) for each record
+    """
+    if isinstance(input_handle, str):
+        with open(input_handle, 'r') as f:
+            yield from i_read_fasta_raw_records(f)
+        return
+    
+    current_record_lines = []
+    
+    for line in input_handle:
+        if line.startswith('>'):
+            if current_record_lines:
+                yield ''.join(current_record_lines), 1
+            current_record_lines = [line]
+        else:
+            current_record_lines.append(line)
+    
+    if current_record_lines:
+        yield ''.join(current_record_lines), 1
+
+
+def i_partition_raw_records(input_paths, cdss_per_partition, filetype_override=None):
+    """Partition sequence files into batches of raw text for parallel processing.
+    
+    This is a single-pass alternative to the offset-based partitioning that reads
+    files once and yields batches of raw record text. Workers can then parse these
+    batches in parallel without needing to seek into files.
+    
+    This approach:
+    - Eliminates double-reading (no separate offset scan + parse)
+    - Works with compressed files (no seeking required)
+    - Parallelizes parsing by distributing raw text to workers
+    
+    Args:
+        input_paths: list of paths to genbank or fasta files
+        cdss_per_partition: target number of CDSs per partition
+        filetype_override: if set, use this filetype instead of guessing from extension
+        
+    Yields:
+        tuple: (raw_records_text: str, filetype: str) where raw_records_text contains
+               one or more concatenated raw records, and filetype is 'genbank' or 'fasta'
+    """
+    for input_path in input_paths:
+        if filetype_override:
+            filetype = filetype_override
+        else:
+            filetype = get_file_type(input_path)
+        
+        if filetype == 'genbank':
+            record_iterator = i_read_genbank_raw_records(input_path)
+        elif filetype == 'fasta':
+            record_iterator = i_read_fasta_raw_records(input_path)
+        else:
+            raise ValueError(f"Filetype not recognized for input file: {input_path}")
+        
+        batch_text = []
+        batch_cds_count = 0
+        
+        for raw_text, cds_count in record_iterator:
+            batch_text.append(raw_text)
+            batch_cds_count += cds_count
+            
+            if batch_cds_count >= cdss_per_partition:
+                yield ''.join(batch_text), filetype
+                batch_text = []
+                batch_cds_count = 0
+        
+        # Yield remaining records
+        if batch_text:
+            yield ''.join(batch_text), filetype
+
+
+def parse_raw_genbank_text(raw_text, default_molecule_type='protein'):
+    """Parse raw GenBank text into SeqRecord objects.
+    
+    This is used by workers to parse raw text received from the main process.
+    
+    Args:
+        raw_text: str, concatenated raw GenBank record text
+        default_molecule_type: molecule type to use if not specified in record
+        
+    Yields:
+        SeqRecord objects
+    """
+    from io import StringIO
+    from domainator.Bio import SeqIO
+    
+    handle = StringIO(raw_text)
+    for rec in SeqIO.parse(handle, 'genbank'):
+        swap_name_id(rec)
+        if 'molecule_type' not in rec.annotations:
+            rec.annotations['molecule_type'] = default_molecule_type
+        yield rec
+
+
+def parse_raw_fasta_text(raw_text, default_molecule_type='protein'):
+    """Parse raw FASTA text into SeqRecord objects.
+    
+    This is used by workers to parse raw text received from the main process.
+    
+    Args:
+        raw_text: str, concatenated raw FASTA record text
+        default_molecule_type: molecule type to use for records
+        
+    Yields:
+        SeqRecord objects
+    """
+    from io import StringIO
+    from domainator.Bio import SeqIO
+    
+    handle = StringIO(raw_text)
+    for rec in SeqIO.parse(handle, 'fasta'):
+        if 'molecule_type' not in rec.annotations:
+            rec.annotations['molecule_type'] = default_molecule_type
+        yield rec
+
+
+def parse_raw_text(raw_text, filetype, default_molecule_type='protein'):
+    """Parse raw sequence text into SeqRecord objects.
+    
+    Args:
+        raw_text: str, concatenated raw record text
+        filetype: 'genbank' or 'fasta'
+        default_molecule_type: molecule type to use if not specified
+        
+    Yields:
+        SeqRecord objects
+    """
+    if filetype == 'genbank':
+        yield from parse_raw_genbank_text(raw_text, default_molecule_type)
+    elif filetype == 'fasta':
+        yield from parse_raw_fasta_text(raw_text, default_molecule_type)
+    else:
+        raise ValueError(f"Unknown filetype: {filetype}")
+
 
 def count_peptides(file_path): 
     _, num_proteins = get_offsets(file_path)
