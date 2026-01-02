@@ -25,7 +25,7 @@
 
 ## Testing
 
-- Run the full suite with `pytest test` from the project root (documented in `docs/developing_domainator.md`). Use `pytest -k <pattern>` for targeted runs.
+- Run the full suite with `conda activate domainator && pytest test` from the project root (documented in `docs/developing_domainator.md`). Use `pytest -k <pattern>` for targeted runs.
 - Optional coverage workflow: `coverage run -m pytest test`, `coverage report -m`, `coverage html`, then open `htmlcov/index.html`.
 - Tests rely on `pytest-datadir` to stage fixtures from `test/data/`; avoid mutating fixture files directly and prefer temporary directories for outputs.
 - Most tests are pure Python. A subset exercise integrations via optional binaries—when introducing new external requirements, document them in `conda_env.yml`, `docs/developing_domainator.md`, and ensure tests skip gracefully if the executable is missing.
