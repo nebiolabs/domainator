@@ -424,10 +424,6 @@ class SummaryHTMLWriter():
         let x = Object.keys(hist).map(Number).sort((a, b) => a - b);
         let y = x.map(size => hist[size]);
         
-        // Determine if log scale is appropriate
-        const maxSize = Math.max(...x);
-        const useLogScale = maxSize > 100;
-        
         Plotly.newPlot('cluster-size-hist', [{{
             x: x,
             y: y,
@@ -438,10 +434,10 @@ class SummaryHTMLWriter():
             title: 'Cluster Size Distribution',
             xaxis: {{
                 title: 'Cluster Size',
-                type: useLogScale ? 'log' : 'linear'
+                type: 'log'
             }},
             yaxis: {{title: 'Number of Clusters',
-                    type: useLogScale ? 'log' : 'linear'
+                    type: 'log'
             }},
             autosize: true,
             height: 240,
