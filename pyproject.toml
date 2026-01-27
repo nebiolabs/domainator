@@ -82,6 +82,7 @@ version = {attr = "domainator.__version__"}
 "build_projection.py" = "domainator:build_projection._entrypoint"
 "build_ssn.py" = "domainator:build_ssn._entrypoint"
 "build_tree.py" = "domainator:build_tree._entrypoint"
+"clean_sequences.py" = "domainator:clean_sequences._entrypoint"
 "color_genbank.py" = "domainator:color_genbank._entrypoint"
 "color_table_to_legend.py" = "domainator:color_table_to_legend._entrypoint"
 "compare_contigs.py" = "domainator:compare_contigs._entrypoint"
