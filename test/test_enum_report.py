@@ -606,3 +606,235 @@ output: {out}
                 assert l[3] == "4470"
                 assert l[4] == "linear"
                 assert len(l) == 5
+
+
+def test_enum_report_starts_with_1(shared_datadir):
+    """
+    Test that --starts_with reports the first character of sequences
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--starts_with", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "starts_with", "length"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                # All proteins should start with M (methionine)
+                assert l[1] == "M"
+                assert len(l) == 3
+
+
+def test_enum_report_isoelectric_point_1(shared_datadir):
+    """
+    Test that --isoelectric_point reports isoelectric point for protein sequences
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--isoelectric_point", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "isoelectric_point", "length"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                # pI should be a reasonable float (typically 3-12)
+                pI = float(l[1])
+                assert 3.0 <= pI <= 12.0
+                assert len(l) == 3
+
+
+def test_enum_report_net_charge_1(shared_datadir):
+    """
+    Test that --net_charge reports net charge at specified pH
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--net_charge", "7", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "net_charge_7", "length"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                # Net charge should be a float (can be positive or negative)
+                charge = float(l[1])
+                assert -50 <= charge <= 50  # reasonable range
+                assert len(l) == 3
+
+
+def test_enum_report_net_charge_multiple_ph_1(shared_datadir):
+    """
+    Test that --net_charge can be called multiple times with different pH values
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--net_charge", "5.5", "--net_charge", "7", "--net_charge", "8.5"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "net_charge_5.5", "net_charge_7", "net_charge_8.5"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                # Net charge at lower pH should be more positive than at higher pH
+                charge_5_5 = float(l[1])
+                charge_7 = float(l[2])
+                charge_8_5 = float(l[3])
+                assert charge_5_5 >= charge_7  # more protonated at lower pH
+                assert charge_7 >= charge_8_5
+                assert len(l) == 4
+
+
+def test_enum_report_repeat_count_1(shared_datadir):
+    """
+    Test that --repeat_count reports character repeats of specified minimum length
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--repeat_count", "2", "--repeat_count", "3"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "repeat_count_2", "repeat_count_3"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                count_2 = int(l[1])
+                count_3 = int(l[2])
+                # Repeats of length 2+ should be >= repeats of length 3+
+                assert count_2 >= count_3
+                assert count_2 >= 0
+                assert count_3 >= 0
+                assert len(l) == 3
+
+
+def test_enum_report_motif_count_1(shared_datadir):
+    """
+    Test that --motif_count reports occurrences of PROSITE motifs
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        # Use a simple motif pattern: M-A (methionine followed by alanine)
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--motif_count", "M-A", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "motif_count_M_A", "length"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                count = int(l[1])
+                assert count >= 0
+                assert len(l) == 3
+
+
+def test_enum_report_motif_count_complex_1(shared_datadir):
+    """
+    Test that --motif_count works with complex PROSITE patterns
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        # Use a more complex motif pattern: [AG]-x-[DE] (A or G, any amino acid, D or E)
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--motif_count", "[AG]-x-[DE]"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "motif_count_AG_x_DE"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                count = int(l[1])
+                assert count >= 0  # Some matches expected with this general pattern
+                assert len(l) == 2
+
+
+def test_enum_report_combined_new_options_1(shared_datadir):
+    """
+    Test that all new options can be combined together
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, 
+                         "--starts_with", "--isoelectric_point", "--net_charge", "7",
+                         "--repeat_count", "2", "--motif_count", "M-A", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            expected_headers = ["contig", "starts_with", "isoelectric_point", "net_charge_7", 
+                               "repeat_count_2", "motif_count_M_A", "length"]
+            assert lines[0].strip().split("\t") == expected_headers
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                assert len(l) == 7
+                assert l[1] == "M"  # starts_with
+                assert 3.0 <= float(l[2]) <= 12.0  # isoelectric_point
+                assert -50 <= float(l[3]) <= 50  # net_charge
+                assert int(l[4]) >= 0  # repeat_count
+                assert int(l[5]) >= 0  # motif_count
+                assert int(l[6]) > 0  # length
+
+
+def test_enum_report_molecular_weight_protein_1(shared_datadir):
+    """
+    Test that --molecular_weight reports molecular weight for protein sequences
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--molecular_weight", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 21  # 1 header + 20 records
+            assert lines[0].strip().split("\t") == ["contig", "molecular_weight", "length"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                mw = float(l[1])
+                length = int(l[2])
+                # Typical protein: ~110 Da per amino acid
+                # These are ~190-210 aa proteins, so expect ~20000-25000 Da
+                assert 15000 <= mw <= 30000
+                # Rough sanity check: MW should be roughly proportional to length
+                assert mw / length > 100  # at least 100 Da per residue
+                assert mw / length < 130  # at most 130 Da per residue
+                assert len(l) == 3
+
+
+def test_enum_report_molecular_weight_dna_1(shared_datadir):
+    """
+    Test that --molecular_weight reports molecular weight for DNA sequences
+    """
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--molecular_weight", "--length"])
+        assert Path(out).is_file()
+        
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 5  # 1 header + 4 records
+            assert lines[0].strip().split("\t") == ["contig", "molecular_weight", "length"]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                mw = float(l[1])
+                length = int(l[2])
+                # Typical DNA: ~330 Da per nucleotide (single-stranded with 5' phosphate)
+                # pDONR201 is 4470 bp, so expect ~1.4 million Da
+                assert mw > 1000000
+                # Rough sanity check: MW should be roughly proportional to length
+                assert mw / length > 250  # at least 250 Da per nucleotide
+                assert mw / length < 400  # at most 400 Da per nucleotide
+                assert len(l) == 3
