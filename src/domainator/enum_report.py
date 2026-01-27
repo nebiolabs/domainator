@@ -623,7 +623,6 @@ def main(argv):
     parser.add_argument('--domain_descriptions', action='append_const', dest=COLS_ARG_NAME, const="domain_descriptions",
                         help="report domain content as alphabetical and semicolon-separated, only listing duplicates once.")
     
-
     parser.add_argument('--score', action='append_const', dest=COLS_ARG_NAME, const="score",
                         help="report report the sum of domain scores.")
 
