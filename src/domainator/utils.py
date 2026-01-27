@@ -53,6 +53,25 @@ DEFAULT_BUFFER_SIZE = 5000
 _MP_CONTEXT = None
 
 
+def pyhmmer_decode(value):
+    """Decode a pyhmmer attribute that may be bytes or str.
+    
+    PyHMMER 0.12.0 changed many attributes from bytes to str.
+    This helper provides backwards compatibility with both versions.
+    
+    Args:
+        value: A bytes or str value from a pyhmmer object attribute
+        
+    Returns:
+        str: The decoded string value
+    """
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.decode()
+    return value
+
+
 def get_multiprocessing_context():
     """Return a cached multiprocessing context that avoids unsafe fork start."""
 
@@ -123,7 +142,7 @@ def read_hmms(hmm_files:Iterable[Union[str,os.PathLike,IOBase]]) -> Dict[str, Di
 
         hmmer_models = OrderedDict() 
         for model in pyhmmer.plan7.HMMFile(file):
-            model_name = model.name.decode()
+            model_name = pyhmmer_decode(model.name)
             if model_name in hmmer_models:
                 warnings.warn(f"multiple hmms with the same name ({model_name}) in file: {file}, only one will be used.")
             hmmer_models[model_name] = model
@@ -140,7 +159,7 @@ def read_pyhmmer_peptide_fastas(peptide_files):
         seqs_dict = dict()
         with pyhmmer.easel.SequenceFile(file_name, digital=True) as seq_file:
             for seq in seq_file:
-                seq_name = seq.name.decode()
+                seq_name = pyhmmer_decode(seq.name)
                 if seq_name in seqs_dict:
                     warnings.warn(f"multiple reference sequences with the same name ({seq_name}) in file: {file_name}, only one will be used.")
                 seqs_dict[seq_name] = seq

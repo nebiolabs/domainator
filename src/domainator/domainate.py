@@ -16,7 +16,7 @@ from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, get_file_type, read_pyhmmer_peptide_fastas, filter_by_taxonomy
+from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, get_file_type, read_pyhmmer_peptide_fastas, filter_by_taxonomy, pyhmmer_decode
 import pyhmmer
 from domainator import __version__, RawAndDefaultsFormatter
 import pyrodigal
@@ -71,13 +71,13 @@ def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, 
 
     for top_hits in hits: # each top_hits covers a single hmm
         for hit in top_hits:
-            hit_name = hit.name.decode().split(",")
+            hit_name = pyhmmer_decode(hit.name).split(",")
             contig_index = int(hit_name[0])
             cds_index = int(hit_name[1])
             for domain in hit.domains:
                 if domain.i_evalue < evalue and domain.i_evalue >= min_evalue:
-                    domain_name = domain.alignment.hmm_name.decode()
-                    domain_accession = domain.alignment.hmm_accession.decode()
+                    domain_name = pyhmmer_decode(domain.alignment.hmm_name)
+                    domain_accession = pyhmmer_decode(domain.alignment.hmm_accession)
                     match_positions = sum(1 for c in domain.alignment.identity_sequence if c.isalpha())
                     
                     # TODO: maybe add an alignment length and envelope length to the SearchResult? Currently, identity is based on alignment size, but start and end are from the envelope, which can be confusing.
@@ -92,7 +92,7 @@ def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, 
                     if references[domain_name].description is None: #TODO: add test case for hmmer and protein queries that lack descriptions
                         domain_description = ""
                     else:
-                        domain_description = references[domain_name].description.decode() #domain.alignment.hmm_name.decode()
+                        domain_description = pyhmmer_decode(references[domain_name].description) #domain.alignment.hmm_name.decode()
                     # if domain_description == "":
                     #     domain_description = ""
                     domain_evalue = domain.i_evalue

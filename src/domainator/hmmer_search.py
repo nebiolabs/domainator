@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.utils import make_pool
+from domainator.utils import make_pool, pyhmmer_decode
 from numba import jit
 import numba as nb
 import psutil
@@ -47,7 +47,7 @@ def read_hmms(hmm_files:Iterable[Union[str,os.PathLike]]) -> Dict[str, Dict[str,
         
         hmmer_models = dict() 
         for model in pyhmmer.plan7.HMMFile(file):
-            model_name = model.name.decode()
+            model_name = pyhmmer_decode(model.name)
             if model_name in hmmer_models:
                 warnings.warn(f"multiple hmms with the same name ({model_name}) in file: {file}, only one will be used.")
             hmmer_models[model_name] = model
@@ -398,7 +398,7 @@ class _hmmer_search_worker():
                 score, _, _, _ = compare_hmmer(input_profile, target_profile)
                 if score >= self.score_cutoff:
                     alignment = None
-                    new_result = HmmerHit(score, input_profile.name.decode(), target_profile.name.decode(), alignment, input_profile)
+                    new_result = HmmerHit(score, pyhmmer_decode(input_profile.name), pyhmmer_decode(target_profile.name), alignment, input_profile)
                     if best_result is None or new_result > best_result:
                         best_result = new_result
         return best_result
