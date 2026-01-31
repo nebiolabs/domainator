@@ -435,6 +435,99 @@
         "nargs": 1
       },
       "target_parameter": "output_cols"
+    },
+    {
+      "name": "Motif Count",
+      "parameter": "output_cols__motif_count",
+      "help": "Report the number of the given PROSITE motif present in the sequence. If nucleotide sequences are provided, then nucleotide motifs are counted. If protein sequences are provided, then protein motifs are counted. More information about PROSITE specification can be found: https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html",
+      "type": "dynamic",
+      "flags": [
+        "--motif_count"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "motif_count",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Isoelectric Point",
+      "parameter": "output_cols__isoelectric_point",
+      "help": "Report the isoelectric point of a protein. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig)",
+      "type": "boolean",
+      "flags": [
+        "--isoelectric_point"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "isoelectric_point"
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Net Charge",
+      "parameter": "output_cols__net_charge",
+      "help": "Report the net charge of a protein at the given pH. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig)",
+      "type": "dynamic",
+      "flags": [
+        "--net_charge"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "net_charge",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Repeat Count",
+      "parameter": "output_cols__repeat_count",
+      "help": "Report the number of repeats of the given length or longer. For example AGGKKK will have repeat_count_1 = 3, repeat_count_2 = 2, and repeat_count_3 = 1",
+      "type": "dynamic",
+      "flags": [
+        "--repeat_count"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "repeat_count",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Starts With",
+      "parameter": "output_cols__starts_with",
+      "help": "Reports the first character of the contig sequence.",
+      "type": "boolean",
+      "flags": [
+        "--starts_with"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "starts_with"
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Molecular Weight",
+      "parameter": "output_cols__molecular_weight",
+      "help": "Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.",
+      "type": "boolean",
+      "flags": [
+        "--molecular_weight"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "molecular_weight"
+      },
+      "target_parameter": "output_cols"
     }
   ],
   "advanced_parameters": [

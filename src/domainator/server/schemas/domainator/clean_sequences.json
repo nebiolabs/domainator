@@ -1,0 +1,108 @@
+{
+  "id": "clean_sequences",
+  "display_name": "Clean Sequences",
+  "category": "Editors",
+  "description": "Clean and filter sequences in genbank or fasta files\n\nThis tool provides functionality to:\n- Clean sequence names for compatibility with newick format\n- Deduplicate sequence names to ensure uniqueness\n- Strip non-canonical residues from sequence ends\n- Filter out sequences containing non-canonical residues",
+  "runner": "module",
+  "priority": 4,
+  "entry_point": "domainator.clean_sequences",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Names of input genbank files.",
+      "type": "file",
+      "multiple": true,
+      "required": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna"
+      ]
+    },
+    {
+      "name": "Fasta Type",
+      "parameter": "fasta_type",
+      "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
+      "type": "string",
+      "choices": [
+        "protein",
+        "nucleotide"
+      ],
+      "default": "protein",
+      "flags": [
+        "--fasta_type"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Genbank output file name.",
+      "required": true,
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Fasta Out",
+      "parameter": "fasta_out",
+      "help": "Makes output a fasta file when activated.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--fasta_out"
+      ]
+    },
+    {
+      "name": "Clean Name",
+      "parameter": "clean_name",
+      "help": "If true then make the name compatible with newick format.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--clean_name"
+      ]
+    },
+    {
+      "name": "Deduplicate Names",
+      "parameter": "deduplicate_names",
+      "help": "If true then rename sequences such that output sequences have unique names.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--deduplicate_names"
+      ]
+    },
+    {
+      "name": "Strip",
+      "parameter": "strip",
+      "help": "If true then strip non-canonical residues or amino acids from the ends of sequences (depending on input type). Including * characters.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--strip"
+      ]
+    },
+    {
+      "name": "Filter By amino acids / nucleotides",
+      "parameter": "filter_by_aa",
+      "help": "If true then throw out sequences containing non-canonical residues or amino acids (depending on input type). Including * characters. (applied after strip)",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--filter_by_aa"
+      ]
+    }
+  ]
+}
