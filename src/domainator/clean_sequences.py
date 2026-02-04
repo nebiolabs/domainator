@@ -63,15 +63,15 @@ def deduplicate_name(name, seen_names):
     Returns:
         A unique version of the name
     """
-    if name not in seen_names:
-        seen_names[name] = 1
-        return name
-    else:
-        count = seen_names[name]
-        seen_names[name] = count + 1
-        new_name = f"{name}_{count}"
-        # Recursively ensure the new name is also unique
-        return deduplicate_name(new_name, seen_names)
+    candidate = name
+    while True:
+        if candidate not in seen_names:
+            seen_names[candidate] = 1
+            return candidate
+
+        count = seen_names[candidate]
+        seen_names[candidate] = count + 1
+        candidate = f"{candidate}_{count}"
 
 
 def strip_non_canonical(sequence, canonical_chars):
@@ -142,7 +142,7 @@ def clean_sequences(contigs, fasta_type="protein", clean_name=False, deduplicate
     else:
         canonical_chars = CANONICAL_NUCLEOTIDE
     
-    seen_names = {}
+    seen_names = dict()
     
     for contig in contigs:
         if stats is not None:
