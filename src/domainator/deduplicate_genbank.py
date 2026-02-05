@@ -211,7 +211,7 @@ class DeduplicateGenbank():
         else:
             return self._cluster_members
 
-    def deduplicate_genbank(self, genbanks, algorithm, params, id, bin_path, add_count, cpus, fasta_type="protein", log_handle=sys.stderr):
+    def deduplicate_genbank(self, genbanks, algorithm, params, id, bin_path, add_count, cpus, fasta_type="protein", both_strands=False, log_handle=sys.stderr):
         """
         input: 
                 genbanks: list of genbank files to cluster sequences from
@@ -221,15 +221,33 @@ class DeduplicateGenbank():
 
         #dict of algorithm names to functions that will run the algorithm, the functions must take three arguments, input_fasta_path,cluster_output_fasta_path,params
 
+        if both_strands and fasta_type != "nucleotide":
+            raise ValueError("--both_strands is only supported for nucleotide input.")
+
         if algorithm == "hash": #TODO: multiprocessing
             if id != 1:
                 raise ValueError(f"hash algorithm only valid for id = 1, not {id}.")
             seen = dict()
             for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
-                seq_hash = hashlib.sha256(str(rec.seq).upper().strip('*').encode("utf-8")).hexdigest()
-                if seq_hash not in seen:
-                    seen[seq_hash] = HashHit(str(i))
-                seen[seq_hash].cluster_members.append(str(i))
+                seq_str = str(rec.seq).upper().strip("*")
+                seq_hashes = [hashlib.sha256(seq_str.encode("utf-8")).hexdigest()]
+                if both_strands:
+                    seq = Seq.Seq(seq_str)
+                    seq_hashes.append(hashlib.sha256(str(seq.complement()).encode("utf-8")).hexdigest())
+                    seq_hashes.append(hashlib.sha256(str(seq.reverse_complement()).encode("utf-8")).hexdigest())
+
+                hit = None
+                for seq_hash in seq_hashes:
+                    if seq_hash in seen:
+                        hit = seen[seq_hash]
+                        break
+
+                if hit is None:
+                    hit = HashHit(str(i))
+                    for seq_hash in seq_hashes:
+                        seen[seq_hash] = hit
+
+                hit.cluster_members.append(str(i))
             reduced_names = {x.rep_name for x in seen.values()}
             cluster_members = {x.rep_name: x.cluster_members for x in seen.values()}
                 
@@ -254,6 +272,11 @@ class DeduplicateGenbank():
                 #run clustering algorithm
                 if algorithm == "cd-hit" and seqtype != "protein":
                     algorithm = "cd-hit-est"
+                if both_strands:
+                    if algorithm == "usearch":
+                        params.setdefault("-strand", "both")
+                    elif algorithm == "cd-hit-est":
+                        params.setdefault("-r", 1)
                 reduced_names, cluster_members = run_clustering(algorithm, input_fasta_path, id, params, bin_path, add_count, cpus, log_handle=log_handle)
 
         #write reduced set of sequences to a genbank file
@@ -321,6 +344,9 @@ def main(argv):
 
     parser.add_argument('--fasta_out', action='store_true', default=False,
                         help="makes output a fasta file when activated")
+
+    parser.add_argument('--both_strands', action='store_true', default=False,
+                        help="When set for nucleotide inputs, consider both strands for clustering/hash deduplication.")
     
     parser.add_argument('--cluster_table', default=None, required=False,
                         help="If supplied, then write a tab separated table with columns: representative, contigs.")
@@ -378,6 +404,7 @@ def main(argv):
             add_count,
             cpus,
             params.fasta_type,
+            params.both_strands,
             log_handle=log)
 
     if params.fasta_out:

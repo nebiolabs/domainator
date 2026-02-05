@@ -64,6 +64,16 @@
       ]
     },
     {
+      "name": "Both Strands",
+      "parameter": "both_strands",
+      "help": "When set for nucleotide inputs, consider both strands for clustering/hash deduplication.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--both_strands"
+      ]
+    },
+    {
       "name": "Algorithm",
       "parameter": "algorithm",
       "help": "Which clustering algorithm to use.",

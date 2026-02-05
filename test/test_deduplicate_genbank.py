@@ -2,6 +2,7 @@ from domainator import utils
 from pathlib import Path
 import tempfile
 from domainator import deduplicate_genbank
+from domainator.Bio import Seq
 
 
 def test_deduplicate_genbank_1(shared_datadir):
@@ -129,6 +130,111 @@ def test_deduplicate_genbank_hash(shared_datadir):
         assert "4-pDONR201_5_1\tpDONR201_5_1 ; pDONR201_5_2 ; pDONR201_5_3 ; pDONR201_5_4" in cluster_table
         assert "4-pDONR201_4_1\tpDONR201_4_1 ; pDONR201_4_2 ; pDONR201_4_3 ; pDONR201_4_4" in cluster_table
         assert len(cluster_table) == 8
+
+
+def test_deduplicate_genbank_hash_both_strands(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_fasta = output_dir + "/input.fasta"
+        out = output_dir + "/deduplicate_out.fasta"
+        log = output_dir + "/deduplicate_out.log"
+
+        seq = "ACGTAAGT"
+        rev_comp = str(Seq.Seq(seq).reverse_complement())
+
+        with open(input_fasta, "w") as handle:
+            handle.write(f">seq1\n{seq}\n")
+            handle.write(f">seq2\n{rev_comp}\n")
+
+        deduplicate_genbank.main([
+            "-i", input_fasta,
+            "--id", "1",
+            "--algorithm", "hash",
+            "--fasta_type", "nucleotide",
+            "--both_strands",
+            "--prefix_count",
+            "--fasta_out",
+            "-o", out,
+            "--log", log,
+        ])
+
+        assert Path(out).is_file()
+        recs = list(utils.parse_seqfiles([out]))
+        assert len(recs) == 1
+        assert recs[0].id[:2] == "2-"
+
+
+def test_deduplicate_genbank_usearch_both_strands_sets_flag():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_fasta = output_dir + "/input.fasta"
+
+        with open(input_fasta, "w") as handle:
+            handle.write(">seq1\nACGTAAGT\n")
+
+        captured = {}
+
+        def fake_run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=None):
+            captured["algorithm"] = algorithm
+            captured["params"] = dict(params)
+            return {"0"}, {"0": ["0"]}
+
+        original_run_clustering = deduplicate_genbank.run_clustering
+        deduplicate_genbank.run_clustering = fake_run_clustering
+        try:
+            dedup = deduplicate_genbank.DeduplicateGenbank()
+            recs = list(dedup.deduplicate_genbank(
+                [input_fasta],
+                "usearch",
+                {},
+                1,
+                None,
+                None,
+                1,
+                "nucleotide",
+                both_strands=True,
+            ))
+        finally:
+            deduplicate_genbank.run_clustering = original_run_clustering
+
+        assert captured["algorithm"] == "usearch"
+        assert captured["params"].get("-strand") == "both"
+        assert len(recs) == 1
+
+
+def test_deduplicate_genbank_cdhit_est_both_strands_sets_flag():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_fasta = output_dir + "/input.fasta"
+
+        with open(input_fasta, "w") as handle:
+            handle.write(">seq1\nACGTAAGT\n")
+
+        captured = {}
+
+        def fake_run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=None):
+            captured["algorithm"] = algorithm
+            captured["params"] = dict(params)
+            return {"0"}, {"0": ["0"]}
+
+        original_run_clustering = deduplicate_genbank.run_clustering
+        deduplicate_genbank.run_clustering = fake_run_clustering
+        try:
+            dedup = deduplicate_genbank.DeduplicateGenbank()
+            recs = list(dedup.deduplicate_genbank(
+                [input_fasta],
+                "cd-hit",
+                {},
+                0.8,
+                None,
+                None,
+                1,
+                "nucleotide",
+                both_strands=True,
+            ))
+        finally:
+            deduplicate_genbank.run_clustering = original_run_clustering
+
+        assert captured["algorithm"] == "cd-hit-est"
+        assert captured["params"].get("-r") == 1
+        assert len(recs) == 1
 
 
 def test_deduplicate_genbank_cdhit_low_id_nt(shared_datadir):
