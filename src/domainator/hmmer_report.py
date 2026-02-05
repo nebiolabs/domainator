@@ -4,7 +4,7 @@
 
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, read_hmms
+from domainator.utils import list_and_file_to_dict_keys, read_hmms, pyhmmer_decode
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from pathlib import Path
@@ -66,9 +66,9 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
     """
     
     STATIC_ANALYSES = {"source": {"columns": ["source"], "column_types": ["str"], "function": lambda source,rec: source},
-                "name": {"columns": ["name"], "column_types": ["str"], "function": lambda source,rec: "" if rec.name is None else rec.name.decode()},
-                "acc": {"columns": ["acc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.accession is None else rec.accession.decode()},
-                "desc": {"columns": ["desc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.description is None else rec.description.decode()},
+                "name": {"columns": ["name"], "column_types": ["str"], "function": lambda source,rec: "" if rec.name is None else pyhmmer_decode(rec.name)},
+                "acc": {"columns": ["acc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.accession is None else pyhmmer_decode(rec.accession)},
+                "desc": {"columns": ["desc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.description is None else pyhmmer_decode(rec.description)},
                 "length": {"columns": ["length"], "column_types": ["int"], "function": lambda source,rec: rec.M},
                 "consensus": {"columns": ["consensus"], "column_types": ["str"], "function": lambda source,rec: "" if rec.consensus is None else rec.consensus},
                 }
@@ -108,7 +108,7 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
 
     for source, records in records:
         for rec in records:
-            name = "" if rec.name is None else rec.name.decode()
+            name = "" if rec.name is None else pyhmmer_decode(rec.name)
             out_line = [name]
             for analysis in analyses_to_run:
                 analysis_result = analysis["function"](source, rec)

@@ -11,6 +11,7 @@ import pyhmmer
 import re
 import sys
 from domainator import __version__, RawAndDefaultsFormatter
+from domainator.utils import pyhmmer_decode
 from typing import Optional, List
 
 def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exact:Optional[List[str]]=None, query_contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False):
@@ -65,18 +66,18 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
     
     def inner(hmm_iterator):
         for model in hmm_iterator:
-            model_name = model.name.decode()
+            model_name = pyhmmer_decode(model.name)
             model_description = model.description
             model_accession = model.accession
   
             if model_description == None:
                 model_description = ""
             else:
-                model_description = model_description.decode()
+                model_description = pyhmmer_decode(model_description)
             if model_accession == None:
                 model_accession = ""
             else:
-                model_accession = model_accession.decode()
+                model_accession = pyhmmer_decode(model_accession)
 
             if not case_sensitive:
                 model_name = model_name.lower()

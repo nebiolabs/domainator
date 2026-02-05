@@ -9,7 +9,7 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "Genbank filenames.",
+      "help": "GenBank or FASTA filenames.",
       "type": "file",
       "multiple": true,
       "required": true,
@@ -375,7 +375,7 @@
     {
       "name": "Taxid",
       "parameter": "output_cols__taxid",
-      "help": "The taxid at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxid available for the record, the column will be named 'taxid_[rank] Enter one entry per line; separate multiple values with spaces or commas.",
+      "help": "The taxid at the given rank (e.g. superkingdom, genus, species); use 'self' for the lowest level taxid available for the record. Enter one entry per line; within a line, provide one or more ranks separated by spaces or commas. The column will be named taxid_[rank].",
       "type": "dynamic",
       "flags": [
         "--taxid"
@@ -391,7 +391,7 @@
     {
       "name": "Taxname",
       "parameter": "output_cols__taxname",
-      "help": "The taxname at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxname available for the record, the column will be named 'taxname_[rank] Enter one entry per line; separate multiple values with spaces or commas.",
+      "help": "The taxname at the given rank (e.g. superkingdom, genus, species); use 'self' for the lowest level taxname available for the record. Enter one entry per line; within a line, provide one or more ranks separated by spaces or commas. The column will be named taxname_[rank].",
       "type": "dynamic",
       "flags": [
         "--taxname"
@@ -407,7 +407,7 @@
     {
       "name": "Qualifier",
       "parameter": "output_cols__qualifier",
-      "help": "Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'. Enter one entry per line; separate multiple values with spaces or commas.",
+      "help": "Supply two strings: a feature type and a qualifier name. Report the values of all instances of this feature+qualifier combination (multiple hits are joined with ';'). Enter one entry per line; within a line provide exactly two values separated by spaces or a comma.",
       "type": "dynamic",
       "flags": [
         "--qualifier"
@@ -423,7 +423,7 @@
     {
       "name": "Feature Count",
       "parameter": "output_cols__feature_count",
-      "help": "Reports the number of features of this type. Enter one entry per line; separate multiple values with spaces or commas.",
+      "help": "Reports the number of features of this type. Enter one entry per line.",
       "type": "dynamic",
       "flags": [
         "--feature_count"
@@ -433,6 +433,115 @@
         "target": "output_cols",
         "const": "feature_count",
         "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Motif Count",
+      "parameter": "output_cols__motif_count",
+      "help": "Report the number of the given PROSITE motif present in the sequence. If nucleotide sequences are provided, then nucleotide motifs are counted. If protein sequences are provided, then protein motifs are counted. More information about PROSITE specification can be found: https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html. Enter one entry per line.",
+      "type": "dynamic",
+      "flags": [
+        "--motif_count"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "motif_count",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Isoelectric Point",
+      "parameter": "output_cols__isoelectric_point",
+      "help": "Report the isoelectric point of a protein. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig).",
+      "type": "boolean",
+      "flags": [
+        "--isoelectric_point"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "isoelectric_point"
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Net Charge",
+      "parameter": "output_cols__net_charge",
+      "help": "Report the net charge of a protein at the given pH. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig). Enter one entry per line.",
+      "type": "dynamic",
+      "flags": [
+        "--net_charge"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "net_charge",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Repeat Count",
+      "parameter": "output_cols__repeat_count",
+      "help": "Report the number of repeats of the given length or longer. For example AGGKKK will have repeat_count_1 = 3, repeat_count_2 = 2, and repeat_count_3 = 1. Enter one entry per line.",
+      "type": "dynamic",
+      "flags": [
+        "--repeat_count"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "repeat_count",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Named Domain Count",
+      "parameter": "output_cols__named_domain_count",
+      "help": "Count the number of Domainator domain features with the given domain name. Can be supplied multiple times. Enter one domain name per line.",
+      "type": "dynamic",
+      "flags": [
+        "--named_domain_count"
+      ],
+      "behavior": "dynamic",
+      "dynamic_action": {
+        "target": "output_cols",
+        "const": "named_domain_count",
+        "nargs": 1
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Starts With",
+      "parameter": "output_cols__starts_with",
+      "help": "Reports the first character of the contig sequence.",
+      "type": "boolean",
+      "flags": [
+        "--starts_with"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "starts_with"
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Molecular Weight",
+      "parameter": "output_cols__molecular_weight",
+      "help": "Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.",
+      "type": "boolean",
+      "flags": [
+        "--molecular_weight"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "molecular_weight"
       },
       "target_parameter": "output_cols"
     }
@@ -483,7 +592,7 @@
     {
       "name": "Append",
       "parameter": "output_cols__append",
-      "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows. Enter one entry per line; separate multiple values with spaces or commas.",
+      "help": "Supply three strings: column name, column type (str/int/float), and a constant value for all rows. Enter one entry per line; within a line provide exactly three values separated by spaces or commas.",
       "type": "dynamic",
       "flags": [
         "--append"
@@ -510,7 +619,7 @@
       "name": "Ncbi Taxonomy Path",
       "parameter": "ncbi_taxonomy_path",
       "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
-      "type": "file",
+      "type": "string",
       "default": "/tmp/ncbi_taxonomy",
       "flags": [
         "--ncbi_taxonomy_path"

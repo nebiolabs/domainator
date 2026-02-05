@@ -17,7 +17,7 @@ from typing import Iterable, TextIO
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit
-from domainator.utils import make_pool
+from domainator.utils import make_pool, pyhmmer_decode
 
 class _hmmer_compare_worker():
     def __init__(self, hmmer_targets, alignment=False, k=None, score_cutoff=float("-inf")):
@@ -37,7 +37,7 @@ class _hmmer_compare_worker():
                     else:
                         alignment = None
                     
-                    result = HmmerHit(score, input_profile.name.decode(), target_profile.name.decode(), alignment)
+                    result = HmmerHit(score, pyhmmer_decode(input_profile.name), pyhmmer_decode(target_profile.name), alignment)
                     if (self.k is None) or (len(out_heap) < self.k):
                         heapq.heappush(out_heap, result)
                     else:

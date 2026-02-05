@@ -20,7 +20,7 @@ import scipy.stats
 import scipy.sparse
 import pyhmmer
 from typing import List
-from domainator.utils import get_file_type, parse_seqfiles, make_pool
+from domainator.utils import get_file_type, parse_seqfiles, make_pool, pyhmmer_decode
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix
 from domainator.hmmer_search import compare_hmmer
@@ -105,7 +105,7 @@ def make_hmm_name_to_idx_dict_from_path(hmm_path):
 
     idx = 0
     for rec in pyhmmer.plan7.HMMFile(hmm_path):
-        name = rec.name.decode()
+        name = pyhmmer_decode(rec.name)
         if name in name_to_idx:  
             warnings.warn(f"Warning: duplicate hmm name found: {name}")
         else:
@@ -123,7 +123,7 @@ def make_hmm_name_to_idx_dict(hmm_list):
 
     idx = 0
     for rec in hmm_list:
-        name = rec.name.decode()
+        name = pyhmmer_decode(rec.name)
         if name in name_to_idx:  
             warnings.warn(f"Warning: duplicate hmm name found: {name}")
         else:
@@ -145,8 +145,8 @@ def run_hmmsearch(hmmer_seqs, hmmer_models, k, threads, search_type):
     hits_list = list()
     for top_hits in hits:
         for hit in top_hits:
-            name = hit.name.decode()
-            domain = hit.best_domain.alignment.hmm_name.decode()
+            name = pyhmmer_decode(hit.name)
+            domain = pyhmmer_decode(hit.best_domain.alignment.hmm_name)
             score = hit.score
             result = CmpResult(round(score,2), name, domain)
             if k is None:
@@ -176,7 +176,7 @@ class _run_hmmer_compare_worker():
         for target_profile in pyhmmer.plan7.HMMFile(self.hmmer_targets):
             
             score, _traceback, _max_index, _match_scores = compare_hmmer(input_profile, target_profile)
-            result = CmpResult(round(score,2), input_profile.name.decode(), target_profile.name.decode())
+            result = CmpResult(round(score,2), pyhmmer_decode(input_profile.name), pyhmmer_decode(target_profile.name))
             if (self.k is None) or (len(out_heap) < self.k):
                 heapq.heappush(out_heap, result)
             else:

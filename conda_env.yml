@@ -12,3 +12,4 @@ dependencies:
   - usearch>=12.0_beta,<13.0
   - pip:
     - -e .[test]
+    - git+https://github.com/BernhoferM/TMbed.git

@@ -10,6 +10,9 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
+from domainator.find_features import search_motif
+from domainator.Bio.SeqUtils.ProtParam import ProteinAnalysis
+from domainator.Bio.SeqUtils import molecular_weight
 from pathlib import Path
 from typing import List, Tuple, Union, Dict, Any
 import json
@@ -17,6 +20,7 @@ from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Taxonomy import NCBITaxonomy
 from domainator.filter_domains import filter_domains
+import re
 
 SELECT_CATEGORIES = {"contig", "cds", "domain"}
 COLS_ARG_NAME = "output_cols"
@@ -28,6 +32,10 @@ class DynamicArg(argparse.Action):
         items = getattr(namespace, self.dest, None)
         if items is None:
             items = []
+        # For nargs='?' with const, when no value is provided, argparse sets
+        # values to const. We detect this case and treat it as None.
+        if self.nargs == '?' and values == self.const:
+            values = None
         items.append( (self.const, values) )
         setattr(namespace, self.dest, items)
 
@@ -381,6 +389,218 @@ def feature_count_factory(spec): #TODO: deduplicate with count_feature
     }
 
 
+def motif_count_factory(spec):
+    """Factory for counting PROSITE motif occurrences in sequences.
+    
+    Args:
+        spec: The PROSITE motif pattern string (as list from nargs=1)
+    """
+    motif = spec[0] if isinstance(spec, list) else spec
+    
+    def motif_count(rec, loc, tax):
+        sequence = str(rec.seq)
+        matches = search_motif(sequence, motif)
+        return len(matches)
+    
+    # sanitize motif for column name (replace special chars)
+    safe_motif = motif.replace("-", "_").replace("[", "").replace("]", "").replace("{", "").replace("}", "").replace("(", "").replace(")", "").replace(",", "_")
+    
+    return {
+        "columns": [f"motif_count_{safe_motif}"],
+        "column_types": ["int"],
+        "function": motif_count,
+    }
+
+
+def _get_single_protein_sequence(rec: SeqRecord) -> str:
+    """Get the single protein sequence from a record, or None if not exactly one.
+    
+    For protein records, returns the sequence directly.
+    For nucleic acid records with exactly 1 CDS, returns the translated sequence.
+    Returns None if there is not exactly 1 protein sequence.
+    """
+    if rec.annotations.get("molecule_type") == "protein":
+        return str(rec.seq).rstrip("*")
+    else:
+        # Nucleic acid - check for exactly 1 CDS
+        cdss = DomainatorCDS.list_from_contig(rec, skip_pseudo=True)
+        if len(cdss) == 1:
+            cds = cdss[0]
+            # Extract translated sequence
+            if "translation" in cds.feature.qualifiers:
+                return cds.feature.qualifiers["translation"][0].rstrip("*")
+            else:
+                return str(cds.feature.translate(rec.seq, cds=False)).rstrip("*")  # cds=False to avoid exceptions on unusual annotations
+        return None
+
+
+def isoelectric_point_factory():
+    """Factory for calculating isoelectric point of proteins."""
+    
+    def isoelectric_point(rec, loc, tax):
+        prot_seq = _get_single_protein_sequence(rec)
+        if prot_seq is None or len(prot_seq) == 0:
+            return None
+        try:
+            analysis = ProteinAnalysis(prot_seq)
+            return analysis.isoelectric_point()
+        except (ValueError, KeyError):
+            return None
+    
+    return {
+        "columns": ["isoelectric_point"],
+        "column_types": ["float"],
+        "function": isoelectric_point,
+    }
+
+
+def net_charge_factory(spec):
+    """Factory for calculating net charge of proteins at a given pH.
+    
+    Args:
+        spec: pH value as string (as list from nargs=1)
+    """
+    spec_val = spec[0] if isinstance(spec, list) else spec
+    pH = float(spec_val)
+    col_name = f"net_charge_{spec_val}"
+    
+    def net_charge(rec, loc, tax):
+        prot_seq = _get_single_protein_sequence(rec)
+        if prot_seq is None or len(prot_seq) == 0:
+            return None
+        try:
+            analysis = ProteinAnalysis(prot_seq)
+            return analysis.charge_at_pH(pH)
+        except (ValueError, KeyError):
+            return None
+    
+    return {
+        "columns": [col_name],
+        "column_types": ["float"],
+        "function": net_charge,
+    }
+
+
+def repeat_count_factory(spec):
+    """Factory for counting character repeats of a given length or longer.
+    
+    Args:
+        spec: Minimum repeat length as string (as list from nargs=1)
+    """
+    spec_val = spec[0] if isinstance(spec, list) else spec
+    min_length = int(spec_val)
+    
+    def repeat_count(rec, loc, tax):
+        sequence = str(rec.seq).upper()
+        if len(sequence) == 0:
+            return 0
+        
+        count = 0
+        i = 0
+        while i < len(sequence):
+            # Count run of same character starting at i
+            char = sequence[i]
+            run_length = 1
+            while i + run_length < len(sequence) and sequence[i + run_length] == char:
+                run_length += 1
+            
+            # If run is at least min_length, count it
+            if run_length >= min_length:
+                count += 1
+            
+            i += run_length
+        
+        return count
+    
+    return {
+        "columns": [f"repeat_count_{min_length}"],
+        "column_types": ["int"],
+        "function": repeat_count,
+    }
+
+
+def named_domain_count_factory(spec):
+    """Factory for counting domains with a given Domainator domain name.
+
+    Args:
+        spec: Domain name as string (as list from nargs=1)
+    """
+
+    domain_name = spec[0] if isinstance(spec, list) else spec
+
+    def named_domain_count(rec, loc, tax):
+        count = 0
+        for feature in rec.features:
+            if feature.type == DOMAIN_FEATURE_NAME:
+                if feature.qualifiers.get("name", [None])[0] == domain_name:
+                    count += 1
+        return count
+
+    safe_domain_name = re.sub(r"[^A-Za-z0-9]+", "_", str(domain_name)).strip("_")
+    if safe_domain_name == "":
+        safe_domain_name = "domain"
+
+    return {
+        "columns": [f"named_domain_count_{safe_domain_name}"],
+        "column_types": ["int"],
+        "function": named_domain_count,
+    }
+
+
+def starts_with_factory():
+    """Factory for reporting the first character of the sequence."""
+    
+    def starts_with(rec, loc, tax):
+        sequence = str(rec.seq)
+        if len(sequence) == 0:
+            return ""
+        return sequence[0]
+    
+    return {
+        "columns": ["starts_with"],
+        "column_types": ["str"],
+        "function": starts_with,
+    }
+
+
+def molecular_weight_factory():
+    """Factory for calculating molecular weight of sequences.
+    
+    Automatically determines the sequence type (protein, DNA, or RNA) from
+    the record's molecule_type annotation.
+    """
+    
+    def calc_molecular_weight(rec, loc, tax):
+        sequence = str(rec.seq).upper()
+        if len(sequence) == 0:
+            return None
+        
+        # Determine sequence type from molecule_type annotation
+        mol_type = rec.annotations.get("molecule_type", "DNA").lower()
+        
+        if mol_type == "protein":
+            seq_type = "protein"
+        elif "rna" in mol_type:
+            seq_type = "RNA"
+        else:
+            seq_type = "DNA"
+        
+        # Remove any stop codon asterisks for proteins
+        if seq_type == "protein":
+            sequence = sequence.rstrip("*")
+        
+        try:
+            return molecular_weight(sequence, seq_type=seq_type)
+        except ValueError:
+            # Handle sequences with ambiguous characters
+            return None
+    
+    return {
+        "columns": ["molecular_weight"],
+        "column_types": ["float"],
+        "function": calc_molecular_weight,
+    }
+
 
 def get_analysis_names(analyses):
     analysis_names = list()
@@ -542,7 +762,8 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
                 "taxname_lineage": { "columns": ["taxid_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.names][1:]) }, # [1:] to remove root
                 "rank_lineage": { "columns": ["rank_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.ranks][1:]) }, # [1:] to remove root
                 }
-    DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
+    DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
+    STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory} # factories that take no arguments
     
     headers = ["contig"]
     column_types = ["str"]
@@ -557,9 +778,17 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
 
     for analysis in analyses:
         if isinstance(analysis, str): # if it's a string, then it's a static analysis
-            headers.extend(STATIC_ANALYSES[analysis]["columns"])
-            column_types.extend(STATIC_ANALYSES[analysis]["column_types"])
-            analyses_to_run.append(STATIC_ANALYSES[analysis])
+            if analysis in STATIC_ANALYSES:
+                headers.extend(STATIC_ANALYSES[analysis]["columns"])
+                column_types.extend(STATIC_ANALYSES[analysis]["column_types"])
+                analyses_to_run.append(STATIC_ANALYSES[analysis])
+            elif analysis in STATIC_ANALYSES_FACTORIES:
+                generated_analysis = STATIC_ANALYSES_FACTORIES[analysis]()
+                headers.extend(generated_analysis["columns"])
+                column_types.extend(generated_analysis["column_types"])
+                analyses_to_run.append(generated_analysis)
+            else:
+                raise ValueError(f"Unknown analysis: {analysis}")
         else:
             generated_analysis = DYNAMIC_ANALYSES[analysis[0]](analysis[1])
             headers.extend(generated_analysis["columns"])
@@ -623,7 +852,6 @@ def main(argv):
     parser.add_argument('--domain_descriptions', action='append_const', dest=COLS_ARG_NAME, const="domain_descriptions",
                         help="report domain content as alphabetical and semicolon-separated, only listing duplicates once.")
     
-
     parser.add_argument('--score', action='append_const', dest=COLS_ARG_NAME, const="score",
                         help="report report the sum of domain scores.")
 
@@ -658,7 +886,7 @@ def main(argv):
                         help="report the number of CDSs as a column in the output")
     
     parser.add_argument('--domain_count', action='append_const', dest=COLS_ARG_NAME, const="domain_count",
-                        help="report the number of domains as a column in the output")
+                        help="report the total number of domains as a column in the output")
     
     parser.add_argument('--definition', action='append_const', dest=COLS_ARG_NAME, const="definition",
                         help="report sequence definition line from the genbank file.")
@@ -685,6 +913,27 @@ def main(argv):
                         help="Reports the number of features of this type.")
     # parser.add_argument('--qualifier_count', type=str, nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, #TODO: implement this using DynamicArg
     #                     help="Supply two strings, an feature type and a qualifier name. Report the number of instances of this feature-qualifier combination.")
+    
+    parser.add_argument('--motif_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="motif_count",
+                        help="Report the number of the given PROSITE motif present in the sequence. If nucleotide sequences are provided, then nucleotide motifs are counted. If protein sequences are provided, then protein motifs are counted. More information about PROSITE specification can be found: https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html")
+    
+    parser.add_argument('--isoelectric_point', action='append_const', dest=COLS_ARG_NAME, const="isoelectric_point",
+                        help="Report the isoelectric point of a protein. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig)")
+    
+    parser.add_argument('--net_charge', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="net_charge",
+                        help="Report the net charge of a protein at the given pH. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig)")
+    
+    parser.add_argument('--repeat_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="repeat_count",
+                        help="Report the number of repeats of the given length or longer. For example AGGKKK will have repeat_count_1 = 3, repeat_count_2 = 2, and repeat_count_3 = 1")
+
+    parser.add_argument('--named_domain_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="named_domain_count",
+                        help="Count the number of Domainator domain features with the given domain name. Can be supplied multiple times. The column will be named named_domain_count_[domain].")
+    
+    parser.add_argument('--starts_with', action='append_const', dest=COLS_ARG_NAME, const="starts_with",
+                        help="Reports the first character of the contig sequence.")
+    
+    parser.add_argument('--molecular_weight', action='append_const', dest=COLS_ARG_NAME, const="molecular_weight",
+                        help="Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.")
     
     parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
                         help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")

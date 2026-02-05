@@ -53,6 +53,25 @@ DEFAULT_BUFFER_SIZE = 5000
 _MP_CONTEXT = None
 
 
+def pyhmmer_decode(value):
+    """Decode a pyhmmer attribute that may be bytes or str.
+    
+    PyHMMER 0.12.0 changed many attributes from bytes to str.
+    This helper provides backwards compatibility with both versions.
+    
+    Args:
+        value: A bytes or str value from a pyhmmer object attribute
+        
+    Returns:
+        str: The decoded string value
+    """
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.decode()
+    return value
+
+
 def get_multiprocessing_context():
     """Return a cached multiprocessing context that avoids unsafe fork start."""
 
@@ -123,7 +142,7 @@ def read_hmms(hmm_files:Iterable[Union[str,os.PathLike,IOBase]]) -> Dict[str, Di
 
         hmmer_models = OrderedDict() 
         for model in pyhmmer.plan7.HMMFile(file):
-            model_name = model.name.decode()
+            model_name = pyhmmer_decode(model.name)
             if model_name in hmmer_models:
                 warnings.warn(f"multiple hmms with the same name ({model_name}) in file: {file}, only one will be used.")
             hmmer_models[model_name] = model
@@ -140,7 +159,7 @@ def read_pyhmmer_peptide_fastas(peptide_files):
         seqs_dict = dict()
         with pyhmmer.easel.SequenceFile(file_name, digital=True) as seq_file:
             for seq in seq_file:
-                seq_name = seq.name.decode()
+                seq_name = pyhmmer_decode(seq.name)
                 if seq_name in seqs_dict:
                     warnings.warn(f"multiple reference sequences with the same name ({seq_name}) in file: {file_name}, only one will be used.")
                 seqs_dict[seq_name] = seq
@@ -363,6 +382,53 @@ class BooleanEvaluator():
         expression = " ".join(interpolated_expression)
         
         return eval(expression)
+    
+    @classmethod
+    def sanitize_identifier(cls, identifier: str) -> str:
+        """
+        Convert an identifier string to a name safe for boolean expressions.
+        
+        The BooleanEvaluator uses these special characters:
+            & - AND operator
+            | - OR operator  
+            ~ - NOT operator
+            ( - grouping open
+            ) - grouping close
+            space - token separator
+        
+        This function replaces these characters to create valid identifiers.
+        
+        Args:
+            identifier: The string to sanitize
+        
+        Returns:
+            A sanitized string suitable for boolean expressions
+        """
+        # Characters that have special meaning in BooleanEvaluator
+        # We use double/triple underscores to avoid collision with single underscores
+        # that might already be in the identifier
+        replacements = [
+            ('(', '__'),    # grouping open
+            (')', '___'),   # grouping close
+            ('&', '_AND_'), # AND operator
+            ('|', '_OR_'),  # OR operator
+            ('~', '_NOT_'), # NOT operator
+            (' ', '_'),     # space separator
+            ('-', '_'),     # common separator in patterns (e.g., PROSITE)
+            ('<', 'Nterm_'),  # N-terminal anchor (PROSITE)
+            ('>', '_Cterm'),  # C-terminal anchor (PROSITE)
+            ('.', ''),      # trailing period (PROSITE)
+        ]
+        
+        result = identifier
+        for old, new in replacements:
+            result = result.replace(old, new)
+        
+        # Remove trailing underscores
+        result = result.rstrip('_')
+        
+        return result
+
 
 def get_domain_cds_annotation_strings(seq_record):
     """

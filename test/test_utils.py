@@ -82,3 +82,62 @@ def test_get_palette_1():
     assert len(palette) == 3
     assert len(set(palette.values())) == 3
     assert all([re.match(r"#[0-9a-fA-F]{6}",x) for x in palette.values()])
+
+
+class TestBooleanEvaluatorSanitizeIdentifier:
+    """Tests for BooleanEvaluator.sanitize_identifier"""
+    
+    def test_special_characters_replaced(self):
+        """Test that BooleanEvaluator special characters are replaced."""
+        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        
+        # Parentheses (grouping)
+        assert "(" not in sanitize("x(2)")
+        assert ")" not in sanitize("x(2)")
+        
+        # Operators
+        assert "&" not in sanitize("A&B")
+        assert "|" not in sanitize("A|B")
+        assert "~" not in sanitize("~A")
+        
+        # Space
+        assert " " not in sanitize("A B C")
+    
+    def test_prosite_patterns(self):
+        """Test sanitization of PROSITE-style patterns."""
+        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        
+        # Dashes should be replaced
+        assert "-" not in sanitize("A-G-C")
+        
+        # Anchors
+        assert "<" not in sanitize("<M")
+        assert ">" not in sanitize("K>")
+        
+        # Trailing period removed
+        result = sanitize("A.")
+        assert not result.endswith(".")
+    
+    def test_complex_pattern(self):
+        """Test sanitization of complex patterns."""
+        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        
+        pattern = "[DE](2)HS{P}"
+        result = sanitize(pattern)
+        
+        # Should not contain boolean operator characters
+        assert "(" not in result
+        assert ")" not in result
+        
+        # Brackets are allowed (not special in BooleanEvaluator)
+        assert "[DE]" in result
+    
+    def test_round_trip_uniqueness(self):
+        """Test that different patterns produce different sanitized names."""
+        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        
+        patterns = ["A(2)", "A(3)", "[DE]", "[EF]", "A-B", "A-C"]
+        sanitized = [sanitize(p) for p in patterns]
+        
+        # All sanitized names should be unique
+        assert len(set(sanitized)) == len(patterns)
