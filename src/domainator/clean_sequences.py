@@ -215,10 +215,10 @@ def main(argv):
                         help="if true then rename sequences such that output sequences have unique names.")
 
     parser.add_argument('--strip', action='store_true', default=False, 
-                        help="if true then strip non-canonical residues or amino acids from the ends of sequences (depending on input type). Including * characters.")
+                        help="if true then strip non-canonical residues or nucleotides from the ends of sequences (depending on input type). Including * characters.")
 
     parser.add_argument('--filter_by_aa', action='store_true', default=False, 
-                        help="if true then throw out sequences containing non-canonical residues or amino acids (depending on input type). Including * characters. (applied after strip)")
+                        help="if true then throw out sequences containing non-canonical residues or nucleotides (depending on input type). Including * characters. (applied after strip)")
 
     parser.add_argument('--log', default=None, required=False,
                         help="The name of the log file. If not supplied, writes to stderr.")
