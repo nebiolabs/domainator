@@ -3,6 +3,9 @@
 For each CDS or protein in the input file, run feature detection algorithms to 
 identify transmembrane regions, signal peptides, and other sequence features.
 
+If no feature options are supplied, the input is still processed to normalize
+CDS translations where possible.
+
 Supported algorithms:
     - TMbed: Transmembrane protein prediction using ProtT5 language model embeddings
     - MOTIF: PROSITE-style pattern matching for exact motif search
@@ -542,7 +545,7 @@ def add_feature_annotations(
 
 def find_features(
     seq_iterator: Iterator[SeqRecord],
-    algorithms: List[str] = ["all"],
+    tmbed: bool = False,
     gpu_device: Optional[str] = "cuda:0",
     cpu: int = 0,
     batch_size: int = 4000,
@@ -558,7 +561,7 @@ def find_features(
     
     Args:
         seq_iterator: Iterator yielding SeqRecord objects
-        algorithms: List of algorithms to run (["all"] or specific algorithms)
+        tmbed: Whether to run TMbed prediction
         gpu_device: GPU device to use (None or "None" for CPU only)
         cpu: Number of CPU threads (0 = use all available)
         batch_size: Batch size for processing
@@ -571,7 +574,7 @@ def find_features(
         Annotated SeqRecord objects
     """
     # Determine which algorithms to run
-    run_tmbed = "all" in algorithms or "TMbed" in algorithms or "tmbed" in algorithms
+    run_tmbed = tmbed
     
     if gene_call not in (None, 'all', 'unannotated'):
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
@@ -761,19 +764,8 @@ def main(argv):
     )
     
     parser.add_argument(
-        "--gpu_device", default="cuda:0", type=str, required=False,
-        help="For models that can use GPU acceleration, use this device if available. "
-             "By default: if not set to 'None' try using the specified device for "
-             "algorithms that allow GPU acceleration, if GPU not available, fall back "
-             "to CPU mode if available. Choices: ['None', '0', 'cuda:0', ...]"
-    )
-    
-    parser.add_argument(
-        "--algorithms", default=["all"], nargs="+", type=str, required=False,
-        help="Which algorithms to run. By default, run all algorithms. "
-             "Choices: ['all', 'TMbed', 'none']. Use 'none' to run only motif "
-             "search without ML algorithms. Note: MOTIF search is controlled "
-             "separately via --motif."
+        "--tmbed", action="store_true",
+        help="Run TMbed transmembrane and signal peptide prediction."
     )
     
     parser.add_argument(
@@ -794,6 +786,15 @@ def main(argv):
     )
     
     parser.add_argument(
+        "--gpu_device", default="cuda:0", type=str, required=False,
+        help="For models that can use GPU acceleration, use this device if available. "
+             "By default: if not set to 'None' try using the specified device for "
+             "algorithms that allow GPU acceleration, if GPU not available, fall back "
+             "to CPU mode if available. Choices: ['None', '0', 'cuda:0', ...]"
+    )
+    
+
+    parser.add_argument(
         "--model_dir", type=str, default=None, required=False,
         help="Base directory for downloading/loading algorithm model weights. "
              "Individual algorithms will create subdirectories as needed. "
@@ -811,13 +812,6 @@ def main(argv):
     parser.add_argument('--config', action=ActionConfigFile)
     
     params = parser.parse_args(argv)
-    
-    # Validate algorithms
-    # 'none' allows running only motif search without any ML algorithms
-    valid_algorithms = {'all', 'TMbed', 'tmbed', 'none'}
-    for alg in params.algorithms:
-        if alg not in valid_algorithms:
-            raise ValueError(f"Unknown algorithm: {alg}. Valid choices: {valid_algorithms}")
     
     # Handle gpu_device="None" string
     gpu_device = params.gpu_device
@@ -839,7 +833,7 @@ def main(argv):
                 filetype_override=None,
                 default_molecule_type=params.fasta_type
             ),
-            algorithms=params.algorithms,
+            tmbed=params.tmbed,
             gpu_device=gpu_device,
             cpu=params.cpu,
             batch_size=params.batch_size,

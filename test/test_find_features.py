@@ -98,7 +98,7 @@ def test_find_features_protein_fasta(shared_datadir):
         args = [
             '--input', str(fasta),
             '-o', str(out),
-            '--algorithms', 'TMbed',
+            '--tmbed',
             '--gpu_device', 'None',  # Use CPU for testing
         ]
         
@@ -124,7 +124,7 @@ def test_find_features_genbank(shared_datadir):
         args = [
             '--input', str(gb),
             '-o', str(out),
-            '--algorithms', 'TMbed',
+            '--tmbed',
             '--gpu_device', 'None',  # Use CPU for testing
         ]
         
@@ -136,27 +136,6 @@ def test_find_features_genbank(shared_datadir):
         records = list(SeqIO.parse(out, "genbank"))
         assert len(records) > 0
 
-
-@pytest.mark.skipif(not TMBED_AVAILABLE, reason="TMbed not installed")
-def test_find_features_algorithms_validation():
-    """Test that invalid algorithms raise errors."""
-    from domainator.find_features import main
-    import tempfile
-    
-    with tempfile.NamedTemporaryFile(suffix='.fasta', mode='w') as f:
-        f.write(">test\nMKFLILLFNILCLFPVLAADNHGVGPQGASGVWD\n")
-        f.flush()
-        
-        with tempfile.TemporaryDirectory() as output_dir:
-            out = os.path.join(output_dir, "out.gb")
-            args = [
-                '--input', f.name,
-                '-o', str(out),
-                '--algorithms', 'InvalidAlgorithm',
-            ]
-            
-            with pytest.raises(ValueError, match="Unknown algorithm"):
-                main(args)
 
 
 # ============================================================================
@@ -320,7 +299,6 @@ def test_motif_integration():
                 args = [
                     '--input', f.name,
                     '-o', str(out),
-                    '--algorithms', 'none',  # Don't run ML algorithms
                     '--motif', '[DE](2)HS',
                 ]
                 

@@ -55,14 +55,13 @@
       ]
     },
     {
-      "name": "Algorithms",
-      "parameter": "algorithms",
-      "help": "Which algorithms to run. By default, run all algorithms. Use 'none' to run only motif search without ML algorithms. Note: MOTIF search is controlled separately via --motif.",
-      "type": "string",
-      "multiple": true,
-      "default": ["all"],
+      "name": "TMbed",
+      "parameter": "tmbed",
+      "help": "Run TMbed transmembrane and signal peptide prediction.",
+      "type": "boolean",
+      "default": false,
       "flags": [
-        "--algorithms"
+        "--tmbed"
       ]
     },
     {
