@@ -92,6 +92,32 @@ def test_enum_report_circular_1(shared_datadir):
                 assert l[4] == "circular"
                 assert len(l) == 5
 
+
+def test_enum_report_named_domain_count_1(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/enum_report.tsv"
+        enum_report.main([
+            "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+            "-o", out,
+            "--named_domain_count", "CcdB",
+            "--named_domain_count", "Condensation",
+        ])
+        assert Path(out).is_file()
+
+        with open(out) as f:
+            lines = f.readlines()
+            assert len(lines) == 5
+            assert lines[0].strip().split("\t") == [
+                "contig",
+                "named_domain_count_CcdB",
+                "named_domain_count_Condensation",
+            ]
+            for l_num in range(1, len(lines)):
+                l = lines[l_num].strip().split("\t")
+                assert f"pDONR201_{l_num}" == l[0]
+                assert l[1] == "1"
+                assert l[2] == "2"
+
 def test_enum_report_cds_1(shared_datadir):
     reference = [
 "pDONR201_1	pDONR201_1		TTTCCTGCGTTATCCCCTGATTCTGTGGATAACCGTATTACCGCTAGCCAGGAAGAGTTTGTAGAAACGCAAAAAGGCCATCCGTCAGGATGGCCTTCTGCTTAG	105		0.0",

@@ -20,6 +20,7 @@ from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Taxonomy import NCBITaxonomy
 from domainator.filter_domains import filter_domains
+import re
 
 SELECT_CATEGORIES = {"contig", "cds", "domain"}
 COLS_ARG_NAME = "output_cols"
@@ -518,6 +519,34 @@ def repeat_count_factory(spec):
     }
 
 
+def named_domain_count_factory(spec):
+    """Factory for counting domains with a given Domainator domain name.
+
+    Args:
+        spec: Domain name as string (as list from nargs=1)
+    """
+
+    domain_name = spec[0] if isinstance(spec, list) else spec
+
+    def named_domain_count(rec, loc, tax):
+        count = 0
+        for feature in rec.features:
+            if feature.type == DOMAIN_FEATURE_NAME:
+                if feature.qualifiers.get("name", [None])[0] == domain_name:
+                    count += 1
+        return count
+
+    safe_domain_name = re.sub(r"[^A-Za-z0-9]+", "_", str(domain_name)).strip("_")
+    if safe_domain_name == "":
+        safe_domain_name = "domain"
+
+    return {
+        "columns": [f"named_domain_count_{safe_domain_name}"],
+        "column_types": ["int"],
+        "function": named_domain_count,
+    }
+
+
 def starts_with_factory():
     """Factory for reporting the first character of the sequence."""
     
@@ -733,7 +762,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
                 "taxname_lineage": { "columns": ["taxid_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.names][1:]) }, # [1:] to remove root
                 "rank_lineage": { "columns": ["rank_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.ranks][1:]) }, # [1:] to remove root
                 }
-    DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
+    DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
     STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory} # factories that take no arguments
     
     headers = ["contig"]
@@ -857,7 +886,7 @@ def main(argv):
                         help="report the number of CDSs as a column in the output")
     
     parser.add_argument('--domain_count', action='append_const', dest=COLS_ARG_NAME, const="domain_count",
-                        help="report the number of domains as a column in the output")
+                        help="report the total number of domains as a column in the output")
     
     parser.add_argument('--definition', action='append_const', dest=COLS_ARG_NAME, const="definition",
                         help="report sequence definition line from the genbank file.")
@@ -896,6 +925,9 @@ def main(argv):
     
     parser.add_argument('--repeat_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="repeat_count",
                         help="Report the number of repeats of the given length or longer. For example AGGKKK will have repeat_count_1 = 3, repeat_count_2 = 2, and repeat_count_3 = 1")
+
+    parser.add_argument('--named_domain_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="named_domain_count",
+                        help="Count the number of Domainator domain features with the given domain name. Can be supplied multiple times. The column will be named named_domain_count_[domain].")
     
     parser.add_argument('--starts_with', action='append_const', dest=COLS_ARG_NAME, const="starts_with",
                         help="Reports the first character of the contig sequence.")
