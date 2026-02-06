@@ -183,6 +183,9 @@ class EnumTSVWriter():
         out_vals = list()
         try:
             for i, v in enumerate(values):
+                if v is None:
+                    out_vals.append("")
+                    continue
                 data_type = self.column_types[i]
                 if data_type == "str":
                     if v is None:
@@ -242,6 +245,9 @@ var tabledata = [""",
     def write_row(self, values):
         out_vals = list()
         for i, v in enumerate(values):
+            if v is None:
+                out_vals.append("")
+                continue
             data_type = self.column_types[i]
             if data_type == "str":
                 out_vals.append(json.dumps(v))
