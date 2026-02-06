@@ -15,6 +15,7 @@ import sys
 import re
 import math
 import warnings
+from pathlib import Path
 warnings.filterwarnings("ignore", module='numpy')
 
 from typing import List, Dict, Tuple, Optional, NamedTuple, Iterator
@@ -587,7 +588,20 @@ def find_features(
     if run_tmbed:
         try:
             # Use algorithm-specific dir if set, otherwise fall back to generic model_dir
-            effective_tmbed_model_dir = tmbed_model_dir if tmbed_model_dir else model_dir
+            if model_dir is not None:
+                if Path(model_dir).is_dir() is False:
+                    raise ValueError(
+                        f"Model directory {model_dir} does not exist or is not a directory."
+                    )
+
+            if tmbed_model_dir:
+                effective_tmbed_model_dir = tmbed_model_dir
+            elif model_dir:
+                effective_tmbed_model_dir = str(Path(model_dir) / "tmbed")
+                Path(effective_tmbed_model_dir).mkdir(parents=True, exist_ok=True)
+            else:
+                effective_tmbed_model_dir = None
+                
             tmbed_components = get_tmbed_predictor(gpu_device, cpu, effective_tmbed_model_dir)
             from tmbed.utils import get_md5
         except ImportError as e:
