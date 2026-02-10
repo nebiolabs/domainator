@@ -5,6 +5,7 @@ from io import BytesIO, StringIO
 from pyhmmer import easel
 from pyhmmer.plan7 import HMM
 from domainator.hmmer_build import hmmer_build, main
+from domainator.utils import pyhmmer_decode
 
 
 @pytest.fixture
@@ -29,7 +30,7 @@ def test_hmmer_build_with_required_params():
     with open(msa_file, "rb") as file:
         hmm = hmmer_build(file, name="test_profile")
         assert isinstance(hmm, HMM)
-        assert hmm.name.decode() == "test_profile"
+        assert pyhmmer_decode(hmm.name) == "test_profile"
 
     os.unlink(msa_file)
 
@@ -40,9 +41,9 @@ def test_hmmer_build_with_optional_params():
     with open(msa_file, "rb") as file:
         hmm = hmmer_build(file, name="test_profile", acc="P12345", desc="Test profile description", alphabet=easel.Alphabet.dna())
         assert isinstance(hmm, HMM)
-        assert hmm.name.decode() == "test_profile"
-        assert hmm.accession.decode() == "P12345"
-        assert hmm.description.decode() == "Test profile description"
+        assert pyhmmer_decode(hmm.name) == "test_profile"
+        assert pyhmmer_decode(hmm.accession) == "P12345"
+        assert pyhmmer_decode(hmm.description) == "Test profile description"
 
     os.unlink(msa_file)
 
@@ -52,9 +53,9 @@ def test_hmmer_build_with_binaryio():
 
     hmm = hmmer_build(msa_file, name="test_profile", acc="P12345", desc="Test profile description", alphabet=easel.Alphabet.dna())
     assert isinstance(hmm, HMM)
-    assert hmm.name.decode() == "test_profile"
-    assert hmm.accession.decode() == "P12345"
-    assert hmm.description.decode() == "Test profile description"
+    assert pyhmmer_decode(hmm.name) == "test_profile"
+    assert pyhmmer_decode(hmm.accession) == "P12345"
+    assert pyhmmer_decode(hmm.description) == "Test profile description"
 
 
 def test_main_with_required_params(msa_file, capsys):
@@ -64,11 +65,11 @@ def test_main_with_required_params(msa_file, capsys):
     assert "NAME  test_profile" in captured.out
 
 def test_main_with_optional_params(msa_file, capsys):
-        main(["--name", "test_profile", "--acc", "P12345", "--desc", "Test profile description", "--input", msa_file, "--alphabet", "dna"])
-        caputured = capsys.readouterr()
-        output = caputured.out
-        assert "HMMER3/f" in output
-        assert "NAME  test_profile" in output
-        assert "ACC   P12345" in output
-        assert "DESC  Test profile description" in output
+    main(["--name", "test_profile", "--acc", "P12345", "--desc", "Test profile description", "--input", msa_file, "--alphabet", "dna"])
+    captured = capsys.readouterr()
+    output = captured.out
+    assert "HMMER3/f" in output
+    assert "NAME  test_profile" in output
+    assert "ACC   P12345" in output
+    assert "DESC  Test profile description" in output
 

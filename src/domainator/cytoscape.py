@@ -4,6 +4,7 @@ import numpy as np
 import html
 import seaborn as sns
 import pandas as pd
+from pandas.api.types import is_integer_dtype, is_float_dtype
 import xml.etree.ElementTree as ET
 from typing import Dict
 
@@ -35,9 +36,10 @@ def get_column_types(df):
     types = df.dtypes
     out = dict()
     for column, datatype in types.items():
-        if np.issubdtype(datatype, np.integer):
+        # Handle pandas extension dtypes like StringDtype that numpy cannot interpret.
+        if is_integer_dtype(datatype):
             out[column] = 'integer'
-        elif np.issubdtype(datatype, np.floating):
+        elif is_float_dtype(datatype):
             out[column] = 'real'
         else:
             out[column] = 'string'
