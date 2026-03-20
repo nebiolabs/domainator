@@ -1,6 +1,10 @@
-"""Search for matches to hmm profiles
+"""Search for matches to protein or nucleic-acid references.
 
-For searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries (profiles or protein sequences).
+For searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries.
+Protein references are searched against CDSs or protein records.
+Nucleic-acid references are searched against whole nucleotide contigs.
+Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
+Protein inputs cannot be searched with nucleotide references.
 
 Returns the contigs with hits, possibly truncated to the neighborhood around the hits.
 
@@ -224,12 +228,12 @@ def main(argv):
 
     parser.add_argument('-i', '--input', default=None, required=True,
                        nargs='+', type=str,
-                       help="the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.")
+                       help="the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.")
     parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
     parser.add_argument('-r', '--references', required=True, type=str,
                         default=None, nargs='+',
-                        help="the names of the HMM files with profiles to search. Or protein query files. ") 
+                        help="reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.") 
 
     parser.add_argument('-o', '--output', default=None, type=str, required=False,
                         help="output genbank filename. If not supplied, writes to stdout.")
@@ -248,7 +252,7 @@ def main(argv):
                         help="hits with E value lower than this will be filtered out. Not frequently used. Use only if you want to eliminate close matches. Must be >=0. [default 0]")
 
     parser.add_argument('--max_mode', action="store_true", default=False,
-                        help="Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
+                        help="Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
 
     parser.add_argument('--max_hits', type=int, default=None,
                         help="the maximum number of CDSs returned by the search. Prioritized by bitscore of best scoring profile. [default: return all hits passing the evalue threshold]")
@@ -282,7 +286,7 @@ def main(argv):
 
 
     parser.add_argument('--translate', action='store_true', default=False,
-                            help="by default, nucleotide databases will return nucleotide hits. When --translate is set, CDS hits will be translated before writing. Note that --translate is incompatble with neighborhood extraction.")
+                            help="by default, nucleotide inputs return nucleotide regions. When --translate is set, CDS hits are translated before writing. Whole-contig nucleic-acid hits are not translated. Note that --translate is incompatble with neighborhood extraction.")
 
 
     ### Select by CDS options ###
@@ -313,7 +317,7 @@ def main(argv):
                        help="by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.")
 
     parser.add_argument("--batch_size", type=int, default=10000, required=False,
-                        help="Approximately how many protein sequences to search at one time in a batch.")
+                        help="Approximately how many target sequences to search at one time in a batch.")
 
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] "

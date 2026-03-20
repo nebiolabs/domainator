@@ -1,11 +1,15 @@
-""" Annotate sequence files with hmm profiles
+""" Annotate sequence files with protein or nucleic-acid references.
 
-For each CDS or protein in the input file, run the hmmer3 against the target domain hmm database to annotate all the different known/detectable domains in the CDS.
-Hits with E value lower than the threshold (default 10) will be added to the annotation in genbank output file as a new "feature"
+Protein references are searched against CDSs or protein records with hmmsearch or phmmer.
+Nucleic-acid references are searched against whole nucleotide contigs with nhmmer or infernal cmsearch.
+Hits passing the threshold are added to the output GenBank file as new Domainator features.
+
+Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
+Protein inputs cannot be searched with nucleotide references.
 
 NOTES: genbank files that contain translation annotations in their CDS features will run much faster than those without translation annotations.
-       domainate.py stores the entire reference set (usually the hmm database) in memory, so it is not suitable for cases where the reference 
-       set is larger than your system memory (this may change in future versions).
+    domainate.py stores the entire reference set in memory, so it is not suitable for cases where the reference
+    set is larger than your system memory (this may change in future versions).
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
@@ -978,14 +982,14 @@ def main(argv):
 
     parser.add_argument('-i', '--input', default=None, required=True,
                        nargs='+', type=str,
-                       help="the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.")
+                       help="the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.")
     parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
     
     # TODO: might be better to allow user to have different command line arguments for different kinds of databases? Particularly for precompiled databases like hhsuite and foldseek.
     parser.add_argument('-r', '--references', required=False, type=str,
                         default=None, nargs='+',
-                        help="the names of the HMM files with profiles to search. Or reference protein fasta files.")
+                        help="reference files to search against the input. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.")
     
     parser.add_argument("--foldseek", nargs="+", default=None, type=str, required=False,
                         help="Foldseek database files.")
@@ -1014,7 +1018,7 @@ def main(argv):
                         help="the maximum number of domains to be reported per CDS. If not specified, then no max_domains filter is applied.")
     
     parser.add_argument('--max_mode', action="store_true", default=False,
-                        help="Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
+                        help="Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.")
@@ -1033,7 +1037,7 @@ def main(argv):
                         help="when activated, new annotations will not be added to the file. This is useful if you are just trying to extract a set of contigs for annotation in a later step.")
 
     parser.add_argument("--batch_size", type=int, default=10000, required=False,
-                        help="How many protein sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.")
+                        help="How many target sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.")
     #TODO: maybe add an hmm_batch_size parameter in case there are really huge hmm files that don't all fit in memory?
  
     parser.add_argument("--offset", type=int, default=None, required=False,

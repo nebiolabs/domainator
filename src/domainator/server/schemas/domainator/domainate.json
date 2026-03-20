@@ -2,7 +2,7 @@
   "id": "domainate",
   "display_name": "Domainate",
   "category": "Editors",
-  "description": "Annotate sequence files with hmm profiles\n\nFor each CDS or protein in the input file, run the hmmer3 against the target domain hmm database to annotate all the different known/detectable domains in the CDS.\nHits with E value lower than the threshold (default 10) will be added to the annotation in genbank output file as a new \"feature\"\n\nNOTES: genbank files that contain translation annotations in their CDS features will run much faster than those without translation annotations.\n       domainate.py stores the entire reference set (usually the hmm database) in memory, so it is not suitable for cases where the reference \n       set is larger than your system memory (this may change in future versions).",
+  "description": "Annotate sequence files with protein or nucleic-acid references\n\nProtein references are searched against CDSs or protein records with hmmsearch or phmmer. Nucleic-acid references are searched against whole nucleotide contigs with nhmmer or infernal cmsearch. Hits passing the threshold are added to the output GenBank file as Domainator annotations.\n\nSupported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. Protein inputs cannot be searched with nucleotide references.\n\nNOTES: genbank files that contain translation annotations in their CDS features will run much faster than those without translation annotations.\n       domainate.py stores the entire reference set in memory, so it is not suitable for cases where the reference set is larger than your system memory (this may change in future versions).",
   "runner": "module",
   "priority": 1,
   "entry_point": "domainator.domainate",
@@ -10,7 +10,7 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.",
+      "help": "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.",
       "type": "file",
       "multiple": true,
       "flags": [
@@ -45,7 +45,7 @@
     {
       "name": "References",
       "parameter": "references",
-      "help": "the names of the HMM files with profiles to search. Or reference protein fasta files.",
+      "help": "reference files to search against the input. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.",
       "type": "file",
       "multiple": true,
       "flags": [
@@ -56,7 +56,9 @@
         "hmm",
         "fasta",
         "faa",
-        "fa"
+        "fa",
+        "fna",
+        "cm"
       ]
     },
     {
@@ -191,7 +193,7 @@
     {
       "name": "Max Mode",
       "parameter": "max_mode",
-      "help": "Run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
+      "help": "Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
       "type": "boolean",
       "default": false,
       "flags": [
@@ -231,7 +233,7 @@
     {
       "name": "Batch Size",
       "parameter": "batch_size",
-      "help": "How many protein sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.",
+      "help": "How many target sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.",
       "type": "integer",
       "default": 10000,
       "flags": [
@@ -258,33 +260,3 @@
     }
   ]
 }
-
-    // {
-    //   "name": "Foldseek",
-    //   "parameter": "foldseek",
-    //   "help": "Foldseek database files.",
-    //   "type": "string",
-    //   "multiple": true,
-    //   "flags": [
-    //     "--foldseek"
-    //   ]
-    // },
-    // {
-    //   "name": "Esm2 3Di Weights",
-    //   "parameter": "esm2_3Di_weights",
-    //   "help": "Path to checkpoint file for esm2_3Di model.",
-    //   "type": "string",
-    //   "flags": [
-    //     "--esm2_3Di_weights"
-    //   ]
-    // },
-    //  {
-    //   "name": "Esm2 3Di Device",
-    //   "parameter": "esm2_3Di_device",
-    //   "help": "device to use for esm2_3Di model.",
-    //   "type": "string",
-    //   "default": "cuda:0",
-    //   "flags": [
-    //     "--esm2_3Di_device"
-    //   ]
-    // },
