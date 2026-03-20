@@ -4,6 +4,7 @@ from domainator import clean_sequences
 from domainator import utils
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.Seq import Seq
+from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
 
 
 def test_clean_name_for_newick():
@@ -122,6 +123,26 @@ def test_clean_sequences_strip():
     
     assert str(result[0].seq) == "MKTLV"
     assert str(result[1].seq) == "AKSLV"
+
+
+def test_clean_sequences_strip_preserves_feature_coordinates():
+    """Test that stripping updates feature coordinates instead of only replacing the sequence."""
+    record = SeqRecord(Seq("XXATGCYY"), id="seq1", name="seq1", description="test")
+    record.annotations["molecule_type"] = "DNA"
+    record.features = [
+        SeqFeature(FeatureLocation(0, len(record.seq)), type="source", qualifiers={}),
+        SeqFeature(FeatureLocation(2, 6), type="CDS", qualifiers={"cds_id": ["cds1"]}),
+    ]
+
+    result = list(clean_sequences.clean_sequences([record], fasta_type="nucleotide", strip=True))
+
+    assert len(result) == 1
+    assert str(result[0].seq) == "ATGC"
+    assert len(result[0].features) == 2
+    assert int(result[0].features[0].location.start) == 0
+    assert int(result[0].features[0].location.end) == 4
+    assert int(result[0].features[1].location.start) == 0
+    assert int(result[0].features[1].location.end) == 4
 
 
 def test_clean_sequences_filter():

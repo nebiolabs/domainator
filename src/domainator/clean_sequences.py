@@ -7,15 +7,13 @@ This module provides functionality to:
 - Filter out sequences containing non-canonical residues
 
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
-import re
 
-from domainator.utils import parse_seqfiles, write_genbank
+from domainator.utils import parse_seqfiles, slice_record, write_genbank
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.Bio import SeqIO
-from domainator.Bio.Seq import Seq
 from domainator.Bio.Data import IUPACData
 
 
@@ -86,19 +84,23 @@ def strip_non_canonical(sequence, canonical_chars):
     Returns:
         Stripped sequence string
     """
+    start, end = strip_non_canonical_bounds(sequence, canonical_chars)
+    return str(sequence)[start:end]
+
+
+def strip_non_canonical_bounds(sequence, canonical_chars):
+    """Return the slice bounds after trimming non-canonical characters from both ends."""
     seq_upper = str(sequence).upper()
-    
-    # Strip from the left
+
     start = 0
     while start < len(seq_upper) and (seq_upper[start] not in canonical_chars or seq_upper[start] == '*'):
         start += 1
-    
-    # Strip from the right
+
     end = len(seq_upper)
     while end > start and (seq_upper[end - 1] not in canonical_chars or seq_upper[end - 1] == '*'):
         end -= 1
-    
-    return str(sequence)[start:end]
+
+    return start, end
 
 
 def has_non_canonical(sequence, canonical_chars):
@@ -153,8 +155,9 @@ def clean_sequences(contigs, fasta_type="protein", clean_name=False, deduplicate
         
         # Strip non-canonical characters from ends if requested
         if strip:
-            new_seq = strip_non_canonical(contig.seq, canonical_chars)
-            contig.seq = Seq(new_seq)
+            start, end = strip_non_canonical_bounds(contig.seq, canonical_chars)
+            if start != 0 or end != len(contig.seq):
+                contig = slice_record(contig, start, end)
         
         # Filter out sequences with non-canonical characters if requested
         if filter_by_aa:
