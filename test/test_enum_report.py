@@ -5,6 +5,8 @@ from helpers import compare_files
 import pytest
 
 from domainator import enum_report
+from domainator.domainate import main as domainate_main
+from domainator.domain_search import main as domain_search_main
 
 def test_enum_report_1(shared_datadir):
     
@@ -256,6 +258,85 @@ def test_enum_report_protein_domain_1(shared_datadir):
                 assert len(ref_line) == len(l)
                 for i in range(len(ref_line)):
                     assert ref_line[i] == l[i]
+
+
+def test_enum_report_nucleotide_contig_annotations(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/annotated.gb"
+        out = output_dir + "/enum_report.tsv"
+
+        domainate_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "--output", annotated,
+            "--evalue", "0.1",
+        ])
+
+        enum_report.main([
+            "-i", annotated,
+            "-o", out,
+            "--domains",
+            "--domain_count",
+            "--named_domain_count", "dna_query_1",
+        ])
+
+        with open(out) as handle:
+            lines = [line.rstrip("\n").split("\t") for line in handle]
+
+        assert lines[0] == ["contig", "domains", "domain_count", "named_domain_count_dna_query_1"]
+        assert len(lines) == 2
+        assert lines[1][0] == "dna_target_1"
+        assert lines[1][1] == "dna_query_1"
+        assert lines[1][2] == "1"
+        assert lines[1][3] == "1"
+
+
+def test_enum_report_nucleotide_domain_search(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/search.gb"
+        out = output_dir + "/enum_report.tsv"
+
+        domain_search_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "-o", annotated,
+            "--whole_contig",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        enum_report.main([
+            "-i", annotated,
+            "-o", out,
+            "--domain_search",
+        ])
+
+        with open(out) as handle:
+            lines = [line.rstrip("\n").split("\t") for line in handle]
+
+        assert lines[0] == [
+            "contig",
+            "best_query",
+            "query_description",
+            "query_start",
+            "query_end",
+            "query_length",
+            "match_start",
+            "match_end",
+            "match_strand",
+            "match_score",
+            "match_identity",
+        ]
+        assert len(lines) == 2
+        assert lines[1][0] == "dna_target_1"
+        assert lines[1][1] == "dna_query_1"
+        assert lines[1][3] == "1"
+        assert lines[1][5] == "62"
+        assert lines[1][8] == "+"
+        assert float(lines[1][9]) > 0.0
+
 
 
 def test_enum_report_rename_columns_1(shared_datadir):

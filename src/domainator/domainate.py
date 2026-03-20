@@ -14,10 +14,11 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import NamedTuple, List, Dict, Set, Tuple, Optional, Union, Iterable, Iterator
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, get_file_type, read_pyhmmer_peptide_fastas, filter_by_taxonomy, pyhmmer_decode
+from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, read_infernal_cms, get_file_type, read_pyhmmer_fastas, read_pyhmmer_peptide_fastas, filter_by_taxonomy, pyhmmer_decode
 import pyhmmer
+import pyinfernal
 from domainator import __version__, RawAndDefaultsFormatter
 import pyrodigal
 from pathlib import Path
@@ -34,6 +35,67 @@ from domainator import foldseek as foldseek_lib
 
 
 MAX_PROTEIN_SIZE = 100_000
+NUCLEIC_ACID_REFERENCE_GROUPS = {"nhmmer", "infernal"}
+
+
+def _is_nucleic_acid_alphabet(alphabet) -> bool:
+    return alphabet.is_dna() or alphabet.is_rna()
+
+
+def _fasta_is_nucleic_acid(file_name: str) -> bool:
+    with pyhmmer.easel.SequenceFile(file_name, digital=True) as seq_file:
+        for seq in seq_file:
+            return _is_nucleic_acid_alphabet(seq.alphabet)
+    return False
+
+
+def _hmm_is_nucleic_acid(file_name: str) -> bool:
+    with pyhmmer.plan7.HMMFile(file_name) as hmm_file:
+        for hmm in hmm_file:
+            return _is_nucleic_acid_alphabet(hmm.alphabet)
+    return False
+
+
+def has_nucleic_acid_references(reference_groups) -> bool:
+    return any(group in reference_groups for group in NUCLEIC_ACID_REFERENCE_GROUPS)
+
+
+def get_reference_length(reference) -> int:
+    try:
+        return reference.M
+    except AttributeError:
+        return len(reference.sequence)
+
+
+def get_max_reference_length(reference_groups, algorithm: str) -> int:
+    if algorithm not in reference_groups:
+        return 0
+    max_length = 0
+    for db_dict in reference_groups[algorithm].values():
+        for reference in db_dict.values():
+            max_length = max(max_length, get_reference_length(reference))
+    return max_length
+
+
+def get_contig_search_sequence(record: SeqRecord, extension_length: int = 0) -> str:
+    sequence = ''.join(filter(str.isalpha, str(record.seq)))
+    if record.annotations.get("topology") == "circular" and extension_length > 0:
+        sequence += sequence[:extension_length]
+    return sequence
+
+
+def validate_input_molecule_types(molecule_types, reference_groups):
+    if "protein" in molecule_types and has_nucleic_acid_references(reference_groups):
+        raise ValueError("Cannot search protein inputs with a nucleotide reference.")
+
+
+def get_input_molecule_types(input_files, default_molecule_type="protein"):
+    molecule_types = set()
+    for input_file in input_files:
+        for rec in parse_seqfiles((input_file,), None, default_molecule_type=default_molecule_type, max_recs=1):
+            molecule_types.add(rec.annotations["molecule_type"])
+    return molecule_types
+
 #{"name": <hmm_name> as str, "desc": <hmm_description> as str, "evalue": <domain_evalue> as float,
 #        "score": <domain_score> as float, "start": <current_left> as int, "end": <current_right> as int}
 class SearchResult(NamedTuple):
@@ -63,6 +125,10 @@ class SearchResult(NamedTuple):
     """length of reference hmm (hmm_length)"""
     program:str = "."
     """name of program that made the hit (hmmsearch, phmmer, foldseek)"""
+    strand: int = 1
+    """strand of the hit on the target sequence"""
+    target_kind: str = "protein"
+    """whether the hit targets a protein/CDS or a nucleic acid contig span"""
 
 
 
@@ -137,6 +203,104 @@ def foldseek_hits_to_search_results(hits, references, evalue, db_name, min_evalu
         
         out[contig_index][cds_index].append(SearchResult(domain_name, domain_description, domain_accession, domain_evalue, score, start, end, db_name, identity, ref_start, ref_end, ref_len, program))
 
+
+def nhmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, out):
+
+    for top_hits in hits:
+        query_name = pyhmmer_decode(top_hits.query.name)
+        reference = references[query_name]
+        if reference.description is None:
+            query_description = ""
+        else:
+            query_description = pyhmmer_decode(reference.description)
+        for hit in top_hits:
+            hit_name = pyhmmer_decode(hit.name).split(",")
+            contig_index = int(hit_name[0])
+            contig_length = int(hit_name[2]) if len(hit_name) > 2 else None
+            for domain in hit.domains:
+                if domain.i_evalue < evalue and domain.i_evalue >= min_evalue:
+                    identity_sequence = getattr(domain.alignment, "identity_sequence", "")
+                    match_positions = sum(1 for c in identity_sequence if c.isalpha())
+                    alignment_length = domain.alignment.hmm_to - (domain.alignment.hmm_from - 1)
+                    identity = 0.0
+                    if alignment_length > 0:
+                        identity = 100 * match_positions / alignment_length
+                    if contig_index not in out:
+                        out[contig_index] = dict()
+                    if -1 not in out[contig_index]:
+                        out[contig_index][-1] = list()
+                    try:
+                        reference_length = reference.M
+                    except AttributeError:
+                        reference_length = len(reference.sequence)
+                    start = domain.env_from - 1
+                    end = domain.env_to
+                    if contig_length is not None and start >= contig_length:
+                        continue
+                    out[contig_index][-1].append(
+                        SearchResult(
+                            query_name,
+                            query_description,
+                            "",
+                            domain.i_evalue,
+                            domain.score,
+                            start,
+                            end,
+                            db_name,
+                            identity,
+                            domain.alignment.hmm_from,
+                            domain.alignment.hmm_to,
+                            reference_length,
+                            "nhmmer",
+                            1,
+                            "nucleic_acid",
+                        )
+                    )
+
+
+def infernal_hits_to_search_results(hits, references, evalue, db_name, min_evalue, out):
+
+    for top_hits in hits:
+        query_name = pyhmmer_decode(top_hits.query.name)
+        query_description = pyhmmer_decode(top_hits.query.description) if top_hits.query.description is not None else ""
+        query_accession = pyhmmer_decode(top_hits.query.accession) if top_hits.query.accession is not None else ""
+        reference = references[query_name]
+        for hit in top_hits:
+            if hit.evalue < evalue and hit.evalue >= min_evalue:
+                hit_name = pyhmmer_decode(hit.name).split(",")
+                contig_index = int(hit_name[0])
+                contig_length = int(hit_name[2]) if len(hit_name) > 2 else None
+                if contig_index not in out:
+                    out[contig_index] = dict()
+                if -1 not in out[contig_index]:
+                    out[contig_index][-1] = list()
+                target_from = hit.alignment.target_from
+                target_to = hit.alignment.target_to
+                strand = -1 if hit.strand == "-" else 1
+                start = min(target_from, target_to) - 1
+                end = max(target_from, target_to)
+                if contig_length is not None and start >= contig_length:
+                    continue
+                out[contig_index][-1].append(
+                    SearchResult(
+                        query_name,
+                        query_description,
+                        query_accession,
+                        hit.evalue,
+                        hit.score,
+                        start,
+                        end,
+                        db_name,
+                        0.0,
+                        hit.alignment.cm_from,
+                        hit.alignment.cm_to,
+                        reference.M,
+                        "infernal",
+                        strand,
+                        "nucleic_acid",
+                    )
+                )
+
     
     
 
@@ -158,21 +322,38 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
 
     out = {}
     hmm_files = []
+    nucleotide_hmm_files = []
+    cm_files = []
     fasta_files = []
+    nucleotide_fasta_files = []
     if reference_files is not None:
         for file in reference_files:
             file_type = get_file_type(file)
-            if file_type not in {"fasta", "hmm"}:
-                raise RuntimeError("Reference files must be fasta or hmmer.")
+            if file_type not in {"fasta", "hmm", "cm"}:
+                raise RuntimeError("Reference files must be fasta, hmmer, or infernal cm.")
             if file_type == "hmm":
-                hmm_files.append(file)
+                if _hmm_is_nucleic_acid(file):
+                    nucleotide_hmm_files.append(file)
+                else:
+                    hmm_files.append(file)
+            elif file_type == "cm":
+                cm_files.append(file)
             else:
-                fasta_files.append(file)
+                if _fasta_is_nucleic_acid(file):
+                    nucleotide_fasta_files.append(file)
+                else:
+                    fasta_files.append(file)
     
     if len(hmm_files) > 0:
         out["hmmsearch"] = read_hmms(hmm_files)
     if len(fasta_files) > 0:
         out["phmmer"] = read_pyhmmer_peptide_fastas(fasta_files)
+    if len(nucleotide_hmm_files) > 0:
+        out["nhmmer"] = read_hmms(nucleotide_hmm_files)
+    if len(nucleotide_fasta_files) > 0:
+        out["nhmmer"] = {**out.get("nhmmer", {}), **read_pyhmmer_fastas(nucleotide_fasta_files)}
+    if len(cm_files) > 0:
+        out["infernal"] = read_infernal_cms(cm_files)
 
     if foldseek is not None:
         out["foldseek"] = dict()
@@ -181,7 +362,7 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     
     return out
 
-def run_search(proteins, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False):
+def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False):
     """
     Args:
         proteins: list
@@ -210,7 +391,7 @@ def run_search(proteins, foldseek, references, evalue:int, cpu:int, z=None, min_
     """
 
     out = dict()
-    if len(proteins) == 0:
+    if len(proteins) == 0 and len(nucleic_acids) == 0 and len(infernal_nucleic_acids) == 0:
         return out
 
 
@@ -234,6 +415,13 @@ def run_search(proteins, foldseek, references, evalue:int, cpu:int, z=None, min_
             elif algorithm == "foldseek":
                 hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue)
                 foldseek_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "foldseek", out)
+            elif algorithm == "nhmmer":
+                hits = pyhmmer.hmmer.nhmmer(db_dict[db_name].values(), nucleic_acids, cpus=cpu, E=evalue, incE=evalue)
+                nhmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, out)
+            elif algorithm == "infernal":
+                infernal_sequences = pyhmmer.easel.DigitalSequenceBlock(pyhmmer.easel.Alphabet.rna(), infernal_nucleic_acids)
+                hits = pyinfernal.cmsearch(db_dict[db_name].values(), infernal_sequences, cpus=cpu, parallel="queries")
+                infernal_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, out)
     return out
 
 
@@ -317,6 +505,50 @@ def get_prot_list(contig, unique_id):
 
 def get_pyhmmer_digital_sequence(name, prot):
     return pyhmmer.easel.TextSequence(name=bytes(name, encoding='utf8'),sequence=prot).digitize(pyhmmer.easel.Alphabet.amino())
+
+
+def get_pyhmmer_digital_nucleotide_sequence(name, sequence, alphabet=None):
+    if alphabet is None:
+        alphabet = pyhmmer.easel.Alphabet.dna()
+    return pyhmmer.easel.TextSequence(name=bytes(name, encoding='utf8'), sequence=sequence).digitize(alphabet)
+
+
+def circular_hit_segments(hit: SearchResult, contig_length: int):
+    if hit.end <= contig_length:
+        return [(hit.start, hit.end)]
+    return [(hit.start, contig_length), (0, hit.end - contig_length)]
+
+
+def circular_hit_contains(container: SearchResult, contained: SearchResult, contig_length: int) -> bool:
+    container_segments = circular_hit_segments(container, contig_length)
+    for contained_segment in circular_hit_segments(contained, contig_length):
+        if not any(segment[0] <= contained_segment[0] and segment[1] >= contained_segment[1] for segment in container_segments):
+            return False
+    return True
+
+
+def deduplicate_contig_hits(contig: SeqRecord, hits_list: List[SearchResult]) -> List[SearchResult]:
+    if contig.annotations.get("topology") != "circular":
+        return hits_list
+    contig_length = len(contig)
+    kept = list()
+    for hit in sorted(hits_list, key=lambda x: x.score, reverse=True):
+        if any(
+            existing.name == hit.name and existing.database == hit.database and existing.program == hit.program and circular_hit_contains(existing, hit, contig_length)
+            for existing in kept
+        ):
+            continue
+        kept.append(hit)
+    return kept
+
+
+def build_contig_hit_location(contig: SeqRecord, hit: SearchResult):
+    if contig.annotations.get("topology") == "circular" and hit.end > len(contig):
+        return CompoundLocation([
+            FeatureLocation(hit.start, len(contig), strand=hit.strand),
+            FeatureLocation(0, hit.end - len(contig), strand=hit.strand),
+        ])
+    return FeatureLocation(hit.start, min(hit.end, len(contig)), strand=hit.strand)
 
 def filter_by_overlap(hits, allowed_percent_overlap, presorted=False, by_db=False):
     """
@@ -483,9 +715,77 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
     # makes a temporary annotation in the SeqRecord containing a {cds_index: best_domain_score}
     contig.set_hit_scores(hit_scores)
     contig.set_hit_names(best_hits)
+
+
+def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[SearchResult], max_hits: int, max_overlap: float, no_annotations: bool, best_annotation: bool, overlap_by_db: bool = False):
+    hits_list = deduplicate_contig_hits(contig, hits_list)
+    hits_list.sort(key=lambda x: x.score, reverse=True)
+    contig.set_hit_best_score(hits_list[0].score)
+    hit_scores = dict()
+    hit_names = dict()
+
+    if best_annotation:
+        hit = hits_list[0]
+        desc = hit.desc if hit.desc.strip() else "."
+        acc = hit.acc if hit.acc.strip() else "."
+        feature_index = len(contig.features)
+        contig.features.append(
+            SeqFeature(
+                location=build_contig_hit_location(contig, hit),
+                type=DOMAIN_SEARCH_BEST_HIT_NAME,
+                qualifiers={
+                    'program': [hit.program],
+                    'database': [hit.database],
+                    'description': [desc],
+                    'accession': [acc],
+                    'evalue': [f"{hit.evalue:.1e}"],
+                    'score': [f"{hit.score:.1f}"],
+                    'name': [hit.name],
+                    'identity': [f"{hit.identity:.1f}"],
+                    'cds_id': ['contig'],
+                    'rstart': [f"{hit.rstart}"],
+                    'rend': [f"{hit.rend}"],
+                    'rlen': [f"{hit.rlen}"],
+                    'target_kind': [hit.target_kind],
+                },
+            )
+        )
+        hit_scores[feature_index] = hit.score
+        hit_names[feature_index] = hit.name
+
+    contig.set_hit_scores(hit_scores)
+    contig.set_hit_names(hit_names)
+
+    if no_annotations:
+        return
+
+    for hit in filter_by_overlap(hits_list[:max_hits], max_overlap, presorted=True, by_db=overlap_by_db):
+        desc = hit.desc if hit.desc.strip() else "."
+        acc = hit.acc if hit.acc.strip() else "."
+        contig.features.append(
+            SeqFeature(
+                location=build_contig_hit_location(contig, hit),
+                type=DOMAIN_FEATURE_NAME,
+                qualifiers={
+                    'program': [hit.program],
+                    'database': [hit.database],
+                    'description': [desc],
+                    'accession': [acc],
+                    'evalue': [f"{hit.evalue:.1e}"],
+                    'score': [f"{hit.score:.1f}"],
+                    'name': [hit.name],
+                    'identity': [f"{hit.identity:.1f}"],
+                    'cds_id': ['contig'],
+                    'rstart': [f"{hit.rstart}"],
+                    'rend': [f"{hit.rend}"],
+                    'rlen': [f"{hit.rlen}"],
+                    'target_kind': [hit.target_kind],
+                },
+            )
+        )
         
 
-def domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False):
     """
 
     Args:
@@ -508,12 +808,14 @@ def domainator_inner(contigs_list, proteins_list, foldseek_list, reference_group
     Returns:
         : 
     """
-    hits =  run_search(proteins_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
+    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
         if contig.annotations['molecule_type'] == "protein":
             add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
+        elif -1 in hits[contig_id]:
+            add_contig_nucleic_acid_annotations(contig, hits[contig_id][-1], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
         else:
             add_nucleic_acid_annotations(contig, hits[contig_id], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
 
@@ -628,10 +930,15 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
     
     contigs_list = list()
     proteins_list = list()
+    nucleic_acid_list = list()
+    infernal_nucleic_acid_list = list()
     foldseek_list = list()
     contig_index = 0
     if include_taxids or exclude_taxids:
         seq_iterator = filter_by_taxonomy(seq_iterator, include_taxids, exclude_taxids, ncbi_taxonomy)
+
+    nhmmer_extension = get_max_reference_length(reference_groups, "nhmmer")
+    infernal_extension = get_max_reference_length(reference_groups, "infernal")
     
     for rec in seq_iterator:
         CDS_count = clean_rec(rec, best_annotation, clear_domainator_annotations, clear_CDS_annotations)
@@ -642,18 +949,24 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index)])
         if "hmmsearch" in reference_groups or "phmmer" in reference_groups or "foldseek" in reference_groups:
             proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index)])
+        if "nhmmer" in reference_groups and rec.annotations['molecule_type'] != "protein":
+            nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, nhmmer_extension)))
+        if "infernal" in reference_groups and rec.annotations['molecule_type'] != "protein":
+            infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
             for contig_id in range(len(contigs_list)):
                 if contig_id in return_contigs:
                     yield contigs_list[contig_id]
             contigs_list = list()
             proteins_list = list()
+            nucleic_acid_list = list()
+            infernal_nucleic_acid_list = list()
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
     #for contig_id in range(len(contigs_list)): #TODO: why did I think this more complicated loop was a good idea?
     #    if contig_id in return_contigs:
     for contig_id in return_contigs:
@@ -745,6 +1058,10 @@ def main(argv):
     if params.references is None and params.foldseek is None:
         raise ValueError("You must specify at least one reference database.")
 
+    reference_groups = read_references(params.references, foldseek=params.foldseek)
+    molecule_types = get_input_molecule_types(params.input, default_molecule_type=params.fasta_type)
+    validate_input_molecule_types(molecule_types, reference_groups)
+
     ## figure out if we are using every contig or just certain, named contigs ##
     #contigs_needed = list_and_file_to_dict_keys(params.contigs, params.contigs_file)
 
@@ -781,7 +1098,7 @@ def main(argv):
     write_genbank(
         domainate(
             parse_seqfiles(params.input, None, filetype_override=None, seek_to=params.offset, max_recs=recs_to_read, default_molecule_type=params.fasta_type),
-            references=params.references,
+            references=None,
             z=Z,
             evalue=params.evalue,
             min_evalue=params.min_evalue,
@@ -791,12 +1108,13 @@ def main(argv):
             batch_size=params.batch_size,
             hits_only=params.hits_only,
             no_annotations=params.no_annotations,
+            pre_parsed_references=reference_groups,
             gene_call=params.gene_call,
             ncbi_taxonomy=ncbi_taxonomy,
             include_taxids=params.include_taxids,
             exclude_taxids=params.exclude_taxids,
             max_mode=params.max_mode,
-            foldseek=params.foldseek,
+            foldseek=None,
             esm2_3Di_weights=params.esm2_3Di_weights,
             esm2_3Di_device=params.esm2_3Di_device,
             overlap_by_db=params.overlap_by_db,

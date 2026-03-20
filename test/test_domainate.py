@@ -2,9 +2,13 @@ import os
 from domainator.domainate import main, filter_by_overlap, SearchResult
 import tempfile
 from glob import glob
+from domainator.Bio.Seq import Seq
+from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME
 from domainator.utils import DomainatorCDS, count_peptides_in_record
+from domainator.domainate import read_references
+import pyhmmer
 import pytest
 from helpers import compare_seqfiles, compare_seqrecords
 
@@ -190,6 +194,140 @@ def test_domainator_phmmer(shared_datadir):
         new_file = list(SeqIO.parse(out, "genbank"))
         domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) == 3
+
+
+def test_read_references_nucleotide_fasta_routes_to_nhmmer(shared_datadir):
+    references = [str(shared_datadir / "simple_dna_queries.fna")]
+
+    parsed = read_references(references, foldseek=None)
+
+    assert "nhmmer" in parsed
+    assert "phmmer" not in parsed
+    assert "simple_dna_queries" in parsed["nhmmer"]
+
+
+def test_domainator_rejects_protein_input_with_nucleotide_references(shared_datadir):
+    protein_input = shared_datadir / "simple_genpept.gb"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        with pytest.raises(ValueError, match="nucleotide reference"):
+            main([
+                "--input", str(protein_input),
+                "-r", str(nucleotide_reference),
+                "--output", str(out),
+            ])
+
+
+def test_domainator_nucleotide_fasta_query_uses_nhmmer(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "--output", str(out),
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 1
+        assert domainator_features[0].qualifiers["program"] == ["nhmmer"]
+        assert domainator_features[0].qualifiers["cds_id"] == ["contig"]
+
+
+def test_domainator_nucleotide_hmm_query_uses_nhmmer(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+
+    builder = pyhmmer.plan7.Builder(pyhmmer.easel.Alphabet.dna())
+    background = pyhmmer.plan7.Background(pyhmmer.easel.Alphabet.dna())
+    sequence = pyhmmer.easel.TextSequence(
+        name=b"dna_hmm_query",
+        sequence="TTGACCGATGCTAGTCGATCGTAGCTAGGCTAACCGTTAGCGATCGTACGATCGATGCTAGT",
+    ).digitize(pyhmmer.easel.Alphabet.dna())
+    hmm, _, _ = builder.build(sequence, background)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm_path = os.path.join(output_dir, "dna_query.hmm")
+        with open(hmm_path, "wb") as handle:
+            hmm.write(handle)
+
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(hmm_path),
+            "--output", str(out),
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 1
+        assert domainator_features[0].qualifiers["program"] == ["nhmmer"]
+
+
+def test_domainator_infernal_cm_query(shared_datadir):
+    nucleotide_input = shared_datadir / "pANT_R100.fa"
+    cm_reference = shared_datadir / "RF00042.cm"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(cm_reference),
+            "--output", str(out),
+            "--hits_only",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) > 0
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) > 0
+        assert domainator_features[0].qualifiers["program"] == ["infernal"]
+
+
+def test_domainator_nucleotide_query_spanning_circular_origin(shared_datadir):
+    circular_sequence = "GCTAACCGTTAGCGATCGTACGATCGATGCTAGTCCGATTAACCGGTTAGGCTTACCGATGG"
+    query_sequence = circular_sequence[-18:] + circular_sequence[:18]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        gb_path = os.path.join(output_dir, "circular.gb")
+        query_path = os.path.join(output_dir, "origin_query.fna")
+        out = os.path.join(output_dir, "out.gb")
+
+        record = SeqRecord(Seq(circular_sequence), id="circular_test", name="circular_test", description="circular test")
+        record.annotations["molecule_type"] = "DNA"
+        record.annotations["topology"] = "circular"
+        with open(gb_path, "w") as handle:
+            SeqIO.write([record], handle, "genbank")
+        with open(query_path, "w") as handle:
+            handle.write(">origin_query\n")
+            handle.write(query_sequence + "\n")
+
+        main([
+            "--input", gb_path,
+            "-r", query_path,
+            "--output", out,
+            "--hits_only",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 1
+        assert len(domainator_features[0].location.parts) == 2
 
 
 def test_domainator_min_evalue(shared_datadir):

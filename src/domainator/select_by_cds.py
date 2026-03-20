@@ -37,12 +37,18 @@ def clear_best_hit_features(input_features: List, keep: str) -> List:
     Returns:
         List: list of seqfeatures with all but one domainator.DOMAIN_SEARCH_BEST_HIT_NAME removed.
     """
+    def feature_focus_id(feature):
+        if feature.qualifiers.get("target_kind", [None])[0] == "nucleic_acid":
+            name_parts = ["_".join((str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable))) for p in feature.location.parts]
+            return " ".join(name_parts)
+        return feature.qualifiers['cds_id'][0]
+
     out_features = list()
 
     for feature in input_features:
         if feature.type != DOMAIN_SEARCH_BEST_HIT_NAME:
             out_features.append(feature)
-        elif feature.qualifiers['cds_id'][0] == keep:
+        elif feature_focus_id(feature) == keep:
             out_features.append(feature)
     return out_features    
 
@@ -315,7 +321,7 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
 
     for rec in contigs:
         # First make a list of all the focus CDSs, by index
-        cdss = DomainatorCDS.list_from_contig(rec, evalue)
+        cdss = DomainatorCDS.list_from_contig(rec, evalue, include_nucleic_acid_annotations=_from_domain_search)
         cdss.sort(key=lambda x: x.feature.location.stranded_start) #TODO: why is this stranded_start, not start?
         if max_region_overlap < 1.0:
             selected_locations = list()

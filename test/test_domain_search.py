@@ -2,8 +2,10 @@ import os
 from domainator.domain_search import main
 import tempfile
 from glob import glob
+from domainator.Bio.Seq import Seq
+from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio import SeqIO
-from domainator import utils, DOMAIN_FEATURE_NAME
+from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import pytest
 from helpers import compare_seqfiles, compare_seqrecords
 
@@ -40,6 +42,189 @@ def test_domain_search_fasta_query(shared_datadir):
         assert utils.count_peptides_in_record(new_file[1]) == 1
         assert utils.count_peptides_in_record(new_file[2]) == 1
         #compare_seqfiles(out, shared_datadir / "ccdb.gb")
+
+
+def test_domain_search_rejects_protein_input_with_nucleotide_references(shared_datadir):
+    protein_input = shared_datadir / "simple_genpept.gb"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        with pytest.raises(ValueError, match="nucleotide reference"):
+            main([
+                "--input", str(protein_input),
+                "-r", str(nucleotide_reference),
+                "-o", str(out),
+            ])
+
+
+def test_domain_search_whole_contig_nucleotide_query(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--whole_contig",
+            "--add_annotations",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 1
+        assert domainator_features[0].qualifiers["program"] == ["nhmmer"]
+
+
+def test_domain_search_whole_contig_nucleotide_query_without_add_annotations(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--whole_contig",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        best_hit_features = [x for x in new_file[0].features if x.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert len(best_hit_features) == 1
+        assert best_hit_features[0].qualifiers["program"] == ["nhmmer"]
+
+
+def test_domain_search_translate_ignores_nucleotide_annotations(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--translate",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 0
+
+
+def test_domain_search_nucleotide_query_defaults_to_annotation_span(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--add_annotations",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        assert len(new_file[0]) == 62
+
+
+def test_domain_search_nucleotide_query_kb_range_uses_annotation_boundaries(shared_datadir):
+    nucleotide_input = shared_datadir / "simple_dna_target.fna"
+    nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--add_annotations",
+            "--kb_range", "0.01",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        assert len(new_file[0]) == 82
+
+
+def test_domain_search_whole_contig_infernal_query(shared_datadir):
+    nucleotide_input = shared_datadir / "pANT_R100.fa"
+    cm_reference = shared_datadir / "RF00042.cm"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(cm_reference),
+            "-o", str(out),
+            "--whole_contig",
+            "--add_annotations",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) > 0
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) > 0
+        assert domainator_features[0].qualifiers["program"] == ["infernal"]
+
+
+def test_domain_search_whole_contig_nucleotide_query_spanning_circular_origin():
+    circular_sequence = "GCTAACCGTTAGCGATCGTACGATCGATGCTAGTCCGATTAACCGGTTAGGCTTACCGATGG"
+    query_sequence = circular_sequence[-18:] + circular_sequence[:18]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        gb_path = os.path.join(output_dir, "circular.gb")
+        query_path = os.path.join(output_dir, "origin_query.fna")
+        out = os.path.join(output_dir, "out.gb")
+
+        record = SeqRecord(Seq(circular_sequence), id="circular_test", name="circular_test", description="circular test")
+        record.annotations["molecule_type"] = "DNA"
+        record.annotations["topology"] = "circular"
+        with open(gb_path, "w") as handle:
+            SeqIO.write([record], handle, "genbank")
+        with open(query_path, "w") as handle:
+            handle.write(">origin_query\n")
+            handle.write(query_sequence + "\n")
+
+        main([
+            "--input", gb_path,
+            "-r", query_path,
+            "-o", out,
+            "--whole_contig",
+            "--add_annotations",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 1
+        assert len(domainator_features[0]) == 36
 
 def test_domain_search_one_file_no_z(shared_datadir):
     gb = shared_datadir / "pDONR201.gb"

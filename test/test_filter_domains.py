@@ -1,4 +1,5 @@
 from domainator.filter_domains import main, find_kept_annotations, domain_overlap, filter_domains
+from domainator.domainate import main as domainate_main
 from pathlib import Path
 import tempfile
 import pytest
@@ -215,4 +216,30 @@ def test_filter_domainator_5(shared_datadir):
                 assert feature.type not in {DOMAIN_SEARCH_BEST_HIT_NAME, DOMAIN_FEATURE_NAME}
                 if feature.type == "CDS":
                     assert "domainator_Pfam-A" not in feature.qualifiers
+
+
+def test_filter_domainator_nucleotide_annotations(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/annotated.gb"
+        filtered = output_dir + "/filtered.gb"
+
+        domainate_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "--output", annotated,
+            "--evalue", "0.1",
+        ])
+
+        main([
+            "-i", annotated,
+            "-o", filtered,
+            "--domains", "not_present",
+            "--annotation_type", "domainator",
+        ])
+
+        recs = list(SeqIO.parse(filtered, "genbank"))
+        assert len(recs) == 1
+        domainator_features = [feature for feature in recs[0].features if feature.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 0
 #TODO: more tests

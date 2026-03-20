@@ -10,6 +10,7 @@ from domainator.Taxonomy import NCBITaxonomy
 from pathlib import Path
 from datetime import date
 import pyhmmer
+import pyinfernal.cm
 import os
 import multiprocessing
 from array import array
@@ -42,6 +43,7 @@ EXTENSION_TO_TYPE = {
     # "gff3":"gff",
     "hmmer":"hmm",
     "hmm":"hmm",
+    "cm":"cm",
     "hdf5":"hdf5",
     "hdf":"hdf5",
     "h5":"hdf5",
@@ -152,9 +154,9 @@ def read_hmms(hmm_files:Iterable[Union[str,os.PathLike,IOBase]]) -> Dict[str, Di
     return out
 
 
-def read_pyhmmer_peptide_fastas(peptide_files):
+def read_pyhmmer_fastas(sequence_files):
     out = dict()
-    for file_name in peptide_files:
+    for file_name in sequence_files:
         name = os.path.basename(Path(file_name).stem)
         seqs_dict = dict()
         with pyhmmer.easel.SequenceFile(file_name, digital=True) as seq_file:
@@ -166,6 +168,27 @@ def read_pyhmmer_peptide_fastas(peptide_files):
         if name in out:
             raise RuntimeError(f"Multiple reference sequence files with the same name, please combine the reference sequences into a single file, or rename one of the files. This is important to avoid searching the same domains twice, and for naming the source databases.")
         out[name] = seqs_dict
+    return out
+
+
+def read_pyhmmer_peptide_fastas(peptide_files):
+    return read_pyhmmer_fastas(peptide_files)
+
+
+def read_infernal_cms(cm_files):
+    out = dict()
+    for file_name in cm_files:
+        name = os.path.basename(Path(file_name).stem)
+        cms_dict = OrderedDict()
+        with pyinfernal.cm.CMFile(file_name) as cm_file:
+            for cm in cm_file:
+                cm_name = pyhmmer_decode(cm.name)
+                if cm_name in cms_dict:
+                    warnings.warn(f"multiple covariance models with the same name ({cm_name}) in file: {file_name}, only one will be used.")
+                cms_dict[cm_name] = cm
+        if name in out:
+            raise RuntimeError(f"Multiple cm files with the same name, please combine the models into a single file, or rename one of the files.")
+        out[name] = cms_dict
     return out
 
 def get_file_type(filename):
@@ -258,13 +281,18 @@ class DomainatorCDS():
     domain_search_feature: SeqFeature = None
 
     @classmethod
-    def list_from_contig(cls, contig, domain_evalue=float("inf"), domain_score=float("-inf"), skip_pseudo=False, name_precedence=None):
+    def list_from_contig(cls, contig, domain_evalue=float("inf"), domain_score=float("-inf"), skip_pseudo=False, name_precedence=None, include_nucleic_acid_annotations=False):
         """
             returns a list of DomainatorCDS objects from a contig SeqRecord
         """
         cdss: List[DomainatorCDS] = list()
         name_to_idx: Dict[str,int] = dict()
         idx:int = 0
+
+        def location_key(feature: SeqFeature) -> str:
+            name_parts = ["_".join((str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable))) for p in feature.location.parts]
+            return " ".join(name_parts)
+
         for i, feature in enumerate(contig.features): #get the CDS features
             if feature.type == 'CDS':
                 if skip_pseudo and ("pseudo" in feature.qualifiers or "pseudogene" in feature.qualifiers):
@@ -281,10 +309,19 @@ class DomainatorCDS():
         for feature in contig.features: #get the domainator features
             if feature.type == DOMAIN_FEATURE_NAME or feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
                 if float(feature.qualifiers['evalue'][0]) < domain_evalue and float(feature.qualifiers['score'][0]) > domain_score:
-                    cds_num = feature.qualifiers['cds_id'][0]
-                    if cds_num not in name_to_idx:
-                        warnings.warn(f"Domainator annotation found with no associated CDS: {cds_num}")
-                        continue
+                    if include_nucleic_acid_annotations and feature.qualifiers.get("target_kind", [None])[0] == "nucleic_acid":
+                        cds_num = location_key(feature)
+                        if cds_num not in name_to_idx:
+                            name = feature.qualifiers.get("name", [cds_num])[0]
+                            pseudo_feature = SeqFeature(location=feature.location, type="CDS", qualifiers={"cds_id": [cds_num]})
+                            cdss.append(DomainatorCDS(name, cds_num, contig.features.index(feature), pseudo_feature))
+                            name_to_idx[cds_num] = idx
+                            idx += 1
+                    else:
+                        cds_num = feature.qualifiers['cds_id'][0]
+                        if cds_num not in name_to_idx:
+                            warnings.warn(f"Domainator annotation found with no associated CDS: {cds_num}")
+                            continue
                     
                     if feature.type == DOMAIN_FEATURE_NAME:
                         cdss[name_to_idx[cds_num]].domain_features.append(feature)

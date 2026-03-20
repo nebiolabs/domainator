@@ -354,6 +354,8 @@ def main(argv):
     kb_range, cds_range = select_by_cds.validate_range(params.kb_range, params.kb_up, params.kb_down, params.cds_range, params.cds_up, params.cds_down)
 
     molecule_types = get_input_molecule_types(params.input, default_molecule_type=params.fasta_type)
+    reference_groups = domainate.read_references(params.references, foldseek=None)
+    domainate.validate_input_molecule_types(molecule_types, reference_groups)
     if len(molecule_types) > 1 and "protein" in molecule_types and not translate:
         raise ValueError("Inputs are a combination of DNA and protein sequences, but --translate is not set. This would lead to an output genbank file with mixed protein and DNA sequences.")
     if ("protein" in molecule_types or translate) and (kb_range is not None or cds_range is not None or whole_contig or pad):

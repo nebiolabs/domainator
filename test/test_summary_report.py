@@ -1,4 +1,5 @@
 from domainator import summary_report
+from domainator.domainate import main as domainate_main
 import tempfile
 
 def test_contig_stats_1(shared_datadir):
@@ -55,3 +56,29 @@ def test_summary_report_database_1(shared_datadir):
             f_txt = open(fh).read()
             assert "pdonr_hmms_1" in f_txt
             assert "pdonr_hmms_2" not in f_txt
+
+
+def test_summary_report_nucleotide_annotations(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/annotated.gb"
+        out_html = output_dir + "/summary.html"
+        out_txt = output_dir + "/summary.txt"
+
+        domainate_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "--output", annotated,
+            "--evalue", "0.1",
+        ])
+
+        summary_report.main([
+            "-i", annotated,
+            "-o", out_txt,
+            "--html", out_html,
+        ])
+
+        for path in (out_txt, out_html):
+            text = open(path).read()
+            assert "Domain Stats" in text
+            assert "dna_query_1" in text
