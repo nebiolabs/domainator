@@ -131,8 +131,6 @@ class SearchResult(NamedTuple):
     """name of program that made the hit (hmmsearch, phmmer, foldseek)"""
     strand: int = 1
     """strand of the hit on the target sequence"""
-    target_kind: str = "protein"
-    """whether the hit targets a protein/CDS or a nucleic acid contig span"""
 
 
 
@@ -257,7 +255,6 @@ def nhmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue,
                             reference_length,
                             "nhmmer",
                             1,
-                            "nucleic_acid",
                         )
                     )
 
@@ -301,7 +298,6 @@ def infernal_hits_to_search_results(hits, references, evalue, db_name, min_evalu
                         reference.M,
                         "infernal",
                         strand,
-                        "nucleic_acid",
                     )
                 )
 
@@ -746,11 +742,10 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
                     'score': [f"{hit.score:.1f}"],
                     'name': [hit.name],
                     'identity': [f"{hit.identity:.1f}"],
-                    'cds_id': ['contig'],
+                    'cds_id': ['.'],
                     'rstart': [f"{hit.rstart}"],
                     'rend': [f"{hit.rend}"],
                     'rlen': [f"{hit.rlen}"],
-                    'target_kind': [hit.target_kind],
                 },
             )
         )
@@ -779,11 +774,10 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
                     'score': [f"{hit.score:.1f}"],
                     'name': [hit.name],
                     'identity': [f"{hit.identity:.1f}"],
-                    'cds_id': ['contig'],
+                    'cds_id': ['.'],
                     'rstart': [f"{hit.rstart}"],
                     'rend': [f"{hit.rend}"],
                     'rlen': [f"{hit.rlen}"],
-                    'target_kind': [hit.target_kind],
                 },
             )
         )

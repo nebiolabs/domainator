@@ -38,7 +38,7 @@ def clear_best_hit_features(input_features: List, keep: str) -> List:
         List: list of seqfeatures with all but one domainator.DOMAIN_SEARCH_BEST_HIT_NAME removed.
     """
     def feature_focus_id(feature):
-        if feature.qualifiers.get("target_kind", [None])[0] == "nucleic_acid":
+        if feature.qualifiers.get("cds_id", [None])[0] == ".":
             name_parts = ["_".join((str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable))) for p in feature.location.parts]
             return " ".join(name_parts)
         return feature.qualifiers['cds_id'][0]

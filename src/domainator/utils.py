@@ -309,7 +309,7 @@ class DomainatorCDS():
         for feature in contig.features: #get the domainator features
             if feature.type == DOMAIN_FEATURE_NAME or feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
                 if float(feature.qualifiers['evalue'][0]) < domain_evalue and float(feature.qualifiers['score'][0]) > domain_score:
-                    if include_nucleic_acid_annotations and feature.qualifiers.get("target_kind", [None])[0] == "nucleic_acid":
+                    if include_nucleic_acid_annotations and feature.qualifiers.get("cds_id", [None])[0] == ".":
                         cds_num = location_key(feature)
                         if cds_num not in name_to_idx:
                             name = feature.qualifiers.get("name", [cds_num])[0]
