@@ -107,6 +107,7 @@ version = {attr = "domainator.__version__"}
 "matrix_report.py" = "domainator:matrix_report._entrypoint"
 "partition_seqfile.py" = "domainator:partition_seqfile._entrypoint"
 "select_by_cds.py" = "domainator:select_by_cds._entrypoint"
+"select_by_coord.py" = "domainator:select_by_coord._entrypoint"
 "select_by_contig.py" = "domainator:select_by_contig._entrypoint"
 "seq_dist.py" = "domainator:seq_dist._entrypoint"
 "summary_report.py" = "domainator:summary_report._entrypoint"
