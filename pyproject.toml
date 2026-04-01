@@ -110,6 +110,7 @@ version = {attr = "domainator.__version__"}
 "select_by_coord.py" = "domainator:select_by_coord._entrypoint"
 "select_by_contig.py" = "domainator:select_by_contig._entrypoint"
 "seq_dist.py" = "domainator:seq_dist._entrypoint"
+"sort_contigs.py" = "domainator:sort_contigs._entrypoint"
 "summary_report.py" = "domainator:summary_report._entrypoint"
 "transform_matrix.py" = "domainator:transform_matrix._entrypoint"
 "plot_contigs.py" = "domainator:plot_contigs._entrypoint"
