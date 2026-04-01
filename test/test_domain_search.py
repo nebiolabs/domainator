@@ -144,6 +144,8 @@ def test_domain_search_nucleotide_query_defaults_to_annotation_span(shared_datad
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         assert len(new_file[0]) == 62
+        best_hit_features = [x for x in new_file[0].features if x.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert len(best_hit_features) == 1
 
 
 def test_domain_search_nucleotide_query_kb_range_uses_annotation_boundaries(shared_datadir):
@@ -166,6 +168,58 @@ def test_domain_search_nucleotide_query_kb_range_uses_annotation_boundaries(shar
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         assert len(new_file[0]) == 82
+        best_hit_features = [x for x in new_file[0].features if x.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert len(best_hit_features) == 1
+
+
+def test_domain_search_nucleotide_multi_hit_whole_contig(shared_datadir):
+    """Multiple nucleotide queries hitting the same contig should each produce an independent region."""
+    nucleotide_input = shared_datadir / "multi_hit_dna_target.fna"
+    nucleotide_reference = shared_datadir / "multi_hit_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--whole_contig",
+            "--add_annotations",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) >= 2
+        for rec in new_file:
+            best_hit_features = [x for x in rec.features if x.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+            assert len(best_hit_features) == 1
+
+
+def test_domain_search_nucleotide_multi_hit_max_hits_per_contig(shared_datadir):
+    """max_hits_per_contig should limit to 1 independent hit region per contig."""
+    nucleotide_input = shared_datadir / "multi_hit_dna_target.fna"
+    nucleotide_reference = shared_datadir / "multi_hit_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "-o", str(out),
+            "--whole_contig",
+            "--add_annotations",
+            "--cpu", "1",
+            "--evalue", "0.1",
+            "--max_hits_per_contig", "1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        best_hit_features = [x for x in new_file[0].features if x.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert len(best_hit_features) == 1
 
 
 def test_domain_search_whole_contig_infernal_query(shared_datadir):

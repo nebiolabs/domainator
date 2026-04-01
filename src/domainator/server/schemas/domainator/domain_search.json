@@ -93,6 +93,15 @@
       ]
     },
     {
+      "name": "Max Hits Per Contig",
+      "parameter": "max_hits_per_contig",
+      "help": "the maximum number of independent hits per contig. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit. [default: unlimited]",
+      "type": "integer",
+      "flags": [
+        "--max_hits_per_contig"
+      ]
+    },
+    {
       "name": "Include Taxids",
       "parameter": "include_taxids",
       "help": "Space separated list of taxids to include",

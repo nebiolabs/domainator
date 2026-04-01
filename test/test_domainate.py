@@ -5,7 +5,7 @@ from glob import glob
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio import SeqIO
-from domainator import DOMAIN_FEATURE_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.utils import DomainatorCDS, count_peptides_in_record
 from domainator.domainate import read_references
 import pyhmmer
@@ -240,7 +240,8 @@ def test_domainator_nucleotide_fasta_query_uses_nhmmer(shared_datadir):
         domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) == 1
         assert domainator_features[0].qualifiers["program"] == ["nhmmer"]
-        assert domainator_features[0].qualifiers["cds_id"] == ["contig"]
+        assert domainator_features[0].qualifiers["cds_id"] == ["."]
+
 
 
 def test_domainator_nucleotide_hmm_query_uses_nhmmer(shared_datadir):
@@ -295,6 +296,30 @@ def test_domainator_infernal_cm_query(shared_datadir):
         domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) > 0
         assert domainator_features[0].qualifiers["program"] == ["infernal"]
+
+
+def test_domainator_nucleotide_multi_hit_annotations(shared_datadir):
+    """Multiple non-overlapping nucleotide hits should each get a DOMAIN_FEATURE_NAME feature."""
+    nucleotide_input = shared_datadir / "multi_hit_dna_target.fna"
+    nucleotide_reference = shared_datadir / "multi_hit_dna_queries.fna"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(nucleotide_input),
+            "--fasta_type", "nucleotide",
+            "-r", str(nucleotide_reference),
+            "--output", str(out),
+            "--evalue", "0.1",
+        ])
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) >= 2
+        query_names = {f.qualifiers["name"][0] for f in domainator_features}
+        assert "dna_query_A" in query_names
+        assert "dna_query_B" in query_names
 
 
 def test_domainator_nucleotide_query_spanning_circular_origin(shared_datadir):

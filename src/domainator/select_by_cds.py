@@ -16,7 +16,7 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist
 from typing import Tuple, List, Optional, Set
-from domainator import __version__, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import __version__, RawAndDefaultsFormatter
 
 #TODO: account for different domain databases
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
@@ -26,31 +26,6 @@ from domainator import __version__, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_
 #TODO: when streaming have option to list non-selected contigs
 
 #TODO: add support for selecting by qualifiers
-
-def clear_best_hit_features(input_features: List, keep: str) -> List:
-    """returns a copy of the input feature list, but with all features of type domainator.DOMAIN_SEARCH_BEST_HIT_NAME removed except the one with cds_id == keep
-
-    Args:
-        input_features (List): list[seqfeature]
-        keep (str): cds_id 
-
-    Returns:
-        List: list of seqfeatures with all but one domainator.DOMAIN_SEARCH_BEST_HIT_NAME removed.
-    """
-    def feature_focus_id(feature):
-        if feature.qualifiers.get("cds_id", [None])[0] == ".":
-            name_parts = ["_".join((str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable))) for p in feature.location.parts]
-            return " ".join(name_parts)
-        return feature.qualifiers['cds_id'][0]
-
-    out_features = list()
-
-    for feature in input_features:
-        if feature.type != DOMAIN_SEARCH_BEST_HIT_NAME:
-            out_features.append(feature)
-        elif feature_focus_id(feature) == keep:
-            out_features.append(feature)
-    return out_features    
 
 def pad_records(records, pad_char="N"):
     if len(records) == 0:
@@ -227,12 +202,13 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
 
     features = get_non_domainator_features(contig)
     
-    for cds in cds_list:
+    for cds_i, cds in enumerate(cds_list):
         if slice_location.contains(cds.feature.location):
             # features.append(cds.feature)
             features.extend(cds.domain_features)
             if cds.domain_search_feature is not None:
-                features.append(cds.domain_search_feature)
+                if not _from_domain_search or cds_i == cds_idx:
+                    features.append(cds.domain_search_feature)
     try:
         record = slice_record_from_location(contig, slice_location, features)
         start = int(slice_location.stranded_start)
@@ -262,8 +238,6 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
     elif strand == -1: # if strand of the location is -1, then slice_record_from_location will have flipped the strand, so we need to mark that in the name.
         record.id += "rc"
         
-    if _from_domain_search:
-        record.features = clear_best_hit_features(record.features, keep=focus_cds.num)
     record.set_dist_to_start(dist_to_start)
     return record, slice_location
 

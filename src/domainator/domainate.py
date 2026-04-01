@@ -237,6 +237,11 @@ def nhmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue,
                         reference_length = len(reference.sequence)
                     start = domain.env_from - 1
                     end = domain.env_to
+                    if start > end:
+                        start, end = end - 1, start + 1
+                        strand = -1
+                    else:
+                        strand = 1
                     if contig_length is not None and start >= contig_length:
                         continue
                     out[contig_index][-1].append(
@@ -254,7 +259,7 @@ def nhmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue,
                             domain.alignment.hmm_to,
                             reference_length,
                             "nhmmer",
-                            1,
+                            strand,
                         )
                     )
 
@@ -717,7 +722,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
     contig.set_hit_names(best_hits)
 
 
-def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[SearchResult], max_hits: int, max_overlap: float, no_annotations: bool, best_annotation: bool, overlap_by_db: bool = False):
+def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[SearchResult], max_hits: int, max_overlap: float, no_annotations: bool, best_annotation: bool, overlap_by_db: bool = False, max_hits_per_contig: Optional[int] = None):
     hits_list = deduplicate_contig_hits(contig, hits_list)
     hits_list.sort(key=lambda x: x.score, reverse=True)
     contig.set_hit_best_score(hits_list[0].score)
@@ -725,32 +730,33 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
     hit_names = dict()
 
     if best_annotation:
-        hit = hits_list[0]
-        desc = hit.desc if hit.desc.strip() else "."
-        acc = hit.acc if hit.acc.strip() else "."
-        feature_index = len(contig.features)
-        contig.features.append(
-            SeqFeature(
-                location=build_contig_hit_location(contig, hit),
-                type=DOMAIN_SEARCH_BEST_HIT_NAME,
-                qualifiers={
-                    'program': [hit.program],
-                    'database': [hit.database],
-                    'description': [desc],
-                    'accession': [acc],
-                    'evalue': [f"{hit.evalue:.1e}"],
-                    'score': [f"{hit.score:.1f}"],
-                    'name': [hit.name],
-                    'identity': [f"{hit.identity:.1f}"],
-                    'cds_id': ['.'],
-                    'rstart': [f"{hit.rstart}"],
-                    'rend': [f"{hit.rend}"],
-                    'rlen': [f"{hit.rlen}"],
-                },
+        best_hits = filter_by_overlap(hits_list if max_hits_per_contig is None else hits_list[:max_hits_per_contig], max_overlap, presorted=True, by_db=overlap_by_db)
+        for hit in best_hits:
+            desc = hit.desc if hit.desc.strip() else "."
+            acc = hit.acc if hit.acc.strip() else "."
+            feature_index = len(contig.features)
+            contig.features.append(
+                SeqFeature(
+                    location=build_contig_hit_location(contig, hit),
+                    type=DOMAIN_SEARCH_BEST_HIT_NAME,
+                    qualifiers={
+                        'program': [hit.program],
+                        'database': [hit.database],
+                        'description': [desc],
+                        'accession': [acc],
+                        'evalue': [f"{hit.evalue:.1e}"],
+                        'score': [f"{hit.score:.1f}"],
+                        'name': [hit.name],
+                        'identity': [f"{hit.identity:.1f}"],
+                        'cds_id': ['.'],
+                        'rstart': [f"{hit.rstart}"],
+                        'rend': [f"{hit.rend}"],
+                        'rlen': [f"{hit.rlen}"],
+                    },
+                )
             )
-        )
-        hit_scores[feature_index] = hit.score
-        hit_names[feature_index] = hit.name
+            hit_scores[feature_index] = hit.score
+            hit_names[feature_index] = hit.name
 
     contig.set_hit_scores(hit_scores)
     contig.set_hit_names(hit_names)
@@ -783,7 +789,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None):
     """
 
     Args:
@@ -802,6 +808,7 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
         min_evalue (float, optional): . Defaults to 0.0.
         max_mode (bool, optional): . Defaults to False.
         overlap_by_db (bool, optional): Defaults to False.
+        max_hits_per_contig (int, optional): Maximum number of independent hits per contig. Defaults to None (unlimited).
 
     Returns:
         : 
@@ -813,7 +820,7 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
         if contig.annotations['molecule_type'] == "protein":
             add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
         elif -1 in hits[contig_id]:
-            add_contig_nucleic_acid_annotations(contig, hits[contig_id][-1], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
+            add_contig_nucleic_acid_annotations(contig, hits[contig_id][-1], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
         else:
             add_nucleic_acid_annotations(contig, hits[contig_id], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
 
@@ -847,7 +854,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         rec.features.append(feature)
         i += 1
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -953,7 +960,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
             for contig_id in range(len(contigs_list)):
                 if contig_id in return_contigs:
                     yield contigs_list[contig_id]
@@ -964,7 +971,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
     #for contig_id in range(len(contigs_list)): #TODO: why did I think this more complicated loop was a good idea?
     #    if contig_id in return_contigs:
     for contig_id in return_contigs:

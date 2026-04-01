@@ -32,7 +32,7 @@ from domainator.Taxonomy import NCBITaxonomy
 
 class _domain_search_worker():
     
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None):
+    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None):
 
         self.z = z
         self.evalue = evalue
@@ -55,6 +55,7 @@ class _domain_search_worker():
         self.max_region_overlap = max_region_overlap
         self.strand = strand
         self.decoy_names = decoy_names
+        self.max_hits_per_contig = max_hits_per_contig
         #self.pre_parsed_references = domainate.read_references(references) #TODO: figure out why pickling pyhmmer peptides causes multithreading issues, and try to patch pyhmmer.
 
 
@@ -97,6 +98,7 @@ class _domain_search_worker():
                 include_taxids=self.include_taxids,
                 exclude_taxids=self.exclude_taxids,
                 max_mode=self.max_mode,
+                max_hits_per_contig=self.max_hits_per_contig,
                 #pre_parsed_references=self.pre_parsed_references
             ):
             try:
@@ -148,7 +150,7 @@ class _partition_seqfile_worker():
         return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
     
 
-def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None):
+def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None):
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 
@@ -174,6 +176,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. [default 1]
         strand: only extract regions around CDSs on the specified strand. If None, then extract regions around CDSs on both strands.
         decoy_names: a set of names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.
+        max_hits_per_contig: the maximum number of independent hits per contig. If None, then all hits will be returned. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit.
     yields:
         SeqRecords of the selected regions
     """
@@ -187,7 +190,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         exclude_taxids = set(exclude_taxids)
 
     out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names)
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig)
 
     with make_pool(processes=cpu - 1) as pool:
         # hits are lists of SeqRecords
@@ -257,6 +260,8 @@ def main(argv):
     parser.add_argument('--max_hits', type=int, default=None,
                         help="the maximum number of CDSs returned by the search. Prioritized by bitscore of best scoring profile. [default: return all hits passing the evalue threshold]")
     
+    parser.add_argument('--max_hits_per_contig', type=int, default=None,
+                        help="the maximum number of independent hits per contig. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit. [default: unlimited]")
 
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
@@ -416,7 +421,8 @@ def main(argv):
         max_mode=params.max_mode,
         max_region_overlap=params.max_region_overlap,
         strand=params.strand,
-        decoy_names=decoy_names
+        decoy_names=decoy_names,
+        max_hits_per_contig=params.max_hits_per_contig
         ):
         #skip pad
         if not pad:
