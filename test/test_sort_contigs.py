@@ -1,6 +1,7 @@
 import tempfile
 
-from domainator import DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.Bio import SeqIO
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator.Bio.SeqRecord import SeqRecord
@@ -77,4 +78,111 @@ def test_sort_contigs_rejects_domain_search_feature_without_score():
             sort_contigs_main([
                 "--input", str(input_path),
                 "-o", str(output_path),
+            ])
+
+
+def make_scored_record(record_id, domainator_hits=None, search_hits=None):
+    record = SeqRecord(Seq("ATGCATGC"), id=record_id, name=record_id, description=record_id)
+    record.annotations["molecule_type"] = "DNA"
+
+    if domainator_hits is not None:
+        for index, (name, database, score) in enumerate(domainator_hits):
+            record.features.append(
+                SeqFeature(
+                    FeatureLocation(index, index + 2, strand=1),
+                    type=DOMAIN_FEATURE_NAME,
+                    qualifiers={
+                        "program": ["hmmsearch"],
+                        "database": [database],
+                        "description": [f"{name} description"],
+                        "accession": [name],
+                        "evalue": ["1.0e-5"],
+                        "score": [str(score)],
+                        "name": [name],
+                        "cds_id": [str(index)],
+                    },
+                )
+            )
+
+    if search_hits is not None:
+        for index, score in enumerate(search_hits):
+            record.features.append(
+                SeqFeature(
+                    FeatureLocation(index + 2, index + 4, strand=1),
+                    type=DOMAIN_SEARCH_BEST_HIT_NAME,
+                    qualifiers={
+                        "program": ["hmmsearch"],
+                        "database": ["search_db"],
+                        "description": [f"search_{index} description"],
+                        "accession": [f"search_{index}"],
+                        "evalue": ["1.0e-5"],
+                        "score": [str(score)],
+                        "name": [f"search_{index}"],
+                        "cds_id": [str(index)],
+                    },
+                )
+            )
+
+    return record
+
+
+def test_sort_contigs_domains_sorts_by_best_matching_domainator_score():
+    records = [
+        make_scored_record("rec1", domainator_hits=[("target", "db1", 40), ("other", "db1", 90)], search_hits=[5]),
+        make_scored_record("rec2", domainator_hits=[("target", "db2", 70)], search_hits=[1]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/domainator.gb"
+        output_path = output_dir + "/sorted.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        sort_contigs_main([
+            "--input", str(input_path),
+            "-o", str(output_path),
+            "--domains", "target",
+        ])
+
+        out_records = list(SeqIO.parse(output_path, "genbank"))
+        assert [record.id for record in out_records] == ["rec2", "rec1"]
+
+
+def test_sort_contigs_domains_databases_filters_domainator_scores():
+    records = [
+        make_scored_record("rec1", domainator_hits=[("target", "db1", 80), ("target", "db2", 20)]),
+        make_scored_record("rec2", domainator_hits=[("target", "db2", 70)]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/domainator.gb"
+        output_path = output_dir + "/sorted.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        sort_contigs_main([
+            "--input", str(input_path),
+            "-o", str(output_path),
+            "--domains", "target",
+            "--databases", "db2",
+        ])
+
+        out_records = list(SeqIO.parse(output_path, "genbank"))
+        assert [record.id for record in out_records] == ["rec2", "rec1"]
+
+
+def test_sort_contigs_domains_raises_when_no_matching_score():
+    record = make_scored_record("rec1", domainator_hits=[("other", "db1", 80)], search_hits=[100])
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/domainator.gb"
+        output_path = output_dir + "/sorted.gb"
+        with open(input_path, "w") as handle:
+            write_genbank((record,), handle)
+
+        with pytest.raises(ValueError, match="matching the requested domains"):
+            sort_contigs_main([
+                "--input", str(input_path),
+                "-o", str(output_path),
+                "--domains", "target",
             ])
