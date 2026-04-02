@@ -85,7 +85,7 @@ def get_domain_architecture_detailed(rec:SeqRecord, domain_sep:str="/", CDS_sep:
             CDS_features.append(domain_sep.join([feature.qualifiers["name"][0] for feature in domainator_features]))
         
     else: # nucleic acid
-        cdss = DomainatorCDS.list_from_contig(rec, skip_pseudo=True)
+        cdss = DomainatorCDS.list_from_contig(rec, skip_pseudo=True, include_nucleic_acid_annotations=True)
         cdss.sort(key=lambda x: x.feature.location.stranded_start)
         for cds in cdss:
             domainator_features = list()
@@ -641,11 +641,13 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
         domain_names = list()
         sources = get_sources(rec)
         if rec.annotations['molecule_type'] != "protein": # nucleic acid
-            cdss = DomainatorCDS.list_from_contig(rec)
+            cdss = DomainatorCDS.list_from_contig(rec, include_nucleic_acid_annotations=True)
             cdss.sort(key=lambda x: x.feature.location.stranded_start)
 
             for i in range(len(cdss)):
                 if by == "cds":
+                    if cdss[i].is_nucleic_acid:
+                        continue # skip nucleic acid domains if we are reporting by CDS.
                     cds_rec = slice_record_from_location(rec, cdss[i].feature.location, sources + [cdss[i].feature] + cdss[i].domain_features, truncate_features=True) #  get_cds_neighborhood(rec, cdss, i) # extract a single CDS.
                     if source_filename:
                         cds_rec.annotations["_source_filename"] = source_filename

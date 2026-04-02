@@ -5,7 +5,6 @@
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import list_and_file_to_dict_keys, read_hmms, pyhmmer_decode
-from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from pathlib import Path
 from typing import List, Tuple, Union, Iterable, Dict

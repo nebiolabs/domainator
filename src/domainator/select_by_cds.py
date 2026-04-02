@@ -241,7 +241,12 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
     record.set_dist_to_start(dist_to_start)
     return record, slice_location
 
-def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=None, cds_range: Tuple[int, int]=None, kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, evalue=float("inf"), invert=False, search_hits=False, max_region_overlap=1.0, strand=None, _from_domain_search=False, _domain_search_negatives:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, unannotated=False):
+def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,
+                  kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, evalue=float("inf"),
+                  invert=False, search_hits=False, max_region_overlap=1.0, strand=None, _from_domain_search=False,
+                  _domain_search_negatives:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, unannotated=False,
+                  include_nucleic_acids:bool = False,
+                  ):
     """
 
         Args:
@@ -267,7 +272,7 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
 
             invert: if True then invert the target_cdss, target_domains, and domain_expr selection criteria (contigs, and ranges are still selected normally, only CDS selection is inverted)
 
-            search_hits: Select CDSs that are marked as search hits
+            search_hits: Select CDSs that are marked as search hits. This activates include_nucleic_acids.
 
             max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done.
 
@@ -278,6 +283,8 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
             _domain_search_negatives (Optional[Set[str]]): if _from_domain_search is True, then this is a set of domain names to negatively select on.
 
             databases: a set of database names to consider when filtering by domain. If None, then all databases will be considered.
+
+            include_nucleic_acids: if True, then pretend nucleic acid annotations are CDSs, and include them in the output if they match the selection criteria.
 
         Yields:
             SeqRecords of the selected regions
@@ -295,7 +302,7 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
 
     for rec in contigs:
         # First make a list of all the focus CDSs, by index
-        cdss = DomainatorCDS.list_from_contig(rec, evalue, include_nucleic_acid_annotations=_from_domain_search)
+        cdss = DomainatorCDS.list_from_contig(rec, evalue, include_nucleic_acid_annotations=True) # _from_domain_search
         cdss.sort(key=lambda x: x.feature.location.stranded_start) #TODO: why is this stranded_start, not start?
         if max_region_overlap < 1.0:
             selected_locations = list()
@@ -306,6 +313,9 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
 
         for focus_index, cds in enumerate(cdss):
             keep = False
+            
+            if cds.is_nucleic_acid and not search_hits and not _from_domain_search and not include_nucleic_acids: # ignore 
+                continue
             #If no selectors then keep every cds
             if target_cdss is None and target_domains is None and domain_expr is None and not search_hits and (not _from_domain_search) and (not unannotated):
                 keep = True
@@ -491,6 +501,10 @@ def main(argv):
 
     parser.add_argument('--invert', action='store_true',
                         help="Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).")
+
+    parser.add_argument('--include_nucleic_acids', action='store_true',
+                        help="Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).")
+
 
     parser.add_argument('--config', action=ActionConfigFile)
     

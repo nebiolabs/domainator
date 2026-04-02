@@ -279,6 +279,7 @@ class DomainatorCDS():
     domain_features: List[SeqFeature] = field(default_factory=lambda: [])
     domain_names: Set[str] = field(default_factory=lambda: set())
     domain_search_feature: SeqFeature = None
+    is_nucleic_acid:bool = False
 
     @classmethod
     def list_from_contig(cls, contig, domain_evalue=float("inf"), domain_score=float("-inf"), skip_pseudo=False, name_precedence=None, include_nucleic_acid_annotations=False):
@@ -288,6 +289,7 @@ class DomainatorCDS():
         cdss: List[DomainatorCDS] = list()
         name_to_idx: Dict[str,int] = dict()
         idx:int = 0
+        nuc_idx:int = 0 # nucleotide annotation index, used for naming nucleotide annotations that don't have cds_id qualifiers based on their position on the contig.
 
         def location_key(feature: SeqFeature) -> str:
             name_parts = ["_".join((str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable))) for p in feature.location.parts]
@@ -310,17 +312,21 @@ class DomainatorCDS():
             if feature.type == DOMAIN_FEATURE_NAME or feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
                 if float(feature.qualifiers['evalue'][0]) < domain_evalue and float(feature.qualifiers['score'][0]) > domain_score:
                     if include_nucleic_acid_annotations and feature.qualifiers.get("cds_id", [None])[0] == ".":
-                        cds_num = location_key(feature)
-                        if cds_num not in name_to_idx:
+                        # cds_num = location_key(feature)
+                        cds_num = f"nuc_{nuc_idx}"
+                        nuc_idx += 1
+                        if cds_num not in name_to_idx: # should always be true.
                             name = feature.qualifiers.get("name", [cds_num])[0]
                             pseudo_feature = SeqFeature(location=feature.location, type="CDS", qualifiers={"cds_id": [cds_num]})
                             cdss.append(DomainatorCDS(name, cds_num, contig.features.index(feature), pseudo_feature))
+                            cdss[-1].is_nucleic_acid = True # set the is_nucleic_acid flag for this CDS, so that it can be filtered out later if desired.
                             name_to_idx[cds_num] = idx
                             idx += 1
                     else:
                         cds_num = feature.qualifiers['cds_id'][0]
                         if cds_num not in name_to_idx:
-                            warnings.warn(f"Domainator annotation found with no associated CDS: {cds_num}")
+                            if cds_num != ".": # We don't need to warn about missing cds_id qualifiers for features that are associated with nucleic acid annotations.
+                                warnings.warn(f"Domainator annotation found with no associated CDS: {cds_num}")
                             continue
                     
                     if feature.type == DOMAIN_FEATURE_NAME:
