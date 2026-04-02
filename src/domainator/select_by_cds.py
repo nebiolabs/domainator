@@ -571,7 +571,8 @@ def main(argv):
         max_region_overlap = params.max_region_overlap,
         strand = params.strand,
         databases = params.databases,
-        unannotated = params.unannotated
+        unannotated = params.unannotated,
+        include_nucleic_acids = params.include_nucleic_acids
         ):
         #skip_deduplicate, pad
         if not pad:
