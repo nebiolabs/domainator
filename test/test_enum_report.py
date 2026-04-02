@@ -292,6 +292,60 @@ def test_enum_report_nucleotide_contig_annotations(shared_datadir):
         assert lines[1][3] == "1"
 
 
+def test_enum_report_nucleotide_architecture_detailed(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/annotated.gb"
+        out = output_dir + "/enum_report.tsv"
+
+        domainate_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "--output", annotated,
+            "--evalue", "0.1",
+        ])
+
+        enum_report.main([
+            "-i", annotated,
+            "-o", out,
+            "--architecture_detailed",
+        ])
+
+        with open(out) as handle:
+            lines = [line.rstrip("\n").split("\t") for line in handle]
+
+        assert lines[0] == ["contig", "architecture_detailed"]
+        assert len(lines) == 2
+        assert lines[1] == ["dna_target_1", "dna_query_1"]
+
+
+def test_enum_report_nucleotide_by_cds_skips_pseudo_cdss(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/annotated.gb"
+        out = output_dir + "/enum_report.tsv"
+
+        domainate_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "--output", annotated,
+            "--evalue", "0.1",
+        ])
+
+        enum_report.main([
+            "-i", annotated,
+            "-o", out,
+            "--by", "cds",
+            "--domains",
+        ])
+
+        with open(out) as handle:
+            lines = [line.rstrip("\n").split("\t") for line in handle]
+
+        assert lines[0] == ["contig", "cds", "domains"]
+        assert len(lines) == 1
+
+
 def test_enum_report_nucleotide_domain_search(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         annotated = output_dir + "/search.gb"

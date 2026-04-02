@@ -1,6 +1,9 @@
 import tempfile
 from domainator.Bio import SeqIO
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator import select_by_cds
+from domainator.domainate import main as domainate_main
+from domainator.domain_search import main as domain_search_main
 from domainator.utils import parse_seqfiles, DomainatorCDS
 import pytest
 from io import StringIO
@@ -254,6 +257,56 @@ def test_domain_search_hit_1(shared_datadir):
         cdss = DomainatorCDS.list_from_contig(new_file[0])
         assert len(cdss) == 1
         assert cdss[0].name == "pDONR201_3"
+
+
+def test_select_by_cds_include_nucleic_acids_flag(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/annotated.gb"
+        out_without = output_dir + "/without.gb"
+        out_with = output_dir + "/with.gb"
+
+        domainate_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "--output", annotated,
+            "--evalue", "0.1",
+        ])
+
+        select_by_cds.main(["-i", annotated, "-o", out_without, "--domains", "dna_query_1"])
+        assert list(SeqIO.parse(out_without, "genbank")) == []
+
+        select_by_cds.main(["-i", annotated, "-o", out_with, "--domains", "dna_query_1", "--include_nucleic_acids"])
+        records = list(SeqIO.parse(out_with, "genbank"))
+
+        assert len(records) == 1
+        domainator_features = [feature for feature in records[0].features if feature.type == DOMAIN_FEATURE_NAME]
+        assert len(domainator_features) == 1
+        assert domainator_features[0].qualifiers["name"] == ["dna_query_1"]
+
+
+def test_select_by_cds_search_hits_selects_nucleic_acid_annotations(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = output_dir + "/search.gb"
+        out = output_dir + "/extraction.gb"
+
+        domain_search_main([
+            "--input", str(shared_datadir / "simple_dna_target.fna"),
+            "--fasta_type", "nucleotide",
+            "-r", str(shared_datadir / "simple_dna_queries.fna"),
+            "-o", annotated,
+            "--whole_contig",
+            "--cpu", "1",
+            "--evalue", "0.1",
+        ])
+
+        select_by_cds.main(["-i", annotated, "-o", out, "--search_hits"])
+        records = list(SeqIO.parse(out, "genbank"))
+
+        assert len(records) == 1
+        best_hit_features = [feature for feature in records[0].features if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert len(best_hit_features) == 1
+        assert best_hit_features[0].qualifiers["name"] == ["dna_query_1"]
 
 
 def test_select_by_cds_no_overlap_1(shared_datadir):

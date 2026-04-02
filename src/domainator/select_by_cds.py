@@ -503,7 +503,7 @@ def main(argv):
                         help="Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).")
 
     parser.add_argument('--include_nucleic_acids', action='store_true',
-                        help="Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).")
+                        help="Include nucleic-acid annotations with no associated CDS (those with cds_id='.') when applying CDS selection criteria.")
 
 
     parser.add_argument('--config', action=ActionConfigFile)

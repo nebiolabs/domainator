@@ -312,14 +312,13 @@ class DomainatorCDS():
             if feature.type == DOMAIN_FEATURE_NAME or feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
                 if float(feature.qualifiers['evalue'][0]) < domain_evalue and float(feature.qualifiers['score'][0]) > domain_score:
                     if include_nucleic_acid_annotations and feature.qualifiers.get("cds_id", [None])[0] == ".":
-                        # cds_num = location_key(feature)
                         cds_num = f"nuc_{nuc_idx}"
                         nuc_idx += 1
                         if cds_num not in name_to_idx: # should always be true.
                             name = feature.qualifiers.get("name", [cds_num])[0]
                             pseudo_feature = SeqFeature(location=feature.location, type="CDS", qualifiers={"cds_id": [cds_num]})
                             cdss.append(DomainatorCDS(name, cds_num, contig.features.index(feature), pseudo_feature))
-                            cdss[-1].is_nucleic_acid = True # set the is_nucleic_acid flag for this CDS, so that it can be filtered out later if desired.
+                            cdss[-1].is_nucleic_acid = True
                             name_to_idx[cds_num] = idx
                             idx += 1
                     else:

@@ -275,6 +275,16 @@
       "flags": [
         "--invert"
       ]
+    },
+    {
+      "name": "Include Nucleic Acids",
+      "parameter": "include_nucleic_acids",
+      "help": "Include nucleic-acid annotations with no associated CDS (those with cds_id='.') when applying CDS selection criteria.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--include_nucleic_acids"
+      ]
     }
   ],
   "advanced_parameters": []

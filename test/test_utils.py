@@ -1,6 +1,7 @@
-from domainator import utils
+from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import tempfile
 from domainator.Bio import SeqIO, SeqRecord, Seq
+from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
 import io
 import pytest
 from array import array
@@ -35,6 +36,65 @@ def test_list_and_file_to_dict_keys(shared_datadir):
     keys = utils.list_and_file_to_dict_keys(None, str(shared_datadir / "CcdB.hmm"))
     print(keys)
     assert 'CcdB' in keys
+
+
+def test_domainator_cds_creates_one_pseudo_cds_per_nucleic_acid_annotation():
+    record = SeqRecord.SeqRecord(Seq.Seq("ATGCGTACGTAA"), id="dna_target")
+    record.annotations["molecule_type"] = "DNA"
+    shared_location = FeatureLocation(2, 8, strand=1)
+    record.features = [
+        SeqFeature(FeatureLocation(0, len(record.seq)), type="source", qualifiers={}),
+        SeqFeature(
+            shared_location,
+            type=DOMAIN_FEATURE_NAME,
+            qualifiers={
+                "name": ["dna_query_1"],
+                "description": ["query 1"],
+                "database": ["nuc_db"],
+                "cds_id": ["."],
+                "evalue": ["1e-20"],
+                "score": ["50"],
+            },
+        ),
+        SeqFeature(
+            shared_location,
+            type=DOMAIN_FEATURE_NAME,
+            qualifiers={
+                "name": ["dna_query_2"],
+                "description": ["query 2"],
+                "database": ["nuc_db"],
+                "cds_id": ["."],
+                "evalue": ["1e-10"],
+                "score": ["40"],
+            },
+        ),
+        SeqFeature(
+            shared_location,
+            type=DOMAIN_SEARCH_BEST_HIT_NAME,
+            qualifiers={
+                "name": ["dna_query_1"],
+                "description": ["query 1"],
+                "cds_id": ["."],
+                "evalue": ["1e-30"],
+                "score": ["60"],
+                "rstart": ["1"],
+                "rend": ["6"],
+                "rlen": ["6"],
+            },
+        ),
+    ]
+
+    cdss = utils.DomainatorCDS.list_from_contig(record, include_nucleic_acid_annotations=True)
+
+    assert len(cdss) == 3
+    assert all(cds.is_nucleic_acid for cds in cdss)
+    assert [cds.num for cds in cdss] == ["nuc_0", "nuc_1", "nuc_2"]
+    assert [cds.name for cds in cdss] == ["dna_query_1", "dna_query_2", "dna_query_1"]
+    assert [len(cds.domain_features) for cds in cdss] == [1, 1, 0]
+    assert cdss[0].domain_features[0].qualifiers["name"] == ["dna_query_1"]
+    assert cdss[1].domain_features[0].qualifiers["name"] == ["dna_query_2"]
+    assert cdss[2].domain_search_feature is not None
+    assert cdss[2].domain_search_feature.qualifiers["name"] == ["dna_query_1"]
 
 
 # regions are tuples of start and stop coordinates
