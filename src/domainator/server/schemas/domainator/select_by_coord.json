@@ -1,0 +1,56 @@
+{
+  "id": "select_by_coord",
+  "display_name": "Select By Coord",
+  "category": "Editors",
+  "description": "Extract contig regions using explicit coordinate ranges\n\nReads a labeled coordinate table into memory, then iterates through the input contigs and extracts one region for each matching row. Required table columns are contig, start, and end. Optional columns are strand and file. Coordinates are 1-based and inclusive.\n\nIf end < start, the region is assumed to wrap around the origin of a circular contig. The same coordinates on a linear contig raise an exception. If a file column is supplied, it must contain basenames only.",
+  "runner": "module",
+  "priority": 5,
+  "entry_point": "domainator.select_by_coord",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "names of input genbank files. If not supplied, reads from stdin.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "genbank output file name.",
+      "type": "output",
+      "required": true,
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Coords",
+      "parameter": "coords",
+      "help": "labeled coordinate table with columns contig, start, end, strand (optional), file (optional).",
+      "type": "file",
+      "required": true,
+      "flags": [
+        "-c",
+        "--coords"
+      ],
+      "file_types": [
+        "txt",
+        "tsv",
+        "csv"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}

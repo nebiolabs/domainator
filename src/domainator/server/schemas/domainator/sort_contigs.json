@@ -1,0 +1,69 @@
+{
+  "id": "sort_contigs",
+  "display_name": "Sort Contigs",
+  "category": "Editors",
+  "description": "Sort contigs by Domain_Search score\n\nMatches the output ordering used by domain_search.py when --max_hits is set. This is primarily intended for post-processing domain_search output written without --max_hits, where the temporary hit_best_score annotation is not preserved in the written GenBank file.\n\nIf --domains is supplied, sorting switches to the best matching Domainator annotation score for the requested domain names. If --databases is also supplied, only matching Domainator annotations from those databases are considered.",
+  "runner": "module",
+  "priority": 5,
+  "entry_point": "domainator.sort_contigs",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Input genbank files.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Output genbank filename.",
+      "type": "output",
+      "required": true,
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Max Hits",
+      "parameter": "max_hits",
+      "help": "Maximum number of contigs to return. Prioritized by the best selected annotation score. [default: return all contigs]",
+      "type": "integer",
+      "flags": [
+        "--max_hits"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "If supplied, sort by the best Domainator annotation score from domains with these names instead of Domain_Search annotation scores.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "When used with --domains, only consider Domainator annotations from these databases.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    }
+  ],
+  "advanced_parameters": []
+}
