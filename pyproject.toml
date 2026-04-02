@@ -100,6 +100,7 @@ version = {attr = "domainator.__version__"}
 "find_features.py" = "domainator:find_features._entrypoint"
 "genbank_to_fasta.py" = "domainator:genbank_to_fasta._entrypoint"
 "hmmer_build.py" = "domainator:hmmer_build._entrypoint"
+"infernal_build.py" = "domainator:infernal_build._entrypoint"
 "hmmer_compare.py" = "domainator:hmmer_compare._entrypoint"
 "hmmer_report.py" = "domainator:hmmer_report._entrypoint"
 "hmmer_search.py" = "domainator:hmmer_search._entrypoint"
