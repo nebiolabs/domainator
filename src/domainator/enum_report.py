@@ -219,6 +219,17 @@ class EnumHTMLWriter():
         self.out_handle = out_handle
         self.max_height = max_height
         self.id_counter = 0
+
+    def _format_cell(self, value, data_type):
+        if data_type == "str":
+            return json.dumps("" if value is None else value)
+        if value is None:
+            return "null"
+        if data_type == "int":
+            return str(int(value))
+        if data_type == "float":
+            return f"%0.1f" % float(value)
+        raise ValueError(f"Unsupported column type: {data_type}")
     
     def write_header(self):
         print("""<!doctype html><html lang='en'>
@@ -245,16 +256,8 @@ var tabledata = [""",
     def write_row(self, values):
         out_vals = list()
         for i, v in enumerate(values):
-            if v is None:
-                out_vals.append("")
-                continue
             data_type = self.column_types[i]
-            if data_type == "str":
-                out_vals.append(json.dumps(v))
-            if data_type == "int":
-                out_vals.append(str(int(v)))
-            if data_type == "float":
-                out_vals.append(f"%0.1f" % float(v))
+            out_vals.append(self._format_cell(v, data_type))
         self.out_handle.write("{id:" + str(self.id_counter) + ",")
         for i,c in enumerate(out_vals):
             self.out_handle.write(f"""{json.dumps(self.columns[i])}:{c}, """)
@@ -767,7 +770,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
                 "domain_search": {"columns": ["best_query", "query_description", "query_start", "query_end", "query_length", "match_start", "match_end", "match_strand", "match_score", "match_identity"], 
                                 "column_types": ["str", "str", "int", "int", "int", "int", "int", "str", "float", "float"], "function": lambda rec,loc,tax: domain_search(rec)},
                 "taxid_lineage": { "columns": ["taxid_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([str(x) for x in tax.lineage][1:]) }, # [1:] to remove root
-                "taxname_lineage": { "columns": ["taxid_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.names][1:]) }, # [1:] to remove root
+                "taxname_lineage": { "columns": ["taxname_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.names][1:]) }, # [1:] to remove root
                 "rank_lineage": { "columns": ["rank_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.ranks][1:]) }, # [1:] to remove root
                 }
     DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}

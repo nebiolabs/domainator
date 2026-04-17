@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+from io import StringIO
 from glob import glob
 from helpers import compare_files
 import pytest
@@ -475,6 +476,25 @@ def test_enum_report_html_quote_escape_1(shared_datadir):
         compare_files(out, reference)
 
 
+def test_enum_html_writer_missing_values_are_valid_javascript():
+    out = StringIO()
+    writer = enum_report.EnumHTMLWriter(
+        ["taxname_superkingdom", "taxid_superkingdom", "taxname_domain"],
+        ["str", "int", "str"],
+        out,
+        None,
+    )
+
+    writer.write_header()
+    writer.write_row([None, None, "Eukaryota"])
+    writer.write_footer()
+
+    html = out.getvalue()
+    assert '"taxname_superkingdom":""' in html
+    assert '"taxid_superkingdom":null' in html
+    assert '"taxname_domain":"Eukaryota"' in html
+
+
 def test_enum_report_taxonomy_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
@@ -488,7 +508,7 @@ def test_enum_report_taxonomy_1(shared_datadir):
             assert len(lines) == 3
             for i, l in enumerate(lines):
                 lines[i] = lines[i].rstrip("\r\n").split("\t")
-            assert lines[0] == ["contig", "taxid_lineage", "taxid_lineage", "taxid_self", "taxid_superkingdom", "taxid_genus", "taxname_self", "taxname_superkingdom", "taxname_genus", "domain_descriptions", "one", "two", "three"]
+            assert lines[0] == ["contig", "taxid_lineage", "taxname_lineage", "taxid_self", "taxid_superkingdom", "taxid_genus", "taxname_self", "taxname_superkingdom", "taxname_genus", "domain_descriptions", "one", "two", "three"]
             assert len(lines[1]) == len(lines[0])
             assert len(lines[2]) == len(lines[0])
             assert lines[1] == ["sp|P0AGD1|SODC_ECOLI", "131567; 2; 1224; 1236; 91347; 543; 561; 562", "cellular organisms; Bacteria; Pseudomonadota; Gammaproteobacteria; Enterobacterales; Enterobacteriaceae; Escherichia; Escherichia coli", "562", "2", "561", "Escherichia coli", "Bacteria", "Escherichia", "", "1", "2.0", "three"] 
