@@ -819,10 +819,13 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
         contig = contigs_list[contig_id]
         if contig.annotations['molecule_type'] == "protein":
             add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
-        elif -1 in hits[contig_id]:
-            add_contig_nucleic_acid_annotations(contig, hits[contig_id][-1], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
         else:
-            add_nucleic_acid_annotations(contig, hits[contig_id], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
+            contig_hits = hits[contig_id].get(-1)
+            cds_hits = {feature_id: feature_hits for feature_id, feature_hits in hits[contig_id].items() if feature_id != -1}
+            if contig_hits:
+                add_contig_nucleic_acid_annotations(contig, contig_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
+            if cds_hits:
+                add_nucleic_acid_annotations(contig, cds_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
 
     if hits_only:
         return_contigs = list(hits.keys())

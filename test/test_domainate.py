@@ -1,4 +1,5 @@
 import os
+import domainator.domainate as domainate_module
 from domainator.domainate import main, filter_by_overlap, SearchResult
 import tempfile
 from glob import glob
@@ -296,6 +297,109 @@ def test_domainator_infernal_cm_query(shared_datadir):
         domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) > 0
         assert domainator_features[0].qualifiers["program"] == ["infernal"]
+
+
+def _assert_mixed_contig_and_cds_hits_are_both_annotated(shared_datadir, monkeypatch, cds_hit_name, cds_hit_desc, cds_hit_database, cds_hit_program):
+    contig = next(SeqIO.parse(shared_datadir / "pDONR201.gb", "genbank"))
+    domainate_module.clean_rec(contig)
+    cds_index = next(index for index, feature in enumerate(contig.features) if feature.type == "CDS")
+    cds_id = contig.features[cds_index].qualifiers["cds_id"][0]
+
+    def fake_run_search(*args, **kwargs):
+        return {
+            0: {
+                -1: [
+                    SearchResult(
+                        "RF00042",
+                        "cm hit",
+                        "RF00042",
+                        1e-20,
+                        42.0,
+                        10,
+                        40,
+                        "rfam",
+                        0.0,
+                        1,
+                        30,
+                        120,
+                        "infernal",
+                    )
+                ],
+                cds_index: [
+                    SearchResult(
+                        cds_hit_name,
+                        cds_hit_desc,
+                        "ACC",
+                        1e-30,
+                        55.0,
+                        2,
+                        20,
+                        cds_hit_database,
+                        80.0,
+                        1,
+                        18,
+                        90,
+                        cds_hit_program,
+                    )
+                ],
+            }
+        }
+
+    monkeypatch.setattr(domainate_module, "run_search", fake_run_search)
+
+    domainate_module.domainator_inner(
+        [contig],
+        [],
+        [],
+        [],
+        [],
+        {},
+        0.1,
+        1,
+        None,
+        False,
+        False,
+        10,
+        1,
+        False,
+    )
+
+    domainator_features = [feature for feature in contig.features if feature.type == DOMAIN_FEATURE_NAME]
+    infernal_features = [
+        feature
+        for feature in domainator_features
+        if feature.qualifiers["program"] == ["infernal"] and feature.qualifiers["cds_id"] == ["."]
+    ]
+    hmmsearch_features = [
+        feature
+        for feature in domainator_features
+        if feature.qualifiers["program"] == [cds_hit_program] and feature.qualifiers["cds_id"] == [cds_id]
+    ]
+
+    assert len(infernal_features) == 1
+    assert len(hmmsearch_features) == 1
+
+
+def test_domainator_mixed_cm_and_protein_hmm_hits_are_both_annotated(shared_datadir, monkeypatch):
+    _assert_mixed_contig_and_cds_hits_are_both_annotated(
+        shared_datadir,
+        monkeypatch,
+        "CcdB",
+        "protein hmm hit",
+        "hmms",
+        "hmmsearch",
+    )
+
+
+def test_domainator_mixed_cm_and_protein_fasta_hits_are_both_annotated(shared_datadir, monkeypatch):
+    _assert_mixed_contig_and_cds_hits_are_both_annotated(
+        shared_datadir,
+        monkeypatch,
+        "pDONR201_2",
+        "protein fasta hit",
+        "peptides",
+        "phmmer",
+    )
 
 
 def test_domainator_nucleotide_multi_hit_annotations(shared_datadir):
