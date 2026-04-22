@@ -1,5 +1,6 @@
 import os
 from domainator.domain_search import main
+import domainator.domain_search as domain_search_module
 import tempfile
 from glob import glob
 from domainator.Bio.Seq import Seq
@@ -479,6 +480,103 @@ def test_domain_search_taxonomy_1(shared_datadir):
         assert len(new_file) == 1
         assert utils.count_peptides_in_record(new_file[0]) == 1
         assert new_file[0].id == "sp|O31851|YOJM_BACSU"
+
+
+def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch):
+    input = shared_datadir / "pdonr_peptides.fasta"
+    total_records = sum(1 for _ in SeqIO.parse(str(input), "fasta"))
+
+    def build_record(record_id, hit_name):
+        rec = SeqRecord(Seq("MA"), id=record_id, description=record_id)
+        rec.annotations["molecule_type"] = "protein"
+        rec.set_hit_names({0: hit_name})
+        rec.set_hit_best_score(42.0)
+        return rec
+
+    matched_records = [
+        build_record("match_1", "keep_me"),
+        build_record("match_2", "drop_me"),
+    ]
+    taxonomy_calls = []
+
+    def fake_domainate(seq_iterator, **kwargs):
+        assert "ncbi_taxonomy" not in kwargs
+        assert "include_taxids" not in kwargs
+        assert "exclude_taxids" not in kwargs
+        return iter(matched_records)
+
+    def fake_record_matches_taxonomy(self, record):
+        taxonomy_calls.append(record.id)
+        return record.id == "match_1"
+
+    monkeypatch.setattr(domain_search_module.domainate, "domainate", fake_domainate)
+    monkeypatch.setattr(domain_search_module._domain_search_worker, "_record_matches_taxonomy", fake_record_matches_taxonomy)
+
+    worker = domain_search_module._domain_search_worker(
+        references=[str(input)],
+        z=1000,
+        evalue=0.1,
+        max_overlap=1,
+        add_annotations=False,
+        cds_range=None,
+        kb_range=None,
+        whole_contig=False,
+        normalize_direction=True,
+        translate=False,
+        batch_size=100,
+        ncbi_taxonomy=object(),
+        include_taxids={2},
+        exclude_taxids={1224},
+        fasta_type="protein",
+    )
+
+    out = worker((str(input), 0, total_records))
+
+    assert total_records > len(matched_records)
+    assert taxonomy_calls == ["match_1", "match_2"]
+    assert len(taxonomy_calls) == len(matched_records)
+    assert [rec.id for rec in out] == ["match_1"]
+
+
+def test_domain_search_taxonomy_cache_reuses_taxid_lineage():
+    class FakeTaxonomy:
+        def __init__(self):
+            self.calls = []
+
+        def lineage(self, taxid):
+            self.calls.append(taxid)
+            return [1, 2, taxid]
+
+    fake_taxonomy = FakeTaxonomy()
+    worker = domain_search_module._domain_search_worker(
+        references=[],
+        z=1000,
+        evalue=0.1,
+        max_overlap=1,
+        add_annotations=False,
+        cds_range=None,
+        kb_range=None,
+        whole_contig=False,
+        normalize_direction=True,
+        translate=False,
+        batch_size=100,
+        ncbi_taxonomy=fake_taxonomy,
+        include_taxids={2},
+        exclude_taxids=None,
+        fasta_type="protein",
+    )
+
+    rec1 = SeqRecord(Seq("MA"), id="rec1", description="rec1")
+    rec1.annotations["molecule_type"] = "protein"
+    rec1.annotations["ncbi_taxid"] = ["10"]
+
+    rec2 = SeqRecord(Seq("MA"), id="rec2", description="rec2")
+    rec2.annotations["molecule_type"] = "protein"
+    rec2.annotations["ncbi_taxid"] = ["10"]
+
+    assert worker._record_matches_taxonomy(rec1)
+    assert worker._record_matches_taxonomy(rec2)
+    assert fake_taxonomy.calls == [10]
         
 
 

@@ -16,8 +16,9 @@ If neither is set, then hits will be written on the fly and not sorted.
 """
 
 import sys
+import functools
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -58,6 +59,24 @@ class _domain_search_worker():
         self.max_hits_per_contig = max_hits_per_contig
         #self.pre_parsed_references = domainate.read_references(references) #TODO: figure out why pickling pyhmmer peptides causes multithreading issues, and try to patch pyhmmer.
 
+    @functools.lru_cache(maxsize=None)
+    def _taxid_matches_taxonomy(self, taxid: int) -> bool:
+        lineage = set(self.ncbi_taxonomy.lineage(taxid))
+        if self.include_taxids and not lineage.intersection(self.include_taxids):
+            return False
+        if self.exclude_taxids and lineage.intersection(self.exclude_taxids):
+            return False
+        return True
+
+    def _record_matches_taxonomy(self, record) -> bool:
+        if not (self.include_taxids or self.exclude_taxids):
+            return True
+
+        taxid = get_taxid(record)
+        if taxid is None:
+            return False
+        return self._taxid_matches_taxonomy(taxid)
+
 
     
 
@@ -94,14 +113,15 @@ class _domain_search_worker():
                 best_annotation=True,
                 gene_call=self.gene_call,
                 min_evalue=self.min_evalue,
-                ncbi_taxonomy=self.ncbi_taxonomy,
-                include_taxids=self.include_taxids,
-                exclude_taxids=self.exclude_taxids,
                 max_mode=self.max_mode,
                 max_hits_per_contig=self.max_hits_per_contig,
                 #pre_parsed_references=self.pre_parsed_references
             ):
             try:
+                # domain_search filters taxonomy after a target has matched so we do not
+                # pay lineage lookup costs for every parsed input record.
+                if not self._record_matches_taxonomy(rec):
+                    continue
                 if rec.annotations['molecule_type'] == "protein":
                     if self.decoy_names is not None and rec.get_hit_names()[0] in self.decoy_names:
                         continue

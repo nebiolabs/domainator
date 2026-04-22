@@ -1333,18 +1333,22 @@ def get_taxid(record:SeqRecord) -> Optional[int]:
                             pass
     return taxid
 
+def record_matches_taxonomy(record: SeqRecord, include_taxids, exclude_taxids, ncbi_taxonomy) -> bool:
+    taxid = get_taxid(record)
+    if taxid is None:
+        return False
+
+    lineage = set(ncbi_taxonomy.lineage(taxid))
+    if include_taxids and not lineage.intersection(include_taxids):
+        return False
+    if exclude_taxids and lineage.intersection(exclude_taxids):
+        return False
+    return True
+
 def filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy):
     for record in records:
-        taxid = get_taxid(record)
-        if taxid is None: # no taxid, skip
-            continue
-
-        lineage = set(ncbi_taxonomy.lineage(taxid))
-        if include_taxids and not lineage.intersection(include_taxids): # not in include_taxids, skip
-            continue
-        if exclude_taxids and lineage.intersection(exclude_taxids): # in exclude_taxids, skip
-            continue
-        yield record
+        if record_matches_taxonomy(record, include_taxids, exclude_taxids, ncbi_taxonomy):
+            yield record
 
 
 def copy_feature(feature:SeqFeature, location:Union[FeatureLocation,CompoundLocation]=None) -> SeqFeature:
