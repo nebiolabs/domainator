@@ -47,6 +47,28 @@
       ]
     },
     {
+      "name": "Subset",
+      "parameter": "subset",
+      "help": "Only consider matrix labels in this list. Additive with --subset_file.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--subset"
+      ]
+    },
+    {
+      "name": "Subset File",
+      "parameter": "subset_file",
+      "help": "text file containing matrix labels to retain.",
+      "type": "file",
+      "flags": [
+        "--subset_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    },
+    {
       "name": "Color By",
       "parameter": "color_by",
       "help": "Color the points in the output image based on this column of the metadata table.",

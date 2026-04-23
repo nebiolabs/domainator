@@ -119,3 +119,46 @@ def test_build_ssn_mst(shared_datadir):
         
         assert mst_edges < full_edges, f"MST should have fewer edges ({mst_edges}) than full graph ({full_edges})"
         assert mst_edges > 0, "MST should have at least one edge"
+
+
+@pytest.mark.parametrize("subset_mode", ["subset", "subset_file"])
+def test_build_ssn_subset(shared_datadir, subset_mode):
+    input_file = "FeSOD_dist.tsv"
+    subset_labels = [
+        "FeSOD_A0A1F4ZT98|unreviewed|Superoxide",
+        "FeSOD_A0A067LT26|unreviewed|Superoxide",
+        "FeSOD_A0A538G8K1|unreviewed|Superoxide",
+        "FeSOD_B8LFE6|unreviewed|Superoxide",
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        metadata = str(shared_datadir / "FeSOD_metadata.tsv")
+        out_clusters = output_dir + f"/{input_file}_subset_clusters.tsv"
+        out_cytoscape = output_dir + f"/{input_file}_subset.xgmml"
+
+        subset_args = ["--subset", *subset_labels]
+        if subset_mode == "subset_file":
+            subset_file = Path(output_dir) / "subset.txt"
+            subset_file.write_text("\n".join(subset_labels) + "\n")
+            subset_args = ["--subset_file", str(subset_file)]
+
+        build_ssn.main([
+            "-i", str(shared_datadir / input_file),
+            "--xgmml", out_cytoscape,
+            "--lb", "175",
+            "--color_by", "SSN_cluster",
+            "--cluster_tsv", out_clusters,
+            "--metadata", metadata,
+            *subset_args,
+        ])
+
+        clusters = pd.read_csv(out_clusters, sep="\t")
+        assert clusters["contig"].tolist() == subset_labels
+        assert clusters["cluster"].tolist() == [1, 2, 1, 2]
+
+        with open(out_cytoscape, "r") as handle:
+            xgmml = handle.read()
+
+        assert sum(1 for line in xgmml.splitlines() if "<node " in line) == 4
+        assert sum(1 for line in xgmml.splitlines() if "<edge " in line) == 2
+        assert "FeSOD_A0A2E1RF15|unreviewed|Superoxide" not in xgmml

@@ -18,13 +18,37 @@ from pathlib import Path
 from domainator import __version__, RawAndDefaultsFormatter
 from typing import List, Union, Dict
 import numpy as np
-from domainator.utils import get_palette
+from domainator.utils import get_palette, list_and_file_to_dict_keys
 from domainator.color_genbank import read_color_table
 
 # TODO: MST-mode, only writes edges if they are in the maximum-spanning-tree of the graph. This allows for much smaller files, while preserving all of the clusters.
 
 SCORE_COLUMN="SSN_SCORE"
 CLUSTER_COLUMN="SSN_cluster"
+
+
+def subset_matrix_by_labels(matrix: DataMatrix, subset_labels) -> DataMatrix:
+    """Filter rows and columns to the labels present in subset_labels."""
+    if subset_labels is None:
+        return matrix
+
+    row_labels = [label for label in matrix.rows if label in subset_labels]
+    if matrix.symmetric_labels:
+        col_labels = row_labels
+    else:
+        col_labels = [label for label in matrix.columns if label in subset_labels]
+
+    row_indices = [matrix.row_to_idx[label] for label in row_labels]
+    col_indices = row_indices if matrix.symmetric_labels else [matrix.column_to_idx[label] for label in col_labels]
+
+    row_lengths = None if matrix.row_lengths is None else matrix.row_lengths[row_indices]
+    if matrix.symmetric_labels:
+        col_lengths = row_lengths
+    else:
+        col_lengths = None if matrix.column_lengths is None else matrix.column_lengths[col_indices]
+
+    data = matrix.data[row_indices][:, col_indices]
+    return matrix.__class__(data, row_labels, col_labels, row_lengths, col_lengths, matrix.data_type)
 
 def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
     """rename labels by frequency, such that the most frequent label is 0, the second most frequent is 1, etc.
@@ -45,7 +69,7 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
 
 
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False):
+              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, subset_labels=None):
     """build a sequence similarity network from a matrix
 
     Args:
@@ -59,10 +83,12 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         no_cluster_header (bool, optional): If True, then the cluster tsv file will not have a header. Defaults to False.
         color_table_out (str, optional): write a color table to this path. Defaults to None.
         mst (bool, optional): If True, then write 
+        subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
 
     Raises:
         ValueError: if the input does not have symmetric row and column labels
     """
+    matrix = subset_matrix_by_labels(matrix, subset_labels)
     
     if not matrix.symmetric_labels:
         raise ValueError("Input does not have symmetric axis labels. Can only build an SSN from a symmetric matrix.")
@@ -151,6 +177,11 @@ def main(argv):
 
     parser.add_argument('--metadata', type=str, nargs="+", required=False, default=None, 
                         help="tab separated files of sequence metadata.")
+
+    parser.add_argument('--subset', type=str, default=None, nargs='+',
+                        help="Only consider matrix labels in this list. Additive with --subset_file.")
+    parser.add_argument('--subset_file', type=str, default=None,
+                        help="text file containing matrix labels to retain.")
     
     parser.add_argument('--color_by', type=str, required=False, default=None,
                         help="Color the points in the output image based on this column of the metadata table.")
@@ -201,12 +232,14 @@ def main(argv):
     color_table = None
     if params.color_table:
         color_table = read_color_table(params.color_table)
+
+    subset_labels = list_and_file_to_dict_keys(params.subset, params.subset_file, as_set=True)
     
     # Run
     # params.metric,
     build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table,
               params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
-              params.mst
+              params.mst, subset_labels
               )
 
 
