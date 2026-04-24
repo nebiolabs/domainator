@@ -1076,9 +1076,17 @@ class MaxTree():
         
         def find(x):
             """Find root with path compression"""
-            if parent[x] != x:
-                parent[x] = find(parent[x])
-            return parent[x]
+            root = x
+
+            while parent[root] != root:
+                root = parent[root]
+
+            while parent[x] != x:
+                next_x = parent[x]
+                parent[x] = root
+                x = next_x
+
+            return root
         
         def union(x, y):
             """Union two sets"""
