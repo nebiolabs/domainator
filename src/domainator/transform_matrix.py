@@ -8,11 +8,13 @@ warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, mst_knn_edge_index_dict
 from domainator import __version__, RawAndDefaultsFormatter
 import scipy.sparse
 import numpy as np
 from domainator.utils import get_file_type
+
+PASS_THROUGH_MODE = "none"
 
 def is_sparse(matrix):
     """
@@ -145,6 +147,58 @@ MODES = {
         "efi_score": efi_score,
         "efi_score_dist": efi_score_dist}
 
+
+def _mst_knn_arg(value):
+    value = int(value)
+    if value <= 1:
+        raise ValueError("--mst_knn must be an integer greater than 1")
+    return value
+
+
+def apply_lower_bound(array, lower_bound):
+    if lower_bound is None:
+        return array
+
+    if scipy.sparse.issparse(array):
+        out = scipy.sparse.csr_array(array)
+        out.data[out.data <= lower_bound] = 0
+        out.eliminate_zeros()
+        return out
+
+    out = np.array(array, copy=True)
+    out[out <= lower_bound] = 0
+    return out
+
+
+def apply_mst_knn_sparsification(matrix, k, lower_bound=0):
+    if matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("--mst_knn requires a square matrix.")
+
+    edge_dict = mst_knn_edge_index_dict(matrix, k, lower_bound=lower_bound)
+    diagonal_indices = np.arange(matrix.shape[0])
+
+    if scipy.sparse.issparse(matrix.data):
+        out = scipy.sparse.dok_array(matrix.shape, dtype=matrix.data.dtype)
+        for index in diagonal_indices:
+            value = matrix.data[index, index]
+            if value != 0:
+                out[index, index] = value
+        for source_idx, target_idx in edge_dict:
+            forward_value = matrix.data[source_idx, target_idx]
+            reverse_value = matrix.data[target_idx, source_idx]
+            if forward_value != 0:
+                out[source_idx, target_idx] = forward_value
+            if reverse_value != 0:
+                out[target_idx, source_idx] = reverse_value
+        return scipy.sparse.csr_array(out)
+
+    out = np.zeros_like(matrix.data)
+    out[diagonal_indices, diagonal_indices] = matrix.data[diagonal_indices, diagonal_indices]
+    for source_idx, target_idx in edge_dict:
+        out[source_idx, target_idx] = matrix.data[source_idx, target_idx]
+        out[target_idx, source_idx] = matrix.data[target_idx, source_idx]
+    return out
+
 def transform_matrix(array, mode, row_lengths=None, col_lengths=None):
     """
     Transform an array to a different mode.
@@ -171,8 +225,13 @@ def main(argv):
     
     parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
 
-    parser.add_argument("--mode", type=str, required=False, default="norm_score", choices=set(MODES.keys()), 
-                        help="what kind of values should be in the output matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: norm_score")
+    parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=set(MODES.keys()).union({PASS_THROUGH_MODE}), 
+                        help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: none")
+
+    parser.add_argument('--lb', type=float, default=None, required=False,
+                        help="Zero out all values less than or equal to this threshold after any mode transformation.")
+    parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
+                        help="Keep only the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, using the post-transform values.")
     
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -206,18 +265,27 @@ def main(argv):
             warnings.warn(f"Input matrix format is '{matrix.data_type}', but --input_type is '{params.input_type}'. The input matrix format is overridden.")
         matrix.data_type = params.input_type
 
-    if matrix.data_type == "":
-        warnings.warn("Input matrix format not specified, assuming 'score'")
-        matrix.data_type = "score"
-    
-    if matrix.data_type != "score" and matrix.data_type != params.mode:
-        raise ValueError(f"Input matrix format is '{matrix.data_type}', but --mode is '{params.mode}'. Transforming between data types is only supported from a 'score' matrix.")
+    requested_mode = None if params.mode == PASS_THROUGH_MODE else params.mode
 
+    if requested_mode is not None:
+        if matrix.data_type == "":
+            warnings.warn("Input matrix format not specified, assuming 'score'")
+            matrix.data_type = "score"
 
-    if matrix.data_type == "score" and matrix.data_type != params.mode:
-        matrix.data = transform_matrix(matrix.data, params.mode, matrix.row_lengths, matrix.column_lengths)
+        if matrix.data_type != "score" and matrix.data_type != requested_mode:
+            raise ValueError(f"Input matrix format is '{matrix.data_type}', but --mode is '{requested_mode}'. Transforming between data types is only supported from a 'score' matrix.")
 
-    matrix.data_type = params.mode
+        if matrix.data_type == "score" and matrix.data_type != requested_mode:
+            matrix.data = transform_matrix(matrix.data, requested_mode, matrix.row_lengths, matrix.column_lengths)
+
+        matrix.data_type = requested_mode
+
+    if params.mst_knn is not None:
+        matrix.data = apply_mst_knn_sparsification(matrix, params.mst_knn, lower_bound=0 if params.lb is None else params.lb)
+
+    if params.lb is not None:
+        matrix.data = apply_lower_bound(matrix.data, params.lb)
+
     ### Run
     if dense is not None:
         matrix.write(dense, "dense")

@@ -110,4 +110,83 @@ def test_transform_matrix_2(shared_datadir):
         compare_data_matrix(dense_output_matrix, expected_matrix)
 
 
+def test_transform_matrix_default_mode_preserves_values():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_data = np.array([
+            [5.0, 1.0, 0.0],
+            [2.0, 4.0, 3.0],
+            [0.0, 6.0, 7.0],
+        ])
+
+        input_file = output_dir + "/input.hdf5"
+        dense_out = output_dir + "/dense_out.hdf5"
+
+        rows = ["a", "b", "c"]
+        columns = ["A", "B", "C"]
+
+        matrix = DenseDataMatrix(input_data, rows, columns, data_type="bool")
+        matrix.write(input_file, "dense")
+
+        transform_matrix.main(["-i", input_file, "--dense", dense_out])
+        dense_output_matrix = DataMatrix.from_file(dense_out)
+
+        np.testing.assert_array_equal(dense_output_matrix.data, input_data)
+        assert dense_output_matrix.data_type == "bool"
+
+
+def test_transform_matrix_lb_applied_after_mode_transform():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_data = np.array([
+            [0.0, 0.2, 0.0],
+            [0.3, 0.0, 0.4],
+            [0.0, 0.0, 0.0],
+        ])
+
+        input_file = output_dir + "/input.hdf5"
+        dense_out = output_dir + "/dense_out.hdf5"
+
+        rows = ["a", "b", "c"]
+        columns = ["A", "B", "C"]
+
+        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "dense")
+
+        transform_matrix.main(["-i", input_file, "--dense", dense_out, "--mode", "bool", "--lb", "0.5"])
+        dense_output_matrix = DataMatrix.from_file(dense_out)
+
+        expected = np.array([
+            [0, 1, 0],
+            [1, 0, 1],
+            [0, 0, 0],
+        ], dtype=np.int8)
+
+        np.testing.assert_array_equal(dense_output_matrix.data, expected)
+        assert dense_output_matrix.data_type == "bool"
+
+
+def test_transform_matrix_mst_knn_applied_after_mode_transform():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_data = np.array([
+            [9.0, 2.0, 1.0],
+            [2.0, 9.0, 8.0],
+            [1.0, 8.0, 9.0],
+        ])
+
+        input_file = output_dir + "/input.hdf5"
+        dense_out = output_dir + "/dense_out.hdf5"
+
+        rows = ["a", "b", "c"]
+        columns = ["a", "b", "c"]
+
+        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "dense")
+
+        transform_matrix.main(["-i", input_file, "--dense", dense_out, "--mode", "bool", "--mst_knn", "2"])
+        dense_output_matrix = DataMatrix.from_file(dense_out)
+
+        expected = np.ones((3, 3), dtype=np.int8)
+        np.testing.assert_array_equal(dense_output_matrix.data, expected)
+        assert dense_output_matrix.data_type == "bool"
+
+
 #TODO: test more conversion modes
