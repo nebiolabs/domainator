@@ -175,6 +175,60 @@ def test_build_ssn_mst_knn(shared_datadir):
         assert mst_edges < mst_knn_edges < full_edges
 
 
+def test_build_ssn_mst_knn_preserves_ssn_cluster_colors(shared_datadir):
+    input_file = "FeSOD_dist.tsv"
+    expected_clusters = {"1", "2", "3"}
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        metadata = str(shared_datadir / "FeSOD_metadata.tsv")
+
+        out_clusters_baseline = output_dir + f"/{input_file}_out_clusters_baseline.tsv"
+        out_cytoscape_baseline = output_dir + f"/{input_file}_out_baseline.xgmml"
+        out_color_table_baseline = output_dir + "/color_table_baseline.tsv"
+        build_ssn.main([
+            "-i", str(shared_datadir / input_file),
+            "--xgmml", out_cytoscape_baseline,
+            "--lb", "175",
+            "--color_by", "SSN_cluster",
+            "--color_table_out", out_color_table_baseline,
+            "--cluster_tsv", out_clusters_baseline,
+            "--metadata", metadata,
+        ])
+
+        out_clusters_mst_knn = output_dir + f"/{input_file}_out_clusters_mst_knn_colors.tsv"
+        out_cytoscape_mst_knn = output_dir + f"/{input_file}_out_mst_knn_colors.xgmml"
+        out_color_table_mst_knn = output_dir + "/color_table_mst_knn.tsv"
+        build_ssn.main([
+            "-i", str(shared_datadir / input_file),
+            "--xgmml", out_cytoscape_mst_knn,
+            "--lb", "175",
+            "--color_by", "SSN_cluster",
+            "--color_table_out", out_color_table_mst_knn,
+            "--cluster_tsv", out_clusters_mst_knn,
+            "--metadata", metadata,
+            "--mst_knn", "2",
+        ])
+
+        compare_files(out_clusters_baseline, out_clusters_mst_knn)
+
+        baseline_color_table = {}
+        with open(out_color_table_baseline, "r") as handle:
+            for line in handle:
+                cluster, color = line.strip().split("\t")
+                baseline_color_table[cluster] = color
+
+        mst_knn_color_table = {}
+        with open(out_color_table_mst_knn, "r") as handle:
+            for line in handle:
+                cluster, color = line.strip().split("\t")
+                mst_knn_color_table[cluster] = color
+
+        assert baseline_color_table == mst_knn_color_table
+        assert set(baseline_color_table.keys()) == expected_clusters
+        assert all(re.match(r"#[0-9a-fA-F]{6}", color) for color in baseline_color_table.values())
+        assert len(set(baseline_color_table.values())) == len(expected_clusters)
+
+
 @pytest.mark.parametrize("subset_mode", ["subset", "subset_file"])
 def test_build_ssn_subset(shared_datadir, subset_mode):
     input_file = "FeSOD_dist.tsv"
