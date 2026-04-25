@@ -37,6 +37,7 @@ Usage:
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
+from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 import heapq
@@ -48,37 +49,117 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Union, Optional, Iterator
 
 
+@dataclass(frozen=True)
+class SortedUndirectedEdges:
+    """Compact representation of sorted undirected edges."""
+
+    n_nodes: int
+    source: np.ndarray
+    target: np.ndarray
+    score: np.ndarray
+
+    def __post_init__(self):
+        if not (len(self.source) == len(self.target) == len(self.score)):
+            raise ValueError("source, target, and score arrays must have the same length")
+
+    def __len__(self) -> int:
+        return len(self.score)
+
+
+@dataclass(frozen=True)
+class CompactNeighborRankings:
+    """Array-backed per-row neighbor rankings."""
+
+    offsets: np.ndarray
+    target: np.ndarray
+    score: np.ndarray
+
+    def __post_init__(self):
+        if len(self.offsets) == 0:
+            raise ValueError("offsets must contain at least one element")
+        if self.offsets[0] != 0:
+            raise ValueError("offsets must start at 0")
+        if self.offsets[-1] != len(self.target) or self.offsets[-1] != len(self.score):
+            raise ValueError("offsets must end at the length of target and score arrays")
+
+    def __len__(self) -> int:
+        return len(self.offsets) - 1
+
+    def row_bounds(self, row_idx: int) -> Tuple[int, int]:
+        return int(self.offsets[row_idx]), int(self.offsets[row_idx + 1])
+
+
+NeighborRankings = Union[CompactNeighborRankings, List[List[Tuple[int, float]]]]
+
+
+def _empty_compact_neighbor_rankings(n_rows: int) -> CompactNeighborRankings:
+    return CompactNeighborRankings(
+        offsets=np.zeros(n_rows + 1, dtype=np.int64),
+        target=np.empty(0, dtype=np.int32),
+        score=np.empty(0, dtype=float),
+    )
+
+
+def _iter_neighbor_ranking_rows(neighbor_rankings: NeighborRankings):
+    if isinstance(neighbor_rankings, CompactNeighborRankings):
+        for row_idx in range(len(neighbor_rankings)):
+            start, end = neighbor_rankings.row_bounds(row_idx)
+            yield row_idx, neighbor_rankings.target[start:end], neighbor_rankings.score[start:end]
+        return
+
+    for row_idx, ranked_neighbors in enumerate(neighbor_rankings):
+        if len(ranked_neighbors) == 0:
+            yield row_idx, np.empty(0, dtype=np.int32), np.empty(0, dtype=float)
+            continue
+        row_target = np.fromiter((target_idx for target_idx, _ in ranked_neighbors), dtype=np.int32, count=len(ranked_neighbors))
+        row_score = np.fromiter((score for _, score in ranked_neighbors), dtype=float, count=len(ranked_neighbors))
+        yield row_idx, row_target, row_score
+
+
 def _score_passes_lower_bound(score: float, lower_bound: float, include_equal: bool = False) -> bool:
     if include_equal:
         return score >= lower_bound
     return score > lower_bound
 
 
-def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None) -> List[List[Tuple[int, float]]]:
-    rankings = []
+def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None) -> CompactNeighborRankings:
+    offsets = [0]
+    target_parts = []
+    score_parts = []
     for row_idx in range(data.shape[0]):
         row_scores = np.maximum(data[row_idx, :], data[:, row_idx])
         candidate_indices = np.flatnonzero(row_scores > 0)
         candidate_indices = candidate_indices[candidate_indices != row_idx]
 
         if candidate_indices.size == 0:
-            rankings.append([])
+            offsets.append(offsets[-1])
             continue
 
         candidate_scores = row_scores[candidate_indices]
         order = np.lexsort((candidate_indices, -candidate_scores))
         if max_k is not None:
             order = order[:max_k]
-        rankings.append([
-            (int(candidate_indices[position]), float(candidate_scores[position]))
-            for position in order
-        ])
-    return rankings
+        row_target = candidate_indices[order].astype(np.int32, copy=False)
+        row_score = candidate_scores[order].astype(float, copy=False)
+        target_parts.append(row_target)
+        score_parts.append(row_score)
+        offsets.append(offsets[-1] + row_target.size)
+
+    if offsets[-1] == 0:
+        return _empty_compact_neighbor_rankings(data.shape[0])
+
+    return CompactNeighborRankings(
+        offsets=np.asarray(offsets, dtype=np.int64),
+        target=np.concatenate(target_parts),
+        score=np.concatenate(score_parts),
+    )
 
 
-def _build_sparse_neighbor_rankings(data: scipy.sparse.csr_array, max_k: Optional[int] = None) -> List[List[Tuple[int, float]]]:
+def _build_sparse_neighbor_rankings(data: scipy.sparse.csr_array, max_k: Optional[int] = None) -> CompactNeighborRankings:
     transpose = data.transpose().tocsr()
-    rankings = []
+    offsets = [0]
+    target_parts = []
+    score_parts = []
 
     for row_idx in range(data.shape[0]):
         candidate_scores = dict()
@@ -106,15 +187,32 @@ def _build_sparse_neighbor_rankings(data: scipy.sparse.csr_array, max_k: Optiona
             if previous is None or score > previous:
                 candidate_scores[target_idx] = score
 
-        if max_k is not None and len(candidate_scores) > max_k:
-            rankings.append(heapq.nsmallest(max_k, candidate_scores.items(), key=lambda item: (-item[1], item[0])))
-        else:
-            rankings.append(sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0])))
+        if len(candidate_scores) == 0:
+            offsets.append(offsets[-1])
+            continue
 
-    return rankings
+        row_target = np.fromiter(candidate_scores.keys(), dtype=np.int32, count=len(candidate_scores))
+        row_score = np.fromiter(candidate_scores.values(), dtype=float, count=len(candidate_scores))
+        order = np.lexsort((row_target, -row_score))
+        if max_k is not None:
+            order = order[:max_k]
+        row_target = row_target[order]
+        row_score = row_score[order]
+        target_parts.append(row_target)
+        score_parts.append(row_score)
+        offsets.append(offsets[-1] + row_target.size)
+
+    if offsets[-1] == 0:
+        return _empty_compact_neighbor_rankings(data.shape[0])
+
+    return CompactNeighborRankings(
+        offsets=np.asarray(offsets, dtype=np.int64),
+        target=np.concatenate(target_parts),
+        score=np.concatenate(score_parts),
+    )
 
 
-def build_symmetric_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int] = None) -> List[List[Tuple[int, float]]]:
+def build_symmetric_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int] = None) -> CompactNeighborRankings:
     """Return deterministic per-row neighbor rankings using max(row,col) scores."""
     if scipy.sparse.issparse(matrix.data):
         return _build_sparse_neighbor_rankings(matrix.data, max_k=max_k)
@@ -122,7 +220,7 @@ def build_symmetric_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int]
 
 
 def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
-                                  neighbor_rankings: Optional[List[List[Tuple[int, float]]]] = None) -> Dict[Tuple[int, int], float]:
+                                  neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return OR-symmetric kNN edges keyed by undirected index pairs."""
     if k < 1:
         raise ValueError("k must be >= 1")
@@ -131,9 +229,9 @@ def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: flo
         neighbor_rankings = build_symmetric_neighbor_rankings(matrix)
 
     edge_dict = dict()
-    for source_idx, ranked_neighbors in enumerate(neighbor_rankings):
+    for source_idx, row_target, row_score in _iter_neighbor_ranking_rows(neighbor_rankings):
         selected = 0
-        for target_idx, score in ranked_neighbors:
+        for target_idx, score in zip(row_target, row_score):
             if not _score_passes_lower_bound(score, lower_bound, include_equal=include_equal):
                 break
             edge = (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
@@ -156,7 +254,7 @@ def mst_edge_index_dict(tree: 'MaxTree', lower_bound: float = 0, include_equal: 
 
 def mst_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
                             tree: Optional['MaxTree'] = None,
-                            neighbor_rankings: Optional[List[List[Tuple[int, float]]]] = None) -> Dict[Tuple[int, int], float]:
+                            neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return the union of MST and OR-symmetric kNN edges keyed by undirected index pair."""
     if tree is None:
         tree = MaxTree(matrix)
@@ -174,7 +272,7 @@ def mst_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0
 
 def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
                                      include_equal: bool = True,
-                                     neighbor_rankings: Optional[List[List[Tuple[int, float]]]] = None) -> np.ndarray:
+                                     neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:
     """Return exact MST-kNN edge counts for each MST threshold and k in [2, max_k]."""
     if max_k < 2:
         raise ValueError("max_k must be >= 2")
@@ -187,23 +285,49 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
     if len(thresholds) == 0:
         return counts
 
-    activation_events = []
-    for source_idx, ranked_neighbors in enumerate(neighbor_rankings):
-        for rank, (target_idx, score) in enumerate(ranked_neighbors[:max_k], start=1):
-            activation_events.append((float(score), rank, (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)))
+    if isinstance(neighbor_rankings, CompactNeighborRankings):
+        total_events = len(neighbor_rankings.target)
+    else:
+        total_events = sum(min(len(ranked_neighbors), max_k) for ranked_neighbors in neighbor_rankings)
+    activation_scores = np.empty(total_events, dtype=float)
+    activation_ranks = np.empty(total_events, dtype=np.int16)
+    activation_source = np.empty(total_events, dtype=np.int32)
+    activation_target = np.empty(total_events, dtype=np.int32)
 
-    activation_events.sort(key=lambda item: item[0], reverse=True)
+    activation_idx = 0
+    for source_idx, row_target, row_score in _iter_neighbor_ranking_rows(neighbor_rankings):
+        for rank, (target_idx, score) in enumerate(zip(row_target[:max_k], row_score[:max_k]), start=1):
+            if source_idx < target_idx:
+                edge_source, edge_target = source_idx, target_idx
+            else:
+                edge_source, edge_target = target_idx, source_idx
+            activation_scores[activation_idx] = float(score)
+            activation_ranks[activation_idx] = rank
+            activation_source[activation_idx] = edge_source
+            activation_target[activation_idx] = edge_target
+            activation_idx += 1
+
+    if total_events > 0:
+        order = np.argsort(-activation_scores, kind="stable")
+        activation_scores = activation_scores[order]
+        activation_ranks = activation_ranks[order]
+        activation_source = activation_source[order]
+        activation_target = activation_target[order]
 
     active_edge_min_rank = dict()
     non_mst_rank_counts = np.zeros(max_k + 1, dtype=int)
     mst_prefix_edges = set()
     activation_idx = 0
 
+    def edge_key(source_idx: int, target_idx: int) -> int:
+        return int(source_idx) * tree.n_nodes + int(target_idx)
+
     for threshold_idx, mst_edge in enumerate(tree.mst_edges):
         threshold = thresholds[threshold_idx]
 
-        while activation_idx < len(activation_events) and _score_passes_lower_bound(activation_events[activation_idx][0], threshold, include_equal=include_equal):
-            _, rank, edge = activation_events[activation_idx]
+        while activation_idx < total_events and _score_passes_lower_bound(activation_scores[activation_idx], threshold, include_equal=include_equal):
+            rank = int(activation_ranks[activation_idx])
+            edge = edge_key(activation_source[activation_idx], activation_target[activation_idx])
             current_rank = active_edge_min_rank.get(edge)
 
             if current_rank is None:
@@ -219,7 +343,7 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
             activation_idx += 1
 
         source_idx, target_idx, _ = mst_edge
-        edge = (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
+        edge = edge_key(source_idx, target_idx) if source_idx < target_idx else edge_key(target_idx, source_idx)
         mst_prefix_edges.add(edge)
         current_rank = active_edge_min_rank.get(edge)
         if current_rank is not None:
@@ -554,6 +678,32 @@ class DataMatrix(ABC):
         
         return items_list, items_dict
 
+    def sorted_undirected_edges(self, skip_zeros: bool = False, agg=None) -> SortedUndirectedEdges:
+        """Return lower-triangular undirected edges sorted by descending score."""
+        triangular = self.triangular(
+            side="lower",
+            include_diagonal=False,
+            skip_zeros=skip_zeros,
+            index_style="index",
+            agg=agg,
+        )
+        if len(triangular) == 0:
+            return SortedUndirectedEdges(
+                n_nodes=len(self),
+                source=np.empty(0, dtype=np.int32),
+                target=np.empty(0, dtype=np.int32),
+                score=np.empty(0, dtype=float),
+            )
+
+        edge_array = np.asarray(triangular, dtype=float)
+        order = np.argsort(-edge_array[:, 2], kind="stable")
+        return SortedUndirectedEdges(
+            n_nodes=len(self),
+            source=edge_array[order, 0].astype(np.int32, copy=False),
+            target=edge_array[order, 1].astype(np.int32, copy=False),
+            score=edge_array[order, 2].astype(float, copy=False),
+        )
+
 
     @classmethod
     def write_sparse(cls, matrix, file_name, row_names, col_names, row_lengths:Optional[np.ndarray]=None, col_lengths:Optional[np.ndarray]=None, data_type=""):
@@ -880,6 +1030,42 @@ class DenseDataMatrix(DataMatrix):
                     out.append((r, c, value))
         
         return out
+
+    def sorted_undirected_edges(self, skip_zeros: bool = False, agg=None) -> SortedUndirectedEdges:
+        """Return lower-triangular undirected edges sorted by descending score."""
+        if self.data.shape[0] != self.data.shape[1]:
+            raise NotImplementedError("sorted_undirected_edges only supported for square matrices")
+
+        if agg is not None and agg is not max:
+            return super().sorted_undirected_edges(skip_zeros=skip_zeros, agg=agg)
+
+        row_idx, col_idx = np.tril_indices(self.data.shape[0], k=-1)
+        if agg is max:
+            scores = np.maximum(self.data[row_idx, col_idx], self.data[col_idx, row_idx])
+        else:
+            scores = self.data[row_idx, col_idx]
+
+        if skip_zeros:
+            mask = scores != 0
+            row_idx = row_idx[mask]
+            col_idx = col_idx[mask]
+            scores = scores[mask]
+
+        if scores.size == 0:
+            return SortedUndirectedEdges(
+                n_nodes=len(self),
+                source=np.empty(0, dtype=np.int32),
+                target=np.empty(0, dtype=np.int32),
+                score=np.empty(0, dtype=float),
+            )
+
+        order = np.argsort(-scores, kind="stable")
+        return SortedUndirectedEdges(
+            n_nodes=len(self),
+            source=row_idx[order].astype(np.int32, copy=False),
+            target=col_idx[order].astype(np.int32, copy=False),
+            score=scores[order].astype(float, copy=False),
+        )
     
     def itervalues(self) -> Iterator[float]:
         """Yield all values row by row."""
@@ -929,7 +1115,7 @@ class SparseDataMatrix(DataMatrix):
     
     def __init__(self, data: scipy.sparse.csr_array, row_names: List[str], col_names: List[str],
                  row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None,
-                 data_type: str = None):
+                 data_type: str = None, *, copy_data: bool = True):
         """
         Initialize a sparse data matrix.
         
@@ -957,7 +1143,7 @@ class SparseDataMatrix(DataMatrix):
         elif not isinstance(data, scipy.sparse.csr_array):
             self.data = scipy.sparse.csr_array(data)
         else:
-            self.data = data.copy()
+            self.data = data.copy() if copy_data else data
         
         self.data.eliminate_zeros()
         self.data.sort_indices()
@@ -1027,7 +1213,7 @@ class SparseDataMatrix(DataMatrix):
             col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
             data_type = f.attrs.get(cls._DATA_TYPE_ATTR, "")
             
-            return cls(data, row_names, col_names, row_lengths, col_lengths, data_type)
+            return cls(data, row_names, col_names, row_lengths, col_lengths, data_type, copy_data=False)
     
     def _read_hdf5(self, matrix_file: Union[PathLike, str]):
         """Not used - handled by _from_hdf5 classmethod"""
@@ -1162,6 +1348,38 @@ class SparseDataMatrix(DataMatrix):
                         out.append((r, c, value))
         
         return out
+
+    def sorted_undirected_edges(self, skip_zeros: bool = False, agg=None) -> SortedUndirectedEdges:
+        """Return lower-triangular undirected edges sorted by descending score."""
+        if self.data.shape[0] != self.data.shape[1]:
+            raise NotImplementedError("sorted_undirected_edges only supported for square matrices")
+
+        if skip_zeros and (agg is None or agg is max):
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+
+            if agg is max:
+                triangular = scipy.sparse.tril(self.data.maximum(self.data.transpose()), k=-1).tocoo()
+            else:
+                triangular = scipy.sparse.tril(self.data, k=-1).tocoo()
+
+            if triangular.nnz == 0:
+                return SortedUndirectedEdges(
+                    n_nodes=len(self),
+                    source=np.empty(0, dtype=np.int32),
+                    target=np.empty(0, dtype=np.int32),
+                    score=np.empty(0, dtype=float),
+                )
+
+            order = np.argsort(-triangular.data, kind="stable")
+            return SortedUndirectedEdges(
+                n_nodes=len(self),
+                source=triangular.row[order].astype(np.int32, copy=False),
+                target=triangular.col[order].astype(np.int32, copy=False),
+                score=triangular.data[order].astype(float, copy=False),
+            )
+
+        return super().sorted_undirected_edges(skip_zeros=skip_zeros, agg=agg)
     
     def itervalues(self) -> Iterator[float]:
         """Yield all values row by row."""
@@ -1204,7 +1422,7 @@ class MaxTree():
         - Sequence similarity networks: Connect most similar sequences
     
     Args:
-        matrix: DataMatrix containing edge weights (typically similarity or distance scores)
+        matrix: DataMatrix or sorted edge table containing edge weights
         skip_zeros: If True, zero-weight edges are excluded. When there is no connected
                    MST without zero edges, the result will be a forest (multiple trees).
     
@@ -1239,23 +1457,15 @@ class MaxTree():
         connected component.
     """
 
-    def __init__(self, matrix:DataMatrix, skip_zeros=True):
-        triangular = matrix.triangular(agg=max, index_style="index", skip_zeros=skip_zeros) #list of tuples: i, j, value 
+    def __init__(self, matrix: Union[DataMatrix, SortedUndirectedEdges], skip_zeros=True):
+        if isinstance(matrix, DataMatrix):
+            sorted_edges = matrix.sorted_undirected_edges(skip_zeros=skip_zeros, agg=max)
+        else:
+            sorted_edges = matrix
 
-       
-        
-        self.n_nodes = len(matrix)
-        self.edges = np.zeros((len(triangular), 4)) # node_i, node_j, edge_value, edges between this and next mst_edge (if 0, then this is not an mst_edge)
-
-        # Handle empty case (single node or empty matrix)
-        if len(triangular) > 0:
-            self.edges[:,0:3] = triangular
-
-        del triangular
-        np.take(self.edges, np.argsort(self.edges[:, 2])[::-1], axis=0, out=self.edges) # sort highest to lowest by value
+        self.n_nodes = sorted_edges.n_nodes
 
         # calculate_max_spanning_tree using union-find
-        self.mst = list() #np.zeros((max(0, self.n_nodes - 1),), dtype=int) # indexes of edges in the mst
         parent = np.arange(self.n_nodes, dtype=int)  # Union-find parent array
         
         def find(x):
@@ -1281,23 +1491,24 @@ class MaxTree():
                 return True
             return False
         
+        mst_edges = []
         edge_count = 0
-        #mst_i = 0
-        for edge_i in range(len(self.edges)):
-            node_1 = int(self.edges[edge_i, 0])
-            node_2 = int(self.edges[edge_i, 1])
+        for edge_i in range(len(sorted_edges)):
+            node_1 = int(sorted_edges.source[edge_i])
+            node_2 = int(sorted_edges.target[edge_i])
+            score = float(sorted_edges.score[edge_i])
             edge_count += 1
             
             # Only add edge if it connects different components
             if union(node_1, node_2):
-                self.edges[edge_i, 3] = edge_count
-                self.mst.append(edge_i)
-                #mst_i += 1
+                mst_edges.append((node_1, node_2, score, edge_count))
                 edge_count = 0
-                
-                # if mst_i == self.n_nodes - 1:
-                #     break  # MST is complete
-        self.mst = np.array(self.mst)
+
+        if len(mst_edges) > 0:
+            self.edges = np.asarray(mst_edges, dtype=float)
+        else:
+            self.edges = np.zeros((0, 4), dtype=float)
+        self.mst = np.arange(len(self.edges), dtype=int)
 
         self.edges_by_threshold = self._edges_by_threshold()
         self.cluster_count_by_threshold = self._cluster_count_by_threshold()

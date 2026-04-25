@@ -37,5 +37,16 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Include Mst Knn",
+      "parameter": "include_mst_knn",
+      "help": "Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--include_mst_knn"
+      ]
+    }
+  ]
 }

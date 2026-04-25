@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings
 import scipy.sparse
 import numpy as np
 import pytest_datadir
@@ -78,6 +78,47 @@ def test_convert_to_sparse():
     assert result is matrix
     assert isinstance(result, SparseDataMatrix)
     assert result.shape == (3, 3)
+
+
+def test_sorted_undirected_edges_sparse_matches_dense():
+    data = np.array([
+        [0, 10, 0, 7],
+        [8, 0, 6, 0],
+        [4, 9, 0, 5],
+        [7, 0, 5, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+
+    dense_matrix = DenseDataMatrix(data, row_names, row_names)
+    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, row_names)
+
+    dense_edges = dense_matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+    sparse_edges = sparse_matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+
+    assert dense_edges.n_nodes == sparse_edges.n_nodes == len(row_names)
+    assert np.array_equal(dense_edges.source, sparse_edges.source)
+    assert np.array_equal(dense_edges.target, sparse_edges.target)
+    assert np.array_equal(dense_edges.score, sparse_edges.score)
+
+
+def test_build_symmetric_neighbor_rankings_sparse_matches_dense():
+    data = np.array([
+        [0, 10, 0, 7],
+        [8, 0, 6, 0],
+        [4, 9, 0, 5],
+        [7, 0, 5, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+
+    dense_matrix = DenseDataMatrix(data, row_names, row_names)
+    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, row_names)
+
+    dense_rankings = build_symmetric_neighbor_rankings(dense_matrix, max_k=3)
+    sparse_rankings = build_symmetric_neighbor_rankings(sparse_matrix, max_k=3)
+
+    assert np.array_equal(dense_rankings.offsets, sparse_rankings.offsets)
+    assert np.array_equal(dense_rankings.target, sparse_rankings.target)
+    assert np.array_equal(dense_rankings.score, sparse_rankings.score)
 
 # Test iter_data order and zeros for synthetic data
 def test_iter_data_order_and_zeros_fake():

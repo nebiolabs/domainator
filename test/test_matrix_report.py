@@ -29,6 +29,8 @@ def test_matrix_report_1(shared_datadir, input_file):
             assert "Max" in f_txt or "max" in f_txt.lower()
             # Check that we have nodes count (20 nodes in the test data)
             assert "20" in f_txt
+        assert 'Projected MST_KNN edge counts' not in open(out_txt).read()
+        assert 'mst-knn-k-slider' not in open(out_html).read()
 
 
 # def test_matrix_report_empty_input(shared_datadir):
@@ -88,7 +90,8 @@ class TestInteractiveHTML:
             
             matrix_report.main([
                 "-i", input_file,
-                "--html", output_file
+                "--html", output_file,
+                "--include_mst_knn"
             ])
             
             assert os.path.exists(output_file)
@@ -184,7 +187,7 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_html = output_dir + "/matrix_report_test.html"
         out_txt = output_dir + "/matrix_report_test.txt"
-        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html])
+        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html, "--include_mst_knn"])
 
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
@@ -192,6 +195,21 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
         assert 'Projected MST_KNN edge counts' in text_content
         assert 'MST_KNN edges' in text_content
         assert 'mst-knn-k-slider' in html_content
+
+
+def test_matrix_report_default_excludes_mst_knn(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_html = output_dir + "/matrix_report_test.html"
+        out_txt = output_dir + "/matrix_report_test.txt"
+        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html])
+
+        text_content = open(out_txt).read()
+        html_content = open(out_html).read()
+
+        assert 'Projected MST_KNN edge counts' not in text_content
+        assert 'MST_KNN edges' not in text_content
+        assert 'mst-knn-k-slider' not in html_content
+        assert 'MST_KNN_COUNTS = []' in html_content
 
 
 if __name__ == '__main__':
