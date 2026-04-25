@@ -123,7 +123,7 @@
       "name": "Cluster Tsv",
       "parameter": "cluster_tsv",
       "help": "Path to write a tsv file will mapping each sequence to its cluster. If set, then --cluster is automatically activated. If --no_cluster_header not set, then the file will have header contig cluster.",
-      "type": "string",
+      "type": "output",
       "flags": [
         "--cluster_tsv"
       ]
@@ -141,11 +141,21 @@
     {
       "name": "Mst",
       "parameter": "mst",
-      "help": "If set, then only include edges that are part of the maximum spanning tree of the graph. The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to the minimum necessary to preserve the clusters.",
+      "help": "If set, then only include edges that are part of the maximum spanning tree of the graph. The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to the minimum necessary to preserve the clusters. Mutually exclusive with Mst KNN.",
       "type": "boolean",
       "default": false,
       "flags": [
         "--mst"
+      ]
+    },
+    {
+      "name": "Mst KNN",
+      "parameter": "mst_knn",
+      "help": "Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. K must be greater than 1. Mutually exclusive with Mst.",
+      "type": "integer",
+      "min": 2,
+      "flags": [
+        "--mst_knn"
       ]
     }
   ]

@@ -39,12 +39,196 @@ import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from os import PathLike
 from pathlib import Path
+import heapq
 import pandas as pd
 import scipy.sparse
 import numpy as np
 import h5py
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Union, Optional, Iterator
+
+
+def _score_passes_lower_bound(score: float, lower_bound: float, include_equal: bool = False) -> bool:
+    if include_equal:
+        return score >= lower_bound
+    return score > lower_bound
+
+
+def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None) -> List[List[Tuple[int, float]]]:
+    rankings = []
+    for row_idx in range(data.shape[0]):
+        row_scores = np.maximum(data[row_idx, :], data[:, row_idx])
+        candidate_indices = np.flatnonzero(row_scores > 0)
+        candidate_indices = candidate_indices[candidate_indices != row_idx]
+
+        if candidate_indices.size == 0:
+            rankings.append([])
+            continue
+
+        candidate_scores = row_scores[candidate_indices]
+        order = np.lexsort((candidate_indices, -candidate_scores))
+        if max_k is not None:
+            order = order[:max_k]
+        rankings.append([
+            (int(candidate_indices[position]), float(candidate_scores[position]))
+            for position in order
+        ])
+    return rankings
+
+
+def _build_sparse_neighbor_rankings(data: scipy.sparse.csr_array, max_k: Optional[int] = None) -> List[List[Tuple[int, float]]]:
+    transpose = data.transpose().tocsr()
+    rankings = []
+
+    for row_idx in range(data.shape[0]):
+        candidate_scores = dict()
+
+        row_start = data.indptr[row_idx]
+        row_end = data.indptr[row_idx + 1]
+        for position in range(row_start, row_end):
+            target_idx = int(data.indices[position])
+            if target_idx == row_idx:
+                continue
+            score = float(data.data[position])
+            if score > 0:
+                candidate_scores[target_idx] = score
+
+        col_start = transpose.indptr[row_idx]
+        col_end = transpose.indptr[row_idx + 1]
+        for position in range(col_start, col_end):
+            target_idx = int(transpose.indices[position])
+            if target_idx == row_idx:
+                continue
+            score = float(transpose.data[position])
+            if score <= 0:
+                continue
+            previous = candidate_scores.get(target_idx)
+            if previous is None or score > previous:
+                candidate_scores[target_idx] = score
+
+        if max_k is not None and len(candidate_scores) > max_k:
+            rankings.append(heapq.nsmallest(max_k, candidate_scores.items(), key=lambda item: (-item[1], item[0])))
+        else:
+            rankings.append(sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0])))
+
+    return rankings
+
+
+def build_symmetric_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int] = None) -> List[List[Tuple[int, float]]]:
+    """Return deterministic per-row neighbor rankings using max(row,col) scores."""
+    if scipy.sparse.issparse(matrix.data):
+        return _build_sparse_neighbor_rankings(matrix.data, max_k=max_k)
+    return _build_dense_neighbor_rankings(matrix.data, max_k=max_k)
+
+
+def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
+                                  neighbor_rankings: Optional[List[List[Tuple[int, float]]]] = None) -> Dict[Tuple[int, int], float]:
+    """Return OR-symmetric kNN edges keyed by undirected index pairs."""
+    if k < 1:
+        raise ValueError("k must be >= 1")
+
+    if neighbor_rankings is None:
+        neighbor_rankings = build_symmetric_neighbor_rankings(matrix)
+
+    edge_dict = dict()
+    for source_idx, ranked_neighbors in enumerate(neighbor_rankings):
+        selected = 0
+        for target_idx, score in ranked_neighbors:
+            if not _score_passes_lower_bound(score, lower_bound, include_equal=include_equal):
+                break
+            edge = (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
+            edge_dict[edge] = score
+            selected += 1
+            if selected >= k:
+                break
+    return edge_dict
+
+
+def mst_edge_index_dict(tree: 'MaxTree', lower_bound: float = 0, include_equal: bool = False) -> Dict[Tuple[int, int], float]:
+    """Return MST edges passing the threshold keyed by undirected index pair."""
+    edge_dict = dict()
+    for source_idx, target_idx, score in tree.mst_edges:
+        if _score_passes_lower_bound(score, lower_bound, include_equal=include_equal):
+            edge = (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
+            edge_dict[edge] = score
+    return edge_dict
+
+
+def mst_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
+                            tree: Optional['MaxTree'] = None,
+                            neighbor_rankings: Optional[List[List[Tuple[int, float]]]] = None) -> Dict[Tuple[int, int], float]:
+    """Return the union of MST and OR-symmetric kNN edges keyed by undirected index pair."""
+    if tree is None:
+        tree = MaxTree(matrix)
+
+    edge_dict = mst_edge_index_dict(tree, lower_bound=lower_bound, include_equal=include_equal)
+    edge_dict.update(symmetric_knn_edge_index_dict(
+        matrix,
+        k,
+        lower_bound=lower_bound,
+        include_equal=include_equal,
+        neighbor_rankings=neighbor_rankings,
+    ))
+    return edge_dict
+
+
+def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
+                                     include_equal: bool = True,
+                                     neighbor_rankings: Optional[List[List[Tuple[int, float]]]] = None) -> np.ndarray:
+    """Return exact MST-kNN edge counts for each MST threshold and k in [2, max_k]."""
+    if max_k < 2:
+        raise ValueError("max_k must be >= 2")
+
+    if neighbor_rankings is None:
+        neighbor_rankings = build_symmetric_neighbor_rankings(matrix, max_k=max_k)
+
+    thresholds = tree.edges_by_threshold[:, 1]
+    counts = np.zeros((len(thresholds), max_k - 1), dtype=int)
+    if len(thresholds) == 0:
+        return counts
+
+    activation_events = []
+    for source_idx, ranked_neighbors in enumerate(neighbor_rankings):
+        for rank, (target_idx, score) in enumerate(ranked_neighbors[:max_k], start=1):
+            activation_events.append((float(score), rank, (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)))
+
+    activation_events.sort(key=lambda item: item[0], reverse=True)
+
+    active_edge_min_rank = dict()
+    non_mst_rank_counts = np.zeros(max_k + 1, dtype=int)
+    mst_prefix_edges = set()
+    activation_idx = 0
+
+    for threshold_idx, mst_edge in enumerate(tree.mst_edges):
+        threshold = thresholds[threshold_idx]
+
+        while activation_idx < len(activation_events) and _score_passes_lower_bound(activation_events[activation_idx][0], threshold, include_equal=include_equal):
+            _, rank, edge = activation_events[activation_idx]
+            current_rank = active_edge_min_rank.get(edge)
+
+            if current_rank is None:
+                active_edge_min_rank[edge] = rank
+                if edge not in mst_prefix_edges:
+                    non_mst_rank_counts[rank] += 1
+            elif rank < current_rank:
+                active_edge_min_rank[edge] = rank
+                if edge not in mst_prefix_edges:
+                    non_mst_rank_counts[current_rank] -= 1
+                    non_mst_rank_counts[rank] += 1
+
+            activation_idx += 1
+
+        source_idx, target_idx, _ = mst_edge
+        edge = (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
+        mst_prefix_edges.add(edge)
+        current_rank = active_edge_min_rank.get(edge)
+        if current_rank is not None:
+            non_mst_rank_counts[current_rank] -= 1
+
+        cumulative_non_mst = np.cumsum(non_mst_rank_counts)
+        counts[threshold_idx, :] = len(mst_prefix_edges) + cumulative_non_mst[2:]
+
+    return counts
 
 #TODO: use hdf5plugin to blosc compress datasets: http://www.silx.org/doc/hdf5plugin/latest/usage.html
 

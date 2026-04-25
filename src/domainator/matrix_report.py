@@ -3,7 +3,7 @@
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.data_matrix import DataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_counts_by_threshold
 from domainator import __version__, RawAndDefaultsFormatter
 from bashplotlib.histogram import plot_hist
 from bashplotlib.scatterplot import plot_scatter
@@ -13,6 +13,20 @@ from domainator.summary_report import histplot_base64
 import statistics
 import numpy as np
 import json
+
+MST_KNN_MIN_K = 2
+MST_KNN_MAX_K = 25
+
+
+def _get_mst_knn_report_config(tree):
+    max_neighbors = max(tree.n_nodes - 1, MST_KNN_MIN_K)
+    max_k = min(MST_KNN_MAX_K, max_neighbors)
+    default_k = min(5, max_k)
+    return {
+        "min_k": MST_KNN_MIN_K,
+        "max_k": max_k,
+        "default_k": default_k,
+    }
 
 class SummaryTextWriter():
     def __init__(self, out_handle): 
@@ -32,7 +46,7 @@ Min: {min(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
 Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
         """, file=self.out_handle)
         
-    def write_plots(self, tree):
+    def write_plots(self, tree, mst_knn_config, mst_knn_counts):
         values = tree.edges[:, 2]
         non_zero_values = values[values > 0]
         
@@ -86,6 +100,18 @@ Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
                     seen.add(i)
                     edges, thresh = edges_by_thresh[i]
                     print(f"  Threshold: {thresh:.2f} → Cumulative edges: {int(edges)}", file=self.out_handle)
+
+        if len(mst_knn_counts) > 0:
+            report_k = mst_knn_config["default_k"]
+            print(f"\nProjected MST_KNN edge counts (k={report_k}):", file=self.out_handle)
+            show_indices = [0, 1, 2, len(mst_knn_counts)//2, -3, -2, -1]
+            seen = set()
+            for i in show_indices:
+                if 0 <= i < len(mst_knn_counts) and i not in seen:
+                    seen.add(i)
+                    threshold = edges_by_thresh[i, 1]
+                    projected_edges = mst_knn_counts[i, report_k - mst_knn_config["min_k"]]
+                    print(f"  Threshold: {threshold:.2f} → MST_KNN edges: {int(projected_edges)}", file=self.out_handle)
     
     def write_footer(self):
         pass
@@ -235,7 +261,7 @@ class SummaryHTMLWriter():
         print(f"""</div>""", file=self.out_handle)
     
     
-    def write_plots(self, tree):
+    def write_plots(self, tree, mst_knn_config, mst_knn_counts):
         # Export data for interactive visualizations
         viz_data = tree.export_for_interactive_viz()
         cluster_by_thresh = tree.cluster_count_by_threshold
@@ -259,6 +285,10 @@ class SummaryHTMLWriter():
                 Threshold: <span id="threshold-number">∞</span>
             </label>
             <input type="range" id="threshold-slider" min="-1" max="{len(tree.mst) - 1}" value="-1" step="1">
+            <label for="mst-knn-k-slider">
+                MST_KNN k: <span id="mst-knn-k-number">{mst_knn_config['default_k']}</span>
+            </label>
+            <input type="range" id="mst-knn-k-slider" min="{mst_knn_config['min_k']}" max="{mst_knn_config['max_k']}" value="{mst_knn_config['default_k']}" step="1">
         </div>
         <div class="stats">
             <div class="stat-box">
@@ -272,6 +302,10 @@ class SummaryHTMLWriter():
             <div class="stat-box">
                 <strong>Number of Edges</strong>
                 <span id="num-edges">0</span>
+            </div>
+            <div class="stat-box">
+                <strong>Projected MST_KNN Edges</strong>
+                <span id="mst-knn-edges">0</span>
             </div>
             <div class="stat-box">
                 <strong>Avg Cluster Size</strong>
@@ -289,6 +323,8 @@ class SummaryHTMLWriter():
     const CLUSTER_BY_THRESH = {json.dumps(cluster_by_thresh.tolist())};
     const CLUSTER_BY_EDGES = {json.dumps(cluster_by_edges.tolist())};
     const EDGES_BY_THRESH = {json.dumps(edges_by_thresh.tolist())};
+    const MST_KNN_COUNTS = {json.dumps(mst_knn_counts.tolist())};
+    const MST_KNN_MIN_K = {mst_knn_config['min_k']};
     
     // Union-Find implementation for fast cluster computation
     class UnionFind {{
@@ -412,6 +448,7 @@ class SummaryHTMLWriter():
     // Update histogram based on slider
     function updateHistogram(edgeIndex) {{
         const chartConfig = {{displayModeBar: false, responsive: true}};
+        const currentK = parseInt(document.getElementById('mst-knn-k-slider').value);
         
         let sizes;
         if (edgeIndex < 0) {{
@@ -455,6 +492,13 @@ class SummaryHTMLWriter():
             edgeCount = EDGES_BY_THRESH[edgeIndex][0];
         }}
         document.getElementById('num-edges').textContent = formatNumber(edgeCount);
+
+        let mstKnnEdgeCount = 0;
+        if (edgeIndex >= 0 && edgeIndex < MST_KNN_COUNTS.length) {{
+            mstKnnEdgeCount = MST_KNN_COUNTS[edgeIndex][currentK - MST_KNN_MIN_K];
+        }}
+        document.getElementById('mst-knn-edges').textContent = formatNumber(mstKnnEdgeCount);
+        document.getElementById('mst-knn-k-number').textContent = currentK.toString();
         
         const avgSize = sizes.reduce((a, b) => a + b, 0) / sizes.length;
         document.getElementById('avg-cluster-size').textContent = avgSize.toFixed(1);
@@ -484,6 +528,14 @@ class SummaryHTMLWriter():
             updateHistogram(index);
         }}, 10); // Small delay to batch rapid slider movements
     }});
+
+    document.getElementById('mst-knn-k-slider').addEventListener('input', () => {{
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {{
+            let index = parseInt(document.getElementById('threshold-slider').value);
+            updateHistogram(index);
+        }}, 10);
+    }});
     
     // Initialize on load
     initCharts();
@@ -503,10 +555,12 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle):
         longform_outputs.append(SummaryHTMLWriter(out_html_handle))
     
     tree = MaxTree(matrix)
+    mst_knn_config = _get_mst_knn_report_config(tree)
+    mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"])
 
     for output in longform_outputs:
         output.write_header(tree)
-        output.write_plots(tree)
+        output.write_plots(tree, mst_knn_config, mst_knn_counts)
         output.write_footer()
 
 def main(argv):

@@ -11,7 +11,7 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from os import PathLike
 import sys
 from domainator.cytoscape import write_cytoscape_xgmml
-from domainator.data_matrix import DataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict
 from scipy.sparse.csgraph import connected_components
 import pandas as pd
 from pathlib import Path
@@ -68,8 +68,15 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
     return new_labels
 
 
+def _mst_knn_arg(value: Union[str, int]) -> int:
+    value = int(value)
+    if value <= 1:
+        raise ValueError("--mst_knn must be an integer greater than 1")
+    return value
+
+
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, subset_labels=None):
+              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None):
     """build a sequence similarity network from a matrix
 
     Args:
@@ -83,6 +90,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         no_cluster_header (bool, optional): If True, then the cluster tsv file will not have a header. Defaults to False.
         color_table_out (str, optional): write a color table to this path. Defaults to None.
         mst (bool, optional): If True, then write 
+        mst_knn (int, optional): If set, emit the union of the MST and an OR-symmetric kNN graph.
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
 
     Raises:
@@ -102,9 +110,16 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     edge_data=dict() # (source, target): score
     if mst:
         tree = MaxTree(matrix)
-        # Convert indices to names
-        edge_iter = [(matrix.rows[source_idx], matrix.rows[target_idx], score) 
-                     for source_idx, target_idx, score in tree.mst_edges]
+        edge_iter = [
+            (matrix.rows[source_idx], matrix.rows[target_idx], score)
+            for source_idx, target_idx, score in tree.mst_edges
+            if score > lb
+        ]
+    elif mst_knn is not None:
+        edge_iter = [
+            (matrix.rows[source_idx], matrix.rows[target_idx], score)
+            for (source_idx, target_idx), score in mst_knn_edge_index_dict(matrix, mst_knn, lower_bound=lb).items()
+        ]
     else:
         edge_iter = matrix.triangular(skip_zeros=True, agg=max)
     for source,target,score in edge_iter:
@@ -200,10 +215,13 @@ def main(argv):
     parser.add_argument('--no_cluster_header', action="store_true", required=False, default=False,
                         help="If set, then the tsv file will not have a header. Only relevant if --cluster_tsv is set.")
 
-    parser.add_argument('--mst', action="store_true", required=False, default=False,
-                        help="If set, then only include edges that are part of the maximum spanning tree of the graph. " \
-                        "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
-                        "the minimum necessary to preserve the clusters.")
+    sparsify_group = parser.add_mutually_exclusive_group(required=False)
+    sparsify_group.add_argument('--mst', action="store_true", required=False, default=False,
+                                help="If set, then only include edges that are part of the maximum spanning tree of the graph. " \
+                                "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
+                                "the minimum necessary to preserve the clusters.")
+    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
+                                help="Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, where K must be greater than 1.")
 
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -239,7 +257,7 @@ def main(argv):
     # params.metric,
     build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table,
               params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
-              params.mst, subset_labels
+              params.mst, params.mst_knn, subset_labels
               )
 
 

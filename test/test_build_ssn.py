@@ -1,7 +1,9 @@
 from domainator import build_ssn
+from domainator.data_matrix import DenseDataMatrix, mst_knn_edge_index_dict
 import pytest
 import tempfile
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from helpers import compare_files
 import re
@@ -121,6 +123,58 @@ def test_build_ssn_mst(shared_datadir):
         assert mst_edges > 0, "MST should have at least one edge"
 
 
+def test_build_ssn_mst_knn(shared_datadir):
+    input_file = "FeSOD_dist.tsv"
+    with tempfile.TemporaryDirectory() as output_dir:
+        metadata = str(shared_datadir / "FeSOD_metadata.tsv")
+
+        out_clusters_full = output_dir + f"/{input_file}_out_clusters_full.tsv"
+        out_cytoscape_full = output_dir + f"/{input_file}_out_full.xgmml"
+        build_ssn.main([
+            "-i", str(shared_datadir / input_file),
+            "--xgmml", out_cytoscape_full,
+            "--lb", "175",
+            "--color_by", "SSN_cluster",
+            "--cluster_tsv", out_clusters_full,
+            "--metadata", metadata,
+        ])
+
+        out_clusters_mst = output_dir + f"/{input_file}_out_clusters_mst.tsv"
+        out_cytoscape_mst = output_dir + f"/{input_file}_out_mst.xgmml"
+        build_ssn.main([
+            "-i", str(shared_datadir / input_file),
+            "--xgmml", out_cytoscape_mst,
+            "--lb", "175",
+            "--color_by", "SSN_cluster",
+            "--cluster_tsv", out_clusters_mst,
+            "--metadata", metadata,
+            "--mst",
+        ])
+
+        out_clusters_mst_knn = output_dir + f"/{input_file}_out_clusters_mst_knn.tsv"
+        out_cytoscape_mst_knn = output_dir + f"/{input_file}_out_mst_knn.xgmml"
+        build_ssn.main([
+            "-i", str(shared_datadir / input_file),
+            "--xgmml", out_cytoscape_mst_knn,
+            "--lb", "175",
+            "--color_by", "SSN_cluster",
+            "--cluster_tsv", out_clusters_mst_knn,
+            "--metadata", metadata,
+            "--mst_knn", "2",
+        ])
+
+        compare_files(out_clusters_mst_knn, out_clusters_full)
+
+        with open(out_cytoscape_full, 'r') as f:
+            full_edges = sum(1 for line in f if '<edge' in line)
+        with open(out_cytoscape_mst, 'r') as f:
+            mst_edges = sum(1 for line in f if '<edge' in line)
+        with open(out_cytoscape_mst_knn, 'r') as f:
+            mst_knn_edges = sum(1 for line in f if '<edge' in line)
+
+        assert mst_edges < mst_knn_edges < full_edges
+
+
 @pytest.mark.parametrize("subset_mode", ["subset", "subset_file"])
 def test_build_ssn_subset(shared_datadir, subset_mode):
     input_file = "FeSOD_dist.tsv"
@@ -162,3 +216,40 @@ def test_build_ssn_subset(shared_datadir, subset_mode):
         assert sum(1 for line in xgmml.splitlines() if "<node " in line) == 4
         assert sum(1 for line in xgmml.splitlines() if "<edge " in line) == 2
         assert "FeSOD_A0A2E1RF15|unreviewed|Superoxide" not in xgmml
+
+
+def test_build_ssn_mst_knn_subset_after_filtering():
+    labels = ["A", "B", "C", "D", "E"]
+    matrix = DenseDataMatrix(np.array([
+        [0, 100, 99, 98, 0],
+        [100, 0, 97, 1, 96],
+        [99, 97, 0, 95, 94],
+        [98, 1, 95, 0, 200],
+        [0, 96, 94, 200, 0],
+    ]), labels, labels)
+
+    subset_labels = {"A", "B", "C", "D"}
+    subset_matrix = build_ssn.subset_matrix_by_labels(matrix, subset_labels)
+    edge_dict = mst_knn_edge_index_dict(subset_matrix, 2, lower_bound=0)
+    subset_edges = {
+        tuple(sorted((subset_matrix.rows[source_idx], subset_matrix.rows[target_idx])))
+        for source_idx, target_idx in edge_dict.keys()
+    }
+
+    assert subset_edges == {
+        ("A", "B"),
+        ("A", "C"),
+        ("A", "D"),
+        ("B", "C"),
+        ("C", "D"),
+    }
+
+
+def test_build_ssn_mst_knn_requires_k_gt_one(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        with pytest.raises(SystemExit):
+            build_ssn.main([
+                "-i", str(shared_datadir / "FeSOD_dist.tsv"),
+                "--xgmml", str(Path(output_dir) / "out.xgmml"),
+                "--mst_knn", "1",
+            ])
