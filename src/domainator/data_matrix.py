@@ -155,67 +155,78 @@ def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None
     )
 
 
-def _build_sparse_neighbor_rankings(data: scipy.sparse.csr_array, max_k: Optional[int] = None) -> CompactNeighborRankings:
-    transpose = data.transpose().tocsr()
-    offsets = [0]
-    target_parts = []
-    score_parts = []
+def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max_k: Optional[int] = None) -> CompactNeighborRankings:
+    if len(edges) == 0:
+        return _empty_compact_neighbor_rankings(edges.n_nodes)
 
-    for row_idx in range(data.shape[0]):
-        candidate_scores = dict()
+    row_counts = np.bincount(edges.source, minlength=edges.n_nodes) + np.bincount(edges.target, minlength=edges.n_nodes)
+    total_directed = int(row_counts.sum())
 
-        row_start = data.indptr[row_idx]
-        row_end = data.indptr[row_idx + 1]
-        for position in range(row_start, row_end):
-            target_idx = int(data.indices[position])
-            if target_idx == row_idx:
-                continue
-            score = float(data.data[position])
-            if score > 0:
-                candidate_scores[target_idx] = score
+    row_indices = np.empty(total_directed, dtype=np.int32)
+    targets = np.empty(total_directed, dtype=np.int32)
+    scores = np.empty(total_directed, dtype=float)
+    edge_count = len(edges)
 
-        col_start = transpose.indptr[row_idx]
-        col_end = transpose.indptr[row_idx + 1]
-        for position in range(col_start, col_end):
-            target_idx = int(transpose.indices[position])
-            if target_idx == row_idx:
-                continue
-            score = float(transpose.data[position])
-            if score <= 0:
-                continue
-            previous = candidate_scores.get(target_idx)
-            if previous is None or score > previous:
-                candidate_scores[target_idx] = score
+    row_indices[:edge_count] = edges.source
+    targets[:edge_count] = edges.target
+    scores[:edge_count] = edges.score
 
-        if len(candidate_scores) == 0:
-            offsets.append(offsets[-1])
+    row_indices[edge_count:] = edges.target
+    targets[edge_count:] = edges.source
+    scores[edge_count:] = edges.score
+
+    order = np.lexsort((targets, -scores, row_indices))
+    row_indices = row_indices[order]
+    targets = targets[order]
+    scores = scores[order]
+
+    row_offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
+    row_offsets[1:] = np.cumsum(np.bincount(row_indices, minlength=edges.n_nodes))
+
+    if max_k is None:
+        return CompactNeighborRankings(
+            offsets=row_offsets,
+            target=targets,
+            score=scores,
+        )
+
+    keep_counts = np.minimum(np.diff(row_offsets), max_k)
+    kept_offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
+    kept_offsets[1:] = np.cumsum(keep_counts)
+    kept_total = int(kept_offsets[-1])
+    kept_targets = np.empty(kept_total, dtype=np.int32)
+    kept_scores = np.empty(kept_total, dtype=float)
+
+    dest_start = 0
+    for row_idx in range(edges.n_nodes):
+        keep_count = int(keep_counts[row_idx])
+        if keep_count == 0:
             continue
-
-        row_target = np.fromiter(candidate_scores.keys(), dtype=np.int32, count=len(candidate_scores))
-        row_score = np.fromiter(candidate_scores.values(), dtype=float, count=len(candidate_scores))
-        order = np.lexsort((row_target, -row_score))
-        if max_k is not None:
-            order = order[:max_k]
-        row_target = row_target[order]
-        row_score = row_score[order]
-        target_parts.append(row_target)
-        score_parts.append(row_score)
-        offsets.append(offsets[-1] + row_target.size)
-
-    if offsets[-1] == 0:
-        return _empty_compact_neighbor_rankings(data.shape[0])
+        src_start = int(row_offsets[row_idx])
+        src_end = src_start + keep_count
+        dest_end = dest_start + keep_count
+        kept_targets[dest_start:dest_end] = targets[src_start:src_end]
+        kept_scores[dest_start:dest_end] = scores[src_start:src_end]
+        dest_start = dest_end
 
     return CompactNeighborRankings(
-        offsets=np.asarray(offsets, dtype=np.int64),
-        target=np.concatenate(target_parts),
-        score=np.concatenate(score_parts),
+        offsets=kept_offsets,
+        target=kept_targets,
+        score=kept_scores,
     )
 
 
-def build_symmetric_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int] = None) -> CompactNeighborRankings:
+def _build_sparse_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int] = None) -> CompactNeighborRankings:
+    edges = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+    return _build_neighbor_rankings_from_sorted_edges(edges, max_k=max_k)
+
+
+def build_symmetric_neighbor_rankings(matrix: Union['DataMatrix', SortedUndirectedEdges], max_k: Optional[int] = None) -> CompactNeighborRankings:
     """Return deterministic per-row neighbor rankings using max(row,col) scores."""
+    if isinstance(matrix, SortedUndirectedEdges):
+        return _build_neighbor_rankings_from_sorted_edges(matrix, max_k=max_k)
     if scipy.sparse.issparse(matrix.data):
-        return _build_sparse_neighbor_rankings(matrix.data, max_k=max_k)
+        return _build_sparse_neighbor_rankings(matrix, max_k=max_k)
     return _build_dense_neighbor_rankings(matrix.data, max_k=max_k)
 
 

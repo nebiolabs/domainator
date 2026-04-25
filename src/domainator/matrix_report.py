@@ -3,7 +3,7 @@
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_counts_by_threshold
+from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
 from domainator import __version__, RawAndDefaultsFormatter
 from bashplotlib.histogram import plot_hist
 from bashplotlib.scatterplot import plot_scatter
@@ -572,7 +572,8 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     mst_knn_counts = None
     if include_mst_knn:
         mst_knn_config = _get_mst_knn_report_config(tree)
-        mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"])
+        neighbor_rankings = build_symmetric_neighbor_rankings(edge_table, max_k=mst_knn_config["max_k"])
+        mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
 
     for output in longform_outputs:
         output.write_header(tree, edge_table.score)
