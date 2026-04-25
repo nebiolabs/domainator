@@ -159,6 +159,50 @@ def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max
     if len(edges) == 0:
         return _empty_compact_neighbor_rankings(edges.n_nodes)
 
+    if max_k is not None:
+        top_k_by_row = [[] for _ in range(edges.n_nodes)]
+
+        def add_candidate(row_idx: int, target_idx: int, score: float):
+            heap = top_k_by_row[row_idx]
+            candidate = (score, -target_idx, target_idx)
+            if len(heap) < max_k:
+                heapq.heappush(heap, candidate)
+                return
+            if candidate > heap[0]:
+                heapq.heapreplace(heap, candidate)
+
+        for source_idx, target_idx, score in zip(edges.source, edges.target, edges.score):
+            add_candidate(int(source_idx), int(target_idx), float(score))
+            add_candidate(int(target_idx), int(source_idx), float(score))
+
+        offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
+        total_kept = 0
+        for row_idx, heap in enumerate(top_k_by_row):
+            total_kept += len(heap)
+            offsets[row_idx + 1] = total_kept
+
+        if total_kept == 0:
+            return _empty_compact_neighbor_rankings(edges.n_nodes)
+
+        targets = np.empty(total_kept, dtype=np.int32)
+        scores = np.empty(total_kept, dtype=float)
+
+        out_idx = 0
+        for heap in top_k_by_row:
+            if len(heap) == 0:
+                continue
+            heap.sort(key=lambda item: (-item[0], item[2]))
+            for score, _, target_idx in heap:
+                targets[out_idx] = target_idx
+                scores[out_idx] = score
+                out_idx += 1
+
+        return CompactNeighborRankings(
+            offsets=offsets,
+            target=targets,
+            score=scores,
+        )
+
     row_counts = np.bincount(edges.source, minlength=edges.n_nodes) + np.bincount(edges.target, minlength=edges.n_nodes)
     total_directed = int(row_counts.sum())
 
@@ -237,7 +281,7 @@ def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: flo
         raise ValueError("k must be >= 1")
 
     if neighbor_rankings is None:
-        neighbor_rankings = build_symmetric_neighbor_rankings(matrix)
+        neighbor_rankings = build_symmetric_neighbor_rankings(matrix, max_k=k)
 
     edge_dict = dict()
     for source_idx, row_target, row_score in _iter_neighbor_ranking_rows(neighbor_rankings):
