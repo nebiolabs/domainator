@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings, average_closeness_by_threshold
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings, average_closeness_by_threshold, _closeness_threshold_groups
 import scipy.sparse
 import numpy as np
 import pytest_datadir
@@ -162,6 +162,24 @@ def test_average_closeness_by_threshold_sparse_matches_dense():
 
     assert dense_curve["mode"] == sparse_curve["mode"] == "exact"
     assert np.allclose(np.asarray(dense_curve["points"], dtype=float), np.asarray(sparse_curve["points"], dtype=float))
+
+
+def test_closeness_threshold_groups_preserve_descending_thresholds():
+    edge_table = matrix_edges = None
+    data = np.array([
+        [0, 9, 7, 7],
+        [9, 0, 7, 5],
+        [7, 7, 0, 5],
+        [7, 5, 5, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+
+    thresholds, edge_counts = _closeness_threshold_groups(edge_table)
+
+    assert np.array_equal(thresholds, np.array([9.0, 7.0, 5.0]))
+    assert np.array_equal(edge_counts, np.array([1, 4, 6]))
 
 # Test iter_data order and zeros for synthetic data
 def test_iter_data_order_and_zeros_fake():

@@ -441,9 +441,11 @@ def _closeness_threshold_groups(sorted_edges: SortedUndirectedEdges) -> Tuple[np
     if len(sorted_edges) == 0:
         return np.empty(0, dtype=float), np.empty(0, dtype=np.int64)
 
-    unique_scores, group_counts = np.unique(sorted_edges.score, return_counts=True)
-    thresholds = unique_scores[::-1].astype(float, copy=False)
-    edge_counts = np.cumsum(group_counts[::-1], dtype=np.int64)
+    scores = np.asarray(sorted_edges.score)
+    change_idx = np.flatnonzero(scores[1:] != scores[:-1]) + 1
+    group_starts = np.concatenate((np.array([0], dtype=np.int64), change_idx.astype(np.int64, copy=False)))
+    thresholds = scores[group_starts].astype(float, copy=False)
+    edge_counts = np.concatenate((change_idx.astype(np.int64, copy=False), np.array([len(scores)], dtype=np.int64)))
     return thresholds, edge_counts
 
 
@@ -497,64 +499,79 @@ def _sample_closeness_threshold_indices(thresholds: np.ndarray, edge_counts: np.
     return selected_indices
 
 
+def _average_closeness_point_at_index(sorted_edges: SortedUndirectedEdges, thresholds: np.ndarray,
+                                      edge_counts: np.ndarray, threshold_idx: int) -> np.ndarray:
+    """Compute average node closeness for one threshold index."""
+    point = np.zeros(5, dtype=float)
+    active_edge_count = int(edge_counts[threshold_idx])
+    point[0] = float(thresholds[threshold_idx])
+    point[2] = active_edge_count
+
+    if active_edge_count == 0:
+        return point
+
+    active_source = sorted_edges.source[:active_edge_count]
+    active_target = sorted_edges.target[:active_edge_count]
+    rows = np.concatenate((active_source, active_target))
+    cols = np.concatenate((active_target, active_source))
+    values = np.ones(rows.shape[0], dtype=np.uint8)
+    graph = scipy.sparse.csr_array((values, (rows, cols)), shape=(sorted_edges.n_nodes, sorted_edges.n_nodes))
+
+    degrees = np.diff(graph.indptr)
+    active_nodes = np.flatnonzero(degrees > 0)
+    if len(active_nodes) == 0:
+        return point
+
+    active_graph = graph[active_nodes][:, active_nodes].tocsr()
+    component_count, component_labels = scipy.sparse.csgraph.connected_components(
+        active_graph,
+        directed=False,
+        return_labels=True,
+    )
+
+    closeness_sum = 0.0
+    for component_idx in range(component_count):
+        component_nodes = np.flatnonzero(component_labels == component_idx)
+        component_size = len(component_nodes)
+        if component_size <= 1:
+            continue
+
+        component_graph = active_graph[component_nodes][:, component_nodes].tocsr()
+        for source_idx in range(component_size):
+            distances = scipy.sparse.csgraph.shortest_path(
+                component_graph,
+                directed=False,
+                unweighted=True,
+                indices=source_idx,
+            )
+            total_distance = float(np.sum(distances))
+            if total_distance > 0.0:
+                closeness_sum += (component_size - 1.0) / total_distance
+
+    point[1] = closeness_sum / len(active_nodes)
+    point[3] = len(active_nodes)
+    point[4] = component_count
+    return point
+
+
 def _average_closeness_points_for_indices(sorted_edges: SortedUndirectedEdges, thresholds: np.ndarray,
-                                          edge_counts: np.ndarray, selected_indices: np.ndarray) -> np.ndarray:
+                                          edge_counts: np.ndarray, selected_indices: np.ndarray,
+                                          point_cache: Optional[Dict[int, np.ndarray]] = None) -> np.ndarray:
     """Compute average node closeness for selected score thresholds."""
     if len(selected_indices) == 0:
         return np.zeros((0, 5), dtype=float)
 
     selected_indices = np.unique(selected_indices.astype(int, copy=False))
+    if point_cache is None:
+        point_cache = dict()
+
     points = np.zeros((len(selected_indices), 5), dtype=float)
-
     for output_idx, threshold_idx in enumerate(selected_indices):
-        active_edge_count = int(edge_counts[threshold_idx])
-        points[output_idx, 0] = float(thresholds[threshold_idx])
-        points[output_idx, 2] = active_edge_count
-
-        if active_edge_count == 0:
-            continue
-
-        active_source = sorted_edges.source[:active_edge_count]
-        active_target = sorted_edges.target[:active_edge_count]
-        rows = np.concatenate((active_source, active_target))
-        cols = np.concatenate((active_target, active_source))
-        values = np.ones(rows.shape[0], dtype=np.uint8)
-        graph = scipy.sparse.csr_array((values, (rows, cols)), shape=(sorted_edges.n_nodes, sorted_edges.n_nodes))
-
-        degrees = np.diff(graph.indptr)
-        active_nodes = np.flatnonzero(degrees > 0)
-        if len(active_nodes) == 0:
-            continue
-
-        active_graph = graph[active_nodes][:, active_nodes].tocsr()
-        component_count, component_labels = scipy.sparse.csgraph.connected_components(
-            active_graph,
-            directed=False,
-            return_labels=True,
-        )
-
-        closeness_sum = 0.0
-        for component_idx in range(component_count):
-            component_nodes = np.flatnonzero(component_labels == component_idx)
-            component_size = len(component_nodes)
-            if component_size <= 1:
-                continue
-
-            component_graph = active_graph[component_nodes][:, component_nodes].tocsr()
-            for source_idx in range(component_size):
-                distances = scipy.sparse.csgraph.shortest_path(
-                    component_graph,
-                    directed=False,
-                    unweighted=True,
-                    indices=source_idx,
-                )
-                total_distance = float(np.sum(distances))
-                if total_distance > 0.0:
-                    closeness_sum += (component_size - 1.0) / total_distance
-
-        points[output_idx, 1] = closeness_sum / len(active_nodes)
-        points[output_idx, 3] = len(active_nodes)
-        points[output_idx, 4] = component_count
+        cached_point = point_cache.get(int(threshold_idx))
+        if cached_point is None:
+            cached_point = _average_closeness_point_at_index(sorted_edges, thresholds, edge_counts, int(threshold_idx))
+            point_cache[int(threshold_idx)] = cached_point
+        points[output_idx, :] = cached_point
 
     return points
 
@@ -593,15 +610,22 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
         resolved_mode = "exact" if mode == "exact" else "auto-exact"
         points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, selected_indices)
     else:
+        point_cache = dict()
         selected_indices = _sample_closeness_threshold_indices(thresholds, edge_counts, tree, max_points=max_points)
         if len(selected_indices) == 0:
             selected_indices = np.asarray([0, len(thresholds) - 1], dtype=int)
 
-        points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, selected_indices)
+        points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, selected_indices, point_cache=point_cache)
 
         while len(selected_indices) < min(max_points, len(thresholds)):
             ordered_indices = np.sort(selected_indices)
-            ordered_points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, ordered_indices)
+            ordered_points = _average_closeness_points_for_indices(
+                sorted_edges,
+                thresholds,
+                edge_counts,
+                ordered_indices,
+                point_cache=point_cache,
+            )
             candidate_gaps = []
             for position in range(len(ordered_indices) - 1):
                 left_idx = int(ordered_indices[position])
@@ -629,7 +653,13 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
                 points = ordered_points
                 break
 
-            points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, selected_indices)
+            points = _average_closeness_points_for_indices(
+                sorted_edges,
+                thresholds,
+                edge_counts,
+                selected_indices,
+                point_cache=point_cache,
+            )
 
         resolved_mode = "sampled" if mode == "sampled" else "auto-sampled"
 
