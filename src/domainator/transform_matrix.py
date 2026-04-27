@@ -10,6 +10,7 @@ import sys
 
 from domainator.data_matrix import DataMatrix, mst_knn_edge_index_dict
 from domainator import __version__, RawAndDefaultsFormatter
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
 import scipy.sparse
 import numpy as np
 from domainator.utils import get_file_type
@@ -232,6 +233,8 @@ def main(argv):
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
     parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
                         help="Keep only the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, using the post-transform values.")
+
+    add_max_output_gb_argument(parser)
     
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -255,6 +258,8 @@ def main(argv):
 
     if sparse is not None and params.mode == "score_dist":
         raise ValueError("Sparse distance matrices not implemented.")
+
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
     matrix = DataMatrix.from_file(params.input)
 
@@ -287,12 +292,51 @@ def main(argv):
         matrix.data = apply_lower_bound(matrix.data, params.lb)
 
     ### Run
-    if dense is not None:
-        matrix.write(dense, "dense")
-    if dense_text is not None:
-        matrix.write(dense_text,"dense_text")
-    if sparse:
-        matrix.write(sparse, "sparse")
+    try:
+        if dense is not None:
+            enforce_matrix_output_limit(
+                output_type="dense",
+                matrix=matrix.data,
+                row_names=matrix.rows,
+                col_names=matrix.columns,
+                row_lengths=matrix.row_lengths,
+                col_lengths=matrix.column_lengths,
+                data_type=matrix.data_type,
+                max_output_bytes=max_output_bytes,
+                output_path=dense,
+                mitigation_options=["--sparse", "--lb", "--mst_knn"],
+            )
+            matrix.write(dense, "dense")
+        if dense_text is not None:
+            enforce_matrix_output_limit(
+                output_type="dense_text",
+                matrix=matrix.data,
+                row_names=matrix.rows,
+                col_names=matrix.columns,
+                row_lengths=matrix.row_lengths,
+                col_lengths=matrix.column_lengths,
+                data_type=matrix.data_type,
+                max_output_bytes=max_output_bytes,
+                output_path=dense_text,
+                mitigation_options=["--sparse", "--lb", "--mst_knn"],
+            )
+            matrix.write(dense_text,"dense_text")
+        if sparse:
+            enforce_matrix_output_limit(
+                output_type="sparse",
+                matrix=matrix.data,
+                row_names=matrix.rows,
+                col_names=matrix.columns,
+                row_lengths=matrix.row_lengths,
+                col_lengths=matrix.column_lengths,
+                data_type=matrix.data_type,
+                max_output_bytes=max_output_bytes,
+                output_path=sparse,
+                mitigation_options=["--lb", "--mst_knn"],
+            )
+            matrix.write(sparse, "sparse")
+    except OutputSizeLimitExceeded as exc:
+        raise SystemExit(str(exc)) from None
 
 def _entrypoint():
     main(sys.argv[1:])

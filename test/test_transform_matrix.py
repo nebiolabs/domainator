@@ -189,4 +189,25 @@ def test_transform_matrix_mst_knn_applied_after_mode_transform():
         assert dense_output_matrix.data_type == "bool"
 
 
+def test_transform_matrix_max_output_gb_blocks_dense_output():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_data = np.array([
+            [5.0, 1.0, 0.0],
+            [2.0, 4.0, 3.0],
+            [0.0, 6.0, 7.0],
+        ])
+
+        input_file = output_dir + "/input.hdf5"
+        dense_out = output_dir + "/dense_out.hdf5"
+
+        rows = ["a", "b", "c"]
+        columns = ["A", "B", "C"]
+
+        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "dense")
+
+        with pytest.raises(SystemExit, match="--max_output_gb"):
+            transform_matrix.main(["-i", input_file, "--dense", dense_out, "--max_output_gb", "0.000001"])
+
+
 #TODO: test more conversion modes
