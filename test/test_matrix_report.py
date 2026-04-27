@@ -197,6 +197,39 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
         assert 'mst-knn-k-slider' in html_content
 
 
+def test_matrix_report_includes_closeness_outputs():
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+        out_txt = os.path.join(output_dir, "matrix_report_test.txt")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "-o", out_txt,
+            "--html", out_html,
+            "--include_closeness",
+            "--closeness_mode", "exact",
+        ])
+
+        text_content = open(out_txt).read()
+        html_content = open(out_html).read()
+
+        assert 'Average closeness summary' in text_content
+        assert 'Threshold: 6.00' in text_content
+        assert 'closeness-by-threshold' in html_content
+        assert 'Average Closeness vs Threshold' in html_content
+
+
 def test_matrix_report_default_excludes_mst_knn(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_html = output_dir + "/matrix_report_test.html"
@@ -208,8 +241,10 @@ def test_matrix_report_default_excludes_mst_knn(shared_datadir):
 
         assert 'Projected MST_KNN edge counts' not in text_content
         assert 'MST_KNN edges' not in text_content
+        assert 'Average closeness summary' not in text_content
         assert 'mst-knn-k-slider' not in html_content
         assert 'MST_KNN_COUNTS = []' in html_content
+        assert 'closeness-by-threshold' not in html_content
 
 
 if __name__ == '__main__':

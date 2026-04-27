@@ -2,8 +2,9 @@
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
+import math
 
-from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
+from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold, average_closeness_by_threshold
 from domainator import __version__, RawAndDefaultsFormatter
 from bashplotlib.histogram import plot_hist
 from bashplotlib.scatterplot import plot_scatter
@@ -28,6 +29,46 @@ def _get_mst_knn_report_config(tree):
         "default_k": default_k,
     }
 
+
+def _format_threshold_value(threshold):
+    if math.isinf(float(threshold)):
+        return "∞"
+    return f"{float(threshold):.2f}"
+
+
+def _summarize_closeness_curve(closeness_curve, max_items=5):
+    if closeness_curve is None or len(closeness_curve.get("points", [])) == 0:
+        return [], []
+
+    points = np.asarray(closeness_curve["points"], dtype=float)
+    values = points[:, 1]
+
+    if len(values) == 1:
+        local_maxima = [0]
+    else:
+        local_maxima = []
+        for idx, value in enumerate(values):
+            left = values[idx - 1] if idx > 0 else -np.inf
+            right = values[idx + 1] if idx + 1 < len(values) else -np.inf
+            if value >= left and value >= right and (value > left or value > right):
+                local_maxima.append(idx)
+
+    if len(local_maxima) == 0:
+        local_maxima = [int(np.argmax(values))]
+
+    ranked_optima = sorted(
+        local_maxima,
+        key=lambda idx: (-points[idx, 1], -points[idx, 0]),
+    )[:max_items]
+
+    change_rows = []
+    for idx in range(len(values) - 1):
+        delta = float(values[idx + 1] - values[idx])
+        change_rows.append((abs(delta), idx, delta))
+
+    ranked_changes = sorted(change_rows, reverse=True)[:max_items]
+    return ranked_optima, ranked_changes
+
 class SummaryTextWriter():
     def __init__(self, out_handle): 
         self.out_handle = out_handle
@@ -45,7 +86,7 @@ Min: {min(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
 Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
         """, file=self.out_handle)
         
-    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts):
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, closeness_curve):
         non_zero_values = edge_scores
         
         # Histogram of all triangular values
@@ -110,6 +151,31 @@ Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
                     threshold = edges_by_thresh[i, 1]
                     projected_edges = mst_knn_counts[i, report_k - mst_knn_config["min_k"]]
                     print(f"  Threshold: {threshold:.2f} → MST_KNN edges: {int(projected_edges)}", file=self.out_handle)
+
+        if closeness_curve is not None and len(closeness_curve.get("points", [])) > 0:
+            optima, changes = _summarize_closeness_curve(closeness_curve)
+            points = np.asarray(closeness_curve["points"], dtype=float)
+            print(
+                f"\nAverage closeness summary ({closeness_curve['mode']}; evaluated {closeness_curve['evaluated_thresholds']}/{closeness_curve['total_thresholds']} thresholds):",
+                file=self.out_handle,
+            )
+            print("  Local optima:", file=self.out_handle)
+            for idx in optima:
+                threshold, closeness, edge_count, active_nodes, component_count = points[idx]
+                print(
+                    f"    Threshold: {_format_threshold_value(threshold)} → Avg closeness: {closeness:.4f}, "
+                    f"Edges: {int(edge_count)}, Active nodes: {int(active_nodes)}, Components: {int(component_count)}",
+                    file=self.out_handle,
+                )
+            print("  Steepest changes:", file=self.out_handle)
+            for _, idx, delta in changes:
+                left = points[idx]
+                right = points[idx + 1]
+                direction = "rise" if delta > 0 else "drop"
+                print(
+                    f"    {_format_threshold_value(left[0])} → {_format_threshold_value(right[0])}: {direction} {delta:+.4f}",
+                    file=self.out_handle,
+                )
     
     def write_footer(self):
         pass
@@ -258,18 +324,45 @@ class SummaryHTMLWriter():
         print(f"""</div>""", file=self.out_handle)
     
     
-    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts):
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, closeness_curve):
         # Export data for interactive visualizations
         viz_data = tree.export_for_interactive_viz()
         cluster_by_thresh = tree.cluster_count_by_threshold
         cluster_by_edges = tree.cluster_count_by_edge_count
         edges_by_thresh = tree.edges_by_threshold
         include_mst_knn = mst_knn_counts is not None
+        include_closeness = closeness_curve is not None and len(closeness_curve.get("points", [])) > 0
         mst_knn_controls = ""
         mst_knn_stat_box = ""
         mst_knn_current_k_expr = "null"
         mst_knn_update_block = ""
         mst_knn_listener_block = ""
+        closeness_chart = ""
+        closeness_plot_block = ""
+        if include_closeness:
+            closeness_chart = """
+    <div class=\"chart\">
+        <div id=\"closeness-by-threshold\"></div>
+    </div>"""
+            closeness_plot_block = """
+
+        const closenessPoints = CLOSENESS_CURVE.points;
+        Plotly.newPlot('closeness-by-threshold', [{{
+            x: closenessPoints.map(d => d[0]),
+            y: closenessPoints.map(d => d[1]),
+            mode: 'lines+markers',
+            name: 'Avg closeness',
+            line: {{color: '#9467bd', width: 2}},
+            marker: {{size: 6}},
+            customdata: closenessPoints.map(d => [d[2], d[3], d[4]]),
+            hovertemplate: 'Threshold: %{{x:.2f}}<br>Avg closeness: %{{y:.4f}}<br>Edges: %{{customdata[0]}}<br>Active nodes: %{{customdata[1]}}<br>Components: %{{customdata[2]}}<extra></extra>'
+        }}], {{
+            ...chartLayout,
+            title: `Average Closeness vs Threshold (${{CLOSENESS_CURVE.mode}}, ${{CLOSENESS_CURVE.evaluated_thresholds}}/${{CLOSENESS_CURVE.total_thresholds}})`,
+            xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
+            yaxis: {{title: 'Average Closeness', range: [0, 1.05]}},
+            hovermode: 'closest'
+        }}, chartConfig);"""
         if include_mst_knn:
             mst_knn_controls = f"""
             <label for=\"mst-knn-k-slider\">
@@ -309,6 +402,7 @@ class SummaryHTMLWriter():
     <div class="chart">
         <div id="edges-by-threshold"></div>
     </div>
+    {closeness_chart}
     <div class="chart-with-controls">
         <div class="slider-container">
             <label for="threshold-slider">
@@ -350,6 +444,8 @@ class SummaryHTMLWriter():
     const HAS_MST_KNN = {json.dumps(include_mst_knn)};
     const MST_KNN_COUNTS = {json.dumps(mst_knn_counts.tolist() if mst_knn_counts is not None else [])};
     const MST_KNN_MIN_K = {mst_knn_config['min_k'] if mst_knn_config is not None else 0};
+    const HAS_CLOSENESS = {json.dumps(include_closeness)};
+    const CLOSENESS_CURVE = {json.dumps(closeness_curve if closeness_curve is not None else {"mode": "exact", "total_thresholds": 0, "evaluated_thresholds": 0, "points": []})};
     
     // Union-Find implementation for fast cluster computation
     class UnionFind {{
@@ -465,6 +561,8 @@ class SummaryHTMLWriter():
             yaxis: {{title: 'Cumulative Edges'}},
             hovermode: 'closest'
         }}, chartConfig);
+
+{closeness_plot_block}
         
         // Initial cluster size histogram
         updateHistogram(-1);
@@ -556,7 +654,8 @@ class SummaryHTMLWriter():
     def write_footer(self):
         print("</body></html>", file=self.out_handle)
 
-def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False):
+def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
+                  include_closeness: bool = False, closeness_mode: str = "auto", closeness_max_points: int = 128):
     """
         Write a report on the matrix to the given handles.
     """
@@ -570,14 +669,22 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     tree = MaxTree(edge_table)
     mst_knn_config = None
     mst_knn_counts = None
+    closeness_curve = None
     if include_mst_knn:
         mst_knn_config = _get_mst_knn_report_config(tree)
         neighbor_rankings = build_symmetric_neighbor_rankings(edge_table, max_k=mst_knn_config["max_k"])
         mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
+    if include_closeness:
+        closeness_curve = average_closeness_by_threshold(
+            edge_table,
+            tree=tree,
+            mode=closeness_mode,
+            max_points=closeness_max_points,
+        )
 
     for output in longform_outputs:
         output.write_header(tree, edge_table.score)
-        output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts)
+        output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts, closeness_curve)
         output.write_footer()
 
 def main(argv):
@@ -592,6 +699,12 @@ def main(argv):
                         help="html file to write output to.")
     parser.add_argument('--include_mst_knn', action='store_true', default=False,
                         help="Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.")
+    parser.add_argument('--include_closeness', action='store_true', default=False,
+                        help="Include paper-style average closeness by threshold in the text and HTML reports.")
+    parser.add_argument('--closeness_mode', choices=['auto', 'exact', 'sampled'], default='auto',
+                        help="How to evaluate closeness thresholds when --include_closeness is enabled.")
+    parser.add_argument('--closeness_max_points', type=int, default=128,
+                        help="Maximum number of thresholds to evaluate when sampled closeness mode is used.")
     
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -617,6 +730,9 @@ def main(argv):
             out,
             out_html_handle,
             include_mst_knn=params.include_mst_knn,
+            include_closeness=params.include_closeness,
+            closeness_mode=params.closeness_mode,
+            closeness_max_points=params.closeness_max_points,
         )
 
     if params.output is not None:

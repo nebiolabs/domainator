@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings, average_closeness_by_threshold
 import scipy.sparse
 import numpy as np
 import pytest_datadir
@@ -119,6 +119,49 @@ def test_build_symmetric_neighbor_rankings_sparse_matches_dense():
     assert np.array_equal(dense_rankings.offsets, sparse_rankings.offsets)
     assert np.array_equal(dense_rankings.target, sparse_rankings.target)
     assert np.array_equal(dense_rankings.score, sparse_rankings.score)
+
+
+def test_average_closeness_by_threshold_tracks_non_mst_thresholds():
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+    tree = MaxTree(edge_table)
+
+    curve = average_closeness_by_threshold(edge_table, tree=tree, mode="exact")
+    points = np.asarray(curve["points"], dtype=float)
+
+    assert curve["mode"] == "exact"
+    assert curve["total_thresholds"] == 4
+    assert np.allclose(points[:, 0], np.array([10.0, 7.0, 6.0, 4.0]))
+    assert np.isclose(points[0, 1], 1.0)
+    assert np.isclose(points[1, 1], 7.0 / 9.0)
+    assert np.isclose(points[2, 1], 1.0)
+    assert points[2, 1] > points[1, 1]
+    assert np.isclose(points[3, 1], 0.775)
+
+
+def test_average_closeness_by_threshold_sparse_matches_dense():
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+    dense_matrix = DenseDataMatrix(data, row_names, row_names)
+    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, row_names)
+
+    dense_curve = average_closeness_by_threshold(dense_matrix.sorted_undirected_edges(skip_zeros=True, agg=max), mode="exact")
+    sparse_curve = average_closeness_by_threshold(sparse_matrix.sorted_undirected_edges(skip_zeros=True, agg=max), mode="exact")
+
+    assert dense_curve["mode"] == sparse_curve["mode"] == "exact"
+    assert np.allclose(np.asarray(dense_curve["points"], dtype=float), np.asarray(sparse_curve["points"], dtype=float))
 
 # Test iter_data order and zeros for synthetic data
 def test_iter_data_order_and_zeros_fake():
