@@ -109,3 +109,17 @@ def test_compare_contigs_database_1(shared_datadir):
         for i in range(len(genbanks)): #TODO: this is a bad test because it doesn't test changes in order, because in this case the output is the same order as the input.
             prefix = str(i).zfill(1)
             assert genbanks[i].id.startswith(prefix+"_")
+
+
+def test_compare_contigs_max_output_gb_blocks_dense_output(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_dense = output_dir + "/dense.hdf5"
+
+        with pytest.raises(SystemExit, match="--max_output_gb"):
+            compare_contigs.main([
+                "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+                "--ji", "0.5",
+                "--ai", "0.1",
+                "--dense", out_dense,
+                "--max_output_gb", "0.000001",
+            ])

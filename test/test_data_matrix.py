@@ -418,8 +418,40 @@ def test_symmetric_values_floating_point_tolerance():
                      [2.5, 5.0, 6.3], 
                      [3.7, 6.3 + 0.01, 9.0]])
     matrix = DenseDataMatrix(data, row_names, col_names)
-    
+
     assert matrix.symmetric_values is False, "Matrix with significant differences should not be considered symmetric"
+
+
+def test_estimate_dense_text_size_matches_written_file(tmp_path):
+    data = np.array([[1.5, 0.0], [2.0, 3.25]], dtype=np.float64)
+    row_names = ['row1', 'row2']
+    col_names = ['col1', 'col2']
+    out_file = tmp_path / "matrix.tsv"
+
+    estimated_size = DataMatrix.estimate_dense_text_size(data, row_names, col_names)
+    DataMatrix.write_dense_text(data, out_file, row_names, col_names)
+
+    assert estimated_size == out_file.stat().st_size
+
+
+def test_estimate_sparse_hdf5_size_smaller_than_dense_for_sparse_matrix():
+    dense_data = np.zeros((128, 128), dtype=np.float64)
+    dense_data[0, 0] = 1.0
+    dense_data[127, 127] = 2.0
+    data = scipy.sparse.csr_array(dense_data)
+    names = [f'N{i}' for i in range(128)]
+
+    sparse_size = DataMatrix.estimate_sparse_hdf5_size(data, names, names)
+    dense_size = DataMatrix.estimate_dense_hdf5_size(data, names, names)
+
+    assert sparse_size < dense_size
+
+
+def test_estimate_write_size_rejects_unknown_output_type():
+    data = np.array([[1.0]], dtype=np.float64)
+
+    with pytest.raises(ValueError, match="Unrecognized output type"):
+        DataMatrix.estimate_write_size("bogus", data, ['A'], ['A'])
 
 
 # Test symmetric_values with non-symmetric labels

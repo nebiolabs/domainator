@@ -92,6 +92,11 @@ class CompactNeighborRankings:
 NeighborRankings = Union[CompactNeighborRankings, List[List[Tuple[int, float]]]]
 
 
+_HDF5_FILE_OVERHEAD_ESTIMATE = 8 * 1024
+_HDF5_DATASET_OVERHEAD_ESTIMATE = 4 * 1024
+_HDF5_ATTRIBUTE_OVERHEAD_ESTIMATE = 2 * 1024
+
+
 def _empty_compact_neighbor_rankings(n_rows: int) -> CompactNeighborRankings:
     return CompactNeighborRankings(
         offsets=np.zeros(n_rows + 1, dtype=np.int64),
@@ -120,6 +125,22 @@ def _score_passes_lower_bound(score: float, lower_bound: float, include_equal: b
     if include_equal:
         return score >= lower_bound
     return score > lower_bound
+
+
+def _encoded_string_bytes(values: List[str]) -> int:
+    return sum(len(value.encode("utf-8")) for value in values)
+
+
+def _estimate_label_dataset_size(values: List[str]) -> int:
+    if len(values) == 0:
+        return _HDF5_DATASET_OVERHEAD_ESTIMATE
+    return _HDF5_DATASET_OVERHEAD_ESTIMATE + _encoded_string_bytes(values) + (16 * len(values))
+
+
+def _estimate_optional_array_size(array: Optional[np.ndarray]) -> int:
+    if array is None:
+        return 0
+    return _HDF5_DATASET_OVERHEAD_ESTIMATE + int(np.asarray(array).nbytes)
 
 
 def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None) -> CompactNeighborRankings:
@@ -725,6 +746,105 @@ class DataMatrix(ABC):
             self.write_dense_text(self.data, file_name, self.rows, self.columns, self.row_lengths, self.column_lengths, self.data_type)
         else:
             raise ValueError(f"Unrecognized output type: {output_type}")
+
+    @classmethod
+    def estimate_dense_hdf5_size(
+        cls,
+        matrix: Union[np.ndarray, scipy.sparse.sparray],
+        row_names: List[str],
+        col_names: List[str],
+        row_lengths: Optional[np.ndarray] = None,
+        col_lengths: Optional[np.ndarray] = None,
+        data_type: str = "",
+    ) -> int:
+        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names, row_lengths, col_lengths)
+        dtype = matrix.dtype if hasattr(matrix, "dtype") else np.float64
+        data_bytes = int(matrix.shape[0] * matrix.shape[1] * np.dtype(dtype).itemsize)
+
+        estimated_size = _HDF5_FILE_OVERHEAD_ESTIMATE + _HDF5_ATTRIBUTE_OVERHEAD_ESTIMATE
+        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + data_bytes
+        estimated_size += _estimate_label_dataset_size(row_names)
+        estimated_size += _estimate_optional_array_size(row_lengths)
+
+        if row_names is not col_names or row_lengths is not col_lengths:
+            estimated_size += _estimate_label_dataset_size(col_names)
+            estimated_size += _estimate_optional_array_size(col_lengths)
+
+        estimated_size += len(data_type.encode("utf-8"))
+        return estimated_size
+
+    @classmethod
+    def estimate_sparse_hdf5_size(
+        cls,
+        matrix: Union[np.ndarray, scipy.sparse.sparray],
+        row_names: List[str],
+        col_names: List[str],
+        row_lengths: Optional[np.ndarray] = None,
+        col_lengths: Optional[np.ndarray] = None,
+        data_type: str = "",
+    ) -> int:
+        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names, row_lengths, col_lengths)
+        if not isinstance(matrix, scipy.sparse.csr_array):
+            matrix = scipy.sparse.csr_array(matrix)
+
+        matrix.eliminate_zeros()
+        matrix.sort_indices()
+
+        estimated_size = _HDF5_FILE_OVERHEAD_ESTIMATE + _HDF5_ATTRIBUTE_OVERHEAD_ESTIMATE
+        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + int(matrix.data.nbytes)
+        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + int(matrix.indices.nbytes)
+        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + int(matrix.indptr.nbytes)
+        estimated_size += _estimate_label_dataset_size(row_names)
+        estimated_size += _estimate_optional_array_size(row_lengths)
+
+        if row_names is not col_names or row_lengths is not col_lengths:
+            estimated_size += _estimate_label_dataset_size(col_names)
+            estimated_size += _estimate_optional_array_size(col_lengths)
+
+        estimated_size += len(data_type.encode("utf-8"))
+        return estimated_size
+
+    @classmethod
+    def estimate_dense_text_size(
+        cls,
+        matrix: Union[np.ndarray, scipy.sparse.sparray],
+        row_names: List[str],
+        col_names: List[str],
+        row_lengths: Optional[np.ndarray] = None,
+        col_lengths: Optional[np.ndarray] = None,
+        data_type: str = "",
+    ) -> int:
+        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names, row_lengths, col_lengths)
+
+        total_bytes = len(("\t" + "\t".join(col_names) + "\n").encode("utf-8"))
+        if scipy.sparse.issparse(matrix):
+            for idx, row_name in enumerate(row_names):
+                row_text = row_name + "\t" + "\t".join(str(x) for x in np.nditer(matrix[[idx], :].toarray())) + "\n"
+                total_bytes += len(row_text.encode("utf-8"))
+        else:
+            for idx, row_name in enumerate(row_names):
+                row_text = row_name + "\t" + "\t".join(str(x) for x in np.nditer(matrix[idx])) + "\n"
+                total_bytes += len(row_text.encode("utf-8"))
+        return total_bytes
+
+    @classmethod
+    def estimate_write_size(
+        cls,
+        output_type: str,
+        matrix: Union[np.ndarray, scipy.sparse.sparray],
+        row_names: List[str],
+        col_names: List[str],
+        row_lengths: Optional[np.ndarray] = None,
+        col_lengths: Optional[np.ndarray] = None,
+        data_type: str = "",
+    ) -> int:
+        if output_type == "dense":
+            return cls.estimate_dense_hdf5_size(matrix, row_names, col_names, row_lengths, col_lengths, data_type)
+        if output_type == "sparse":
+            return cls.estimate_sparse_hdf5_size(matrix, row_names, col_names, row_lengths, col_lengths, data_type)
+        if output_type == "dense_text":
+            return cls.estimate_dense_text_size(matrix, row_names, col_names, row_lengths, col_lengths, data_type)
+        raise ValueError(f"Unrecognized output type: {output_type}")
 
     @staticmethod
     def parse_axis_index(axis_index):

@@ -18,6 +18,7 @@ import math
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix
 from domainator.filter_domains import filter_domains
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from typing import Optional, Set
 import numpy as np
 import scipy.sparse
@@ -159,11 +160,22 @@ class DistanceReport(ABC):
         pass
 
 class SparseTableOutput(DistanceReport):
-    def __init__(self, outpath):
+    def __init__(self, outpath, max_output_bytes=None):
         self.outpath = outpath
+        self.max_output_bytes = max_output_bytes
     
     def write(self, recs, scores, options):
         row_names = [x.id for x in recs]
+        enforce_matrix_output_limit(
+            output_type="sparse",
+            matrix=scores,
+            row_names=row_names,
+            col_names=row_names,
+            data_type="score",
+            max_output_bytes=self.max_output_bytes,
+            output_path=self.outpath,
+            mitigation_options=["--sparse", "-k"],
+        )
         DataMatrix.write_sparse(scores, self.outpath, row_names, row_names, data_type="score")
 
 
@@ -229,21 +241,42 @@ class GenbankOutput(DistanceReport):
 
 class DenseTextTableOutput(DistanceReport):
 
-    def __init__(self, outpath):
+    def __init__(self, outpath, max_output_bytes=None):
         self.outpath = outpath
+        self.max_output_bytes = max_output_bytes
     
     def write(self, recs, scores, options):
         row_names = [x.id for x in recs]
+        enforce_matrix_output_limit(
+            output_type="dense_text",
+            matrix=scores,
+            row_names=row_names,
+            col_names=row_names,
+            data_type="score",
+            max_output_bytes=self.max_output_bytes,
+            output_path=self.outpath,
+            mitigation_options=["--sparse", "-k"],
+        )
         DataMatrix.write_dense_text(scores, self.outpath, row_names, row_names)
 
 class DenseTableOutput(DistanceReport):
 
-    def __init__(self, outpath):
+    def __init__(self, outpath, max_output_bytes=None):
         self.outpath = outpath
+        self.max_output_bytes = max_output_bytes
     
     def write(self, recs, scores, options):
         row_names = [x.id for x in recs]
-
+        enforce_matrix_output_limit(
+            output_type="dense",
+            matrix=scores,
+            row_names=row_names,
+            col_names=row_names,
+            data_type="score",
+            max_output_bytes=self.max_output_bytes,
+            output_path=self.outpath,
+            mitigation_options=["--sparse", "-k"],
+        )
         DataMatrix.write_dense(scores.toarray(), self.outpath, row_names, row_names, data_type="score")
 
 def compare_contigs(genbanks, metrics, reports, k, contigs, name_by_order, databases:Optional[Set[str]]=None):
@@ -318,6 +351,8 @@ def main(argv):
     
     parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
 
+    add_max_output_gb_argument(parser)
+
     parser.add_argument('--config', action=ActionConfigFile)
 
 
@@ -329,6 +364,7 @@ def main(argv):
     #     genbanks = [sys.stdin]
     # elif params.genbank is not None:
     genbanks = params.input
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
 
     reports = list()
@@ -339,13 +375,13 @@ def main(argv):
     if params.dense is not None:
         if get_file_type(params.dense) != "hdf5":
             raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
-        reports.append(DenseTableOutput(params.dense))
+        reports.append(DenseTableOutput(params.dense, max_output_bytes=max_output_bytes))
     if params.dense_text is not None:
-        reports.append(DenseTextTableOutput(params.dense_text))
+        reports.append(DenseTextTableOutput(params.dense_text, max_output_bytes=max_output_bytes))
     if params.sparse is not None:
         if get_file_type(params.sparse) != "hdf5":
             raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
-        reports.append(SparseTableOutput(params.sparse))
+        reports.append(SparseTableOutput(params.sparse, max_output_bytes=max_output_bytes))
     if params.output is not None:
         if params.output == "-":
             reports.append(GenbankOutput('/dev/stdout')) # TODO: not cross platform, will not work on windows.
@@ -372,7 +408,10 @@ def main(argv):
     contigs_needed = list_and_file_to_dict_keys(params.contigs, params.contigs_file)
     
     # Run
-    compare_contigs(genbanks, metrics, reports, params.k, contigs=contigs_needed, name_by_order=params.name_by_order)
+    try:
+        compare_contigs(genbanks, metrics, reports, params.k, contigs=contigs_needed, name_by_order=params.name_by_order)
+    except OutputSizeLimitExceeded as exc:
+        raise SystemExit(str(exc)) from None
 
 def _entrypoint():
     main(sys.argv[1:])
