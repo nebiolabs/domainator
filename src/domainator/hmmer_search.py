@@ -19,6 +19,8 @@ warnings.filterwarnings("ignore", category=UserWarning, module='numpy') # suppre
 from jsonargparse import ArgumentParser, ActionConfigFile
 from dataclasses import dataclass
 import sys
+import io
+import os
 import numpy as np
 import pyhmmer
 from typing import List, Iterable, TextIO, Tuple, Union, Dict, Optional, BinaryIO
@@ -27,9 +29,16 @@ from pathlib import Path
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.utils import make_pool, pyhmmer_decode
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 from numba import jit
 import numba as nb
 import psutil
+
+
+def _estimate_hmm_profile_size_bytes(profile: pyhmmer.plan7.HMM) -> int:
+    buffer = io.BytesIO()
+    profile.write(buffer)
+    return len(buffer.getvalue())
 
 
 def read_hmms(hmm_files:Iterable[Union[str,os.PathLike]]) -> Dict[str, Dict[str,pyhmmer.plan7.HMM]]:
@@ -404,7 +413,7 @@ class _hmmer_search_worker():
         return best_result
 
 
-def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer_handle:BinaryIO, score_cutoff:float, max_hits:int, cpu:int):
+def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer_handle:BinaryIO, score_cutoff:float, max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output"):
     references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
 
     worker = _hmmer_search_worker(references, score_cutoff)
@@ -417,9 +426,20 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
                     if hit is not None:
                         yield hit
 
+    written_bytes = 0
+    mitigation_options = ["--max_hits", "--score_cutoff"]
+
     if max_hits is None:
         for hit in run_comparison():
+            profile_bytes = _estimate_hmm_profile_size_bytes(hit.profile) if max_output_bytes is not None else 0
+            enforce_output_limit(
+                projected_bytes=written_bytes + profile_bytes,
+                max_output_bytes=max_output_bytes,
+                output_description=output_description,
+                mitigation_options=mitigation_options,
+            )
             hit.profile.write(hmmer_handle)
+            written_bytes += profile_bytes
     else:
         out_heap = []
         for hit in run_comparison():
@@ -429,7 +449,15 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
                 heapq.heappushpop(out_heap, hit)
         out_heap.sort(reverse=True)
         for hit in out_heap:
+            profile_bytes = _estimate_hmm_profile_size_bytes(hit.profile) if max_output_bytes is not None else 0
+            enforce_output_limit(
+                projected_bytes=written_bytes + profile_bytes,
+                max_output_bytes=max_output_bytes,
+                output_description=output_description,
+                mitigation_options=mitigation_options,
+            )
             hit.profile.write(hmmer_handle)
+            written_bytes += profile_bytes
 
 
 def main(argv):
@@ -452,6 +480,8 @@ def main(argv):
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="how many cpu threads to use. Default: use all available cores")
 
+    add_max_output_gb_argument(parser)
+
     parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
@@ -461,21 +491,38 @@ def main(argv):
     else:
         cpus = params.cpu
 
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
+    output_description = f"hmmer_search HMM output '{params.output if params.output is not None else 'stdout'}'"
+    temp_output_path = None
     if params.output is None:
         out = sys.stdout.buffer
     else:
-        out = open(params.output, "wb")
+        temp_output_path = make_temporary_output_path(params.output)
+        out = open(temp_output_path, "wb")
     
     if params.input is None:
         input_files = [sys.stdin]
     else:
         input_files = params.input
 
-
-    hmmer_search(input_files, params.reference, out, params.score_cutoff, params.max_hits, cpus)
+    try:
+        hmmer_search(input_files, params.reference, out, params.score_cutoff, params.max_hits, cpus, max_output_bytes=max_output_bytes, output_description=output_description)
+    except OutputSizeLimitExceeded as exc:
+        if params.output is not None:
+            out.close()
+            if temp_output_path is not None and os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        if params.output is not None:
+            out.close()
+            if temp_output_path is not None and os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+        raise
 
     if params.output is not None:
         out.close()
+        os.replace(temp_output_path, params.output)
 
 def _entrypoint():
     main(sys.argv[1:])

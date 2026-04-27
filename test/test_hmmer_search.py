@@ -1,6 +1,7 @@
 import tempfile
 from domainator import hmmer_search
 from pathlib import Path
+import pytest
 
 #TODO: better tests!
 
@@ -33,4 +34,18 @@ def test_hmmer_search_2(shared_datadir):
         assert "NAME  CcdB" not in file_contents
         assert "NAME  Condensation" not in file_contents
         assert "NAME  TCAD9" not in file_contents
+
+
+def test_hmmer_search_max_output_gb_blocks_large_hmm_output(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_path = output_dir + "/out_scores.hmm"
+        with pytest.raises(SystemExit, match="--max_output_gb"):
+            hmmer_search.main([
+                "-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
+                "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+                "-o", out_path,
+                "--score_cutoff", "13",
+                "--max_output_gb", "0.000001",
+            ])
+        assert not Path(out_path).exists()
         

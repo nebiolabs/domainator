@@ -89,6 +89,7 @@ For detailed documentation for each program, call the program with the `-h` opti
 Programs that can accept streaming input will read genbank formatted data from `stdin` when not supplied with an explicit input. Programs that need to pass over the input multiple times can't support streaming input.
 Programs that can produce streaming output will write genbank formatted data to `stdout` when not supplied with an explicit output. 
 You can use shell pipes to move data from a program that supports streaming ouput into a program that supports streaming input (but note that it is more efficient to use domainator as a python library, see below).
+Many commands that can generate large outputs also support `--max_output_gb` to fail early when a projected output would exceed the configured size limit. The default limit is 25 GB, and setting `--max_output_gb 0` disables the guardrail.
 
 | Program | Description | input |  output  | streaming input  |  streaming output  |  notes  |
 | ---- | ----- | ---- |---| -- | -- | ------------- |
