@@ -126,6 +126,24 @@ def test_domain_search_translate_ignores_nucleotide_annotations(shared_datadir):
         assert len(new_file) == 0
 
 
+def test_domain_search_max_output_gb_blocks_large_genbank_output(shared_datadir):
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "pdonr_peptides.fasta"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        with pytest.raises(SystemExit, match="--max_output_gb"):
+            main([
+                "--input", str(gb),
+                "-r", str(hmms),
+                "--evalue", "0.1",
+                "-o", str(out),
+                "--whole_contig",
+                "--cpu", "1",
+                "--max_output_gb", "0.000001",
+            ])
+        assert not os.path.exists(out)
+
+
 def test_domain_search_nucleotide_query_defaults_to_annotation_span(shared_datadir):
     nucleotide_input = shared_datadir / "simple_dna_target.fna"
     nucleotide_reference = shared_datadir / "simple_dna_queries.fna"

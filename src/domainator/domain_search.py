@@ -16,7 +16,10 @@ If neither is set, then hits will be written on the fly and not sorted.
 """
 
 import sys
+import io
 import functools
+import os
+import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid
 from domainator import __version__
@@ -30,6 +33,33 @@ from domainator import extract_peptides
 import warnings
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
+
+
+def _estimate_genbank_record_size_bytes(record) -> int:
+    buffer = io.StringIO()
+    write_genbank((record,), buffer, preserve_original=True)
+    return len(buffer.getvalue().encode("utf-8"))
+
+
+def _write_records_with_limit(records, out_handle, current_output_bytes: int, max_output_bytes: Optional[int], output_description: str, mitigation_options, extra_guidance: Optional[str] = None) -> int:
+    if max_output_bytes is None:
+        write_genbank(records, out_handle)
+        return current_output_bytes
+
+    for record in records:
+        record_bytes = _estimate_genbank_record_size_bytes(record)
+        enforce_output_limit(
+            projected_bytes=current_output_bytes + record_bytes,
+            max_output_bytes=max_output_bytes,
+            output_description=output_description,
+            mitigation_options=mitigation_options,
+            extra_guidance=extra_guidance,
+        )
+        write_genbank((record,), out_handle)
+        current_output_bytes += record_bytes
+
+    return current_output_bytes
 
 class _domain_search_worker():
     
@@ -348,6 +378,8 @@ def main(argv):
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] "
                         "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
 
+    add_max_output_gb_argument(parser)
+
     parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
@@ -364,10 +396,19 @@ def main(argv):
     if params.batch_size < 1:
         raise ValueError("batch_size must be > 0")
 
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
+    output_description = f"domain_search GenBank output '{params.output if params.output is not None else 'stdout'}'"
+    mitigation_options = ["--max_hits", "--max_hits_per_contig", "--cds_range", "--kb_range"]
+    extra_guidance = None
+    if params.whole_contig:
+        extra_guidance = "Avoid --whole_contig on broad searches unless you expect very few hits."
+
+    temp_output_path = None
     if params.output is None:
         out = sys.stdout
     else:
-        out = open(params.output, "w")
+        temp_output_path = make_temporary_output_path(params.output)
+        out = open(temp_output_path, "w")
 
     if params.max_hits == 0:
         max_hits = None
@@ -418,48 +459,78 @@ def main(argv):
     ### Run
     seen = set()
     records = list()
-    for record in domain_search(
-        partitions,
-        references=params.references,
-        z=Z,
-        evalue=params.evalue,
-        max_hits=max_hits,
-        max_overlap=params.max_overlap,
-        cpu=cpus,
-        add_annotations=params.add_annotations,
-        cds_range=cds_range,
-        kb_range=kb_range,
-        whole_contig=whole_contig,
-        normalize_direction=normalize_direction,
-        translate=translate,
-        gene_call=params.gene_call,
-        min_evalue=params.min_evalue,
-        ncbi_taxonomy=ncbi_taxonomy,
-        include_taxids=params.include_taxids,
-        exclude_taxids=params.exclude_taxids,
-        fasta_type=params.fasta_type,
-        max_mode=params.max_mode,
-        max_region_overlap=params.max_region_overlap,
-        strand=params.strand,
-        decoy_names=decoy_names,
-        max_hits_per_contig=params.max_hits_per_contig
-        ):
-        #skip pad
-        if not pad:
-            if not deduplicate or (record.id not in seen):
-                write_genbank((record,), out)
-        else:
-            if not deduplicate or (record.id not in seen):
-                records.append(record)
-        if deduplicate:
-            seen.add(record.id)
-    if pad:
-        records.sort(reverse=True)
-        select_by_cds.pad_records(records)
-        write_genbank(records, out)
+    current_output_bytes = 0
+    try:
+        for record in domain_search(
+            partitions,
+            references=params.references,
+            z=Z,
+            evalue=params.evalue,
+            max_hits=max_hits,
+            max_overlap=params.max_overlap,
+            cpu=cpus,
+            add_annotations=params.add_annotations,
+            cds_range=cds_range,
+            kb_range=kb_range,
+            whole_contig=whole_contig,
+            normalize_direction=normalize_direction,
+            translate=translate,
+            gene_call=params.gene_call,
+            min_evalue=params.min_evalue,
+            ncbi_taxonomy=ncbi_taxonomy,
+            include_taxids=params.include_taxids,
+            exclude_taxids=params.exclude_taxids,
+            fasta_type=params.fasta_type,
+            max_mode=params.max_mode,
+            max_region_overlap=params.max_region_overlap,
+            strand=params.strand,
+            decoy_names=decoy_names,
+            max_hits_per_contig=params.max_hits_per_contig
+            ):
+            if not pad:
+                if not deduplicate or (record.id not in seen):
+                    current_output_bytes = _write_records_with_limit(
+                        (record,),
+                        out,
+                        current_output_bytes,
+                        max_output_bytes,
+                        output_description,
+                        mitigation_options,
+                        extra_guidance,
+                    )
+            else:
+                if not deduplicate or (record.id not in seen):
+                    records.append(record)
+            if deduplicate:
+                seen.add(record.id)
+        if pad:
+            records.sort(reverse=True)
+            select_by_cds.pad_records(records)
+            current_output_bytes = _write_records_with_limit(
+                records,
+                out,
+                current_output_bytes,
+                max_output_bytes,
+                output_description,
+                mitigation_options,
+                extra_guidance,
+            )
+    except OutputSizeLimitExceeded as exc:
+        if params.output is not None:
+            out.close()
+            if temp_output_path is not None and os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        if params.output is not None:
+            out.close()
+            if temp_output_path is not None and os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+        raise
 
     if params.output is not None:
         out.close()
+        os.replace(temp_output_path, params.output)
 
 def _entrypoint():
     main(sys.argv[1:])
