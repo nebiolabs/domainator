@@ -8,6 +8,8 @@ from pandas.api.types import is_integer_dtype, is_float_dtype
 import xml.etree.ElementTree as ET
 from typing import Dict
 
+from domainator.output_guardrails import build_output_limit_message, OutputSizeLimitExceeded
+
 MAX_DOUBLE = np.finfo(np.float64).max
 MIN_DOUBLE = np.finfo(np.float64).min
 MAX_INT = np.iinfo(np.int64).max
@@ -74,7 +76,113 @@ def check_null(value, xgmml_type):
 
 
 #TODO: option to add edges for non-zero mutual-blast (or some threshold)
-def write_cytoscape_xgmml(out_path, nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None,  color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
+def _serialize_xgmml_element(element, tail):
+    indent(element, level=1)
+    element.tail = tail
+    return ET.tostring(element, encoding="utf-8")
+
+
+def _iter_cytoscape_xgmml_chunks(nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None, color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
+    graph_name = name
+    possible_shapes = {"DIAMOND", "ELLIPSE", "HEXAGON", "OCTAGON", "PARALLELOGRAM", "RECTANGLE", "ROUND_RECTANGLE", "TRIANGLE", "V"}
+    if shape not in possible_shapes:
+        raise ValueError(f"Unrecognized node shape specification {shape}, please choose one of: {possible_shapes}")
+
+    palette = None
+    if color_by is not None:
+        if color_by not in nodes.columns:
+            raise ValueError(f"color_by column {color_by} not found in nodes dataframe")
+        if color_table is not None:
+            palette = color_table
+        else:
+            raise ValueError("color_table must be provided if color_by is provided")
+
+    metadata_types = get_column_types(nodes)
+    node_names_to_ids = dict() if edges is not None else None
+    col_to_idx = {v:i+1 for i,v in enumerate(nodes.columns)}
+    node_count = len(nodes.index)
+    edge_count = 0 if edges is None else len(edges.index)
+
+    has_children = node_count + edge_count > 0
+
+    yield b"<?xml version='1.0' encoding='utf-8'?>\n"
+    yield f'<graph label="{html.escape(str(graph_name), quote=True)}" xmlns="http://www.cs.rpi.edu/XGMML">\n'.encode("utf-8")
+    if has_children:
+        yield b"  "
+
+    for i, row in enumerate(nodes.itertuples(name=None)):
+        name = str(row[0])
+        node_id = f"n{i}"
+        node = ET.Element("node", {"id":node_id, "label":node_id})
+        if node_names_to_ids is not None:
+            node_names_to_ids[name] = node_id
+
+        ET.SubElement(node, "att", {"type":"string", "name":"Description", "value":html.escape(name)})
+        for key, idx in col_to_idx.items():
+            value = row[idx]
+            if key != x_col and key != y_col and key != z_col:
+                ET.SubElement(node, "att", {"type":metadata_types[key], "name":str(key), "value":html.escape(str(check_null(value, metadata_types[key])))})
+
+        color = None
+        if color_by is not None:
+            if row[col_to_idx[color_by]] in palette:
+                color = palette[row[col_to_idx[color_by]]]
+            elif str(row[col_to_idx[color_by]]) in palette:
+                color = palette[str(row[col_to_idx[color_by]])]
+            else:
+                color = palette[None]
+
+        elem_dict = {"type":shape, "x":"0.0", "y":"0.0", "w":str(shape_x), "h":str(shape_y), "z":"0.0"}
+        if color is not None:
+            elem_dict["fill"] = color
+        if x_col is not None and x_col in col_to_idx:
+            elem_dict["x"] = str(row[col_to_idx[x_col]])
+        if y_col is not None and y_col in col_to_idx:
+            elem_dict["y"] = str(-1 * row[col_to_idx[y_col]])
+        if z_col is not None and z_col in col_to_idx:
+            elem_dict["z"] = str(row[col_to_idx[z_col]])
+        ET.SubElement(node, "graphics", elem_dict)
+
+        tail = "\n" if i == node_count - 1 and edge_count == 0 else "\n  "
+        yield _serialize_xgmml_element(node, tail)
+
+    if edges is not None:
+        edge_metadata_types = get_column_types(edges)
+        for i, row in enumerate(edges.itertuples()):
+            source = node_names_to_ids[row[0][0]]
+            target = node_names_to_ids[row[0][1]]
+            edge = ET.Element("edge", {"id":f"e{i}", "label":f"e{i}", "source": source, "target": target})
+            for key in row._fields[1:]:
+                value = getattr(row, key)
+                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":str(check_null(value, edge_metadata_types[key]))})
+
+            tail = "\n" if i == edge_count - 1 else "\n  "
+            yield _serialize_xgmml_element(edge, tail)
+
+    yield b"</graph>\n"
+
+
+def estimate_cytoscape_xgmml_size(nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None, color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
+    """Return the exact serialized XGMML size in bytes for the given node and edge tables."""
+    return sum(
+        len(chunk)
+        for chunk in _iter_cytoscape_xgmml_chunks(
+            nodes,
+            edges=edges,
+            name=name,
+            x_col=x_col,
+            y_col=y_col,
+            z_col=z_col,
+            color_by=color_by,
+            color_table=color_table,
+            shape=shape,
+            shape_x=shape_x,
+            shape_y=shape_y,
+        )
+    )
+
+
+def write_cytoscape_xgmml(out_path, nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None,  color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25, max_output_bytes=None, output_description=None, mitigation_options=None, extra_guidance=None):
     """
         out_path: network file to write, should end in .xgmml
         nodes: pandas dataframe for nodes and their annotations. Should have a single index column which will be the node name.
@@ -88,92 +196,41 @@ def write_cytoscape_xgmml(out_path, nodes, edges=None, name="", x_col=None, y_co
         shape_x: size of the nodes in the x-dimension
         shape_y: size of the nodes in the y-dimension
     """
-    graph_name=name
-    possible_shapes = {"DIAMOND", "ELLIPSE", "HEXAGON", "OCTAGON", "PARALLELOGRAM", "RECTANGLE", "ROUND_RECTANGLE", "TRIANGLE", "V"}
-    if shape not in possible_shapes:
-        raise ValueError(f"Unrecognized node shape specification {shape}, please choose one of: {possible_shapes}")
-    
-    if color_by is not None:
-        if color_by not in nodes.columns:
-            raise ValueError(f"color_by column {color_by} not found in nodes dataframe")
-        if color_table is not None:
-            palette = color_table
-        else:
-            raise ValueError("color_table must be provided if color_by is provided")
+    should_close = False
+    if hasattr(out_path, "write"):
+        out_handle = out_path
+    else:
+        out_handle = open(out_path, "wb")
+        should_close = True
 
-
-    metadata_types = get_column_types(nodes)
-
-    graph = ET.Element("graph", {"label": graph_name, "xmlns":"http://www.cs.rpi.edu/XGMML"})
-    i = -1
-    if edges is not None:
-        node_names_to_ids = dict()
-    col_to_idx = {v:i+1 for i,v in enumerate(nodes.columns)}
-
-    for row in nodes.itertuples(name=None):
-        i += 1
-        name = str(row[0])
-        id = f"n{i}"
-        node = ET.SubElement(graph,"node", {"id":id, "label":id})
-        if edges is not None:
-            node_names_to_ids[name] = id
-        
-        # add attributes
-        ET.SubElement(node, "att", {"type":"string", "name":"Description", "value":html.escape(name)})
-        for key,idx in col_to_idx.items():
-            value = row[idx] 
-            
-            if key != x_col and key != y_col and key != z_col: 
-                ET.SubElement(node, "att", {"type":metadata_types[key], "name":str(key), "value":html.escape(str(check_null(value,metadata_types[key])))})
-        
-        # add shape
-        color = None 
-        if color_by is not None:
-            if row[col_to_idx[color_by]] in palette:
-                color = palette[row[col_to_idx[color_by]]]
-            elif str(row[col_to_idx[color_by]]) in palette:
-                color = palette[str(row[col_to_idx[color_by]])]
-            else:
-                color = palette[None]
-        
-        elem_dict = {"type":shape, "x":"0.0", "y":"0.0", "w":str(shape_x), "h":str(shape_y), "z":"0.0"}
-
-        if color is not None:
-            elem_dict["fill"] = color
-
-
-        if x_col is not None and x_col in col_to_idx:
-            elem_dict["x"] = str(row[col_to_idx[x_col]])
-
-        # multiply y-coord by -1 because it seems that the origin in cyoscape is at the top left and positive numbers are down.
-        if y_col is not None and  y_col in col_to_idx:
-            elem_dict["y"] = str(-1 * row[col_to_idx[y_col]])
-        
-        if z_col is not None and  z_col in col_to_idx:
-            elem_dict["z"] = str(row[col_to_idx[z_col]])
-        ET.SubElement(node, "graphics", elem_dict)
-        
-
-#  <edge label="zzz1018,zzzz736" id="zzz1018,zzzz736" target="zzzz736" source="zzz1018">
-#     <att name="%id" type="real" value="38.19" />
-#     <att name="alignment_score" type="real" value="24" />
-#     <att name="alignment_len" type="integer" value="144" />
-#   </edge>
-
-    if edges is not None:
-        edge_metadata_types = get_column_types(edges)
-        i = -1
-        for row in edges.itertuples():
-            i += 1
-            source = node_names_to_ids[row[0][0]]
-            target = node_names_to_ids[row[0][1]]
-            edge = ET.SubElement(graph,"edge", {"id":f"e{i}", "label":f"e{i}", "source": source, "target": target})
-            # add attributes
-            # ET.SubElement(edge, "att", {"type":"string", "name":"Description", "value":str(name)})
-            for key in row._fields[1:]: 
-                value = getattr(row, key)
-                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":str(check_null(value,edge_metadata_types[key]))})
-
-    indent(graph)
-    ET.ElementTree(graph).write(out_path, encoding="utf-8", xml_declaration=True)
+    bytes_written = 0
+    try:
+        for chunk in _iter_cytoscape_xgmml_chunks(
+            nodes,
+            edges=edges,
+            name=name,
+            x_col=x_col,
+            y_col=y_col,
+            z_col=z_col,
+            color_by=color_by,
+            color_table=color_table,
+            shape=shape,
+            shape_x=shape_x,
+            shape_y=shape_y,
+        ):
+            out_handle.write(chunk)
+            bytes_written += len(chunk)
+            if max_output_bytes is not None and bytes_written > max_output_bytes:
+                raise OutputSizeLimitExceeded(
+                    build_output_limit_message(
+                        output_description=output_description or "XGMML output",
+                        projected_bytes=bytes_written,
+                        max_output_bytes=max_output_bytes,
+                        mitigation_options=mitigation_options,
+                        extra_guidance=extra_guidance,
+                    )
+                )
+    finally:
+        if should_close:
+            out_handle.close()
     

@@ -3,15 +3,15 @@
 Build a sequence similarity network and do analysis related to that.
 """
 
-# TODO: MSA column for cystoscape cluster
-# TODO: nothing here is very memory efficient. How big of a problem is that?
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ArgumentParser, ActionConfigFile
 from os import PathLike
+import os
 import sys
 from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 from scipy.sparse.csgraph import connected_components
 import pandas as pd
 from pathlib import Path
@@ -20,8 +20,6 @@ from typing import List, Union, Dict
 import numpy as np
 from domainator.utils import get_palette, list_and_file_to_dict_keys
 from domainator.color_genbank import read_color_table
-
-# TODO: MST-mode, only writes edges if they are in the maximum-spanning-tree of the graph. This allows for much smaller files, while preserving all of the clusters.
 
 SCORE_COLUMN="SSN_SCORE"
 CLUSTER_COLUMN="SSN_cluster"
@@ -76,7 +74,7 @@ def _mst_knn_arg(value: Union[str, int]) -> int:
 
 
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None):
+              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None, max_output_bytes=None):
     """build a sequence similarity network from a matrix
 
     Args:
@@ -153,7 +151,24 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
             color_table = get_palette(node_data[color_by].unique())
 
     if xgmml is not None:
-        write_cytoscape_xgmml(xgmml, node_data, edge_data, name=Path(xgmml).stem, color_by=color_by, color_table=color_table)
+        temp_xgmml_path = make_temporary_output_path(xgmml)
+        try:
+            write_cytoscape_xgmml(
+                temp_xgmml_path,
+                node_data,
+                edge_data,
+                name=Path(xgmml).stem,
+                color_by=color_by,
+                color_table=color_table,
+                max_output_bytes=max_output_bytes,
+                output_description=f"XGMML network output '{xgmml}'",
+                mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
+            )
+            os.replace(temp_xgmml_path, xgmml)
+            temp_xgmml_path = None
+        finally:
+            if temp_xgmml_path is not None and Path(temp_xgmml_path).exists():
+                os.unlink(temp_xgmml_path)
 
     if cluster_tsv:
         index_label = None
@@ -178,11 +193,6 @@ def main(argv):
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, required=False,
                         help="pairwise similarity (or distance) scores. In the network, nodes will be derived from row and column names, and edges will be added between pairs of rows and columns meeting the threshold criteria. Format can be tab-separated text, or Domainator hdf5.")
-
-    #TODO: add a separate program for matrix analysis, such as density, non-zeros, histograms like they do in EFI
-    #           maybe just a 'hist' option that write a histogram and then quits?
-    #TODO: tree output (or as a separate script, or as part of the ssn script?), in the ssn 
-    #TODO: auto-generate MSAs and hmms and logos and stuff from clusters
 
     parser.add_argument('--lb', type=float, default=0, required=False,
                         help="exclude all edges with weights less than or equal to this value. This should be >= 0.")
@@ -215,6 +225,8 @@ def main(argv):
     parser.add_argument('--no_cluster_header', action="store_true", required=False, default=False,
                         help="If set, then the tsv file will not have a header. Only relevant if --cluster_tsv is set.")
 
+    add_max_output_gb_argument(parser)
+
     sparsify_group = parser.add_mutually_exclusive_group(required=False)
     sparsify_group.add_argument('--mst', action="store_true", required=False, default=False,
                                 help="If set, then only include edges that are part of the maximum spanning tree of the graph. " \
@@ -226,9 +238,7 @@ def main(argv):
     parser.add_argument('--config', action=ActionConfigFile)
 
 
-
-    # TODO: add annotation for connected clusters
-    # TODO: color by connected cluster (use a single color for all singletons)
+    # TODO: color by connected component (use a single color for all singletons)
     # TODO: generate MSAs for connected clusters (write to files and make a cytoscape column with the alinged sequences)
     # TODO: generate hmms for connected clusters (write to files)
     # TODO: 
@@ -237,6 +247,7 @@ def main(argv):
 
 
     params = parser.parse_args(argv)
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
 
     input_file = params.input
@@ -255,10 +266,12 @@ def main(argv):
     
     # Run
     # params.metric,
-    build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table,
-              params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
-              params.mst, params.mst_knn, subset_labels
-              )
+    try:
+        build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table,
+                  params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
+                  params.mst, params.mst_knn, subset_labels, max_output_bytes=max_output_bytes)
+    except OutputSizeLimitExceeded as exc:
+        raise SystemExit(str(exc)) from None
 
 
 def _entrypoint():

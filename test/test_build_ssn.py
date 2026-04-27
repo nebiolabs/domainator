@@ -229,6 +229,30 @@ def test_build_ssn_mst_knn_preserves_ssn_cluster_colors(shared_datadir):
         assert len(set(baseline_color_table.values())) == len(expected_clusters)
 
 
+def test_build_ssn_max_output_gb_blocks_xgmml(shared_datadir):
+    input_file = "FeSOD_dist.tsv"
+    with tempfile.TemporaryDirectory() as output_dir:
+        output_path = Path(output_dir)
+        metadata = str(shared_datadir / "FeSOD_metadata.tsv")
+        out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
+        out_cytoscape = output_dir + f"/{input_file}_out.xgmml"
+
+        with pytest.raises(SystemExit, match="--max_output_gb"):
+            build_ssn.main([
+                "-i", str(shared_datadir / input_file),
+                "--xgmml", out_cytoscape,
+                "--lb", "175",
+                "--color_by", "SSN_cluster",
+                "--cluster_tsv", out_clusters,
+                "--metadata", metadata,
+                "--max_output_gb", "0.000001",
+            ])
+
+            assert not Path(out_cytoscape).exists()
+            assert not Path(out_clusters).exists()
+            assert not any(path.suffix == ".tmp" for path in output_path.iterdir())
+
+
 @pytest.mark.parametrize("subset_mode", ["subset", "subset_file"])
 def test_build_ssn_subset(shared_datadir, subset_mode):
     input_file = "FeSOD_dist.tsv"
