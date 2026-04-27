@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import scipy
 import scipy.sparse
+import pytest
 from domainator.data_matrix import DataMatrix
 from helpers import compare_iterables
 
@@ -81,6 +82,37 @@ def test_seq_hmmsearch_sparse_1(shared_datadir):
         out_data = list([x[2] for x in out_table.iter_data()])
 
         assert (out_data == expected).all()
+
+
+def test_seq_dist_max_output_gb_blocks_dense_output(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+
+        with pytest.raises(SystemExit, match="--max_output_gb"):
+            seq_dist.main([
+                "-i", str(shared_datadir / "FeSOD_20.fasta"),
+                "-r", str(shared_datadir / "FeSOD_20.fasta"),
+                "--dense", out,
+                "-k", "1",
+                "--mode", "score",
+                "--max_output_gb", "0.000001",
+            ])
+
+
+def test_seq_dist_max_output_gb_zero_disables_guardrail(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+
+        seq_dist.main([
+            "-i", str(shared_datadir / "FeSOD_20.fasta"),
+            "-r", str(shared_datadir / "FeSOD_20.fasta"),
+            "--dense", out,
+            "-k", "1",
+            "--mode", "score",
+            "--max_output_gb", "0",
+        ])
+
+        assert DataMatrix.from_file(out).shape == (20, 20)
 
 
 def test_row_norm_score_mode():

@@ -24,6 +24,7 @@ from domainator.utils import get_file_type, parse_seqfiles, make_pool, pyhmmer_d
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix
 from domainator.hmmer_search import compare_hmmer
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from domainator.transform_matrix import MODES
 import psutil
 
@@ -197,7 +198,7 @@ def convert_to_fasta(input_path, output_path):
             SeqIO.write(rec,outh,"fasta")
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb):
+def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None):
     """
 
     """
@@ -290,12 +291,51 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
         matrix = MODES[mode](matrix, query_idx_to_len, db_idx_to_len)
     
 
-    if dense is not None:
-        DataMatrix.write_dense(matrix, dense, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
-    if dense_text is not None:
-        DataMatrix.write_dense_text(matrix, dense_text, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
-    if sparse:
-        DataMatrix.write_sparse(matrix, sparse, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
+    try:
+        if dense is not None:
+            enforce_matrix_output_limit(
+                output_type="dense",
+                matrix=matrix,
+                row_names=query_idx_to_name,
+                col_names=db_idx_to_name,
+                row_lengths=query_idx_to_len,
+                col_lengths=db_idx_to_len,
+                data_type=mode,
+                max_output_bytes=max_output_bytes,
+                output_path=dense,
+                mitigation_options=["--sparse", "-k", "--lb"],
+            )
+            DataMatrix.write_dense(matrix, dense, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
+        if dense_text is not None:
+            enforce_matrix_output_limit(
+                output_type="dense_text",
+                matrix=matrix,
+                row_names=query_idx_to_name,
+                col_names=db_idx_to_name,
+                row_lengths=query_idx_to_len,
+                col_lengths=db_idx_to_len,
+                data_type=mode,
+                max_output_bytes=max_output_bytes,
+                output_path=dense_text,
+                mitigation_options=["--sparse", "-k", "--lb"],
+            )
+            DataMatrix.write_dense_text(matrix, dense_text, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
+        if sparse:
+            enforce_matrix_output_limit(
+                output_type="sparse",
+                matrix=matrix,
+                row_names=query_idx_to_name,
+                col_names=db_idx_to_name,
+                row_lengths=query_idx_to_len,
+                col_lengths=db_idx_to_len,
+                data_type=mode,
+                max_output_bytes=max_output_bytes,
+                output_path=sparse,
+                mitigation_options=["-k", "--lb"],
+            )
+            DataMatrix.write_sparse(matrix, sparse, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
+    except OutputSizeLimitExceeded as exc:
+        raise SystemExit(str(exc)) from None
 
 def main(argv):
     #TODO: support for nucleotide sequences? (see compare_contigs.py)
@@ -345,6 +385,8 @@ def main(argv):
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="how many cpu threads to use. Default: use all available cores.")
 
+    add_max_output_gb_argument(parser)
+
     parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
@@ -378,7 +420,9 @@ def main(argv):
     if sparse is not None and params.mode == "score_dist":
         raise ValueError("Sparse distance matrices not implemented.")
 
-    seq_dist(params.input, input_type, params.reference, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb)
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
+
+    seq_dist(params.input, input_type, params.reference, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes)
 
 def _entrypoint():
     main(sys.argv[1:])
