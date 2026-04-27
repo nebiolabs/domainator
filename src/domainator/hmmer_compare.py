@@ -12,12 +12,21 @@ Söding, Johannes. "Protein Homology Detection by HMM–HMM Comparison." Bioinfo
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
+import os
 import pyhmmer
 from typing import Iterable, TextIO
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit
 from domainator.utils import make_pool, pyhmmer_decode
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
+
+
+def _format_hmmer_compare_hit(hit: HmmerHit, alignments: bool, sep: str = "\t") -> str:
+    out = sep.join((hit.query_name, hit.reference_name, f"{round(hit.score, 2):.2f}")) + "\n"
+    if alignments:
+        out += hit.alignment + "\n\n\n\n"
+    return out
 
 class _hmmer_compare_worker():
     def __init__(self, hmmer_targets, alignment=False, k=None, score_cutoff=float("-inf")):
@@ -47,23 +56,38 @@ class _hmmer_compare_worker():
 
 
 
-def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_handle:TextIO, score_cutoff:float, alignments:bool, k:int, cpu:int):
+def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_handle:TextIO, score_cutoff:float, alignments:bool, k:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
     references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
 
     worker = _hmmer_compare_worker(references, alignments, k, score_cutoff)
 
     sep="\t"
-    print(sep.join(("query","reference","score")), file=out_handle) #TODO: how to write the alignment?
+    header = sep.join(("query", "reference", "score")) + "\n"
+    header_bytes = len(header.encode("utf-8"))
+    enforce_output_limit(
+        projected_bytes=header_bytes,
+        max_output_bytes=max_output_bytes,
+        output_description=output_description,
+        mitigation_options=["-k", "--score_cutoff", "--alignments"],
+    )
+    out_handle.write(header)
+    written_bytes = header_bytes
     
     for file in query_files:
         # file_name = os.path.basename(Path(file).stem)
         with make_pool(processes=cpu) as pool:
             for hits in pool.imap(worker, pyhmmer.plan7.HMMFile(file), chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                 for hit in hits:
-                    print(sep.join( (hit.query_name,hit.reference_name,f"{round(hit.score,2):.2f}") ), file=out_handle)
-                    if alignments:
-                        print(hit.alignment, file=out_handle)
-                        print("\n\n", file=out_handle)
+                    rendered_hit = _format_hmmer_compare_hit(hit, alignments, sep=sep)
+                    hit_bytes = len(rendered_hit.encode("utf-8"))
+                    enforce_output_limit(
+                        projected_bytes=written_bytes + hit_bytes,
+                        max_output_bytes=max_output_bytes,
+                        output_description=output_description,
+                        mitigation_options=["-k", "--score_cutoff", "--alignments"],
+                    )
+                    out_handle.write(rendered_hit)
+                    written_bytes += hit_bytes
 
 
 def main(argv):
@@ -88,19 +112,39 @@ def main(argv):
     parser.add_argument('--cpu', type=int, default=8, required=False,
                         help="how many cpu threads to use. Default: 8")
 
+    add_max_output_gb_argument(parser)
+
     parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
 
+    max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
+    output_description = f"hmmer_compare TSV output '{params.output if params.output is not None else 'stdout'}'"
+    temp_output_path = None
     if params.output is None:
         out = sys.stdout
     else:
-        out = open(params.output, "w")
+        temp_output_path = make_temporary_output_path(params.output)
+        out = open(temp_output_path, "w")
 
-    hmmer_compare(params.input, params.reference, out, params.score_cutoff, params.alignments, params.k, params.cpu)
+    try:
+        hmmer_compare(params.input, params.reference, out, params.score_cutoff, params.alignments, params.k, params.cpu, max_output_bytes=max_output_bytes, output_description=output_description)
+    except OutputSizeLimitExceeded as exc:
+        if params.output is not None:
+            out.close()
+            if temp_output_path is not None and os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        if params.output is not None:
+            out.close()
+            if temp_output_path is not None and os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+        raise
 
     if params.output is not None:
         out.close()
+        os.replace(temp_output_path, params.output)
 
 def _entrypoint():
     main(sys.argv[1:])
