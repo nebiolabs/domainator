@@ -371,6 +371,16 @@
       "flags": [
         "--batch_size"
       ]
+    },
+    {
+      "name": "Max Output Gb",
+      "parameter": "max_output_gb",
+      "help": "Fail if a projected output file would exceed this many GB. Set to 0 to disable the guardrail.",
+      "type": "number",
+      "default": 25.0,
+      "flags": [
+        "--max_output_gb"
+      ]
     }
   ]
 }
