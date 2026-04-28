@@ -48,6 +48,11 @@ import h5py
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Union, Optional, Iterator
 
+try:
+    import numba as nb
+except ImportError:
+    nb = None
+
 
 @dataclass(frozen=True)
 class SortedUndirectedEdges:
@@ -176,32 +181,125 @@ def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None
     )
 
 
-def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max_k: Optional[int] = None) -> CompactNeighborRankings:
-    if len(edges) == 0:
+def _build_top_k_neighbor_rankings_heap(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
+    top_k_by_row = [[] for _ in range(edges.n_nodes)]
+
+    def add_candidate(row_idx: int, target_idx: int, score: float):
+        heap = top_k_by_row[row_idx]
+        candidate = (score, -target_idx, target_idx)
+        if len(heap) < max_k:
+            heapq.heappush(heap, candidate)
+            return
+        if candidate > heap[0]:
+            heapq.heapreplace(heap, candidate)
+
+    for source_idx, target_idx, score in zip(edges.source, edges.target, edges.score):
+        add_candidate(int(source_idx), int(target_idx), float(score))
+        add_candidate(int(target_idx), int(source_idx), float(score))
+
+    offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
+    total_kept = 0
+    for row_idx, heap in enumerate(top_k_by_row):
+        total_kept += len(heap)
+        offsets[row_idx + 1] = total_kept
+
+    if total_kept == 0:
         return _empty_compact_neighbor_rankings(edges.n_nodes)
 
-    if max_k is not None:
-        top_k_by_row = [[] for _ in range(edges.n_nodes)]
+    targets = np.empty(total_kept, dtype=np.int32)
+    scores = np.empty(total_kept, dtype=float)
 
-        def add_candidate(row_idx: int, target_idx: int, score: float):
-            heap = top_k_by_row[row_idx]
-            candidate = (score, -target_idx, target_idx)
-            if len(heap) < max_k:
-                heapq.heappush(heap, candidate)
-                return
-            if candidate > heap[0]:
-                heapq.heapreplace(heap, candidate)
+    out_idx = 0
+    for heap in top_k_by_row:
+        if len(heap) == 0:
+            continue
+        heap.sort(key=lambda item: (-item[0], item[2]))
+        for score, _, target_idx in heap:
+            targets[out_idx] = target_idx
+            scores[out_idx] = score
+            out_idx += 1
 
-        for source_idx, target_idx, score in zip(edges.source, edges.target, edges.score):
-            add_candidate(int(source_idx), int(target_idx), float(score))
-            add_candidate(int(target_idx), int(source_idx), float(score))
+    return CompactNeighborRankings(
+        offsets=offsets,
+        target=targets,
+        score=scores,
+    )
+
+
+if nb is not None:
+    @nb.njit(cache=True)
+    def _is_better_top_k_candidate(candidate_score: float, candidate_target: int,
+                                   current_score: float, current_target: int) -> bool:
+        if candidate_score > current_score:
+            return True
+        if candidate_score < current_score:
+            return False
+        return candidate_target < current_target
+
+
+    @nb.njit(cache=True)
+    def _insert_top_k_candidate(top_targets: np.ndarray, top_scores: np.ndarray, row_counts: np.ndarray,
+                                row_idx: int, candidate_target: int, candidate_score: float, max_k: int) -> None:
+        count = int(row_counts[row_idx])
+        if count == max_k and not _is_better_top_k_candidate(
+            candidate_score,
+            candidate_target,
+            top_scores[row_idx, max_k - 1],
+            top_targets[row_idx, max_k - 1],
+        ):
+            return
+
+        insert_pos = count
+        if insert_pos >= max_k:
+            insert_pos = max_k - 1
+
+        while insert_pos > 0 and _is_better_top_k_candidate(
+            candidate_score,
+            candidate_target,
+            top_scores[row_idx, insert_pos - 1],
+            top_targets[row_idx, insert_pos - 1],
+        ):
+            if insert_pos < max_k:
+                top_scores[row_idx, insert_pos] = top_scores[row_idx, insert_pos - 1]
+                top_targets[row_idx, insert_pos] = top_targets[row_idx, insert_pos - 1]
+            insert_pos -= 1
+
+        top_scores[row_idx, insert_pos] = candidate_score
+        top_targets[row_idx, insert_pos] = candidate_target
+
+        if count < max_k:
+            row_counts[row_idx] = count + 1
+
+
+    @nb.njit(cache=True)
+    def _build_top_k_neighbor_arrays(source: np.ndarray, target: np.ndarray, score: np.ndarray,
+                                     n_nodes: int, max_k: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        top_targets = np.full((n_nodes, max_k), -1, dtype=np.int32)
+        top_scores = np.empty((n_nodes, max_k), dtype=np.float64)
+        row_counts = np.zeros(n_nodes, dtype=np.int32)
+
+        for edge_idx in range(source.shape[0]):
+            source_idx = int(source[edge_idx])
+            target_idx = int(target[edge_idx])
+            edge_score = float(score[edge_idx])
+            _insert_top_k_candidate(top_targets, top_scores, row_counts, source_idx, target_idx, edge_score, max_k)
+            _insert_top_k_candidate(top_targets, top_scores, row_counts, target_idx, source_idx, edge_score, max_k)
+
+        return top_targets, top_scores, row_counts
+
+
+    def _build_top_k_neighbor_rankings_numba(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
+        top_targets, top_scores, row_counts = _build_top_k_neighbor_arrays(
+            edges.source,
+            edges.target,
+            edges.score,
+            edges.n_nodes,
+            max_k,
+        )
 
         offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
-        total_kept = 0
-        for row_idx, heap in enumerate(top_k_by_row):
-            total_kept += len(heap)
-            offsets[row_idx + 1] = total_kept
-
+        offsets[1:] = np.cumsum(row_counts, dtype=np.int64)
+        total_kept = int(offsets[-1])
         if total_kept == 0:
             return _empty_compact_neighbor_rankings(edges.n_nodes)
 
@@ -209,20 +307,31 @@ def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max
         scores = np.empty(total_kept, dtype=float)
 
         out_idx = 0
-        for heap in top_k_by_row:
-            if len(heap) == 0:
+        for row_idx in range(edges.n_nodes):
+            keep_count = int(row_counts[row_idx])
+            if keep_count == 0:
                 continue
-            heap.sort(key=lambda item: (-item[0], item[2]))
-            for score, _, target_idx in heap:
-                targets[out_idx] = target_idx
-                scores[out_idx] = score
-                out_idx += 1
+            next_idx = out_idx + keep_count
+            targets[out_idx:next_idx] = top_targets[row_idx, :keep_count]
+            scores[out_idx:next_idx] = top_scores[row_idx, :keep_count]
+            out_idx = next_idx
 
         return CompactNeighborRankings(
             offsets=offsets,
             target=targets,
             score=scores,
         )
+else:
+    def _build_top_k_neighbor_rankings_numba(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
+        return _build_top_k_neighbor_rankings_heap(edges, max_k)
+
+
+def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max_k: Optional[int] = None) -> CompactNeighborRankings:
+    if len(edges) == 0:
+        return _empty_compact_neighbor_rankings(edges.n_nodes)
+
+    if max_k is not None:
+        return _build_top_k_neighbor_rankings_numba(edges, max_k)
 
     row_counts = np.bincount(edges.source, minlength=edges.n_nodes) + np.bincount(edges.target, minlength=edges.n_nodes)
     total_directed = int(row_counts.sum())
@@ -537,16 +646,15 @@ def _average_closeness_point_at_index(sorted_edges: SortedUndirectedEdges, thres
             continue
 
         component_graph = active_graph[component_nodes][:, component_nodes].tocsr()
-        for source_idx in range(component_size):
-            distances = scipy.sparse.csgraph.shortest_path(
-                component_graph,
-                directed=False,
-                unweighted=True,
-                indices=source_idx,
-            )
-            total_distance = float(np.sum(distances))
-            if total_distance > 0.0:
-                closeness_sum += (component_size - 1.0) / total_distance
+        distances = scipy.sparse.csgraph.shortest_path(
+            component_graph,
+            directed=False,
+            unweighted=True,
+        )
+        total_distances = np.asarray(distances.sum(axis=1)).reshape(-1)
+        valid_mask = total_distances > 0.0
+        if np.any(valid_mask):
+            closeness_sum += float(np.sum((component_size - 1.0) / total_distances[valid_mask]))
 
     point[1] = closeness_sum / len(active_nodes)
     point[3] = len(active_nodes)

@@ -121,6 +121,24 @@ def test_build_symmetric_neighbor_rankings_sparse_matches_dense():
     assert np.array_equal(dense_rankings.score, sparse_rankings.score)
 
 
+def test_build_symmetric_neighbor_rankings_top_k_tie_order():
+    data = np.array([
+        [0, 10, 10, 8, 7],
+        [10, 0, 5, 0, 0],
+        [10, 5, 0, 0, 0],
+        [8, 0, 0, 0, 0],
+        [7, 0, 0, 0, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    rankings = build_symmetric_neighbor_rankings(matrix, max_k=3)
+    start, end = rankings.row_bounds(0)
+
+    assert np.array_equal(rankings.target[start:end], np.array([1, 2, 3], dtype=np.int32))
+    assert np.allclose(rankings.score[start:end], np.array([10.0, 10.0, 8.0]))
+
+
 def test_average_closeness_by_threshold_tracks_non_mst_thresholds():
     data = np.array([
         [0, 10, 6, 0],

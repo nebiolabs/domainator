@@ -3,6 +3,7 @@
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 import math
+from time import perf_counter
 
 from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold, average_closeness_by_threshold
 from domainator import __version__, RawAndDefaultsFormatter
@@ -68,6 +69,24 @@ def _summarize_closeness_curve(closeness_curve, max_items=5):
 
     ranked_changes = sorted(change_rows, reverse=True)[:max_items]
     return ranked_optima, ranked_changes
+
+
+def _record_stage_timing(stage_timings, stage_name, start_time, **metrics):
+    elapsed = perf_counter() - start_time
+    stage_timings.append((stage_name, elapsed, metrics))
+    return elapsed
+
+
+def _emit_stage_timings(stage_timings, out_handle=None):
+    if out_handle is None:
+        out_handle = sys.stderr
+
+    print("matrix_report stage timings:", file=out_handle)
+    for stage_name, elapsed, metrics in stage_timings:
+        suffix = ""
+        if len(metrics) > 0:
+            suffix = " (" + ", ".join(f"{key}={value}" for key, value in metrics.items()) + ")"
+        print(f"  {stage_name}: {elapsed:.3f}s{suffix}", file=out_handle)
 
 class SummaryTextWriter():
     def __init__(self, out_handle): 
@@ -655,7 +674,8 @@ class SummaryHTMLWriter():
         print("</body></html>", file=self.out_handle)
 
 def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
-                  include_closeness: bool = False, closeness_mode: str = "auto", closeness_max_points: int = 128):
+                  include_closeness: bool = False, closeness_mode: str = "auto", closeness_max_points: int = 128,
+                  profile_stages: bool = False, stage_timings=None):
     """
         Write a report on the matrix to the given handles.
     """
@@ -664,28 +684,45 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
         longform_outputs.append(SummaryTextWriter(out_text_handle))
     if out_html_handle is not None:
         longform_outputs.append(SummaryHTMLWriter(out_html_handle))
+
+    if stage_timings is None:
+        stage_timings = []
     
+    stage_start = perf_counter()
     edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+    _record_stage_timing(stage_timings, "build_edge_table", stage_start, n_edges=len(edge_table), n_nodes=edge_table.n_nodes)
+
+    stage_start = perf_counter()
     tree = MaxTree(edge_table)
+    _record_stage_timing(stage_timings, "build_max_tree", stage_start, n_mst_edges=len(tree.mst_edges))
     mst_knn_config = None
     mst_knn_counts = None
     closeness_curve = None
     if include_mst_knn:
+        stage_start = perf_counter()
         mst_knn_config = _get_mst_knn_report_config(tree)
         neighbor_rankings = build_symmetric_neighbor_rankings(edge_table, max_k=mst_knn_config["max_k"])
+        _record_stage_timing(stage_timings, "build_mst_knn_neighbor_rankings", stage_start, max_k=mst_knn_config["max_k"], kept_edges=len(neighbor_rankings.target))
+
+        stage_start = perf_counter()
         mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
+        _record_stage_timing(stage_timings, "build_mst_knn_counts", stage_start, thresholds=len(tree.mst_edges), max_k=mst_knn_config["max_k"])
     if include_closeness:
+        stage_start = perf_counter()
         closeness_curve = average_closeness_by_threshold(
             edge_table,
             tree=tree,
             mode=closeness_mode,
             max_points=closeness_max_points,
         )
+        _record_stage_timing(stage_timings, "build_closeness_curve", stage_start, mode=closeness_curve["mode"], evaluated=closeness_curve["evaluated_thresholds"], total=closeness_curve["total_thresholds"])
 
+    stage_start = perf_counter()
     for output in longform_outputs:
         output.write_header(tree, edge_table.score)
         output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts, closeness_curve)
         output.write_footer()
+    _record_stage_timing(stage_timings, "render_outputs", stage_start, outputs=len(longform_outputs))
 
 def main(argv):
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
@@ -705,6 +742,8 @@ def main(argv):
                         help="How to evaluate closeness thresholds when --include_closeness is enabled.")
     parser.add_argument('--closeness_max_points', type=int, default=128,
                         help="Maximum number of thresholds to evaluate when sampled closeness mode is used.")
+    parser.add_argument('--profile_stages', action='store_true', default=False,
+                        help="Print per-stage runtime timings to stderr for profiling large matrix_report runs.")
     
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -721,10 +760,15 @@ def main(argv):
     if params.html is not None:
         out_html_handle = open(params.html, "w")
  
+    stage_timings = []
+    stage_start = perf_counter()
     matrix = DataMatrix.from_file(params.input)
+    if params.profile_stages:
+        _record_stage_timing(stage_timings, "load_matrix", stage_start, shape=matrix.shape, matrix_type=type(matrix).__name__)
 
     ### Run
     if params.output is not None or params.html is not None:
+        stage_start = perf_counter()
         matrix_report(
             matrix,
             out,
@@ -733,7 +777,12 @@ def main(argv):
             include_closeness=params.include_closeness,
             closeness_mode=params.closeness_mode,
             closeness_max_points=params.closeness_max_points,
+            profile_stages=params.profile_stages,
+            stage_timings=stage_timings,
         )
+        if params.profile_stages:
+            _record_stage_timing(stage_timings, "matrix_report_total", stage_start)
+            _emit_stage_timings(stage_timings)
 
     if params.output is not None:
         out.close()
