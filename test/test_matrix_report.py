@@ -285,5 +285,36 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
         assert 'matrix_report_total:' in stderr_output
 
 
+def test_matrix_report_progress_emits_live_updates(capsys):
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "--html", out_html,
+            "--include_closeness",
+            "--closeness_mode", "exact",
+            "--progress",
+        ])
+
+        stderr_output = capsys.readouterr().err
+
+        assert 'loading matrix from' in stderr_output
+        assert 'building closeness curve' in stderr_output
+        assert 'closeness progress:' in stderr_output
+        assert 'closeness complete:' in stderr_output
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

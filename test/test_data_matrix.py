@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings, average_closeness_by_threshold, _closeness_threshold_groups
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings, average_closeness_by_threshold, _adaptive_closeness_max_points, _closeness_threshold_groups
 import scipy.sparse
 import numpy as np
 import pytest_datadir
@@ -198,6 +198,11 @@ def test_closeness_threshold_groups_preserve_descending_thresholds():
 
     assert np.array_equal(thresholds, np.array([9.0, 7.0, 5.0]))
     assert np.array_equal(edge_counts, np.array([1, 4, 6]))
+
+
+def test_adaptive_closeness_max_points_caps_huge_graphs():
+    assert _adaptive_closeness_max_points(706_633, 786_835, 1_804, 128) == 128
+    assert _adaptive_closeness_max_points(8_445_546, 113_469_739, 16_132, 128) == 16
 
 # Test iter_data order and zeros for synthetic data
 def test_iter_data_order_and_zeros_fake():

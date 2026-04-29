@@ -88,6 +88,19 @@ def _emit_stage_timings(stage_timings, out_handle=None):
             suffix = " (" + ", ".join(f"{key}={value}" for key, value in metrics.items()) + ")"
         print(f"  {stage_name}: {elapsed:.3f}s{suffix}", file=out_handle)
 
+
+def _make_progress_callback(out_handle=None):
+    if out_handle is None:
+        out_handle = sys.stderr
+
+    start_time = perf_counter()
+
+    def emit(message):
+        elapsed = perf_counter() - start_time
+        print(f"[matrix_report +{elapsed:.1f}s] {message}", file=out_handle, flush=True)
+
+    return emit
+
 class SummaryTextWriter():
     def __init__(self, out_handle): 
         self.out_handle = out_handle
@@ -675,7 +688,7 @@ class SummaryHTMLWriter():
 
 def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
                   include_closeness: bool = False, closeness_mode: str = "auto", closeness_max_points: int = 128,
-                  profile_stages: bool = False, stage_timings=None):
+                  profile_stages: bool = False, stage_timings=None, progress_callback=None):
     """
         Write a report on the matrix to the given handles.
     """
@@ -688,10 +701,14 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     if stage_timings is None:
         stage_timings = []
     
+    if progress_callback is not None:
+        progress_callback("building edge table")
     stage_start = perf_counter()
     edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
     _record_stage_timing(stage_timings, "build_edge_table", stage_start, n_edges=len(edge_table), n_nodes=edge_table.n_nodes)
 
+    if progress_callback is not None:
+        progress_callback("building maximum spanning tree")
     stage_start = perf_counter()
     tree = MaxTree(edge_table)
     _record_stage_timing(stage_timings, "build_max_tree", stage_start, n_mst_edges=len(tree.mst_edges))
@@ -699,24 +716,33 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     mst_knn_counts = None
     closeness_curve = None
     if include_mst_knn:
+        if progress_callback is not None:
+            progress_callback("building MST_KNN neighbor rankings")
         stage_start = perf_counter()
         mst_knn_config = _get_mst_knn_report_config(tree)
         neighbor_rankings = build_symmetric_neighbor_rankings(edge_table, max_k=mst_knn_config["max_k"])
         _record_stage_timing(stage_timings, "build_mst_knn_neighbor_rankings", stage_start, max_k=mst_knn_config["max_k"], kept_edges=len(neighbor_rankings.target))
 
+        if progress_callback is not None:
+            progress_callback("building MST_KNN threshold counts")
         stage_start = perf_counter()
         mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
         _record_stage_timing(stage_timings, "build_mst_knn_counts", stage_start, thresholds=len(tree.mst_edges), max_k=mst_knn_config["max_k"])
     if include_closeness:
+        if progress_callback is not None:
+            progress_callback("building closeness curve")
         stage_start = perf_counter()
         closeness_curve = average_closeness_by_threshold(
             edge_table,
             tree=tree,
             mode=closeness_mode,
             max_points=closeness_max_points,
+            progress_callback=progress_callback,
         )
         _record_stage_timing(stage_timings, "build_closeness_curve", stage_start, mode=closeness_curve["mode"], evaluated=closeness_curve["evaluated_thresholds"], total=closeness_curve["total_thresholds"])
 
+    if progress_callback is not None:
+        progress_callback("rendering outputs")
     stage_start = perf_counter()
     for output in longform_outputs:
         output.write_header(tree, edge_table.score)
@@ -742,6 +768,8 @@ def main(argv):
                         help="How to evaluate closeness thresholds when --include_closeness is enabled.")
     parser.add_argument('--closeness_max_points', type=int, default=128,
                         help="Maximum number of thresholds to evaluate when sampled closeness mode is used.")
+    parser.add_argument('--progress', action='store_true', default=False,
+                        help="Print live progress updates to stderr during long-running matrix_report stages.")
     parser.add_argument('--profile_stages', action='store_true', default=False,
                         help="Print per-stage runtime timings to stderr for profiling large matrix_report runs.")
     
@@ -759,8 +787,14 @@ def main(argv):
     out_html_handle = None
     if params.html is not None:
         out_html_handle = open(params.html, "w")
+
+    progress_callback = None
+    if params.progress or params.profile_stages:
+        progress_callback = _make_progress_callback()
  
     stage_timings = []
+    if progress_callback is not None:
+        progress_callback(f"loading matrix from {params.input}")
     stage_start = perf_counter()
     matrix = DataMatrix.from_file(params.input)
     if params.profile_stages:
@@ -779,6 +813,7 @@ def main(argv):
             closeness_max_points=params.closeness_max_points,
             profile_stages=params.profile_stages,
             stage_timings=stage_timings,
+            progress_callback=progress_callback,
         )
         if params.profile_stages:
             _record_stage_timing(stage_timings, "matrix_report_total", stage_start)

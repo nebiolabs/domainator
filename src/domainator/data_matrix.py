@@ -46,7 +46,7 @@ import scipy.sparse
 import numpy as np
 import h5py
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Union, Optional, Iterator
+from typing import Callable, Dict, List, Tuple, Union, Optional, Iterator
 
 try:
     import numba as nb
@@ -543,6 +543,78 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
 _AUTO_CLOSENESS_MAX_THRESHOLDS = 256
 _AUTO_CLOSENESS_MAX_EDGES = 200000
 _AUTO_CLOSENESS_MAX_NODES = 1500
+_AUTO_CLOSENESS_MEDIUM_MAX_POINTS = 64
+_AUTO_CLOSENESS_LARGE_MAX_POINTS = 32
+_AUTO_CLOSENESS_HUGE_MAX_POINTS = 16
+_AUTO_CLOSENESS_MEDIUM_MAX_THRESHOLDS = 1_000_000
+_AUTO_CLOSENESS_MEDIUM_MAX_EDGES = 1_000_000
+_AUTO_CLOSENESS_MEDIUM_MAX_NODES = 2_000
+_AUTO_CLOSENESS_LARGE_MAX_THRESHOLDS = 2_000_000
+_AUTO_CLOSENESS_LARGE_MAX_EDGES = 5_000_000
+_AUTO_CLOSENESS_LARGE_MAX_NODES = 5_000
+_AUTO_CLOSENESS_HUGE_MAX_THRESHOLDS = 5_000_000
+_AUTO_CLOSENESS_HUGE_MAX_EDGES = 20_000_000
+_AUTO_CLOSENESS_HUGE_MAX_NODES = 10_000
+
+
+def _adaptive_closeness_max_points(n_thresholds: int, n_edges: int, n_nodes: int,
+                                   requested_max_points: int) -> int:
+    requested_max_points = max(8, int(requested_max_points))
+
+    if (
+        n_thresholds > _AUTO_CLOSENESS_HUGE_MAX_THRESHOLDS
+        or n_edges > _AUTO_CLOSENESS_HUGE_MAX_EDGES
+        or n_nodes > _AUTO_CLOSENESS_HUGE_MAX_NODES
+    ):
+        return min(requested_max_points, _AUTO_CLOSENESS_HUGE_MAX_POINTS)
+
+    if (
+        n_thresholds > _AUTO_CLOSENESS_LARGE_MAX_THRESHOLDS
+        or n_edges > _AUTO_CLOSENESS_LARGE_MAX_EDGES
+        or n_nodes > _AUTO_CLOSENESS_LARGE_MAX_NODES
+    ):
+        return min(requested_max_points, _AUTO_CLOSENESS_LARGE_MAX_POINTS)
+
+    if (
+        n_thresholds > _AUTO_CLOSENESS_MEDIUM_MAX_THRESHOLDS
+        or n_edges > _AUTO_CLOSENESS_MEDIUM_MAX_EDGES
+        or n_nodes > _AUTO_CLOSENESS_MEDIUM_MAX_NODES
+    ):
+        return min(requested_max_points, _AUTO_CLOSENESS_MEDIUM_MAX_POINTS)
+
+    return min(requested_max_points, 128)
+
+
+def _make_closeness_progress_state(total_points: int) -> Dict[str, int]:
+    total_points = max(1, int(total_points))
+    report_interval = 1 if total_points <= 25 else max(1, (total_points + 19) // 20)
+    return {
+        "computed": 0,
+        "reported": 0,
+        "report_interval": report_interval,
+        "total": total_points,
+    }
+
+
+def _emit_closeness_progress(progress_callback: Optional[Callable[[str], None]], progress_state: Optional[Dict[str, int]],
+                             threshold_value: float, active_edge_count: int) -> None:
+    if progress_callback is None or progress_state is None:
+        return
+
+    progress_state["computed"] += 1
+    computed = progress_state["computed"]
+    total_points = progress_state["total"]
+
+    if (
+        computed == 1
+        or computed == total_points
+        or computed - progress_state["reported"] >= progress_state["report_interval"]
+    ):
+        progress_state["reported"] = computed
+        progress_callback(
+            f"closeness progress: {computed}/{total_points} points ({100.0 * computed / total_points:.1f}%), "
+            f"threshold={float(threshold_value):.2f}, edges={int(active_edge_count)}"
+        )
 
 
 def _closeness_threshold_groups(sorted_edges: SortedUndirectedEdges) -> Tuple[np.ndarray, np.ndarray]:
@@ -664,7 +736,9 @@ def _average_closeness_point_at_index(sorted_edges: SortedUndirectedEdges, thres
 
 def _average_closeness_points_for_indices(sorted_edges: SortedUndirectedEdges, thresholds: np.ndarray,
                                           edge_counts: np.ndarray, selected_indices: np.ndarray,
-                                          point_cache: Optional[Dict[int, np.ndarray]] = None) -> np.ndarray:
+                                          point_cache: Optional[Dict[int, np.ndarray]] = None,
+                                          progress_callback: Optional[Callable[[str], None]] = None,
+                                          progress_state: Optional[Dict[str, int]] = None) -> np.ndarray:
     """Compute average node closeness for selected score thresholds."""
     if len(selected_indices) == 0:
         return np.zeros((0, 5), dtype=float)
@@ -679,13 +753,20 @@ def _average_closeness_points_for_indices(sorted_edges: SortedUndirectedEdges, t
         if cached_point is None:
             cached_point = _average_closeness_point_at_index(sorted_edges, thresholds, edge_counts, int(threshold_idx))
             point_cache[int(threshold_idx)] = cached_point
+            _emit_closeness_progress(
+                progress_callback,
+                progress_state,
+                float(thresholds[int(threshold_idx)]),
+                int(edge_counts[int(threshold_idx)]),
+            )
         points[output_idx, :] = cached_point
 
     return points
 
 
 def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Optional['MaxTree'] = None,
-                                   mode: str = "auto", max_points: int = 128) -> Dict[str, Union[str, int, List[List[float]]]]:
+                                   mode: str = "auto", max_points: int = 128,
+                                   progress_callback: Optional[Callable[[str], None]] = None) -> Dict[str, Union[str, int, List[List[float]]]]:
     """Return paper-style average node closeness across score thresholds.
 
     Closeness is computed on undirected, unweighted thresholded graphs using the
@@ -716,16 +797,52 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
     if use_exact:
         selected_indices = np.arange(len(thresholds), dtype=int)
         resolved_mode = "exact" if mode == "exact" else "auto-exact"
-        points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, selected_indices)
+        if progress_callback is not None:
+            progress_callback(
+                f"closeness start: mode={resolved_mode}, evaluating {len(selected_indices)}/{len(thresholds)} thresholds"
+            )
+        points = _average_closeness_points_for_indices(
+            sorted_edges,
+            thresholds,
+            edge_counts,
+            selected_indices,
+            progress_callback=progress_callback,
+            progress_state=_make_closeness_progress_state(len(selected_indices)),
+        )
     else:
         point_cache = dict()
-        selected_indices = _sample_closeness_threshold_indices(thresholds, edge_counts, tree, max_points=max_points)
+        requested_max_points = max(8, min(int(max_points), len(thresholds)))
+        effective_max_points = requested_max_points
+        if mode == "auto":
+            effective_max_points = _adaptive_closeness_max_points(
+                len(thresholds),
+                len(sorted_edges),
+                sorted_edges.n_nodes,
+                requested_max_points,
+            )
+
+        if progress_callback is not None:
+            progress_callback(
+                f"closeness start: mode={'auto-sampled' if mode == 'auto' else 'sampled'}, total_thresholds={len(thresholds)}, "
+                f"requested_points={requested_max_points}, target_points={effective_max_points}"
+            )
+
+        progress_state = _make_closeness_progress_state(min(effective_max_points, len(thresholds)))
+        selected_indices = _sample_closeness_threshold_indices(thresholds, edge_counts, tree, max_points=effective_max_points)
         if len(selected_indices) == 0:
             selected_indices = np.asarray([0, len(thresholds) - 1], dtype=int)
 
-        points = _average_closeness_points_for_indices(sorted_edges, thresholds, edge_counts, selected_indices, point_cache=point_cache)
+        points = _average_closeness_points_for_indices(
+            sorted_edges,
+            thresholds,
+            edge_counts,
+            selected_indices,
+            point_cache=point_cache,
+            progress_callback=progress_callback,
+            progress_state=progress_state,
+        )
 
-        while len(selected_indices) < min(max_points, len(thresholds)):
+        while len(selected_indices) < min(effective_max_points, len(thresholds)):
             ordered_indices = np.sort(selected_indices)
             ordered_points = _average_closeness_points_for_indices(
                 sorted_edges,
@@ -733,6 +850,8 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
                 edge_counts,
                 ordered_indices,
                 point_cache=point_cache,
+                progress_callback=progress_callback,
+                progress_state=progress_state,
             )
             candidate_gaps = []
             for position in range(len(ordered_indices) - 1):
@@ -754,7 +873,7 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
                 if midpoint not in selected_indices:
                     selected_indices = np.unique(np.append(selected_indices, midpoint))
                     added = True
-                if len(selected_indices) >= min(max_points, len(thresholds)):
+                if len(selected_indices) >= min(effective_max_points, len(thresholds)):
                     break
 
             if not added:
@@ -767,17 +886,30 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
                 edge_counts,
                 selected_indices,
                 point_cache=point_cache,
+                progress_callback=progress_callback,
+                progress_state=progress_state,
             )
 
         resolved_mode = "sampled" if mode == "sampled" else "auto-sampled"
 
     ordered_points = points[np.argsort(-points[:, 0], kind="stable")]
-    return {
+    result = {
         "mode": resolved_mode,
         "total_thresholds": int(len(thresholds)),
         "evaluated_thresholds": int(len(ordered_points)),
         "points": ordered_points.tolist(),
     }
+
+    if not use_exact:
+        result["requested_max_points"] = int(requested_max_points)
+        result["effective_max_points"] = int(effective_max_points)
+
+    if progress_callback is not None:
+        progress_callback(
+            f"closeness complete: mode={resolved_mode}, evaluated={int(len(ordered_points))}/{len(thresholds)} thresholds"
+        )
+
+    return result
 
 #TODO: use hdf5plugin to blosc compress datasets: http://www.silx.org/doc/hdf5plugin/latest/usage.html
 
