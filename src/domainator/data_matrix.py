@@ -455,6 +455,29 @@ def mst_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0
     return edge_dict
 
 
+def sorted_edges_from_edge_index_dict(n_nodes: int, edge_dict: Dict[Tuple[int, int], float]) -> SortedUndirectedEdges:
+    """Return a descending score-sorted edge table from an undirected edge dict."""
+    if len(edge_dict) == 0:
+        return SortedUndirectedEdges(
+            n_nodes=n_nodes,
+            source=np.empty(0, dtype=np.int32),
+            target=np.empty(0, dtype=np.int32),
+            score=np.empty(0, dtype=float),
+        )
+
+    items = sorted(
+        ((float(score), int(source_idx), int(target_idx)) for (source_idx, target_idx), score in edge_dict.items()),
+        key=lambda item: (-item[0], item[1], item[2]),
+    )
+
+    return SortedUndirectedEdges(
+        n_nodes=n_nodes,
+        source=np.fromiter((source_idx for _, source_idx, _ in items), dtype=np.int32, count=len(items)),
+        target=np.fromiter((target_idx for _, _, target_idx in items), dtype=np.int32, count=len(items)),
+        score=np.fromiter((score for score, _, _ in items), dtype=float, count=len(items)),
+    )
+
+
 def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
                                      include_equal: bool = True,
                                      neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:
@@ -764,6 +787,98 @@ def _average_closeness_points_for_indices(sorted_edges: SortedUndirectedEdges, t
     return points
 
 
+def _mst_closeness_threshold_indices(thresholds: np.ndarray, tree: Optional['MaxTree']) -> np.ndarray:
+    if tree is None:
+        raise ValueError("tree is required for MST closeness threshold selection")
+    if len(tree.edges_by_threshold) == 0 or len(thresholds) == 0:
+        return np.empty(0, dtype=int)
+
+    threshold_lookup = {float(threshold): idx for idx, threshold in enumerate(thresholds)}
+    mst_thresholds = np.unique(tree.edges_by_threshold[:, 1]).astype(float, copy=False)
+    return np.sort(np.asarray([
+        threshold_lookup[threshold]
+        for threshold in mst_thresholds
+        if threshold in threshold_lookup
+    ], dtype=int))
+
+
+def _mst_discontinuity_pairs(thresholds: np.ndarray, tree: 'MaxTree') -> List[Tuple[float, int, int]]:
+    candidate_indices = _mst_closeness_threshold_indices(thresholds, tree)
+    if len(candidate_indices) < 2:
+        return []
+
+    parent = np.arange(tree.n_nodes, dtype=int)
+    component_sizes = np.ones(tree.n_nodes, dtype=int)
+    merge_priority_by_threshold = dict()
+
+    def find(node_idx: int) -> int:
+        root = node_idx
+        while parent[root] != root:
+            root = parent[root]
+        while parent[node_idx] != node_idx:
+            next_idx = parent[node_idx]
+            parent[node_idx] = root
+            node_idx = next_idx
+        return root
+
+    for source_idx, target_idx, threshold in tree.mst_edges:
+        left_root = find(source_idx)
+        right_root = find(target_idx)
+        if left_root == right_root:
+            continue
+        left_size = int(component_sizes[left_root])
+        right_size = int(component_sizes[right_root])
+        merge_priority_by_threshold[float(threshold)] = merge_priority_by_threshold.get(float(threshold), 0.0) + float(left_size * right_size)
+        parent[left_root] = right_root
+        component_sizes[right_root] = left_size + right_size
+
+    ranked_pairs = []
+    for position in range(1, len(candidate_indices)):
+        threshold_idx = int(candidate_indices[position])
+        previous_idx = int(candidate_indices[position - 1])
+        ranked_pairs.append((
+            float(merge_priority_by_threshold.get(float(thresholds[threshold_idx]), 0.0)),
+            previous_idx,
+            threshold_idx,
+        ))
+
+    ranked_pairs.sort(key=lambda item: (-item[0], item[1], item[2]))
+    return ranked_pairs
+
+
+def _sample_mst_closeness_threshold_indices(thresholds: np.ndarray, edge_counts: np.ndarray,
+                                            tree: 'MaxTree', max_points: int) -> np.ndarray:
+    candidate_indices = _mst_closeness_threshold_indices(thresholds, tree)
+    if len(candidate_indices) == 0:
+        return np.empty(0, dtype=int)
+
+    max_points = max(8, min(int(max_points), len(candidate_indices)))
+    if len(candidate_indices) <= max_points:
+        return candidate_indices
+
+    selected = {int(candidate_indices[0]), int(candidate_indices[-1])}
+    for _, previous_idx, threshold_idx in _mst_discontinuity_pairs(thresholds, tree):
+        if len(selected) >= max_points:
+            break
+        selected.add(int(previous_idx))
+        if len(selected) >= max_points:
+            break
+        selected.add(int(threshold_idx))
+
+    selected_indices = np.sort(np.fromiter(selected, dtype=int))
+    if len(selected_indices) >= max_points:
+        return selected_indices[:max_points]
+
+    seed_fill = _downsample_sorted_indices(candidate_indices, max_points)
+    selected_set = set(selected_indices.tolist())
+    for threshold_idx in seed_fill:
+        if len(selected_set) >= max_points:
+            break
+        selected_set.add(int(threshold_idx))
+
+    return np.sort(np.fromiter(selected_set, dtype=int))
+
+
 def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Optional['MaxTree'] = None,
                                    mode: str = "auto", max_points: int = 128,
                                    progress_callback: Optional[Callable[[str], None]] = None) -> Dict[str, Union[str, int, List[List[float]]]]:
@@ -778,28 +893,42 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
         raise ValueError(f"mode must be one of {sorted(allowed_modes)}")
 
     thresholds, edge_counts = _closeness_threshold_groups(sorted_edges)
+    threshold_source = "mst" if tree is not None else "all"
     if len(thresholds) == 0:
         return {
             "mode": "exact",
+            "threshold_source": threshold_source,
             "total_thresholds": 0,
             "evaluated_thresholds": 0,
             "points": [],
         }
 
+    candidate_indices = np.arange(len(thresholds), dtype=int)
+    if tree is not None:
+        candidate_indices = _mst_closeness_threshold_indices(thresholds, tree)
+        if len(candidate_indices) == 0:
+            return {
+                "mode": "exact",
+                "threshold_source": threshold_source,
+                "total_thresholds": int(len(thresholds)),
+                "evaluated_thresholds": 0,
+                "points": [],
+            }
+
     use_exact = mode == "exact"
     if mode == "auto":
         use_exact = (
-            len(thresholds) <= _AUTO_CLOSENESS_MAX_THRESHOLDS
+            len(candidate_indices) <= _AUTO_CLOSENESS_MAX_THRESHOLDS
             and len(sorted_edges) <= _AUTO_CLOSENESS_MAX_EDGES
             and sorted_edges.n_nodes <= _AUTO_CLOSENESS_MAX_NODES
         )
 
     if use_exact:
-        selected_indices = np.arange(len(thresholds), dtype=int)
+        selected_indices = candidate_indices
         resolved_mode = "exact" if mode == "exact" else "auto-exact"
         if progress_callback is not None:
             progress_callback(
-                f"closeness start: mode={resolved_mode}, evaluating {len(selected_indices)}/{len(thresholds)} thresholds"
+                f"closeness start: mode={resolved_mode}, threshold_source={threshold_source}, evaluating {len(selected_indices)}/{len(candidate_indices)} candidate thresholds"
             )
         points = _average_closeness_points_for_indices(
             sorted_edges,
@@ -811,11 +940,11 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
         )
     else:
         point_cache = dict()
-        requested_max_points = max(8, min(int(max_points), len(thresholds)))
+        requested_max_points = max(8, min(int(max_points), len(candidate_indices)))
         effective_max_points = requested_max_points
         if mode == "auto":
             effective_max_points = _adaptive_closeness_max_points(
-                len(thresholds),
+                len(candidate_indices),
                 len(sorted_edges),
                 sorted_edges.n_nodes,
                 requested_max_points,
@@ -823,14 +952,27 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
 
         if progress_callback is not None:
             progress_callback(
-                f"closeness start: mode={'auto-sampled' if mode == 'auto' else 'sampled'}, total_thresholds={len(thresholds)}, "
+                f"closeness start: mode={'auto-sampled' if mode == 'auto' else 'sampled'}, threshold_source={threshold_source}, total_thresholds={len(thresholds)}, candidate_thresholds={len(candidate_indices)}, "
                 f"requested_points={requested_max_points}, target_points={effective_max_points}"
             )
 
-        progress_state = _make_closeness_progress_state(min(effective_max_points, len(thresholds)))
-        selected_indices = _sample_closeness_threshold_indices(thresholds, edge_counts, tree, max_points=effective_max_points)
+        progress_state = _make_closeness_progress_state(min(effective_max_points, len(candidate_indices)))
+        if tree is not None:
+            selected_indices = _sample_mst_closeness_threshold_indices(
+                thresholds,
+                edge_counts,
+                tree,
+                max_points=effective_max_points,
+            )
+        else:
+            selected_indices = _sample_closeness_threshold_indices(
+                thresholds,
+                edge_counts,
+                tree,
+                max_points=effective_max_points,
+            )
         if len(selected_indices) == 0:
-            selected_indices = np.asarray([0, len(thresholds) - 1], dtype=int)
+            selected_indices = np.asarray([int(candidate_indices[0]), int(candidate_indices[-1])], dtype=int)
 
         points = _average_closeness_points_for_indices(
             sorted_edges,
@@ -842,7 +984,7 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
             progress_state=progress_state,
         )
 
-        while len(selected_indices) < min(effective_max_points, len(thresholds)):
+        while len(selected_indices) < min(effective_max_points, len(candidate_indices)):
             ordered_indices = np.sort(selected_indices)
             ordered_points = _average_closeness_points_for_indices(
                 sorted_edges,
@@ -859,8 +1001,15 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
                 right_idx = int(ordered_indices[position + 1])
                 if right_idx - left_idx <= 1:
                     continue
+                if tree is not None:
+                    gap_candidates = candidate_indices[(candidate_indices > left_idx) & (candidate_indices < right_idx)]
+                    if len(gap_candidates) == 0:
+                        continue
+                    midpoint = int(gap_candidates[len(gap_candidates) // 2])
+                else:
+                    midpoint = (left_idx + right_idx) // 2
                 delta = abs(float(ordered_points[position + 1, 1] - ordered_points[position, 1]))
-                candidate_gaps.append((delta, left_idx, right_idx))
+                candidate_gaps.append((delta, left_idx, right_idx, midpoint))
 
             if len(candidate_gaps) == 0:
                 points = ordered_points
@@ -868,12 +1017,11 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
 
             candidate_gaps.sort(reverse=True)
             added = False
-            for _, left_idx, right_idx in candidate_gaps:
-                midpoint = (left_idx + right_idx) // 2
+            for _, left_idx, right_idx, midpoint in candidate_gaps:
                 if midpoint not in selected_indices:
                     selected_indices = np.unique(np.append(selected_indices, midpoint))
                     added = True
-                if len(selected_indices) >= min(effective_max_points, len(thresholds)):
+                if len(selected_indices) >= min(effective_max_points, len(candidate_indices)):
                     break
 
             if not added:
@@ -895,6 +1043,7 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
     ordered_points = points[np.argsort(-points[:, 0], kind="stable")]
     result = {
         "mode": resolved_mode,
+        "threshold_source": threshold_source,
         "total_thresholds": int(len(thresholds)),
         "evaluated_thresholds": int(len(ordered_points)),
         "points": ordered_points.tolist(),
@@ -906,7 +1055,7 @@ def average_closeness_by_threshold(sorted_edges: SortedUndirectedEdges, tree: Op
 
     if progress_callback is not None:
         progress_callback(
-            f"closeness complete: mode={resolved_mode}, evaluated={int(len(ordered_points))}/{len(thresholds)} thresholds"
+            f"closeness complete: mode={resolved_mode}, threshold_source={threshold_source}, evaluated={int(len(ordered_points))}/{len(candidate_indices)} candidate thresholds"
         )
 
     return result
