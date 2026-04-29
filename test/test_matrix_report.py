@@ -228,6 +228,7 @@ def test_matrix_report_includes_closeness_outputs():
         assert 'Threshold: 6.00' in text_content
         assert 'closeness-by-threshold' in html_content
         assert 'Average Closeness vs Threshold' in html_content
+        assert '{{' not in html_content
 
 
 def test_matrix_report_default_excludes_mst_knn(shared_datadir):

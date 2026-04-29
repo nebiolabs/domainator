@@ -366,22 +366,22 @@ class SummaryHTMLWriter():
             closeness_plot_block = """
 
         const closenessPoints = CLOSENESS_CURVE.points;
-        Plotly.newPlot('closeness-by-threshold', [{{
+        Plotly.newPlot('closeness-by-threshold', [{
             x: closenessPoints.map(d => d[0]),
             y: closenessPoints.map(d => d[1]),
             mode: 'lines+markers',
             name: 'Avg closeness',
-            line: {{color: '#9467bd', width: 2}},
-            marker: {{size: 6}},
+            line: {color: '#9467bd', width: 2},
+            marker: {size: 6},
             customdata: closenessPoints.map(d => [d[2], d[3], d[4]]),
-            hovertemplate: 'Threshold: %{{x:.2f}}<br>Avg closeness: %{{y:.4f}}<br>Edges: %{{customdata[0]}}<br>Active nodes: %{{customdata[1]}}<br>Components: %{{customdata[2]}}<extra></extra>'
-        }}], {{
+            hovertemplate: 'Threshold: %{x:.2f}<br>Avg closeness: %{y:.4f}<br>Edges: %{customdata[0]}<br>Active nodes: %{customdata[1]}<br>Components: %{customdata[2]}<extra></extra>'
+        }], {
             ...chartLayout,
-            title: `Average Closeness vs Threshold (${{CLOSENESS_CURVE.mode}}, ${{CLOSENESS_CURVE.evaluated_thresholds}}/${{CLOSENESS_CURVE.total_thresholds}})`,
-            xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
-            yaxis: {{title: 'Average Closeness', range: [0, 1.05]}},
+            title: `Average Closeness vs Threshold (${CLOSENESS_CURVE.mode}, ${CLOSENESS_CURVE.evaluated_thresholds}/${CLOSENESS_CURVE.total_thresholds})`,
+            xaxis: {title: 'Threshold', type: 'log', autorange: true},
+            yaxis: {title: 'Average Closeness', range: [0, 1.05]},
             hovermode: 'closest'
-        }}, chartConfig);"""
+        }, chartConfig);"""
         if include_mst_knn:
             mst_knn_controls = f"""
             <label for=\"mst-knn-k-slider\">
