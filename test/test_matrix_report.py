@@ -247,7 +247,13 @@ def test_matrix_report_includes_merge_event_outputs():
         assert 'Top-2 ratio' not in text_content
         assert 'Largest cluster changes (MST-derived)' not in text_content
         assert 'Cluster Splits vs Threshold' in html_content
+        assert 'class="threshold-slider-track"' in html_content
+        assert 'padding-left: 45px;' in html_content
+        assert 'padding-right: 5px;' in html_content
+        assert "title: 'Cluster Splits vs Threshold',\n            xaxis: {title: 'Threshold', type: 'linear', autorange: true}" in html_content
         assert 'Size of smallest new cluster' in html_content
+        assert "updateHistogramFromSliderPosition(position, false);" in html_content
+        assert "document.getElementById('threshold-slider').addEventListener('change'" in html_content
         assert "orientation: 'h'" in html_content
         assert "y: 1.08" in html_content
         assert 'Cumulative split fraction' not in html_content
@@ -354,7 +360,8 @@ def test_matrix_report_max_merge_events_filters_html_payload():
         assert len(payload['merge_event_series']) == 2
         assert [row['edge_index'] for row in payload['merge_event_series']] == [3, 4]
         assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 3, 4]
-        assert 'id="threshold-slider" min="0" max="2" value="0" step="1"' in html_content
+        assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 9500]
+        assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
 
 def test_matrix_report_max_merge_events_zero_includes_all_html_events():
@@ -385,7 +392,8 @@ def test_matrix_report_max_merge_events_zero_includes_all_html_events():
 
         assert len(payload['merge_event_series']) == 5
         assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4]
-        assert 'id="threshold-slider" min="0" max="5" value="0" step="1"' in html_content
+        assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 2750, 5000, 7250, 9500]
+        assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
 
 def test_matrix_report_text_merge_events_limited_to_top_25():
@@ -453,6 +461,34 @@ def test_matrix_report_text_merge_events_are_sorted_by_from_threshold():
             from_thresholds.append(line.split()[0])
 
         assert from_thresholds == ['∞', '10.00', '9.00', '8.00', '7.00']
+
+def test_matrix_report_slider_stops_are_proportionally_spaced():
+    data = np.array([
+        [0, 10, 0, 0, 0],
+        [10, 0, 5, 0, 0],
+        [0, 5, 0, 4, 0],
+        [0, 0, 4, 0, 1],
+        [0, 0, 0, 1, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "--html", out_html,
+        ])
+
+        html_content = open(out_html).read()
+        payload = _embedded_report_payload(html_content)
+        slider_stops = payload['slider_stops']
+
+        assert [stop['threshold_label'] for stop in slider_stops] == ['∞', '10.00', '5.00', '4.00', '1.00']
+        assert [stop['slider_position'] for stop in slider_stops] == [0, 500, 5500, 6500, 9500]
 
 
 def test_matrix_report_profile_stages_emits_timings(capsys):

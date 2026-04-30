@@ -32,6 +32,16 @@ MERGE_IMPACT_PRODUCT = "product"
 MERGE_IMPACT_MIN_CHILD = "min_child"
 MERGE_IMPACT_CHOICES = (MERGE_IMPACT_PRODUCT, MERGE_IMPACT_MIN_CHILD)
 DEFAULT_MAX_MERGE_EVENTS = 500
+SLIDER_POSITION_SCALE = 10_000
+SLIDER_RIGHT_STOP_PADDING_FRACTION = 0.05
+SLIDER_LEFT_STOP_PADDING_FRACTION = 0.05
+SPLIT_PLOT_MARGIN_TOP = 72
+SPLIT_PLOT_MARGIN_BOTTOM = 50
+SPLIT_PLOT_MARGIN_LEFT = 60
+SPLIT_PLOT_MARGIN_RIGHT = 20
+SLIDER_PANEL_PADDING = 15
+THRESHOLD_SLIDER_ALIGN_LEFT = max(0, SPLIT_PLOT_MARGIN_LEFT - SLIDER_PANEL_PADDING)
+THRESHOLD_SLIDER_ALIGN_RIGHT = max(0, SPLIT_PLOT_MARGIN_RIGHT - SLIDER_PANEL_PADDING)
 
 
 def _get_mst_knn_report_config(tree):
@@ -209,13 +219,52 @@ def _slider_stop_rows(merge_event_rows):
         "edge_index": -1,
         "threshold_label": "∞",
         "threshold_value": None,
+        "slider_position": 0,
     }]
     for merge_row in merge_event_rows:
         stops.append({
             "edge_index": int(merge_row["edge_index"]),
             "threshold_label": merge_row["threshold_to"],
             "threshold_value": merge_row["threshold_value"],
+            "slider_position": 0,
         })
+
+    if len(stops) <= 1:
+        return stops
+
+    finite_stops = stops[1:]
+    finite_thresholds = [float(stop["threshold_value"]) for stop in finite_stops]
+    min_threshold = min(finite_thresholds)
+    max_threshold = max(finite_thresholds)
+    min_finite_slider_position = max(1, int(round(SLIDER_POSITION_SCALE * SLIDER_RIGHT_STOP_PADDING_FRACTION)))
+    max_finite_slider_position = max(
+        min_finite_slider_position + 1,
+        int(round(SLIDER_POSITION_SCALE * (1.0 - SLIDER_LEFT_STOP_PADDING_FRACTION))),
+    )
+
+    if math.isclose(max_threshold, min_threshold):
+        if len(finite_stops) == 1:
+            finite_stops[0]["slider_position"] = max_finite_slider_position
+            return stops
+        for stop_idx, stop in enumerate(finite_stops, start=1):
+            stop["slider_position"] = int(round(
+                min_finite_slider_position
+                + stop_idx * (max_finite_slider_position - min_finite_slider_position) / len(finite_stops)
+            ))
+        finite_stops[-1]["slider_position"] = max_finite_slider_position
+        return stops
+
+    previous_position = 0
+    for stop in finite_stops:
+        normalized_position = (max_threshold - float(stop["threshold_value"])) / (max_threshold - min_threshold)
+        slider_position = min_finite_slider_position + int(round(
+            normalized_position * (max_finite_slider_position - min_finite_slider_position)
+        ))
+        slider_position = max(previous_position + 1, slider_position)
+        stop["slider_position"] = slider_position
+        previous_position = slider_position
+
+    finite_stops[-1]["slider_position"] = max_finite_slider_position
     return stops
 
 
@@ -520,6 +569,10 @@ class SummaryHTMLWriter():
         font-weight: 500;
         color: #555;
     }}
+    .threshold-slider-track {{
+        padding-left: {THRESHOLD_SLIDER_ALIGN_LEFT}px;
+        padding-right: {THRESHOLD_SLIDER_ALIGN_RIGHT}px;
+    }}
     #threshold-slider {{
         width: 100%;
         height: 6px;
@@ -640,9 +693,9 @@ class SummaryHTMLWriter():
             }}
         ], {{
             ...chartLayout,
-            margin: {{t: 72, b: 50, l: 60, r: 20}},
+            margin: {{t: {SPLIT_PLOT_MARGIN_TOP}, b: {SPLIT_PLOT_MARGIN_BOTTOM}, l: {SPLIT_PLOT_MARGIN_LEFT}, r: {SPLIT_PLOT_MARGIN_RIGHT}}},
             title: 'Cluster Splits vs Threshold',
-            xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
+            xaxis: {{title: 'Threshold', type: 'linear', autorange: true}},
             yaxis: {{title: 'Size of smallest new cluster'}},
             legend: {{
                 orientation: 'h',
@@ -695,7 +748,9 @@ class SummaryHTMLWriter():
             <label for="threshold-slider">
                 Threshold: <span id="threshold-number">∞</span>
             </label>
-            <input type="range" id="threshold-slider" min="0" max="{max(len(slider_stops) - 1, 0)}" value="0" step="1">
+            <div class="threshold-slider-track">
+                <input type="range" id="threshold-slider" min="0" max="{SLIDER_POSITION_SCALE if len(slider_stops) > 0 else 0}" value="0" step="1">
+            </div>
             {mst_knn_controls}
         </div>
         <div class="stats">
@@ -993,14 +1048,28 @@ class SummaryHTMLWriter():
 
     function sliderStopAt(position) {{
         if (SLIDER_STOPS.length === 0) {{
-            return {{edge_index: -1, threshold_label: '∞'}};
+            return {{edge_index: -1, threshold_label: '∞', slider_position: 0}};
         }}
-        const boundedPosition = Math.max(0, Math.min(position, SLIDER_STOPS.length - 1));
-        return SLIDER_STOPS[boundedPosition];
+        const maxPosition = SLIDER_STOPS[SLIDER_STOPS.length - 1].slider_position;
+        const boundedPosition = Math.max(0, Math.min(position, maxPosition));
+        let nearestStop = SLIDER_STOPS[0];
+        let nearestDistance = Math.abs(boundedPosition - nearestStop.slider_position);
+        for (let stopIdx = 1; stopIdx < SLIDER_STOPS.length; stopIdx++) {{
+            const stop = SLIDER_STOPS[stopIdx];
+            const distance = Math.abs(boundedPosition - stop.slider_position);
+            if (distance < nearestDistance) {{
+                nearestStop = stop;
+                nearestDistance = distance;
+            }}
+        }}
+        return nearestStop;
     }}
 
-    function updateHistogramFromSliderPosition(position) {{
+    function updateHistogramFromSliderPosition(position, snapSlider = true) {{
         const stop = sliderStopAt(position);
+        if (snapSlider) {{
+            document.getElementById('threshold-slider').value = stop.slider_position.toString();
+        }}
         updateHistogram(stop.edge_index, stop);
     }}
     
@@ -1059,8 +1128,12 @@ class SummaryHTMLWriter():
         clearTimeout(updateTimeout);
         updateTimeout = setTimeout(() => {{
             let position = parseInt(e.target.value);
-            updateHistogramFromSliderPosition(position);
+            updateHistogramFromSliderPosition(position, false);
         }}, 10); // Small delay to batch rapid slider movements
+    }});
+    document.getElementById('threshold-slider').addEventListener('change', (e) => {{
+        let position = parseInt(e.target.value);
+        updateHistogramFromSliderPosition(position, true);
     }});
 {mst_knn_listener_block}
 
