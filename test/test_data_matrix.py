@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings, average_closeness_by_threshold, mst_knn_edge_index_dict, sorted_edges_from_edge_index_dict, _adaptive_closeness_max_points, _closeness_threshold_groups
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings
 import scipy.sparse
 import numpy as np
 import pytest_datadir
@@ -138,136 +138,6 @@ def test_build_symmetric_neighbor_rankings_top_k_tie_order():
     assert np.array_equal(rankings.target[start:end], np.array([1, 2, 3], dtype=np.int32))
     assert np.allclose(rankings.score[start:end], np.array([10.0, 10.0, 8.0]))
 
-
-def test_average_closeness_by_threshold_tracks_non_mst_thresholds():
-    data = np.array([
-        [0, 10, 6, 0],
-        [10, 0, 7, 0],
-        [6, 7, 0, 4],
-        [0, 0, 4, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
-    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
-    curve = average_closeness_by_threshold(edge_table, mode="exact")
-    points = np.asarray(curve["points"], dtype=float)
-
-    assert curve["mode"] == "exact"
-    assert curve["total_thresholds"] == 4
-    assert np.allclose(points[:, 0], np.array([10.0, 7.0, 6.0, 4.0]))
-    assert np.isclose(points[0, 1], 1.0)
-    assert np.isclose(points[1, 1], 7.0 / 9.0)
-    assert np.isclose(points[2, 1], 1.0)
-    assert points[2, 1] > points[1, 1]
-    assert np.isclose(points[3, 1], 0.775)
-
-
-def test_average_closeness_by_threshold_sparse_matches_dense():
-    data = np.array([
-        [0, 10, 6, 0],
-        [10, 0, 7, 0],
-        [6, 7, 0, 4],
-        [0, 0, 4, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D']
-    dense_matrix = DenseDataMatrix(data, row_names, row_names)
-    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, row_names)
-
-    dense_curve = average_closeness_by_threshold(dense_matrix.sorted_undirected_edges(skip_zeros=True, agg=max), mode="exact")
-    sparse_curve = average_closeness_by_threshold(sparse_matrix.sorted_undirected_edges(skip_zeros=True, agg=max), mode="exact")
-
-    assert dense_curve["mode"] == sparse_curve["mode"] == "exact"
-    assert np.allclose(np.asarray(dense_curve["points"], dtype=float), np.asarray(sparse_curve["points"], dtype=float))
-
-
-def test_average_closeness_by_threshold_can_restrict_to_mst_thresholds():
-    data = np.array([
-        [0, 10, 6, 0],
-        [10, 0, 7, 0],
-        [6, 7, 0, 4],
-        [0, 0, 4, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
-    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
-    tree = MaxTree(edge_table)
-
-    curve = average_closeness_by_threshold(edge_table, tree=tree, mode="exact")
-    points = np.asarray(curve["points"], dtype=float)
-
-    assert curve["threshold_source"] == "mst"
-    assert curve["evaluated_thresholds"] == 3
-    assert np.allclose(points[:, 0], np.array([10.0, 7.0, 4.0]))
-
-
-def test_average_closeness_by_threshold_supports_mst_knn_graph():
-    data = np.array([
-        [0, 10, 6, 0, 2],
-        [10, 0, 7, 0, 0],
-        [6, 7, 0, 4, 8],
-        [0, 0, 4, 0, 9],
-        [2, 0, 8, 9, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D', 'E']
-    matrix = DenseDataMatrix(data, row_names, row_names)
-    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
-    tree = MaxTree(edge_table)
-
-    closeness_edge_table = sorted_edges_from_edge_index_dict(
-        tree.n_nodes,
-        mst_knn_edge_index_dict(matrix, 3, tree=tree),
-    )
-    closeness_tree = MaxTree(closeness_edge_table)
-    curve = average_closeness_by_threshold(closeness_edge_table, tree=closeness_tree, mode="exact")
-
-    assert curve["threshold_source"] == "mst"
-    assert curve["evaluated_thresholds"] == len(np.unique(closeness_tree.edges_by_threshold[:, 1]))
-    assert curve["total_thresholds"] == len(np.unique(closeness_edge_table.score))
-
-
-def test_average_closeness_by_threshold_sampled_pairs_top_mst_discontinuity():
-    data = np.array([
-        [0, 10, 1, 0, 0, 0],
-        [10, 0, 9, 0, 0, 0],
-        [1, 9, 0, 6, 0, 0],
-        [0, 0, 6, 0, 8, 1],
-        [0, 0, 0, 8, 0, 7],
-        [0, 0, 0, 1, 7, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DenseDataMatrix(data, row_names, row_names)
-    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
-    tree = MaxTree(edge_table)
-
-    curve = average_closeness_by_threshold(edge_table, tree=tree, mode="sampled", max_points=4)
-    sampled_thresholds = np.asarray(curve["points"], dtype=float)[:, 0]
-
-    assert curve["threshold_source"] == "mst"
-    assert 7.0 in sampled_thresholds
-    assert 6.0 in sampled_thresholds
-
-
-def test_closeness_threshold_groups_preserve_descending_thresholds():
-    edge_table = matrix_edges = None
-    data = np.array([
-        [0, 9, 7, 7],
-        [9, 0, 7, 5],
-        [7, 7, 0, 5],
-        [7, 5, 5, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
-    edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
-
-    thresholds, edge_counts = _closeness_threshold_groups(edge_table)
-
-    assert np.array_equal(thresholds, np.array([9.0, 7.0, 5.0]))
-    assert np.array_equal(edge_counts, np.array([1, 4, 6]))
-
-
-def test_adaptive_closeness_max_points_caps_huge_graphs():
-    assert _adaptive_closeness_max_points(706_633, 786_835, 1_804, 128) == 128
-    assert _adaptive_closeness_max_points(8_445_546, 113_469_739, 16_132, 128) == 16
 
 # Test iter_data order and zeros for synthetic data
 def test_iter_data_order_and_zeros_fake():

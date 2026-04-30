@@ -197,7 +197,7 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
         assert 'mst-knn-k-slider' in html_content
 
 
-def test_matrix_report_includes_closeness_outputs():
+def test_matrix_report_includes_merge_event_outputs():
     data = np.array([
         [0, 10, 6, 0],
         [10, 0, 7, 0],
@@ -217,70 +217,38 @@ def test_matrix_report_includes_closeness_outputs():
             "-i", input_file,
             "-o", out_txt,
             "--html", out_html,
-            "--include_closeness",
-            "--closeness_mode", "exact",
         ])
 
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
 
-        assert 'Average closeness summary' in text_content
-        assert 'thresholds=mst' in text_content
-        assert 'Largest cluster changes (MST-derived)' in text_content
-        assert 'Strongest MST merge events' in text_content
-        assert 'Top-2 ratio' in text_content
-        assert 'closeness-by-threshold' in html_content
-        assert 'Average Closeness vs Threshold' in html_content
-        assert 'Cluster Size Summaries vs Threshold' in html_content
-        assert 'Merge Event Signals vs Threshold (min_child)' in html_content
-        assert 'Largest Merge Events (min_child)' in html_content
-        assert 'merge-events-table' in html_content
+        assert 'Strongest MST split events' in text_content
+        assert '      From        To    Impact' in text_content
+        assert 'Top-2 ratio' not in text_content
+        assert 'Largest cluster changes (MST-derived)' not in text_content
+        assert 'Cluster Splits vs Threshold' in html_content
+        assert 'Size of smallest new cluster' in html_content
+        assert "orientation: 'h'" in html_content
+        assert "y: 1.08" in html_content
+        assert 'Cumulative split fraction' not in html_content
+        assert 'range: [-0.2, 1.05]' not in html_content
+        assert "zerolinecolor: '#9ca3af'" not in html_content
+        assert 'Largest Merge Events (min_child)' not in html_content
+        assert 'merge-events-table' not in html_content
         assert 'MERGE_EVENT_SERIES' in html_content
+        assert 'Clusters and Edge Count vs Threshold' in html_content
+        assert 'id="edges-by-threshold"' not in html_content
+        assert '<div class="chart chart-wide">\n        <div id="cluster-discontinuity-by-threshold"></div>' in html_content
         assert 'cdn.jsdelivr.net/npm/d3@7' in html_content
         assert 'cluster-size-bubble' in html_content
         assert 'updateClusterBubbleChart' in html_content
         assert 'num-singletons' in html_content
         assert 'Number of Singletons' in html_content
+        assert 'Cluster Size Summaries vs Threshold' not in html_content
         assert 'cluster-size-hist' not in html_content
         assert "''.join(" not in html_content
         assert "row['threshold_from']" not in html_content
         assert '{{' not in html_content
-
-
-def test_matrix_report_supports_mst_scoped_mst_knn_closeness():
-    data = np.array([
-        [0, 10, 6, 0, 2],
-        [10, 0, 7, 0, 0],
-        [6, 7, 0, 4, 8],
-        [0, 0, 4, 0, 9],
-        [2, 0, 8, 9, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D', 'E']
-    matrix = DenseDataMatrix(data, row_names, row_names)
-
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        out_html = os.path.join(output_dir, "matrix_report_test.html")
-        out_txt = os.path.join(output_dir, "matrix_report_test.txt")
-
-        matrix.write(input_file, output_type="dense")
-        matrix_report.main([
-            "-i", input_file,
-            "-o", out_txt,
-            "--html", out_html,
-            "--include_closeness",
-            "--closeness_mode", "exact",
-            "--closeness_graph", "mst_knn",
-            "--closeness_mst_knn_k", "3",
-        ])
-
-        text_content = open(out_txt).read()
-        html_content = open(out_html).read()
-
-        assert 'graph=mst_knn(k=3)' in text_content
-        assert 'thresholds=mst' in text_content
-        assert '"graph_source": "mst_knn(k=3)"' in html_content
-        assert '"threshold_source": "mst"' in html_content
 
 
 def test_matrix_report_supports_product_merge_impact_metric():
@@ -309,9 +277,10 @@ def test_matrix_report_supports_product_merge_impact_metric():
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
 
-        assert 'Strongest MST merge events (metric=product)' in text_content
-        assert 'Merge Event Signals vs Threshold (product)' in html_content
-        assert 'Largest Merge Events (product)' in html_content
+        assert 'Strongest MST split events (metric=product)' in text_content
+        assert 'Clusters and Edge Count vs Threshold' in html_content
+        assert 'Cluster Splits vs Threshold' in html_content
+        assert 'Largest Merge Events (product)' not in html_content
 
 
 def test_matrix_report_default_excludes_mst_knn(shared_datadir):
@@ -325,11 +294,76 @@ def test_matrix_report_default_excludes_mst_knn(shared_datadir):
 
         assert 'Projected MST_KNN edge counts' not in text_content
         assert 'MST_KNN edges' not in text_content
-        assert 'Average closeness summary' not in text_content
         assert 'mst-knn-k-slider' not in html_content
         assert 'MST_KNN_COUNTS = []' in html_content
-        assert 'closeness-by-threshold' not in html_content
-        assert 'Cluster Size Summaries vs Threshold' in html_content
+        assert 'Cluster Size Summaries vs Threshold' not in html_content
+
+
+def test_matrix_report_text_merge_events_limited_to_top_25():
+    n_nodes = 30
+    data = np.zeros((n_nodes, n_nodes), dtype=float)
+    for idx in range(n_nodes - 1):
+        weight = float(n_nodes - idx)
+        data[idx, idx + 1] = weight
+        data[idx + 1, idx] = weight
+
+    row_names = [f'N{idx}' for idx in range(n_nodes)]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_txt = os.path.join(output_dir, "matrix_report_test.txt")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "-o", out_txt,
+        ])
+
+        text_lines = open(out_txt).read().splitlines()
+
+        header_index = text_lines.index('Strongest MST split events (metric=min_child):')
+        table_lines = []
+        for line in text_lines[header_index + 2:]:
+            if not line.strip():
+                break
+            table_lines.append(line)
+
+        assert len(table_lines) == 25
+
+
+def test_matrix_report_text_merge_events_are_sorted_by_from_threshold():
+    data = np.array([
+        [0, 10, 0, 0, 0, 0],
+        [10, 0, 7, 0, 0, 0],
+        [0, 7, 0, 9, 0, 0],
+        [0, 0, 9, 0, 6, 0],
+        [0, 0, 0, 6, 0, 8],
+        [0, 0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_txt = os.path.join(output_dir, "matrix_report_test.txt")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "-o", out_txt,
+        ])
+
+        text_lines = open(out_txt).read().splitlines()
+
+        header_index = text_lines.index('Strongest MST split events (metric=min_child):')
+        from_thresholds = []
+        for line in text_lines[header_index + 2:]:
+            if not line.strip():
+                break
+            from_thresholds.append(line.split()[0])
+
+        assert from_thresholds == ['∞', '10.00', '9.00', '8.00', '7.00']
 
 
 def test_matrix_report_profile_stages_emits_timings(capsys):
@@ -351,8 +385,6 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
             "-i", input_file,
             "--html", out_html,
             "--include_mst_knn",
-            "--include_closeness",
-            "--closeness_mode", "exact",
             "--profile_stages",
         ])
 
@@ -364,7 +396,6 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
         assert 'build_max_tree:' in stderr_output
         assert 'build_mst_knn_neighbor_rankings:' in stderr_output
         assert 'build_mst_knn_counts:' in stderr_output
-        assert 'build_closeness_curve:' in stderr_output
         assert 'render_outputs:' in stderr_output
         assert 'matrix_report_total:' in stderr_output
 
@@ -387,17 +418,15 @@ def test_matrix_report_progress_emits_live_updates(capsys):
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
-            "--include_closeness",
-            "--closeness_mode", "exact",
             "--progress",
         ])
 
         stderr_output = capsys.readouterr().err
 
         assert 'loading matrix from' in stderr_output
-        assert 'building closeness curve' in stderr_output
-        assert 'closeness progress:' in stderr_output
-        assert 'closeness complete:' in stderr_output
+        assert 'building edge table' in stderr_output
+        assert 'building maximum spanning tree' in stderr_output
+        assert 'rendering outputs' in stderr_output
 
 
 if __name__ == '__main__':

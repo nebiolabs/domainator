@@ -4,12 +4,11 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 import math
 from time import perf_counter
-from bisect import bisect_left, bisect_right, insort
+from bisect import bisect_left, insort
 
-from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold, mst_knn_edge_index_dict, sorted_edges_from_edge_index_dict, average_closeness_by_threshold
+from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
 from domainator import __version__, RawAndDefaultsFormatter
 from bashplotlib.histogram import plot_hist
-from bashplotlib.scatterplot import plot_scatter
 import io
 from contextlib import redirect_stdout
 from domainator.summary_report import histplot_base64
@@ -23,14 +22,9 @@ MST_KNN_MAX_K = 25
 COMPONENT_THRESHOLD_COL = 0
 COMPONENT_LARGEST_COL = 1
 COMPONENT_AVG_NON_SINGLETON_COL = 2
-COMPONENT_AVG_TOP_N_COL = 3
-COMPONENT_MEDIAN_NON_SINGLETON_COL = 4
-COMPONENT_MEDIAN_TOP_N_COL = 5
-COMPONENT_SECOND_LARGEST_COL = 6
-COMPONENT_TOP_TWO_RATIO_COL = 7
-COMPONENT_MERGE_IMPACT_COL = 8
-COMPONENT_DELTA_LARGEST_COL = 9
-COMPONENT_DELTA_AVG_NON_SINGLETON_COL = 10
+COMPONENT_MERGE_IMPACT_COL = 3
+COMPONENT_DELTA_LARGEST_COL = 4
+COMPONENT_DELTA_AVG_NON_SINGLETON_COL = 5
 
 MERGE_IMPACT_PRODUCT = "product"
 MERGE_IMPACT_MIN_CHILD = "min_child"
@@ -62,40 +56,6 @@ def _format_merge_impact_metric(metric: str) -> str:
     raise ValueError(f"Unsupported merge impact metric: {metric}")
 
 
-def _summarize_closeness_curve(closeness_curve, max_items=5):
-    if closeness_curve is None or len(closeness_curve.get("points", [])) == 0:
-        return [], []
-
-    points = np.asarray(closeness_curve["points"], dtype=float)
-    values = points[:, 1]
-
-    if len(values) == 1:
-        local_maxima = [0]
-    else:
-        local_maxima = []
-        for idx, value in enumerate(values):
-            left = values[idx - 1] if idx > 0 else -np.inf
-            right = values[idx + 1] if idx + 1 < len(values) else -np.inf
-            if value >= left and value >= right and (value > left or value > right):
-                local_maxima.append(idx)
-
-    if len(local_maxima) == 0:
-        local_maxima = [int(np.argmax(values))]
-
-    ranked_optima = sorted(
-        local_maxima,
-        key=lambda idx: (-points[idx, 1], -points[idx, 0]),
-    )[:max_items]
-
-    change_rows = []
-    for idx in range(len(values) - 1):
-        delta = float(values[idx + 1] - values[idx])
-        change_rows.append((abs(delta), idx, delta))
-
-    ranked_changes = sorted(change_rows, reverse=True)[:max_items]
-    return ranked_optima, ranked_changes
-
-
 def _remove_sorted_size(sorted_sizes, size):
     position = bisect_left(sorted_sizes, size)
     if position >= len(sorted_sizes) or sorted_sizes[position] != size:
@@ -103,19 +63,9 @@ def _remove_sorted_size(sorted_sizes, size):
     sorted_sizes.pop(position)
 
 
-def _median_from_sorted_slice(sorted_values, start_idx=0):
-    count = len(sorted_values) - start_idx
-    if count <= 0:
-        return 0.0
-    midpoint = start_idx + (count // 2)
-    if count % 2 == 1:
-        return float(sorted_values[midpoint])
-    return float(sorted_values[midpoint - 1] + sorted_values[midpoint]) / 2.0
-
-
-def _component_size_summary_by_threshold(tree, top_n=5, merge_impact_metric=MERGE_IMPACT_MIN_CHILD):
+def _component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_MIN_CHILD):
     if tree.n_nodes == 0:
-        return np.zeros((0, 11), dtype=float)
+        return np.zeros((0, 6), dtype=float)
 
     if merge_impact_metric not in MERGE_IMPACT_CHOICES:
         raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
@@ -125,7 +75,7 @@ def _component_size_summary_by_threshold(tree, top_n=5, merge_impact_metric=MERG
     sorted_sizes = [1] * tree.n_nodes
     non_singleton_count = 0
     non_singleton_sum = 0
-    summary = np.zeros((len(tree.mst_edges) + 1, 11), dtype=float)
+    summary = np.zeros((len(tree.mst_edges) + 1, 6), dtype=float)
 
     def find(node_idx):
         root = node_idx
@@ -139,20 +89,12 @@ def _component_size_summary_by_threshold(tree, top_n=5, merge_impact_metric=MERG
 
     def record(row_idx, threshold, merge_impact=0.0):
         nonlocal non_singleton_count, non_singleton_sum
-        first_non_singleton = bisect_right(sorted_sizes, 1)
-        top_sizes = list(reversed(sorted_sizes[max(0, len(sorted_sizes) - top_n):]))
         largest_cluster = float(sorted_sizes[-1]) if len(sorted_sizes) > 0 else 0.0
-        second_largest = float(sorted_sizes[-2]) if len(sorted_sizes) > 1 else 0.0
         avg_non_singleton = float(non_singleton_sum) / non_singleton_count if non_singleton_count > 0 else 0.0
 
         summary[row_idx, COMPONENT_THRESHOLD_COL] = threshold
         summary[row_idx, COMPONENT_LARGEST_COL] = largest_cluster
         summary[row_idx, COMPONENT_AVG_NON_SINGLETON_COL] = avg_non_singleton
-        summary[row_idx, COMPONENT_AVG_TOP_N_COL] = float(sum(top_sizes)) / len(top_sizes) if len(top_sizes) > 0 else 0.0
-        summary[row_idx, COMPONENT_MEDIAN_NON_SINGLETON_COL] = _median_from_sorted_slice(sorted_sizes, first_non_singleton)
-        summary[row_idx, COMPONENT_MEDIAN_TOP_N_COL] = float(statistics.median(top_sizes)) if len(top_sizes) > 0 else 0.0
-        summary[row_idx, COMPONENT_SECOND_LARGEST_COL] = second_largest
-        summary[row_idx, COMPONENT_TOP_TWO_RATIO_COL] = largest_cluster / max(second_largest, 1.0) if largest_cluster > 0 else 0.0
         summary[row_idx, COMPONENT_MERGE_IMPACT_COL] = float(merge_impact)
         if row_idx > 0:
             summary[row_idx, COMPONENT_DELTA_LARGEST_COL] = largest_cluster - summary[row_idx - 1, COMPONENT_LARGEST_COL]
@@ -195,17 +137,6 @@ def _component_size_summary_by_threshold(tree, top_n=5, merge_impact_metric=MERG
     return summary
 
 
-def _summarize_component_size_curve(component_summary, max_items=5):
-    if component_summary is None or len(component_summary) < 2:
-        return []
-
-    changes = []
-    for idx in range(1, len(component_summary)):
-        delta = float(component_summary[idx, COMPONENT_DELTA_LARGEST_COL])
-        changes.append((abs(delta), idx, delta))
-    return sorted(changes, reverse=True)[:max_items]
-
-
 def _summarize_merge_events(component_summary, max_items=5):
     if component_summary is None or len(component_summary) < 2:
         return []
@@ -222,8 +153,6 @@ def _threshold_merge_event_rows(component_summary):
     event_rows = []
     previous_row = component_summary[0]
     row_idx = 1
-    cumulative_impact = 0.0
-    total_impact = float(np.sum(component_summary[1:, COMPONENT_MERGE_IMPACT_COL]))
 
     while row_idx < len(component_summary):
         threshold_value = float(component_summary[row_idx, COMPONENT_THRESHOLD_COL])
@@ -235,47 +164,31 @@ def _threshold_merge_event_rows(component_summary):
             last_row = component_summary[row_idx]
             row_idx += 1
 
-        cumulative_impact += merge_impact
         event_rows.append({
+            "threshold_from_value": float(previous_row[COMPONENT_THRESHOLD_COL]),
             "threshold_from": _format_threshold_value(previous_row[COMPONENT_THRESHOLD_COL]),
             "threshold_to": _format_threshold_value(last_row[COMPONENT_THRESHOLD_COL]),
             "threshold_value": float(last_row[COMPONENT_THRESHOLD_COL]),
             "merge_impact": float(merge_impact),
             "delta_largest": float(abs(last_row[COMPONENT_LARGEST_COL] - previous_row[COMPONENT_LARGEST_COL])),
             "delta_avg_non_singleton": float(abs(last_row[COMPONENT_AVG_NON_SINGLETON_COL] - previous_row[COMPONENT_AVG_NON_SINGLETON_COL])),
-            "top_two_ratio": float(last_row[COMPONENT_TOP_TWO_RATIO_COL]),
-            "cumulative_impact": float(cumulative_impact),
-            "cumulative_fraction": float(cumulative_impact / total_impact) if total_impact > 0.0 else 0.0,
         })
         previous_row = last_row
 
     return event_rows
 
 
-def _merge_event_table_rows(component_summary, max_items=10):
+def _merge_event_table_rows(component_summary, max_items=25):
     rows = []
-    for merge_row in _summarize_merge_events(component_summary, max_items=max_items):
+    strongest_rows = _summarize_merge_events(component_summary, max_items=max_items)
+    strongest_rows.sort(key=lambda row: (row["threshold_from_value"], row["threshold_value"]), reverse=True)
+    for merge_row in strongest_rows:
         rows.append({
             "threshold_from": merge_row["threshold_from"],
             "threshold_to": merge_row["threshold_to"],
             "merge_impact": int(round(merge_row["merge_impact"])),
-            "delta_largest": int(round(merge_row["delta_largest"])),
-            "delta_avg_non_singleton": float(merge_row["delta_avg_non_singleton"]),
-            "top_two_ratio": float(merge_row["top_two_ratio"]),
         })
     return rows
-
-
-def _render_merge_event_table_rows_html(component_summary, max_items=10):
-    merge_event_rows = _merge_event_table_rows(component_summary, max_items=max_items)
-    if len(merge_event_rows) == 0:
-        return '<tr><td colspan="6">No merge events found.</td></tr>'
-
-    return "".join(
-        f"<tr><td>{row['threshold_from']}</td><td>{row['threshold_to']}</td><td>{row['merge_impact']}</td>"
-        f"<td>{row['delta_largest']}</td><td>{row['delta_avg_non_singleton']:.1f}</td><td>{row['top_two_ratio']:.2f}</td></tr>"
-        for row in merge_event_rows
-    )
 
 
 def _record_stage_timing(stage_timings, stage_name, start_time, **metrics):
@@ -325,7 +238,7 @@ Min: {min(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
 Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
         """, file=self.out_handle)
         
-    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, closeness_curve, component_summary, merge_impact_metric):
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric):
         non_zero_values = edge_scores
         
         # Histogram of all triangular values
@@ -392,60 +305,20 @@ Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
                     print(f"  Threshold: {threshold:.2f} → MST_KNN edges: {int(projected_edges)}", file=self.out_handle)
 
         if component_summary is not None and len(component_summary) > 1:
-            changes = _summarize_component_size_curve(component_summary)
-            print("\nLargest cluster changes (MST-derived):", file=self.out_handle)
-            for _, idx, delta in changes:
-                left = component_summary[idx - 1]
-                right = component_summary[idx]
-                direction = "rise" if delta > 0 else "drop"
-                print(
-                    f"  {_format_threshold_value(left[COMPONENT_THRESHOLD_COL])} → {_format_threshold_value(right[COMPONENT_THRESHOLD_COL])}: {direction} {delta:+.0f} "
-                    f"(largest {int(left[COMPONENT_LARGEST_COL])} → {int(right[COMPONENT_LARGEST_COL])})",
-                    file=self.out_handle,
-                )
-
             merge_event_rows = _merge_event_table_rows(component_summary)
-            print(f"\nStrongest MST merge events (metric={_format_merge_impact_metric(merge_impact_metric)}):", file=self.out_handle)
+            print(f"\nStrongest MST split events (metric={_format_merge_impact_metric(merge_impact_metric)}):", file=self.out_handle)
             if len(merge_event_rows) == 0:
-                print("  No merge events found.", file=self.out_handle)
+                print("  No split events found.", file=self.out_handle)
             else:
                 print(
-                    f"  {'From':>8}  {'To':>8}  {'Impact':>8}  {'|Δlargest|':>10}  {'|Δavg_non_singleton|':>20}  {'Top-2 ratio':>11}",
+                    f"  {'From':>8}  {'To':>8}  {'Impact':>8}",
                     file=self.out_handle,
                 )
                 for merge_row in merge_event_rows:
                     print(
-                        f"  {merge_row['threshold_from']:>8}  {merge_row['threshold_to']:>8}  {merge_row['merge_impact']:>8}  "
-                        f"{merge_row['delta_largest']:>10}  {merge_row['delta_avg_non_singleton']:>20.1f}  {merge_row['top_two_ratio']:>11.2f}",
+                        f"  {merge_row['threshold_from']:>8}  {merge_row['threshold_to']:>8}  {merge_row['merge_impact']:>8}",
                         file=self.out_handle,
                     )
-
-        if closeness_curve is not None and len(closeness_curve.get("points", [])) > 0:
-            optima, changes = _summarize_closeness_curve(closeness_curve)
-            points = np.asarray(closeness_curve["points"], dtype=float)
-            graph_source = closeness_curve.get("graph_source", "full")
-            threshold_source = closeness_curve.get("threshold_source", "all")
-            print(
-                f"\nAverage closeness summary ({closeness_curve['mode']}; graph={graph_source}; thresholds={threshold_source}; evaluated {closeness_curve['evaluated_thresholds']}/{closeness_curve['total_thresholds']} thresholds):",
-                file=self.out_handle,
-            )
-            print("  Local optima:", file=self.out_handle)
-            for idx in optima:
-                threshold, closeness, edge_count, active_nodes, component_count = points[idx]
-                print(
-                    f"    Threshold: {_format_threshold_value(threshold)} → Avg closeness: {closeness:.4f}, "
-                    f"Edges: {int(edge_count)}, Active nodes: {int(active_nodes)}, Components: {int(component_count)}",
-                    file=self.out_handle,
-                )
-            print("  Steepest changes:", file=self.out_handle)
-            for _, idx, delta in changes:
-                left = points[idx]
-                right = points[idx + 1]
-                direction = "rise" if delta > 0 else "drop"
-                print(
-                    f"    {_format_threshold_value(left[0])} → {_format_threshold_value(right[0])}: {direction} {delta:+.4f}",
-                    file=self.out_handle,
-                )
     
     def write_footer(self):
         pass
@@ -523,13 +396,6 @@ class SummaryHTMLWriter():
     }}
     .chart-wide {{
         grid-column: 1 / -1;
-    }}
-    .table-wrapper {{
-        overflow-x: auto;
-    }}
-    #merge-events-table {{
-        width: 100%;
-        table-layout: auto;
     }}
     .distribution-panels {{
         margin-top: 15px;
@@ -640,103 +506,26 @@ class SummaryHTMLWriter():
         print(f"""</div>""", file=self.out_handle)
     
     
-    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, closeness_curve, component_summary, merge_impact_metric):
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric):
         # Export data for interactive visualizations
         viz_data = tree.export_for_interactive_viz()
         cluster_by_thresh = tree.cluster_count_by_threshold
         cluster_by_edges = tree.cluster_count_by_edge_count
         edges_by_thresh = tree.edges_by_threshold
         include_mst_knn = mst_knn_counts is not None
-        include_closeness = closeness_curve is not None and len(closeness_curve.get("points", [])) > 0
         include_component_summary = component_summary is not None and len(component_summary) > 1
         mst_knn_controls = ""
         mst_knn_stat_box = ""
         mst_knn_current_k_expr = "null"
         mst_knn_update_block = ""
         mst_knn_listener_block = ""
-        component_summary_chart = ""
-        component_summary_plot_block = ""
         component_signal_chart = ""
         component_signal_plot_block = ""
-        merge_events_chart = ""
-        closeness_chart = ""
-        closeness_plot_block = ""
         if include_component_summary:
-            component_summary_chart = """
-    <div class=\"chart\">
-        <div id=\"cluster-summary-by-threshold\"></div>
-    </div>"""
             component_signal_chart = """
-    <div class=\"chart\">
+    <div class=\"chart chart-wide\">
         <div id=\"cluster-discontinuity-by-threshold\"></div>
     </div>"""
-            merge_events_chart = f"""
-    <div class=\"chart chart-wide\">
-        <h3>Largest Merge Events ({_format_merge_impact_metric(merge_impact_metric)})</h3>
-        <div class=\"table-wrapper\">
-            <table id=\"merge-events-table\">
-                <thead>
-                    <tr>
-                        <th>From</th>
-                        <th>To</th>
-                        <th>Impact</th>
-                        <th>|Δlargest|</th>
-                        <th>|Δavg non-singleton|</th>
-                        <th>Top-2 ratio</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {_render_merge_event_table_rows_html(component_summary)}
-                </tbody>
-            </table>
-        </div>
-    </div>"""
-            component_summary_plot_block = """
-
-        const clusterSummaryPoints = COMPONENT_SIZE_SUMMARY.slice(1);
-        Plotly.newPlot('cluster-summary-by-threshold', [
-            {
-                x: clusterSummaryPoints.map(d => d[0]),
-                y: clusterSummaryPoints.map(d => d[1]),
-                mode: 'lines',
-                name: 'Largest cluster',
-                line: {color: '#e45756', width: 3}
-            },
-            {
-                x: clusterSummaryPoints.map(d => d[0]),
-                y: clusterSummaryPoints.map(d => d[2]),
-                mode: 'lines',
-                name: 'Avg non-singleton',
-                line: {color: '#4c78a8', width: 2}
-            },
-            {
-                x: clusterSummaryPoints.map(d => d[0]),
-                y: clusterSummaryPoints.map(d => d[3]),
-                mode: 'lines',
-                name: 'Avg top 5',
-                line: {color: '#54a24b', width: 2, dash: 'dash'}
-            },
-            {
-                x: clusterSummaryPoints.map(d => d[0]),
-                y: clusterSummaryPoints.map(d => d[4]),
-                mode: 'lines',
-                name: 'Median non-singleton',
-                line: {color: '#f58518', width: 2}
-            },
-            {
-                x: clusterSummaryPoints.map(d => d[0]),
-                y: clusterSummaryPoints.map(d => d[5]),
-                mode: 'lines',
-                name: 'Median top 5',
-                line: {color: '#72b7b2', width: 2, dash: 'dot'}
-            }
-        ], {
-            ...chartLayout,
-            title: 'Cluster Size Summaries vs Threshold',
-            xaxis: {title: 'Threshold', type: 'log', autorange: true},
-            yaxis: {title: 'Cluster Size'},
-            hovermode: 'closest'
-        }, chartConfig);"""
             component_signal_plot_block = f"""
 
         const mergeEventPoints = MERGE_EVENT_SERIES;
@@ -751,7 +540,7 @@ class SummaryHTMLWriter():
                 x: mergeEventStemX,
                 y: mergeEventStemY,
                 mode: 'lines',
-                name: 'Merge event',
+                name: 'Split event',
                 line: {{color: '#72b7b2', width: 1}},
                 hoverinfo: 'skip'
             }},
@@ -759,58 +548,26 @@ class SummaryHTMLWriter():
                 x: mergeEventPoints.map(d => d.threshold_value),
                 y: mergeEventPoints.map(d => d.merge_impact),
                 mode: 'markers',
-                name: 'Merge impact',
+                name: 'Split size',
                 marker: {{color: '#e45756', size: 6, opacity: 0.75}},
-                customdata: mergeEventPoints.map(d => [d.threshold_from, d.threshold_to, d.delta_largest, d.delta_avg_non_singleton, d.top_two_ratio]),
-                hovertemplate: 'Threshold: %{{x:.2f}}<br>Impact: %{{y:.2f}}<br>From: %{{customdata[0]}}<br>To: %{{customdata[1]}}<br>|Δlargest|: %{{customdata[2]:.0f}}<br>|Δavg non-singleton|: %{{customdata[3]:.1f}}<br>Top-2 ratio: %{{customdata[4]:.2f}}<extra></extra>'
-            }},
-            {{
-                x: mergeEventPoints.map(d => d.threshold_value),
-                y: mergeEventPoints.map(d => d.cumulative_fraction),
-                mode: 'lines+markers',
-                name: 'Cumulative fraction',
-                yaxis: 'y2',
-                line: {{color: '#4c78a8', width: 3}},
-                marker: {{size: 5}},
-                hovertemplate: 'Threshold: %{{x:.2f}}<br>Cumulative fraction: %{{y:.4f}}<extra></extra>'
+                customdata: mergeEventPoints.map(d => [d.threshold_from, d.threshold_to]),
+                hovertemplate: 'Threshold: %{{x:.2f}}<br>Smallest new cluster: %{{y:.2f}}<br>From: %{{customdata[0]}}<br>To: %{{customdata[1]}}<extra></extra>'
             }}
         ], {{
             ...chartLayout,
-            title: 'Merge Event Signals vs Threshold ({_format_merge_impact_metric(merge_impact_metric)})',
+            margin: {{t: 72, b: 50, l: 60, r: 20}},
+            title: 'Cluster Splits vs Threshold',
             xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
-            yaxis: {{title: 'Merge impact'}},
-            yaxis2: {{
-                title: 'Cumulative fraction',
-                overlaying: 'y',
-                side: 'right',
-                range: [0, 1.05]
+            yaxis: {{title: 'Size of smallest new cluster'}},
+            legend: {{
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.08,
+                xanchor: 'left',
+                x: 0
             }},
             hovermode: 'closest'
         }}, chartConfig);"""
-        if include_closeness:
-            closeness_chart = """
-    <div class=\"chart\">
-        <div id=\"closeness-by-threshold\"></div>
-    </div>"""
-            closeness_plot_block = """
-
-        const closenessPoints = CLOSENESS_CURVE.points;
-        Plotly.newPlot('closeness-by-threshold', [{
-            x: closenessPoints.map(d => d[0]),
-            y: closenessPoints.map(d => d[1]),
-            mode: 'lines+markers',
-            name: 'Avg closeness',
-            line: {color: '#9467bd', width: 2},
-            marker: {size: 6},
-            customdata: closenessPoints.map(d => [d[2], d[3], d[4]]),
-            hovertemplate: 'Threshold: %{x:.2f}<br>Avg closeness: %{y:.4f}<br>Edges: %{customdata[0]}<br>Active nodes: %{customdata[1]}<br>Components: %{customdata[2]}<extra></extra>'
-        }], {
-            ...chartLayout,
-            title: `Average Closeness vs Threshold (${CLOSENESS_CURVE.mode}, graph=${CLOSENESS_CURVE.graph_source}, thresholds=${CLOSENESS_CURVE.threshold_source}, ${CLOSENESS_CURVE.evaluated_thresholds}/${CLOSENESS_CURVE.total_thresholds})`,
-            xaxis: {title: 'Threshold', type: 'log', autorange: true},
-            yaxis: {title: 'Average Closeness', range: [0, 1.05]},
-            hovermode: 'closest'
-        }, chartConfig);"""
         if include_mst_knn:
             mst_knn_controls = f"""
             <label for=\"mst-knn-k-slider\">
@@ -847,13 +604,7 @@ class SummaryHTMLWriter():
     <div class="chart">
         <div id="cluster-by-edges"></div>
     </div>
-    <div class="chart">
-        <div id="edges-by-threshold"></div>
-    </div>
-    {component_summary_chart}
     {component_signal_chart}
-    {merge_events_chart}
-    {closeness_chart}
     <div class="chart-with-controls">
         <div class="slider-container">
             <label for="threshold-slider">
@@ -879,11 +630,11 @@ class SummaryHTMLWriter():
                 <strong>Number of Edges</strong>
                 <span id="num-edges">0</span>
             </div>
-            {mst_knn_stat_box}
             <div class="stat-box">
                 <strong>Avg Cluster Size</strong>
                 <span id="avg-cluster-size">1.0</span>
             </div>
+            {mst_knn_stat_box}
         </div>
         <div class="distribution-panels">
             <h3 class="bubble-title">100 Largest Clusters</h3>
@@ -902,10 +653,7 @@ class SummaryHTMLWriter():
     const HAS_MST_KNN = {json.dumps(include_mst_knn)};
     const MST_KNN_COUNTS = {json.dumps(mst_knn_counts.tolist() if mst_knn_counts is not None else [])};
     const MST_KNN_MIN_K = {mst_knn_config['min_k'] if mst_knn_config is not None else 0};
-    const COMPONENT_SIZE_SUMMARY = {json.dumps(component_summary.tolist() if component_summary is not None else [])};
     const MERGE_EVENT_SERIES = {json.dumps(_threshold_merge_event_rows(component_summary) if component_summary is not None else [])};
-    const HAS_CLOSENESS = {json.dumps(include_closeness)};
-    const CLOSENESS_CURVE = {json.dumps(closeness_curve if closeness_curve is not None else {"mode": "exact", "total_thresholds": 0, "evaluated_thresholds": 0, "points": []})};
     
     // Union-Find implementation for fast cluster computation
     class UnionFind {{
@@ -1029,7 +777,7 @@ class SummaryHTMLWriter():
             margin: {{t: 40, b: 50, l: 60, r: 20}}
         }};
         
-        // Cluster count vs threshold
+        // Clusters and edges vs threshold
         Plotly.newPlot('cluster-by-threshold', [{{
             x: CLUSTER_BY_THRESH.slice(1).map(d => d[0]),
             y: CLUSTER_BY_THRESH.slice(1).map(d => d[1]),
@@ -1037,11 +785,24 @@ class SummaryHTMLWriter():
             name: 'Clusters',
             line: {{color: '#1f77b4', width: 2}},
             hovertemplate: 'Threshold: %{{x:.2f}}<br>Clusters: %{{y}}<extra></extra>'
+        }}, {{
+            x: EDGES_BY_THRESH.map(d => d[1]),
+            y: EDGES_BY_THRESH.map(d => d[0]),
+            mode: 'lines',
+            name: 'Edges',
+            yaxis: 'y2',
+            line: {{color: '#2ca02c', width: 2}},
+            hovertemplate: 'Threshold: %{{x:.2f}}<br>Edges: %{{y}}<extra></extra>'
         }}], {{
             ...chartLayout,
-            title: 'Clusters vs Threshold',
+            title: 'Clusters and Edge Count vs Threshold',
             xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
             yaxis: {{title: 'Number of Clusters'}},
+            yaxis2: {{
+                title: 'Cumulative Edges',
+                overlaying: 'y',
+                side: 'right'
+            }},
             hovermode: 'closest'
         }}, chartConfig);
         
@@ -1061,27 +822,7 @@ class SummaryHTMLWriter():
             hovermode: 'closest'
         }}, chartConfig);
         
-        // Edges vs threshold
-        Plotly.newPlot('edges-by-threshold', [{{
-            x: EDGES_BY_THRESH.map(d => d[1]),
-            y: EDGES_BY_THRESH.map(d => d[0]),
-            mode: 'lines',
-            name: 'Edges',
-            line: {{color: '#2ca02c', width: 2}},
-            hovertemplate: 'Threshold: %{{x:.2f}}<br>Edges: %{{y}}<extra></extra>'
-        }}], {{
-            ...chartLayout,
-            title: 'Edge Count vs Threshold',
-            xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
-            yaxis: {{title: 'Cumulative Edges'}},
-            hovermode: 'closest'
-        }}, chartConfig);
-
-{component_summary_plot_block}
-
 {component_signal_plot_block}
-
-{closeness_plot_block}
         
         // Initial cluster size histogram
         updateHistogram(-1);
@@ -1152,8 +893,6 @@ class SummaryHTMLWriter():
         print("</body></html>", file=self.out_handle)
 
 def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
-                  include_closeness: bool = False, closeness_mode: str = "auto", closeness_max_points: int = 128,
-                  closeness_graph: str = "full", closeness_mst_knn_k: int = 25,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
                   profile_stages: bool = False, stage_timings=None, progress_callback=None):
     """
@@ -1182,9 +921,8 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     component_summary = _component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
     mst_knn_config = None
     mst_knn_counts = None
-    closeness_curve = None
     neighbor_rankings = None
-    if include_mst_knn or closeness_graph == "mst_knn":
+    if include_mst_knn:
         if progress_callback is not None:
             progress_callback("building MST_KNN neighbor rankings")
         stage_start = perf_counter()
@@ -1198,40 +936,13 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
         stage_start = perf_counter()
         mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
         _record_stage_timing(stage_timings, "build_mst_knn_counts", stage_start, thresholds=len(tree.mst_edges), max_k=mst_knn_config["max_k"])
-    if include_closeness:
-        closeness_edge_table = edge_table
-        closeness_tree = tree
-        closeness_graph_label = "full"
-        if closeness_graph == "mst_knn":
-            resolved_k = min(max(2, int(closeness_mst_knn_k)), mst_knn_config["max_k"])
-            if progress_callback is not None:
-                progress_callback(f"building closeness MST_KNN graph (k={resolved_k})")
-            stage_start = perf_counter()
-            closeness_edges = mst_knn_edge_index_dict(matrix, resolved_k, tree=tree, neighbor_rankings=neighbor_rankings)
-            closeness_edge_table = sorted_edges_from_edge_index_dict(tree.n_nodes, closeness_edges)
-            closeness_tree = MaxTree(closeness_edge_table)
-            closeness_graph_label = f"mst_knn(k={resolved_k})"
-            _record_stage_timing(stage_timings, "build_closeness_mst_knn_graph", stage_start, k=resolved_k, n_edges=len(closeness_edge_table))
-
-        if progress_callback is not None:
-            progress_callback("building closeness curve")
-        stage_start = perf_counter()
-        closeness_curve = average_closeness_by_threshold(
-            closeness_edge_table,
-            tree=closeness_tree,
-            mode=closeness_mode,
-            max_points=closeness_max_points,
-            progress_callback=progress_callback,
-        )
-        closeness_curve["graph_source"] = closeness_graph_label
-        _record_stage_timing(stage_timings, "build_closeness_curve", stage_start, mode=closeness_curve["mode"], graph=closeness_graph_label, threshold_source=closeness_curve["threshold_source"], evaluated=closeness_curve["evaluated_thresholds"], total=closeness_curve["total_thresholds"])
 
     if progress_callback is not None:
         progress_callback("rendering outputs")
     stage_start = perf_counter()
     for output in longform_outputs:
         output.write_header(tree, edge_table.score)
-        output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts, closeness_curve, component_summary, merge_impact_metric)
+        output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric)
         output.write_footer()
     _record_stage_timing(stage_timings, "render_outputs", stage_start, outputs=len(longform_outputs))
 
@@ -1247,18 +958,8 @@ def main(argv):
                         help="html file to write output to.")
     parser.add_argument('--include_mst_knn', action='store_true', default=False,
                         help="Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.")
-    parser.add_argument('--include_closeness', action='store_true', default=False,
-                        help="Include paper-style average closeness by threshold in the text and HTML reports.")
-    parser.add_argument('--closeness_mode', choices=['auto', 'exact', 'sampled'], default='auto',
-                        help="How to evaluate closeness thresholds when --include_closeness is enabled.")
-    parser.add_argument('--closeness_graph', choices=['full', 'mst_knn'], default='full',
-                        help="Which graph to evaluate for closeness. 'mst_knn' uses the MST plus symmetric k-nearest-neighbor edges.")
-    parser.add_argument('--closeness_mst_knn_k', type=int, default=MST_KNN_MAX_K,
-                        help="k to use when --closeness_graph=mst_knn.")
     parser.add_argument('--merge_impact_metric', choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
-                        help="Metric used for merge event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.")
-    parser.add_argument('--closeness_max_points', type=int, default=128,
-                        help="Maximum number of thresholds to evaluate when sampled closeness mode is used.")
+                        help="Metric used for split-event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.")
     parser.add_argument('--progress', action='store_true', default=False,
                         help="Print live progress updates to stderr during long-running matrix_report stages.")
     parser.add_argument('--profile_stages', action='store_true', default=False,
@@ -1267,9 +968,6 @@ def main(argv):
     parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
-
-    if params.closeness_mst_knn_k < 2:
-        parser.error("--closeness_mst_knn_k must be >= 2")
 
     if params.output is None and params.html is None:
         parser.error("No output file specified. Use --output, and/or --html to specify at least one output file.")
@@ -1302,11 +1000,6 @@ def main(argv):
             out,
             out_html_handle,
             include_mst_knn=params.include_mst_knn,
-            include_closeness=params.include_closeness,
-            closeness_mode=params.closeness_mode,
-            closeness_max_points=params.closeness_max_points,
-            closeness_graph=params.closeness_graph,
-            closeness_mst_knn_k=params.closeness_mst_knn_k,
             merge_impact_metric=params.merge_impact_metric,
             profile_stages=params.profile_stages,
             stage_timings=stage_timings,
