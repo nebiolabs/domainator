@@ -47,6 +47,51 @@
       "flags": [
         "--include_mst_knn"
       ]
+    },
+    {
+      "name": "Merge Impact Metric",
+      "parameter": "merge_impact_metric",
+      "help": "Metric used for split-event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.",
+      "type": "string",
+      "choices": [
+        "product",
+        "min_child"
+      ],
+      "default": "min_child",
+      "flags": [
+        "--merge_impact_metric"
+      ]
+    },
+    {
+      "name": "Max Merge Events",
+      "parameter": "max_merge_events",
+      "help": "Maximum number of strongest merge events to embed in the interactive HTML threshold slider and split plot. Use 0 to include all merge events.",
+      "type": "integer",
+      "min": 0,
+      "default": 500,
+      "flags": [
+        "--max_merge_events"
+      ]
+    },
+    {
+      "name": "Progress",
+      "parameter": "progress",
+      "help": "Print live progress updates to stderr during long-running matrix_report stages.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--progress"
+      ]
+    },
+    {
+      "name": "Profile Stages",
+      "parameter": "profile_stages",
+      "help": "Print per-stage runtime timings to stderr for profiling large matrix_report runs.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--profile_stages"
+      ]
     }
   ]
 }
