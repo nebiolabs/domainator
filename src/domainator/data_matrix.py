@@ -64,8 +64,22 @@ class SortedUndirectedEdges:
     score: np.ndarray
 
     def __post_init__(self):
+        if self.n_nodes < 0:
+            raise ValueError("n_nodes must be >= 0")
+        if self.source.ndim != 1 or self.target.ndim != 1 or self.score.ndim != 1:
+            raise ValueError("source, target, and score arrays must be 1-dimensional")
         if not (len(self.source) == len(self.target) == len(self.score)):
             raise ValueError("source, target, and score arrays must have the same length")
+        if len(self.source) == 0:
+            return
+        if np.any(self.source < 0) or np.any(self.target < 0):
+            raise ValueError("source and target indices must be >= 0")
+        if np.any(self.source >= self.n_nodes) or np.any(self.target >= self.n_nodes):
+            raise ValueError("source and target indices must be less than n_nodes")
+        if np.any(self.source == self.target):
+            raise ValueError("self edges are not supported")
+        if np.any(self.score[:-1] < self.score[1:]):
+            raise ValueError("score array must be sorted in descending order")
 
     def __len__(self) -> int:
         return len(self.score)
@@ -80,12 +94,23 @@ class CompactNeighborRankings:
     score: np.ndarray
 
     def __post_init__(self):
+        if self.offsets.ndim != 1 or self.target.ndim != 1 or self.score.ndim != 1:
+            raise ValueError("offsets, target, and score arrays must be 1-dimensional")
         if len(self.offsets) == 0:
             raise ValueError("offsets must contain at least one element")
         if self.offsets[0] != 0:
             raise ValueError("offsets must start at 0")
+        if np.any(self.offsets < 0):
+            raise ValueError("offsets must be non-negative")
+        if np.any(self.offsets[:-1] > self.offsets[1:]):
+            raise ValueError("offsets must be monotonically non-decreasing")
         if self.offsets[-1] != len(self.target) or self.offsets[-1] != len(self.score):
             raise ValueError("offsets must end at the length of target and score arrays")
+        if len(self.target) > 0:
+            if np.any(self.target < 0):
+                raise ValueError("target indices must be >= 0")
+            if np.any(self.target >= len(self)):
+                raise ValueError("target indices must be less than the number of rows")
 
     def __len__(self) -> int:
         return len(self.offsets) - 1
@@ -1080,6 +1105,9 @@ class DataMatrix(ABC):
 
         """
 
+        row_names = list(row_names)
+        col_names = list(col_names)
+
         if len(matrix.shape) != 2:
             raise ValueError(f"matrix must be 2-dimensional, not: {matrix.shape}")
         
@@ -1088,6 +1116,11 @@ class DataMatrix(ABC):
 
         if len(col_names) != matrix.shape[1]:
             raise ValueError(f"col_names size must match dense_matrix dim 1, not: {len(col_names)} vs. {matrix.shape[1]}")
+
+        if len(set(row_names)) != len(row_names):
+            raise ValueError("row_names must be unique")
+        if len(set(col_names)) != len(col_names):
+            raise ValueError("col_names must be unique")
         
         if row_lens is not None:
             if len(row_lens) != matrix.shape[0]:
@@ -1101,9 +1134,7 @@ class DataMatrix(ABC):
         if row_lens is None and col_lens is not None:
             raise ValueError("If col_lens is provided, row_lens must also be provided.")
 
-
-
-        if (row_names == col_names) or (all(a == b for a,b in zip(row_names, col_names))):
+        if row_names == col_names:
             col_names = row_names
 
         return row_names, col_names        
@@ -1123,7 +1154,7 @@ class DataMatrix(ABC):
         if scipy.sparse.issparse(matrix):
             matrix = matrix.toarray()
 
-        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names)
+        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names, row_lengths, col_lengths)
         
 
         with h5py.File(file_name, 'w') as f:
@@ -1159,7 +1190,7 @@ class DataMatrix(ABC):
             col_names:List[str]: column labels
         """
 
-        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names)
+        row_names, col_names = cls.validate_matrix_data(matrix, row_names, col_names, row_lengths, col_lengths)
         outfile = open(file_name, "w")
         print("\t" + "\t".join(col_names), file=outfile)
         
@@ -1194,18 +1225,20 @@ class DenseDataMatrix(DataMatrix):
     
     def __init__(self, data: np.ndarray, row_names: List[str], col_names: List[str], 
                  row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None, 
-                 data_type: str = None):
+                 data_type: str = None, *, copy_data: bool = True):
         """
         Initialize a dense data matrix.
         
         Args:
-            data: 2D numpy array or array-like object (will be copied). If sparse, 
-                  will be converted to dense via toarray()
+            data: 2D numpy array or array-like object. If sparse, will be converted
+                to dense via toarray(). Dense numpy inputs are copied by default.
             row_names: List of row labels, length must match data.shape[0]
             col_names: List of column labels, length must match data.shape[1]
             row_lengths: Optional sequence lengths for rows (array-like, stored as numpy array)
             col_lengths: Optional sequence lengths for columns (array-like, stored as numpy array)
             data_type: Optional string describing the data type (e.g., 'score', 'norm_score')
+            copy_data: If True, copy dense input arrays. If False, reuse dense numpy
+                storage when possible. Sparse input conversion still creates a dense array.
         
         Raises:
             ValueError: If data dimensions don't match label lengths
@@ -1216,8 +1249,10 @@ class DenseDataMatrix(DataMatrix):
         
         if scipy.sparse.issparse(data):
             self.data = data.toarray()
-        else:
+        elif copy_data:
             self.data = np.array(data, copy=True)
+        else:
+            self.data = np.asarray(data)
     
     @property
     def shape(self):
@@ -1260,9 +1295,11 @@ class DenseDataMatrix(DataMatrix):
             
             row_lengths = f[cls._ROW_LENGTHS_DATASET][:] if cls._ROW_LENGTHS_DATASET in f else None
             col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
+            if f.attrs[cls._SYMMETRIC_LABELS_ATTR] and row_lengths is not None and col_lengths is None:
+                col_lengths = row_lengths
             data_type = f.attrs.get(cls._DATA_TYPE_ATTR, "")
             
-            return cls(data, row_names, col_names, row_lengths, col_lengths, data_type)
+            return cls(data, row_names, col_names, row_lengths, col_lengths, data_type, copy_data=False)
     
     @classmethod
     def _from_text(cls, matrix_file: Union[PathLike, str]) -> 'DenseDataMatrix':
@@ -1518,6 +1555,8 @@ class SparseDataMatrix(DataMatrix):
             
             row_lengths = f[cls._ROW_LENGTHS_DATASET][:] if cls._ROW_LENGTHS_DATASET in f else None
             col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
+            if f.attrs[cls._SYMMETRIC_LABELS_ATTR] and row_lengths is not None and col_lengths is None:
+                col_lengths = row_lengths
             data_type = f.attrs.get(cls._DATA_TYPE_ATTR, "")
             
             return cls(data, row_names, col_names, row_lengths, col_lengths, data_type, copy_data=False)
@@ -1704,7 +1743,8 @@ class SparseDataMatrix(DataMatrix):
             self.data.toarray(),
             self.rows, self.columns,
             self.row_lengths, self.column_lengths,
-            self.data_type
+            self.data_type,
+            copy_data=False,
         )
     
     def toarray(self) -> np.ndarray:

@@ -12,7 +12,7 @@ from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor
 from domainator import __version__, RawAndDefaultsFormatter
 from bashplotlib.histogram import plot_hist
 import io
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from domainator.summary_report import histplot_base64
 import statistics
 import numpy as np
@@ -1036,6 +1036,8 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     """
         Write a report on the matrix to the given handles.
     """
+    if merge_impact_metric not in MERGE_IMPACT_CHOICES:
+        raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
     if max_merge_events < 0:
         raise ValueError("max_merge_events must be >= 0")
 
@@ -1115,49 +1117,39 @@ def main(argv):
     if params.output is None and params.html is None:
         parser.error("No output file specified. Use --output, and/or --html to specify at least one output file.")
 
-    out = None
-    if params.output is not None:
-        out = open(params.output, "w")
-    
-    out_html_handle = None
-    if params.html is not None:
-        out_html_handle = open(params.html, "w")
+    with ExitStack() as output_stack:
+        out = output_stack.enter_context(open(params.output, "w")) if params.output is not None else None
+        out_html_handle = output_stack.enter_context(open(params.html, "w")) if params.html is not None else None
 
-    progress_callback = None
-    if params.progress or params.profile_stages:
-        progress_callback = _make_progress_callback()
- 
-    stage_timings = []
-    if progress_callback is not None:
-        progress_callback(f"loading matrix from {params.input}")
-    stage_start = perf_counter()
-    matrix = DataMatrix.from_file(params.input)
-    if params.profile_stages:
-        _record_stage_timing(stage_timings, "load_matrix", stage_start, shape=matrix.shape, matrix_type=type(matrix).__name__)
+        progress_callback = None
+        if params.progress or params.profile_stages:
+            progress_callback = _make_progress_callback()
 
-    ### Run
-    if params.output is not None or params.html is not None:
+        stage_timings = []
+        if progress_callback is not None:
+            progress_callback(f"loading matrix from {params.input}")
         stage_start = perf_counter()
-        matrix_report(
-            matrix,
-            out,
-            out_html_handle,
-            include_mst_knn=params.include_mst_knn,
-            merge_impact_metric=params.merge_impact_metric,
-            profile_stages=params.profile_stages,
-            stage_timings=stage_timings,
-            progress_callback=progress_callback,
-            max_merge_events=params.max_merge_events,
-        )
+        matrix = DataMatrix.from_file(params.input)
         if params.profile_stages:
-            _record_stage_timing(stage_timings, "matrix_report_total", stage_start)
-            _emit_stage_timings(stage_timings)
+            _record_stage_timing(stage_timings, "load_matrix", stage_start, shape=matrix.shape, matrix_type=type(matrix).__name__)
 
-    if params.output is not None:
-        out.close()
-    
-    if params.html is not None:
-        out_html_handle.close()
+        ### Run
+        if params.output is not None or params.html is not None:
+            stage_start = perf_counter()
+            matrix_report(
+                matrix,
+                out,
+                out_html_handle,
+                include_mst_knn=params.include_mst_knn,
+                merge_impact_metric=params.merge_impact_metric,
+                profile_stages=params.profile_stages,
+                stage_timings=stage_timings,
+                progress_callback=progress_callback,
+                max_merge_events=params.max_merge_events,
+            )
+            if params.profile_stages:
+                _record_stage_timing(stage_timings, "matrix_report_total", stage_start)
+                _emit_stage_timings(stage_timings)
 
 def _entrypoint():
     main(sys.argv[1:])

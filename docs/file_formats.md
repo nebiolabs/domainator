@@ -58,7 +58,7 @@ If no taxid is noted in either place, the Taxid will be assigned [32644](https:/
 
 ## hdf5
 
-Domainator uses hdf5 files to store data matrics in both dense and sparse formats. Code for reading, writing, and using data matrices is found in the `data_matrix.py` file (which is not executable, but imported by various other scripts).
+Domainator uses hdf5 files to store data matrices in both dense and sparse formats. Code for reading, writing, and using data matrices is found in the `data_matrix.py` file (which is not executable, but imported by various other scripts).
 
 hdf5 output is generally specified using the `--dense [filename]` or `--sparse [filename]` command line arguments, for example by `seq_dist.py`. For matrix input, the data format is automatically detected.
 
@@ -76,11 +76,15 @@ ROW_LABELS: list of str
 COL_LABELS: list of str # not used if SYMMETRIC_LABELS is True
 DENSE_DATA: 2d array of float # used for dense data
 SPARSE_VALUES: list of float # used for values for CSR sparse data
-SPARSE_CSR_INDICES: list of int # row index for CSR sparse data
-SPARSE_CSR_INDPTR: list of int # col index for CSR sparse data
+SPARSE_CSR_INDICES: list of int # column indices for CSR sparse data
+SPARSE_CSR_INDPTR: list of int # row pointer offsets for CSR sparse data
 (optional) ROW_LENGTHS: list of int # the lengths of the sequences in the rows
 (optional) COL_LENGTHS: list of int # not used if SYMMETRIC LABELS is True
 ```
+
+Sparse matrices are stored as canonical CSR arrays: explicit zero values are removed and indices are sorted when written or loaded. Dense files preserve every matrix cell, including zero values, and are usually preferable when most entries are non-zero. Sparse files are usually preferable for sequence similarity graphs or other matrices where most entries are zero.
+
+`MATRIX_FILE_VERSION` is the compatibility marker for this schema. It should be incremented when a change would prevent older Domainator versions from reading a file correctly or would change the meaning of an existing dataset or attribute.
 
 In the future, we may add a `DESCRIPTION` field to distinguish different kinds of data, like raw scores, normalized scores, etc. But so far it is up to the user to remember what the data represents. We may also add `ROW_SEQ_LENGTHS` and `COL_SEQ_LENGTHS` variables to allow for calculation of scores using the EFI score formula, which normalizes on length.
 

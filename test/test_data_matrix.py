@@ -1,7 +1,15 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, MaxTree, build_symmetric_neighbor_rankings
+from domainator.data_matrix import (
+    CompactNeighborRankings,
+    DataMatrix,
+    DenseDataMatrix,
+    MaxTree,
+    SortedUndirectedEdges,
+    SparseDataMatrix,
+    build_symmetric_neighbor_rankings,
+)
 import scipy.sparse
 import numpy as np
 import pytest_datadir
@@ -58,6 +66,121 @@ def test_from_file(shared_datadir, filename, sparse):
     assert matrix.row_lengths is None
     assert matrix.column_lengths is None
     assert matrix.data_type == ""
+
+
+def test_validate_matrix_data_keeps_prefix_labels_as_asymmetric(tmp_path):
+    data = np.array([
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+    ])
+    row_names = ['A', 'B']
+    col_names = ['A', 'B', 'C']
+
+    validated_rows, validated_cols = DataMatrix.validate_matrix_data(data, row_names, col_names)
+    assert validated_rows == row_names
+    assert validated_cols == col_names
+    assert validated_cols is not validated_rows
+
+    out_file = tmp_path / "prefix_labels.dense.hdf5"
+    DataMatrix.write_dense(data, out_file, row_names, col_names)
+    matrix = DataMatrix.from_file(out_file)
+
+    assert matrix.rows == row_names
+    assert matrix.columns == col_names
+    assert matrix.symmetric_labels is False
+
+
+@pytest.mark.parametrize(
+    "row_names,col_names,error_message",
+    [
+        (['A', 'A'], ['X', 'Y'], "row_names must be unique"),
+        (['A', 'B'], ['X', 'X'], "col_names must be unique"),
+    ],
+)
+def test_validate_matrix_data_rejects_duplicate_labels(row_names, col_names, error_message):
+    data = np.ones((2, 2))
+
+    with pytest.raises(ValueError, match=error_message):
+        DataMatrix.validate_matrix_data(data, row_names, col_names)
+
+
+def test_write_dense_validates_column_lengths():
+    data = np.ones((2, 2))
+
+    with pytest.raises(ValueError, match="col_lens size must match"):
+        DataMatrix.write_dense(
+            data,
+            "/tmp/unused_domainator_matrix.hdf5",
+            ['A', 'B'],
+            ['A', 'B'],
+            row_lengths=np.array([100, 200]),
+            col_lengths=np.array([100]),
+        )
+
+
+@pytest.mark.parametrize("output_type", ["dense", "sparse"])
+def test_hdf5_roundtrip_preserves_asymmetric_metadata(tmp_path, output_type):
+    data = np.array([
+        [1.0, 0.0, 3.0],
+        [0.0, 5.0, 6.0],
+    ])
+    row_names = ['row1', 'row2']
+    col_names = ['col1', 'col2', 'col3']
+    row_lengths = np.array([100, 200])
+    col_lengths = np.array([10, 20, 30])
+    out_file = tmp_path / f"metadata.{output_type}.hdf5"
+
+    matrix_data = scipy.sparse.csr_array(data) if output_type == "sparse" else data
+    if output_type == "sparse":
+        DataMatrix.write_sparse(matrix_data, out_file, row_names, col_names, row_lengths, col_lengths, data_type="score")
+    else:
+        DataMatrix.write_dense(matrix_data, out_file, row_names, col_names, row_lengths, col_lengths, data_type="score")
+
+    matrix = DataMatrix.from_file(out_file)
+
+    assert matrix.rows == row_names
+    assert matrix.columns == col_names
+    assert np.array_equal(matrix.row_lengths, row_lengths)
+    assert np.array_equal(matrix.column_lengths, col_lengths)
+    assert matrix.data_type == "score"
+    assert np.array_equal(matrix.toarray(), data)
+
+
+@pytest.mark.parametrize("output_type", ["dense", "sparse"])
+def test_hdf5_roundtrip_preserves_symmetric_lengths(tmp_path, output_type):
+    data = np.array([
+        [1.0, 2.0],
+        [2.0, 3.0],
+    ])
+    names = ['A', 'B']
+    lengths = np.array([100, 200])
+    out_file = tmp_path / f"symmetric_lengths.{output_type}.hdf5"
+
+    matrix_data = scipy.sparse.csr_array(data) if output_type == "sparse" else data
+    if output_type == "sparse":
+        DataMatrix.write_sparse(matrix_data, out_file, names, names, lengths, lengths, data_type="efi_score")
+    else:
+        DataMatrix.write_dense(matrix_data, out_file, names, names, lengths, lengths, data_type="efi_score")
+
+    matrix = DataMatrix.from_file(out_file)
+
+    assert matrix.rows == names
+    assert matrix.columns == names
+    assert np.array_equal(matrix.row_lengths, lengths)
+    assert np.array_equal(matrix.column_lengths, lengths)
+    assert matrix.data_type == "efi_score"
+    assert matrix.symmetric_labels is True
+
+
+def test_dense_data_matrix_copy_data_false_reuses_numpy_storage():
+    data = np.array([[1.0, 2.0], [3.0, 4.0]])
+    copied = DenseDataMatrix(data, ['A', 'B'], ['A', 'B'])
+    shared = DenseDataMatrix(data, ['A', 'B'], ['A', 'B'], copy_data=False)
+
+    data[0, 0] = 99.0
+
+    assert copied.data[0, 0] == 1.0
+    assert shared.data[0, 0] == 99.0
 
 
 # Test convert_to_sparse method of DataMatrix
@@ -137,6 +260,34 @@ def test_build_symmetric_neighbor_rankings_top_k_tie_order():
 
     assert np.array_equal(rankings.target[start:end], np.array([1, 2, 3], dtype=np.int32))
     assert np.allclose(rankings.score[start:end], np.array([10.0, 10.0, 8.0]))
+
+
+@pytest.mark.parametrize(
+    "kwargs,error_message",
+    [
+        ({"n_nodes": -1, "source": np.array([], dtype=np.int32), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "n_nodes must be >= 0"),
+        ({"n_nodes": 2, "source": np.array([0], dtype=np.int32), "target": np.array([2], dtype=np.int32), "score": np.array([1.0])}, "less than n_nodes"),
+        ({"n_nodes": 2, "source": np.array([1], dtype=np.int32), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "self edges"),
+        ({"n_nodes": 3, "source": np.array([0, 1], dtype=np.int32), "target": np.array([1, 2], dtype=np.int32), "score": np.array([1.0, 2.0])}, "descending"),
+    ],
+)
+def test_sorted_undirected_edges_validates_invariants(kwargs, error_message):
+    with pytest.raises(ValueError, match=error_message):
+        SortedUndirectedEdges(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs,error_message",
+    [
+        ({"offsets": np.array([], dtype=np.int64), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "at least one"),
+        ({"offsets": np.array([1], dtype=np.int64), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "start at 0"),
+        ({"offsets": np.array([0, 2, 1], dtype=np.int64), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "monotonically"),
+        ({"offsets": np.array([0, 1], dtype=np.int64), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "less than the number of rows"),
+    ],
+)
+def test_compact_neighbor_rankings_validates_invariants(kwargs, error_message):
+    with pytest.raises(ValueError, match=error_message):
+        CompactNeighborRankings(**kwargs)
 
 
 # Test iter_data order and zeros for synthetic data

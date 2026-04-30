@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import base64
 import gzip
+import io
 import json
 import re
 from domainator import matrix_report
@@ -41,6 +42,13 @@ def test_matrix_report_1(shared_datadir, input_file):
             assert "20" in f_txt
         assert 'Projected MST_KNN edge counts' not in open(out_txt).read()
         assert 'mst-knn-k-slider' not in open(out_html).read()
+
+
+def test_matrix_report_rejects_invalid_merge_impact_metric():
+    matrix = DenseDataMatrix(np.array([[0.0, 1.0], [1.0, 0.0]]), ['A', 'B'], ['A', 'B'])
+
+    with pytest.raises(ValueError, match="merge_impact_metric must be one of"):
+        matrix_report.matrix_report(matrix, io.StringIO(), None, merge_impact_metric="bad")
 
 
 # def test_matrix_report_empty_input(shared_datadir):
