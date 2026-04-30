@@ -5,6 +5,8 @@ import sys
 import math
 from time import perf_counter
 from bisect import bisect_left, insort
+import base64
+import gzip
 
 from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
 from domainator import __version__, RawAndDefaultsFormatter
@@ -29,6 +31,7 @@ COMPONENT_DELTA_AVG_NON_SINGLETON_COL = 5
 MERGE_IMPACT_PRODUCT = "product"
 MERGE_IMPACT_MIN_CHILD = "min_child"
 MERGE_IMPACT_CHOICES = (MERGE_IMPACT_PRODUCT, MERGE_IMPACT_MIN_CHILD)
+DEFAULT_MAX_MERGE_EVENTS = 500
 
 
 def _get_mst_knn_report_config(tree):
@@ -155,6 +158,7 @@ def _threshold_merge_event_rows(component_summary):
     row_idx = 1
 
     while row_idx < len(component_summary):
+        first_summary_row_idx = row_idx
         threshold_value = float(component_summary[row_idx, COMPONENT_THRESHOLD_COL])
         merge_impact = 0.0
         last_row = component_summary[row_idx]
@@ -164,7 +168,12 @@ def _threshold_merge_event_rows(component_summary):
             last_row = component_summary[row_idx]
             row_idx += 1
 
+        edge_index = row_idx - 2
+
         event_rows.append({
+            "edge_index": int(edge_index),
+            "summary_row_from": int(first_summary_row_idx),
+            "summary_row_to": int(row_idx - 1),
             "threshold_from_value": float(previous_row[COMPONENT_THRESHOLD_COL]),
             "threshold_from": _format_threshold_value(previous_row[COMPONENT_THRESHOLD_COL]),
             "threshold_to": _format_threshold_value(last_row[COMPONENT_THRESHOLD_COL]),
@@ -176,6 +185,61 @@ def _threshold_merge_event_rows(component_summary):
         previous_row = last_row
 
     return event_rows
+
+
+def _filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
+    if max_merge_events is None:
+        max_merge_events = DEFAULT_MAX_MERGE_EVENTS
+    if max_merge_events < 0:
+        raise ValueError("max_merge_events must be >= 0")
+    if max_merge_events == 0 or len(event_rows) <= max_merge_events:
+        return list(event_rows)
+
+    ranked_rows = sorted(
+        event_rows,
+        key=lambda row: (-row["merge_impact"], -row["delta_largest"], -row["delta_avg_non_singleton"], row["edge_index"]),
+    )
+    filtered_rows = ranked_rows[:max_merge_events]
+    filtered_rows.sort(key=lambda row: row["edge_index"])
+    return filtered_rows
+
+
+def _slider_stop_rows(merge_event_rows):
+    stops = [{
+        "edge_index": -1,
+        "threshold_label": "∞",
+        "threshold_value": None,
+    }]
+    for merge_row in merge_event_rows:
+        stops.append({
+            "edge_index": int(merge_row["edge_index"]),
+            "threshold_label": merge_row["threshold_to"],
+            "threshold_value": merge_row["threshold_value"],
+        })
+    return stops
+
+
+def _json_ready(value):
+    if isinstance(value, dict):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _json_ready(value.tolist())
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        value = float(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return value
+    return value
+
+
+def _compressed_json_base64(payload):
+    json_bytes = json.dumps(_json_ready(payload), separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(gzip.compress(json_bytes, mtime=0)).decode("ascii")
 
 
 def _merge_event_table_rows(component_summary, max_items=25):
@@ -238,7 +302,7 @@ Min: {min(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
 Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
         """, file=self.out_handle)
         
-    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric):
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
         non_zero_values = edge_scores
         
         # Histogram of all triangular values
@@ -506,7 +570,7 @@ class SummaryHTMLWriter():
         print(f"""</div>""", file=self.out_handle)
     
     
-    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric):
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
         # Export data for interactive visualizations
         viz_data = tree.export_for_interactive_viz()
         cluster_by_thresh = tree.cluster_count_by_threshold
@@ -514,6 +578,21 @@ class SummaryHTMLWriter():
         edges_by_thresh = tree.edges_by_threshold
         include_mst_knn = mst_knn_counts is not None
         include_component_summary = component_summary is not None and len(component_summary) > 1
+        merge_event_rows = _threshold_merge_event_rows(component_summary) if component_summary is not None else []
+        filtered_merge_event_rows = _filter_merge_event_rows(merge_event_rows, max_merge_events=max_merge_events)
+        slider_stops = _slider_stop_rows(filtered_merge_event_rows)
+        payload = {
+            "viz_data": viz_data,
+            "cluster_by_thresh": cluster_by_thresh,
+            "cluster_by_edges": cluster_by_edges,
+            "edges_by_thresh": edges_by_thresh,
+            "has_mst_knn": include_mst_knn,
+            "mst_knn_counts": mst_knn_counts if mst_knn_counts is not None else [],
+            "mst_knn_min_k": mst_knn_config['min_k'] if mst_knn_config is not None else 0,
+            "merge_event_series": filtered_merge_event_rows,
+            "slider_stops": slider_stops,
+        }
+        compressed_payload = _compressed_json_base64(payload)
         mst_knn_controls = ""
         mst_knn_stat_box = ""
         mst_knn_current_k_expr = "null"
@@ -521,7 +600,7 @@ class SummaryHTMLWriter():
         mst_knn_listener_block = ""
         component_signal_chart = ""
         component_signal_plot_block = ""
-        if include_component_summary:
+        if include_component_summary and len(filtered_merge_event_rows) > 0:
             component_signal_chart = """
     <div class=\"chart chart-wide\">
         <div id=\"cluster-discontinuity-by-threshold\"></div>
@@ -591,8 +670,8 @@ class SummaryHTMLWriter():
     document.getElementById('mst-knn-k-slider').addEventListener('input', () => {
         clearTimeout(updateTimeout);
         updateTimeout = setTimeout(() => {
-            let index = parseInt(document.getElementById('threshold-slider').value);
-            updateHistogram(index);
+            let position = parseInt(document.getElementById('threshold-slider').value);
+            updateHistogramFromSliderPosition(position);
         }, 10);
     });"""
         
@@ -610,7 +689,7 @@ class SummaryHTMLWriter():
             <label for="threshold-slider">
                 Threshold: <span id="threshold-number">∞</span>
             </label>
-            <input type="range" id="threshold-slider" min="-1" max="{len(tree.mst) - 1}" value="-1" step="1">
+            <input type="range" id="threshold-slider" min="0" max="{max(len(slider_stops) - 1, 0)}" value="0" step="1">
             {mst_knn_controls}
         </div>
         <div class="stats">
@@ -645,15 +724,47 @@ class SummaryHTMLWriter():
 </div>
 
 <script>
-    // Embedded data
-    const VIZ_DATA = {json.dumps(viz_data)};
-    const CLUSTER_BY_THRESH = {json.dumps(cluster_by_thresh.tolist())};
-    const CLUSTER_BY_EDGES = {json.dumps(cluster_by_edges.tolist())};
-    const EDGES_BY_THRESH = {json.dumps(edges_by_thresh.tolist())};
-    const HAS_MST_KNN = {json.dumps(include_mst_knn)};
-    const MST_KNN_COUNTS = {json.dumps(mst_knn_counts.tolist() if mst_knn_counts is not None else [])};
-    const MST_KNN_MIN_K = {mst_knn_config['min_k'] if mst_knn_config is not None else 0};
-    const MERGE_EVENT_SERIES = {json.dumps(_threshold_merge_event_rows(component_summary) if component_summary is not None else [])};
+    const EMBEDDED_REPORT_DATA_GZIP_BASE64 = "{compressed_payload}";
+    let VIZ_DATA;
+    let CLUSTER_BY_THRESH;
+    let CLUSTER_BY_EDGES;
+    let EDGES_BY_THRESH;
+    let HAS_MST_KNN;
+    let MST_KNN_COUNTS;
+    let MST_KNN_MIN_K;
+    let MERGE_EVENT_SERIES;
+    let SLIDER_STOPS;
+
+    function base64ToBytes(base64Text) {{
+        const binaryText = atob(base64Text);
+        const bytes = new Uint8Array(binaryText.length);
+        for (let i = 0; i < binaryText.length; i++) {{
+            bytes[i] = binaryText.charCodeAt(i);
+        }}
+        return bytes;
+    }}
+
+    async function decodeEmbeddedReportData(base64Text) {{
+        if (!('DecompressionStream' in window)) {{
+            throw new Error('This browser cannot decompress embedded matrix_report data. Please use a current Chromium, Firefox, or Safari browser.');
+        }}
+        const bytes = base64ToBytes(base64Text);
+        const stream = new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'));
+        const text = await new Response(stream).text();
+        return JSON.parse(text);
+    }}
+
+    function installReportData(reportData) {{
+        VIZ_DATA = reportData.viz_data;
+        CLUSTER_BY_THRESH = reportData.cluster_by_thresh;
+        CLUSTER_BY_EDGES = reportData.cluster_by_edges;
+        EDGES_BY_THRESH = reportData.edges_by_thresh;
+        HAS_MST_KNN = reportData.has_mst_knn;
+        MST_KNN_COUNTS = reportData.mst_knn_counts;
+        MST_KNN_MIN_K = reportData.mst_knn_min_k;
+        MERGE_EVENT_SERIES = reportData.merge_event_series;
+        SLIDER_STOPS = reportData.slider_stops;
+    }}
     
     // Union-Find implementation for fast cluster computation
     class UnionFind {{
@@ -825,11 +936,24 @@ class SummaryHTMLWriter():
 {component_signal_plot_block}
         
         // Initial cluster size histogram
-        updateHistogram(-1);
+        updateHistogramFromSliderPosition(0);
+    }}
+
+    function sliderStopAt(position) {{
+        if (SLIDER_STOPS.length === 0) {{
+            return {{edge_index: -1, threshold_label: '∞'}};
+        }}
+        const boundedPosition = Math.max(0, Math.min(position, SLIDER_STOPS.length - 1));
+        return SLIDER_STOPS[boundedPosition];
+    }}
+
+    function updateHistogramFromSliderPosition(position) {{
+        const stop = sliderStopAt(position);
+        updateHistogram(stop.edge_index, stop);
     }}
     
     // Update histogram based on slider
-    function updateHistogram(edgeIndex) {{
+    function updateHistogram(edgeIndex, sliderStop) {{
         const chartConfig = {{displayModeBar: false, responsive: true}};
         const currentK = {mst_knn_current_k_expr};
         
@@ -860,7 +984,10 @@ class SummaryHTMLWriter():
         
         let threshVal;
         let threshPos;
-        if (edgeIndex < 0) {{
+        if (sliderStop) {{
+            threshVal = sliderStop.threshold_label;
+            threshPos = (SLIDER_STOPS.indexOf(sliderStop) + 1).toString();
+        }} else if (edgeIndex < 0) {{
             threshVal = '∞';
             threshPos = '0';
         }} else if (edgeIndex >= VIZ_DATA.mst_edges.length) {{
@@ -879,14 +1006,24 @@ class SummaryHTMLWriter():
     document.getElementById('threshold-slider').addEventListener('input', (e) => {{
         clearTimeout(updateTimeout);
         updateTimeout = setTimeout(() => {{
-            let index = parseInt(e.target.value);
-            updateHistogram(index);
+            let position = parseInt(e.target.value);
+            updateHistogramFromSliderPosition(position);
         }}, 10); // Small delay to batch rapid slider movements
     }});
 {mst_knn_listener_block}
-    
-    // Initialize on load
-    initCharts();
+
+    decodeEmbeddedReportData(EMBEDDED_REPORT_DATA_GZIP_BASE64)
+        .then(reportData => {{
+            installReportData(reportData);
+            initCharts();
+        }})
+        .catch(error => {{
+            console.error(error);
+            document.querySelector('.dashboard').insertAdjacentHTML(
+                'afterbegin',
+                '<div class="chart chart-wide">Unable to load embedded report data in this browser.</div>'
+            );
+        }});
 </script>""", file=self.out_handle)
 
     def write_footer(self):
@@ -894,10 +1031,14 @@ class SummaryHTMLWriter():
 
 def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
-                  profile_stages: bool = False, stage_timings=None, progress_callback=None):
+                  profile_stages: bool = False, stage_timings=None, progress_callback=None,
+                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS):
     """
         Write a report on the matrix to the given handles.
     """
+    if max_merge_events < 0:
+        raise ValueError("max_merge_events must be >= 0")
+
     longform_outputs = list()
     if out_text_handle is not None:
         longform_outputs.append(SummaryTextWriter(out_text_handle))
@@ -942,7 +1083,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     stage_start = perf_counter()
     for output in longform_outputs:
         output.write_header(tree, edge_table.score)
-        output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric)
+        output.write_plots(tree, edge_table.score, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=max_merge_events)
         output.write_footer()
     _record_stage_timing(stage_timings, "render_outputs", stage_start, outputs=len(longform_outputs))
 
@@ -960,6 +1101,8 @@ def main(argv):
                         help="Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.")
     parser.add_argument('--merge_impact_metric', choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric used for split-event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.")
+    parser.add_argument('--max_merge_events', type=int, default=DEFAULT_MAX_MERGE_EVENTS,
+                        help="Maximum number of strongest merge events to embed in the interactive HTML threshold slider and split plot. Use 0 to include all merge events.")
     parser.add_argument('--progress', action='store_true', default=False,
                         help="Print live progress updates to stderr during long-running matrix_report stages.")
     parser.add_argument('--profile_stages', action='store_true', default=False,
@@ -1004,6 +1147,7 @@ def main(argv):
             profile_stages=params.profile_stages,
             stage_timings=stage_timings,
             progress_callback=progress_callback,
+            max_merge_events=params.max_merge_events,
         )
         if params.profile_stages:
             _record_stage_timing(stage_timings, "matrix_report_total", stage_start)

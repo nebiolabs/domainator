@@ -1,5 +1,9 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
+import base64
+import gzip
+import json
+import re
 from domainator import matrix_report
 from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, mst_knn_edge_counts_by_threshold
 from domainator.matrix_report import MaxTree
@@ -8,6 +12,12 @@ import pytest
 import numpy as np
 import scipy.sparse
 import os
+
+
+def _embedded_report_payload(html_content):
+    match = re.search(r'const EMBEDDED_REPORT_DATA_GZIP_BASE64 = "([^"]+)";', html_content)
+    assert match is not None
+    return json.loads(gzip.decompress(base64.b64decode(match.group(1))).decode("utf-8"))
 
 
 @pytest.mark.parametrize("input_file",
@@ -236,6 +246,10 @@ def test_matrix_report_includes_merge_event_outputs():
         assert 'Largest Merge Events (min_child)' not in html_content
         assert 'merge-events-table' not in html_content
         assert 'MERGE_EVENT_SERIES' in html_content
+        payload = _embedded_report_payload(html_content)
+        assert len(payload['merge_event_series']) == 3
+        assert payload['slider_stops'][0]['edge_index'] == -1
+        assert [stop['edge_index'] for stop in payload['slider_stops'][1:]] == [0, 1, 2]
         assert 'Clusters and Edge Count vs Threshold' in html_content
         assert 'id="edges-by-threshold"' not in html_content
         assert '<div class="chart chart-wide">\n        <div id="cluster-discontinuity-by-threshold"></div>' in html_content
@@ -295,8 +309,73 @@ def test_matrix_report_default_excludes_mst_knn(shared_datadir):
         assert 'Projected MST_KNN edge counts' not in text_content
         assert 'MST_KNN edges' not in text_content
         assert 'mst-knn-k-slider' not in html_content
-        assert 'MST_KNN_COUNTS = []' in html_content
+        payload = _embedded_report_payload(html_content)
+        assert payload['has_mst_knn'] is False
+        assert payload['mst_knn_counts'] == []
         assert 'Cluster Size Summaries vs Threshold' not in html_content
+
+
+def test_matrix_report_max_merge_events_filters_html_payload():
+    data = np.array([
+        [0, 10, 0, 0, 0, 0],
+        [10, 0, 7, 0, 0, 0],
+        [0, 7, 0, 9, 0, 0],
+        [0, 0, 9, 0, 6, 0],
+        [0, 0, 0, 6, 0, 8],
+        [0, 0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "--html", out_html,
+            "--max_merge_events", "2",
+        ])
+
+        html_content = open(out_html).read()
+        payload = _embedded_report_payload(html_content)
+
+        assert len(payload['merge_event_series']) == 2
+        assert [row['edge_index'] for row in payload['merge_event_series']] == [3, 4]
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 3, 4]
+        assert 'id="threshold-slider" min="0" max="2" value="0" step="1"' in html_content
+
+
+def test_matrix_report_max_merge_events_zero_includes_all_html_events():
+    data = np.array([
+        [0, 10, 0, 0, 0, 0],
+        [10, 0, 7, 0, 0, 0],
+        [0, 7, 0, 9, 0, 0],
+        [0, 0, 9, 0, 6, 0],
+        [0, 0, 0, 6, 0, 8],
+        [0, 0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file,
+            "--html", out_html,
+            "--max_merge_events", "0",
+        ])
+
+        html_content = open(out_html).read()
+        payload = _embedded_report_payload(html_content)
+
+        assert len(payload['merge_event_series']) == 5
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4]
+        assert 'id="threshold-slider" min="0" max="5" value="0" step="1"' in html_content
 
 
 def test_matrix_report_text_merge_events_limited_to_top_25():
