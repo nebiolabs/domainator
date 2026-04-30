@@ -68,6 +68,30 @@ def test_from_file(shared_datadir, filename, sparse):
     assert matrix.data_type == ""
 
 
+def test_dense_text_reader_rejects_duplicate_row_labels(tmp_path):
+    matrix_file = tmp_path / "duplicate_rows.tsv"
+    matrix_file.write_text("\tA\tB\nrow1\t1\t2\nrow1\t3\t4\n")
+
+    with pytest.raises(ValueError, match="row_names must be unique"):
+        DataMatrix.from_file(matrix_file)
+
+
+def test_dense_text_reader_rejects_duplicate_column_labels(tmp_path):
+    matrix_file = tmp_path / "duplicate_columns.tsv"
+    matrix_file.write_text("\tA\tA\nrow1\t1\t2\nrow2\t3\t4\n")
+
+    with pytest.raises(ValueError, match="col_names must be unique"):
+        DataMatrix.from_file(matrix_file)
+
+
+def test_dense_text_reader_rejects_non_numeric_values(tmp_path):
+    matrix_file = tmp_path / "non_numeric.tsv"
+    matrix_file.write_text("\tA\tB\nrow1\t1\tnope\nrow2\t3\t4\n")
+
+    with pytest.raises(ValueError, match="Dense text matrix values must be numeric"):
+        DataMatrix.from_file(matrix_file)
+
+
 def test_validate_matrix_data_keeps_prefix_labels_as_asymmetric(tmp_path):
     data = np.array([
         [1.0, 2.0, 3.0],
@@ -288,6 +312,34 @@ def test_sorted_undirected_edges_validates_invariants(kwargs, error_message):
 def test_compact_neighbor_rankings_validates_invariants(kwargs, error_message):
     with pytest.raises(ValueError, match=error_message):
         CompactNeighborRankings(**kwargs)
+
+
+def test_max_tree_filters_zero_edges_from_sorted_edge_table():
+    edges = SortedUndirectedEdges(
+        n_nodes=3,
+        source=np.array([0, 1], dtype=np.int32),
+        target=np.array([1, 2], dtype=np.int32),
+        score=np.array([5.0, 0.0]),
+    )
+
+    with pytest.warns(RuntimeWarning, match="removed zero-score edges"):
+        tree = MaxTree(edges, skip_zeros=True)
+
+    assert tree.mst_edges == [(0, 1, 5.0)]
+
+
+def test_max_tree_warns_when_zero_edges_are_included():
+    edges = SortedUndirectedEdges(
+        n_nodes=3,
+        source=np.array([0, 1], dtype=np.int32),
+        target=np.array([1, 2], dtype=np.int32),
+        score=np.array([5.0, 0.0]),
+    )
+
+    with pytest.warns(RuntimeWarning, match="includes zero-score edges"):
+        tree = MaxTree(edges, skip_zeros=False)
+
+    assert tree.mst_edges == [(0, 1, 5.0), (1, 2, 0.0)]
 
 
 # Test iter_data order and zeros for synthetic data

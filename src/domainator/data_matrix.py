@@ -37,6 +37,7 @@ Usage:
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
+import csv
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
@@ -632,9 +633,9 @@ class DataMatrix(ABC):
     _SPARSE_VALUES_DATASET="SPARSE_VALUES" 
     """values for CSR sparse"""
     _SPARSE_CSR_INDICES_DATASET="SPARSE_CSR_INDICES"
-    """row index for CSR sparse"""
+    """column indices for CSR sparse"""
     _SPARSE_CSR_INDPTR_DATASET="SPARSE_CSR_INDPTR"
-    """col index for CSR sparse"""
+    """row pointer offsets for CSR sparse"""
     
     _ARRAY_TYPE_ATTR="ARRAY_TYPE"
     """{DENSE, SPARSE_CSR}"""
@@ -1305,13 +1306,45 @@ class DenseDataMatrix(DataMatrix):
     def _from_text(cls, matrix_file: Union[PathLike, str]) -> 'DenseDataMatrix':
         """Load a dense matrix from text file."""
         try:
+            with open(matrix_file, newline="", encoding="utf-8") as handle:
+                reader = csv.reader(handle, delimiter="\t")
+                try:
+                    header = next(reader)
+                except StopIteration:
+                    raise ValueError("Dense text matrix file is empty.")
+
+                col_names = header[1:]
+                if len(set(col_names)) != len(col_names):
+                    raise ValueError("col_names must be unique")
+
+                row_names = []
+                for line_number, row in enumerate(reader, start=2):
+                    if len(row) == 0:
+                        continue
+                    row_names.append(row[0])
+                    if len(row) != len(header):
+                        raise ValueError(
+                            f"Dense text matrix row {line_number} has {len(row) - 1} values; expected {len(col_names)}."
+                        )
+
+                if len(set(row_names)) != len(row_names):
+                    raise ValueError("row_names must be unique")
+        except UnicodeDecodeError:
+            raise ValueError(f"Expecting utf-8 encoded matrix file, but found invalid unicode byte.")
+
+        try:
             mat_file = pd.read_csv(matrix_file, sep="\t", index_col=0)
         except UnicodeDecodeError:
             raise ValueError(f"Expecting utf-8 encoded matrix file, but found invalid unicode byte.")
+        except pd.errors.ParserError as err:
+            raise ValueError(f"Dense text matrix could not be parsed as tab-separated data: {err}") from err
         
         row_names = list(mat_file.index)
         col_names = list(mat_file.columns)
-        data = mat_file.to_numpy()
+        try:
+            data = mat_file.to_numpy(dtype=float)
+        except ValueError as err:
+            raise ValueError(f"Dense text matrix values must be numeric: {err}") from err
         
         return cls(data, row_names, col_names)
     
@@ -1808,7 +1841,29 @@ class MaxTree():
         if isinstance(matrix, DataMatrix):
             sorted_edges = matrix.sorted_undirected_edges(skip_zeros=skip_zeros, agg=max)
         else:
-            sorted_edges = matrix
+            if skip_zeros:
+                keep_mask = matrix.score != 0
+                sorted_edges = SortedUndirectedEdges(
+                    n_nodes=matrix.n_nodes,
+                    source=matrix.source[keep_mask],
+                    target=matrix.target[keep_mask],
+                    score=matrix.score[keep_mask],
+                )
+            else:
+                sorted_edges = matrix
+
+        if not skip_zeros and len(sorted_edges) > 0 and np.any(sorted_edges.score == 0):
+            warnings.warn(
+                "MaxTree(skip_zeros=False) includes zero-score edges and may connect otherwise disconnected components.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        elif not isinstance(matrix, DataMatrix) and skip_zeros and len(matrix) != len(sorted_edges):
+            warnings.warn(
+                "MaxTree(skip_zeros=True) removed zero-score edges from the provided SortedUndirectedEdges.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         self.n_nodes = sorted_edges.n_nodes
 

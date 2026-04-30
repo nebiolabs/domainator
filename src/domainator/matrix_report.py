@@ -255,6 +255,22 @@ def _merge_event_table_rows(component_summary, max_items=25):
     return rows
 
 
+def _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_summary, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
+    merge_event_rows = _threshold_merge_event_rows(component_summary) if component_summary is not None else []
+    filtered_merge_event_rows = _filter_merge_event_rows(merge_event_rows, max_merge_events=max_merge_events)
+    return {
+        "viz_data": tree.export_for_interactive_viz(),
+        "cluster_by_thresh": tree.cluster_count_by_threshold,
+        "cluster_by_edges": tree.cluster_count_by_edge_count,
+        "edges_by_thresh": tree.edges_by_threshold,
+        "has_mst_knn": mst_knn_counts is not None,
+        "mst_knn_counts": mst_knn_counts if mst_knn_counts is not None else [],
+        "mst_knn_min_k": mst_knn_config['min_k'] if mst_knn_config is not None else 0,
+        "merge_event_series": filtered_merge_event_rows,
+        "slider_stops": _slider_stop_rows(filtered_merge_event_rows),
+    }
+
+
 def _record_stage_timing(stage_timings, stage_name, start_time, **metrics):
     elapsed = perf_counter() - start_time
     stage_timings.append((stage_name, elapsed, metrics))
@@ -284,6 +300,12 @@ def _make_progress_callback(out_handle=None):
         print(f"[matrix_report +{elapsed:.1f}s] {message}", file=out_handle, flush=True)
 
     return emit
+
+
+def _estimate_mst_knn_counts_bytes(n_thresholds: int, max_k: int) -> int:
+    if max_k < MST_KNN_MIN_K:
+        return 0
+    return int(n_thresholds) * int(max_k - MST_KNN_MIN_K + 1) * np.dtype(int).itemsize
 
 class SummaryTextWriter():
     def __init__(self, out_handle): 
@@ -571,27 +593,11 @@ class SummaryHTMLWriter():
     
     
     def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
-        # Export data for interactive visualizations
-        viz_data = tree.export_for_interactive_viz()
-        cluster_by_thresh = tree.cluster_count_by_threshold
-        cluster_by_edges = tree.cluster_count_by_edge_count
-        edges_by_thresh = tree.edges_by_threshold
         include_mst_knn = mst_knn_counts is not None
         include_component_summary = component_summary is not None and len(component_summary) > 1
-        merge_event_rows = _threshold_merge_event_rows(component_summary) if component_summary is not None else []
-        filtered_merge_event_rows = _filter_merge_event_rows(merge_event_rows, max_merge_events=max_merge_events)
-        slider_stops = _slider_stop_rows(filtered_merge_event_rows)
-        payload = {
-            "viz_data": viz_data,
-            "cluster_by_thresh": cluster_by_thresh,
-            "cluster_by_edges": cluster_by_edges,
-            "edges_by_thresh": edges_by_thresh,
-            "has_mst_knn": include_mst_knn,
-            "mst_knn_counts": mst_knn_counts if mst_knn_counts is not None else [],
-            "mst_knn_min_k": mst_knn_config['min_k'] if mst_knn_config is not None else 0,
-            "merge_event_series": filtered_merge_event_rows,
-            "slider_stops": slider_stops,
-        }
+        payload = _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_summary, max_merge_events=max_merge_events)
+        filtered_merge_event_rows = payload["merge_event_series"]
+        slider_stops = payload["slider_stops"]
         compressed_payload = _compressed_json_base64(payload)
         mst_knn_controls = ""
         mst_knn_stat_box = ""
@@ -734,6 +740,8 @@ class SummaryHTMLWriter():
     let MST_KNN_MIN_K;
     let MERGE_EVENT_SERIES;
     let SLIDER_STOPS;
+    let CLUSTER_CHECKPOINTS = [];
+    const CLUSTER_CHECKPOINT_STRIDE = 50;
 
     function base64ToBytes(base64Text) {{
         const binaryText = atob(base64Text);
@@ -768,9 +776,9 @@ class SummaryHTMLWriter():
     
     // Union-Find implementation for fast cluster computation
     class UnionFind {{
-        constructor(n) {{
-            this.parent = Array.from({{length: n}}, (_, i) => i);
-            this.size = Array(n).fill(1);
+        constructor(n, parent = null, size = null) {{
+            this.parent = parent ? parent.slice() : Array.from({{length: n}}, (_, i) => i);
+            this.size = size ? size.slice() : Array(n).fill(1);
         }}
         
         find(x) {{
@@ -800,12 +808,54 @@ class SummaryHTMLWriter():
             }}
             return sizes.sort((a, b) => b - a);
         }}
+
+        snapshot(edgeIndex) {{
+            return {{
+                edgeIndex: edgeIndex,
+                parent: this.parent.slice(),
+                size: this.size.slice()
+            }};
+        }}
+    }}
+
+    function buildClusterCheckpoints() {{
+        CLUSTER_CHECKPOINTS = [];
+        let uf = new UnionFind(VIZ_DATA.n_nodes);
+        CLUSTER_CHECKPOINTS.push(uf.snapshot(-1));
+
+        let nextEdgeIndex = 0;
+        for (let position = 1; position < SLIDER_STOPS.length; position++) {{
+            const targetEdgeIndex = SLIDER_STOPS[position].edge_index;
+            while (nextEdgeIndex <= targetEdgeIndex && nextEdgeIndex < VIZ_DATA.mst_edges.length) {{
+                let [n1, n2, val] = VIZ_DATA.mst_edges[nextEdgeIndex];
+                uf.union(n1, n2);
+                nextEdgeIndex++;
+            }}
+            if (position % CLUSTER_CHECKPOINT_STRIDE === 0 || position === SLIDER_STOPS.length - 1) {{
+                CLUSTER_CHECKPOINTS.push(uf.snapshot(targetEdgeIndex));
+            }}
+        }}
+    }}
+
+    function checkpointForEdgeIndex(edgeIndex) {{
+        let checkpoint = CLUSTER_CHECKPOINTS[0];
+        for (let i = 1; i < CLUSTER_CHECKPOINTS.length; i++) {{
+            if (CLUSTER_CHECKPOINTS[i].edgeIndex > edgeIndex) {{
+                break;
+            }}
+            checkpoint = CLUSTER_CHECKPOINTS[i];
+        }}
+        return checkpoint;
     }}
     
     // Compute clusters at specific MST edge index
     function computeClusters(edgeIndex) {{
-        let uf = new UnionFind(VIZ_DATA.n_nodes);
-        for (let i = 0; i <= edgeIndex && i < VIZ_DATA.mst_edges.length; i++) {{
+        if (edgeIndex < 0) {{
+            return Array(VIZ_DATA.n_nodes).fill(1);
+        }}
+        const checkpoint = checkpointForEdgeIndex(edgeIndex);
+        let uf = new UnionFind(VIZ_DATA.n_nodes, checkpoint.parent, checkpoint.size);
+        for (let i = checkpoint.edgeIndex + 1; i <= edgeIndex && i < VIZ_DATA.mst_edges.length; i++) {{
             let [n1, n2, val] = VIZ_DATA.mst_edges[i];
             uf.union(n1, n2);
         }}
@@ -935,6 +985,8 @@ class SummaryHTMLWriter():
         
 {component_signal_plot_block}
         
+    buildClusterCheckpoints();
+
         // Initial cluster size histogram
         updateHistogramFromSliderPosition(0);
     }}
@@ -1071,14 +1123,29 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
         stage_start = perf_counter()
         mst_knn_config = _get_mst_knn_report_config(tree)
         neighbor_rankings = build_symmetric_neighbor_rankings(edge_table, max_k=mst_knn_config["max_k"])
-        _record_stage_timing(stage_timings, "build_mst_knn_neighbor_rankings", stage_start, max_k=mst_knn_config["max_k"], kept_edges=len(neighbor_rankings.target))
+        _record_stage_timing(
+            stage_timings,
+            "build_mst_knn_neighbor_rankings",
+            stage_start,
+            max_k=mst_knn_config["max_k"],
+            kept_directed_edges=len(neighbor_rankings.target),
+            estimated_counts_bytes=_estimate_mst_knn_counts_bytes(len(tree.mst_edges), mst_knn_config["max_k"]),
+        )
 
     if include_mst_knn:
         if progress_callback is not None:
             progress_callback("building MST_KNN threshold counts")
         stage_start = perf_counter()
         mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
-        _record_stage_timing(stage_timings, "build_mst_knn_counts", stage_start, thresholds=len(tree.mst_edges), max_k=mst_knn_config["max_k"])
+        _record_stage_timing(
+            stage_timings,
+            "build_mst_knn_counts",
+            stage_start,
+            thresholds=len(tree.mst_edges),
+            max_k=mst_knn_config["max_k"],
+            output_shape=mst_knn_counts.shape,
+            output_bytes=mst_knn_counts.nbytes,
+        )
 
     if progress_callback is not None:
         progress_callback("rendering outputs")

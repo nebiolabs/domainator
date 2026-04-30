@@ -123,6 +123,8 @@ class TestInteractiveHTML:
             assert 'Plotly' in content or 'plotly' in content
             assert 'mst-knn-k-slider' in content
             assert 'MST_KNN_COUNTS' in content
+            assert 'CLUSTER_CHECKPOINT_STRIDE' in content
+            assert 'buildClusterCheckpoints' in content
             assert 'Projected MST_KNN Edges' in content
 
 
@@ -482,7 +484,11 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
         assert 'build_edge_table:' in stderr_output
         assert 'build_max_tree:' in stderr_output
         assert 'build_mst_knn_neighbor_rankings:' in stderr_output
+        assert 'kept_directed_edges=' in stderr_output
+        assert 'estimated_counts_bytes=' in stderr_output
         assert 'build_mst_knn_counts:' in stderr_output
+        assert 'output_shape=' in stderr_output
+        assert 'output_bytes=' in stderr_output
         assert 'render_outputs:' in stderr_output
         assert 'matrix_report_total:' in stderr_output
 
