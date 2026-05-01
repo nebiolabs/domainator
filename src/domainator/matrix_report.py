@@ -4,7 +4,6 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 import math
 from time import perf_counter
-from bisect import bisect_left, insort
 import base64
 import gzip
 
@@ -17,21 +16,20 @@ from domainator.summary_report import histplot_base64
 import statistics
 import numpy as np
 import json
+from domainator.ssn_hierarchy import (
+    DEFAULT_MAX_MERGE_EVENTS,
+    MERGE_IMPACT_CHOICES,
+    MERGE_IMPACT_MIN_CHILD,
+    MERGE_IMPACT_PRODUCT,
+    component_size_summary_by_threshold,
+    filter_merge_event_rows,
+    format_merge_impact_metric,
+    merge_event_table_rows,
+    threshold_merge_event_rows,
+)
 
 MST_KNN_MIN_K = 2
 MST_KNN_MAX_K = 25
-
-COMPONENT_THRESHOLD_COL = 0
-COMPONENT_LARGEST_COL = 1
-COMPONENT_AVG_NON_SINGLETON_COL = 2
-COMPONENT_MERGE_IMPACT_COL = 3
-COMPONENT_DELTA_LARGEST_COL = 4
-COMPONENT_DELTA_AVG_NON_SINGLETON_COL = 5
-
-MERGE_IMPACT_PRODUCT = "product"
-MERGE_IMPACT_MIN_CHILD = "min_child"
-MERGE_IMPACT_CHOICES = (MERGE_IMPACT_PRODUCT, MERGE_IMPACT_MIN_CHILD)
-DEFAULT_MAX_MERGE_EVENTS = 500
 SLIDER_POSITION_SCALE = 10_000
 SLIDER_RIGHT_STOP_PADDING_FRACTION = 0.05
 SLIDER_LEFT_STOP_PADDING_FRACTION = 0.05
@@ -53,165 +51,6 @@ def _get_mst_knn_report_config(tree):
         "max_k": max_k,
         "default_k": default_k,
     }
-
-
-def _format_threshold_value(threshold):
-    if math.isinf(float(threshold)):
-        return "∞"
-    return f"{float(threshold):.2f}"
-
-
-def _format_merge_impact_metric(metric: str) -> str:
-    if metric == MERGE_IMPACT_PRODUCT:
-        return "product"
-    if metric == MERGE_IMPACT_MIN_CHILD:
-        return "min_child"
-    raise ValueError(f"Unsupported merge impact metric: {metric}")
-
-
-def _remove_sorted_size(sorted_sizes, size):
-    position = bisect_left(sorted_sizes, size)
-    if position >= len(sorted_sizes) or sorted_sizes[position] != size:
-        raise ValueError(f"size {size} missing from sorted component sizes")
-    sorted_sizes.pop(position)
-
-
-def _component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_MIN_CHILD):
-    if tree.n_nodes == 0:
-        return np.zeros((0, 6), dtype=float)
-
-    if merge_impact_metric not in MERGE_IMPACT_CHOICES:
-        raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
-
-    parent = np.arange(tree.n_nodes, dtype=int)
-    component_sizes = np.ones(tree.n_nodes, dtype=int)
-    sorted_sizes = [1] * tree.n_nodes
-    non_singleton_count = 0
-    non_singleton_sum = 0
-    summary = np.zeros((len(tree.mst_edges) + 1, 6), dtype=float)
-
-    def find(node_idx):
-        root = node_idx
-        while parent[root] != root:
-            root = parent[root]
-        while parent[node_idx] != node_idx:
-            next_idx = parent[node_idx]
-            parent[node_idx] = root
-            node_idx = next_idx
-        return root
-
-    def record(row_idx, threshold, merge_impact=0.0):
-        nonlocal non_singleton_count, non_singleton_sum
-        largest_cluster = float(sorted_sizes[-1]) if len(sorted_sizes) > 0 else 0.0
-        avg_non_singleton = float(non_singleton_sum) / non_singleton_count if non_singleton_count > 0 else 0.0
-
-        summary[row_idx, COMPONENT_THRESHOLD_COL] = threshold
-        summary[row_idx, COMPONENT_LARGEST_COL] = largest_cluster
-        summary[row_idx, COMPONENT_AVG_NON_SINGLETON_COL] = avg_non_singleton
-        summary[row_idx, COMPONENT_MERGE_IMPACT_COL] = float(merge_impact)
-        if row_idx > 0:
-            summary[row_idx, COMPONENT_DELTA_LARGEST_COL] = largest_cluster - summary[row_idx - 1, COMPONENT_LARGEST_COL]
-            summary[row_idx, COMPONENT_DELTA_AVG_NON_SINGLETON_COL] = avg_non_singleton - summary[row_idx - 1, COMPONENT_AVG_NON_SINGLETON_COL]
-
-    record(0, float("inf"))
-
-    for row_idx, (source_idx, target_idx, threshold) in enumerate(tree.mst_edges, start=1):
-        left_root = find(source_idx)
-        right_root = find(target_idx)
-        merge_impact = 0.0
-        if left_root != right_root:
-            left_size = int(component_sizes[left_root])
-            right_size = int(component_sizes[right_root])
-            if merge_impact_metric == MERGE_IMPACT_PRODUCT:
-                merge_impact = float(left_size * right_size)
-            else:
-                merge_impact = float(min(left_size, right_size))
-
-            _remove_sorted_size(sorted_sizes, left_size)
-            _remove_sorted_size(sorted_sizes, right_size)
-
-            if left_size > 1:
-                non_singleton_count -= 1
-                non_singleton_sum -= left_size
-            if right_size > 1:
-                non_singleton_count -= 1
-                non_singleton_sum -= right_size
-
-            merged_size = left_size + right_size
-            parent[left_root] = right_root
-            component_sizes[right_root] = merged_size
-
-            insort(sorted_sizes, merged_size)
-            non_singleton_count += 1
-            non_singleton_sum += merged_size
-
-        record(row_idx, float(threshold), merge_impact=merge_impact)
-
-    return summary
-
-
-def _summarize_merge_events(component_summary, max_items=5):
-    if component_summary is None or len(component_summary) < 2:
-        return []
-
-    merge_rows = _threshold_merge_event_rows(component_summary)
-    ranked_rows = sorted(merge_rows, key=lambda row: (-row["merge_impact"], -row["delta_largest"], -row["delta_avg_non_singleton"]))
-    return ranked_rows[:max_items]
-
-
-def _threshold_merge_event_rows(component_summary):
-    if component_summary is None or len(component_summary) < 2:
-        return []
-
-    event_rows = []
-    previous_row = component_summary[0]
-    row_idx = 1
-
-    while row_idx < len(component_summary):
-        first_summary_row_idx = row_idx
-        threshold_value = float(component_summary[row_idx, COMPONENT_THRESHOLD_COL])
-        merge_impact = 0.0
-        last_row = component_summary[row_idx]
-
-        while row_idx < len(component_summary) and float(component_summary[row_idx, COMPONENT_THRESHOLD_COL]) == threshold_value:
-            merge_impact += float(component_summary[row_idx, COMPONENT_MERGE_IMPACT_COL])
-            last_row = component_summary[row_idx]
-            row_idx += 1
-
-        edge_index = row_idx - 2
-
-        event_rows.append({
-            "edge_index": int(edge_index),
-            "summary_row_from": int(first_summary_row_idx),
-            "summary_row_to": int(row_idx - 1),
-            "threshold_from_value": float(previous_row[COMPONENT_THRESHOLD_COL]),
-            "threshold_from": _format_threshold_value(previous_row[COMPONENT_THRESHOLD_COL]),
-            "threshold_to": _format_threshold_value(last_row[COMPONENT_THRESHOLD_COL]),
-            "threshold_value": float(last_row[COMPONENT_THRESHOLD_COL]),
-            "merge_impact": float(merge_impact),
-            "delta_largest": float(abs(last_row[COMPONENT_LARGEST_COL] - previous_row[COMPONENT_LARGEST_COL])),
-            "delta_avg_non_singleton": float(abs(last_row[COMPONENT_AVG_NON_SINGLETON_COL] - previous_row[COMPONENT_AVG_NON_SINGLETON_COL])),
-        })
-        previous_row = last_row
-
-    return event_rows
-
-
-def _filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
-    if max_merge_events is None:
-        max_merge_events = DEFAULT_MAX_MERGE_EVENTS
-    if max_merge_events < 0:
-        raise ValueError("max_merge_events must be >= 0")
-    if max_merge_events == 0 or len(event_rows) <= max_merge_events:
-        return list(event_rows)
-
-    ranked_rows = sorted(
-        event_rows,
-        key=lambda row: (-row["merge_impact"], -row["delta_largest"], -row["delta_avg_non_singleton"], row["edge_index"]),
-    )
-    filtered_rows = ranked_rows[:max_merge_events]
-    filtered_rows.sort(key=lambda row: row["edge_index"])
-    return filtered_rows
 
 
 def _slider_stop_rows(merge_event_rows):
@@ -292,21 +131,12 @@ def _compressed_json_base64(payload):
 
 
 def _merge_event_table_rows(component_summary, max_items=25):
-    rows = []
-    strongest_rows = _summarize_merge_events(component_summary, max_items=max_items)
-    strongest_rows.sort(key=lambda row: (row["threshold_from_value"], row["threshold_value"]), reverse=True)
-    for merge_row in strongest_rows:
-        rows.append({
-            "threshold_from": merge_row["threshold_from"],
-            "threshold_to": merge_row["threshold_to"],
-            "merge_impact": int(round(merge_row["merge_impact"])),
-        })
-    return rows
+    return merge_event_table_rows(component_summary, max_items=max_items)
 
 
 def _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_summary, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
-    merge_event_rows = _threshold_merge_event_rows(component_summary) if component_summary is not None else []
-    filtered_merge_event_rows = _filter_merge_event_rows(merge_event_rows, max_merge_events=max_merge_events)
+    merge_event_rows = threshold_merge_event_rows(component_summary) if component_summary is not None else []
+    filtered_merge_event_rows = filter_merge_event_rows(merge_event_rows, max_merge_events=max_merge_events)
     return {
         "viz_data": tree.export_for_interactive_viz(),
         "cluster_by_thresh": tree.cluster_count_by_threshold,
@@ -441,7 +271,7 @@ Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
 
         if component_summary is not None and len(component_summary) > 1:
             merge_event_rows = _merge_event_table_rows(component_summary)
-            print(f"\nStrongest MST split events (metric={_format_merge_impact_metric(merge_impact_metric)}):", file=self.out_handle)
+            print(f"\nStrongest MST split events (metric={format_merge_impact_metric(merge_impact_metric)}):", file=self.out_handle)
             if len(merge_event_rows) == 0:
                 print("  No split events found.", file=self.out_handle)
             else:
@@ -1186,7 +1016,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     stage_start = perf_counter()
     tree = MaxTree(edge_table)
     _record_stage_timing(stage_timings, "build_max_tree", stage_start, n_mst_edges=len(tree.mst_edges))
-    component_summary = _component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
+    component_summary = component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
     mst_knn_config = None
     mst_knn_counts = None
     neighbor_rankings = None
