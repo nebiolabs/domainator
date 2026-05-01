@@ -150,3 +150,7 @@ src/domainator/_lib/*
 nextflow/*
 
 *.sif
+
+models/*
+
+scratch/*
