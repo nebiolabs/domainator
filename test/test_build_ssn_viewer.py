@@ -191,17 +191,34 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'tidyForestLayout' in html_content
         assert 'forceDirectedForestLayout' in html_content
         assert 'organicForestLayout' in html_content
+        assert 'gridClusterLayout' in html_content
         assert 'computeVisibleLayout' in html_content
         assert 'renderClusterView' in html_content
+        assert 'refineLayoutGeometry' in html_content
+        assert 'pointSegmentDistance' in html_content
+        assert 'trimmedLinkEndpoints' in html_content
+        assert 'renderedLinkSegments' in html_content
+        assert 'sort-components-by-size' in html_content
+        assert 'Sort components by size' in html_content
+        assert 'sortComponentsBySizeEnabled' in html_content
+        assert 'componentSelectionState' in html_content
+        assert 'toggleSelectionForNode' in html_content
+        assert 'hitTestNodeAt' in html_content
         assert 'layout-algorithm' in html_content
         assert 'Layout algorithm' in html_content
         assert '<option value="tree">Tree</option>' in html_content
         assert '<option value="force">Force-directed</option>' in html_content
         assert '<option value="organic">Organic</option>' in html_content
+        assert '<option value="grid" selected>Grid (no edges)</option>' in html_content
         assert 'leaf-pruning-only' in html_content
         assert 'Minimum cluster size trims leaf clusters only' in html_content
         assert 'show-node-counts' in html_content
         assert 'Show node count labels' in html_content
         assert 'show-edge-scores' in html_content
         assert 'Show edge score labels' in html_content
+        assert '<input id="exact-node-rendering" type="checkbox" checked />' in html_content
+        assert 'Render every node and scale bubble area exactly' in html_content
+        assert '<input id="leaf-pruning-only" type="checkbox" checked />' in html_content
+        assert '<button id="sort-components-by-size" type="button" aria-pressed="true" disabled>' in html_content
+        assert 'initialPosition: 0' in html_content
         assert 'reset-view' in html_content

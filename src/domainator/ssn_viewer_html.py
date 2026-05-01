@@ -152,6 +152,11 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         transform: translateY(-1px);
         background: #fff;
     }}
+    .toolbar button[aria-pressed="true"] {{
+        background: rgba(200, 85, 61, 0.14);
+        border-color: rgba(200, 85, 61, 0.55);
+        color: #7b2f22;
+    }}
     .toolbar button:disabled {{
         opacity: 0.45;
         cursor: not-allowed;
@@ -405,7 +410,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                     <div id="selection-summary" class="pill">0 nodes selected</div>
                 </div>
                 <div class="canvas-wrap"><canvas id="cluster-view" width="1100" height="700"></canvas></div>
-                <div class="note">Wheel to zoom, drag the background to pan, and Shift-drag a box to select clusters. Click a cluster bubble to toggle selection for every node inside it.</div>
+                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Click a cluster bubble to toggle every node inside it.</div>
             </div>
         </section>
         <section class="panel sidebar">
@@ -418,6 +423,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                             <option value="tree">Tree</option>
                             <option value="force">Force-directed</option>
                             <option value="organic">Organic</option>
+                            <option value="grid" selected>Grid (no edges)</option>
                         </select>
                     </div>
                     <div class="control">
@@ -445,11 +451,16 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                         <label for="show-edge-scores">Show edge score labels</label>
                     </div>
                     <div class="control checkbox">
+                        <input id="exact-node-rendering" type="checkbox" checked />
+                        <label for="exact-node-rendering">Render every node and scale bubble area exactly</label>
+                    </div>
+                    <div class="control checkbox">
                         <input id="leaf-pruning-only" type="checkbox" checked />
                         <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
                     </div>
                 </div>
                 <div class="toolbar">
+                    <button id="sort-components-by-size" type="button" aria-pressed="true" disabled>Sort clusters by size: On</button>
                     <button id="reset-view" disabled>Reset view</button>
                     <button id="clear-selection" disabled>Clear selection</button>
                 </div>
@@ -556,6 +567,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         slider.disabled = state.sliderModel.stops.length === 0;
         document.getElementById('threshold-min-label').textContent = state.sliderModel.minLabel;
         document.getElementById('threshold-max-label').textContent = state.sliderModel.maxLabel;
+        document.getElementById('sort-components-by-size').disabled = false;
         document.getElementById('reset-view').disabled = false;
         document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
         setStatus('Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.');
@@ -575,9 +587,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
         if (finiteStops.length === 0) {{
             return {{
-                stops: [{{...infinityStop, sliderPosition: 1000}}],
-                maxPosition: 1000,
-                initialPosition: 1000,
+                stops: [{{...infinityStop, sliderPosition: 0}}],
+                maxPosition: 0,
+                initialPosition: 0,
                 minLabel: '∞',
                 maxLabel: '∞',
             }};
@@ -602,7 +614,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         return {{
             stops: positionedStops,
             maxPosition: 1000,
-            initialPosition: 1000,
+            initialPosition: 0,
             minLabel: finiteStops[0].threshold_label,
             maxLabel: '∞',
         }};
@@ -723,7 +735,36 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
 
     function currentLayoutAlgorithm() {{
-        return document.getElementById('layout-algorithm').value || 'tree';
+        return document.getElementById('layout-algorithm').value || 'grid';
+    }}
+
+    function compareVisibleClusterIds(leftId, rightId) {{
+        const leftNode = state.bundle.graph.hierarchy.nodes[leftId];
+        const rightNode = state.bundle.graph.hierarchy.nodes[rightId];
+        if (sortComponentsBySizeEnabled()) {{
+            return rightNode.size - leftNode.size || leftNode.leaf_start - rightNode.leaf_start || leftId - rightId;
+        }}
+        return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
+    }}
+
+    function sortComponentsBySizeEnabled() {{
+        return document.getElementById('sort-components-by-size').getAttribute('aria-pressed') === 'true';
+    }}
+
+    function updateComponentSortButton() {{
+        const button = document.getElementById('sort-components-by-size');
+        const enabled = sortComponentsBySizeEnabled();
+        const gridMode = currentLayoutAlgorithm() === 'grid';
+        button.textContent = gridMode
+            ? (enabled ? 'Sort clusters by size: On' : 'Sort clusters by size: Off')
+            : (enabled ? 'Sort components by size: On' : 'Sort components by size: Off');
+        button.title = gridMode
+            ? (enabled
+                ? 'Visible clusters are ordered by cluster size before grid placement.'
+                : 'Visible clusters keep their hierarchy-derived order before grid placement.')
+            : (enabled
+                ? 'Connected components are ordered by total visible node count.'
+                : 'Connected components keep their hierarchy-derived order.');
     }}
 
     function showNodeCountsEnabled() {{
@@ -732,6 +773,10 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function showEdgeScoresEnabled() {{
         return document.getElementById('show-edge-scores').checked;
+    }}
+
+    function exactNodeRenderingEnabled() {{
+        return document.getElementById('exact-node-rendering').checked;
     }}
 
     function currentColorField() {{
@@ -999,7 +1044,49 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
 
     function componentRadiusForSize(size) {{
+        if (exactNodeRenderingEnabled()) {{
+            const areaPerNode = 48;
+            return Math.sqrt((Math.max(1, size) * areaPerNode) / Math.PI);
+        }}
         return Math.max(7, Math.min(52, 10 + Math.sqrt(size) * 4.7));
+    }}
+
+    function componentDotCount(componentSize) {{
+        if (exactNodeRenderingEnabled()) {{
+            return componentSize;
+        }}
+        return Math.min(componentSize, 140);
+    }}
+
+    function componentDotRadius(componentSize, bubbleRadius) {{
+        return 1.95;
+    }}
+
+    function componentDotOffset(sampleIndex, sampleCount, packingRadius) {{
+        if (sampleCount <= 1 || packingRadius <= 0) {{
+            return {{x: 0, y: 0}};
+        }}
+
+        if (sampleCount <= 6) {{
+            const ringRadius = sampleCount === 2
+                ? packingRadius * 0.58
+                : sampleCount <= 4
+                    ? packingRadius * 0.72
+                    : packingRadius * 0.78;
+            const angleOffset = sampleCount === 4 ? Math.PI / 4 : -Math.PI / 2;
+            const angle = angleOffset + (sampleIndex * ((Math.PI * 2) / sampleCount));
+            return {{
+                x: Math.cos(angle) * ringRadius,
+                y: Math.sin(angle) * ringRadius,
+            }};
+        }}
+
+        const angle = sampleIndex * 2.399963229728653;
+        const distance = Math.sqrt((sampleIndex + 0.5) / sampleCount) * packingRadius;
+        return {{
+            x: Math.cos(angle) * distance,
+            y: Math.sin(angle) * distance,
+        }};
     }}
 
     function clusterGraphComponents(visibleIds, links) {{
@@ -1034,8 +1121,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }});
 
         components.sort((leftIds, rightIds) => {{
+            const leftNodeCount = leftIds.reduce((sum, nodeId) => sum + state.bundle.graph.hierarchy.nodes[nodeId].size, 0);
+            const rightNodeCount = rightIds.reduce((sum, nodeId) => sum + state.bundle.graph.hierarchy.nodes[nodeId].size, 0);
             const leftStart = Math.min(...leftIds.map(nodeId => state.bundle.graph.hierarchy.nodes[nodeId].leaf_start));
             const rightStart = Math.min(...rightIds.map(nodeId => state.bundle.graph.hierarchy.nodes[nodeId].leaf_start));
+            if (sortComponentsBySizeEnabled()) {{
+                return rightNodeCount - leftNodeCount || leftStart - rightStart || rightIds.length - leftIds.length;
+            }}
             return leftStart - rightStart || rightIds.length - leftIds.length;
         }});
         return {{adjacency, components}};
@@ -1074,6 +1166,39 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         return packed;
     }}
 
+    function gridClusterLayout(visibleIds) {{
+        if (visibleIds.length === 0) {{
+            clusterCanvas.height = 760;
+            return [];
+        }}
+
+        clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
+        const orderedIds = [...visibleIds].sort(compareVisibleClusterIds);
+        const items = orderedIds.map(componentId => {{
+            const node = state.bundle.graph.hierarchy.nodes[componentId];
+            return {{
+                componentId,
+                radius: componentRadiusForSize(node.size),
+            }};
+        }});
+        const maxDiameter = Math.max(...items.map(item => item.radius * 2), 22);
+        const cellSize = maxDiameter + 34;
+        const outerPadding = 58;
+        const aspectRatio = clusterCanvas.width / Math.max(clusterCanvas.height, 1);
+        const columnCount = Math.max(1, Math.ceil(Math.sqrt(items.length * Math.max(0.75, aspectRatio))));
+
+        return items.map((item, index) => {{
+            const column = index % columnCount;
+            const row = Math.floor(index / columnCount);
+            return {{
+                componentId: item.componentId,
+                radius: item.radius,
+                x: outerPadding + (column * cellSize) + (cellSize / 2),
+                y: outerPadding + (row * cellSize) + (cellSize / 2),
+            }};
+        }});
+    }}
+
     function normalizeComponentLayout(items, padding = 20) {{
         if (items.length === 0) {{
             return {{items: [], width: 0, height: 0}};
@@ -1100,6 +1225,245 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }};
     }}
 
+    function componentLeafOrder(componentIds) {{
+        return [...componentIds].sort((leftId, rightId) => {{
+            const leftNode = state.bundle.graph.hierarchy.nodes[leftId];
+            const rightNode = state.bundle.graph.hierarchy.nodes[rightId];
+            return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
+        }});
+    }}
+
+    function layoutLinkPairs(linksOrPairs) {{
+        return linksOrPairs.map(link => {{
+            if (Array.isArray(link)) {{
+                return {{sourceId: link[0], targetId: link[1]}};
+            }}
+            return {{sourceId: link.sourceId, targetId: link.targetId}};
+        }});
+    }}
+
+    function pointSegmentDistance(point, start, end) {{
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const lengthSq = (dx * dx) + (dy * dy);
+        if (lengthSq < 1e-9) {{
+            return {{distance: Math.hypot(point.x - start.x, point.y - start.y), t: 0, closestX: start.x, closestY: start.y}};
+        }}
+        const t = Math.max(0, Math.min(1, (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / lengthSq));
+        const closestX = start.x + (dx * t);
+        const closestY = start.y + (dy * t);
+        return {{distance: Math.hypot(point.x - closestX, point.y - closestY), t, closestX, closestY}};
+    }}
+
+    function segmentOrientation(a, b, c) {{
+        return ((b.y - a.y) * (c.x - b.x)) - ((b.x - a.x) * (c.y - b.y));
+    }}
+
+    function segmentsCross(a, b, c, d) {{
+        const o1 = segmentOrientation(a, b, c);
+        const o2 = segmentOrientation(a, b, d);
+        const o3 = segmentOrientation(c, d, a);
+        const o4 = segmentOrientation(c, d, b);
+        return (o1 * o2 < 0) && (o3 * o4 < 0);
+    }}
+
+    function refineLayoutGeometry(items, linksOrPairs, options = {{}}) {{
+        const refined = items.map(item => ({{...item}}));
+        if (refined.length <= 1) {{
+            return refined;
+        }}
+
+        const itemById = new Map(refined.map(item => [item.componentId, item]));
+        const links = layoutLinkPairs(linksOrPairs).filter(link => itemById.has(link.sourceId) && itemById.has(link.targetId));
+        const bubblePadding = options.bubblePadding ?? 14;
+        const edgePadding = options.edgePadding ?? 8;
+        const overlapIterations = options.overlapIterations ?? 5;
+        const edgeIterations = options.edgeIterations ?? 3;
+        const crossingIterations = options.crossingIterations ?? 2;
+        const maxPairChecks = options.maxPairChecks ?? 180000;
+        const maxEdgeNodeChecks = options.maxEdgeNodeChecks ?? 140000;
+        const maxCrossingChecks = options.maxCrossingChecks ?? 90000;
+        const pairChecks = (refined.length * (refined.length - 1)) / 2;
+
+        if (pairChecks <= maxPairChecks) {{
+            for (let iteration = 0; iteration < overlapIterations; iteration++) {{
+                for (let leftIndex = 0; leftIndex < refined.length; leftIndex++) {{
+                    const left = refined[leftIndex];
+                    for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex++) {{
+                        const right = refined[rightIndex];
+                        let dx = right.x - left.x;
+                        let dy = right.y - left.y;
+                        let distance = Math.hypot(dx, dy);
+                        if (distance < 1e-6) {{
+                            dx = (seededUnit(left.componentId + right.componentId, iteration + 21) - 0.5) || 0.01;
+                            dy = (seededUnit(left.componentId + right.componentId, iteration + 22) - 0.5) || 0.01;
+                            distance = Math.hypot(dx, dy);
+                        }}
+                        const minimumDistance = left.radius + right.radius + bubblePadding;
+                        if (distance >= minimumDistance) {{
+                            continue;
+                        }}
+                        const shift = ((minimumDistance - distance) / 2) * 0.72;
+                        const shiftX = (dx / distance) * shift;
+                        const shiftY = (dy / distance) * shift;
+                        left.x -= shiftX;
+                        left.y -= shiftY;
+                        right.x += shiftX;
+                        right.y += shiftY;
+                    }}
+                }}
+            }}
+        }}
+
+        if (links.length * refined.length <= maxEdgeNodeChecks) {{
+            for (let iteration = 0; iteration < edgeIterations; iteration++) {{
+                links.forEach(link => {{
+                    const source = itemById.get(link.sourceId);
+                    const target = itemById.get(link.targetId);
+                    if (!source || !target) {{
+                        return;
+                    }}
+                    refined.forEach(item => {{
+                        if (item.componentId === link.sourceId || item.componentId === link.targetId) {{
+                            return;
+                        }}
+                        const hit = pointSegmentDistance(item, source, target);
+                        if (hit.t <= 0.03 || hit.t >= 0.97) {{
+                            return;
+                        }}
+                        const minimumDistance = item.radius + edgePadding;
+                        if (hit.distance >= minimumDistance) {{
+                            return;
+                        }}
+                        let normalX = item.x - hit.closestX;
+                        let normalY = item.y - hit.closestY;
+                        let normalLength = Math.hypot(normalX, normalY);
+                        if (normalLength < 1e-6) {{
+                            const edgeDx = target.x - source.x;
+                            const edgeDy = target.y - source.y;
+                            normalX = -edgeDy || 1;
+                            normalY = edgeDx || 0;
+                            normalLength = Math.hypot(normalX, normalY);
+                        }}
+                        const push = (minimumDistance - hit.distance) * 0.68;
+                        item.x += (normalX / normalLength) * push;
+                        item.y += (normalY / normalLength) * push;
+                    }});
+                }});
+            }}
+        }}
+
+        const crossingChecks = (links.length * (links.length - 1)) / 2;
+        if (crossingChecks <= maxCrossingChecks) {{
+            for (let iteration = 0; iteration < crossingIterations; iteration++) {{
+                for (let leftIndex = 0; leftIndex < links.length; leftIndex++) {{
+                    const leftLink = links[leftIndex];
+                    const a = itemById.get(leftLink.sourceId);
+                    const b = itemById.get(leftLink.targetId);
+                    if (!a || !b) {{
+                        continue;
+                    }}
+                    for (let rightIndex = leftIndex + 1; rightIndex < links.length; rightIndex++) {{
+                        const rightLink = links[rightIndex];
+                        if (leftLink.sourceId === rightLink.sourceId || leftLink.sourceId === rightLink.targetId || leftLink.targetId === rightLink.sourceId || leftLink.targetId === rightLink.targetId) {{
+                            continue;
+                        }}
+                        const c = itemById.get(rightLink.sourceId);
+                        const d = itemById.get(rightLink.targetId);
+                        if (!c || !d || !segmentsCross(a, b, c, d)) {{
+                            continue;
+                        }}
+                        let dx = b.x - a.x;
+                        let dy = b.y - a.y;
+                        let length = Math.hypot(dx, dy);
+                        if (length < 1e-6) {{
+                            continue;
+                        }}
+                        const normalX = -dy / length;
+                        const normalY = dx / length;
+                        const push = 4.5 + (iteration * 1.5);
+                        a.x += normalX * push;
+                        a.y += normalY * push;
+                        b.x += normalX * push;
+                        b.y += normalY * push;
+                        c.x -= normalX * push;
+                        c.y -= normalY * push;
+                        d.x -= normalX * push;
+                        d.y -= normalY * push;
+                    }}
+                }}
+            }}
+        }}
+
+        if (links.length * refined.length <= maxEdgeNodeChecks) {{
+            links.forEach(link => {{
+                const source = itemById.get(link.sourceId);
+                const target = itemById.get(link.targetId);
+                if (!source || !target) {{
+                    return;
+                }}
+                refined.forEach(item => {{
+                    if (item.componentId === link.sourceId || item.componentId === link.targetId) {{
+                        return;
+                    }}
+                    const hit = pointSegmentDistance(item, source, target);
+                    if (hit.t <= 0.03 || hit.t >= 0.97) {{
+                        return;
+                    }}
+                    const minimumDistance = item.radius + edgePadding;
+                    if (hit.distance >= minimumDistance) {{
+                        return;
+                    }}
+                    let normalX = item.x - hit.closestX;
+                    let normalY = item.y - hit.closestY;
+                    let normalLength = Math.hypot(normalX, normalY);
+                    if (normalLength < 1e-6) {{
+                        const edgeDx = target.x - source.x;
+                        const edgeDy = target.y - source.y;
+                        normalX = -edgeDy || 1;
+                        normalY = edgeDx || 0;
+                        normalLength = Math.hypot(normalX, normalY);
+                    }}
+                    const push = (minimumDistance - hit.distance) * 0.82;
+                    item.x += (normalX / normalLength) * push;
+                    item.y += (normalY / normalLength) * push;
+                }});
+            }});
+        }}
+
+        if (pairChecks <= maxPairChecks) {{
+            for (let iteration = 0; iteration < 4; iteration++) {{
+                for (let leftIndex = 0; leftIndex < refined.length; leftIndex++) {{
+                    const left = refined[leftIndex];
+                    for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex++) {{
+                        const right = refined[rightIndex];
+                        let dx = right.x - left.x;
+                        let dy = right.y - left.y;
+                        let distance = Math.hypot(dx, dy);
+                        if (distance < 1e-6) {{
+                            dx = (seededUnit(left.componentId + right.componentId, iteration + 41) - 0.5) || 0.01;
+                            dy = (seededUnit(left.componentId + right.componentId, iteration + 42) - 0.5) || 0.01;
+                            distance = Math.hypot(dx, dy);
+                        }}
+                        const minimumDistance = left.radius + right.radius + bubblePadding;
+                        if (distance >= minimumDistance) {{
+                            continue;
+                        }}
+                        const shift = ((minimumDistance - distance) / 2) * 0.9;
+                        const shiftX = (dx / distance) * shift;
+                        const shiftY = (dy / distance) * shift;
+                        left.x -= shiftX;
+                        left.y -= shiftY;
+                        right.x += shiftX;
+                        right.y += shiftY;
+                    }}
+                }}
+            }}
+        }}
+
+        return refined;
+    }}
+
     function seededUnit(componentId, salt) {{
         const raw = Math.sin((componentId + 1) * 12.9898 + salt * 78.233) * 43758.5453;
         return raw - Math.floor(raw);
@@ -1121,6 +1485,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         const iterations = options.iterations ?? 110;
         const preferredEdgeLength = options.preferredEdgeLength ?? 120;
         const collisionStrength = options.collisionStrength ?? 0.28;
+        const orderedIds = componentLeafOrder(componentIds);
+        const orderRank = new Map(orderedIds.map((nodeId, index) => [nodeId, index]));
+        const orderCenter = (orderedIds.length - 1) / 2;
 
         tree.order.forEach((nodeId, index) => {{
             const depth = (() => {{
@@ -1132,11 +1499,12 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                 }}
                 return currentDepth;
             }})();
-            const angle = ((index / Math.max(1, tree.order.length)) * Math.PI * 2 * angleScale) + (seededUnit(nodeId, 1) - 0.5) * 0.35;
+            const rank = orderRank.get(nodeId) ?? index;
+            const angle = ((rank / Math.max(1, tree.order.length)) * Math.PI * 2 * angleScale) + (seededUnit(nodeId, 1) - 0.5) * 0.35;
             const radius = depth * baseSpacing;
             const anchor = options.useTreeSeed === false
                 ? {{x: Math.cos(angle) * radius, y: Math.sin(angle) * radius}}
-                : {{x: depth * baseSpacing, y: ((state.bundle.graph.hierarchy.nodes[nodeId].leaf_start ?? index) - componentIds[0]) * 12 + (seededUnit(nodeId, 2) - 0.5) * 24}};
+                : {{x: depth * baseSpacing, y: (rank - orderCenter) * Math.max(26, baseSpacing * 0.58) + (seededUnit(nodeId, 2) - 0.5) * 24}};
             anchors.set(nodeId, anchor);
             positions.set(nodeId, {{
                 x: anchor.x + (seededUnit(nodeId, 3) - 0.5) * 18,
@@ -1220,10 +1588,18 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             }});
         }}
 
-        return normalizeComponentLayout(componentIds.map(nodeId => {{
+        const rawItems = componentIds.map(nodeId => {{
             const position = positions.get(nodeId);
             return {{componentId: nodeId, x: position.x, y: position.y, radius: radii.get(nodeId) || 10}};
-        }}), 24);
+        }});
+        const refinedItems = refineLayoutGeometry(rawItems, edgePairs, {{
+            bubblePadding: options.bubblePadding ?? 14,
+            edgePadding: options.edgePadding ?? 8,
+            overlapIterations: options.geometryIterations ?? 5,
+            edgeIterations: options.edgeIterations ?? 3,
+            crossingIterations: options.crossingIterations ?? 2,
+        }});
+        return normalizeComponentLayout(refinedItems, 24);
     }}
 
     function forceDirectedForestLayout(visibleIds, links) {{
@@ -1234,16 +1610,21 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
         const {{adjacency, components}} = clusterGraphComponents(visibleIds, links);
         const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
-            useTreeSeed: false,
-            baseSpacing: 82,
-            repulsion: 7200,
-            spring: 0.08,
-            gravity: 0.010,
+            useTreeSeed: true,
+            baseSpacing: 104,
+            repulsion: 8200,
+            spring: 0.078,
+            gravity: 0.009,
             damping: 0.82,
-            preferredEdgeLength: 118,
-            iterations: Math.min(140, 68 + componentIds.length),
-            collisionStrength: 0.32,
-            anchorStrength: 0.005,
+            preferredEdgeLength: 124,
+            iterations: Math.min(165, 78 + componentIds.length),
+            collisionStrength: 0.46,
+            bubblePadding: 17,
+            edgePadding: 10,
+            geometryIterations: 7,
+            edgeIterations: 4,
+            crossingIterations: 3,
+            anchorStrength: 0.010,
             angleScale: 1,
         }}));
         return packLayouts(componentLayouts, {{gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}});
@@ -1258,15 +1639,20 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         const {{adjacency, components}} = clusterGraphComponents(visibleIds, links);
         const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
             useTreeSeed: true,
-            baseSpacing: 88,
-            repulsion: 5600,
-            spring: 0.11,
+            baseSpacing: 112,
+            repulsion: 9200,
+            spring: 0.09,
             gravity: 0.012,
             damping: 0.84,
-            preferredEdgeLength: 104,
-            iterations: Math.min(160, 84 + componentIds.length),
-            collisionStrength: 0.34,
-            anchorStrength: 0.028,
+            preferredEdgeLength: 132,
+            iterations: Math.min(200, 108 + componentIds.length),
+            collisionStrength: 0.58,
+            bubblePadding: 19,
+            edgePadding: 12,
+            geometryIterations: 8,
+            edgeIterations: 5,
+            crossingIterations: 4,
+            anchorStrength: 0.018,
             angleScale: 0.65,
         }}));
         return packLayouts(componentLayouts, {{gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72}});
@@ -1283,8 +1669,6 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
         const outerPadding = 58;
         const componentGap = 110;
-        const siblingGap = 18;
-        const levelGap = 152;
         const layout = [];
         let currentX = outerPadding;
 
@@ -1298,10 +1682,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                 }});
             }});
             const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(state.bundle.graph.hierarchy.nodes[nodeId].size)]));
+            const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
+            const siblingGap = Math.max(20, maxRadius * 0.42);
+            const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
             const subtreeSpan = new Map();
             [...tree.order].reverse().forEach(nodeId => {{
                 const childIds = tree.children.get(nodeId) || [];
-                const nodeSpan = Math.max(16, Math.min(30, (radii.get(nodeId) || 12) * 0.72 + 8));
+                const nodeSpan = ((radii.get(nodeId) || 12) * 2) + 18;
                 if (childIds.length === 0) {{
                     subtreeSpan.set(nodeId, nodeSpan);
                     return;
@@ -1355,7 +1742,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function layoutCacheKey(visibleIds, links, algorithm) {{
         const linkKey = links.map(link => link.sourceId + ':' + link.targetId + ':' + Number(link.weight).toFixed(4)).join('|');
-        return algorithm + '::' + visibleIds.join(',') + '::' + linkKey;
+        return algorithm + '::' + (exactNodeRenderingEnabled() ? 'exact' : 'sampled') + '::' + (sortComponentsBySizeEnabled() ? 'size' : 'leaf') + '::' + visibleIds.join(',') + '::' + linkKey;
     }}
 
     function computeVisibleLayout(visibleIds, links, algorithm) {{
@@ -1364,6 +1751,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             return state.layoutCache.get(key).map(item => ({{...item}}));
         }}
         const layout = (() => {{
+            if (algorithm === 'grid') {{
+                return gridClusterLayout(visibleIds);
+            }}
             if (algorithm === 'force') {{
                 return forceDirectedForestLayout(visibleIds, links);
             }}
@@ -1596,6 +1986,68 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         clusterContext.restore();
     }}
 
+    function trimmedLinkEndpoints(link) {{
+        const dx = link.right.x - link.left.x;
+        const dy = link.right.y - link.left.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 1e-6) {{
+            return {{startX: link.left.x, startY: link.left.y, endX: link.right.x, endY: link.right.y}};
+        }}
+        const unitX = dx / distance;
+        const unitY = dy / distance;
+        const leftOffset = Math.min(distance / 2, link.left.radius + 3);
+        const rightOffset = Math.min(distance / 2, link.right.radius + 3);
+        return {{
+            startX: link.left.x + (unitX * leftOffset),
+            startY: link.left.y + (unitY * leftOffset),
+            endX: link.right.x - (unitX * rightOffset),
+            endY: link.right.y - (unitY * rightOffset),
+        }};
+    }}
+
+    function renderedLinkSegments(link) {{
+        const trimmed = trimmedLinkEndpoints(link);
+        if (currentLayoutAlgorithm() !== 'tree') {{
+            return [trimmed];
+        }}
+        const middleX = (trimmed.startX + trimmed.endX) / 2;
+        return [
+            {{startX: trimmed.startX, startY: trimmed.startY, endX: middleX, endY: trimmed.startY}},
+            {{startX: middleX, startY: trimmed.startY, endX: middleX, endY: trimmed.endY}},
+            {{startX: middleX, startY: trimmed.endY, endX: trimmed.endX, endY: trimmed.endY}},
+        ].filter(segment => Math.hypot(segment.endX - segment.startX, segment.endY - segment.startY) > 1e-6);
+    }}
+
+    function componentDotGeometry(component, item) {{
+        const sampleCount = componentDotCount(component.size);
+        const dotRadius = componentDotRadius(component.size, item.radius);
+        const availablePackingRadius = Math.max(0, item.radius - dotRadius - 0.6);
+        const targetPackingRadius = exactNodeRenderingEnabled()
+            ? availablePackingRadius
+            : Math.max(
+                dotRadius * 1.15,
+                dotRadius * Math.sqrt(Math.max(1, sampleCount)) * (sampleCount <= 6 ? 1.15 : 1.55),
+            );
+        const packingRadius = exactNodeRenderingEnabled()
+            ? availablePackingRadius
+            : Math.min(availablePackingRadius, targetPackingRadius);
+        return {{sampleCount, dotRadius, packingRadius}};
+    }}
+
+    function componentSelectionState(members) {{
+        let selectedCount = 0;
+        members.forEach(nodeIndex => {{
+            if (state.selectedNodeIndices.has(nodeIndex)) {{
+                selectedCount += 1;
+            }}
+        }});
+        return {{
+            selectedCount,
+            anySelected: selectedCount > 0,
+            allSelected: members.length > 0 && selectedCount === members.length,
+        }};
+    }}
+
     function renderClusterView() {{
         clusterContext.clearRect(0, 0, clusterCanvas.width, clusterCanvas.height);
         clusterContext.fillStyle = '#fffaf4';
@@ -1608,6 +2060,8 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             return;
         }}
 
+        const selectedNodeOutlines = [];
+
         clusterContext.save();
         clusterContext.translate(state.viewTransform.offsetX, state.viewTransform.offsetY);
         clusterContext.scale(state.viewTransform.scale, state.viewTransform.scale);
@@ -1616,38 +2070,61 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             clusterContext.strokeStyle = 'rgba(92, 106, 112, 0.42)';
             clusterContext.lineWidth = 1.6 / Math.max(state.viewTransform.scale, 0.1);
             clusterContext.beginPath();
-            clusterContext.moveTo(link.left.x, link.left.y);
-            clusterContext.lineTo(link.right.x, link.right.y);
+            const segments = renderedLinkSegments(link);
+            segments.forEach((segment, index) => {{
+                if (index === 0) {{
+                    clusterContext.moveTo(segment.startX, segment.startY);
+                }} else {{
+                    clusterContext.lineTo(segment.startX, segment.startY);
+                }}
+                clusterContext.lineTo(segment.endX, segment.endY);
+            }});
             clusterContext.stroke();
         }});
 
         state.visibleLayout.forEach(item => {{
             const component = state.bundle.graph.hierarchy.nodes[item.componentId];
             const members = componentMembers(item.componentId);
-            const isSelected = members.some(nodeIndex => state.selectedNodeIndices.has(nodeIndex));
+            const selectionState = componentSelectionState(members);
 
             clusterContext.fillStyle = 'rgba(248, 243, 235, 0.95)';
-            clusterContext.strokeStyle = isSelected ? '#1e2a2f' : '#c8b8a6';
-            clusterContext.lineWidth = (isSelected ? 3 : 1.5) / Math.max(state.viewTransform.scale, 0.1);
+            clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c8b8a6';
+            clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / Math.max(state.viewTransform.scale, 0.1);
             clusterContext.beginPath();
             clusterContext.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
             clusterContext.fill();
             clusterContext.stroke();
 
-            const sampleCount = Math.min(component.size, 140);
+            const {{sampleCount, dotRadius, packingRadius}} = componentDotGeometry(component, item);
             for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {{
                 const memberIndex = members[Math.floor(sampleIndex * members.length / sampleCount)];
-                const angle = sampleIndex * 2.399963229728653;
-                const distance = component.size === 1 ? 0 : Math.sqrt((sampleIndex + 0.5) / sampleCount) * Math.max(0, item.radius - 8);
-                const dotX = item.x + Math.cos(angle) * distance;
-                const dotY = item.y + Math.sin(angle) * distance;
+                const offset = componentDotOffset(sampleIndex, sampleCount, packingRadius);
+                const dotX = item.x + offset.x;
+                const dotY = item.y + offset.y;
                 clusterContext.fillStyle = nodeColor(memberIndex);
                 clusterContext.beginPath();
-                clusterContext.arc(dotX, dotY, component.size === 1 ? 4.8 / Math.max(state.viewTransform.scale, 0.35) : 2.6 / Math.max(state.viewTransform.scale, 0.35), 0, Math.PI * 2);
+                clusterContext.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
                 clusterContext.fill();
+                if (!selectionState.allSelected && state.selectedNodeIndices.has(memberIndex)) {{
+                    selectedNodeOutlines.push({{x: dotX, y: dotY, radius: dotRadius}});
+                }}
             }}
         }});
         clusterContext.restore();
+
+        if (selectedNodeOutlines.length > 0) {{
+            clusterContext.save();
+            clusterContext.strokeStyle = '#1e2a2f';
+            clusterContext.lineWidth = 1.8;
+            selectedNodeOutlines.forEach(outline => {{
+                const screenPoint = worldToScreenPoint(outline.x, outline.y);
+                const screenRadius = Math.max(3, (outline.radius * state.viewTransform.scale) + 1.6);
+                clusterContext.beginPath();
+                clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, Math.PI * 2);
+                clusterContext.stroke();
+            }});
+            clusterContext.restore();
+        }}
 
         if (showEdgeScoresEnabled() && state.viewTransform.scale >= 0.16) {{
             state.splitLinks.forEach(link => {{
@@ -1706,21 +2183,24 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
 
         const minClusterSize = Math.max(1, Number(document.getElementById('min-cluster-size').value) || 1);
+        const layoutAlgorithm = currentLayoutAlgorithm();
         const thresholdValue = selectedThresholdValue();
         const activeClusterIds = activeClustersAtThreshold(thresholdValue);
         const visibleGraph = mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnlyEnabled());
-        const visibleLayout = computeVisibleLayout(visibleGraph.visibleIds, visibleGraph.links, currentLayoutAlgorithm());
+        const visibleLayout = computeVisibleLayout(visibleGraph.visibleIds, visibleGraph.links, layoutAlgorithm);
         const layoutById = new Map(visibleLayout.map(item => [item.componentId, item]));
-        const links = visibleGraph.links
-            .map(link => {{
-                const left = layoutById.get(link.sourceId);
-                const right = layoutById.get(link.targetId);
-                if (!left || !right) {{
-                    return null;
-                }}
-                return {{left, right, threshold: link.weight}};
-            }})
-            .filter(Boolean);
+        const links = layoutAlgorithm === 'grid'
+            ? []
+            : visibleGraph.links
+                .map(link => {{
+                    const left = layoutById.get(link.sourceId);
+                    const right = layoutById.get(link.targetId);
+                    if (!left || !right) {{
+                        return null;
+                    }}
+                    return {{left, right, threshold: link.weight}};
+                }})
+                .filter(Boolean);
 
         state.activeClusters = activeClusterIds;
         state.visibleClusters = visibleGraph.visibleIds;
@@ -1783,7 +2263,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             : (
                 selected.length > 250
                     ? 'Showing the first 250 selected rows in the table. Export includes the full selection.'
-                    : 'Click a cluster to toggle it, or Shift-drag a box to add multiple clusters.'
+                    : 'Ctrl-click a node to toggle it individually, click a cluster to toggle it, or Shift-drag a box to add multiple clusters.'
             );
         document.getElementById('export-selected').disabled = !state.bundle;
         document.getElementById('clear-selection').disabled = selected.length === 0;
@@ -1864,6 +2344,51 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         updateMetadataTable();
     }}
 
+    function toggleSelectionForNode(nodeIndex) {{
+        if (state.selectedNodeIndices.has(nodeIndex)) {{
+            state.selectedNodeIndices.delete(nodeIndex);
+        }} else {{
+            state.selectedNodeIndices.add(nodeIndex);
+        }}
+        renderClusterView();
+        updateMetadataTable();
+    }}
+
+    function hitTestNodeAt(screenX, screenY) {{
+        const worldPoint = screenToWorldPoint(screenX, screenY);
+        for (let index = state.visibleLayout.length - 1; index >= 0; index--) {{
+            const item = state.visibleLayout[index];
+            const dx = worldPoint.x - item.x;
+            const dy = worldPoint.y - item.y;
+            if ((dx * dx) + (dy * dy) > item.radius * item.radius) {{
+                continue;
+            }}
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const members = componentMembers(item.componentId);
+            const {{sampleCount, dotRadius, packingRadius}} = componentDotGeometry(component, item);
+            const hitRadius = Math.max(dotRadius, 5 / Math.max(state.viewTransform.scale, 0.1));
+            let nearestNodeIndex = null;
+            let nearestDistanceSq = Infinity;
+            for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {{
+                const memberIndex = members[Math.floor(sampleIndex * members.length / sampleCount)];
+                const offset = componentDotOffset(sampleIndex, sampleCount, packingRadius);
+                const nodeX = item.x + offset.x;
+                const nodeY = item.y + offset.y;
+                const nodeDx = worldPoint.x - nodeX;
+                const nodeDy = worldPoint.y - nodeY;
+                const distanceSq = (nodeDx * nodeDx) + (nodeDy * nodeDy);
+                if (distanceSq <= hitRadius * hitRadius && distanceSq < nearestDistanceSq) {{
+                    nearestDistanceSq = distanceSq;
+                    nearestNodeIndex = memberIndex;
+                }}
+            }}
+            if (nearestNodeIndex !== null) {{
+                return nearestNodeIndex;
+            }}
+        }}
+        return null;
+    }}
+
     function hitTestComponentAt(screenX, screenY) {{
         const worldPoint = screenToWorldPoint(screenX, screenY);
         for (let index = state.visibleLayout.length - 1; index >= 0; index--) {{
@@ -1924,6 +2449,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             return;
         }}
         const point = canvasCoordinatesFromEvent(event);
+        if (event.ctrlKey || event.metaKey) {{
+            const nodeIndex = hitTestNodeAt(point.x, point.y);
+            if (nodeIndex !== null) {{
+                toggleSelectionForNode(nodeIndex);
+            }}
+            return;
+        }}
         const hit = hitTestComponentAt(point.x, point.y);
         if (hit) {{
             toggleSelectionForComponent(hit.componentId);
@@ -2038,6 +2570,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }});
     document.getElementById('min-cluster-size').addEventListener('input', updateThresholdUI);
     document.getElementById('layout-algorithm').addEventListener('change', () => {{
+        updateComponentSortButton();
         if (!state.bundle) {{
             return;
         }}
@@ -2049,6 +2582,22 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     document.getElementById('show-labels').addEventListener('change', renderClusterView);
     document.getElementById('show-node-counts').addEventListener('change', renderClusterView);
     document.getElementById('show-edge-scores').addEventListener('change', renderClusterView);
+    document.getElementById('exact-node-rendering').addEventListener('change', () => {{
+        if (!state.bundle) {{
+            return;
+        }}
+        drawClusterView(true);
+    }});
+    document.getElementById('sort-components-by-size').addEventListener('click', () => {{
+        const button = document.getElementById('sort-components-by-size');
+        const enabled = button.getAttribute('aria-pressed') === 'true';
+        button.setAttribute('aria-pressed', enabled ? 'false' : 'true');
+        updateComponentSortButton();
+        if (!state.bundle) {{
+            return;
+        }}
+        drawClusterView(true);
+    }});
     document.getElementById('export-selected').addEventListener('click', exportSelection);
     document.getElementById('reset-view').addEventListener('click', () => {{
         fitClusterViewToLayout();
@@ -2067,6 +2616,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }});
 
     warnIfUnsupported();
+    updateComponentSortButton();
     drawSplitChart();
     drawClusterView();
 </script>
