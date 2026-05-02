@@ -1141,9 +1141,6 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
 
     function componentDotRadius(componentSize, bubbleRadius) {{
-        if (currentNodeArrangement() === 'grouped') {{
-            return 1.08;
-        }}
         return 1.95;
     }}
 
@@ -1196,43 +1193,21 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         return arrangement + ':' + componentId + ':' + sampleCount + ':' + spacingKey;
     }}
 
+    function radialDotPositions(sampleCount) {{
+        const positions = [];
+        for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {{
+            const offset = componentDotOffset(sampleIndex, sampleCount, 1);
+            positions.push({{x: offset.x, y: offset.y, sampleIndex}});
+        }}
+        return positions;
+    }}
+
     function radialDotLayout(sampledMembers) {{
+        const positions = radialDotPositions(sampledMembers.length);
         return sampledMembers.map((member, sampleIndex) => {{
-            const offset = componentDotOffset(sampleIndex, sampledMembers.length, 1);
-            return {{memberIndex: member.nodeIndex, x: offset.x, y: offset.y}};
+            const position = positions[sampleIndex];
+            return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
         }});
-    }}
-
-    function rotateNormalizedPoint(point, angle) {{
-        const cosAngle = Math.cos(angle);
-        const sinAngle = Math.sin(angle);
-        return {{
-            x: (point.x * cosAngle) - (point.y * sinAngle),
-            y: (point.x * sinAngle) + (point.y * cosAngle),
-        }};
-    }}
-
-    function groupedChildCircles(leftCount, rightCount, componentId, depth) {{
-        const leftWeight = Math.sqrt(Math.max(1, leftCount));
-        const rightWeight = Math.sqrt(Math.max(1, rightCount));
-        const largerWeight = Math.max(leftWeight, rightWeight);
-        const smallerWeight = Math.min(leftWeight, rightWeight);
-        const margin = 0.06;
-        const gap = 0.05;
-        const sizeScale = Math.min(
-            0.92 / (leftWeight + rightWeight),
-            (1 - margin - (gap / 2)) / Math.max(0.6, (smallerWeight * 0.5) + (largerWeight * 1.5)),
-        );
-        const leftRadius = leftWeight * sizeScale;
-        const rightRadius = rightWeight * sizeScale;
-        const centerDistance = (leftRadius + rightRadius + gap) / 2;
-        const baseAngle = ((depth % 3) * (Math.PI / 3)) + ((seededUnit(componentId, depth + 61) - 0.5) * 0.55);
-        const leftCenter = rotateNormalizedPoint({{x: -centerDistance, y: 0}}, baseAngle);
-        const rightCenter = rotateNormalizedPoint({{x: centerDistance, y: 0}}, baseAngle);
-        return {{
-            left: {{x: leftCenter.x, y: leftCenter.y, radius: leftRadius}},
-            right: {{x: rightCenter.x, y: rightCenter.y, radius: rightRadius}},
-        }};
     }}
 
     function splitSampledMembers(componentId, sampledMembers) {{
@@ -1260,177 +1235,133 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }};
     }}
 
-    function groupedDotGroupsForComponent(componentId, sampledMembers) {{
-        const groups = [{{componentId, members: sampledMembers}}];
-        const targetGroupSize = Math.max(6, Math.ceil(Math.sqrt(sampledMembers.length) * 1.8));
-        const maxGroups = Math.min(10, Math.max(3, Math.ceil(Math.sqrt(sampledMembers.length))));
-
-        while (groups.length < maxGroups) {{
-            let candidateIndex = -1;
-            let candidateSize = -1;
-            for (let index = 0; index < groups.length; index += 1) {{
-                const group = groups[index];
-                if (group.members.length <= targetGroupSize || group.members.length <= candidateSize) {{
-                    continue;
-                }}
-                const split = splitSampledMembers(group.componentId, group.members);
-                if (!split) {{
-                    continue;
-                }}
-                candidateIndex = index;
-                candidateSize = group.members.length;
-            }}
-
-            if (candidateIndex < 0) {{
-                break;
-            }}
-
-            const candidate = groups[candidateIndex];
-            const split = splitSampledMembers(candidate.componentId, candidate.members);
-            if (!split) {{
-                break;
-            }}
-            groups.splice(
-                candidateIndex,
-                1,
-                {{componentId: split.leftId, members: split.leftMembers}},
-                {{componentId: split.rightId, members: split.rightMembers}},
-            );
+    function positionCentroid(positions) {{
+        if (positions.length === 0) {{
+            return {{x: 0, y: 0}};
         }}
-
-        return groups;
+        const sum = positions.reduce((accumulator, position) => {{
+            accumulator.x += position.x;
+            accumulator.y += position.y;
+            return accumulator;
+        }}, {{x: 0, y: 0}});
+        return {{x: sum.x / positions.length, y: sum.y / positions.length}};
     }}
 
-    function groupedDotLayoutForNode(componentId, sampledMembers, depth = 0) {{
-        if (sampledMembers.length <= 1) {{
-            return sampledMembers.map(member => ({{memberIndex: member.nodeIndex, x: 0, y: 0}}));
+    function orderedRadialPositions(positions) {{
+        if (positions.length <= 1) {{
+            return [...positions];
         }}
-
-        if (sampledMembers.length <= 14) {{
-            return radialDotLayout(sampledMembers).map(layout => ({{
-                ...layout,
-                x: layout.x * (sampledMembers.length <= 5 ? 0.72 : 0.88),
-                y: layout.y * (sampledMembers.length <= 5 ? 0.72 : 0.88),
-            }}));
-        }}
-
-        const groups = groupedDotGroupsForComponent(componentId, sampledMembers);
-        if (groups.length <= 1) {{
-            return radialDotLayout(sampledMembers).map(layout => ({{
-                ...layout,
-                x: layout.x * 0.82,
-                y: layout.y * 0.82,
-            }}));
-        }}
-
-        const totalCount = sampledMembers.length;
-        const groupItems = groups.map((group, index) => {{
-            const center = componentDotOffset(index, groups.length, groups.length <= 3 ? 0.22 : 0.34);
-            return {{
-                componentId: index,
-                x: center.x,
-                y: center.y,
-                radius: Math.max(0.16, Math.sqrt(group.members.length / totalCount) * 0.54),
-            }};
+        const centroid = positionCentroid(positions);
+        return [...positions].sort((left, right) => {{
+            const leftAngle = Math.atan2(left.y - centroid.y, left.x - centroid.x);
+            const rightAngle = Math.atan2(right.y - centroid.y, right.x - centroid.x);
+            if (Math.abs(leftAngle - rightAngle) > 1e-6) {{
+                return leftAngle - rightAngle;
+            }}
+            const leftDistance = Math.hypot(left.x - centroid.x, left.y - centroid.y);
+            const rightDistance = Math.hypot(right.x - centroid.x, right.y - centroid.y);
+            return leftDistance - rightDistance || left.sampleIndex - right.sampleIndex;
         }});
-        const refinedItems = refineLayoutGeometry(groupItems, [], {{
-            bubblePadding: 0.045,
-            edgeIterations: 0,
-            crossingIterations: 0,
-            maxPairChecks: 400,
-        }});
+    }}
+
+    function positionClusterScore(positions) {{
+        if (positions.length <= 1) {{
+            return 0;
+        }}
+        const centroid = positionCentroid(positions);
         let maxExtent = 0;
-        refinedItems.forEach(item => {{
-            maxExtent = Math.max(maxExtent, Math.hypot(item.x, item.y) + item.radius);
+        let sumSq = 0;
+        positions.forEach(position => {{
+            const distance = Math.hypot(position.x - centroid.x, position.y - centroid.y);
+            maxExtent = Math.max(maxExtent, distance);
+            sumSq += distance * distance;
         }});
-        const scale = maxExtent > 0.94 ? 0.94 / maxExtent : 1;
-
-        return groups.flatMap((group, index) => {{
-            const groupItem = refinedItems[index];
-            const groupRadius = groupItem.radius * scale;
-            const localScale = groupRadius * 0.9;
-            return radialDotLayout(group.members).map(layout => ({{
-                memberIndex: layout.memberIndex,
-                x: (groupItem.x * scale) + (layout.x * localScale),
-                y: (groupItem.y * scale) + (layout.y * localScale),
-            }}));
-        }});
+        return (maxExtent * 2.4) + (sumSq / positions.length);
     }}
 
-    function normalizedDotOverlapPass(layout, minimumDistance) {{
-        if (layout.length <= 1 || minimumDistance <= 0) {{
-            return layout.map(dot => ({{...dot}}));
+    function splitRadialPositionsForSubclusters(positions, leftCount, componentId, depth = 0) {{
+        if (leftCount <= 0 || leftCount >= positions.length) {{
+            return null;
         }}
+        const centroid = positionCentroid(positions);
+        const candidateCount = 8;
+        const baseAngle = ((depth % 4) * (Math.PI / 8)) + ((seededUnit(componentId, depth + 151) - 0.5) * 0.36);
+        let best = null;
 
-        const refined = layout.map(dot => ({{...dot}}));
-        const seeds = layout.map(dot => ({{x: dot.x, y: dot.y, memberIndex: dot.memberIndex}}));
-        const maxRadius = Math.max(0.82, 0.992 - (minimumDistance * 0.35));
+        for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++) {{
+            const angle = baseAngle + (candidateIndex * (Math.PI / candidateCount));
+            const axisX = Math.cos(angle);
+            const axisY = Math.sin(angle);
+            const normalX = -axisY;
+            const normalY = axisX;
 
-        for (let iteration = 0; iteration < 96; iteration += 1) {{
-            let overlapCount = 0;
-            for (let leftIndex = 0; leftIndex < refined.length; leftIndex += 1) {{
-                const left = refined[leftIndex];
-                for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex += 1) {{
-                    const right = refined[rightIndex];
-                    let dx = right.x - left.x;
-                    let dy = right.y - left.y;
-                    let distance = Math.hypot(dx, dy);
-                    if (distance < 1e-6) {{
-                        const angle = seededUnit(left.memberIndex + right.memberIndex, iteration + 113) * Math.PI * 2;
-                        dx = Math.cos(angle);
-                        dy = Math.sin(angle);
-                        distance = 1;
+            for (const direction of [1, -1]) {{
+                const sorted = [...positions].sort((left, right) => {{
+                    const leftProjection = ((((left.x - centroid.x) * axisX) + ((left.y - centroid.y) * axisY))) * direction;
+                    const rightProjection = ((((right.x - centroid.x) * axisX) + ((right.y - centroid.y) * axisY))) * direction;
+                    if (Math.abs(leftProjection - rightProjection) > 1e-6) {{
+                        return leftProjection - rightProjection;
                     }}
-                    if (distance >= minimumDistance) {{
-                        continue;
-                    }}
-                    overlapCount += 1;
-                    const shift = ((minimumDistance - distance) / 2) * 1.04;
-                    const shiftX = (dx / distance) * shift;
-                    const shiftY = (dy / distance) * shift;
-                    left.x -= shiftX;
-                    left.y -= shiftY;
-                    right.x += shiftX;
-                    right.y += shiftY;
+                    const leftOrthogonal = ((left.x - centroid.x) * normalX) + ((left.y - centroid.y) * normalY);
+                    const rightOrthogonal = ((right.x - centroid.x) * normalX) + ((right.y - centroid.y) * normalY);
+                    return leftOrthogonal - rightOrthogonal || left.sampleIndex - right.sampleIndex;
+                }});
+                const leftPositions = sorted.slice(0, leftCount);
+                const rightPositions = sorted.slice(leftCount);
+                if (rightPositions.length === 0) {{
+                    continue;
                 }}
-            }}
-
-            let meanX = 0;
-            let meanY = 0;
-            refined.forEach((dot, index) => {{
-                meanX += dot.x;
-                meanY += dot.y;
-            }});
-            meanX /= refined.length;
-            meanY /= refined.length;
-
-            refined.forEach((dot, index) => {{
-                dot.x -= meanX * 0.92;
-                dot.y -= meanY * 0.92;
-                if (iteration >= 10) {{
-                    const pull = overlapCount === 0 ? 0.08 : 0.015;
-                    dot.x = (dot.x * (1 - pull)) + (seeds[index].x * pull);
-                    dot.y = (dot.y * (1 - pull)) + (seeds[index].y * pull);
+                const score = positionClusterScore(leftPositions) + positionClusterScore(rightPositions);
+                if (!best || score < best.score) {{
+                    best = {{score, leftPositions, rightPositions}};
                 }}
-                const distance = Math.hypot(dot.x, dot.y);
-                if (distance > maxRadius) {{
-                    const scale = maxRadius / distance;
-                    dot.x *= scale;
-                    dot.y *= scale;
-                }}
-            }});
-
-            if (overlapCount === 0 && iteration >= 6) {{
-                break;
             }}
         }}
 
-        return refined;
+        return best
+            ? {{leftPositions: best.leftPositions, rightPositions: best.rightPositions}}
+            : null;
+    }}
+
+    function assignMembersToRadialPositions(componentId, sampledMembers, positions, depth = 0) {{
+        if (sampledMembers.length <= 1 || positions.length <= 1) {{
+            return sampledMembers.map((member, index) => {{
+                const position = positions[index] || {{x: 0, y: 0, sampleIndex: index}};
+                return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
+            }});
+        }}
+
+        const split = splitSampledMembers(componentId, sampledMembers);
+        if (!split || sampledMembers.length <= 4) {{
+            const orderedPositions = orderedRadialPositions(positions);
+            return sampledMembers.map((member, index) => {{
+                const position = orderedPositions[index];
+                return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
+            }});
+        }}
+
+        const positionSplit = splitRadialPositionsForSubclusters(positions, split.leftMembers.length, componentId, depth);
+        if (!positionSplit) {{
+            const orderedPositions = orderedRadialPositions(positions);
+            return sampledMembers.map((member, index) => {{
+                const position = orderedPositions[index];
+                return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
+            }});
+        }}
+
+        return [
+            ...assignMembersToRadialPositions(split.leftId, split.leftMembers, positionSplit.leftPositions, depth + 1),
+            ...assignMembersToRadialPositions(split.rightId, split.rightMembers, positionSplit.rightPositions, depth + 1),
+        ];
+    }}
+
+    function groupedDotLayoutForNode(componentId, sampledMembers) {{
+        return assignMembersToRadialPositions(componentId, sampledMembers, radialDotPositions(sampledMembers.length));
     }}
 
     function normalizedComponentDotLayout(componentId, sampleCount, minimumDistance = 0) {{
         const arrangement = currentNodeArrangement();
-        const spacingKey = minimumDistance > 0 ? minimumDistance.toFixed(4) : 'base';
+        const spacingKey = arrangement === 'grouped' ? 'radial-reassigned' : 'radial-direct';
         const cacheKey = dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey);
         const cached = state.dotLayoutCache.get(cacheKey);
         if (cached) {{
@@ -1438,12 +1369,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
 
         const sampledMembers = sampledMembersForComponent(componentId, sampleCount);
-        const seedLayout = arrangement === 'radial'
-            ? radialDotLayout(sampledMembers)
-            : groupedDotLayoutForNode(componentId, sampledMembers);
         const layout = arrangement === 'grouped'
-            ? normalizedDotOverlapPass(seedLayout, minimumDistance)
-            : seedLayout;
+            ? groupedDotLayoutForNode(componentId, sampledMembers)
+            : radialDotLayout(sampledMembers);
         state.dotLayoutCache.set(cacheKey, layout);
         return layout;
     }}
