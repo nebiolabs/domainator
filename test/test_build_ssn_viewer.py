@@ -204,6 +204,18 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'componentSelectionState' in html_content
         assert 'toggleSelectionForNode' in html_content
         assert 'hitTestNodeAt' in html_content
+        assert 'metadata-sort-button' in html_content
+        assert 'toggleMetadataSort' in html_content
+        assert 'sortedMetadataNodeIndices' in html_content
+        assert 'metadata-filter' in html_content
+        assert 'metadata-select-nodes' in html_content
+        assert 'metadata-reset-sort' in html_content
+        assert 'metadata-null-order' in html_content
+        assert 'filteredMetadataNodeIndices' in html_content
+        assert 'formatMetadataDisplayValue' in html_content
+        assert 'toggleMetadataRowSelection' in html_content
+        assert 'metadataRowSelectionAnchor' in html_content
+        assert 'selectNodesFromMetadataRows' in html_content
         assert 'layout-algorithm' in html_content
         assert 'Layout algorithm' in html_content
         assert '<option value="tree">Tree</option>' in html_content
@@ -222,3 +234,9 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<button id="sort-components-by-size" type="button" aria-pressed="true" disabled>' in html_content
         assert 'initialPosition: 0' in html_content
         assert 'reset-view' in html_content
+        assert 'node-arrangement' in html_content
+        assert 'Grouped subclusters' in html_content
+        assert 'Radial split order' in html_content
+        assert 'groupedDotLayoutForNode' in html_content
+        assert 'normalizedDotOverlapPass' in html_content
+        assert 'normalizedComponentDotLayout' in html_content

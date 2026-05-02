@@ -121,7 +121,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
     .control input,
     .control select,
-    .toolbar button {{
+    .toolbar button,
+    .toolbar input,
+    .toolbar select {{
         width: 100%;
         border: 1px solid var(--line);
         background: var(--panel-strong);
@@ -160,6 +162,12 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     .toolbar button:disabled {{
         opacity: 0.45;
         cursor: not-allowed;
+    }}
+    .toolbar input,
+    .toolbar select {{
+        width: auto;
+        min-width: 170px;
+        flex: 1 1 200px;
     }}
     .split-topline {{
         display: block;
@@ -258,6 +266,52 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         top: 0;
         background: #fffaf4;
         z-index: 1;
+    }}
+    tbody tr {{
+        transition: background 140ms ease;
+    }}
+    tbody tr:not(.metadata-empty-row) {{
+        cursor: pointer;
+    }}
+    tbody tr:not(.metadata-empty-row):hover {{
+        background: rgba(200, 85, 61, 0.08);
+    }}
+    .metadata-row-selected {{
+        background: rgba(200, 85, 61, 0.14);
+    }}
+    .metadata-sort-button {{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }}
+    .metadata-sort-button:hover {{
+        color: #7b2f22;
+    }}
+    .metadata-sort-indicator {{
+        color: var(--muted);
+        font-size: 0.82rem;
+        letter-spacing: 0.01em;
+    }}
+    .metadata-cell-number {{
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }}
+    .metadata-cell-null {{
+        color: var(--muted);
+        font-style: italic;
+    }}
+    .metadata-empty-row td {{
+        color: var(--muted);
+        font-style: italic;
     }}
     .pill {{
         display: inline-flex;
@@ -454,6 +508,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                         <input id="exact-node-rendering" type="checkbox" checked />
                         <label for="exact-node-rendering">Render every node and scale bubble area exactly</label>
                     </div>
+                    <div class="control">
+                        <label for="node-arrangement">Node arrangement</label>
+                        <select id="node-arrangement">
+                            <option value="grouped" selected>Grouped subclusters</option>
+                            <option value="radial">Radial split order</option>
+                        </select>
+                    </div>
                     <div class="control checkbox">
                         <input id="leaf-pruning-only" type="checkbox" checked />
                         <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
@@ -472,6 +533,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             <div class="panel-body">
                 <div class="toolbar">
                     <button id="export-selected" disabled>Export table TSV</button>
+                    <button id="metadata-select-nodes" type="button" disabled>Select nodes</button>
+                    <button id="metadata-reset-sort" type="button" disabled>Reset table sort</button>
+                    <input id="metadata-filter" type="search" placeholder="Search node_id and metadata" disabled />
+                    <select id="metadata-null-order" disabled>
+                        <option value="last" selected>Nulls last</option>
+                        <option value="first">Nulls first</option>
+                    </select>
                 </div>
                 <div class="table-wrap">
                     <table id="metadata-table">
@@ -492,14 +560,18 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         activeClusters: [],
         visibleClusters: [],
         selectedNodeIndices: new Set(),
+        selectedMetadataNodeIndices: new Set(),
+        metadataRowSelectionAnchor: null,
         visibleLayout: [],
         splitLinks: [],
         sliderModel: null,
+        metadataSort: {{columnKey: null, direction: 'asc'}},
         viewTransform: {{scale: 1, offsetX: 0, offsetY: 0, minScale: 0.02, maxScale: 10}},
         selectionBox: null,
         dragState: null,
         suppressClick: false,
         layoutCache: new Map(),
+        dotLayoutCache: new Map(),
     }};
 
     const splitCanvas = document.getElementById('split-chart');
@@ -557,7 +629,11 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         state.metadataColumns = bundle.metadata.columns || [];
         state.metadataRows = bundle.metadata.rows || [];
         state.metadataByNodeIndex = state.metadataRows;
+        state.metadataSort = {{columnKey: null, direction: 'asc'}};
         state.selectedNodeIndices = new Set();
+        state.selectedMetadataNodeIndices = new Set();
+        state.metadataRowSelectionAnchor = null;
+        state.dotLayoutCache = new Map();
         state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
 
         populateMetadataControls();
@@ -570,6 +646,12 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         document.getElementById('sort-components-by-size').disabled = false;
         document.getElementById('reset-view').disabled = false;
         document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
+        document.getElementById('metadata-select-nodes').disabled = true;
+        document.getElementById('metadata-reset-sort').disabled = true;
+        document.getElementById('metadata-filter').disabled = false;
+        document.getElementById('metadata-filter').value = '';
+        document.getElementById('metadata-null-order').disabled = false;
+        document.getElementById('metadata-null-order').value = 'last';
         setStatus('Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.');
         updateThresholdUI();
     }}
@@ -1059,6 +1141,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
 
     function componentDotRadius(componentSize, bubbleRadius) {{
+        if (currentNodeArrangement() === 'grouped') {{
+            return 1.08;
+        }}
         return 1.95;
     }}
 
@@ -1087,6 +1172,280 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             x: Math.cos(angle) * distance,
             y: Math.sin(angle) * distance,
         }};
+    }}
+
+    function currentNodeArrangement() {{
+        return document.getElementById('node-arrangement').value || 'grouped';
+    }}
+
+    function sampledMembersForComponent(componentId, sampleCount) {{
+        const hierarchy = state.bundle.graph.hierarchy;
+        const component = hierarchy.nodes[componentId];
+        const sampledMembers = [];
+        for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {{
+            const leafPosition = component.leaf_start + Math.floor(sampleIndex * component.leaf_count / sampleCount);
+            sampledMembers.push({{
+                nodeIndex: hierarchy.leaf_order[leafPosition],
+                leafPosition,
+            }});
+        }}
+        return sampledMembers;
+    }}
+
+    function dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey = 'base') {{
+        return arrangement + ':' + componentId + ':' + sampleCount + ':' + spacingKey;
+    }}
+
+    function radialDotLayout(sampledMembers) {{
+        return sampledMembers.map((member, sampleIndex) => {{
+            const offset = componentDotOffset(sampleIndex, sampledMembers.length, 1);
+            return {{memberIndex: member.nodeIndex, x: offset.x, y: offset.y}};
+        }});
+    }}
+
+    function rotateNormalizedPoint(point, angle) {{
+        const cosAngle = Math.cos(angle);
+        const sinAngle = Math.sin(angle);
+        return {{
+            x: (point.x * cosAngle) - (point.y * sinAngle),
+            y: (point.x * sinAngle) + (point.y * cosAngle),
+        }};
+    }}
+
+    function groupedChildCircles(leftCount, rightCount, componentId, depth) {{
+        const leftWeight = Math.sqrt(Math.max(1, leftCount));
+        const rightWeight = Math.sqrt(Math.max(1, rightCount));
+        const largerWeight = Math.max(leftWeight, rightWeight);
+        const smallerWeight = Math.min(leftWeight, rightWeight);
+        const margin = 0.06;
+        const gap = 0.05;
+        const sizeScale = Math.min(
+            0.92 / (leftWeight + rightWeight),
+            (1 - margin - (gap / 2)) / Math.max(0.6, (smallerWeight * 0.5) + (largerWeight * 1.5)),
+        );
+        const leftRadius = leftWeight * sizeScale;
+        const rightRadius = rightWeight * sizeScale;
+        const centerDistance = (leftRadius + rightRadius + gap) / 2;
+        const baseAngle = ((depth % 3) * (Math.PI / 3)) + ((seededUnit(componentId, depth + 61) - 0.5) * 0.55);
+        const leftCenter = rotateNormalizedPoint({{x: -centerDistance, y: 0}}, baseAngle);
+        const rightCenter = rotateNormalizedPoint({{x: centerDistance, y: 0}}, baseAngle);
+        return {{
+            left: {{x: leftCenter.x, y: leftCenter.y, radius: leftRadius}},
+            right: {{x: rightCenter.x, y: rightCenter.y, radius: rightRadius}},
+        }};
+    }}
+
+    function splitSampledMembers(componentId, sampledMembers) {{
+        const hierarchy = state.bundle.graph.hierarchy;
+        const component = hierarchy.nodes[componentId];
+        if (!component || component.kind === 'leaf') {{
+            return null;
+        }}
+        const leftNode = hierarchy.nodes[component.left];
+        const leftBoundary = leftNode.leaf_start + leftNode.leaf_count;
+        let splitIndex = sampledMembers.findIndex(member => member.leafPosition >= leftBoundary);
+        if (splitIndex < 0) {{
+            splitIndex = sampledMembers.length;
+        }}
+        const leftMembers = sampledMembers.slice(0, splitIndex);
+        const rightMembers = sampledMembers.slice(splitIndex);
+        if (leftMembers.length === 0 || rightMembers.length === 0) {{
+            return null;
+        }}
+        return {{
+            leftId: component.left,
+            rightId: component.right,
+            leftMembers,
+            rightMembers,
+        }};
+    }}
+
+    function groupedDotGroupsForComponent(componentId, sampledMembers) {{
+        const groups = [{{componentId, members: sampledMembers}}];
+        const targetGroupSize = Math.max(6, Math.ceil(Math.sqrt(sampledMembers.length) * 1.8));
+        const maxGroups = Math.min(10, Math.max(3, Math.ceil(Math.sqrt(sampledMembers.length))));
+
+        while (groups.length < maxGroups) {{
+            let candidateIndex = -1;
+            let candidateSize = -1;
+            for (let index = 0; index < groups.length; index += 1) {{
+                const group = groups[index];
+                if (group.members.length <= targetGroupSize || group.members.length <= candidateSize) {{
+                    continue;
+                }}
+                const split = splitSampledMembers(group.componentId, group.members);
+                if (!split) {{
+                    continue;
+                }}
+                candidateIndex = index;
+                candidateSize = group.members.length;
+            }}
+
+            if (candidateIndex < 0) {{
+                break;
+            }}
+
+            const candidate = groups[candidateIndex];
+            const split = splitSampledMembers(candidate.componentId, candidate.members);
+            if (!split) {{
+                break;
+            }}
+            groups.splice(
+                candidateIndex,
+                1,
+                {{componentId: split.leftId, members: split.leftMembers}},
+                {{componentId: split.rightId, members: split.rightMembers}},
+            );
+        }}
+
+        return groups;
+    }}
+
+    function groupedDotLayoutForNode(componentId, sampledMembers, depth = 0) {{
+        if (sampledMembers.length <= 1) {{
+            return sampledMembers.map(member => ({{memberIndex: member.nodeIndex, x: 0, y: 0}}));
+        }}
+
+        if (sampledMembers.length <= 14) {{
+            return radialDotLayout(sampledMembers).map(layout => ({{
+                ...layout,
+                x: layout.x * (sampledMembers.length <= 5 ? 0.72 : 0.88),
+                y: layout.y * (sampledMembers.length <= 5 ? 0.72 : 0.88),
+            }}));
+        }}
+
+        const groups = groupedDotGroupsForComponent(componentId, sampledMembers);
+        if (groups.length <= 1) {{
+            return radialDotLayout(sampledMembers).map(layout => ({{
+                ...layout,
+                x: layout.x * 0.82,
+                y: layout.y * 0.82,
+            }}));
+        }}
+
+        const totalCount = sampledMembers.length;
+        const groupItems = groups.map((group, index) => {{
+            const center = componentDotOffset(index, groups.length, groups.length <= 3 ? 0.22 : 0.34);
+            return {{
+                componentId: index,
+                x: center.x,
+                y: center.y,
+                radius: Math.max(0.16, Math.sqrt(group.members.length / totalCount) * 0.54),
+            }};
+        }});
+        const refinedItems = refineLayoutGeometry(groupItems, [], {{
+            bubblePadding: 0.045,
+            edgeIterations: 0,
+            crossingIterations: 0,
+            maxPairChecks: 400,
+        }});
+        let maxExtent = 0;
+        refinedItems.forEach(item => {{
+            maxExtent = Math.max(maxExtent, Math.hypot(item.x, item.y) + item.radius);
+        }});
+        const scale = maxExtent > 0.94 ? 0.94 / maxExtent : 1;
+
+        return groups.flatMap((group, index) => {{
+            const groupItem = refinedItems[index];
+            const groupRadius = groupItem.radius * scale;
+            const localScale = groupRadius * 0.9;
+            return radialDotLayout(group.members).map(layout => ({{
+                memberIndex: layout.memberIndex,
+                x: (groupItem.x * scale) + (layout.x * localScale),
+                y: (groupItem.y * scale) + (layout.y * localScale),
+            }}));
+        }});
+    }}
+
+    function normalizedDotOverlapPass(layout, minimumDistance) {{
+        if (layout.length <= 1 || minimumDistance <= 0) {{
+            return layout.map(dot => ({{...dot}}));
+        }}
+
+        const refined = layout.map(dot => ({{...dot}}));
+        const seeds = layout.map(dot => ({{x: dot.x, y: dot.y, memberIndex: dot.memberIndex}}));
+        const maxRadius = Math.max(0.82, 0.992 - (minimumDistance * 0.35));
+
+        for (let iteration = 0; iteration < 96; iteration += 1) {{
+            let overlapCount = 0;
+            for (let leftIndex = 0; leftIndex < refined.length; leftIndex += 1) {{
+                const left = refined[leftIndex];
+                for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex += 1) {{
+                    const right = refined[rightIndex];
+                    let dx = right.x - left.x;
+                    let dy = right.y - left.y;
+                    let distance = Math.hypot(dx, dy);
+                    if (distance < 1e-6) {{
+                        const angle = seededUnit(left.memberIndex + right.memberIndex, iteration + 113) * Math.PI * 2;
+                        dx = Math.cos(angle);
+                        dy = Math.sin(angle);
+                        distance = 1;
+                    }}
+                    if (distance >= minimumDistance) {{
+                        continue;
+                    }}
+                    overlapCount += 1;
+                    const shift = ((minimumDistance - distance) / 2) * 1.04;
+                    const shiftX = (dx / distance) * shift;
+                    const shiftY = (dy / distance) * shift;
+                    left.x -= shiftX;
+                    left.y -= shiftY;
+                    right.x += shiftX;
+                    right.y += shiftY;
+                }}
+            }}
+
+            let meanX = 0;
+            let meanY = 0;
+            refined.forEach((dot, index) => {{
+                meanX += dot.x;
+                meanY += dot.y;
+            }});
+            meanX /= refined.length;
+            meanY /= refined.length;
+
+            refined.forEach((dot, index) => {{
+                dot.x -= meanX * 0.92;
+                dot.y -= meanY * 0.92;
+                if (iteration >= 10) {{
+                    const pull = overlapCount === 0 ? 0.08 : 0.015;
+                    dot.x = (dot.x * (1 - pull)) + (seeds[index].x * pull);
+                    dot.y = (dot.y * (1 - pull)) + (seeds[index].y * pull);
+                }}
+                const distance = Math.hypot(dot.x, dot.y);
+                if (distance > maxRadius) {{
+                    const scale = maxRadius / distance;
+                    dot.x *= scale;
+                    dot.y *= scale;
+                }}
+            }});
+
+            if (overlapCount === 0 && iteration >= 6) {{
+                break;
+            }}
+        }}
+
+        return refined;
+    }}
+
+    function normalizedComponentDotLayout(componentId, sampleCount, minimumDistance = 0) {{
+        const arrangement = currentNodeArrangement();
+        const spacingKey = minimumDistance > 0 ? minimumDistance.toFixed(4) : 'base';
+        const cacheKey = dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey);
+        const cached = state.dotLayoutCache.get(cacheKey);
+        if (cached) {{
+            return cached;
+        }}
+
+        const sampledMembers = sampledMembersForComponent(componentId, sampleCount);
+        const seedLayout = arrangement === 'radial'
+            ? radialDotLayout(sampledMembers)
+            : groupedDotLayoutForNode(componentId, sampledMembers);
+        const layout = arrangement === 'grouped'
+            ? normalizedDotOverlapPass(seedLayout, minimumDistance)
+            : seedLayout;
+        state.dotLayoutCache.set(cacheKey, layout);
+        return layout;
     }}
 
     function clusterGraphComponents(visibleIds, links) {{
@@ -2034,6 +2393,18 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         return {{sampleCount, dotRadius, packingRadius}};
     }}
 
+    function componentDotLayout(component, item) {{
+        const {{sampleCount, dotRadius, packingRadius}} = componentDotGeometry(component, item);
+        const minimumDistance = packingRadius > 0 ? Math.min(0.22, (dotRadius * 2.12) / packingRadius) : 0;
+        const normalizedLayout = normalizedComponentDotLayout(component.id, sampleCount, minimumDistance);
+        return normalizedLayout.map(layout => ({{
+            memberIndex: layout.memberIndex,
+            x: item.x + (layout.x * packingRadius),
+            y: item.y + (layout.y * packingRadius),
+            radius: dotRadius,
+        }}));
+    }}
+
     function componentSelectionState(members) {{
         let selectedCount = 0;
         members.forEach(nodeIndex => {{
@@ -2095,20 +2466,16 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             clusterContext.fill();
             clusterContext.stroke();
 
-            const {{sampleCount, dotRadius, packingRadius}} = componentDotGeometry(component, item);
-            for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {{
-                const memberIndex = members[Math.floor(sampleIndex * members.length / sampleCount)];
-                const offset = componentDotOffset(sampleIndex, sampleCount, packingRadius);
-                const dotX = item.x + offset.x;
-                const dotY = item.y + offset.y;
-                clusterContext.fillStyle = nodeColor(memberIndex);
+            const dotLayout = componentDotLayout(component, item);
+            dotLayout.forEach(dot => {{
+                clusterContext.fillStyle = nodeColor(dot.memberIndex);
                 clusterContext.beginPath();
-                clusterContext.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                clusterContext.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
                 clusterContext.fill();
-                if (!selectionState.allSelected && state.selectedNodeIndices.has(memberIndex)) {{
-                    selectedNodeOutlines.push({{x: dotX, y: dotY, radius: dotRadius}});
+                if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {{
+                    selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius}});
                 }}
-            }}
+            }});
         }});
         clusterContext.restore();
 
@@ -2222,9 +2589,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function updateMetadataTable() {{
         const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
-        const displayedNodeIndices = selected.length > 0
+        const baseNodeIndices = selected.length > 0
             ? selected
             : state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex);
+        const filteredNodeIndices = filteredMetadataNodeIndices(baseNodeIndices);
+        const sortedNodeIndices = sortedMetadataNodeIndices(filteredNodeIndices);
+        const renderedNodeIndices = sortedNodeIndices.slice(0, 250);
+        pruneMetadataRowSelection(renderedNodeIndices);
         const thead = document.querySelector('#metadata-table thead');
         const tbody = document.querySelector('#metadata-table tbody');
         thead.innerHTML = '';
@@ -2233,39 +2604,96 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         const headerRow = document.createElement('tr');
         ['node_id', ...state.metadataColumns.map(column => column.name)].forEach(label => {{
             const th = document.createElement('th');
-            th.textContent = label;
+            th.setAttribute('aria-sort', state.metadataSort.columnKey === label ? (state.metadataSort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'metadata-sort-button';
+            button.setAttribute('data-column-key', label);
+            button.setAttribute('title', 'Sort by ' + label);
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = label;
+            const indicatorSpan = document.createElement('span');
+            indicatorSpan.className = 'metadata-sort-indicator';
+            indicatorSpan.textContent = metadataSortIndicator(label);
+            button.appendChild(labelSpan);
+            button.appendChild(indicatorSpan);
+            button.addEventListener('click', () => toggleMetadataSort(label));
+            th.appendChild(button);
             headerRow.appendChild(th);
         }});
         thead.appendChild(headerRow);
 
-        displayedNodeIndices.slice(0, 250).forEach(nodeIndex => {{
-            const row = document.createElement('tr');
-            const idCell = document.createElement('td');
-            idCell.textContent = nodeId(nodeIndex);
-            row.appendChild(idCell);
+        if (sortedNodeIndices.length === 0) {{
+            const emptyRow = document.createElement('tr');
+            emptyRow.className = 'metadata-empty-row';
+            const emptyCell = document.createElement('td');
+            emptyCell.colSpan = state.metadataColumns.length + 1;
+            emptyCell.textContent = metadataFilterText()
+                ? 'No metadata rows match the current filter.'
+                : 'No metadata rows to display.';
+            emptyRow.appendChild(emptyCell);
+            tbody.appendChild(emptyRow);
+        }} else {{
+            renderedNodeIndices.forEach(nodeIndex => {{
+                const row = document.createElement('tr');
+                if (state.selectedMetadataNodeIndices.has(nodeIndex)) {{
+                    row.className = 'metadata-row-selected';
+                }}
+                row.tabIndex = 0;
+                row.setAttribute('aria-selected', state.selectedMetadataNodeIndices.has(nodeIndex) ? 'true' : 'false');
+                row.addEventListener('click', event => {{
+                    if (event.target.closest('button, a, input, select, textarea')) {{
+                        return;
+                    }}
+                    toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, {{range: event.shiftKey}});
+                }});
+                row.addEventListener('keydown', event => {{
+                    if (event.key !== 'Enter' && event.key !== ' ') {{
+                        return;
+                    }}
+                    event.preventDefault();
+                    toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, {{range: event.shiftKey}});
+                }});
+                const idCell = document.createElement('td');
+                idCell.textContent = nodeId(nodeIndex);
+                row.appendChild(idCell);
 
-            const metadata = state.metadataByNodeIndex[nodeIndex] || [];
-            metadata.forEach(value => {{
-                const cell = document.createElement('td');
-                cell.textContent = formatValue(value);
-                row.appendChild(cell);
+                state.metadataColumns.forEach(column => {{
+                    const value = metadataValue(nodeIndex, column.name);
+                    const cell = document.createElement('td');
+                    const className = metadataCellClass(column.name, value);
+                    if (className) {{
+                        cell.className = className;
+                    }}
+                    cell.textContent = formatMetadataDisplayValue(column.name, value);
+                    row.appendChild(cell);
+                }});
+                tbody.appendChild(row);
             }});
-            tbody.appendChild(row);
-        }});
+        }}
 
         document.getElementById('selection-summary').textContent = selected.length.toLocaleString() + ' nodes selected';
-        document.getElementById('selection-note').textContent = selected.length === 0
+        const sortDescription = metadataSortDescription();
+        const filterText = metadataFilterText();
+        const filterDescription = filterText ? ' matching filter "' + filterText + '"' : '';
+        const metadataSelectionCount = state.selectedMetadataNodeIndices.size;
+        const metadataSelectionDescription = metadataSelectionCount > 0
+            ? metadataSelectionCount.toLocaleString() + ' table rows selected. Click Select nodes to promote them into the graph selection. '
+            : '';
+        document.getElementById('selection-note').textContent = metadataSelectionDescription + (selected.length === 0
             ? (
-                displayedNodeIndices.length > 250
-                    ? 'No clusters selected. Showing the first 250 rows from the full network table.'
-                    : 'No clusters selected. Showing the full network table.'
+                sortedNodeIndices.length > 250
+                    ? 'No clusters selected. Showing the first 250 rows from the full network table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
+                    : 'No clusters selected. Showing the full network table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
             )
             : (
                 selected.length > 250
-                    ? 'Showing the first 250 selected rows in the table. Export includes the full selection.'
-                    : 'Ctrl-click a node to toggle it individually, click a cluster to toggle it, or Shift-drag a box to add multiple clusters.'
-            );
+                    ? 'Showing the first 250 selected rows in the table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '. Export includes the full filtered selection.'
+                    : 'Ctrl-click a node to toggle it individually, click a cluster to toggle it, Shift-drag a box to add multiple clusters, click table rows to stage them, shift-click to select or deselect row ranges, use the search box to filter rows, and click a column header to sort' + (sortDescription ? ' by ' + sortDescription : '') + '.'
+            ));
         document.getElementById('export-selected').disabled = !state.bundle;
+        document.getElementById('metadata-select-nodes').disabled = !state.bundle || metadataSelectionCount === 0;
+        document.getElementById('metadata-reset-sort').disabled = !state.bundle || !state.metadataSort.columnKey;
         document.getElementById('clear-selection').disabled = selected.length === 0;
     }}
 
@@ -2274,9 +2702,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         if (!state.bundle) {{
             return;
         }}
-        const exportedNodeIndices = selected.length > 0
+        const exportedNodeIndices = metadataDisplayNodeIndices(selected.length > 0
             ? selected
-            : state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex);
+            : state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex));
         const header = ['node_id', ...state.metadataColumns.map(column => column.name)];
         const lines = [header.join('\\t')];
         exportedNodeIndices.forEach(nodeIndex => {{
@@ -2308,6 +2736,242 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         document.getElementById('threshold-input').value = stop.threshold_value === null ? '' : String(stop.threshold_value);
         drawSplitChart();
         drawClusterView(resetView);
+        updateMetadataTable();
+    }}
+
+    function metadataSortIndicator(columnKey) {{
+        if (state.metadataSort.columnKey !== columnKey) {{
+            return '↕';
+        }}
+        return state.metadataSort.direction === 'asc' ? '↑' : '↓';
+    }}
+
+    function metadataSortDescription() {{
+        if (!state.metadataSort.columnKey) {{
+            return null;
+        }}
+        return state.metadataSort.columnKey + ' (' + (state.metadataSort.direction === 'asc' ? 'ascending' : 'descending') + ')';
+    }}
+
+    function metadataFilterText() {{
+        const input = document.getElementById('metadata-filter');
+        return input ? input.value.trim().toLowerCase() : '';
+    }}
+
+    function metadataNullPlacement() {{
+        const select = document.getElementById('metadata-null-order');
+        return select ? (select.value || 'last') : 'last';
+    }}
+
+    function isMissingMetadataValue(value) {{
+        return value === null || value === undefined || value === '';
+    }}
+
+    function metadataSortValue(nodeIndex, columnKey) {{
+        if (columnKey === 'node_id') {{
+            return nodeId(nodeIndex);
+        }}
+        const columnIndex = state.metadataColumns.findIndex(column => column.name === columnKey);
+        if (columnIndex < 0) {{
+            return null;
+        }}
+        return state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
+    }}
+
+    function metadataMatchesFilter(nodeIndex, filterText) {{
+        if (!filterText) {{
+            return true;
+        }}
+        if (nodeId(nodeIndex).toLowerCase().includes(filterText)) {{
+            return true;
+        }}
+        const metadata = state.metadataByNodeIndex[nodeIndex] || [];
+        return metadata.some(value => {{
+            if (value === null || value === undefined) {{
+                return false;
+            }}
+            if (Array.isArray(value)) {{
+                return value.join(' ').toLowerCase().includes(filterText);
+            }}
+            return String(value).toLowerCase().includes(filterText);
+        }});
+    }}
+
+    function filteredMetadataNodeIndices(nodeIndices) {{
+        const filterText = metadataFilterText();
+        if (!filterText) {{
+            return [...nodeIndices];
+        }}
+        return nodeIndices.filter(nodeIndex => metadataMatchesFilter(nodeIndex, filterText));
+    }}
+
+    function metadataDisplayNodeIndices(nodeIndices) {{
+        return sortedMetadataNodeIndices(filteredMetadataNodeIndices(nodeIndices));
+    }}
+
+    function pruneMetadataRowSelection(visibleNodeIndices) {{
+        const visibleSet = new Set(visibleNodeIndices);
+        if (state.metadataRowSelectionAnchor !== null && !visibleSet.has(state.metadataRowSelectionAnchor)) {{
+            state.metadataRowSelectionAnchor = null;
+        }}
+        if (state.selectedMetadataNodeIndices.size === 0) {{
+            return;
+        }}
+        state.selectedMetadataNodeIndices = new Set(
+            Array.from(state.selectedMetadataNodeIndices).filter(nodeIndex => visibleSet.has(nodeIndex))
+        );
+    }}
+
+    function clearMetadataRowSelection() {{
+        state.selectedMetadataNodeIndices = new Set();
+        state.metadataRowSelectionAnchor = null;
+    }}
+
+    function toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, options = {{}}) {{
+        const nextSelection = new Set(state.selectedMetadataNodeIndices);
+        if (options.range && state.metadataRowSelectionAnchor !== null) {{
+            const anchorPosition = renderedNodeIndices.indexOf(state.metadataRowSelectionAnchor);
+            const currentPosition = renderedNodeIndices.indexOf(nodeIndex);
+            if (anchorPosition >= 0 && currentPosition >= 0) {{
+                const start = Math.min(anchorPosition, currentPosition);
+                const end = Math.max(anchorPosition, currentPosition);
+                const shouldSelect = !nextSelection.has(nodeIndex);
+                for (let position = start; position <= end; position += 1) {{
+                    const rangeNodeIndex = renderedNodeIndices[position];
+                    if (shouldSelect) {{
+                        nextSelection.add(rangeNodeIndex);
+                    }} else {{
+                        nextSelection.delete(rangeNodeIndex);
+                    }}
+                }}
+            }} else if (nextSelection.has(nodeIndex)) {{
+                nextSelection.delete(nodeIndex);
+            }} else {{
+                nextSelection.add(nodeIndex);
+            }}
+        }} else if (nextSelection.has(nodeIndex)) {{
+            nextSelection.delete(nodeIndex);
+        }} else {{
+            nextSelection.add(nodeIndex);
+        }}
+        state.selectedMetadataNodeIndices = nextSelection;
+        state.metadataRowSelectionAnchor = nodeIndex;
+        updateMetadataTable();
+    }}
+
+    function selectNodesFromMetadataRows() {{
+        if (state.selectedMetadataNodeIndices.size === 0) {{
+            return;
+        }}
+        state.selectedNodeIndices = new Set(state.selectedMetadataNodeIndices);
+        clearMetadataRowSelection();
+        renderClusterView();
+        updateMetadataTable();
+    }}
+
+    function metadataColumnType(columnKey) {{
+        if (columnKey === 'node_id') {{
+            return 'string';
+        }}
+        return metadataColumn(columnKey)?.type || 'string';
+    }}
+
+    function formatMetadataDisplayValue(columnKey, value) {{
+        if (isMissingMetadataValue(value)) {{
+            return '—';
+        }}
+        const columnType = metadataColumnType(columnKey);
+        if (columnType === 'int') {{
+            const numeric = typeof value === 'number' ? value : Number(value);
+            return Number.isFinite(numeric) ? Math.trunc(numeric).toLocaleString() : String(value);
+        }}
+        if (columnType === 'float') {{
+            const numeric = typeof value === 'number' ? value : Number(value);
+            if (!Number.isFinite(numeric)) {{
+                return String(value);
+            }}
+            const absValue = Math.abs(numeric);
+            if (absValue >= 10000 || (absValue > 0 && absValue < 0.001)) {{
+                return numeric.toExponential(3);
+            }}
+            return new Intl.NumberFormat(undefined, {{maximumFractionDigits: 4}}).format(numeric);
+        }}
+        if (columnType === 'bool' || columnType === 'boolean') {{
+            return value ? 'True' : 'False';
+        }}
+        if (Array.isArray(value)) {{
+            return value.join(', ');
+        }}
+        return String(value);
+    }}
+
+    function metadataCellClass(columnKey, value) {{
+        if (isMissingMetadataValue(value)) {{
+            return 'metadata-cell-null';
+        }}
+        const columnType = metadataColumnType(columnKey);
+        return columnType === 'int' || columnType === 'float' ? 'metadata-cell-number' : '';
+    }}
+
+    function compareMetadataValues(leftValue, rightValue) {{
+        if (leftValue === rightValue) {{
+            return 0;
+        }}
+        if (typeof leftValue === 'number' && typeof rightValue === 'number') {{
+            return leftValue - rightValue;
+        }}
+        const leftText = String(leftValue);
+        const rightText = String(rightValue);
+        const leftNumeric = Number(leftText);
+        const rightNumeric = Number(rightText);
+        if (Number.isFinite(leftNumeric) && Number.isFinite(rightNumeric) && leftText.trim() !== '' && rightText.trim() !== '') {{
+            return leftNumeric - rightNumeric;
+        }}
+        return leftText.localeCompare(rightText, undefined, {{numeric: true, sensitivity: 'base'}});
+    }}
+
+    function sortedMetadataNodeIndices(nodeIndices) {{
+        if (!state.metadataSort.columnKey) {{
+            return [...nodeIndices];
+        }}
+        const direction = state.metadataSort.direction === 'desc' ? -1 : 1;
+        const nullPlacement = metadataNullPlacement();
+        return [...nodeIndices].sort((leftIndex, rightIndex) => {{
+            const leftValue = metadataSortValue(leftIndex, state.metadataSort.columnKey);
+            const rightValue = metadataSortValue(rightIndex, state.metadataSort.columnKey);
+            const leftMissing = isMissingMetadataValue(leftValue);
+            const rightMissing = isMissingMetadataValue(rightValue);
+            if (leftMissing || rightMissing) {{
+                if (leftMissing && rightMissing) {{
+                    return nodeId(leftIndex).localeCompare(nodeId(rightIndex), undefined, {{numeric: true, sensitivity: 'base'}});
+                }}
+                return leftMissing
+                    ? (nullPlacement === 'first' ? -1 : 1)
+                    : (nullPlacement === 'first' ? 1 : -1);
+            }}
+            const comparison = compareMetadataValues(
+                leftValue,
+                rightValue,
+            );
+            if (comparison !== 0) {{
+                return comparison * direction;
+            }}
+            return nodeId(leftIndex).localeCompare(nodeId(rightIndex), undefined, {{numeric: true, sensitivity: 'base'}});
+        }});
+    }}
+        document.getElementById('metadata-select-nodes').addEventListener('click', selectNodesFromMetadataRows);
+
+    function toggleMetadataSort(columnKey) {{
+        if (state.metadataSort.columnKey === columnKey) {{
+            state.metadataSort.direction = state.metadataSort.direction === 'asc' ? 'desc' : 'asc';
+        }} else {{
+            state.metadataSort = {{columnKey, direction: 'asc'}};
+        }}
+        updateMetadataTable();
+    }}
+
+    function resetMetadataSort() {{
+        state.metadataSort = {{columnKey: null, direction: 'asc'}};
         updateMetadataTable();
     }}
 
@@ -2364,22 +3028,18 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                 continue;
             }}
             const component = state.bundle.graph.hierarchy.nodes[item.componentId];
-            const members = componentMembers(item.componentId);
-            const {{sampleCount, dotRadius, packingRadius}} = componentDotGeometry(component, item);
+            const dotLayout = componentDotLayout(component, item);
+            const dotRadius = dotLayout.length > 0 ? dotLayout[0].radius : componentDotGeometry(component, item).dotRadius;
             const hitRadius = Math.max(dotRadius, 5 / Math.max(state.viewTransform.scale, 0.1));
             let nearestNodeIndex = null;
             let nearestDistanceSq = Infinity;
-            for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {{
-                const memberIndex = members[Math.floor(sampleIndex * members.length / sampleCount)];
-                const offset = componentDotOffset(sampleIndex, sampleCount, packingRadius);
-                const nodeX = item.x + offset.x;
-                const nodeY = item.y + offset.y;
-                const nodeDx = worldPoint.x - nodeX;
-                const nodeDy = worldPoint.y - nodeY;
+            for (const dot of dotLayout) {{
+                const nodeDx = worldPoint.x - dot.x;
+                const nodeDy = worldPoint.y - dot.y;
                 const distanceSq = (nodeDx * nodeDx) + (nodeDy * nodeDy);
                 if (distanceSq <= hitRadius * hitRadius && distanceSq < nearestDistanceSq) {{
                     nearestDistanceSq = distanceSq;
-                    nearestNodeIndex = memberIndex;
+                    nearestNodeIndex = dot.memberIndex;
                 }}
             }}
             if (nearestNodeIndex !== null) {{
@@ -2588,6 +3248,12 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
         drawClusterView(true);
     }});
+    document.getElementById('node-arrangement').addEventListener('change', () => {{
+        if (!state.bundle) {{
+            return;
+        }}
+        renderClusterView();
+    }});
     document.getElementById('sort-components-by-size').addEventListener('click', () => {{
         const button = document.getElementById('sort-components-by-size');
         const enabled = button.getAttribute('aria-pressed') === 'true';
@@ -2599,12 +3265,16 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         drawClusterView(true);
     }});
     document.getElementById('export-selected').addEventListener('click', exportSelection);
+    document.getElementById('metadata-reset-sort').addEventListener('click', resetMetadataSort);
+    document.getElementById('metadata-filter').addEventListener('input', updateMetadataTable);
+    document.getElementById('metadata-null-order').addEventListener('change', updateMetadataTable);
     document.getElementById('reset-view').addEventListener('click', () => {{
         fitClusterViewToLayout();
         renderClusterView();
     }});
     document.getElementById('clear-selection').addEventListener('click', () => {{
         state.selectedNodeIndices = new Set();
+        clearMetadataRowSelection();
         renderClusterView();
         updateMetadataTable();
     }});
