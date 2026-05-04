@@ -114,6 +114,35 @@ def test_build_ssn_viewer_cluster_counts_match_maxtree():
         assert bundle["graph"]["hierarchy"]["nodes"][8]["leaf_count"] == 5
 
 
+def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
+    data = np.array([
+        [0, 10, 0, 0, 0],
+        [10, 0, 5, 0, 0],
+        [0, 5, 0, 4, 0],
+        [0, 0, 4, 0, 1],
+        [0, 0, 0, 1, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D", "E"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        matrix.write(input_file, output_type="dense")
+
+        build_ssn_viewer.main([
+            "-i", input_file,
+            "-o", bundle_file,
+            "--max_merge_events", "2",
+        ])
+
+        bundle = _read_bundle(bundle_file)
+
+        assert len(bundle["graph"]["merge_event_series"]) == 2
+        assert len(bundle["graph"]["slider_stops"]) == 3
+        assert bundle["graph"]["slider_stops"][0]["threshold_value"] is None
+
+
 def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
     data = np.array([
         [0, 10, 6, 1],

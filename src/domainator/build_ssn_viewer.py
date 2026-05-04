@@ -22,10 +22,12 @@ from domainator.output_guardrails import (
     max_output_gb_to_bytes,
 )
 from domainator.ssn_hierarchy import (
+    DEFAULT_MAX_MERGE_EVENTS,
     MERGE_IMPACT_CHOICES,
     MERGE_IMPACT_MIN_CHILD,
     build_mst_component_hierarchy,
     component_size_summary_by_threshold,
+    filter_merge_event_rows,
     threshold_merge_event_rows,
 )
 from domainator.ssn_viewer_html import write_ssn_viewer_html
@@ -120,12 +122,15 @@ def build_ssn_viewer_bundle(
     metadata_files: List[Union[str, PathLike]] = None,
     subset_labels=None,
     merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
+    max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS,
     color_by: str = None,
     label_by: str = None,
     name: str = None,
 ):
     if merge_impact_metric not in MERGE_IMPACT_CHOICES:
         raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
+    if max_merge_events < 0:
+        raise ValueError("max_merge_events must be >= 0")
 
     matrix = subset_matrix_by_labels(matrix, subset_labels)
     if not matrix.symmetric_labels:
@@ -144,7 +149,10 @@ def build_ssn_viewer_bundle(
 
     tree = MaxTree(matrix)
     component_summary = component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
-    merge_event_series = threshold_merge_event_rows(component_summary)
+    merge_event_series = filter_merge_event_rows(
+        threshold_merge_event_rows(component_summary),
+        max_merge_events=max_merge_events,
+    )
     hierarchy = build_mst_component_hierarchy(tree)
 
     bundle = {
@@ -220,6 +228,8 @@ def main(argv):
                         help="Record a default metadata field for node labels in the viewer bundle.")
     parser.add_argument("--merge_impact_metric", choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric recorded for split events in the bundle.")
+    parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
+                        help="Maximum number of strongest merge events to embed in the viewer bundle threshold slider and split plot. Use 0 to include all merge events.")
     add_max_output_gb_argument(parser)
     parser.add_argument("--config", action=ActionConfigFile)
 
@@ -234,6 +244,7 @@ def main(argv):
             metadata_files=params.metadata,
             subset_labels=subset_labels,
             merge_impact_metric=params.merge_impact_metric,
+            max_merge_events=params.max_merge_events,
             color_by=params.color_by,
             label_by=params.label_by,
             name=bundle_name,

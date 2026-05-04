@@ -557,6 +557,10 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         metadataColumns: [],
         metadataRows: [],
         metadataByNodeIndex: [],
+        metadataColumnByName: new Map(),
+        metadataColumnIndexByName: new Map(),
+        metadataColorInfoByName: new Map(),
+        metadataSearchTextByNodeIndex: [],
         activeClusters: [],
         visibleClusters: [],
         selectedNodeIndices: new Set(),
@@ -572,15 +576,24 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         suppressClick: false,
         layoutCache: new Map(),
         dotLayoutCache: new Map(),
+        pendingThresholdUIFrame: null,
+        pendingThresholdUIResetView: false,
+        pendingMetadataFilterTimer: null,
+        pendingClusterRenderFrame: null,
     }};
 
     const splitCanvas = document.getElementById('split-chart');
     const splitContext = splitCanvas.getContext('2d');
     const clusterCanvas = document.getElementById('cluster-view');
     const clusterContext = clusterCanvas.getContext('2d');
+    const LARGE_BUNDLE_NODE_THRESHOLD = 4000;
 
     function setStatus(message) {{
         document.getElementById('bundle-status').textContent = message;
+    }}
+
+    function isLargeBundle(bundle) {{
+        return (bundle?.graph?.nodes?.length || 0) > LARGE_BUNDLE_NODE_THRESHOLD;
     }}
 
     function browserSupportsBundleLoading() {{
@@ -634,7 +647,14 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         state.selectedMetadataNodeIndices = new Set();
         state.metadataRowSelectionAnchor = null;
         state.dotLayoutCache = new Map();
+        state.layoutCache = new Map();
         state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
+        rebuildMetadataCaches();
+
+        if (isLargeBundle(bundle)) {{
+            document.getElementById('exact-node-rendering').checked = false;
+            document.getElementById('node-arrangement').value = 'radial';
+        }}
 
         populateMetadataControls();
         const slider = document.getElementById('threshold-slider');
@@ -652,8 +672,77 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         document.getElementById('metadata-filter').value = '';
         document.getElementById('metadata-null-order').disabled = false;
         document.getElementById('metadata-null-order').value = 'last';
-        setStatus('Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.');
+        setStatus(
+            'Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.' +
+            (isLargeBundle(bundle)
+                ? ' Exact node rendering was disabled and radial node placement selected automatically for faster startup.'
+                : '')
+        );
         updateThresholdUI();
+        updateMetadataTable();
+    }}
+
+    function rebuildMetadataCaches() {{
+        state.metadataColumnByName = new Map();
+        state.metadataColumnIndexByName = new Map();
+        state.metadataColorInfoByName = new Map();
+
+        state.metadataColumns.forEach((column, columnIndex) => {{
+            state.metadataColumnByName.set(column.name, column);
+            state.metadataColumnIndexByName.set(column.name, columnIndex);
+            if (column.type === 'int' || column.type === 'float') {{
+                state.metadataColorInfoByName.set(column.name, {{type: 'numeric', min: Infinity, max: -Infinity}});
+                return;
+            }}
+            state.metadataColorInfoByName.set(column.name, {{type: 'categorical'}});
+        }});
+
+        state.metadataByNodeIndex.forEach(row => {{
+            if (!row) {{
+                return;
+            }}
+            state.metadataColumns.forEach((column, columnIndex) => {{
+                if (column.type !== 'int' && column.type !== 'float') {{
+                    return;
+                }}
+                const value = row[columnIndex];
+                if (typeof value !== 'number' || Number.isNaN(value)) {{
+                    return;
+                }}
+                const info = state.metadataColorInfoByName.get(column.name);
+                if (!info) {{
+                    return;
+                }}
+                info.min = Math.min(info.min, value);
+                info.max = Math.max(info.max, value);
+            }});
+        }});
+
+        state.metadataColorInfoByName.forEach(info => {{
+            if (info.type !== 'numeric') {{
+                return;
+            }}
+            if (!Number.isFinite(info.min) || !Number.isFinite(info.max)) {{
+                info.min = 0;
+                info.max = 0;
+            }}
+        }});
+
+        state.metadataSearchTextByNodeIndex = state.bundle.graph.nodes.map((nodeName, nodeIndex) => {{
+            const row = state.metadataByNodeIndex[nodeIndex] || [];
+            const parts = [String(nodeName)];
+            row.forEach(value => {{
+                if (value === null || value === undefined) {{
+                    return;
+                }}
+                if (Array.isArray(value)) {{
+                    parts.push(value.join(' '));
+                    return;
+                }}
+                parts.push(String(value));
+            }});
+            return parts.join(' ').toLowerCase();
+        }});
     }}
 
     function buildSliderModel(sourceStops) {{
@@ -870,15 +959,15 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
 
     function metadataColumn(name) {{
-        return state.metadataColumns.find(column => column.name === name) || null;
+        return state.metadataColumnByName.get(name) || null;
     }}
 
     function metadataValue(nodeIndex, columnName) {{
         if (!columnName) {{
             return null;
         }}
-        const columnIndex = state.metadataColumns.findIndex(column => column.name === columnName);
-        if (columnIndex < 0) {{
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (columnIndex === undefined) {{
             return null;
         }}
         return state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
@@ -910,22 +999,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }}
 
     function colorInfo(columnName) {{
-        const column = metadataColumn(columnName);
-        if (!column) {{
-            return null;
-        }}
-        if (column.type === 'int' || column.type === 'float') {{
-            const values = [];
-            state.metadataByNodeIndex.forEach(row => {{
-                const columnIndex = state.metadataColumns.findIndex(item => item.name === columnName);
-                const value = row?.[columnIndex];
-                if (typeof value === 'number' && !Number.isNaN(value)) {{
-                    values.push(value);
-                }}
-            }});
-            return {{type: 'numeric', min: Math.min(...values), max: Math.max(...values)}};
-        }}
-        return {{type: 'categorical'}};
+        return state.metadataColorInfoByName.get(columnName) || null;
     }}
 
     function nodeColor(nodeIndex) {{
@@ -2471,6 +2545,16 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
     }}
 
+    function scheduleClusterRender() {{
+        if (state.pendingClusterRenderFrame !== null) {{
+            return;
+        }}
+        state.pendingClusterRenderFrame = window.requestAnimationFrame(() => {{
+            state.pendingClusterRenderFrame = null;
+            renderClusterView();
+        }});
+    }}
+
     function drawClusterView(resetView = true) {{
         if (!state.bundle) {{
             renderClusterView();
@@ -2664,7 +2748,22 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         document.getElementById('threshold-input').value = stop.threshold_value === null ? '' : String(stop.threshold_value);
         drawSplitChart();
         drawClusterView(resetView);
-        updateMetadataTable();
+    }}
+
+    function scheduleThresholdUI(resetView = true) {{
+        if (!state.bundle) {{
+            return;
+        }}
+        state.pendingThresholdUIResetView = state.pendingThresholdUIResetView || resetView;
+        if (state.pendingThresholdUIFrame !== null) {{
+            return;
+        }}
+        state.pendingThresholdUIFrame = window.requestAnimationFrame(() => {{
+            const nextResetView = state.pendingThresholdUIResetView;
+            state.pendingThresholdUIFrame = null;
+            state.pendingThresholdUIResetView = false;
+            updateThresholdUI(nextResetView);
+        }});
     }}
 
     function metadataSortIndicator(columnKey) {{
@@ -2699,8 +2798,8 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         if (columnKey === 'node_id') {{
             return nodeId(nodeIndex);
         }}
-        const columnIndex = state.metadataColumns.findIndex(column => column.name === columnKey);
-        if (columnIndex < 0) {{
+        const columnIndex = state.metadataColumnIndexByName.get(columnKey);
+        if (columnIndex === undefined) {{
             return null;
         }}
         return state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
@@ -2710,19 +2809,17 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         if (!filterText) {{
             return true;
         }}
-        if (nodeId(nodeIndex).toLowerCase().includes(filterText)) {{
-            return true;
+        return (state.metadataSearchTextByNodeIndex[nodeIndex] || '').includes(filterText);
+    }}
+
+    function scheduleMetadataFilterUpdate(delayMs = 120) {{
+        if (state.pendingMetadataFilterTimer !== null) {{
+            window.clearTimeout(state.pendingMetadataFilterTimer);
         }}
-        const metadata = state.metadataByNodeIndex[nodeIndex] || [];
-        return metadata.some(value => {{
-            if (value === null || value === undefined) {{
-                return false;
-            }}
-            if (Array.isArray(value)) {{
-                return value.join(' ').toLowerCase().includes(filterText);
-            }}
-            return String(value).toLowerCase().includes(filterText);
-        }});
+        state.pendingMetadataFilterTimer = window.setTimeout(() => {{
+            state.pendingMetadataFilterTimer = null;
+            updateMetadataTable();
+        }}, delayMs);
     }}
 
     function filteredMetadataNodeIndices(nodeIndices) {{
@@ -3062,7 +3159,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         state.viewTransform.scale = nextScale;
         state.viewTransform.offsetX = point.x - (anchor.x * nextScale);
         state.viewTransform.offsetY = point.y - (anchor.y * nextScale);
-        renderClusterView();
+        scheduleClusterRender();
     }}, {{passive: false}});
 
     clusterCanvas.addEventListener('mousedown', event => {{
@@ -3090,14 +3187,14 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             state.dragState.moved = state.dragState.moved || Math.abs(dx) > 3 || Math.abs(dy) > 3;
             state.viewTransform.offsetX = state.dragState.originOffsetX + dx;
             state.viewTransform.offsetY = state.dragState.originOffsetY + dy;
-            renderClusterView();
+            scheduleClusterRender();
             return;
         }}
         state.dragState.endX = point.x;
         state.dragState.endY = point.y;
         state.dragState.moved = state.dragState.moved || Math.abs(point.x - state.dragState.startX) > 3 || Math.abs(point.y - state.dragState.startY) > 3;
         state.selectionBox = normalizedSelectionBox(state.dragState);
-        renderClusterView();
+        scheduleClusterRender();
     }});
 
     window.addEventListener('mouseup', () => {{
@@ -3111,7 +3208,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         state.dragState = null;
         state.selectionBox = null;
         clusterCanvas.style.cursor = 'grab';
-        renderClusterView();
+        scheduleClusterRender();
     }});
 
     clusterCanvas.addEventListener('mousemove', event => {{
@@ -3141,12 +3238,12 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
     }});
     document.getElementById('threshold-slider').addEventListener('input', () => {{
-        updateThresholdUI();
+        scheduleThresholdUI(false);
     }});
     document.getElementById('threshold-slider').addEventListener('change', () => {{
         const stop = currentSliderStop();
         snapSliderToStop(stop);
-        updateThresholdUI();
+        scheduleThresholdUI(true);
     }});
     document.getElementById('threshold-input').addEventListener('change', jumpToThresholdValue);
     document.getElementById('threshold-input').addEventListener('keydown', event => {{
@@ -3156,7 +3253,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         event.preventDefault();
         jumpToThresholdValue();
     }});
-    document.getElementById('min-cluster-size').addEventListener('input', updateThresholdUI);
+    document.getElementById('min-cluster-size').addEventListener('input', () => {{
+        scheduleThresholdUI(true);
+    }});
     document.getElementById('layout-algorithm').addEventListener('change', () => {{
         updateComponentSortButton();
         if (!state.bundle) {{
@@ -3164,7 +3263,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
         drawClusterView(true);
     }});
-    document.getElementById('leaf-pruning-only').addEventListener('change', updateThresholdUI);
+    document.getElementById('leaf-pruning-only').addEventListener('change', () => {{
+        scheduleThresholdUI(true);
+    }});
     document.getElementById('color-by').addEventListener('change', renderClusterView);
     document.getElementById('label-by').addEventListener('change', renderClusterView);
     document.getElementById('show-labels').addEventListener('change', renderClusterView);
@@ -3194,7 +3295,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     }});
     document.getElementById('export-selected').addEventListener('click', exportSelection);
     document.getElementById('metadata-reset-sort').addEventListener('click', resetMetadataSort);
-    document.getElementById('metadata-filter').addEventListener('input', updateMetadataTable);
+    document.getElementById('metadata-filter').addEventListener('input', () => {{
+        scheduleMetadataFilterUpdate();
+    }});
     document.getElementById('metadata-null-order').addEventListener('change', updateMetadataTable);
     document.getElementById('reset-view').addEventListener('click', () => {{
         fitClusterViewToLayout();
