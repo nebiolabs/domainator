@@ -63,6 +63,22 @@ def test_select_by_contig_6(shared_datadir):
         seqs = list(utils.parse_seqfiles([out]))
         assert len(seqs) == 1
 
+def test_select_by_contig_cds_count_lb_1(shared_datadir):
+    
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction_pept.gb"
+        select_by_contig.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--cds_count_lb", "6", "-o", out])
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 4
+
+def test_select_by_contig_cds_count_ub_1(shared_datadir):
+    
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction_pept.gb"
+        select_by_contig.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--cds_count_ub", "5", "-o", out])
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 0
+
 def test_select_by_conting_domain_expression_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
