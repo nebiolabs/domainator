@@ -28,19 +28,6 @@ from domainator.output_guardrails import add_max_output_gb_argument, enforce_mat
 from domainator.transform_matrix import MODES
 import psutil
 
-#TODO: maybe merge with compare_contigs.py? Domainatorify more than it is.
-
-#TODO: ESM embeddings! (we could do direct PCA on the embeddings, or convert the embeddings to pairwise distances then do PCA or UMAP)
-#TODO: extract scores from domainator annotations
-#TODO: BigScape/CORASON-style scoring for domainator/hmm scores, also support anti-smash gb files (See compare_contigs)
-#TODO: rank is kind of weird, and also not compatible with sparse data I think it should be 0 as the worst and num_rows as the best.
-#TODO: upgrade to scipy 1.8
-#TODO: it's more like seq_similarity than seq_dist
-#TODO: add support for comparing hmm profiles, and/or MSAs
-#TODO: maybe negative log evalue output?
-
-#TODO: with sparse output, I think we are destroying singletons, can we account for that somehow, maybe by having a 1-column line?
-
 CmpResult = namedtuple("CmpResult", ["score", "input", "reference"])
 
 def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode, max_hsps=1) -> List[CmpResult]:
@@ -338,31 +325,26 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
         raise SystemExit(str(exc)) from None
 
 def main(argv):
-    #TODO: support for nucleotide sequences? (see compare_contigs.py)
+    #TODO: support for nucleotide sequences? (see compare_contigs.py), can be implemented easily with nhmmer, without adding new dependencies.
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     parser.add_argument('-i', '--input', type=str, required=True,
-                        help="Input query file.")
+                        help="Input query file. Queries in the input file will be compared to the reference sequences/profiles. This can be a fasta, genbank, or hmm file.")
 
     parser.add_argument('--input_type', type=str, required=False, default=None, choices={"fasta", "genbank", "hmm"},
-                        help="File type for the sequence file")
+                        help="File type for the sequence file.")
 
-    parser.add_argument('-r', "--reference", type=str, required=True,
-                        help="Reference file.")
+    parser.add_argument('-r', "--reference", type=str, required=False,
+                        help="Reference file. If not provided, the input file will be used as the reference, and the output will be a pairwise similarity matrix between the input sequences/profiles. This can be a fasta, genbank, or hmm file.")
 
     parser.add_argument('--reference_type', type=str, required=False, default=None, choices={"fasta", "genbank", "hmm"},
                         help="File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.")
 
-    # TODO: is it weird to not have a -o parameter?
-    # parser.add_argument('-o', '--output', type=str, required=True,
-    #                     help="file to write the distance matrix to as a sparse hdf5.")
     parser.add_argument("--dense", type=str, default=None, help="Write a dense distance matrix hdf5 file to this path.")
     
     parser.add_argument("--dense_text", type=str, default=None, help="Write a dense distance matrix tsv file to this path.")
     
     parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
 
-    # parser.add_argument("--hist", type=str, default=None, help="Write a histogram figure of the data to this path.") #TODO: implement this, maybe as a plotly html?, how should 0s (1s in dist mode) be handled, maybe write a count but don't include in hist, maybe there is other information that would be helpful in a report, like number of singletons?
-    
     parser.add_argument('--lb', default=0, type=float, required=False,
                         help="Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).")
 
@@ -373,12 +355,6 @@ def main(argv):
     parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices={"diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"},
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
 
-    #TODO: random subset of references
-
-    #TODO: what should the default be for rank, max_rank+1?
-    #TODO: add rank back rank: hit scores converted to ranks,
-    #TODO: maybe better to use raw score as default and then cluster on cosine distance? Would that be similar to using a normalized score matrix?
-    #TODO: would efi_score_dist be useful? 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()), 
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")
 
@@ -397,9 +373,14 @@ def main(argv):
     if params.input_type is None:
         input_type = get_file_type(params.input)
 
-    reference_type = params.reference_type
-    if params.reference_type is None:
-        reference_type = get_file_type(params.reference)
+    if params.reference is None:
+        reference_path = params.input
+        reference_type = input_type
+    else:
+        reference_path = params.reference
+        reference_type = params.reference_type
+        if params.reference_type is None:
+            reference_type = get_file_type(reference_path)
 
     if params.dense is not None and get_file_type(params.dense) != "hdf5":
         raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
@@ -422,7 +403,7 @@ def main(argv):
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
-    seq_dist(params.input, input_type, params.reference, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes)
+    seq_dist(params.input, input_type, reference_path, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes)
 
 def _entrypoint():
     main(sys.argv[1:])

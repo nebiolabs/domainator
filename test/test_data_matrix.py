@@ -196,6 +196,26 @@ def test_hdf5_roundtrip_preserves_symmetric_lengths(tmp_path, output_type):
     assert matrix.symmetric_labels is True
 
 
+def test_sparse_hdf5_roundtrip_preserves_zero_only_rows_and_columns(tmp_path):
+    data = scipy.sparse.csr_array(np.array([
+        [0.0, 0.0, 0.0],
+        [0.0, 5.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ]))
+    row_names = ['row1', 'row2', 'row3']
+    col_names = ['col1', 'col2', 'col3']
+    out_file = tmp_path / "zero_only_axes.sparse.hdf5"
+
+    DataMatrix.write_sparse(data, out_file, row_names, col_names)
+    matrix = DataMatrix.from_file(out_file)
+
+    assert isinstance(matrix, SparseDataMatrix)
+    assert matrix.shape == (3, 3)
+    assert matrix.rows == row_names
+    assert matrix.columns == col_names
+    assert np.array_equal(matrix.toarray(), data.toarray())
+
+
 def test_dense_data_matrix_copy_data_false_reuses_numpy_storage():
     data = np.array([[1.0, 2.0], [3.0, 4.0]])
     copied = DenseDataMatrix(data, ['A', 'B'], ['A', 'B'])
