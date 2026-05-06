@@ -663,17 +663,6 @@ def test_decoys_proteins_1(shared_datadir):
         assert os.path.isfile(out)
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 2
-# def test_domain_search_annotations_circular_contig(shared_datadir): #TODO: test on circular contigs!
-#     input_files = [str(shared_datadir / "bacillus_phage_SPR.gb")]
-#     hmms = shared_datadir / "thymidylate_synthase.fasta"
-#     with tempfile.TemporaryDirectory() as output_dir:
-#         # output_dir="test_out"
-#         out = output_dir + f"/out.gb"
-#         args = ['--input'] + input_files + ["-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000"]
-#         main(args)
-#         assert os.path.isfile(out)
-        
-#         new_file = list(SeqIO.parse(out, "genbank"))
 
 
 @pytest.mark.parametrize("params, expected_hit_size",
@@ -700,5 +689,28 @@ def test_domain_search_range_up_down_1(params, expected_hit_size, shared_datadir
         assert len(new_file) == 1
         assert len(new_file[0]) == expected_hit_size
 
-#TODO: test keeping annotations like source, organism, etc.
+
+def test_domain_search_keeps_record_annotations(shared_datadir):
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "--input", str(gb),
+            "-r", str(hmms),
+            "--evalue", "0.1",
+            "-o", str(out),
+            "--max_overlap", "1",
+            "-Z", "1000",
+            "--add_annotations",
+        ])
+
+        input_record = next(SeqIO.parse(str(gb), "genbank"))
+        output_record = next(SeqIO.parse(out, "genbank"))
+
+        assert output_record.annotations["organism"] == input_record.annotations["organism"]
+        assert output_record.annotations["source"] == input_record.annotations["source"]
+        assert output_record.features[0].type == "source"
+        assert output_record.features[0].qualifiers == input_record.features[0].qualifiers
 

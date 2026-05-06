@@ -174,9 +174,9 @@ def test_domain_search_hit_1(shared_datadir):
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         assert len(new_file[0]) == 123
-        new_file[0].name = "pDONR201_1"
-        
-#TODO: test naming
+        assert new_file[0].id == "pDONR201_1"
+        assert new_file[0].name == "pDONR201_1_1391:1269rc"
+        assert new_file[0].description == "pDONR201_1"
 
 def test_domain_database_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:

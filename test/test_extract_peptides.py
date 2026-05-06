@@ -3,11 +3,11 @@ import io
 from helpers import compare_seqfiles, compare_seqrecords
 from domainator.Bio import SeqIO
 from domainator import extract_peptides
+from domainator import DOMAIN_FEATURE_NAME
+from domainator.Bio.Seq import Seq
+from domainator.Bio.SeqRecord import SeqRecord
+from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from domainator.utils import parse_seqfiles
-
-
-#TODO: test long filenames
-#TODO: test domain locations on forward and reverse-complement translations
 
 def compare_files(f1,f2):
     with open(f1,"r") as newfile:
@@ -68,7 +68,11 @@ def test_extract_peptides_origin_spanning_1(shared_datadir):
         assert len(recs) == 5
         assert str(recs[0].seq).upper() == "MTQFDKQYSSIINDIINNGISDEEFQVRTKWDSDGTPAHTLSVISKQMRFDNSEVPILTTKKVAWKTAIKELLWIWQLKSNDVNDLNKMGVHIWDQWKQEDGTIGHAYGFQLGKKNRSLNGEKVDQVDYLLHQLKNNPSSRRHITMLWNPDDLDSMALTPCVYETQWYVKQGKLHLEVRARSNDMALGNPFNVFQYNVLQRMIAQVTGYKLGEYIFNIGDCHVYTRHIDNLKIQMEREQFEAPELWINPEVKDFYHFTIDDFKLINYKHGDKLLFEVAV"
         assert str(recs[4].seq).upper() == "MLSLIACCDKTLAIGHQNKLLYHVPADMKHFKEKTEGKICIQGRSTYESIIGMTGKPLQNRRNIILTRDQNFKPDYSSFVYHSIEEVLKLIQGQVNTDEEVMVIGGSMIYKAFLPYADKVYLTIVDSESNEADSYFPMLDDHWKVTNKQHNEADEKNKYNYSFLTFENKYRQK"
-        #TODO: test that it keeps all the domain and source annotations
+        assert recs[0].annotations["source"] == "Bacillus phage SPR"
+        assert recs[0].annotations["organism"] == "Bacillus phage SPR"
+        assert [feature.type for feature in recs[0].features] == ["source", "CDS", DOMAIN_FEATURE_NAME]
+        assert recs[0].features[0].qualifiers["organism"] == ["Bacillus phage SPR"]
+        assert recs[0].features[2].qualifiers["name"] == ["Thymidylat_synt"]
 
 def test_domain_search_hit_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
@@ -187,4 +191,129 @@ def test_overhanging_annotations_1(shared_datadir):
         assert recs["pDONR201_3"].features[0].location.start == 0
         assert recs["pDONR201_3"].features[0].location.end == 42
 
-# TODO: add a test for source compound locations.
+
+def _make_extract_peptide_record():
+    record = SeqRecord(
+        Seq("ATGGCCGCCGCCTTAGGCATGGCC"),
+        id="synthetic_contig",
+        name="synthetic_contig",
+        description="synthetic contig",
+    )
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["source"] = "synthetic source"
+    record.annotations["organism"] = "synthetic organism"
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 12, strand=1),
+            type="CDS",
+            qualifiers={
+                "cds_id": ["cds_f"],
+                "protein_id": ["forward_protein"],
+                "translation": ["MAAA"],
+            },
+        )
+    )
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(3, 9, strand=1),
+            type=DOMAIN_FEATURE_NAME,
+            qualifiers={
+                "cds_id": ["cds_f"],
+                "name": ["forward_domain"],
+                "database": ["db"],
+                "evalue": ["1e-20"],
+                "score": ["50"],
+            },
+        )
+    )
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(12, 24, strand=-1),
+            type="CDS",
+            qualifiers={
+                "cds_id": ["cds_r"],
+                "protein_id": ["reverse_protein"],
+                "translation": ["GHLP"],
+            },
+        )
+    )
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(15, 21, strand=-1),
+            type=DOMAIN_FEATURE_NAME,
+            qualifiers={
+                "cds_id": ["cds_r"],
+                "name": ["reverse_domain"],
+                "database": ["db"],
+                "evalue": ["1e-20"],
+                "score": ["50"],
+            },
+        )
+    )
+    return record
+
+
+def test_extract_peptides_long_protein_id_is_preserved():
+    long_name = "protein_" + ("x" * 80)
+    record = SeqRecord(Seq("ATGGCCGCCGCC"), id="contig", name="contig", description="contig")
+    record.annotations["molecule_type"] = "DNA"
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 12, strand=1),
+            type="CDS",
+            qualifiers={
+                "cds_id": ["cds1"],
+                "protein_id": [long_name],
+                "translation": ["MAAA"],
+            },
+        )
+    )
+
+    peptides = list(extract_peptides.extract_peptides([record], 1e9, None, None, extract_all=True))
+
+    assert len(peptides) == 1
+    assert peptides[0].id == long_name
+    assert len(peptides[0].id) == len(long_name)
+
+
+def test_extract_peptides_translates_domain_locations_on_both_strands():
+    peptides = list(extract_peptides.extract_peptides([_make_extract_peptide_record()], 1e9, None, None, extract_all=True))
+    peptides_by_id = {record.id: record for record in peptides}
+
+    assert peptides_by_id["forward_protein"].features[0].location == FeatureLocation(1, 3, strand=1)
+    assert peptides_by_id["reverse_protein"].features[0].location == FeatureLocation(1, 3, strand=1)
+    assert str(peptides_by_id["forward_protein"].seq) == "MAAA"
+    assert str(peptides_by_id["reverse_protein"].seq) == "GHLP"
+
+
+def test_extract_peptides_source_compound_locations_are_translated():
+    record = SeqRecord(Seq("ATGGCCGCCGCC"), id="contig", name="contig", description="contig")
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["source"] = "synthetic source"
+    record.features.append(
+        SeqFeature(
+            CompoundLocation(
+                [FeatureLocation(0, 3, strand=1), FeatureLocation(9, 12, strand=1)],
+                operator="join",
+            ),
+            type="source",
+            qualifiers={"organism": ["synthetic organism"]},
+        )
+    )
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 12, strand=1),
+            type="CDS",
+            qualifiers={
+                "cds_id": ["cds1"],
+                "protein_id": ["prot1"],
+                "translation": ["MAAA"],
+            },
+        )
+    )
+
+    peptide = list(extract_peptides.extract_peptides([record], 1e9, None, None, extract_all=True))[0]
+    source_feature = peptide.features[0]
+
+    assert isinstance(source_feature.location, CompoundLocation)
+    assert [(int(part.start), int(part.end)) for part in source_feature.location.parts] == [(0, 1), (3, 4)]

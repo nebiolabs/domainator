@@ -5,17 +5,15 @@ from domainator import utils
 import subprocess
 import sys
 
-#TODO: add more assertions
-
 def test_select_by_contig_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--domains", "CAT", ])
-        # assert 0
-        # compare_seqfiles(out, shared_datadir / "extract_peptides_test_1_out.gb")
-        # assert compare_files(out, shared_datadir / "extract_peptides_test_1_out.gb")
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 1
+        assert seqs[0].id == "pDONR201_4"
 
 def test_select_by_contig_2(shared_datadir):
     
@@ -110,11 +108,48 @@ def test_select_by_conting_domain_expression_config_file(shared_datadir):
         seqs = list(utils.parse_seqfiles([out]))
         assert len(seqs) == 2
 
-#TODO: test evalue
+def test_select_by_contig_evalue_filter_1(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction_pept.gb"
+        select_by_contig.main([
+            "-i", str(shared_datadir / "simple_genpept.gb"),
+            "-o", out,
+            "--domains", "CAT",
+            "--evalue", "1e-200",
+        ])
 
-#TODO: test invert
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 0
 
-#TODO: test phylogeny filtering
+
+def test_select_by_contig_invert_1(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction_pept.gb"
+        select_by_contig.main([
+            "-i", str(shared_datadir / "simple_genpept.gb"),
+            "-o", out,
+            "--domains", "CAT",
+            "--invert",
+        ])
+
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 4
+        assert [seq.id for seq in seqs] == ["pDONR201_1", "pDONR201_2", "pDONR201_3", "pDONR201_5"]
+
+
+def test_select_by_contig_phylogeny_filter_1(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction_pept.gb"
+        select_by_contig.main([
+            "-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"),
+            "-o", out,
+            "--include_taxids", "1224",
+            "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"),
+        ])
+
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 1
+        assert seqs[0].id == "sp|P0AGD1|SODC_ECOLI"
         
 def test_select_by_contig_unannotated_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:

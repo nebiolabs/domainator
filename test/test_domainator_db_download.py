@@ -25,8 +25,6 @@ def test_uniprot_download_genbank(shared_datadir):
         recs = list(utils.parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
-#TODO: add tests for genbank downloads
-
 
 
 def test_genbank_download_genbank_1(shared_datadir):

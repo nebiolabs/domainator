@@ -13,12 +13,6 @@ import pyhmmer
 import pytest
 from helpers import compare_seqfiles, compare_seqrecords
 
-#TODO: test evalue cutoffs
-#TODO: look into situation where higher scoring domain is smaller than lower-scoring domain, but lower scoring domain is not filtered.
-#      see "bad_genbank_overlap.gb" in test data
-
-#TODO: test foldseek, but somehow make it optional, and opt-in
-
 @pytest.mark.parametrize("Z,expected_string",
 [(0, "CcdB (CcdB protein, 1.3e-33, 103.1)"),
 (10000000, "CcdB (CcdB protein, 4.4e-27, 103.1)"),
@@ -197,6 +191,51 @@ def test_domainator_phmmer(shared_datadir):
         assert len(domainator_features) == 3
 
 
+def test_domainator_evalue_cutoff_filters_hits(shared_datadir):
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        permissive_out = output_dir + "/permissive.gb"
+        strict_out = output_dir + "/strict.gb"
+
+        main([
+            "--input", str(gb),
+            "-r", str(hmms),
+            "--evalue", "0.1",
+            "-o", permissive_out,
+            "--max_domains", "1",
+            "--max_overlap", "1",
+            "-Z", "0",
+        ])
+        main([
+            "--input", str(gb),
+            "-r", str(hmms),
+            "--evalue", "1e-40",
+            "-o", strict_out,
+            "--max_domains", "1",
+            "--max_overlap", "1",
+            "-Z", "0",
+        ])
+
+        permissive_record = list(SeqIO.parse(permissive_out, "genbank"))[0]
+        strict_record = list(SeqIO.parse(strict_out, "genbank"))[0]
+
+        assert len([f for f in permissive_record.features if f.type == DOMAIN_FEATURE_NAME]) == 1
+        assert len([f for f in strict_record.features if f.type == DOMAIN_FEATURE_NAME]) == 0
+
+
+def test_domainator_overlap_prefers_higher_scoring_smaller_hit():
+    hits = [
+        SearchResult("small_high", "desc", "", 1e-30, 100.0, 10, 40, "db", 0.0, 1, 10, 30),
+        SearchResult("large_low", "desc", "", 1e-20, 90.0, 5, 60, "db", 0.0, 1, 10, 55),
+    ]
+
+    filtered_hits = filter_by_overlap(hits, 0.5)
+
+    assert [hit.name for hit in filtered_hits] == ["small_high"]
+
+
 def test_read_references_nucleotide_fasta_routes_to_nhmmer(shared_datadir):
     references = [str(shared_datadir / "simple_dna_queries.fna")]
 
@@ -205,6 +244,12 @@ def test_read_references_nucleotide_fasta_routes_to_nhmmer(shared_datadir):
     assert "nhmmer" in parsed
     assert "phmmer" not in parsed
     assert "simple_dna_queries" in parsed["nhmmer"]
+
+
+def test_read_references_foldseek_paths_are_registered():
+    parsed = read_references(None, foldseek=["/tmp/example_db"])
+
+    assert parsed["foldseek"] == {"example_db": "/tmp/example_db"}
 
 
 def test_domainator_rejects_protein_input_with_nucleotide_references(shared_datadir):
