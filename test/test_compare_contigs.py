@@ -1,6 +1,8 @@
 from domainator import compare_contigs, utils
 import tempfile
 import pandas as pd
+import numpy as np
+import scipy.sparse
 from domainator.data_matrix import DataMatrix
 import pytest
 from domainator import DOMAIN_FEATURE_NAME
@@ -59,15 +61,13 @@ def test_compare_no_annotations_1(shared_datadir):
         sparse_matrix = DataMatrix.from_file(out_sparse)
         assert len(sparse_matrix) == 4
         assert sparse_matrix.shape[1] == 4
-        print(list(sparse_matrix.itervalues()))
-        assert pytest.approx(sum(sparse_matrix.itervalues()),0.001) == (0.6 * 16) # every value should be 0.6
-        # assert all([x == 0.6 for x in sparse_matrix.itervalues()])
+        assert sparse_matrix.data.nnz == 4
+        assert pytest.approx(sum(sparse_matrix.itervalues()),0.001) == (0.6 * 4)
         dense_matrix = DataMatrix.from_file(out_dense)
         assert len(dense_matrix) == 4
         assert dense_matrix.shape[1] == 4
-        assert  pytest.approx(sum(dense_matrix.itervalues()),0.001) == (0.6 * 16) # every value should be 0.6
-        
-        # assert all([x == 0.6 for x in dense_matrix.itervalues()])
+        assert pytest.approx(sum(dense_matrix.itervalues()),0.001) == (0.6 * 4)
+        assert (dense_matrix.toarray() == np.eye(4) * 0.6).all()
         
         _assert_name_by_order_prefixes(list(utils.parse_seqfiles([out_gb])))
 
@@ -119,6 +119,63 @@ def test_compare_contigs_max_output_gb_blocks_dense_output(shared_datadir):
                 "--dense", out_dense,
                 "--max_output_gb", "0.000001",
             ])
+
+
+def test_compare_contigs_progress_flag(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_dense = output_dir + "/dense.hdf5"
+
+        compare_contigs.main([
+            "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+            "--ji", "0.5",
+            "--ai", "0.1",
+            "--dense", out_dense,
+            "--progress",
+        ])
+
+        dense_matrix = DataMatrix.from_file(out_dense)
+        assert dense_matrix.shape == (4, 4)
+        assert all([x == 0.6 for x in dense_matrix.itervalues()])
+
+
+def test_compare_contigs_cpu_flag_matches_serial(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        serial_out = output_dir + "/serial.hdf5"
+        parallel_out = output_dir + "/parallel.hdf5"
+
+        args = [
+            "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+            "--ji", "0.5",
+            "--ai", "0.1",
+        ]
+
+        compare_contigs.main(args + ["--dense", serial_out, "--cpu", "1"])
+        compare_contigs.main(args + ["--dense", parallel_out, "--cpu", "2"])
+
+        serial_matrix = DataMatrix.from_file(serial_out)
+        parallel_matrix = DataMatrix.from_file(parallel_out)
+
+        assert np.array_equal(serial_matrix.toarray(), parallel_matrix.toarray())
+
+
+def test_compare_contigs_cpu_flag_matches_serial_for_single_metric(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        serial_out = output_dir + "/serial_single_metric.hdf5"
+        parallel_out = output_dir + "/parallel_single_metric.hdf5"
+
+        args = [
+            "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+            "--ji", "0.5",
+            "--ai", "0.0",
+        ]
+
+        compare_contigs.main(args + ["--dense", serial_out, "--cpu", "1"])
+        compare_contigs.main(args + ["--dense", parallel_out, "--cpu", "2"])
+
+        serial_matrix = DataMatrix.from_file(serial_out)
+        parallel_matrix = DataMatrix.from_file(parallel_out)
+
+        assert np.array_equal(serial_matrix.toarray(), parallel_matrix.toarray())
 
 
 def _make_compare_contig_record(record_id, domain_names):
@@ -217,3 +274,178 @@ def test_compare_contigs_lb_thresholds_small_scores():
         assert dense_matrix.data[1, 1] == 1.0
         assert dense_matrix.data[0, 1] == 0.0
         assert dense_matrix.data[1, 0] == 0.0
+
+
+def test_compare_contigs_singleton_adjacency_scores_zero():
+    records = [
+        _make_compare_contig_record("rec1", ["A"]),
+        _make_compare_contig_record("rec2", ["A"]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        out_dense = output_dir + "/dense.hdf5"
+
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        compare_contigs.main([
+            "-i", input_path,
+            "--ji", "0.0",
+            "--ai", "1.0",
+            "--dense", out_dense,
+        ])
+
+        dense_matrix = DataMatrix.from_file(out_dense)
+
+        assert dense_matrix.data[0, 0] == 1.0
+        assert dense_matrix.data[1, 1] == 1.0
+        assert dense_matrix.data[0, 1] == 0.0
+        assert dense_matrix.data[1, 0] == 0.0
+
+
+def test_compare_contigs_lb_preserves_pairs_that_only_clear_threshold_after_combining_metrics():
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        out_dense = output_dir + "/dense.hdf5"
+
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        compare_contigs.main([
+            "-i", input_path,
+            "--ji", "0.5",
+            "--ai", "0.5",
+            "--lb", "0.3",
+            "--dense", out_dense,
+        ])
+
+        dense_matrix = DataMatrix.from_file(out_dense)
+
+        assert dense_matrix.data[0, 1] == pytest.approx((0.5 * 0.5) + (0.5 * (1.0 / 3.0)))
+        assert dense_matrix.data[1, 0] == pytest.approx((0.5 * 0.5) + (0.5 * (1.0 / 3.0)))
+
+
+class _FixedMatrixMetric(compare_contigs.ContigMetric):
+    def __init__(self, weight, matrix):
+        self.weight = weight
+        self.matrix = scipy.sparse.csr_array(matrix, dtype=np.float64)
+
+    def compute(self, recs, cpu=1, progress=False):
+        assert len(recs) == self.matrix.shape[0]
+        return self.matrix
+
+
+class _CaptureScoresReport(compare_contigs.DistanceReport):
+    def __init__(self):
+        self.scores = None
+
+    def write(self, recs, scores, options):
+        self.scores = scipy.sparse.csr_array(scores)
+
+
+def test_compare_contigs_k_applies_to_combined_scores():
+    records = [
+        _make_compare_contig_record("rec1", []),
+        _make_compare_contig_record("rec2", []),
+        _make_compare_contig_record("rec3", []),
+        _make_compare_contig_record("rec4", []),
+    ]
+
+    metric_1 = _FixedMatrixMetric(
+        0.5,
+        np.array([
+            [1.0, 0.9, 0.4, 0.6],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]),
+    )
+    metric_2 = _FixedMatrixMetric(
+        0.5,
+        np.array([
+            [1.0, 0.1, 0.7, 0.6],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]),
+    )
+
+    capture = _CaptureScoresReport()
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        compare_contigs.compare_contigs(
+            [input_path],
+            [metric_1, metric_2],
+            [capture],
+            k=2,
+            contigs=[record.id for record in records],
+            name_by_order=False,
+        )
+
+    out = capture.scores.toarray()
+
+    assert np.count_nonzero(out[0]) == 2
+    assert out[0, 0] == pytest.approx(1.0)
+    assert out[0, 1] == 0.0
+    assert out[0, 2] == 0.0
+    assert out[0, 3] == pytest.approx(0.6)
+
+
+def test_streaming_csr_chunk_builder_rejects_out_of_order_chunks():
+    builder = compare_contigs._StreamingCSRChunkBuilder((3, 3))
+
+    with pytest.raises(RuntimeError, match="out of order"):
+        builder.append_chunk(1, 2, scipy.sparse.csr_array([[1.0, 0.0, 0.0]]))
+
+
+def test_iter_query_chunks_caps_max_rows_per_chunk():
+    chunks = compare_contigs._iter_query_chunks(100, cpu=1, chunks_per_worker=1, max_rows_per_chunk=15)
+
+    assert max(end - start for start, end in chunks) == 15
+    assert chunks[0] == (0, 15)
+    assert chunks[-1] == (90, 100)
+
+
+def test_compare_contigs_combined_sparse_metric_path_matches_fallback():
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+        _make_compare_contig_record("rec3", ["A", "E"]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        recs = list(utils.parse_seqfiles([input_path]))
+        prepared_metrics = [
+            compare_contigs.JaccardIndex(0.5).prepare_sparse_metric(recs),
+            compare_contigs.AdjacencyIndex(0.5).prepare_sparse_metric(recs),
+        ]
+
+        combined = compare_contigs._compute_combined_sparse_similarity_matrix(
+            prepared_metrics,
+            k=2,
+            lb=0.2,
+            cpu=1,
+        )
+
+        fallback = scipy.sparse.csr_array((len(recs), len(recs)), dtype=np.float64)
+        for metric in [compare_contigs.JaccardIndex(0.5), compare_contigs.AdjacencyIndex(0.5)]:
+            fallback = fallback + (metric.weight * metric.compute(recs, cpu=1, progress=False))
+        fallback = compare_contigs._keep_top_k_per_row(fallback, 2)
+        fallback = compare_contigs._prune_scores_inplace(fallback, 0.2)
+
+        assert np.allclose(combined.toarray(), fallback.toarray())
