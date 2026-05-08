@@ -4,8 +4,6 @@ import pandas as pd
 from pathlib import Path
 import pytest
 
-#TODO: test from coords file
-
 
 @pytest.mark.parametrize("input_file",
 [
@@ -110,3 +108,24 @@ def test_build_projection_color_table_out(shared_datadir):
         assert Path(out_color_table).is_file()
         color_table_file = pd.read_csv(out_color_table, sep="\t", header=None)
         assert color_table_file.shape == (2,2)
+
+
+def test_build_projection_from_coords_file(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        first_coords = output_dir + "/first.tsv"
+        second_coords = output_dir + "/second.tsv"
+
+        build_projection.main([
+            "-i", str(shared_datadir / "scorefull.tsv"),
+            "--algorithm", "pca",
+            "--coords_out", first_coords,
+        ])
+        build_projection.main([
+            "-i", first_coords,
+            "--algorithm", "coords",
+            "--coords_out", second_coords,
+        ])
+
+        first_table = pd.read_csv(first_coords, sep="\t", index_col=0)
+        second_table = pd.read_csv(second_coords, sep="\t", index_col=0)
+        pd.testing.assert_frame_equal(first_table, second_table)

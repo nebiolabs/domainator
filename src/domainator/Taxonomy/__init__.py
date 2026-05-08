@@ -255,7 +255,7 @@ class NCBITaxonomy:
         if tax_id in merged_tab:
             tax_id = int(merged_tab[tax_id]["new_tax_id"])
 
-        if tax_id in deleted_tab: #TODO: Not sure what the best way to handle this is, we may want to do some kind of custom handling for deleted taxids to ensure desired behavior
+        if tax_id in deleted_tab:
             warnings.warn(f"Attempted to calculate lineage for a deleted taxid: {tax_id}, lineage search prematurely stopped, which might confuse lineage exclusions.")
             return out_list
         
@@ -279,7 +279,7 @@ class NCBITaxonomy:
         '''
         if tax_id in self._merged_tab:
             return int(self._merged_tab[tax_id]["new_tax_id"])
-        elif tax_id in self._deleted_tab: #TODO: Not sure what the best way to handle this is, we may want to do some kind of custom handling for deleted taxids to ensure desired behavior
+        elif tax_id in self._deleted_tab:
             return 32644 # this is the normalized taxid for "unidentified sequences"
         else:
             return tax_id

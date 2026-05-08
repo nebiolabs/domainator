@@ -586,7 +586,6 @@ def test_enum_report_database_1(shared_datadir):
             assert lines[7] == ["pDONR201_4", "pDONR201_4", "CAT", "CAT"]
             assert lines[8] == ["pDONR201_4", "pDONR201_5", "APH", "APH"]
 
-# def test_enum_report_complete_cds(shared_datadir): #TODO: probably deprecate that option
     
 #     with tempfile.TemporaryDirectory() as output_dir:
 #         #output_dir = "test_out"

@@ -42,7 +42,18 @@ def test_contig_stats_taxonomy_1(shared_datadir):
         out_html = output_dir + "/contig_stats_test.html"
         out_txt = output_dir + "/contig_stats_test.txt"
         summary_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out_txt, "--html", out_html, "--taxonomy", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp")])
-        # TODO: test output
+        txt = open(out_txt).read()
+        html = open(out_html).read()
+
+        assert "Contig Stats" in txt
+        assert "Taxonomy" in txt
+        assert "Bacillus" in txt
+        assert "Escherichia" in txt
+        assert "taxid" in txt
+
+        assert "Summary Report" in html
+        assert "Taxonomy" in html
+        assert "Bacillus" in html
 
 
 def test_summary_report_database_1(shared_datadir):

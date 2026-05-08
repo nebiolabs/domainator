@@ -773,7 +773,7 @@ class DataMatrix(ABC):
                 raise ValueError(f"Required attribute '{attribute}' not found in HDF5 file")
 
     @classmethod
-    def from_file(cls, matrix_file):
+    def from_file(cls, matrix_file, lower_bound=None):
         """
         Factory method that returns the appropriate subclass (DenseDataMatrix or SparseDataMatrix)
         based on the file content.
@@ -785,7 +785,7 @@ class DataMatrix(ABC):
                 array_type = f.attrs.get(cls._ARRAY_TYPE_ATTR, cls._DENSE)
                 
                 if array_type == cls._SPARSE_CSR:
-                    return SparseDataMatrix._from_hdf5(matrix_file)
+                    return SparseDataMatrix._from_hdf5(matrix_file, lower_bound=lower_bound)
                 else:
                     return DenseDataMatrix._from_hdf5(matrix_file)
         elif file_type is None:
@@ -823,9 +823,9 @@ class DataMatrix(ABC):
         pass
 
     @abstractmethod
-    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+    def triangular_iter(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
         """
-        Return triangular part of the matrix as a list of tuples.
+        Iterate over the triangular part of the matrix.
         
         Only works for square matrices. Returns values from either upper or lower triangle.
         
@@ -837,13 +837,23 @@ class DataMatrix(ABC):
             agg: Optional aggregation function to combine symmetric positions (e.g., lambda a,b: max(a,b)).
                  When provided, applies agg(value, transpose_value) for each position.
         
-        Returns:
-            list: List of tuples (row_identifier, col_identifier, value)
+        Yields:
+            tuple: (row_identifier, col_identifier, value)
         
         Raises:
             NotImplementedError: If matrix is not square
         """
         pass
+
+    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+        """Return triangular part of the matrix as a list of tuples."""
+        return list(self.triangular_iter(
+            side=side,
+            include_diagonal=include_diagonal,
+            skip_zeros=skip_zeros,
+            index_style=index_style,
+            agg=agg,
+        ))
 
     @abstractmethod
     def itervalues(self) -> Iterator[float]:
@@ -1367,8 +1377,8 @@ class DenseDataMatrix(DataMatrix):
                     else:
                         yield r, c, value
     
-    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
-        """Get triangular part of the matrix."""
+    def triangular_iter(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+        """Iterate over the triangular part of the matrix."""
         if self.data.shape[0] != self.data.shape[1]:
             raise NotImplementedError(f"Triangular only supported for square matrices")
         
@@ -1379,8 +1389,6 @@ class DenseDataMatrix(DataMatrix):
         index_style = index_style.lower()
         if index_style not in {"name", "index"}:
             raise ValueError("index_style must be 'name' or 'index'.")
-        
-        out = []
         
         for r in range(self.data.shape[0]):
             if side == "lower":
@@ -1402,11 +1410,9 @@ class DenseDataMatrix(DataMatrix):
                     continue
                 
                 if index_style == "name":
-                    out.append((self.rows[r], self.columns[c], value))
+                    yield self.rows[r], self.columns[c], value
                 else:
-                    out.append((r, c, value))
-        
-        return out
+                    yield r, c, value
 
     def sorted_undirected_edges(self, skip_zeros: bool = False, agg=None) -> SortedUndirectedEdges:
         """Return lower-triangular undirected edges sorted by descending score."""
@@ -1562,7 +1568,7 @@ class SparseDataMatrix(DataMatrix):
         return True
     
     @classmethod
-    def _from_hdf5(cls, matrix_file: Union[PathLike, str]) -> 'SparseDataMatrix':
+    def _from_hdf5(cls, matrix_file: Union[PathLike, str], lower_bound: Optional[float] = None) -> 'SparseDataMatrix':
         """Load a sparse matrix from HDF5 file."""
         with h5py.File(matrix_file, 'r') as f:
             # Validate file format
@@ -1585,6 +1591,10 @@ class SparseDataMatrix(DataMatrix):
                  f[cls._SPARSE_CSR_INDPTR_DATASET][:]), 
                 (len(row_names), len(col_names))
             )
+            if lower_bound is not None:
+                data.data[data.data <= lower_bound] = 0
+                data.eliminate_zeros()
+                data.sort_indices()
             
             row_lengths = f[cls._ROW_LENGTHS_DATASET][:] if cls._ROW_LENGTHS_DATASET in f else None
             col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
@@ -1626,8 +1636,8 @@ class SparseDataMatrix(DataMatrix):
                     else:
                         yield r, c, value
     
-    def triangular(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
-        """Get triangular part of the matrix (optimized for sparse)."""
+    def triangular_iter(self, side="lower", include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+        """Iterate over the triangular part of the matrix (optimized for sparse)."""
         if self.data.shape[0] != self.data.shape[1]:
             raise NotImplementedError(f"Triangular only supported for square matrices")
         
@@ -1639,9 +1649,75 @@ class SparseDataMatrix(DataMatrix):
         if index_style not in {"name", "index"}:
             raise ValueError("index_style must be 'name' or 'index'.")
         
-        out = []
-        
-        if agg is not None and skip_zeros:
+        if agg is max and skip_zeros:
+            self.data.eliminate_zeros()
+            self.data.sort_indices()
+
+            transpose = self.data.transpose().tocsr()
+            transpose.sort_indices()
+
+            for r in range(self.data.shape[0]):
+                if side == "lower":
+                    start_c = 0
+                    end_c = r + 1 if include_diagonal else r
+                else:
+                    start_c = r if include_diagonal else r + 1
+                    end_c = self.data.shape[1]
+
+                row_start = self.data.indptr[r]
+                row_end = self.data.indptr[r + 1]
+                row_indices = self.data.indices
+                row_values = self.data.data
+
+                transpose_start = transpose.indptr[r]
+                transpose_end = transpose.indptr[r + 1]
+                transpose_indices = transpose.indices
+                transpose_values = transpose.data
+
+                row_pos = row_start
+                transpose_pos = transpose_start
+
+                while row_pos < row_end and row_indices[row_pos] < start_c:
+                    row_pos += 1
+                while transpose_pos < transpose_end and transpose_indices[transpose_pos] < start_c:
+                    transpose_pos += 1
+
+                while row_pos < row_end or transpose_pos < transpose_end:
+                    next_row_idx = row_indices[row_pos] if row_pos < row_end else None
+                    next_transpose_idx = transpose_indices[transpose_pos] if transpose_pos < transpose_end else None
+
+                    if next_row_idx is not None and next_row_idx >= end_c:
+                        next_row_idx = None
+                    if next_transpose_idx is not None and next_transpose_idx >= end_c:
+                        next_transpose_idx = None
+
+                    if next_row_idx is None and next_transpose_idx is None:
+                        break
+
+                    if next_transpose_idx is None or (next_row_idx is not None and next_row_idx < next_transpose_idx):
+                        c = next_row_idx
+                    elif next_row_idx is None or next_transpose_idx < next_row_idx:
+                        c = next_transpose_idx
+                    else:
+                        c = next_row_idx
+
+                    value = 0
+                    symmetric_value = 0
+                    if row_pos < row_end and row_indices[row_pos] == c:
+                        value = row_values[row_pos]
+                        row_pos += 1
+                    if transpose_pos < transpose_end and transpose_indices[transpose_pos] == c:
+                        symmetric_value = transpose_values[transpose_pos]
+                        transpose_pos += 1
+
+                    agg_value = max(value, symmetric_value)
+
+                    if index_style == "name":
+                        yield self.rows[r], self.columns[c], agg_value
+                    else:
+                        yield r, c, agg_value
+
+        elif agg is not None and skip_zeros:
             # Optimized path for sparse with aggregation
             self.data.eliminate_zeros()
             self.data.sort_indices()
@@ -1680,9 +1756,9 @@ class SparseDataMatrix(DataMatrix):
                 agg_value = agg(value, symmetric_value)
                 
                 if index_style == "name":
-                    out.append((self.rows[r], self.columns[c], agg_value))
+                    yield self.rows[r], self.columns[c], agg_value
                 else:
-                    out.append((r, c, agg_value))
+                    yield r, c, agg_value
         
         elif skip_zeros:
             # Sparse without agg - only iterate non-zeros
@@ -1702,9 +1778,9 @@ class SparseDataMatrix(DataMatrix):
                         value = self.data.data[ind]
                         
                         if index_style == "name":
-                            out.append((self.rows[r], self.columns[c], value))
+                            yield self.rows[r], self.columns[c], value
                         else:
-                            out.append((r, c, value))
+                            yield r, c, value
         
         else:
             # Need all values including zeros - use dense logic
@@ -1722,11 +1798,9 @@ class SparseDataMatrix(DataMatrix):
                         value = agg(value, symmetric_value)
                     
                     if index_style == "name":
-                        out.append((self.rows[r], self.columns[c], value))
+                        yield self.rows[r], self.columns[c], value
                     else:
-                        out.append((r, c, value))
-        
-        return out
+                        yield r, c, value
 
     def sorted_undirected_edges(self, skip_zeros: bool = False, agg=None) -> SortedUndirectedEdges:
         """Return lower-triangular undirected edges sorted by descending score."""
@@ -1924,11 +1998,13 @@ class MaxTree():
         Returns:
             List[Tuple[int,int,float]]: List of MST edges as (node_i, node_j, edge_value) tuples
         """
-        mst_edge_list = []
+        return list(self.iter_mst_edges())
+
+    def iter_mst_edges(self) -> Iterator[Tuple[int, int, float]]:
+        """Iterate over the edges in the maximum spanning tree."""
         for mst_idx in self.mst:
             edge = self.edges[mst_idx]
-            mst_edge_list.append((int(edge[0]), int(edge[1]), float(edge[2])))
-        return mst_edge_list
+            yield int(edge[0]), int(edge[1]), float(edge[2])
         
 
     def _edges_by_threshold(self):

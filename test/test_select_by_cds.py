@@ -11,17 +11,20 @@ import sys
 import subprocess
 
 
-#TODO: replace writing to tempdir with capturing stdout for most tests
-
 def test_select_by_cds_1(shared_datadir):
-    #TODO: add some assertions
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
         select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains", "CAT", ])
-        # assert 0
-        # compare_seqfiles(out, shared_datadir / "extract_peptides_test_1_out.gb")
-        # assert compare_files(out, shared_datadir / "extract_peptides_test_1_out.gb")
+        recs = list(parse_seqfiles([out]))
+        assert len(recs) == 4
+        assert [rec.id for rec in recs] == [
+            "pDONR201_1_2266:1605rc",
+            "pDONR201_2_2266:1605rc",
+            "pDONR201_3_2266:1605rc",
+            "pDONR201_4_2266:1605rc",
+        ]
+        assert all(len(DomainatorCDS.list_from_contig(rec)) == 1 for rec in recs)
 
 @pytest.mark.parametrize("cds_range,expected_cds_count",
 [

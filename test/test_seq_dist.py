@@ -115,6 +115,124 @@ def test_seq_dist_max_output_gb_zero_disables_guardrail(shared_datadir):
         assert DataMatrix.from_file(out).shape == (20, 20)
 
 
+def test_seq_dist_progress_flag(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+
+        seq_dist.main([
+            "-i", str(shared_datadir / "FeSOD_20.fasta"),
+            "-r", str(shared_datadir / "FeSOD_20.fasta"),
+            "--dense", out,
+            "-k", "1",
+            "--mode", "score",
+            "--progress",
+        ])
+
+        dense_matrix = DataMatrix.from_file(out)
+        assert dense_matrix.shape == (20, 20)
+        assert (dense_matrix.toarray() > 0).sum() == 20
+
+
+def test_seq_hmmsearch_progress_flag(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+
+        seq_dist.main([
+            "-i", str(shared_datadir / "pdonr_peptides.fasta"),
+            "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+            "--dense", out,
+            "--algorithm", "hmmer",
+            "--mode", "score",
+            "--progress",
+        ])
+
+        assert DataMatrix.from_file(out).shape == (5, 7)
+
+
+def test_seq_hmmsearch_bool_lb_filters_raw_scores(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+
+        seq_dist.main([
+            "-i", str(shared_datadir / "pdonr_peptides.fasta"),
+            "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+            "--sparse", out,
+            "--algorithm", "hmmer",
+            "--mode", "bool",
+            "--lb", "100",
+        ])
+
+        out_table = DataMatrix.from_file(out)
+        out_data = list(x[2] for x in out_table.iter_data())
+
+        assert out_table.data.nnz == 2
+        assert out_data == [1.0, 1.0]
+
+
+class _FakeProgressBar:
+    def __init__(self):
+        self.updates = []
+        self.closed = False
+
+    def update(self, amount):
+        self.updates.append(amount)
+
+    def close(self):
+        self.closed = True
+
+
+def test_diamond_query_progress_accounts_for_skipped_queries():
+    progress_bar = _FakeProgressBar()
+    query_positions = {"q1": 0, "q2": 1, "q3": 2}
+
+    current_query_idx = None
+    current_query_idx = seq_dist._advance_query_progress(progress_bar, query_positions, current_query_idx, "q2")
+    current_query_idx = seq_dist._advance_query_progress(progress_bar, query_positions, current_query_idx, "q3")
+    seq_dist._finish_query_progress(progress_bar, current_query_idx, 3)
+
+    assert progress_bar.updates == [2, 1]
+    assert progress_bar.closed is True
+
+
+def test_diamond_query_progress_advances_on_first_seen_query():
+    progress_bar = _FakeProgressBar()
+    query_positions = {"q1": 0, "q2": 1, "q3": 2}
+
+    current_query_idx = None
+    current_query_idx = seq_dist._advance_query_progress(progress_bar, query_positions, current_query_idx, "q1")
+    seq_dist._finish_query_progress(progress_bar, current_query_idx, 3)
+
+    assert progress_bar.updates == [1, 2]
+    assert progress_bar.closed is True
+
+
+def test_sparse_max_result_builder_keeps_best_duplicate_score():
+    builder = seq_dist._SparseMaxResultBuilder({"q1": 0}, {"s1": 0, "s2": 1})
+
+    builder.add_result("q1", "s1", 5.0)
+    builder.add_result("q1", "s1", 9.0)
+    builder.add_result("q1", "s2", 3.0)
+
+    matrix = builder.build()
+
+    assert np.allclose(matrix.toarray(), np.array([[9.0, 3.0]]))
+
+
+def test_grouped_query_sparse_builder_rejects_noncontiguous_repeated_query():
+    builder = seq_dist._GroupedQuerySparseMaxResultBuilder(
+        {"q1": 0, "q2": 1},
+        {"s1": 0},
+        stream_name="test stream",
+        expected_query_order=["q1", "q2"],
+    )
+
+    builder.add_result("q1", "s1", 1.0)
+    builder.add_result("q2", "s1", 2.0)
+
+    with pytest.raises(RuntimeError, match="grouped by query"):
+        builder.add_result("q1", "s1", 3.0)
+
+
 def test_row_norm_score_mode():
     mode="row_norm_score"
     input = np.array([

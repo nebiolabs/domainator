@@ -6,6 +6,8 @@ Selection criteria are combined as follows:
 
 (contig length within specified bounds [length_lb, length_ub])
 AND 
+(contig CDS count within specified bounds [cds_count_lb, cds_count_ub])
+AND 
 (contig matches specified taxonomy filters)
 AND # INVERT applies to this list of criteria
 (
@@ -59,8 +61,31 @@ def length_filter(contigs, length_lb=None, length_ub=None):
         yield contig
 
 
+def count_cds(contig):
+    count = 0
+    for feature in contig.features:
+        if feature.type == 'CDS':
+            if "pseudo" in feature.qualifiers or "pseudogene" in feature.qualifiers:
+                continue
+            count += 1
+    return count
 
-def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain"):
+
+def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
+    if cds_count_lb is None:
+        cds_count_lb = 0
+    if cds_count_ub is None:
+        cds_count_ub = sys.maxsize
+
+    for contig in contigs:
+        cds_count = count_cds(contig)
+        if cds_count < cds_count_lb or cds_count > cds_count_ub:
+            continue
+        yield contig
+
+
+
+def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain"):
     """
 
         Args:
@@ -85,6 +110,10 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             length_lb: only keep contigs with length greater than this
 
             length_ub: only keep contigs with length less than this
+
+            cds_count_lb: only keep contigs with CDS count greater than or equal to this
+
+            cds_count_ub: only keep contigs with CDS count less than or equal to this
 
             invert: invert the selection criteria
 
@@ -137,6 +166,9 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
     
     if length_lb is not None or length_ub is not None:
         contigs = length_filter(contigs, length_lb, length_ub)
+
+    if cds_count_lb is not None or cds_count_ub is not None:
+        contigs = cds_count_filter(contigs, cds_count_lb, cds_count_ub)
 
     if search_score_lb is not None or search_score_ub is not None:
         if search_score_lb is None:
@@ -272,6 +304,12 @@ def main(argv):
 
     parser.add_argument('--length_ub', default=None, type=int,
                         help="skip contigs larger than this. In units of bp (aa for protein input).")
+
+    parser.add_argument('--cds_count_lb', default=None, type=int,
+                        help="skip contigs with fewer CDSs than this. Pseudogenes are not counted.")
+
+    parser.add_argument('--cds_count_ub', default=None, type=int,
+                        help="skip contigs with more CDSs than this. Pseudogenes are not counted.")
     
     parser.add_argument('--search_score_lb', default=None, type=float,
                             help="Skip contigs with a domain_search annotation score smaller than this.")
@@ -331,6 +369,8 @@ def main(argv):
                     params.first,
                     params.length_lb,
                     params.length_ub,
+                    params.cds_count_lb,
+                    params.cds_count_ub,
                     params.definition_regex,
                     params.sequence_regex,
                     target_contigs,

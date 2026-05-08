@@ -131,10 +131,8 @@ def test_main_1(tmpdir):
 
     # Call main function
     main(test_args)
-    # Add assertions to verify the expected behavior
 
 
-#TODO: test content of output files!
 @pytest.mark.parametrize("input_files,overlap,evalue,input_type,database",
 [(["pDONR201_multi_genemark_domainator.gb"], 1, 1000, "gb", None),
  (["pDONR201_multi_genemark_domainator.gb", "pDONR201_multi_genemark_domainator.gb"], 1, "1e-10", "gb", "Pfam-A"),
@@ -242,4 +240,3 @@ def test_filter_domainator_nucleotide_annotations(shared_datadir):
         assert len(recs) == 1
         domainator_features = [feature for feature in recs[0].features if feature.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) == 0
-#TODO: more tests

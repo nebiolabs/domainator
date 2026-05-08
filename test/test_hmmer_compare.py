@@ -4,8 +4,6 @@ from helpers import compare_files
 from pathlib import Path
 import pytest
 
-#TODO: better tests!
-
 def test_hmmer_compare_1(shared_datadir):
 
     with tempfile.TemporaryDirectory() as output_dir:

@@ -3,8 +3,6 @@ from domainator import hmmer_search
 from pathlib import Path
 import pytest
 
-#TODO: better tests!
-
 def test_hmmer_search_1(shared_datadir):
 
     with tempfile.TemporaryDirectory() as output_dir:

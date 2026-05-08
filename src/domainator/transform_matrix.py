@@ -16,6 +16,7 @@ import numpy as np
 from domainator.utils import get_file_type
 
 PASS_THROUGH_MODE = "none"
+LOG10_2 = np.log10(2.0)
 
 def is_sparse(matrix):
     """
@@ -73,25 +74,24 @@ def efi_score(array, row_lengths=None, col_lengths=None):
 
         This is the score used by EFI-EST.
 
-
-        
     """
     if row_lengths is None or col_lengths is None:
         raise ValueError("Row and column lengths must be provided for EFI score.")
 
-    if is_sparse(array): #sparse matrix
-        array = scipy.sparse.dok_array(array) #TODO: maybe there is a more efficient way to do this without duplicating the data
-        out = scipy.sparse.dok_array(array.shape,dtype=np.float64)
+    row_logs = np.log10(np.asarray(row_lengths, dtype=np.float64))
+    col_logs = np.log10(np.asarray(col_lengths, dtype=np.float64))
 
-        for (r,c),v in array.items():
-            #score = -np.log10(2**(-v) * (row_lengths[r] * col_lengths[c]))
-            score = v * np.log10(2) - np.log10(row_lengths[r] * col_lengths[c]) # refactored to avoid overflow
-            if score > 0:
-                out[r, c] = score
-        return out
+    if is_sparse(array): #sparse matrix
+        array = scipy.sparse.coo_array(array)
+        scores = array.data * LOG10_2 - row_logs[array.row] - col_logs[array.col]
+        keep_mask = scores > 0
+        return scipy.sparse.csr_array(
+            (scores[keep_mask], (array.row[keep_mask], array.col[keep_mask])),
+            shape=array.shape,
+        )
     
     else: # dense matrix
-        out = -np.log10(2.0**(-array) * (row_lengths[:,np.newaxis] * col_lengths[np.newaxis,:]))
+        out = array * LOG10_2 - row_logs[:, np.newaxis] - col_logs[np.newaxis, :]
         return out * (out > 0)
     
 def efi_score_dist(array, row_lengths=None, col_lengths=None):

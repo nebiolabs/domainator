@@ -51,11 +51,6 @@ def test_matrix_report_rejects_invalid_merge_impact_metric():
         matrix_report.matrix_report(matrix, io.StringIO(), None, merge_impact_metric="bad")
 
 
-# def test_matrix_report_empty_input(shared_datadir):
-#     pass
-#     #TODO
-
-
 
 class TestInteractiveHTML:
     """Test suite for interactive HTML generation"""

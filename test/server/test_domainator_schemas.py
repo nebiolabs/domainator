@@ -129,7 +129,7 @@ SCHEMA_CASES = [
         parameters=lambda data_dir: {
             "input": [str(data_dir / "color_domain_search_test.gb")],
             "output": "colored.gb",
-            "color_both": True,
+            "mode": "domains_and_cdss",
         },
         expected_outputs={
             "colored.gb": _has_feature_qualifier("Color"),

@@ -11,6 +11,7 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 """
 
 import sys
+from argparse import SUPPRESS
 from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, open_if_is_name
 import warnings
@@ -21,6 +22,12 @@ import random
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
 
 #TODO: color gradient based on bit score
+
+COLOR_MODES = {
+    "domains": {"domains"},
+    "cdss": {"cdss"},
+    "domains_and_cdss": {"domains", "cdss"},
+}
 
 def normalize_color_hex(color_hex):
     '''
@@ -64,17 +71,18 @@ def read_color_table(color_table):
     
     return out
 
-def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings=False, search_hit_color=None, clear=False, databases=None):
+def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings=False, search_hit_color=None, clear=False, databases=None, color_feature="name"):
     """
         input: 
             record: SeqRecord containing CDS and domain annotations from Domainator program
-            color_map: dict of {domain_name: hex_color}, 
+            color_map: dict of {domain_name_or_database: hex_color}, 
                     for example: {'RNA_pol': '#cc0000', 'DNA_pol_A': '#0000cc', 'DnaB_C':'#FFA500', 'Terminase':'#00cc00'}
             color_targets: a set or list containing "domains", "cdss", or both. Specifying which type of feature to color.
             disable_warnings: if True, then don't warn when a CDS gets multiple colors. NOT IMPLEMENTED
             search_hit_color: if not None, then color search_hit annotations with this color.
             clear: if True, then remove all color annotations from the genbank file before adding any new ones.
             databases: if not None, then only use domains from these databases for determining color.
+            color_feature: qualifier name to use for assigning colors. Either "name" or "database".
 
         output:
             modifies the SeqRecord to add "Color" qualifiers
@@ -91,9 +99,10 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
         if feature.type == DOMAIN_FEATURE_NAME:
             if databases is not None and feature.qualifiers['database'][0] not in databases:
                 continue
-            if feature.qualifiers['name'][0] in color_map:
+            color_key = feature.qualifiers[color_feature][0]
+            if color_key in color_map:
                 if "domains" in color_targets:
-                    feature.qualifiers['Color'] = [ color_map[feature.qualifiers['name'][0]] ]
+                    feature.qualifiers['Color'] = [ color_map[color_key] ]
 
                 score = float(feature.qualifiers['score'][0])
                 if "cdss" in color_targets:
@@ -101,7 +110,7 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
                     
                     if score > new_cds_bitscores.get(cds_id, ninf):
                         new_cds_bitscores[cds_id] = score
-                        new_cds_colors[cds_id] = color_map[feature.qualifiers['name'][0]]
+                        new_cds_colors[cds_id] = color_map[color_key]
                     # elif not disable_warnings:
                     #     warnings.warn(f"cds {cds_id} in {record.id} has more than one color annotation")
         if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
@@ -157,17 +166,18 @@ class AutoColormap:
 
         
 
-def color_genbank(records, color_table, color_targets, search_hit_color=None, clear=False, color_table_out=None, databases=None):
+def color_genbank(records, color_table, color_targets, search_hit_color=None, clear=False, color_table_out=None, databases=None, color_feature="name"):
     """
       input: 
         records: an iterator of SeqRecords
         contigs: collection if not None, then only . if None then don't filter out any contigs (most common).
-        color_table: a dict mapping domain names to color hex.
+        color_table: a dict mapping domain names or database ids to color hex.
         color_targets: a set or list containing "domains", "cdss", or both. Specifying which type of feature to color.
         search_hit_color: if not None, then color search_hit annotations with this color.
         clear: if True, then remove all color annotations from the genbank file before adding any new ones.
         color_table_out: if not None, then write the updated color table to this file.
         databases: if not None, then only use domains from these databases for determining color.
+        color_feature: qualifier name to use for assigning colors. Either "name" or "database".
     """
     disable_multiple_colors_warning = False
     if color_table is not None:
@@ -177,13 +187,25 @@ def color_genbank(records, color_table, color_targets, search_hit_color=None, cl
         color_map = AutoColormap()
 
     for rec in records:
-        color_seqrecord_by_domain(rec, color_map, color_targets, disable_multiple_colors_warning, search_hit_color=search_hit_color, clear=clear, databases=databases)
+        color_seqrecord_by_domain(rec, color_map, color_targets, disable_multiple_colors_warning, search_hit_color=search_hit_color, clear=clear, databases=databases, color_feature=color_feature)
         yield rec
     
     if color_table_out is not None:
         with open(color_table_out, "w") as out:
-            for domain, color in color_map.items():
-                out.write(f"{domain}\t{color}\n")
+            for annotation, color in color_map.items():
+                out.write(f"{annotation}\t{color}\n")
+
+def resolve_color_mode(parser, params):
+    legacy_mode = None
+    if params.color_domains:
+        legacy_mode = "domains"
+    elif params.color_both:
+        legacy_mode = "domains_and_cdss"
+
+    if params.mode is not None and legacy_mode is not None and params.mode != legacy_mode:
+        parser.error("--mode cannot be combined with legacy flags that request a different coloring target")
+
+    return params.mode or legacy_mode or "cdss"
 
 def main(argv):
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
@@ -209,13 +231,15 @@ def main(argv):
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Domain databases to use for coloring. default: all databases.")
-    
-    #TODO: maybe just color the top 16 or so most common domains, and give everything else the same color? Or have like 5 colors split among all of the less common domains.
-    color_selection = parser.add_mutually_exclusive_group() # TODO: change this from mutually exclusive to just a list of options on one parameter, 
-    color_selection.add_argument("--color_domains", action="store_true", default=False, 
-                                help="if set, then color domain annotations instead of CDS annotations (by default CDS annotations will be colored)")
-    color_selection.add_argument("--color_both", action="store_true", default=False, 
-                                help="if set, then color domain and CDS annotations annotations (by default only CDS annotations will be colored)")
+
+    parser.add_argument("--mode", default=None, choices=tuple(COLOR_MODES.keys()),
+                        help="what to color. domains: color only domain annotations. cdss: color only CDS annotations. domains_and_cdss: color both domains and CDS annotations. Default: cdss")
+    parser.add_argument("--domain_database", action="store_true", default=False,
+                        help="if set, then color domains based on their database instead of their name. If used with --color_table, the first column must contain database ids.")
+
+    # TODO: remove these compatibility flags after downstream callers have migrated to --mode.
+    parser.add_argument("--color_domains", action="store_true", default=False, help=SUPPRESS)
+    parser.add_argument("--color_both", action="store_true", default=False, help=SUPPRESS)
  
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -241,13 +265,9 @@ def main(argv):
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)
 
-    color_targets = {}
-    if params.color_domains:
-        color_targets = {"domains"}
-    elif params.color_both:
-        color_targets = {"domains", "cdss"}
-    else:
-        color_targets = {"cdss"}
+    color_mode = resolve_color_mode(parser, params)
+    color_targets = COLOR_MODES[color_mode]
+    color_feature = "database" if params.domain_database else "name"
 
     color_table = None
     if params.color_table is not None:
@@ -270,7 +290,8 @@ def main(argv):
             search_hit_color,
             params.clear,
             color_table_out=params.color_table_out,
-            databases=databases
+            databases=databases,
+            color_feature=color_feature
             ), 
         out)
     

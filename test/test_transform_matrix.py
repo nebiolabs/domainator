@@ -210,4 +210,39 @@ def test_transform_matrix_max_output_gb_blocks_dense_output():
             transform_matrix.main(["-i", input_file, "--dense", dense_out, "--max_output_gb", "0.000001"])
 
 
-#TODO: test more conversion modes
+def test_transform_matrix_output_format_conversions():
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_data = np.array([
+            [5.0, 1.0, 0.0],
+            [2.0, 4.0, 3.0],
+            [0.0, 6.0, 7.0],
+        ])
+
+        input_file = output_dir + "/input.hdf5"
+        dense_text_out = output_dir + "/dense_out.tsv"
+        sparse_out = output_dir + "/sparse_out.hdf5"
+
+        rows = ["a", "b", "c"]
+        columns = ["A", "B", "C"]
+
+        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "dense")
+
+        transform_matrix.main([
+            "-i", input_file,
+            "--dense_text", dense_text_out,
+            "--sparse", sparse_out,
+            "--mode", "bool",
+        ])
+
+        dense_text_matrix = DataMatrix.from_file(dense_text_out)
+        sparse_matrix = DataMatrix.from_file(sparse_out)
+        expected = np.array([
+            [1, 1, 0],
+            [1, 1, 1],
+            [0, 1, 1],
+        ], dtype=np.int8)
+
+        np.testing.assert_array_equal(dense_text_matrix.data, expected)
+        np.testing.assert_array_equal(sparse_matrix.data.toarray(), expected)
+        assert sparse_matrix.data_type == "bool"
