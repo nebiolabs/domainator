@@ -531,6 +531,21 @@ def test_triangular_dense_sparse_consistency():
                     f"Dense and sparse differ for side={side}, diagonal={include_diagonal}, skip_zeros={skip_zeros}"
 
 
+def test_triangular_iter_matches_triangular():
+    """Test that triangular_iter preserves triangular ordering and values."""
+    data = np.array([[1, 0, 3], [4, 5, 0], [7, 8, 9]])
+    row_names = ['A', 'B', 'C']
+    col_names = ['A', 'B', 'C']
+
+    dense = DenseDataMatrix(data, row_names, col_names)
+    sparse = SparseDataMatrix(scipy.sparse.csr_array(data), row_names, col_names)
+
+    for matrix in (dense, sparse):
+        expected = matrix.triangular(side='lower', include_diagonal=False, skip_zeros=True, agg=max)
+        observed = list(matrix.triangular_iter(side='lower', include_diagonal=False, skip_zeros=True, agg=max))
+        assert observed == expected
+
+
 # Test triangular with non-square matrix
 def test_triangular_non_square_error():
     """Test that triangular raises an error for non-square matrices."""
@@ -694,6 +709,27 @@ def test_estimate_write_size_rejects_unknown_output_type():
 
     with pytest.raises(ValueError, match="Unrecognized output type"):
         DataMatrix.estimate_write_size("bogus", data, ['A'], ['A'])
+
+
+def test_from_file_sparse_hdf5_applies_lower_bound(tmp_path):
+    data = scipy.sparse.csr_array(np.array([
+        [0.0, 0.2, 0.8],
+        [0.2, 0.0, 0.5],
+        [0.8, 0.5, 0.0],
+    ], dtype=float))
+    names = ['A', 'B', 'C']
+    matrix_path = tmp_path / 'matrix.hdf5'
+
+    DataMatrix.write_sparse(data, matrix_path, names, names)
+
+    matrix = DataMatrix.from_file(matrix_path, lower_bound=0.5)
+
+    assert isinstance(matrix, SparseDataMatrix)
+    assert matrix.toarray().tolist() == [
+        [0.0, 0.0, 0.8],
+        [0.0, 0.0, 0.0],
+        [0.8, 0.0, 0.0],
+    ]
 
 
 # Test symmetric_values with non-symmetric labels
@@ -945,6 +981,20 @@ class TestMaxTree:
         # MST should contain edges with values 10, 9, 6 (highest three without cycles)
         mst_values = sorted([tree.edges[tree.mst[i], 2] for i in range(len(tree.mst))], reverse=True)
         assert mst_values == [10, 9, 6]
+
+    def test_iter_mst_edges_matches_property(self):
+        """Test that iter_mst_edges yields the same MST edge sequence as mst_edges."""
+        data = np.array([
+            [0, 10, 5],
+            [10, 0, 8],
+            [5, 8, 0]
+        ])
+        row_names = ['A', 'B', 'C']
+        matrix = DenseDataMatrix(data, row_names, row_names)
+
+        tree = MaxTree(matrix)
+
+        assert list(tree.iter_mst_edges()) == tree.mst_edges
     
     def test_init_disconnected_components(self):
         """Test MST on a matrix with zeros (disconnected if we filter)"""

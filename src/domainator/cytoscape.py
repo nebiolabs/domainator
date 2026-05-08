@@ -4,9 +4,10 @@ import numpy as np
 import html
 import seaborn as sns
 import pandas as pd
+from itertools import chain
 from pandas.api.types import is_integer_dtype, is_float_dtype
 import xml.etree.ElementTree as ET
-from typing import Dict
+from typing import Dict, Iterable, Iterator, Optional, Sequence, Tuple
 
 from domainator.output_guardrails import build_output_limit_message, OutputSizeLimitExceeded
 
@@ -82,11 +83,38 @@ def _serialize_xgmml_element(element, tail):
     return ET.tostring(element, encoding="utf-8")
 
 
-def _iter_cytoscape_xgmml_chunks(nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None, color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
+def _peek_iterable(values: Iterable[Tuple]) -> Tuple[Iterator[Tuple], bool]:
+    iterator = iter(values)
+    try:
+        first_value = next(iterator)
+    except StopIteration:
+        return iter(()), False
+    return chain((first_value,), iterator), True
+
+
+def _iter_with_is_last(values: Iterable[Tuple]) -> Iterator[Tuple[Tuple, bool]]:
+    iterator = iter(values)
+    try:
+        previous = next(iterator)
+    except StopIteration:
+        return
+
+    for value in iterator:
+        yield previous, False
+        previous = value
+
+    yield previous, True
+
+
+def _iter_cytoscape_xgmml_chunks(nodes, edges=None, edge_rows=None, edge_column_names: Optional[Sequence[str]]=None, edge_metadata_types: Optional[Dict[str, str]]=None, edge_endpoint_style: str = "name", name="", x_col=None, y_col=None, z_col=None, color_by=None, color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
     graph_name = name
     possible_shapes = {"DIAMOND", "ELLIPSE", "HEXAGON", "OCTAGON", "PARALLELOGRAM", "RECTANGLE", "ROUND_RECTANGLE", "TRIANGLE", "V"}
     if shape not in possible_shapes:
         raise ValueError(f"Unrecognized node shape specification {shape}, please choose one of: {possible_shapes}")
+    if edges is not None and edge_rows is not None:
+        raise ValueError("Provide either edges or edge_rows, not both")
+    if edge_endpoint_style not in {"name", "index"}:
+        raise ValueError("edge_endpoint_style must be 'name' or 'index'")
 
     palette = None
     if color_by is not None:
@@ -98,12 +126,15 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, name="", x_col=None, y_col=N
             raise ValueError("color_table must be provided if color_by is provided")
 
     metadata_types = get_column_types(nodes)
-    node_names_to_ids = dict() if edges is not None else None
+    edge_rows, has_stream_edges = _peek_iterable(edge_rows) if edge_rows is not None else (None, False)
+    has_edges = edges is not None or has_stream_edges
+    node_names_to_ids = dict() if has_edges and edge_endpoint_style == "name" else None
+    node_ids_by_index = [] if has_edges and edge_endpoint_style == "index" else None
     col_to_idx = {v:i+1 for i,v in enumerate(nodes.columns)}
     node_count = len(nodes.index)
     edge_count = 0 if edges is None else len(edges.index)
 
-    has_children = node_count + edge_count > 0
+    has_children = node_count + edge_count + int(has_stream_edges) > 0
 
     yield b"<?xml version='1.0' encoding='utf-8'?>\n"
     yield f'<graph label="{html.escape(str(graph_name), quote=True)}" xmlns="http://www.cs.rpi.edu/XGMML">\n'.encode("utf-8")
@@ -116,6 +147,8 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, name="", x_col=None, y_col=N
         node = ET.Element("node", {"id":node_id, "label":node_id})
         if node_names_to_ids is not None:
             node_names_to_ids[name] = node_id
+        if node_ids_by_index is not None:
+            node_ids_by_index.append(node_id)
 
         ET.SubElement(node, "att", {"type":"string", "name":"Description", "value":html.escape(name)})
         for key, idx in col_to_idx.items():
@@ -143,7 +176,7 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, name="", x_col=None, y_col=N
             elem_dict["z"] = str(row[col_to_idx[z_col]])
         ET.SubElement(node, "graphics", elem_dict)
 
-        tail = "\n" if i == node_count - 1 and edge_count == 0 else "\n  "
+        tail = "\n" if i == node_count - 1 and not has_edges else "\n  "
         yield _serialize_xgmml_element(node, tail)
 
     if edges is not None:
@@ -158,17 +191,41 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, name="", x_col=None, y_col=N
 
             tail = "\n" if i == edge_count - 1 else "\n  "
             yield _serialize_xgmml_element(edge, tail)
+    elif edge_rows is not None:
+        if edge_column_names is None or edge_metadata_types is None:
+            raise ValueError("edge_column_names and edge_metadata_types are required with edge_rows")
+
+        for i, (row, is_last) in enumerate(_iter_with_is_last(edge_rows)):
+            source = row[0]
+            target = row[1]
+            if edge_endpoint_style == "name":
+                source_id = node_names_to_ids[source]
+                target_id = node_names_to_ids[target]
+            else:
+                source_id = node_ids_by_index[source]
+                target_id = node_ids_by_index[target]
+
+            edge = ET.Element("edge", {"id":f"e{i}", "label":f"e{i}", "source": source_id, "target": target_id})
+            for key, value in zip(edge_column_names, row[2:]):
+                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":str(check_null(value, edge_metadata_types[key]))})
+
+            tail = "\n" if is_last else "\n  "
+            yield _serialize_xgmml_element(edge, tail)
 
     yield b"</graph>\n"
 
 
-def estimate_cytoscape_xgmml_size(nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None, color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
+def estimate_cytoscape_xgmml_size(nodes, edges=None, edge_rows=None, edge_column_names: Optional[Sequence[str]]=None, edge_metadata_types: Optional[Dict[str, str]]=None, edge_endpoint_style: str = "name", name="", x_col=None, y_col=None, z_col=None, color_by=None, color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25):
     """Return the exact serialized XGMML size in bytes for the given node and edge tables."""
     return sum(
         len(chunk)
         for chunk in _iter_cytoscape_xgmml_chunks(
             nodes,
             edges=edges,
+            edge_rows=edge_rows,
+            edge_column_names=edge_column_names,
+            edge_metadata_types=edge_metadata_types,
+            edge_endpoint_style=edge_endpoint_style,
             name=name,
             x_col=x_col,
             y_col=y_col,
@@ -182,7 +239,7 @@ def estimate_cytoscape_xgmml_size(nodes, edges=None, name="", x_col=None, y_col=
     )
 
 
-def write_cytoscape_xgmml(out_path, nodes, edges=None, name="", x_col=None, y_col=None, z_col=None, color_by=None,  color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25, max_output_bytes=None, output_description=None, mitigation_options=None, extra_guidance=None):
+def write_cytoscape_xgmml(out_path, nodes, edges=None, edge_rows=None, edge_column_names: Optional[Sequence[str]]=None, edge_metadata_types: Optional[Dict[str, str]]=None, edge_endpoint_style: str = "name", name="", x_col=None, y_col=None, z_col=None, color_by=None,  color_table:Dict[str,str]=None, shape="ELLIPSE", shape_x=25, shape_y=25, max_output_bytes=None, output_description=None, mitigation_options=None, extra_guidance=None):
     """
         out_path: network file to write, should end in .xgmml
         nodes: pandas dataframe for nodes and their annotations. Should have a single index column which will be the node name.
@@ -208,6 +265,10 @@ def write_cytoscape_xgmml(out_path, nodes, edges=None, name="", x_col=None, y_co
         for chunk in _iter_cytoscape_xgmml_chunks(
             nodes,
             edges=edges,
+            edge_rows=edge_rows,
+            edge_column_names=edge_column_names,
+            edge_metadata_types=edge_metadata_types,
+            edge_endpoint_style=edge_endpoint_style,
             name=name,
             x_col=x_col,
             y_col=y_col,

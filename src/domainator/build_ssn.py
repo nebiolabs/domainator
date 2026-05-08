@@ -73,6 +73,63 @@ def _mst_knn_arg(value: Union[str, int]) -> int:
     return value
 
 
+def cluster_labels_from_tree(tree: MaxTree, lb: float) -> np.ndarray:
+    """Return size-ranked connected component labels from MST edges above the threshold."""
+
+    parent = np.arange(tree.n_nodes, dtype=int)
+
+    def find(node_idx: int) -> int:
+        root = node_idx
+        while parent[root] != root:
+            root = parent[root]
+
+        while parent[node_idx] != node_idx:
+            next_idx = parent[node_idx]
+            parent[node_idx] = root
+            node_idx = next_idx
+
+        return root
+
+    def union(left_idx: int, right_idx: int) -> None:
+        left_root = find(left_idx)
+        right_root = find(right_idx)
+        if left_root != right_root:
+            parent[left_root] = right_root
+
+    for source_idx, target_idx, score in tree.iter_mst_edges():
+        if score <= lb:
+            break
+        union(source_idx, target_idx)
+
+    labels = np.empty(tree.n_nodes, dtype=int)
+    root_to_label = dict()
+    next_label = 0
+    for node_idx in range(tree.n_nodes):
+        root = find(node_idx)
+        if root not in root_to_label:
+            root_to_label[root] = next_label
+            next_label += 1
+        labels[node_idx] = root_to_label[root]
+
+    return rename_labels_by_frequency(labels) + 1
+
+
+def cluster_labels_from_graph(matrix: DataMatrix, lb: float) -> np.ndarray:
+    """Return size-ranked connected component labels from the thresholded input graph."""
+    labels = connected_components(matrix.data > lb, directed=False, return_labels=True)[1]
+    return rename_labels_by_frequency(labels) + 1
+
+
+def iter_default_ssn_edges(matrix: DataMatrix, lb: float):
+    """Yield default-path SSN edges as index/index/score tuples in legacy output order."""
+    for source_idx, target_idx, score in matrix.triangular_iter(skip_zeros=True, agg=max, index_style="index"):
+        if score <= lb or source_idx == target_idx:
+            continue
+        if matrix.rows[target_idx] < matrix.rows[source_idx]:
+            source_idx, target_idx = target_idx, source_idx
+        yield source_idx, target_idx, score
+
+
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
               xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None, max_output_bytes=None):
     """build a sequence similarity network from a matrix
@@ -104,42 +161,38 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
 
     if cluster_tsv is not None:
         cluster = True
-    # find edges
-    edge_data=dict() # (source, target): score
+    tree = MaxTree(matrix) if mst or mst_knn is not None else None
+
+    node_data = pd.DataFrame(index=matrix.rows)
+    if cluster:
+        if tree is None:
+            node_data[CLUSTER_COLUMN] = cluster_labels_from_graph(matrix, lb)
+        else:
+            node_data[CLUSTER_COLUMN] = cluster_labels_from_tree(tree, lb)
+
+    edge_data = None
     if mst:
-        tree = MaxTree(matrix)
-        edge_iter = [
+        edge_iter = (
             (matrix.rows[source_idx], matrix.rows[target_idx], score)
-            for source_idx, target_idx, score in tree.mst_edges
+            for source_idx, target_idx, score in tree.iter_mst_edges()
             if score > lb
-        ]
+        )
     elif mst_knn is not None:
-        edge_iter = [
+        edge_iter = (
             (matrix.rows[source_idx], matrix.rows[target_idx], score)
-            for (source_idx, target_idx), score in mst_knn_edge_index_dict(matrix, mst_knn, lower_bound=lb).items()
-        ]
+            for (source_idx, target_idx), score in mst_knn_edge_index_dict(matrix, mst_knn, lower_bound=lb, tree=tree).items()
+        )
     else:
-        edge_iter = matrix.triangular(skip_zeros=True, agg=max)
-    for source,target,score in edge_iter:
-        if score > lb:
+        edge_iter = None
+
+    if edge_iter is not None:
+        edge_data_dict = dict() # (source, target): score
+        for source, target, score in edge_iter:
             if source != target: #don't write self-edges
                 if target < source:
-                    tmp = source
-                    source = target
-                    
-                    target = tmp
-                edge_data[(source,target)] = score
-
-    #TODO: could save a lot of memory by streaming: writing the xgmml row by row instead of loading the entire matrix and metadata into memory.
-    edge_data = pd.DataFrame.from_dict(edge_data, orient="index", columns=[SCORE_COLUMN]) # (source_node, dest_node): score
-    node_data = pd.DataFrame()
-    node_data.index = matrix.rows # node: []
-
-    if cluster:
-        n_components, labels =  connected_components( (matrix.data > lb), directed=False, return_labels=True)
-        labels = rename_labels_by_frequency(labels)
-        labels = labels + 1 # make the cluster labels start at 1 instead of 0
-        node_data[CLUSTER_COLUMN] = labels
+                    source, target = target, source
+                edge_data_dict[(source, target)] = score
+        edge_data = pd.DataFrame.from_dict(edge_data_dict, orient="index", columns=[SCORE_COLUMN]) # (source_node, dest_node): score
 
     if metadata_files is not None:
         for file in metadata_files:
@@ -153,17 +206,33 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     if xgmml is not None:
         temp_xgmml_path = make_temporary_output_path(xgmml)
         try:
-            write_cytoscape_xgmml(
-                temp_xgmml_path,
-                node_data,
-                edge_data,
-                name=Path(xgmml).stem,
-                color_by=color_by,
-                color_table=color_table,
-                max_output_bytes=max_output_bytes,
-                output_description=f"XGMML network output '{xgmml}'",
-                mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
-            )
+            if mst or mst_knn is not None:
+                write_cytoscape_xgmml(
+                    temp_xgmml_path,
+                    node_data,
+                    edges=edge_data,
+                    name=Path(xgmml).stem,
+                    color_by=color_by,
+                    color_table=color_table,
+                    max_output_bytes=max_output_bytes,
+                    output_description=f"XGMML network output '{xgmml}'",
+                    mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
+                )
+            else:
+                write_cytoscape_xgmml(
+                    temp_xgmml_path,
+                    node_data,
+                    edge_rows=iter_default_ssn_edges(matrix, lb),
+                    edge_column_names=[SCORE_COLUMN],
+                    edge_metadata_types={SCORE_COLUMN: "real"},
+                    edge_endpoint_style="index",
+                    name=Path(xgmml).stem,
+                    color_by=color_by,
+                    color_table=color_table,
+                    max_output_bytes=max_output_bytes,
+                    output_description=f"XGMML network output '{xgmml}'",
+                    mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
+                )
             os.replace(temp_xgmml_path, xgmml)
             temp_xgmml_path = None
         finally:
@@ -267,7 +336,8 @@ def main(argv):
     # Run
     # params.metric,
     try:
-        build_ssn(DataMatrix.from_file(input_file), params.lb, params.metadata, params.color_by, color_table,
+        load_lower_bound = params.lb if (params.mst_knn is None and not params.mst) else None
+        build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.lb, params.metadata, params.color_by, color_table,
                   params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
                   params.mst, params.mst_knn, subset_labels, max_output_bytes=max_output_bytes)
     except OutputSizeLimitExceeded as exc:

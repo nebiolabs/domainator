@@ -1,5 +1,5 @@
 from domainator import build_ssn
-from domainator.data_matrix import DenseDataMatrix, mst_knn_edge_index_dict
+from domainator.data_matrix import DenseDataMatrix, SparseDataMatrix, MaxTree, mst_knn_edge_index_dict
 import pytest
 import tempfile
 import pandas as pd
@@ -7,6 +7,8 @@ import numpy as np
 from pathlib import Path
 from helpers import compare_files
 import re
+import scipy.sparse
+from scipy.sparse.csgraph import connected_components
 
 @pytest.mark.parametrize("input_file,expected_output",
 [
@@ -321,6 +323,43 @@ def test_build_ssn_mst_knn_subset_after_filtering():
         ("B", "C"),
         ("C", "D"),
     }
+
+
+def test_cluster_labels_from_tree_matches_connected_components():
+    labels = ["A", "B", "C", "D", "E"]
+    array = np.array([
+        [0, 9, 0, 0, 0],
+        [9, 0, 5, 0, 0],
+        [0, 5, 0, 0, 0],
+        [0, 0, 0, 0, 7],
+        [0, 0, 0, 7, 0],
+    ], dtype=float)
+
+    for matrix in (
+        DenseDataMatrix(array, labels, labels),
+        SparseDataMatrix(scipy.sparse.csr_array(array), labels, labels),
+    ):
+        tree = MaxTree(matrix)
+        expected = connected_components(matrix.data > 5, directed=False, return_labels=True)[1]
+        expected = build_ssn.rename_labels_by_frequency(expected) + 1
+        observed = build_ssn.cluster_labels_from_tree(tree, 5)
+        assert np.array_equal(observed, expected)
+
+
+def test_iter_default_ssn_edges_uses_indices_and_lexical_endpoint_order():
+    labels = ["zeta", "alpha", "beta"]
+    matrix = DenseDataMatrix(np.array([
+        [0, 10, 0],
+        [10, 0, 7],
+        [0, 7, 0],
+    ], dtype=float), labels, labels)
+
+    edges = list(build_ssn.iter_default_ssn_edges(matrix, lb=0))
+
+    assert edges == [
+        (1, 0, 10.0),
+        (1, 2, 7.0),
+    ]
 
 
 def test_build_ssn_mst_knn_requires_k_gt_one(shared_datadir):
