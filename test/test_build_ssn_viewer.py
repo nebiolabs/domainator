@@ -241,6 +241,9 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'metadata-select-nodes' in html_content
         assert 'metadata-reset-sort' in html_content
         assert 'metadata-null-order' in html_content
+        assert 'metadata-rows-per-page' in html_content
+        assert 'Rows per page' in html_content
+        assert '<option value="all">All rows</option>' in html_content
         assert 'filteredMetadataNodeIndices' in html_content
         assert 'formatMetadataDisplayValue' in html_content
         assert 'toggleMetadataRowSelection' in html_content

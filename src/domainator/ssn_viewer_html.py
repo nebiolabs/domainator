@@ -277,6 +277,11 @@ def ssn_viewer_html(
         gap: 10px;
         flex-wrap: wrap;
     }}
+    .metadata-pager-controls label {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }}
     .metadata-pager button {{
         width: auto;
         min-width: 0;
@@ -642,6 +647,18 @@ def ssn_viewer_html(
                 <div class="metadata-pager">
                     <div id="metadata-page-status" class="metadata-pager-status">Load a bundle to page through metadata.</div>
                     <div class="metadata-pager-controls">
+                        <label for="metadata-rows-per-page">Rows per page
+                            <select id="metadata-rows-per-page" disabled>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="250" selected>250</option>
+                                <option value="500">500</option>
+                                <option value="1000">1000</option>
+                                <option value="2500">2500</option>
+                                <option value="5000">5000</option>
+                                <option value="all">All rows</option>
+                            </select>
+                        </label>
                         <button id="metadata-prev-page" type="button" disabled>Previous page</button>
                         <button id="metadata-next-page" type="button" disabled>Next page</button>
                     </div>
@@ -689,7 +706,7 @@ def ssn_viewer_html(
     const clusterCanvas = document.getElementById('cluster-view');
     const clusterContext = clusterCanvas.getContext('2d');
     const LARGE_BUNDLE_NODE_THRESHOLD = 4000;
-    const METADATA_PAGE_SIZE = 250;
+    const DEFAULT_METADATA_PAGE_SIZE = 250;
     const EMBEDDED_BUNDLE_BASE64 = {json.dumps(embedded_bundle_base64)};
 
     function setStatus(message) {{
@@ -819,6 +836,7 @@ def ssn_viewer_html(
         document.getElementById('metadata-filter').value = '';
         document.getElementById('metadata-null-order').disabled = false;
         document.getElementById('metadata-null-order').value = 'last';
+        document.getElementById('metadata-rows-per-page').disabled = false;
         document.getElementById('metadata-prev-page').disabled = true;
         document.getElementById('metadata-next-page').disabled = true;
         setStatus(
@@ -2928,6 +2946,8 @@ def ssn_viewer_html(
             pageStatus.textContent = metadataFilterText()
                 ? 'No rows match the current filter.'
                 : 'No metadata rows available.';
+        }} else if (pagination.showAll) {{
+            pageStatus.textContent = 'Showing all ' + sortedNodeIndices.length.toLocaleString() + ' rows on one page.';
         }} else {{
             pageStatus.textContent = 'Showing rows ' + (pagination.start + 1).toLocaleString() + ' to ' + pagination.end.toLocaleString() +
                 ' of ' + sortedNodeIndices.length.toLocaleString() + ' (page ' + (pagination.pageIndex + 1).toLocaleString() +
@@ -2942,14 +2962,15 @@ def ssn_viewer_html(
         const metadataSelectionDescription = metadataSelectionCount > 0
             ? metadataSelectionCount.toLocaleString() + ' table rows selected. Click Select nodes to promote them into the graph selection. '
             : '';
+        const pagerActive = pagination.pageCount > 1;
         document.getElementById('selection-note').textContent = metadataSelectionDescription + (selected.length === 0
             ? (
-                sortedNodeIndices.length > METADATA_PAGE_SIZE
+                pagerActive
                     ? 'No clusters selected. Browse the full network table with the pager' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
                     : 'No clusters selected. Showing the full network table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
             )
             : (
-                selected.length > METADATA_PAGE_SIZE
+                pagerActive
                     ? 'Showing one page of the selected rows in the table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '. Use the pager to browse more rows. Export includes the full filtered selection.'
                     : 'Ctrl-click a node to toggle it individually, click a cluster to toggle it, Shift-drag a box to add multiple clusters, click table rows to stage them, shift-click to select or deselect row ranges, use the search box to filter rows, and click a column header to sort' + (sortDescription ? ' by ' + sortDescription : '') + '.'
             ));
@@ -3100,12 +3121,29 @@ def ssn_viewer_html(
         return sortedMetadataNodeIndices(filteredMetadataNodeIndices(nodeIndices));
     }}
 
+    function metadataRowsPerPageSetting() {{
+        const select = document.getElementById('metadata-rows-per-page');
+        const value = select ? select.value : String(DEFAULT_METADATA_PAGE_SIZE);
+        if (value === 'all') {{
+            return {{showAll: true, pageSize: Number.POSITIVE_INFINITY}};
+        }}
+        const pageSize = Number.parseInt(value, 10);
+        if (!Number.isFinite(pageSize) || pageSize <= 0) {{
+            return {{showAll: false, pageSize: DEFAULT_METADATA_PAGE_SIZE}};
+        }}
+        return {{showAll: false, pageSize}};
+    }}
+
     function metadataPagination(totalRowCount) {{
-        const pageCount = Math.max(1, Math.ceil(totalRowCount / METADATA_PAGE_SIZE));
+        const rowsPerPage = metadataRowsPerPageSetting();
+        if (rowsPerPage.showAll) {{
+            return {{pageCount: 1, pageIndex: 0, start: 0, end: totalRowCount, showAll: true}};
+        }}
+        const pageCount = Math.max(1, Math.ceil(totalRowCount / rowsPerPage.pageSize));
         const pageIndex = Math.max(0, Math.min(state.metadataPage, pageCount - 1));
-        const start = totalRowCount === 0 ? 0 : pageIndex * METADATA_PAGE_SIZE;
-        const end = Math.min(totalRowCount, start + METADATA_PAGE_SIZE);
-        return {{pageCount, pageIndex, start, end}};
+        const start = totalRowCount === 0 ? 0 : pageIndex * rowsPerPage.pageSize;
+        const end = Math.min(totalRowCount, start + rowsPerPage.pageSize);
+        return {{pageCount, pageIndex, start, end, showAll: false}};
     }}
 
     function resetMetadataPage() {{
@@ -3671,6 +3709,10 @@ def ssn_viewer_html(
         scheduleMetadataFilterUpdate();
     }});
     document.getElementById('metadata-null-order').addEventListener('change', () => {{
+        resetMetadataPage();
+        updateMetadataTable();
+    }});
+    document.getElementById('metadata-rows-per-page').addEventListener('change', () => {{
         resetMetadataPage();
         updateMetadataTable();
     }});
