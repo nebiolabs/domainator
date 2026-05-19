@@ -179,13 +179,18 @@ def build_ssn_viewer_bundle(
     return _json_ready(bundle)
 
 
+def _serialize_ssn_viewer_bundle(bundle: dict) -> tuple[bytes, bytes]:
+    json_bytes = json.dumps(bundle, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    compressed_bytes = gzip.compress(json_bytes, mtime=0)
+    return json_bytes, compressed_bytes
+
+
 def write_ssn_viewer_bundle(
     out_path: Union[str, PathLike],
     bundle: dict,
     max_output_bytes: int | None = None,
 ):
-    json_bytes = json.dumps(bundle, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    compressed_bytes = gzip.compress(json_bytes, mtime=0)
+    _, compressed_bytes = _serialize_ssn_viewer_bundle(bundle)
     enforce_output_limit(
         projected_bytes=len(compressed_bytes),
         max_output_bytes=max_output_bytes,
@@ -208,12 +213,14 @@ def write_ssn_viewer_bundle(
 def main(argv):
     parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
-    parser.add_argument("-i", "--input", type=str, required=True,
+    parser.add_argument("-i", "--input", type=str, required=False,
                         help="Symmetric similarity matrix to convert into an SSN viewer bundle. Format can be tab-separated text or Domainator hdf5.")
-    parser.add_argument("-o", "--output", type=str, required=True,
-                        help="Path to write the gzip-compressed SSN viewer bundle.")
-    parser.add_argument("--viewer_html", type=str, default=None,
+    parser.add_argument("-o", "--output", type=str, required=False,
+                        help="Path to write the gzip-compressed JSON SSN viewer bundle.")
+    parser.add_argument("--html", type=str, default=None,
                         help="Optional path to write a standalone static HTML viewer shell that loads local bundle files.")
+    parser.add_argument("--embed_data", action="store_true",
+                        help="Embed the input bundle JSON into --html so the viewer autoloads it on open.")
     parser.add_argument("--name", type=str, default=None,
                         help="Optional display name recorded in the bundle. Defaults to the output file stem.")
     parser.add_argument("--metadata", type=str, nargs="+", required=False, default=None,
@@ -234,9 +241,34 @@ def main(argv):
     parser.add_argument("--config", action=ActionConfigFile)
 
     params = parser.parse_args(argv)
+
+    if params.input is None:
+        if params.output is not None:
+            raise SystemExit("-o/--output requires -i/--input.")
+        if params.embed_data:
+            raise SystemExit("--embed_data requires -i/--input.")
+        if params.html is None:
+            raise SystemExit("When -i/--input is omitted, --html is required.")
+
+        bundle_name = params.name if params.name is not None else "Domainator SSN Viewer"
+        write_ssn_viewer_html(params.html, title=bundle_name)
+        return
+
+    if params.output is None and not params.embed_data:
+        raise SystemExit("When -i/--input is supplied, provide -o/--output or --embed_data.")
+    if params.embed_data and params.html is None:
+        raise SystemExit("--embed_data requires --html.")
+
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     subset_labels = list_and_file_to_dict_keys(params.subset, params.subset_file, as_set=True)
-    bundle_name = params.name if params.name is not None else Path(params.output).stem
+    if params.name is not None:
+        bundle_name = params.name
+    elif params.output is not None:
+        bundle_name = Path(params.output).stem
+    elif params.html is not None:
+        bundle_name = Path(params.html).stem
+    else:
+        bundle_name = "Domainator SSN Viewer"
 
     try:
         bundle = build_ssn_viewer_bundle(
@@ -249,9 +281,17 @@ def main(argv):
             label_by=params.label_by,
             name=bundle_name,
         )
-        write_ssn_viewer_bundle(params.output, bundle, max_output_bytes=max_output_bytes)
-        if params.viewer_html is not None:
-            write_ssn_viewer_html(params.viewer_html, title=bundle_name)
+        embedded_bundle_json = None
+        if params.output is not None:
+            write_ssn_viewer_bundle(params.output, bundle, max_output_bytes=max_output_bytes)
+        if params.embed_data:
+            embedded_bundle_json, _ = _serialize_ssn_viewer_bundle(bundle)
+        if params.html is not None:
+            write_ssn_viewer_html(
+                params.html,
+                title=bundle_name,
+                embedded_bundle_json=embedded_bundle_json,
+            )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 

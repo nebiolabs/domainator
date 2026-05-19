@@ -1,12 +1,20 @@
 """Static HTML shell for the standalone SSN viewer."""
 
+import base64
+import json
 from pathlib import Path
 
 from domainator.output_guardrails import make_temporary_output_path
 
 
-def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
+def ssn_viewer_html(
+    title: str = "Domainator SSN Viewer",
+    embedded_bundle_json: bytes | None = None,
+) -> str:
     escaped_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    embedded_bundle_base64 = None
+    if embedded_bundle_json is not None:
+        embedded_bundle_base64 = base64.b64encode(embedded_bundle_json).decode("ascii")
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -250,9 +258,33 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         border: 1px solid rgba(216, 206, 194, 0.8);
         background: rgba(255,255,255,0.72);
     }}
+    .metadata-pager {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.9rem;
+    }}
+    .metadata-pager-status {{
+        min-width: 0;
+    }}
+    .metadata-pager-controls {{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }}
+    .metadata-pager button {{
+        width: auto;
+        min-width: 0;
+    }}
     table {{
         border-collapse: collapse;
         width: 100%;
+        table-layout: fixed;
         font-size: 0.92rem;
     }}
     th, td {{
@@ -260,12 +292,28 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         border-bottom: 1px solid rgba(216, 206, 194, 0.65);
         text-align: left;
         vertical-align: top;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }}
     thead th {{
         position: sticky;
         top: 0;
         background: #fffaf4;
         z-index: 1;
+    }}
+    th.metadata-header {{
+        position: sticky;
+        top: 0;
+        padding: 0;
+        background: #fffaf4;
+    }}
+    .metadata-header-cell {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 8px 14px 8px 10px;
     }}
     tbody tr {{
         transition: background 140ms ease;
@@ -283,7 +331,8 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        width: 100%;
+        min-width: 0;
+        flex: 1 1 auto;
         padding: 0;
         border: 0;
         background: transparent;
@@ -300,6 +349,48 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         color: var(--muted);
         font-size: 0.82rem;
         letter-spacing: 0.01em;
+        flex: 0 0 auto;
+    }}
+    .metadata-copy-button {{
+        flex: 0 0 auto;
+        border: 1px solid rgba(216, 206, 194, 0.9);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--muted);
+        padding: 4px 9px;
+        font: inherit;
+        font-size: 0.78rem;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+        transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+    }}
+    .metadata-copy-button:hover {{
+        color: #7b2f22;
+        border-color: rgba(200, 85, 61, 0.4);
+        background: rgba(200, 85, 61, 0.10);
+    }}
+    .metadata-resize-handle {{
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 12px;
+        height: 100%;
+        cursor: col-resize;
+        touch-action: none;
+    }}
+    .metadata-resize-handle::before {{
+        content: "";
+        position: absolute;
+        top: 9px;
+        bottom: 9px;
+        left: 5px;
+        width: 2px;
+        border-radius: 999px;
+        background: rgba(216, 206, 194, 0.95);
+        transition: background 140ms ease;
+    }}
+    .metadata-resize-handle:hover::before {{
+        background: rgba(200, 85, 61, 0.58);
     }}
     .metadata-cell-number {{
         text-align: right;
@@ -543,9 +634,17 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                 </div>
                 <div class="table-wrap">
                     <table id="metadata-table">
+                        <colgroup></colgroup>
                         <thead></thead>
                         <tbody></tbody>
                     </table>
+                </div>
+                <div class="metadata-pager">
+                    <div id="metadata-page-status" class="metadata-pager-status">Load a bundle to page through metadata.</div>
+                    <div class="metadata-pager-controls">
+                        <button id="metadata-prev-page" type="button" disabled>Previous page</button>
+                        <button id="metadata-next-page" type="button" disabled>Next page</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -560,12 +659,15 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         metadataColumnByName: new Map(),
         metadataColumnIndexByName: new Map(),
         metadataColorInfoByName: new Map(),
+        metadataColumnWidths: new Map(),
         metadataSearchTextByNodeIndex: [],
+        metadataPage: 0,
         activeClusters: [],
         visibleClusters: [],
         selectedNodeIndices: new Set(),
         selectedMetadataNodeIndices: new Set(),
         metadataRowSelectionAnchor: null,
+        metadataResize: null,
         visibleLayout: [],
         splitLinks: [],
         sliderModel: null,
@@ -587,9 +689,27 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     const clusterCanvas = document.getElementById('cluster-view');
     const clusterContext = clusterCanvas.getContext('2d');
     const LARGE_BUNDLE_NODE_THRESHOLD = 4000;
+    const METADATA_PAGE_SIZE = 250;
+    const EMBEDDED_BUNDLE_BASE64 = {json.dumps(embedded_bundle_base64)};
 
     function setStatus(message) {{
         document.getElementById('bundle-status').textContent = message;
+    }}
+
+    async function writeTextToClipboard(text) {{
+        if (navigator.clipboard?.writeText) {{
+            await navigator.clipboard.writeText(text);
+            return;
+        }}
+        const helper = document.createElement('textarea');
+        helper.value = text;
+        helper.setAttribute('readonly', 'readonly');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand('copy');
+        document.body.removeChild(helper);
     }}
 
     function isLargeBundle(bundle) {{
@@ -602,7 +722,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function warnIfUnsupported() {{
         if (!browserSupportsBundleLoading()) {{
-            document.getElementById('browser-warning').textContent = 'This browser lacks DecompressionStream support; gzipped bundles cannot be loaded.';
+            document.getElementById('browser-warning').textContent = EMBEDDED_BUNDLE_BASE64
+                ? 'This browser lacks DecompressionStream support; bundled data will still open, but loading external gzipped bundles is unavailable.'
+                : 'This browser lacks DecompressionStream support; gzipped bundles cannot be loaded.';
         }}
     }}
 
@@ -618,6 +740,28 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
         const text = await file.text();
         return JSON.parse(text);
+    }}
+
+    function decodeBase64Utf8(base64Value) {{
+        const binary = atob(base64Value);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index++) {{
+            bytes[index] = binary.charCodeAt(index);
+        }}
+        return new TextDecoder().decode(bytes);
+    }}
+
+    async function autoloadEmbeddedBundle() {{
+        if (!EMBEDDED_BUNDLE_BASE64) {{
+            return;
+        }}
+        setStatus('Loading bundled data...');
+        try {{
+            installBundle(JSON.parse(decodeBase64Utf8(EMBEDDED_BUNDLE_BASE64)));
+        }} catch (error) {{
+            console.error(error);
+            setStatus('Failed to load bundled data: ' + error.message);
+        }}
     }}
 
     function formatValue(value) {{
@@ -643,6 +787,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         state.metadataRows = bundle.metadata.rows || [];
         state.metadataByNodeIndex = state.metadataRows;
         state.metadataSort = {{columnKey: null, direction: 'asc'}};
+        state.metadataColumnWidths = new Map();
+        state.metadataPage = 0;
+        state.metadataResize = null;
         state.selectedNodeIndices = new Set();
         state.selectedMetadataNodeIndices = new Set();
         state.metadataRowSelectionAnchor = null;
@@ -672,6 +819,8 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         document.getElementById('metadata-filter').value = '';
         document.getElementById('metadata-null-order').disabled = false;
         document.getElementById('metadata-null-order').value = 'last';
+        document.getElementById('metadata-prev-page').disabled = true;
+        document.getElementById('metadata-next-page').disabled = true;
         setStatus(
             'Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.' +
             (isLargeBundle(bundle)
@@ -960,6 +1109,62 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function metadataColumn(name) {{
         return state.metadataColumnByName.get(name) || null;
+    }}
+
+    function metadataColumnKeys() {{
+        return ['node_id', ...state.metadataColumns.map(column => column.name)];
+    }}
+
+    function defaultMetadataColumnWidth(columnKey) {{
+        if (columnKey === 'node_id') {{
+            return 230;
+        }}
+        const column = metadataColumn(columnKey);
+        if (!column) {{
+            return 180;
+        }}
+        if (column.type === 'int' || column.type === 'float') {{
+            return 140;
+        }}
+        if (column.type === 'bool' || column.type === 'boolean') {{
+            return 120;
+        }}
+        return 190;
+    }}
+
+    function metadataColumnWidth(columnKey) {{
+        return state.metadataColumnWidths.get(columnKey) || defaultMetadataColumnWidth(columnKey);
+    }}
+
+    function applyMetadataColumnWidths() {{
+        const colgroup = document.querySelector('#metadata-table colgroup');
+        if (!colgroup) {{
+            return;
+        }}
+        colgroup.innerHTML = '';
+        metadataColumnKeys().forEach(columnKey => {{
+            const col = document.createElement('col');
+            col.style.width = metadataColumnWidth(columnKey) + 'px';
+            colgroup.appendChild(col);
+        }});
+    }}
+
+    function updateMetadataColumnWidth(columnKey, nextWidth) {{
+        const clampedWidth = Math.max(96, Math.min(640, Math.round(nextWidth)));
+        state.metadataColumnWidths.set(columnKey, clampedWidth);
+        applyMetadataColumnWidths();
+    }}
+
+    function startMetadataColumnResize(columnKey, event) {{
+        event.preventDefault();
+        event.stopPropagation();
+        state.metadataResize = {{
+            columnKey,
+            startX: event.clientX,
+            startWidth: metadataColumnWidth(columnKey),
+        }};
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
     }}
 
     function metadataValue(nodeIndex, columnName) {{
@@ -2601,22 +2806,28 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function updateMetadataTable() {{
         const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
-        const baseNodeIndices = selected.length > 0
-            ? selected
-            : state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex);
+        const baseNodeIndices = metadataBaseNodeIndices();
         const filteredNodeIndices = filteredMetadataNodeIndices(baseNodeIndices);
         const sortedNodeIndices = sortedMetadataNodeIndices(filteredNodeIndices);
-        const renderedNodeIndices = sortedNodeIndices.slice(0, 250);
+        const pagination = metadataPagination(sortedNodeIndices.length);
+        state.metadataPage = pagination.pageIndex;
+        const renderedNodeIndices = sortedNodeIndices.slice(pagination.start, pagination.end);
         pruneMetadataRowSelection(renderedNodeIndices);
+        applyMetadataColumnWidths();
         const thead = document.querySelector('#metadata-table thead');
         const tbody = document.querySelector('#metadata-table tbody');
         thead.innerHTML = '';
         tbody.innerHTML = '';
 
         const headerRow = document.createElement('tr');
-        ['node_id', ...state.metadataColumns.map(column => column.name)].forEach(label => {{
+        metadataColumnKeys().forEach(label => {{
             const th = document.createElement('th');
+            th.className = 'metadata-header';
             th.setAttribute('aria-sort', state.metadataSort.columnKey === label ? (state.metadataSort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+
+            const headerCell = document.createElement('div');
+            headerCell.className = 'metadata-header-cell';
+
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'metadata-sort-button';
@@ -2630,7 +2841,29 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             button.appendChild(labelSpan);
             button.appendChild(indicatorSpan);
             button.addEventListener('click', () => toggleMetadataSort(label));
-            th.appendChild(button);
+
+            const copyButton = document.createElement('button');
+            copyButton.type = 'button';
+            copyButton.className = 'metadata-copy-button';
+            copyButton.textContent = 'Copy';
+            copyButton.setAttribute('title', 'Copy the currently displayed values from ' + label);
+            copyButton.addEventListener('click', async event => {{
+                event.preventDefault();
+                event.stopPropagation();
+                await copyMetadataColumn(label);
+            }});
+
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'metadata-resize-handle';
+            resizeHandle.setAttribute('role', 'separator');
+            resizeHandle.setAttribute('aria-orientation', 'vertical');
+            resizeHandle.setAttribute('title', 'Drag to resize column');
+            resizeHandle.addEventListener('pointerdown', event => startMetadataColumnResize(label, event));
+
+            headerCell.appendChild(button);
+            headerCell.appendChild(copyButton);
+            th.appendChild(headerCell);
+            th.appendChild(resizeHandle);
             headerRow.appendChild(th);
         }});
         thead.appendChild(headerRow);
@@ -2657,6 +2890,9 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                     if (event.target.closest('button, a, input, select, textarea')) {{
                         return;
                     }}
+                    if (metadataTableHasActiveTextSelection()) {{
+                        return;
+                    }}
                     toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, {{range: event.shiftKey}});
                 }});
                 row.addEventListener('keydown', event => {{
@@ -2668,6 +2904,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                 }});
                 const idCell = document.createElement('td');
                 idCell.textContent = nodeId(nodeIndex);
+                idCell.title = idCell.textContent;
                 row.appendChild(idCell);
 
                 state.metadataColumns.forEach(column => {{
@@ -2678,6 +2915,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
                         cell.className = className;
                     }}
                     cell.textContent = formatMetadataDisplayValue(column.name, value);
+                    cell.title = cell.textContent;
                     row.appendChild(cell);
                 }});
                 tbody.appendChild(row);
@@ -2685,6 +2923,18 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
 
         document.getElementById('selection-summary').textContent = selected.length.toLocaleString() + ' nodes selected';
+        const pageStatus = document.getElementById('metadata-page-status');
+        if (sortedNodeIndices.length === 0) {{
+            pageStatus.textContent = metadataFilterText()
+                ? 'No rows match the current filter.'
+                : 'No metadata rows available.';
+        }} else {{
+            pageStatus.textContent = 'Showing rows ' + (pagination.start + 1).toLocaleString() + ' to ' + pagination.end.toLocaleString() +
+                ' of ' + sortedNodeIndices.length.toLocaleString() + ' (page ' + (pagination.pageIndex + 1).toLocaleString() +
+                ' of ' + pagination.pageCount.toLocaleString() + ').';
+        }}
+        document.getElementById('metadata-prev-page').disabled = !state.bundle || sortedNodeIndices.length === 0 || pagination.pageIndex === 0;
+        document.getElementById('metadata-next-page').disabled = !state.bundle || sortedNodeIndices.length === 0 || pagination.pageIndex >= pagination.pageCount - 1;
         const sortDescription = metadataSortDescription();
         const filterText = metadataFilterText();
         const filterDescription = filterText ? ' matching filter "' + filterText + '"' : '';
@@ -2694,13 +2944,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             : '';
         document.getElementById('selection-note').textContent = metadataSelectionDescription + (selected.length === 0
             ? (
-                sortedNodeIndices.length > 250
-                    ? 'No clusters selected. Showing the first 250 rows from the full network table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
+                sortedNodeIndices.length > METADATA_PAGE_SIZE
+                    ? 'No clusters selected. Browse the full network table with the pager' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
                     : 'No clusters selected. Showing the full network table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
             )
             : (
-                selected.length > 250
-                    ? 'Showing the first 250 selected rows in the table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '. Export includes the full filtered selection.'
+                selected.length > METADATA_PAGE_SIZE
+                    ? 'Showing one page of the selected rows in the table' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '. Use the pager to browse more rows. Export includes the full filtered selection.'
                     : 'Ctrl-click a node to toggle it individually, click a cluster to toggle it, Shift-drag a box to add multiple clusters, click table rows to stage them, shift-click to select or deselect row ranges, use the search box to filter rows, and click a column header to sort' + (sortDescription ? ' by ' + sortDescription : '') + '.'
             ));
         document.getElementById('export-selected').disabled = !state.bundle;
@@ -2714,14 +2964,29 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         if (!state.bundle) {{
             return;
         }}
+        const activeClusterIds = activeClustersAtThreshold(selectedThresholdValue());
+        const componentAssignments = activeClusterAssignments(activeClusterIds);
+        const rankedClusterIds = [...activeClusterIds].sort((leftId, rightId) => {{
+            const leftNode = state.bundle.graph.hierarchy.nodes[leftId];
+            const rightNode = state.bundle.graph.hierarchy.nodes[rightId];
+            return rightNode.size - leftNode.size || leftNode.leaf_start - rightNode.leaf_start || leftId - rightId;
+        }});
+        const clusterByComponentId = new Map(rankedClusterIds.map((componentId, clusterIndex) => [componentId, clusterIndex + 1]));
+        const metadataColumns = state.metadataColumns.filter(column => column.name !== 'SSN_cluster');
         const exportedNodeIndices = metadataDisplayNodeIndices(selected.length > 0
             ? selected
             : state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex));
-        const header = ['node_id', ...state.metadataColumns.map(column => column.name)];
+        const header = ['node_id', 'SSN_cluster', ...metadataColumns.map(column => column.name)];
         const lines = [header.join('\\t')];
         exportedNodeIndices.forEach(nodeIndex => {{
-            const metadata = state.metadataByNodeIndex[nodeIndex] || [];
-            const row = [nodeId(nodeIndex), ...metadata.map(value => value === null || value === undefined ? '' : String(value))];
+            const row = [
+                nodeId(nodeIndex),
+                clusterByComponentId.get(componentAssignments[nodeIndex]) ?? '',
+                ...metadataColumns.map(column => {{
+                    const value = metadataValue(nodeIndex, column.name);
+                    return value === null || value === undefined ? '' : String(value);
+                }}),
+            ];
             lines.push(row.join('\\t'));
         }});
         const blob = new Blob([lines.join('\\n')], {{type: 'text/tab-separated-values'}});
@@ -2818,6 +3083,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }}
         state.pendingMetadataFilterTimer = window.setTimeout(() => {{
             state.pendingMetadataFilterTimer = null;
+            resetMetadataPage();
             updateMetadataTable();
         }}, delayMs);
     }}
@@ -2832,6 +3098,62 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
 
     function metadataDisplayNodeIndices(nodeIndices) {{
         return sortedMetadataNodeIndices(filteredMetadataNodeIndices(nodeIndices));
+    }}
+
+    function metadataPagination(totalRowCount) {{
+        const pageCount = Math.max(1, Math.ceil(totalRowCount / METADATA_PAGE_SIZE));
+        const pageIndex = Math.max(0, Math.min(state.metadataPage, pageCount - 1));
+        const start = totalRowCount === 0 ? 0 : pageIndex * METADATA_PAGE_SIZE;
+        const end = Math.min(totalRowCount, start + METADATA_PAGE_SIZE);
+        return {{pageCount, pageIndex, start, end}};
+    }}
+
+    function resetMetadataPage() {{
+        state.metadataPage = 0;
+    }}
+
+    function stepMetadataPage(delta) {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const totalRowCount = metadataDisplayNodeIndices(metadataBaseNodeIndices()).length;
+        const pagination = metadataPagination(totalRowCount);
+        const nextPage = Math.max(0, Math.min(pagination.pageCount - 1, pagination.pageIndex + delta));
+        if (nextPage === pagination.pageIndex) {{
+            return;
+        }}
+        state.metadataPage = nextPage;
+        updateMetadataTable();
+    }}
+
+    function metadataBaseNodeIndices() {{
+        const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
+        if (selected.length > 0) {{
+            return selected;
+        }}
+        return state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex);
+    }}
+
+    function metadataColumnValues(nodeIndices, columnKey) {{
+        if (columnKey === 'node_id') {{
+            return nodeIndices.map(nodeIndex => nodeId(nodeIndex));
+        }}
+        return nodeIndices.map(nodeIndex => formatMetadataDisplayValue(columnKey, metadataSortValue(nodeIndex, columnKey)));
+    }}
+
+    async function copyMetadataColumn(columnKey) {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const nodeIndices = metadataDisplayNodeIndices(metadataBaseNodeIndices());
+        const values = metadataColumnValues(nodeIndices, columnKey);
+        try {{
+            await writeTextToClipboard(values.join('\\n'));
+            setStatus('Copied column "' + columnKey + '" for ' + values.length.toLocaleString() + ' rows.');
+        }} catch (error) {{
+            console.error(error);
+            setStatus('Failed to copy column "' + columnKey + '": ' + error.message);
+        }}
     }}
 
     function pruneMetadataRowSelection(visibleNodeIndices) {{
@@ -2850,6 +3172,24 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     function clearMetadataRowSelection() {{
         state.selectedMetadataNodeIndices = new Set();
         state.metadataRowSelectionAnchor = null;
+    }}
+
+    function metadataTableHasActiveTextSelection() {{
+        const selection = window.getSelection ? window.getSelection() : null;
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {{
+            return false;
+        }}
+        const metadataTable = document.getElementById('metadata-table');
+        if (!metadataTable) {{
+            return false;
+        }}
+        for (let rangeIndex = 0; rangeIndex < selection.rangeCount; rangeIndex += 1) {{
+            const range = selection.getRangeAt(rangeIndex);
+            if (metadataTable.contains(range.commonAncestorContainer)) {{
+                return true;
+            }}
+        }}
+        return false;
     }}
 
     function toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, options = {{}}) {{
@@ -2889,6 +3229,7 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             return;
         }}
         state.selectedNodeIndices = new Set(state.selectedMetadataNodeIndices);
+        resetMetadataPage();
         clearMetadataRowSelection();
         renderClusterView();
         updateMetadataTable();
@@ -2984,6 +3325,35 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
             return nodeId(leftIndex).localeCompare(nodeId(rightIndex), undefined, {{numeric: true, sensitivity: 'base'}});
         }});
     }}
+
+    window.addEventListener('pointermove', event => {{
+        if (!state.metadataResize) {{
+            return;
+        }}
+        updateMetadataColumnWidth(
+            state.metadataResize.columnKey,
+            state.metadataResize.startWidth + (event.clientX - state.metadataResize.startX),
+        );
+    }});
+
+    window.addEventListener('pointerup', () => {{
+        if (!state.metadataResize) {{
+            return;
+        }}
+        state.metadataResize = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }});
+
+    window.addEventListener('pointercancel', () => {{
+        if (!state.metadataResize) {{
+            return;
+        }}
+        state.metadataResize = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }});
+
         document.getElementById('metadata-select-nodes').addEventListener('click', selectNodesFromMetadataRows);
 
     function toggleMetadataSort(columnKey) {{
@@ -2992,11 +3362,13 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
         }} else {{
             state.metadataSort = {{columnKey, direction: 'asc'}};
         }}
+        resetMetadataPage();
         updateMetadataTable();
     }}
 
     function resetMetadataSort() {{
         state.metadataSort = {{columnKey: null, direction: 'asc'}};
+        resetMetadataPage();
         updateMetadataTable();
     }}
 
@@ -3298,13 +3670,23 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     document.getElementById('metadata-filter').addEventListener('input', () => {{
         scheduleMetadataFilterUpdate();
     }});
-    document.getElementById('metadata-null-order').addEventListener('change', updateMetadataTable);
+    document.getElementById('metadata-null-order').addEventListener('change', () => {{
+        resetMetadataPage();
+        updateMetadataTable();
+    }});
+    document.getElementById('metadata-prev-page').addEventListener('click', () => {{
+        stepMetadataPage(-1);
+    }});
+    document.getElementById('metadata-next-page').addEventListener('click', () => {{
+        stepMetadataPage(1);
+    }});
     document.getElementById('reset-view').addEventListener('click', () => {{
         fitClusterViewToLayout();
         renderClusterView();
     }});
     document.getElementById('clear-selection').addEventListener('click', () => {{
         state.selectedNodeIndices = new Set();
+        resetMetadataPage();
         clearMetadataRowSelection();
         renderClusterView();
         updateMetadataTable();
@@ -3320,17 +3702,22 @@ def ssn_viewer_html(title: str = "Domainator SSN Viewer") -> str:
     updateComponentSortButton();
     drawSplitChart();
     drawClusterView();
+    autoloadEmbeddedBundle();
 </script>
 </body>
 </html>
 """
 
 
-def write_ssn_viewer_html(out_path: str, title: str = "Domainator SSN Viewer") -> None:
+def write_ssn_viewer_html(
+    out_path: str,
+    title: str = "Domainator SSN Viewer",
+    embedded_bundle_json: bytes | None = None,
+) -> None:
     temp_path = make_temporary_output_path(out_path)
     try:
         with open(temp_path, "w", encoding="utf-8") as out_handle:
-            out_handle.write(ssn_viewer_html(title=title))
+            out_handle.write(ssn_viewer_html(title=title, embedded_bundle_json=embedded_bundle_json))
         Path(temp_path).replace(out_path)
         temp_path = None
     finally:

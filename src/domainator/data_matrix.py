@@ -1812,7 +1812,84 @@ class SparseDataMatrix(DataMatrix):
             self.data.sort_indices()
 
             if agg is max:
-                triangular = scipy.sparse.tril(self.data.maximum(self.data.transpose()), k=-1).tocoo()
+                transpose = self.data.transpose().tocsr()
+                transpose.sort_indices()
+
+                row_indices = self.data.indices
+                row_values = self.data.data
+                transpose_indices = transpose.indices
+                transpose_values = transpose.data
+
+                def iter_lower_triangle_row(row_idx: int):
+                    row_start = self.data.indptr[row_idx]
+                    row_end = self.data.indptr[row_idx + 1]
+                    transpose_start = transpose.indptr[row_idx]
+                    transpose_end = transpose.indptr[row_idx + 1]
+
+                    row_pos = row_start
+                    transpose_pos = transpose_start
+
+                    while row_pos < row_end or transpose_pos < transpose_end:
+                        next_row_idx = row_indices[row_pos] if row_pos < row_end else None
+                        next_transpose_idx = transpose_indices[transpose_pos] if transpose_pos < transpose_end else None
+
+                        if next_row_idx is not None and next_row_idx >= row_idx:
+                            next_row_idx = None
+                        if next_transpose_idx is not None and next_transpose_idx >= row_idx:
+                            next_transpose_idx = None
+
+                        if next_row_idx is None and next_transpose_idx is None:
+                            break
+
+                        if next_transpose_idx is None or (next_row_idx is not None and next_row_idx < next_transpose_idx):
+                            col_idx = next_row_idx
+                        elif next_row_idx is None or next_transpose_idx < next_row_idx:
+                            col_idx = next_transpose_idx
+                        else:
+                            col_idx = next_row_idx
+
+                        value = 0
+                        symmetric_value = 0
+                        if row_pos < row_end and row_indices[row_pos] == col_idx:
+                            value = row_values[row_pos]
+                            row_pos += 1
+                        if transpose_pos < transpose_end and transpose_indices[transpose_pos] == col_idx:
+                            symmetric_value = transpose_values[transpose_pos]
+                            transpose_pos += 1
+
+                        yield col_idx, max(value, symmetric_value)
+
+                n_edges = 0
+                for r in range(self.data.shape[0]):
+                    for _col_idx, _score in iter_lower_triangle_row(r):
+                        n_edges += 1
+
+                if n_edges == 0:
+                    return SortedUndirectedEdges(
+                        n_nodes=len(self),
+                        source=np.empty(0, dtype=np.int32),
+                        target=np.empty(0, dtype=np.int32),
+                        score=np.empty(0, dtype=float),
+                    )
+
+                source = np.empty(n_edges, dtype=np.int32)
+                target = np.empty(n_edges, dtype=np.int32)
+                score = np.empty(n_edges, dtype=float)
+                edge_idx = 0
+                for r in range(self.data.shape[0]):
+                    for col_idx, edge_score in iter_lower_triangle_row(r):
+                        source[edge_idx] = r
+                        target[edge_idx] = col_idx
+                        score[edge_idx] = edge_score
+                        edge_idx += 1
+
+                order = np.lexsort((target, source, -score))
+                return SortedUndirectedEdges(
+                    n_nodes=len(self),
+                    source=source[order],
+                    target=target[order],
+                    score=score[order],
+                )
             else:
                 triangular = scipy.sparse.tril(self.data, k=-1).tocoo()
 

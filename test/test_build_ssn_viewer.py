@@ -2,6 +2,7 @@ import base64
 import gzip
 import json
 import os
+import re
 import tempfile
 
 import numpy as np
@@ -196,7 +197,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
         build_ssn_viewer.main([
             "-i", input_file,
             "-o", bundle_file,
-            "--viewer_html", html_file,
+            "--html", html_file,
             "--name", "Viewer Test",
         ])
 
@@ -273,3 +274,107 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'splitRadialPositionsForSubclusters' in html_content
         assert 'assignMembersToRadialPositions' in html_content
         assert 'normalizedComponentDotLayout' in html_content
+
+
+def test_build_ssn_viewer_writes_static_html_without_input():
+    with tempfile.TemporaryDirectory() as output_dir:
+        html_file = os.path.join(output_dir, "viewer.html")
+
+        build_ssn_viewer.main([
+            "--html", html_file,
+            "--name", "Viewer Only",
+        ])
+
+        html_content = open(html_file, "r", encoding="utf-8").read()
+
+        assert '<title>Viewer Only</title>' in html_content
+        assert 'const EMBEDDED_BUNDLE_BASE64 = null;' in html_content
+        assert 'No bundle loaded.' in html_content
+
+
+def test_build_ssn_viewer_embeds_data_in_viewer_html():
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        html_file = os.path.join(output_dir, "viewer.html")
+        matrix.write(input_file, output_type="dense")
+
+        build_ssn_viewer.main([
+            "-i", input_file,
+            "--html", html_file,
+            "--embed_data",
+            "--name", "Embedded Viewer",
+        ])
+
+        html_content = open(html_file, "r", encoding="utf-8").read()
+
+        assert 'const EMBEDDED_BUNDLE_BASE64 = ' in html_content
+        assert 'Loading bundled data...' in html_content
+        assert 'autoloadEmbeddedBundle()' in html_content
+
+        match = re.search(r"const EMBEDDED_BUNDLE_BASE64 = \"([^\"]+)\";", html_content)
+        assert match is not None
+
+        embedded_bundle = json.loads(base64.b64decode(match.group(1)).decode("utf-8"))
+        assert embedded_bundle["name"] == "Embedded Viewer"
+        assert embedded_bundle["graph"]["nodes"] == row_names
+
+
+def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied():
+    data = np.array([
+        [0, 10],
+        [10, 0],
+    ], dtype=float)
+    row_names = ["A", "B"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        matrix.write(input_file, output_type="dense")
+
+        with pytest.raises(SystemExit, match="provide -o/--output or --embed_data"):
+            build_ssn_viewer.main([
+                "-i", input_file,
+            ])
+
+
+def test_build_ssn_viewer_rejects_output_without_input():
+    with tempfile.TemporaryDirectory() as output_dir:
+        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+
+        with pytest.raises(SystemExit, match="-o/--output requires -i/--input"):
+            build_ssn_viewer.main([
+                "-o", bundle_file,
+            ])
+
+
+def test_build_ssn_viewer_rejects_embed_without_viewer_html():
+    data = np.array([
+        [0, 10],
+        [10, 0],
+    ], dtype=float)
+    row_names = ["A", "B"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        matrix.write(input_file, output_type="dense")
+
+        with pytest.raises(SystemExit, match="--embed_data requires --html"):
+            build_ssn_viewer.main([
+                "-i", input_file,
+                "--embed_data",
+            ])
+
+
+def test_build_ssn_viewer_requires_viewer_html_without_input():
+    with pytest.raises(SystemExit, match="--html is required"):
+        build_ssn_viewer.main([])
