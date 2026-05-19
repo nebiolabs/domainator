@@ -115,6 +115,7 @@ version = {attr = "domainator.__version__"}
 "seq_dist.py" = "domainator:seq_dist._entrypoint"
 "sort_contigs.py" = "domainator:sort_contigs._entrypoint"
 "summary_report.py" = "domainator:summary_report._entrypoint"
+"split_by_cluster.py" = "domainator:split_by_cluster._entrypoint"
 "transform_matrix.py" = "domainator:transform_matrix._entrypoint"
 "plot_contigs.py" = "domainator:plot_contigs._entrypoint"
 "trim_contigs.py" = "domainator:trim_contigs._entrypoint"
