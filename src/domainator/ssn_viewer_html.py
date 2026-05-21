@@ -578,7 +578,7 @@ def ssn_viewer_html(
                     </div>
                     <div class="control">
                         <label for="min-cluster-size">Minimum cluster size</label>
-                        <input id="min-cluster-size" type="number" min="1" value="1" step="1" />
+                        <input id="min-cluster-size" type="number" min="1" value="5" step="1" />
                     </div>
                     <div class="control">
                         <label for="color-by">Color by</label>
@@ -607,12 +607,12 @@ def ssn_viewer_html(
                     <div class="control">
                         <label for="node-arrangement">Node arrangement</label>
                         <select id="node-arrangement">
-                            <option value="grouped" selected>Grouped subclusters</option>
-                            <option value="radial">Radial split order</option>
+                            <option value="grouped">Grouped subclusters</option>
+                            <option value="radial" selected>Radial split order</option>
                         </select>
                     </div>
                     <div class="control checkbox">
-                        <input id="leaf-pruning-only" type="checkbox" checked />
+                        <input id="leaf-pruning-only" type="checkbox" />
                         <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
                     </div>
                 </div>
@@ -816,7 +816,6 @@ def ssn_viewer_html(
         rebuildMetadataCaches();
 
         if (isLargeBundle(bundle)) {{
-            document.getElementById('exact-node-rendering').checked = false;
             document.getElementById('node-arrangement').value = 'radial';
         }}
 
@@ -1469,7 +1468,7 @@ def ssn_viewer_html(
     }}
 
     function currentNodeArrangement() {{
-        return document.getElementById('node-arrangement').value || 'grouped';
+        return document.getElementById('node-arrangement').value || 'radial';
     }}
 
     function sampledMembersForComponent(componentId, sampleCount) {{

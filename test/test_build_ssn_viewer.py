@@ -255,6 +255,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<option value="force">Force-directed</option>' in html_content
         assert '<option value="organic">Organic</option>' in html_content
         assert '<option value="grid" selected>Grid (no edges)</option>' in html_content
+        assert '<input id="min-cluster-size" type="number" min="1" value="5" step="1" />' in html_content
         assert 'leaf-pruning-only' in html_content
         assert 'Minimum cluster size trims leaf clusters only' in html_content
         assert 'show-node-counts' in html_content
@@ -263,13 +264,13 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'Show edge score labels' in html_content
         assert '<input id="exact-node-rendering" type="checkbox" checked />' in html_content
         assert 'Render every node and scale bubble area exactly' in html_content
-        assert '<input id="leaf-pruning-only" type="checkbox" checked />' in html_content
+        assert '<input id="leaf-pruning-only" type="checkbox" />' in html_content
         assert '<button id="sort-components-by-size" type="button" aria-pressed="true" disabled>' in html_content
         assert 'initialPosition: 0' in html_content
         assert 'reset-view' in html_content
         assert 'node-arrangement' in html_content
-        assert 'Grouped subclusters' in html_content
-        assert 'Radial split order' in html_content
+        assert '<option value="grouped">Grouped subclusters</option>' in html_content
+        assert '<option value="radial" selected>Radial split order</option>' in html_content
         assert 'groupedDotLayoutForNode' in html_content
         assert 'radialDotPositions' in html_content
         assert 'orderedRadialPositions' in html_content
