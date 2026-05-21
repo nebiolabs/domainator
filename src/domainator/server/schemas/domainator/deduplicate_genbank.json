@@ -2,7 +2,7 @@
   "id": "deduplicate_genbank",
   "display_name": "Deduplicate Genbank",
   "category": "Editors",
-  "description": "Remove redundant sequences from a genbank file\n\nRuns a clustering algorithm, such as cdhit or usearch on sequences from a genbank (or fasta) file to reduce redundancy.\nThe \"hash\" algorithm is a faster way to deduplicate exact duplicates, by hashing the sequences and eliminating hash duplicates.",
+  "description": "Remove redundant sequences from a genbank file\n\nRuns a clustering algorithm, such as cdhit, usearch, or diamond on sequences from a genbank (or fasta) file to reduce redundancy.\nThe \"hash\" algorithm is a faster way to deduplicate exact duplicates, by hashing the sequences and eliminating hash duplicates.",
   "runner": "module",
   "entry_point": "domainator.deduplicate_genbank",
   "parameters": [
@@ -81,7 +81,8 @@
       "choices": [
         "hash",
         "cd-hit",
-        "usearch"
+        "usearch",
+        "diamond"
       ],
       "default": "cd-hit",
       "flags": [
@@ -91,7 +92,7 @@
     {
       "name": "Identity Threshold",
       "parameter": "id",
-      "help": "Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter or to usearach as the -id parameter.",
+      "help": "Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent.",
       "type": "number",
       "flags": [
         "--id"

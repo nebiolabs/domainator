@@ -1,6 +1,6 @@
 """Remove redundant sequences from a genbank file
 
-Runs a clustering algorithm, such as cdhit or usearch on sequences from a genbank (or fasta) file to reduce redundancy.
+Runs a clustering algorithm, such as cdhit, usearch, or diamond on sequences from a genbank (or fasta) file to reduce redundancy.
 The "hash" algorithm is a faster way to deduplicate exact duplicates, by hashing the sequences and eliminating hash duplicates.
 """
 
@@ -46,11 +46,20 @@ class ClusterProgram(ABC):
 
         """
 
-        out = subprocess.run(self.search_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            out = subprocess.run(self.search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+        except FileNotFoundError:
+            print(
+                f'Error executing clustering program: {self.search_args[0]} not found', file=self.log_handle)
+            exit(1)
 
         if out.returncode != 0:
             print(
                 f'Error executing clustering program: {self.search_args}', file=self.log_handle)
+            if out.stdout:
+                print(out.stdout, file=self.log_handle, end="")
+            if out.stderr:
+                print(out.stderr, file=self.log_handle, end="")
             exit(1)
     
     @abstractmethod
@@ -155,6 +164,115 @@ class CdHitEST(CdHit):
             raise ValueError("For cd-hit on nucleotide sequences, id must be >= 0.8")
 
         super().__init__(input_fasta_path, id, params, bin_path=bin_path, cpus=cpus, word_size=word_size, log_handle=log_handle)
+
+
+class Diamond(ClusterProgram):
+    def __init__(self, input_fasta_path, id, params, bin_path=None, cpus=1, log_handle=sys.stderr):
+        self.bin_path = "diamond"
+        self.input_fasta_path = input_fasta_path
+        self.cluster_output_fasta_path = None
+        self.cluster_assignment_path = Path(input_fasta_path).parents[0] / "output.tsv"
+        self._cluster_members = None
+        self.search_args = [
+            "cluster",
+            "-d",
+            input_fasta_path,
+            "-o",
+            self.cluster_assignment_path,
+            "--approx-id",
+            str(id * 100),
+            "--threads",
+            str(int(cpus)),
+        ]
+        super().__init__(params, bin_path, log_handle=log_handle)
+
+    def _run_cluster(self):
+        try:
+            return subprocess.run(self.search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+        except FileNotFoundError:
+            print(
+                f'Error executing clustering program: {self.bin_path} not found', file=self.log_handle)
+            exit(1)
+
+    def _report_cluster_error(self, search_args, out):
+        print(
+            f'Error executing clustering program: {search_args}', file=self.log_handle)
+        if out.stdout:
+            print(out.stdout, file=self.log_handle, end="")
+        if out.stderr:
+            print(out.stderr, file=self.log_handle, end="")
+        exit(1)
+
+    def _set_single_cluster_fallback(self):
+        representative = None
+        representative_length = -1
+        members = list()
+
+        for rec in SeqIO.parse(self.input_fasta_path, "fasta"):
+            members.append(rec.id)
+            rec_length = len(rec.seq)
+            if rec_length > representative_length:
+                representative = rec.id
+                representative_length = rec_length
+
+        if representative is None:
+            raise RuntimeError("diamond fallback requires at least one sequence")
+
+        self._cluster_members = {representative: members}
+        print(
+            "Warning: diamond cluster failed with 'Record count not set'; "
+            f"using longest input sequence {representative} as the representative for a single cluster.",
+            file=self.log_handle,
+        )
+
+    def run(self):
+        out = self._run_cluster()
+        if out.returncode == 0:
+            return
+
+        if out.stderr is not None and "Record count not set" in out.stderr:
+            self._set_single_cluster_fallback()
+            return
+
+        self._report_cluster_error(self.search_args, out)
+
+    def _load_cluster_members(self):
+        if self._cluster_members is not None:
+            return self._cluster_members
+
+        out = dict()
+        with open(self.cluster_assignment_path, "r") as cluster_file:
+            for line in cluster_file:
+                line = line.strip()
+                if line == "":
+                    continue
+
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    continue
+
+                representative = parts[0]
+                member = parts[1]
+                if representative.lower() == "representative" and member.lower() == "member":
+                    continue
+
+                if representative not in out:
+                    out[representative] = list()
+                if member not in out[representative]:
+                    out[representative].append(member)
+
+        for representative, members in out.items():
+            if representative not in members:
+                members.insert(0, representative)
+
+        self._cluster_members = out
+        return self._cluster_members
+
+    def get_cluster_members(self):
+        return self._load_cluster_members()
+
+    def get_reduced_names(self):
+        return set(self._load_cluster_members().keys())
    
 # class HashDedup(ClusterProgram):
 #     pass
@@ -180,7 +298,7 @@ def run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_c
 
     """
 
-    search_classes = {"cd-hit":CdHitProtein, "usearch": USearch, "cd-hit-est": CdHitEST}
+    search_classes = {"cd-hit":CdHitProtein, "usearch": USearch, "cd-hit-est": CdHitEST, "diamond": Diamond}
     
     search = search_classes[algorithm](input_fasta_path, id, params, bin_path, cpus, log_handle=log_handle)
 
@@ -272,6 +390,8 @@ class DeduplicateGenbank():
                 #run clustering algorithm
                 if algorithm == "cd-hit" and seqtype != "protein":
                     algorithm = "cd-hit-est"
+                if algorithm == "diamond" and seqtype != "protein":
+                    raise ValueError("diamond deduplication is only supported for protein input.")
                 if both_strands:
                     if algorithm == "usearch":
                         params.setdefault("-strand", "both")
@@ -320,14 +440,14 @@ def main(argv):
     parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
 
-    parser.add_argument("--algorithm", type=str, default="cd-hit", choices={"cd-hit", "usearch", "hash"},
+    parser.add_argument("--algorithm", type=str, default="cd-hit", choices={"cd-hit", "usearch", "hash", "diamond"},
                         help="Which clustering algorithm to use.")
 
     parser.add_argument("--bin_path", type=str, default=None,
                         help="If the executable for the algorithm you're using isn't in the system path, you can provide the full path to the executable here.")
 
     parser.add_argument("--id", type=float, required=True, default=None,
-                        help="Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter or to usearach as the -id parameter.")
+                        help="Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent.")
 
     labels = parser.add_mutually_exclusive_group(required=False)
     labels.add_argument("--prefix_count", action="store_true",
