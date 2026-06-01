@@ -787,7 +787,7 @@ class DataMatrix(ABC):
                 if array_type == cls._SPARSE_CSR:
                     return SparseDataMatrix._from_hdf5(matrix_file, lower_bound=lower_bound)
                 else:
-                    return DenseDataMatrix._from_hdf5(matrix_file)
+                    return DenseDataMatrix._from_hdf5(matrix_file, lower_bound=lower_bound)
         elif file_type is None:
             # Assume dense tsv text file if extension not recognized
             return DenseDataMatrix._from_text(matrix_file)
@@ -1286,30 +1286,33 @@ class DenseDataMatrix(DataMatrix):
         return True
     
     @classmethod
-    def _from_hdf5(cls, matrix_file: Union[PathLike, str]) -> 'DenseDataMatrix':
+    def _from_hdf5(cls, matrix_file: Union[PathLike, str], lower_bound: Optional[float] = None) -> 'DenseDataMatrix':
         """Load a dense matrix from HDF5 file."""
         with h5py.File(matrix_file, 'r') as f:
             # Validate file format
             cls._validate_hdf5_attributes(f)
-            
+
             if f.attrs[cls._ARRAY_TYPE_ATTR] != cls._DENSE:
                 raise ValueError(f"Expected DENSE matrix, got {f.attrs[cls._ARRAY_TYPE_ATTR]}")
-            
+
             # Load data
             data = f[cls._DENSE_DATASET][:]
             row_names, _ = cls.parse_axis_index(f[cls._ROW_LABELS_DATASET])
-            
+
             if f.attrs[cls._SYMMETRIC_LABELS_ATTR]:
                 col_names = row_names
             else:
                 col_names, _ = cls.parse_axis_index(f[cls._COL_LABELS_DATASET])
-            
+
             row_lengths = f[cls._ROW_LENGTHS_DATASET][:] if cls._ROW_LENGTHS_DATASET in f else None
             col_lengths = f[cls._COL_LENGTHS_DATASET][:] if cls._COL_LENGTHS_DATASET in f else None
             if f.attrs[cls._SYMMETRIC_LABELS_ATTR] and row_lengths is not None and col_lengths is None:
                 col_lengths = row_lengths
             data_type = f.attrs.get(cls._DATA_TYPE_ATTR, "")
-            
+
+            if lower_bound is not None:
+                data[data <= lower_bound] = 0
+
             return cls(data, row_names, col_names, row_lengths, col_lengths, data_type, copy_data=False)
     
     @classmethod
@@ -1422,19 +1425,25 @@ class DenseDataMatrix(DataMatrix):
         if agg is not None and agg is not max:
             return super().sorted_undirected_edges(skip_zeros=skip_zeros, agg=agg)
 
-        row_idx, col_idx = np.tril_indices(self.data.shape[0], k=-1)
+        n = self.data.shape[0]
+        # Pack source/target/score into a single structured array so sorting is
+        # in-place and avoids a separate O(n²/2) argsort index array.
+        dtype = np.dtype([('score', np.float64), ('source', np.int32), ('target', np.int32)])
+        edges = np.empty(n * (n - 1) // 2, dtype=dtype)
+
+        row_idx, col_idx = np.tril_indices(n, k=-1)
         if agg is max:
-            scores = np.maximum(self.data[row_idx, col_idx], self.data[col_idx, row_idx])
+            edges['score'] = np.maximum(self.data[row_idx, col_idx], self.data[col_idx, row_idx])
         else:
-            scores = self.data[row_idx, col_idx]
+            edges['score'] = self.data[row_idx, col_idx]
+        edges['source'] = row_idx
+        edges['target'] = col_idx
+        del row_idx, col_idx  # free before sort
 
         if skip_zeros:
-            mask = scores != 0
-            row_idx = row_idx[mask]
-            col_idx = col_idx[mask]
-            scores = scores[mask]
+            edges = edges[edges['score'] != 0]
 
-        if scores.size == 0:
+        if edges.size == 0:
             return SortedUndirectedEdges(
                 n_nodes=len(self),
                 source=np.empty(0, dtype=np.int32),
@@ -1442,12 +1451,13 @@ class DenseDataMatrix(DataMatrix):
                 score=np.empty(0, dtype=float),
             )
 
-        order = np.argsort(-scores, kind="stable")
+        edges.sort(order='score', kind='stable')  # ascending in-place
+        edges = edges[::-1]  # descending view; base array kept alive via field views below
         return SortedUndirectedEdges(
             n_nodes=len(self),
-            source=row_idx[order].astype(np.int32, copy=False),
-            target=col_idx[order].astype(np.int32, copy=False),
-            score=scores[order].astype(float, copy=False),
+            source=edges['source'],
+            target=edges['target'],
+            score=edges['score'],
         )
     
     def itervalues(self) -> Iterator[float]:

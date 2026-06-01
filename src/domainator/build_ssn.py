@@ -6,6 +6,7 @@ Build a sequence similarity network and do analysis related to that.
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ArgumentParser, ActionConfigFile
+from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 import os
 import sys
@@ -130,6 +131,28 @@ def iter_default_ssn_edges(matrix: DataMatrix, lb: float):
         yield source_idx, target_idx, score
 
 
+def iter_mst_ssn_edges(tree: "MaxTree", rows, lb: float):
+    """Yield MST edges above lb as (source_name, target_name, score) in canonical order."""
+    for source_idx, target_idx, score in tree.iter_mst_edges():
+        if score <= lb:
+            break
+        if source_idx == target_idx:
+            continue
+        source, target = rows[source_idx], rows[target_idx]
+        if target < source:
+            source, target = target, source
+        yield source, target, score
+
+
+def iter_mst_knn_ssn_edges(edge_dict, rows):
+    """Yield MST+kNN edges as (source_name, target_name, score) in canonical order."""
+    for (source_idx, target_idx), score in edge_dict.items():
+        source, target = rows[source_idx], rows[target_idx]
+        if target < source:
+            source, target = target, source
+        yield source, target, score
+
+
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
               xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None, max_output_bytes=None):
     """build a sequence similarity network from a matrix
@@ -152,10 +175,10 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         ValueError: if the input does not have symmetric row and column labels
     """
     matrix = subset_matrix_by_labels(matrix, subset_labels)
-    
+
     if not matrix.symmetric_labels:
         raise ValueError("Input does not have symmetric axis labels. Can only build an SSN from a symmetric matrix.")
-    
+
     # if not matrix.symmetric_values:
     #     raise ValueError("Input not symmetric data values. Can only build an SSN from a symmetric matrix.")
 
@@ -170,35 +193,43 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         else:
             node_data[CLUSTER_COLUMN] = cluster_labels_from_tree(tree, lb)
 
-    edge_data = None
+    # Determine the edge source for the XGMML write.  For mst/mst_knn we free
+    # the large matrix.data as soon as it is no longer needed.
     if mst:
-        edge_iter = (
-            (matrix.rows[source_idx], matrix.rows[target_idx], score)
-            for source_idx, target_idx, score in tree.iter_mst_edges()
-            if score > lb
+        rows = matrix.rows
+        del matrix  # free O(n²) data array; rows is a plain list
+        xgmml_edge_rows = iter_mst_ssn_edges(tree, rows, lb)
+        xgmml_edge_kwargs = dict(
+            edge_rows=xgmml_edge_rows,
+            edge_column_names=[SCORE_COLUMN],
+            edge_metadata_types={SCORE_COLUMN: "real"},
+            edge_endpoint_style="name",
         )
     elif mst_knn is not None:
-        edge_iter = (
-            (matrix.rows[source_idx], matrix.rows[target_idx], score)
-            for (source_idx, target_idx), score in mst_knn_edge_index_dict(matrix, mst_knn, lower_bound=lb, tree=tree).items()
+        edge_dict = mst_knn_edge_index_dict(matrix, mst_knn, lower_bound=lb, tree=tree)
+        rows = matrix.rows
+        del matrix  # free O(n²) data array
+        xgmml_edge_rows = iter_mst_knn_ssn_edges(edge_dict, rows)
+        xgmml_edge_kwargs = dict(
+            edge_rows=xgmml_edge_rows,
+            edge_column_names=[SCORE_COLUMN],
+            edge_metadata_types={SCORE_COLUMN: "real"},
+            edge_endpoint_style="name",
         )
     else:
-        edge_iter = None
-
-    if edge_iter is not None:
-        edge_data_dict = dict() # (source, target): score
-        for source, target, score in edge_iter:
-            if source != target: #don't write self-edges
-                if target < source:
-                    source, target = target, source
-                edge_data_dict[(source, target)] = score
-        edge_data = pd.DataFrame.from_dict(edge_data_dict, orient="index", columns=[SCORE_COLUMN]) # (source_node, dest_node): score
+        xgmml_edge_kwargs = dict(
+            edge_rows=iter_default_ssn_edges(matrix, lb),
+            edge_column_names=[SCORE_COLUMN],
+            edge_metadata_types={SCORE_COLUMN: "real"},
+            edge_endpoint_style="index",
+        )
 
     if metadata_files is not None:
-        for file in metadata_files:
-            metadata = pd.read_csv(file, sep="\t", index_col=0)
-            node_data = node_data.merge(metadata,how="left", left_index=True, right_index=True)
-    
+        with ThreadPoolExecutor() as exe:
+            dfs = list(exe.map(lambda f: pd.read_csv(f, sep="\t", index_col=0), metadata_files))
+        for df in dfs:
+            node_data = node_data.merge(df, how="left", left_index=True, right_index=True)
+
     if color_by is not None:
         if color_table is None:
             color_table = get_palette(node_data[color_by].unique())
@@ -206,33 +237,17 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     if xgmml is not None:
         temp_xgmml_path = make_temporary_output_path(xgmml)
         try:
-            if mst or mst_knn is not None:
-                write_cytoscape_xgmml(
-                    temp_xgmml_path,
-                    node_data,
-                    edges=edge_data,
-                    name=Path(xgmml).stem,
-                    color_by=color_by,
-                    color_table=color_table,
-                    max_output_bytes=max_output_bytes,
-                    output_description=f"XGMML network output '{xgmml}'",
-                    mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
-                )
-            else:
-                write_cytoscape_xgmml(
-                    temp_xgmml_path,
-                    node_data,
-                    edge_rows=iter_default_ssn_edges(matrix, lb),
-                    edge_column_names=[SCORE_COLUMN],
-                    edge_metadata_types={SCORE_COLUMN: "real"},
-                    edge_endpoint_style="index",
-                    name=Path(xgmml).stem,
-                    color_by=color_by,
-                    color_table=color_table,
-                    max_output_bytes=max_output_bytes,
-                    output_description=f"XGMML network output '{xgmml}'",
-                    mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
-                )
+            write_cytoscape_xgmml(
+                temp_xgmml_path,
+                node_data,
+                **xgmml_edge_kwargs,
+                name=Path(xgmml).stem,
+                color_by=color_by,
+                color_table=color_table,
+                max_output_bytes=max_output_bytes,
+                output_description=f"XGMML network output '{xgmml}'",
+                mitigation_options=["--lb", "--mst", "--mst_knn", "--subset"],
+            )
             os.replace(temp_xgmml_path, xgmml)
             temp_xgmml_path = None
         finally:
