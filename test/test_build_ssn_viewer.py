@@ -327,7 +327,7 @@ def test_build_ssn_viewer_embeds_data_in_viewer_html():
         match = re.search(r"const EMBEDDED_BUNDLE_BASE64 = \"([^\"]+)\";", html_content)
         assert match is not None
 
-        embedded_bundle = json.loads(base64.b64decode(match.group(1)).decode("utf-8"))
+        embedded_bundle = json.loads(gzip.decompress(base64.b64decode(match.group(1))).decode("utf-8"))
         assert embedded_bundle["name"] == "Embedded Viewer"
         assert embedded_bundle["graph"]["nodes"] == row_names
 

@@ -7,6 +7,305 @@ from pathlib import Path
 from domainator.output_guardrails import make_temporary_output_path
 
 
+def _layout_worker_js() -> str:
+    """Standalone JS for the layout Web Worker (no f-string escaping needed here)."""
+    return """
+function seededUnit(componentId, salt) {
+    const raw = Math.sin((componentId + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+    return raw - Math.floor(raw);
+}
+function componentRadiusForSize(size, exactNodeRendering) {
+    if (exactNodeRendering) { return Math.sqrt(Math.max(1, size) * 48 / Math.PI); }
+    return Math.max(7, Math.min(52, 10 + Math.sqrt(size) * 4.7));
+}
+function componentLeafOrder(componentIds, hierarchyNodes) {
+    return [...componentIds].sort((a, b) => {
+        const an = hierarchyNodes[a], bn = hierarchyNodes[b];
+        return an.leaf_start - bn.leaf_start || bn.size - an.size || a - b;
+    });
+}
+function treeCenter(nodeIds, adjacency, hierarchyNodes) {
+    if (nodeIds.length <= 2) { return nodeIds[0]; }
+    const degree = new Map();
+    nodeIds.forEach(id => degree.set(id, (adjacency.get(id) || []).length));
+    let leaves = nodeIds.filter(id => (degree.get(id) || 0) <= 1), remaining = nodeIds.length;
+    while (remaining > 2 && leaves.length > 0) {
+        remaining -= leaves.length;
+        const nextLeaves = [];
+        leaves.forEach(leafId => {
+            (adjacency.get(leafId) || []).forEach(nid => {
+                if (!degree.has(nid)) { return; }
+                degree.set(nid, degree.get(nid) - 1);
+                if (degree.get(nid) === 1) { nextLeaves.push(nid); }
+            });
+            degree.delete(leafId);
+        });
+        leaves = nextLeaves;
+    }
+    const candidates = degree.size > 0 ? Array.from(degree.keys()) : nodeIds;
+    candidates.sort((a, b) => hierarchyNodes[b].size - hierarchyNodes[a].size || a - b);
+    return candidates[0];
+}
+function rootedTree(rootId, adjacency, hierarchyNodes) {
+    const parent = new Map([[rootId, null]]), order = [rootId];
+    for (let i = 0; i < order.length; i++) {
+        const nodeId = order[i];
+        (adjacency.get(nodeId) || []).forEach(nid => { if (!parent.has(nid)) { parent.set(nid, nodeId); order.push(nid); } });
+    }
+    const children = new Map();
+    order.forEach(id => children.set(id, []));
+    for (let i = 1; i < order.length; i++) { children.get(parent.get(order[i])).push(order[i]); }
+    children.forEach(childIds => {
+        childIds.sort((a, b) => {
+            const an = hierarchyNodes[a], bn = hierarchyNodes[b];
+            return an.leaf_start - bn.leaf_start || bn.size - an.size || a - b;
+        });
+    });
+    return {parent, order, children};
+}
+function pointSegmentDistance(point, start, end) {
+    const dx = end.x - start.x, dy = end.y - start.y, lsq = dx * dx + dy * dy;
+    if (lsq < 1e-9) { return {distance: Math.hypot(point.x - start.x, point.y - start.y), t: 0, closestX: start.x, closestY: start.y}; }
+    const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lsq));
+    const cx = start.x + dx * t, cy = start.y + dy * t;
+    return {distance: Math.hypot(point.x - cx, point.y - cy), t, closestX: cx, closestY: cy};
+}
+function segmentOrientation(a, b, c) { return (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y); }
+function segmentsCross(a, b, c, d) {
+    return segmentOrientation(a,b,c) * segmentOrientation(a,b,d) < 0 && segmentOrientation(c,d,a) * segmentOrientation(c,d,b) < 0;
+}
+function refineLayoutGeometry(items, edgePairs, options) {
+    options = options || {};
+    const refined = items.map(item => Object.assign({}, item));
+    if (refined.length <= 1) { return refined; }
+    const itemById = new Map(refined.map(item => [item.componentId, item]));
+    const links = edgePairs.map(pair => Array.isArray(pair) ? {sourceId: pair[0], targetId: pair[1]} : pair)
+        .filter(link => itemById.has(link.sourceId) && itemById.has(link.targetId));
+    const bp = options.bubblePadding != null ? options.bubblePadding : 14;
+    const ep = options.edgePadding != null ? options.edgePadding : 8;
+    const oi = options.overlapIterations != null ? options.overlapIterations : 5;
+    const ei = options.edgeIterations != null ? options.edgeIterations : 3;
+    const ci = options.crossingIterations != null ? options.crossingIterations : 2;
+    const mpc = 180000, menc = 140000, mcc = 90000;
+    const pairChecks = refined.length * (refined.length - 1) / 2;
+    function overlapPass(iters, strength) {
+        if (pairChecks > mpc) { return; }
+        for (let it = 0; it < iters; it++) {
+            for (let li = 0; li < refined.length; li++) {
+                const l = refined[li];
+                for (let ri = li + 1; ri < refined.length; ri++) {
+                    const r = refined[ri];
+                    let dx = r.x - l.x, dy = r.y - l.y, dist = Math.hypot(dx, dy);
+                    if (dist < 1e-6) {
+                        dx = (seededUnit(l.componentId + r.componentId, it + 21) - 0.5) || 0.01;
+                        dy = (seededUnit(l.componentId + r.componentId, it + 22) - 0.5) || 0.01;
+                        dist = Math.hypot(dx, dy);
+                    }
+                    const md = l.radius + r.radius + bp;
+                    if (dist >= md) { continue; }
+                    const sh = (md - dist) / 2 * strength;
+                    l.x -= dx / dist * sh; l.y -= dy / dist * sh;
+                    r.x += dx / dist * sh; r.y += dy / dist * sh;
+                }
+            }
+        }
+    }
+    function edgePass(iters, strength) {
+        if (links.length * refined.length > menc) { return; }
+        for (let it = 0; it < iters; it++) {
+            links.forEach(link => {
+                const s = itemById.get(link.sourceId), t = itemById.get(link.targetId);
+                if (!s || !t) { return; }
+                refined.forEach(item => {
+                    if (item.componentId === link.sourceId || item.componentId === link.targetId) { return; }
+                    const hit = pointSegmentDistance(item, s, t);
+                    if (hit.t <= 0.03 || hit.t >= 0.97) { return; }
+                    const md = item.radius + ep;
+                    if (hit.distance >= md) { return; }
+                    let nx = item.x - hit.closestX, ny = item.y - hit.closestY, nl = Math.hypot(nx, ny);
+                    if (nl < 1e-6) { const ex = t.x - s.x, ey = t.y - s.y; nx = -ey || 1; ny = ex || 0; nl = Math.hypot(nx, ny); }
+                    const push = (md - hit.distance) * strength;
+                    item.x += nx / nl * push; item.y += ny / nl * push;
+                });
+            });
+        }
+    }
+    overlapPass(oi, 0.72);
+    edgePass(ei, 0.68);
+    if (links.length * (links.length - 1) / 2 <= mcc) {
+        for (let it = 0; it < ci; it++) {
+            for (let li = 0; li < links.length; li++) {
+                const la = links[li], a = itemById.get(la.sourceId), b = itemById.get(la.targetId);
+                if (!a || !b) { continue; }
+                for (let ri = li + 1; ri < links.length; ri++) {
+                    const rb = links[ri];
+                    if (la.sourceId === rb.sourceId || la.sourceId === rb.targetId || la.targetId === rb.sourceId || la.targetId === rb.targetId) { continue; }
+                    const c = itemById.get(rb.sourceId), d = itemById.get(rb.targetId);
+                    if (!c || !d || !segmentsCross(a, b, c, d)) { continue; }
+                    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+                    if (len < 1e-6) { continue; }
+                    const nx = -dy / len, ny = dx / len, push = 4.5 + it * 1.5;
+                    a.x += nx * push; a.y += ny * push; b.x += nx * push; b.y += ny * push;
+                    c.x -= nx * push; c.y -= ny * push; d.x -= nx * push; d.y -= ny * push;
+                }
+            }
+        }
+    }
+    edgePass(1, 0.82);
+    overlapPass(4, 0.9);
+    return refined;
+}
+function normalizeComponentLayout(items, padding) {
+    padding = padding != null ? padding : 20;
+    if (!items.length) { return {items: [], width: 0, height: 0}; }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    items.forEach(item => {
+        minX = Math.min(minX, item.x - item.radius); minY = Math.min(minY, item.y - item.radius);
+        maxX = Math.max(maxX, item.x + item.radius); maxY = Math.max(maxY, item.y + item.radius);
+    });
+    return {
+        items: items.map(item => Object.assign({}, item, {x: item.x - minX + padding, y: item.y - minY + padding})),
+        width: (maxX - minX) + padding * 2, height: (maxY - minY) + padding * 2,
+    };
+}
+function simulateComponentLayout(componentIds, adjacency, options, hierarchyNodes, exactNodeRendering) {
+    options = options || {};
+    const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size, exactNodeRendering)]));
+    const tree = rootedTree(treeCenter(componentIds, adjacency, hierarchyNodes), adjacency, hierarchyNodes);
+    const positions = new Map(), velocities = new Map(), anchors = new Map();
+    const baseSpacing = options.baseSpacing != null ? options.baseSpacing : 110;
+    const angleScale = options.angleScale != null ? options.angleScale : 0.5;
+    const damping = options.damping != null ? options.damping : 0.8;
+    const repulsion = options.repulsion != null ? options.repulsion : 6000;
+    const spring = options.spring != null ? options.spring : 0.07;
+    const gravity = options.gravity != null ? options.gravity : 0.008;
+    const anchorStrength = options.anchorStrength != null ? options.anchorStrength : 0;
+    const iterations = options.iterations != null ? options.iterations : 110;
+    const preferredEdgeLength = options.preferredEdgeLength != null ? options.preferredEdgeLength : 120;
+    const collisionStrength = options.collisionStrength != null ? options.collisionStrength : 0.28;
+    const orderedIds = componentLeafOrder(componentIds, hierarchyNodes);
+    const orderRank = new Map(orderedIds.map((id, i) => [id, i]));
+    const orderCenter = (orderedIds.length - 1) / 2;
+    tree.order.forEach((nodeId, index) => {
+        let depth = 0, cur = nodeId;
+        while (tree.parent.get(cur) !== null) { depth++; cur = tree.parent.get(cur); }
+        const rank = orderRank.has(nodeId) ? orderRank.get(nodeId) : index;
+        const angle = (rank / Math.max(1, tree.order.length)) * Math.PI * 2 * angleScale + (seededUnit(nodeId, 1) - 0.5) * 0.35;
+        const r = depth * baseSpacing;
+        const anchor = options.useTreeSeed === false
+            ? {x: Math.cos(angle) * r, y: Math.sin(angle) * r}
+            : {x: depth * baseSpacing, y: (rank - orderCenter) * Math.max(26, baseSpacing * 0.58) + (seededUnit(nodeId, 2) - 0.5) * 24};
+        anchors.set(nodeId, anchor);
+        positions.set(nodeId, {x: anchor.x + (seededUnit(nodeId, 3) - 0.5) * 18, y: anchor.y + (seededUnit(nodeId, 4) - 0.5) * 18});
+        velocities.set(nodeId, {x: 0, y: 0});
+    });
+    const edgePairs = [];
+    componentIds.forEach(id => { (adjacency.get(id) || []).forEach(nid => { if (id < nid) { edgePairs.push([id, nid]); } }); });
+    for (let iter = 0; iter < iterations; iter++) {
+        const forces = new Map(componentIds.map(id => [id, {x: 0, y: 0}]));
+        for (let li = 0; li < componentIds.length; li++) {
+            const lid = componentIds[li], lp = positions.get(lid);
+            for (let ri = li + 1; ri < componentIds.length; ri++) {
+                const rid = componentIds[ri], rp = positions.get(rid);
+                let dx = rp.x - lp.x, dy = rp.y - lp.y, dsq = dx * dx + dy * dy;
+                if (dsq < 1e-6) {
+                    dx = (seededUnit(lid + rid, iter + 5) - 0.5) * 0.01;
+                    dy = (seededUnit(lid + rid, iter + 6) - 0.5) * 0.01;
+                    dsq = dx * dx + dy * dy;
+                }
+                const dist = Math.sqrt(dsq), rf = repulsion / dsq;
+                const ov = (radii.get(lid) || 0) + (radii.get(rid) || 0) + 12 - dist;
+                const cf = ov > 0 ? ov * collisionStrength : 0;
+                const fx = dx / dist * (rf + cf), fy = dy / dist * (rf + cf);
+                forces.get(lid).x -= fx; forces.get(lid).y -= fy;
+                forces.get(rid).x += fx; forces.get(rid).y += fy;
+            }
+        }
+        edgePairs.forEach(([lid, rid]) => {
+            const lp = positions.get(lid), rp = positions.get(rid);
+            let dx = rp.x - lp.x, dy = rp.y - lp.y, dist = Math.hypot(dx, dy);
+            if (dist < 1e-6) { dist = 1e-6; dx = preferredEdgeLength; dy = 0; }
+            const df = spring * (dist - preferredEdgeLength), fx = dx / dist * df, fy = dy / dist * df;
+            forces.get(lid).x += fx; forces.get(lid).y += fy;
+            forces.get(rid).x -= fx; forces.get(rid).y -= fy;
+        });
+        componentIds.forEach(id => {
+            const pos = positions.get(id), vel = velocities.get(id), f = forces.get(id), anch = anchors.get(id);
+            f.x += (anch.x - pos.x) * anchorStrength - pos.x * gravity;
+            f.y += (anch.y - pos.y) * anchorStrength - pos.y * gravity;
+            vel.x = (vel.x + f.x) * damping; vel.y = (vel.y + f.y) * damping;
+            pos.x += vel.x; pos.y += vel.y;
+        });
+    }
+    const rawItems = componentIds.map(id => { const pos = positions.get(id); return {componentId: id, x: pos.x, y: pos.y, radius: radii.get(id) || 10}; });
+    return normalizeComponentLayout(refineLayoutGeometry(rawItems, edgePairs, {
+        bubblePadding: options.bubblePadding != null ? options.bubblePadding : 14,
+        edgePadding: options.edgePadding != null ? options.edgePadding : 8,
+        overlapIterations: options.geometryIterations != null ? options.geometryIterations : 5,
+        edgeIterations: options.edgeIterations != null ? options.edgeIterations : 3,
+        crossingIterations: options.crossingIterations != null ? options.crossingIterations : 2,
+    }), 24);
+}
+function clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {
+    const adjacency = new Map();
+    visibleIds.forEach(id => adjacency.set(id, []));
+    links.forEach(link => {
+        (adjacency.get(link.sourceId) || []).push(link.targetId);
+        (adjacency.get(link.targetId) || []).push(link.sourceId);
+    });
+    const components = [], seen = new Set();
+    visibleIds.forEach(id => {
+        if (seen.has(id)) { return; }
+        const stack = [id], comp = [];
+        seen.add(id);
+        while (stack.length > 0) { const cur = stack.pop(); comp.push(cur); (adjacency.get(cur) || []).forEach(nid => { if (!seen.has(nid)) { seen.add(nid); stack.push(nid); } }); }
+        components.push(comp);
+    });
+    components.sort((a, b) => {
+        const ac = a.reduce((s, id) => s + hierarchyNodes[id].size, 0), bc = b.reduce((s, id) => s + hierarchyNodes[id].size, 0);
+        const as_ = Math.min(...a.map(id => hierarchyNodes[id].leaf_start)), bs_ = Math.min(...b.map(id => hierarchyNodes[id].leaf_start));
+        return sortBySizeEnabled ? (bc - ac || as_ - bs_ || b.length - a.length) : (as_ - bs_ || b.length - a.length);
+    });
+    return {adjacency, components};
+}
+function packLayouts(componentLayouts, options) {
+    options = options || {};
+    const gapX = options.gapX != null ? options.gapX : 120, gapY = options.gapY != null ? options.gapY : 120;
+    const rw = options.rowTargetWidth != null ? options.rowTargetWidth : 2200, op = options.outerPadding != null ? options.outerPadding : 72;
+    const packed = []; let cx = op, cy = op, rh = 0;
+    componentLayouts.forEach(comp => {
+        if (!comp || !comp.items.length) { return; }
+        if (cx > op && cx + comp.width > rw) { cx = op; cy += rh + gapY; rh = 0; }
+        comp.items.forEach(item => packed.push({componentId: item.componentId, x: item.x + cx, y: item.y + cy, radius: item.radius}));
+        cx += comp.width + gapX; rh = Math.max(rh, comp.height);
+    });
+    return packed;
+}
+self.onmessage = function(event) {
+    const msg = event.data;
+    if (msg.type !== 'computeLayout') { return; }
+    const {requestId, key, algorithm, visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled} = msg;
+    const {adjacency, components} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
+    const isForce = algorithm === 'force';
+    const componentLayouts = components.map(ids => simulateComponentLayout(ids, adjacency, isForce ? {
+        useTreeSeed: true, baseSpacing: 104, repulsion: 8200, spring: 0.078, gravity: 0.009,
+        damping: 0.82, preferredEdgeLength: 124, iterations: Math.min(165, 78 + ids.length),
+        collisionStrength: 0.46, bubblePadding: 17, edgePadding: 10, geometryIterations: 7,
+        edgeIterations: 4, crossingIterations: 3, anchorStrength: 0.010, angleScale: 1,
+    } : {
+        useTreeSeed: true, baseSpacing: 112, repulsion: 9200, spring: 0.09, gravity: 0.012,
+        damping: 0.84, preferredEdgeLength: 132, iterations: Math.min(200, 108 + ids.length),
+        collisionStrength: 0.58, bubblePadding: 19, edgePadding: 12, geometryIterations: 8,
+        edgeIterations: 5, crossingIterations: 4, anchorStrength: 0.018, angleScale: 0.65,
+    }, hierarchyNodes, exactNodeRendering));
+    const layout = packLayouts(componentLayouts, isForce
+        ? {gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}
+        : {gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72});
+    self.postMessage({requestId, key, layout});
+};
+"""
+
+
 def ssn_viewer_html(
     title: str = "Domainator SSN Viewer",
     embedded_bundle_json: bytes | None = None,
@@ -15,6 +314,7 @@ def ssn_viewer_html(
     embedded_bundle_base64 = None
     if embedded_bundle_json is not None:
         embedded_bundle_base64 = base64.b64encode(embedded_bundle_json).decode("ascii")
+    layout_worker_code_json = json.dumps(_layout_worker_js())
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -618,6 +918,7 @@ def ssn_viewer_html(
                 </div>
                 <div class="toolbar">
                     <button id="sort-components-by-size" type="button" aria-pressed="true" disabled>Sort clusters by size: On</button>
+                    <button id="focus-largest-cluster" type="button" disabled>Focus largest cluster</button>
                     <button id="reset-view" disabled>Reset view</button>
                     <button id="clear-selection" disabled>Clear selection</button>
                 </div>
@@ -630,6 +931,7 @@ def ssn_viewer_html(
                 <div class="toolbar">
                     <button id="export-selected" disabled>Export table TSV</button>
                     <button id="metadata-select-nodes" type="button" disabled>Select nodes</button>
+                    <button id="metadata-deselect-rows" type="button" disabled>Deselect rows</button>
                     <button id="metadata-reset-sort" type="button" disabled>Reset table sort</button>
                     <input id="metadata-filter" type="search" placeholder="Search node_id and metadata" disabled />
                     <select id="metadata-null-order" disabled>
@@ -699,6 +1001,16 @@ def ssn_viewer_html(
         pendingThresholdUIResetView: false,
         pendingMetadataFilterTimer: null,
         pendingClusterRenderFrame: null,
+        allNodeIndices: [],
+        nodeColorCache: [],
+        metadataBaseNoteText: '',
+        renderedNodeIndices: [],
+        layoutWorker: null,
+        pendingLayoutRequestId: 0,
+        _pendingVisibleGraph: null,
+        _pendingLayoutAlgorithm: null,
+        _pendingLayoutResetView: true,
+        layoutComputing: false,
     }};
 
     const splitCanvas = document.getElementById('split-chart');
@@ -708,6 +1020,7 @@ def ssn_viewer_html(
     const LARGE_BUNDLE_NODE_THRESHOLD = 4000;
     const DEFAULT_METADATA_PAGE_SIZE = 250;
     const EMBEDDED_BUNDLE_BASE64 = {json.dumps(embedded_bundle_base64)};
+    const LAYOUT_WORKER_CODE = {layout_worker_code_json};
 
     function setStatus(message) {{
         document.getElementById('bundle-status').textContent = message;
@@ -759,13 +1072,8 @@ def ssn_viewer_html(
         return JSON.parse(text);
     }}
 
-    function decodeBase64Utf8(base64Value) {{
-        const binary = atob(base64Value);
-        const bytes = new Uint8Array(binary.length);
-        for (let index = 0; index < binary.length; index++) {{
-            bytes[index] = binary.charCodeAt(index);
-        }}
-        return new TextDecoder().decode(bytes);
+    function base64ToBytes(base64Value) {{
+        return Uint8Array.from(atob(base64Value), c => c.charCodeAt(0));
     }}
 
     async function autoloadEmbeddedBundle() {{
@@ -774,7 +1082,15 @@ def ssn_viewer_html(
         }}
         setStatus('Loading bundled data...');
         try {{
-            installBundle(JSON.parse(decodeBase64Utf8(EMBEDDED_BUNDLE_BASE64)));
+            const bytes = base64ToBytes(EMBEDDED_BUNDLE_BASE64);
+            let text;
+            if (browserSupportsBundleLoading()) {{
+                const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+                text = await new Response(stream).text();
+            }} else {{
+                text = new TextDecoder().decode(bytes);
+            }}
+            installBundle(JSON.parse(text));
         }} catch (error) {{
             console.error(error);
             setStatus('Failed to load bundled data: ' + error.message);
@@ -813,7 +1129,9 @@ def ssn_viewer_html(
         state.dotLayoutCache = new Map();
         state.layoutCache = new Map();
         state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
+        state.allNodeIndices = bundle.graph.nodes.map((_, i) => i);
         rebuildMetadataCaches();
+        rebuildNodeColorCache();
 
         if (isLargeBundle(bundle)) {{
             document.getElementById('node-arrangement').value = 'radial';
@@ -827,9 +1145,11 @@ def ssn_viewer_html(
         document.getElementById('threshold-min-label').textContent = state.sliderModel.minLabel;
         document.getElementById('threshold-max-label').textContent = state.sliderModel.maxLabel;
         document.getElementById('sort-components-by-size').disabled = false;
+        document.getElementById('focus-largest-cluster').disabled = false;
         document.getElementById('reset-view').disabled = false;
         document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
         document.getElementById('metadata-select-nodes').disabled = true;
+        document.getElementById('metadata-deselect-rows').disabled = true;
         document.getElementById('metadata-reset-sort').disabled = true;
         document.getElementById('metadata-filter').disabled = false;
         document.getElementById('metadata-filter').value = '';
@@ -909,6 +1229,19 @@ def ssn_viewer_html(
             }});
             return parts.join(' ').toLowerCase();
         }});
+    }}
+
+    function rebuildNodeColorCache() {{
+        if (!state.bundle) {{
+            state.nodeColorCache = [];
+            return;
+        }}
+        const nodeCount = state.bundle.graph.nodes.length;
+        const cache = new Array(nodeCount);
+        for (let i = 0; i < nodeCount; i++) {{
+            cache[i] = nodeColor(i);
+        }}
+        state.nodeColorCache = cache;
     }}
 
     function buildSliderModel(sourceStops) {{
@@ -1354,7 +1687,7 @@ def ssn_viewer_html(
         }};
     }}
 
-    function treeCenter(nodeIds, adjacency) {{
+    function treeCenter(nodeIds, adjacency, hierarchyNodes) {{
         if (nodeIds.length <= 2) {{
             return nodeIds[0];
         }}
@@ -1383,14 +1716,14 @@ def ssn_viewer_html(
         }}
         const candidates = degree.size > 0 ? Array.from(degree.keys()) : nodeIds;
         candidates.sort((leftId, rightId) => {{
-            const leftSize = state.bundle.graph.hierarchy.nodes[leftId].size;
-            const rightSize = state.bundle.graph.hierarchy.nodes[rightId].size;
+            const leftSize = hierarchyNodes[leftId].size;
+            const rightSize = hierarchyNodes[rightId].size;
             return rightSize - leftSize || leftId - rightId;
         }});
         return candidates[0];
     }}
 
-    function rootedTree(rootId, adjacency) {{
+    function rootedTree(rootId, adjacency, hierarchyNodes) {{
         const parent = new Map([[rootId, null]]);
         const order = [rootId];
         for (let index = 0; index < order.length; index++) {{
@@ -1412,8 +1745,8 @@ def ssn_viewer_html(
         }}
         children.forEach((childIds, nodeId) => {{
             childIds.sort((leftId, rightId) => {{
-                const leftNode = state.bundle.graph.hierarchy.nodes[leftId];
-                const rightNode = state.bundle.graph.hierarchy.nodes[rightId];
+                const leftNode = hierarchyNodes[leftId];
+                const rightNode = hierarchyNodes[rightId];
                 return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
             }});
         }});
@@ -1421,8 +1754,8 @@ def ssn_viewer_html(
         return {{parent, order, children}};
     }}
 
-    function componentRadiusForSize(size) {{
-        if (exactNodeRenderingEnabled()) {{
+    function componentRadiusForSize(size, exactNodeRendering = exactNodeRenderingEnabled()) {{
+        if (exactNodeRendering) {{
             const areaPerNode = 48;
             return Math.sqrt((Math.max(1, size) * areaPerNode) / Math.PI);
         }}
@@ -1672,7 +2005,7 @@ def ssn_viewer_html(
         return layout;
     }}
 
-    function clusterGraphComponents(visibleIds, links) {{
+    function clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
         const adjacency = new Map();
         visibleIds.forEach(nodeId => adjacency.set(nodeId, []));
         links.forEach(link => {{
@@ -1704,11 +2037,11 @@ def ssn_viewer_html(
         }});
 
         components.sort((leftIds, rightIds) => {{
-            const leftNodeCount = leftIds.reduce((sum, nodeId) => sum + state.bundle.graph.hierarchy.nodes[nodeId].size, 0);
-            const rightNodeCount = rightIds.reduce((sum, nodeId) => sum + state.bundle.graph.hierarchy.nodes[nodeId].size, 0);
-            const leftStart = Math.min(...leftIds.map(nodeId => state.bundle.graph.hierarchy.nodes[nodeId].leaf_start));
-            const rightStart = Math.min(...rightIds.map(nodeId => state.bundle.graph.hierarchy.nodes[nodeId].leaf_start));
-            if (sortComponentsBySizeEnabled()) {{
+            const leftNodeCount = leftIds.reduce((sum, nodeId) => sum + hierarchyNodes[nodeId].size, 0);
+            const rightNodeCount = rightIds.reduce((sum, nodeId) => sum + hierarchyNodes[nodeId].size, 0);
+            const leftStart = Math.min(...leftIds.map(nodeId => hierarchyNodes[nodeId].leaf_start));
+            const rightStart = Math.min(...rightIds.map(nodeId => hierarchyNodes[nodeId].leaf_start));
+            if (sortBySizeEnabled) {{
                 return rightNodeCount - leftNodeCount || leftStart - rightStart || rightIds.length - leftIds.length;
             }}
             return leftStart - rightStart || rightIds.length - leftIds.length;
@@ -1808,10 +2141,10 @@ def ssn_viewer_html(
         }};
     }}
 
-    function componentLeafOrder(componentIds) {{
+    function componentLeafOrder(componentIds, hierarchyNodes) {{
         return [...componentIds].sort((leftId, rightId) => {{
-            const leftNode = state.bundle.graph.hierarchy.nodes[leftId];
-            const rightNode = state.bundle.graph.hierarchy.nodes[rightId];
+            const leftNode = hierarchyNodes[leftId];
+            const rightNode = hierarchyNodes[rightId];
             return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
         }});
     }}
@@ -2052,9 +2385,9 @@ def ssn_viewer_html(
         return raw - Math.floor(raw);
     }}
 
-    function simulateComponentLayout(componentIds, adjacency, options = {{}}) {{
-        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(state.bundle.graph.hierarchy.nodes[nodeId].size)]));
-        const tree = rootedTree(treeCenter(componentIds, adjacency), adjacency);
+    function simulateComponentLayout(componentIds, adjacency, options = {{}}, hierarchyNodes, exactNodeRendering) {{
+        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size, exactNodeRendering)]));
+        const tree = rootedTree(treeCenter(componentIds, adjacency, hierarchyNodes), adjacency, hierarchyNodes);
         const positions = new Map();
         const velocities = new Map();
         const anchors = new Map();
@@ -2068,7 +2401,7 @@ def ssn_viewer_html(
         const iterations = options.iterations ?? 110;
         const preferredEdgeLength = options.preferredEdgeLength ?? 120;
         const collisionStrength = options.collisionStrength ?? 0.28;
-        const orderedIds = componentLeafOrder(componentIds);
+        const orderedIds = componentLeafOrder(componentIds, hierarchyNodes);
         const orderRank = new Map(orderedIds.map((nodeId, index) => [nodeId, index]));
         const orderCenter = (orderedIds.length - 1) / 2;
 
@@ -2185,13 +2518,13 @@ def ssn_viewer_html(
         return normalizeComponentLayout(refinedItems, 24);
     }}
 
-    function forceDirectedForestLayout(visibleIds, links) {{
+    function forceDirectedForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
             return [];
         }}
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
-        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links);
+        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
         const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
             useTreeSeed: true,
             baseSpacing: 104,
@@ -2209,17 +2542,17 @@ def ssn_viewer_html(
             crossingIterations: 3,
             anchorStrength: 0.010,
             angleScale: 1,
-        }}));
+        }}, hierarchyNodes, exactNodeRendering));
         return packLayouts(componentLayouts, {{gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}});
     }}
 
-    function organicForestLayout(visibleIds, links) {{
+    function organicForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
             return [];
         }}
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
-        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links);
+        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
         const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
             useTreeSeed: true,
             baseSpacing: 112,
@@ -2237,17 +2570,17 @@ def ssn_viewer_html(
             crossingIterations: 4,
             anchorStrength: 0.018,
             angleScale: 0.65,
-        }}));
+        }}, hierarchyNodes, exactNodeRendering));
         return packLayouts(componentLayouts, {{gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72}});
     }}
 
-    function tidyForestLayout(visibleIds, links) {{
+    function tidyForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
             return [];
         }}
 
-        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links);
+        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
 
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
         const outerPadding = 58;
@@ -2256,15 +2589,15 @@ def ssn_viewer_html(
         let currentX = outerPadding;
 
         components.forEach(componentIds => {{
-            const rootId = treeCenter(componentIds, adjacency);
-            const tree = rootedTree(rootId, adjacency);
+            const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
+            const tree = rootedTree(rootId, adjacency, hierarchyNodes);
             const depthByNode = new Map([[rootId, 0]]);
             tree.order.forEach(nodeId => {{
                 (tree.children.get(nodeId) || []).forEach(childId => {{
                     depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1);
                 }});
             }});
-            const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(state.bundle.graph.hierarchy.nodes[nodeId].size)]));
+            const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size, exactNodeRendering)]));
             const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
             const siblingGap = Math.max(20, maxRadius * 0.42);
             const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
@@ -2324,33 +2657,66 @@ def ssn_viewer_html(
     }}
 
     function layoutCacheKey(visibleIds, links, algorithm) {{
-        const linkKey = links.map(link => link.sourceId + ':' + link.targetId + ':' + Number(link.weight).toFixed(4)).join('|');
-        return algorithm + '::' + (exactNodeRenderingEnabled() ? 'exact' : 'sampled') + '::' + (sortComponentsBySizeEnabled() ? 'size' : 'leaf') + '::' + visibleIds.join(',') + '::' + linkKey;
+        const flags = (exactNodeRenderingEnabled() ? 1 : 0) | (sortComponentsBySizeEnabled() ? 2 : 0);
+        let h = flags;
+        for (let i = 0; i < visibleIds.length; i++) {{
+            h = (Math.imul(h, 1664525) + visibleIds[i] + 1013904223) | 0;
+        }}
+        let lh = 0;
+        for (let i = 0; i < links.length; i++) {{
+            const link = links[i];
+            lh ^= (Math.imul((link.sourceId * 31 + link.targetId) | 0, 2654435761) | 0) + Math.round((link.weight || 0) * 10000);
+        }}
+        h = (Math.imul(h, 1664525) + lh + 1013904223) | 0;
+        return algorithm + ':' + flags + ':' + visibleIds.length + ':' + links.length + ':' + h;
     }}
 
-    function computeVisibleLayout(visibleIds, links, algorithm) {{
+    function computeVisibleLayout(visibleIds, links, algorithm, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
         const key = layoutCacheKey(visibleIds, links, algorithm);
-        if (state.layoutCache.has(key)) {{
-            return state.layoutCache.get(key).map(item => ({{...item}}));
+        const cached = state.layoutCache.get(key);
+        if (cached !== undefined) {{
+            return {{layout: cached.map(item => ({{...item}})), key, async: false}};
         }}
+
+        if ((algorithm === 'force' || algorithm === 'organic') && state.layoutWorker) {{
+            const workerHierarchyNodes = {{}};
+            visibleIds.forEach(id => {{
+                const node = hierarchyNodes[id];
+                workerHierarchyNodes[id] = {{size: node.size, leaf_start: node.leaf_start}};
+            }});
+            const requestId = ++state.pendingLayoutRequestId;
+            state.layoutWorker.postMessage({{
+                type: 'computeLayout',
+                requestId,
+                key,
+                algorithm,
+                visibleIds,
+                links: links.map(link => ({{sourceId: link.sourceId, targetId: link.targetId, weight: link.weight}})),
+                hierarchyNodes: workerHierarchyNodes,
+                exactNodeRendering,
+                sortBySizeEnabled,
+            }});
+            return {{layout: null, key, async: true}};
+        }}
+
         const layout = (() => {{
             if (algorithm === 'grid') {{
                 return gridClusterLayout(visibleIds);
             }}
             if (algorithm === 'force') {{
-                return forceDirectedForestLayout(visibleIds, links);
+                return forceDirectedForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
             }}
             if (algorithm === 'organic') {{
-                return organicForestLayout(visibleIds, links);
+                return organicForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
             }}
-            return tidyForestLayout(visibleIds, links);
+            return tidyForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
         }})();
         state.layoutCache.set(key, layout.map(item => ({{...item}})));
         if (state.layoutCache.size > 24) {{
             const oldestKey = state.layoutCache.keys().next().value;
             state.layoutCache.delete(oldestKey);
         }}
-        return layout;
+        return {{layout, key, async: false}};
     }}
 
     function drawSplitChart() {{
@@ -2656,14 +3022,22 @@ def ssn_viewer_html(
         }}
 
         const selectedNodeOutlines = [];
+        const TAU = Math.PI * 2;
+        const drawScale = Math.max(state.viewTransform.scale, 1e-9);
+
+        // World-space viewport bounds for culling (#4)
+        const worldMinX = (0 - state.viewTransform.offsetX) / drawScale;
+        const worldMaxX = (clusterCanvas.width - state.viewTransform.offsetX) / drawScale;
+        const worldMinY = (0 - state.viewTransform.offsetY) / drawScale;
+        const worldMaxY = (clusterCanvas.height - state.viewTransform.offsetY) / drawScale;
 
         clusterContext.save();
         clusterContext.translate(state.viewTransform.offsetX, state.viewTransform.offsetY);
-        clusterContext.scale(state.viewTransform.scale, state.viewTransform.scale);
+        clusterContext.scale(drawScale, drawScale);
 
         state.splitLinks.forEach(link => {{
             clusterContext.strokeStyle = 'rgba(92, 106, 112, 0.42)';
-            clusterContext.lineWidth = 1.6 / Math.max(state.viewTransform.scale, 0.1);
+            clusterContext.lineWidth = 1.6 / drawScale;
             clusterContext.beginPath();
             const segments = renderedLinkSegments(link);
             segments.forEach((segment, index) => {{
@@ -2677,30 +3051,55 @@ def ssn_viewer_html(
             clusterContext.stroke();
         }});
 
+        // Collect dots batched by color for batch drawing (#3)
+        const dotColorBuckets = new Map();
+
         state.visibleLayout.forEach(item => {{
+            // Viewport culling (#4)
+            if (item.x + item.radius < worldMinX || item.x - item.radius > worldMaxX ||
+                item.y + item.radius < worldMinY || item.y - item.radius > worldMaxY) {{
+                return;
+            }}
+
             const component = state.bundle.graph.hierarchy.nodes[item.componentId];
             const members = componentMembers(item.componentId);
             const selectionState = componentSelectionState(members);
 
             clusterContext.fillStyle = 'rgba(248, 243, 235, 0.95)';
             clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c8b8a6';
-            clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / Math.max(state.viewTransform.scale, 0.1);
+            clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / drawScale;
             clusterContext.beginPath();
-            clusterContext.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
+            clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
             clusterContext.fill();
             clusterContext.stroke();
 
             const dotLayout = componentDotLayout(component, item);
-            dotLayout.forEach(dot => {{
-                clusterContext.fillStyle = nodeColor(dot.memberIndex);
-                clusterContext.beginPath();
-                clusterContext.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
-                clusterContext.fill();
+            for (const dot of dotLayout) {{
+                // Use pre-computed color cache (#2)
+                const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
+                let bucket = dotColorBuckets.get(color);
+                if (bucket === undefined) {{
+                    bucket = [];
+                    dotColorBuckets.set(color, bucket);
+                }}
+                bucket.push(dot);
                 if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {{
                     selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius}});
                 }}
-            }});
+            }}
         }});
+
+        // Batch draw all dots grouped by color (#3)
+        dotColorBuckets.forEach((dots, color) => {{
+            clusterContext.fillStyle = color;
+            clusterContext.beginPath();
+            for (const dot of dots) {{
+                clusterContext.moveTo(dot.x + dot.radius, dot.y);
+                clusterContext.arc(dot.x, dot.y, dot.radius, 0, TAU);
+            }}
+            clusterContext.fill();
+        }});
+
         clusterContext.restore();
 
         if (selectedNodeOutlines.length > 0) {{
@@ -2711,7 +3110,7 @@ def ssn_viewer_html(
                 const screenPoint = worldToScreenPoint(outline.x, outline.y);
                 const screenRadius = Math.max(3, (outline.radius * state.viewTransform.scale) + 1.6);
                 clusterContext.beginPath();
-                clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, Math.PI * 2);
+                clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, TAU);
                 clusterContext.stroke();
             }});
             clusterContext.restore();
@@ -2731,9 +3130,14 @@ def ssn_viewer_html(
         }}
 
         state.visibleLayout.forEach(item => {{
-            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
             const screenPoint = worldToScreenPoint(item.x, item.y);
             const screenRadius = item.radius * state.viewTransform.scale;
+            // Viewport culling for labels (#4)
+            if (screenPoint.x + screenRadius < 0 || screenPoint.x - screenRadius > clusterCanvas.width ||
+                screenPoint.y + screenRadius < 0 || screenPoint.y - screenRadius > clusterCanvas.height) {{
+                return;
+            }}
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
             let labelText = '';
             let labelY = screenPoint.y + 4;
             let font = '600 12px Georgia';
@@ -2765,6 +3169,20 @@ def ssn_viewer_html(
             clusterContext.strokeRect(box.left, box.top, box.width, box.height);
             clusterContext.restore();
         }}
+
+        if (state.layoutComputing) {{
+            const cx = clusterCanvas.width / 2;
+            const cy = clusterCanvas.height / 2;
+            clusterContext.save();
+            clusterContext.fillStyle = 'rgba(255, 250, 242, 0.72)';
+            clusterContext.fillRect(cx - 120, cy - 22, 240, 44);
+            clusterContext.fillStyle = '#5c6a70';
+            clusterContext.font = '600 14px Georgia';
+            clusterContext.textAlign = 'center';
+            clusterContext.textBaseline = 'middle';
+            clusterContext.fillText('Computing layout…', cx, cy);
+            clusterContext.restore();
+        }}
     }}
 
     function scheduleClusterRender() {{
@@ -2775,6 +3193,26 @@ def ssn_viewer_html(
             state.pendingClusterRenderFrame = null;
             renderClusterView();
         }});
+    }}
+
+    function applyComputedLayout(layout, visibleGraph, layoutAlgorithm, resetView) {{
+        const layoutById = new Map(layout.map(item => [item.componentId, item]));
+        const links = layoutAlgorithm === 'grid'
+            ? []
+            : visibleGraph.links
+                .map(link => {{
+                    const left = layoutById.get(link.sourceId);
+                    const right = layoutById.get(link.targetId);
+                    if (!left || !right) {{ return null; }}
+                    return {{left, right, threshold: link.weight}};
+                }})
+                .filter(Boolean);
+        state.visibleLayout = layout;
+        state.splitLinks = links;
+        document.getElementById('stat-clusters').textContent = layout.length.toLocaleString();
+        document.getElementById('stat-links').textContent = links.length.toLocaleString();
+        if (resetView) {{ fitClusterViewToLayout(); }}
+        renderClusterView();
     }}
 
     function drawClusterView(resetView = true) {{
@@ -2788,37 +3226,100 @@ def ssn_viewer_html(
         const thresholdValue = selectedThresholdValue();
         const activeClusterIds = activeClustersAtThreshold(thresholdValue);
         const visibleGraph = mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnlyEnabled());
-        const visibleLayout = computeVisibleLayout(visibleGraph.visibleIds, visibleGraph.links, layoutAlgorithm);
-        const layoutById = new Map(visibleLayout.map(item => [item.componentId, item]));
-        const links = layoutAlgorithm === 'grid'
-            ? []
-            : visibleGraph.links
-                .map(link => {{
-                    const left = layoutById.get(link.sourceId);
-                    const right = layoutById.get(link.targetId);
-                    if (!left || !right) {{
-                        return null;
-                    }}
-                    return {{left, right, threshold: link.weight}};
-                }})
-                .filter(Boolean);
+        const hierarchyNodes = state.bundle.graph.hierarchy.nodes;
+        const exactNodeRendering = exactNodeRenderingEnabled();
+        const sortBySizeEnabled = sortComponentsBySizeEnabled();
 
         state.activeClusters = activeClusterIds;
         state.visibleClusters = visibleGraph.visibleIds;
-        state.visibleLayout = visibleLayout;
-        state.splitLinks = links;
 
         const hidden = visibleGraph.hiddenNodes;
         const shown = state.bundle.graph.nodes.length - hidden;
         document.getElementById('hidden-summary').textContent = hidden.toLocaleString() + ' nodes hidden by minimum cluster size';
-        document.getElementById('stat-clusters').textContent = visibleLayout.length.toLocaleString();
-        document.getElementById('stat-links').textContent = links.length.toLocaleString();
         document.getElementById('stat-shown-nodes').textContent = shown.toLocaleString();
         document.getElementById('stat-hidden-nodes').textContent = hidden.toLocaleString();
-        if (resetView) {{
-            fitClusterViewToLayout();
+
+        const result = computeVisibleLayout(visibleGraph.visibleIds, visibleGraph.links, layoutAlgorithm, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
+        if (result.async) {{
+            state._pendingVisibleGraph = visibleGraph;
+            state._pendingLayoutAlgorithm = layoutAlgorithm;
+            state._pendingLayoutResetView = resetView;
+            state.layoutComputing = true;
+            renderClusterView();
+            return;
         }}
-        renderClusterView();
+        state.layoutComputing = false;
+        applyComputedLayout(result.layout, visibleGraph, layoutAlgorithm, resetView);
+    }}
+
+    function htmlEscape(value) {{
+        return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }}
+
+    function setupLayoutWorker() {{
+        try {{
+            const blob = new Blob([LAYOUT_WORKER_CODE], {{type: 'application/javascript'}});
+            const workerUrl = URL.createObjectURL(blob);
+            const worker = new Worker(workerUrl);
+            worker.onmessage = function(event) {{
+                const {{requestId, key, layout}} = event.data;
+                if (requestId !== state.pendingLayoutRequestId) {{ return; }}
+                state.layoutCache.set(key, layout.map(item => ({{...item}})));
+                if (state.layoutCache.size > 24) {{
+                    state.layoutCache.delete(state.layoutCache.keys().next().value);
+                }}
+                state.layoutComputing = false;
+                applyComputedLayout(layout, state._pendingVisibleGraph, state._pendingLayoutAlgorithm, state._pendingLayoutResetView);
+            }};
+            worker.onerror = function(error) {{
+                console.warn('Layout worker error, falling back to main thread:', error);
+                state.layoutWorker = null;
+                state.layoutComputing = false;
+                renderClusterView();
+            }};
+            state.layoutWorker = worker;
+        }} catch (error) {{
+            console.warn('Layout worker unavailable, using main thread:', error);
+        }}
+    }}
+
+    function setupMetadataTableDelegation() {{
+        const thead = document.querySelector('#metadata-table thead');
+        const tbody = document.querySelector('#metadata-table tbody');
+
+        thead.addEventListener('click', event => {{
+            const sortBtn = event.target.closest('[data-column-key]');
+            if (sortBtn) {{ toggleMetadataSort(sortBtn.dataset.columnKey); return; }}
+            const copyBtn = event.target.closest('[data-copy-column]');
+            if (copyBtn) {{ event.preventDefault(); event.stopPropagation(); copyMetadataColumn(copyBtn.dataset.copyColumn); }}
+        }});
+
+        thead.addEventListener('pointerdown', event => {{
+            const resizeHandle = event.target.closest('[data-resize-column]');
+            if (resizeHandle) {{ startMetadataColumnResize(resizeHandle.dataset.resizeColumn, event); }}
+        }});
+
+        tbody.addEventListener('mousedown', event => {{
+            if (event.shiftKey && !event.target.closest('button, a, input, select, textarea')) {{
+                event.preventDefault();
+            }}
+        }});
+
+        tbody.addEventListener('click', event => {{
+            if (event.target.closest('button, a, input, select, textarea')) {{ return; }}
+            if (!event.shiftKey && metadataTableHasActiveTextSelection()) {{ return; }}
+            const row = event.target.closest('tr[data-node-index]');
+            if (!row) {{ return; }}
+            toggleMetadataRowSelection(Number(row.dataset.nodeIndex), state.renderedNodeIndices, {{range: event.shiftKey}});
+        }});
+
+        tbody.addEventListener('keydown', event => {{
+            if (event.key !== 'Enter' && event.key !== ' ') {{ return; }}
+            const row = event.target.closest('tr[data-node-index]');
+            if (!row) {{ return; }}
+            event.preventDefault();
+            toggleMetadataRowSelection(Number(row.dataset.nodeIndex), state.renderedNodeIndices, {{range: event.shiftKey}});
+        }});
     }}
 
     function updateMetadataTable() {{
@@ -2829,115 +3330,53 @@ def ssn_viewer_html(
         const pagination = metadataPagination(sortedNodeIndices.length);
         state.metadataPage = pagination.pageIndex;
         const renderedNodeIndices = sortedNodeIndices.slice(pagination.start, pagination.end);
+        state.renderedNodeIndices = renderedNodeIndices;
         pruneMetadataRowSelection(renderedNodeIndices);
         applyMetadataColumnWidths();
         const thead = document.querySelector('#metadata-table thead');
         const tbody = document.querySelector('#metadata-table tbody');
-        thead.innerHTML = '';
-        tbody.innerHTML = '';
 
-        const headerRow = document.createElement('tr');
-        metadataColumnKeys().forEach(label => {{
-            const th = document.createElement('th');
-            th.className = 'metadata-header';
-            th.setAttribute('aria-sort', state.metadataSort.columnKey === label ? (state.metadataSort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
-
-            const headerCell = document.createElement('div');
-            headerCell.className = 'metadata-header-cell';
-
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'metadata-sort-button';
-            button.setAttribute('data-column-key', label);
-            button.setAttribute('title', 'Sort by ' + label);
-            const labelSpan = document.createElement('span');
-            labelSpan.textContent = label;
-            const indicatorSpan = document.createElement('span');
-            indicatorSpan.className = 'metadata-sort-indicator';
-            indicatorSpan.textContent = metadataSortIndicator(label);
-            button.appendChild(labelSpan);
-            button.appendChild(indicatorSpan);
-            button.addEventListener('click', () => toggleMetadataSort(label));
-
-            const copyButton = document.createElement('button');
-            copyButton.type = 'button';
-            copyButton.className = 'metadata-copy-button';
-            copyButton.textContent = 'Copy';
-            copyButton.setAttribute('title', 'Copy the currently displayed values from ' + label);
-            copyButton.addEventListener('click', async event => {{
-                event.preventDefault();
-                event.stopPropagation();
-                await copyMetadataColumn(label);
-            }});
-
-            const resizeHandle = document.createElement('div');
-            resizeHandle.className = 'metadata-resize-handle';
-            resizeHandle.setAttribute('role', 'separator');
-            resizeHandle.setAttribute('aria-orientation', 'vertical');
-            resizeHandle.setAttribute('title', 'Drag to resize column');
-            resizeHandle.addEventListener('pointerdown', event => startMetadataColumnResize(label, event));
-
-            headerCell.appendChild(button);
-            headerCell.appendChild(copyButton);
-            th.appendChild(headerCell);
-            th.appendChild(resizeHandle);
-            headerRow.appendChild(th);
+        const columnKeys = metadataColumnKeys();
+        const headerCells = columnKeys.map(label => {{
+            const escapedLabel = htmlEscape(label);
+            const ariasort = state.metadataSort.columnKey === label
+                ? (state.metadataSort.direction === 'asc' ? 'ascending' : 'descending')
+                : 'none';
+            const indicator = htmlEscape(metadataSortIndicator(label));
+            return '<th class="metadata-header" aria-sort="' + ariasort + '">'
+                + '<div class="metadata-header-cell">'
+                + '<button type="button" class="metadata-sort-button" data-column-key="' + escapedLabel + '" title="Sort by ' + escapedLabel + '">'
+                + '<span>' + escapedLabel + '</span><span class="metadata-sort-indicator">' + indicator + '</span></button>'
+                + '<button type="button" class="metadata-copy-button" data-copy-column="' + escapedLabel + '" title="Copy the currently displayed values from ' + escapedLabel + '">Copy</button>'
+                + '</div>'
+                + '<div class="metadata-resize-handle" role="separator" aria-orientation="vertical" title="Drag to resize column" data-resize-column="' + escapedLabel + '"></div>'
+                + '</th>';
         }});
-        thead.appendChild(headerRow);
+        thead.innerHTML = '<tr>' + headerCells.join('') + '</tr>';
 
+        let bodyHtml;
         if (sortedNodeIndices.length === 0) {{
-            const emptyRow = document.createElement('tr');
-            emptyRow.className = 'metadata-empty-row';
-            const emptyCell = document.createElement('td');
-            emptyCell.colSpan = state.metadataColumns.length + 1;
-            emptyCell.textContent = metadataFilterText()
+            const emptyMsg = htmlEscape(metadataFilterText()
                 ? 'No metadata rows match the current filter.'
-                : 'No metadata rows to display.';
-            emptyRow.appendChild(emptyCell);
-            tbody.appendChild(emptyRow);
+                : 'No metadata rows to display.');
+            bodyHtml = '<tr class="metadata-empty-row"><td colspan="' + (state.metadataColumns.length + 1) + '">' + emptyMsg + '</td></tr>';
         }} else {{
-            renderedNodeIndices.forEach(nodeIndex => {{
-                const row = document.createElement('tr');
-                if (state.selectedMetadataNodeIndices.has(nodeIndex)) {{
-                    row.className = 'metadata-row-selected';
-                }}
-                row.tabIndex = 0;
-                row.setAttribute('aria-selected', state.selectedMetadataNodeIndices.has(nodeIndex) ? 'true' : 'false');
-                row.addEventListener('click', event => {{
-                    if (event.target.closest('button, a, input, select, textarea')) {{
-                        return;
-                    }}
-                    if (metadataTableHasActiveTextSelection()) {{
-                        return;
-                    }}
-                    toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, {{range: event.shiftKey}});
-                }});
-                row.addEventListener('keydown', event => {{
-                    if (event.key !== 'Enter' && event.key !== ' ') {{
-                        return;
-                    }}
-                    event.preventDefault();
-                    toggleMetadataRowSelection(nodeIndex, renderedNodeIndices, {{range: event.shiftKey}});
-                }});
-                const idCell = document.createElement('td');
-                idCell.textContent = nodeId(nodeIndex);
-                idCell.title = idCell.textContent;
-                row.appendChild(idCell);
-
-                state.metadataColumns.forEach(column => {{
+            bodyHtml = renderedNodeIndices.map(nodeIndex => {{
+                const isSelected = state.selectedMetadataNodeIndices.has(nodeIndex);
+                const rowClass = isSelected ? ' class="metadata-row-selected"' : '';
+                const ariaSelected = isSelected ? 'true' : 'false';
+                const idText = htmlEscape(nodeId(nodeIndex));
+                let cellsHtml = '<td title="' + idText + '">' + idText + '</td>';
+                for (const column of state.metadataColumns) {{
                     const value = metadataValue(nodeIndex, column.name);
-                    const cell = document.createElement('td');
-                    const className = metadataCellClass(column.name, value);
-                    if (className) {{
-                        cell.className = className;
-                    }}
-                    cell.textContent = formatMetadataDisplayValue(column.name, value);
-                    cell.title = cell.textContent;
-                    row.appendChild(cell);
-                }});
-                tbody.appendChild(row);
-            }});
+                    const cellClass = metadataCellClass(column.name, value);
+                    const displayText = htmlEscape(formatMetadataDisplayValue(column.name, value));
+                    cellsHtml += '<td' + (cellClass ? ' class="' + cellClass + '"' : '') + ' title="' + displayText + '">' + displayText + '</td>';
+                }}
+                return '<tr' + rowClass + ' tabindex="0" aria-selected="' + ariaSelected + '" data-node-index="' + nodeIndex + '">' + cellsHtml + '</tr>';
+            }}).join('');
         }}
+        tbody.innerHTML = bodyHtml;
 
         document.getElementById('selection-summary').textContent = selected.length.toLocaleString() + ' nodes selected';
         const pageStatus = document.getElementById('metadata-page-status');
@@ -2957,12 +3396,8 @@ def ssn_viewer_html(
         const sortDescription = metadataSortDescription();
         const filterText = metadataFilterText();
         const filterDescription = filterText ? ' matching filter "' + filterText + '"' : '';
-        const metadataSelectionCount = state.selectedMetadataNodeIndices.size;
-        const metadataSelectionDescription = metadataSelectionCount > 0
-            ? metadataSelectionCount.toLocaleString() + ' table rows selected. Click Select nodes to promote them into the graph selection. '
-            : '';
         const pagerActive = pagination.pageCount > 1;
-        document.getElementById('selection-note').textContent = metadataSelectionDescription + (selected.length === 0
+        state.metadataBaseNoteText = (selected.length === 0
             ? (
                 pagerActive
                     ? 'No clusters selected. Browse the full network table with the pager' + filterDescription + (sortDescription ? ', sorted by ' + sortDescription : '') + '.'
@@ -2974,9 +3409,28 @@ def ssn_viewer_html(
                     : 'Ctrl-click a node to toggle it individually, click a cluster to toggle it, Shift-drag a box to add multiple clusters, click table rows to stage them, shift-click to select or deselect row ranges, use the search box to filter rows, and click a column header to sort' + (sortDescription ? ' by ' + sortDescription : '') + '.'
             ));
         document.getElementById('export-selected').disabled = !state.bundle;
-        document.getElementById('metadata-select-nodes').disabled = !state.bundle || metadataSelectionCount === 0;
         document.getElementById('metadata-reset-sort').disabled = !state.bundle || !state.metadataSort.columnKey;
         document.getElementById('clear-selection').disabled = selected.length === 0;
+        applyMetadataTableRowHighlights();
+    }}
+
+    function applyMetadataTableRowHighlights() {{
+        const tbody = document.querySelector('#metadata-table tbody');
+        if (tbody) {{
+            tbody.querySelectorAll('tr[data-node-index]').forEach(row => {{
+                const idx = Number(row.dataset.nodeIndex);
+                const sel = state.selectedMetadataNodeIndices.has(idx);
+                row.className = sel ? 'metadata-row-selected' : '';
+                row.setAttribute('aria-selected', sel ? 'true' : 'false');
+            }});
+        }}
+        const metadataSelectionCount = state.selectedMetadataNodeIndices.size;
+        const metadataSelectionDescription = metadataSelectionCount > 0
+            ? metadataSelectionCount.toLocaleString() + ' table rows selected. Click Select nodes to promote them into the graph selection. '
+            : '';
+        document.getElementById('selection-note').textContent = metadataSelectionDescription + state.metadataBaseNoteText;
+        document.getElementById('metadata-select-nodes').disabled = !state.bundle || metadataSelectionCount === 0;
+        document.getElementById('metadata-deselect-rows').disabled = !state.bundle || metadataSelectionCount === 0;
     }}
 
     function exportSelection() {{
@@ -3168,7 +3622,7 @@ def ssn_viewer_html(
         if (selected.length > 0) {{
             return selected;
         }}
-        return state.bundle.graph.nodes.map((_, nodeIndex) => nodeIndex);
+        return state.allNodeIndices;
     }}
 
     function metadataColumnValues(nodeIndices, columnKey) {{
@@ -3258,7 +3712,7 @@ def ssn_viewer_html(
         }}
         state.selectedMetadataNodeIndices = nextSelection;
         state.metadataRowSelectionAnchor = nodeIndex;
-        updateMetadataTable();
+        applyMetadataTableRowHighlights();
     }}
 
     function selectNodesFromMetadataRows() {{
@@ -3675,7 +4129,7 @@ def ssn_viewer_html(
     document.getElementById('leaf-pruning-only').addEventListener('change', () => {{
         scheduleThresholdUI(true);
     }});
-    document.getElementById('color-by').addEventListener('change', renderClusterView);
+    document.getElementById('color-by').addEventListener('change', () => {{ rebuildNodeColorCache(); renderClusterView(); }});
     document.getElementById('label-by').addEventListener('change', renderClusterView);
     document.getElementById('show-labels').addEventListener('change', renderClusterView);
     document.getElementById('show-node-counts').addEventListener('change', renderClusterView);
@@ -3703,6 +4157,10 @@ def ssn_viewer_html(
         drawClusterView(true);
     }});
     document.getElementById('export-selected').addEventListener('click', exportSelection);
+    document.getElementById('metadata-deselect-rows').addEventListener('click', () => {{
+        clearMetadataRowSelection();
+        applyMetadataTableRowHighlights();
+    }});
     document.getElementById('metadata-reset-sort').addEventListener('click', resetMetadataSort);
     document.getElementById('metadata-filter').addEventListener('input', () => {{
         scheduleMetadataFilterUpdate();
@@ -3720,6 +4178,19 @@ def ssn_viewer_html(
     }});
     document.getElementById('metadata-next-page').addEventListener('click', () => {{
         stepMetadataPage(1);
+    }});
+    document.getElementById('focus-largest-cluster').addEventListener('click', () => {{
+        if (!state.bundle || state.visibleLayout.length === 0) {{ return; }}
+        const hierarchyNodes = state.bundle.graph.hierarchy.nodes;
+        let largestItem = state.visibleLayout[0];
+        let largestSize = hierarchyNodes[largestItem.componentId].size;
+        for (const item of state.visibleLayout) {{
+            const size = hierarchyNodes[item.componentId].size;
+            if (size > largestSize) {{ largestSize = size; largestItem = item; }}
+        }}
+        state.viewTransform.offsetX = clusterCanvas.width / 2 - largestItem.x * state.viewTransform.scale;
+        state.viewTransform.offsetY = clusterCanvas.height / 2 - largestItem.y * state.viewTransform.scale;
+        scheduleClusterRender();
     }});
     document.getElementById('reset-view').addEventListener('click', () => {{
         fitClusterViewToLayout();
@@ -3739,6 +4210,8 @@ def ssn_viewer_html(
         drawClusterView(true);
     }});
 
+    setupLayoutWorker();
+    setupMetadataTableDelegation();
     warnIfUnsupported();
     updateComponentSortButton();
     drawSplitChart();

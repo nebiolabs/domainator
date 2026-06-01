@@ -293,9 +293,8 @@ def main(argv):
             name=bundle_name,
         )
         # Serialize once; reuse bytes for both file output and HTML embedding.
-        need_json = params.embed_data
-        need_compressed = params.output is not None
-        json_bytes, compressed_bytes = _serialize_ssn_viewer_bundle(bundle) if (need_json or need_compressed) else (None, None)
+        need_compressed = params.output is not None or params.embed_data
+        json_bytes, compressed_bytes = _serialize_ssn_viewer_bundle(bundle) if need_compressed else (None, None)
 
         if params.output is not None:
             _write_compressed_ssn_viewer_bundle(params.output, compressed_bytes, max_output_bytes=max_output_bytes)
@@ -303,7 +302,7 @@ def main(argv):
             write_ssn_viewer_html(
                 params.html,
                 title=bundle_name,
-                embedded_bundle_json=json_bytes if params.embed_data else None,
+                embedded_bundle_json=compressed_bytes if params.embed_data else None,
             )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
