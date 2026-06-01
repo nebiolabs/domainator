@@ -4,6 +4,7 @@ import gzip
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 from pathlib import Path
 from typing import Dict, List, Union
@@ -138,9 +139,10 @@ def build_ssn_viewer_bundle(
 
     node_data = pd.DataFrame(index=matrix.rows)
     if metadata_files is not None:
-        for file in metadata_files:
-            metadata = pd.read_csv(file, sep="\t", index_col=0)
-            node_data = node_data.merge(metadata, how="left", left_index=True, right_index=True)
+        with ThreadPoolExecutor() as exe:
+            dfs = list(exe.map(lambda f: pd.read_csv(f, sep="\t", index_col=0), metadata_files))
+        for df in dfs:
+            node_data = node_data.merge(df, how="left", left_index=True, right_index=True)
 
     if color_by is not None and color_by not in node_data.columns:
         raise ValueError(f"Requested color_by column '{color_by}' was not found in the merged metadata.")
@@ -148,6 +150,8 @@ def build_ssn_viewer_bundle(
         raise ValueError(f"Requested label_by column '{label_by}' was not found in the merged metadata.")
 
     tree = MaxTree(matrix)
+    rows = list(matrix.rows)  # save label names before freeing matrix
+    del matrix                # free O(n²) data array
     component_summary = component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
     merge_event_series = filter_merge_event_rows(
         threshold_merge_event_rows(component_summary),
@@ -161,7 +165,7 @@ def build_ssn_viewer_bundle(
         "name": name,
         "domainator_version": __version__,
         "graph": {
-            "nodes": list(matrix.rows),
+            "nodes": rows,
             "mst_edges": tree.export_for_interactive_viz()["mst_edges"],
             "cluster_count_by_threshold": tree.cluster_count_by_threshold,
             "edges_by_threshold": tree.edges_by_threshold,
@@ -185,12 +189,11 @@ def _serialize_ssn_viewer_bundle(bundle: dict) -> tuple[bytes, bytes]:
     return json_bytes, compressed_bytes
 
 
-def write_ssn_viewer_bundle(
+def _write_compressed_ssn_viewer_bundle(
     out_path: Union[str, PathLike],
-    bundle: dict,
+    compressed_bytes: bytes,
     max_output_bytes: int | None = None,
 ):
-    _, compressed_bytes = _serialize_ssn_viewer_bundle(bundle)
     enforce_output_limit(
         projected_bytes=len(compressed_bytes),
         max_output_bytes=max_output_bytes,
@@ -198,7 +201,6 @@ def write_ssn_viewer_bundle(
         mitigation_options=["--subset", "--subset_file"],
         extra_guidance="This bundle stores only MST-derived hierarchy data; subset the network before export if it is still too large.",
     )
-
     temp_path = make_temporary_output_path(out_path)
     try:
         with open(temp_path, "wb") as out_handle:
@@ -208,6 +210,15 @@ def write_ssn_viewer_bundle(
     finally:
         if temp_path is not None and Path(temp_path).exists():
             os.unlink(temp_path)
+
+
+def write_ssn_viewer_bundle(
+    out_path: Union[str, PathLike],
+    bundle: dict,
+    max_output_bytes: int | None = None,
+):
+    _, compressed_bytes = _serialize_ssn_viewer_bundle(bundle)
+    _write_compressed_ssn_viewer_bundle(out_path, compressed_bytes, max_output_bytes=max_output_bytes)
 
 
 def main(argv):
@@ -281,16 +292,18 @@ def main(argv):
             label_by=params.label_by,
             name=bundle_name,
         )
-        embedded_bundle_json = None
+        # Serialize once; reuse bytes for both file output and HTML embedding.
+        need_json = params.embed_data
+        need_compressed = params.output is not None
+        json_bytes, compressed_bytes = _serialize_ssn_viewer_bundle(bundle) if (need_json or need_compressed) else (None, None)
+
         if params.output is not None:
-            write_ssn_viewer_bundle(params.output, bundle, max_output_bytes=max_output_bytes)
-        if params.embed_data:
-            embedded_bundle_json, _ = _serialize_ssn_viewer_bundle(bundle)
+            _write_compressed_ssn_viewer_bundle(params.output, compressed_bytes, max_output_bytes=max_output_bytes)
         if params.html is not None:
             write_ssn_viewer_html(
                 params.html,
                 title=bundle_name,
-                embedded_bundle_json=embedded_bundle_json,
+                embedded_bundle_json=json_bytes if params.embed_data else None,
             )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
