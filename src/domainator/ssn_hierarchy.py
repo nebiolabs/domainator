@@ -1,5 +1,5 @@
+import heapq
 import math
-from bisect import bisect_left, insort
 
 import numpy as np
 
@@ -31,13 +31,6 @@ def format_merge_impact_metric(metric: str) -> str:
     raise ValueError(f"Unsupported merge impact metric: {metric}")
 
 
-def _remove_sorted_size(sorted_sizes, size):
-    position = bisect_left(sorted_sizes, size)
-    if position >= len(sorted_sizes) or sorted_sizes[position] != size:
-        raise ValueError(f"size {size} missing from sorted component sizes")
-    sorted_sizes.pop(position)
-
-
 def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_MIN_CHILD):
     if tree.n_nodes == 0:
         return np.zeros((0, 6), dtype=float)
@@ -47,7 +40,29 @@ def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_M
 
     parent = np.arange(tree.n_nodes, dtype=int)
     component_sizes = np.ones(tree.n_nodes, dtype=int)
-    sorted_sizes = [1] * tree.n_nodes
+
+    # Max-heap with lazy deletion tracks the largest component size in O(log n)
+    # per merge instead of the O(n) cost of maintaining a sorted list.
+    heap = [-1] * tree.n_nodes  # negated for max-heap; all components start at size 1
+    heapq.heapify(heap)
+    heap_deleted = {}  # size -> pending deletion count
+
+    def heap_remove(size):
+        heap_deleted[size] = heap_deleted.get(size, 0) + 1
+
+    def heap_push(size):
+        heapq.heappush(heap, -size)
+
+    def heap_max():
+        while heap:
+            s = -heap[0]
+            if heap_deleted.get(s, 0) > 0:
+                heap_deleted[s] -= 1
+                heapq.heappop(heap)
+            else:
+                return float(s)
+        return 0.0
+
     non_singleton_count = 0
     non_singleton_sum = 0
     summary = np.zeros((len(tree.mst_edges) + 1, 6), dtype=float)
@@ -64,7 +79,7 @@ def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_M
 
     def record(row_idx, threshold, merge_impact=0.0):
         nonlocal non_singleton_count, non_singleton_sum
-        largest_cluster = float(sorted_sizes[-1]) if len(sorted_sizes) > 0 else 0.0
+        largest_cluster = heap_max()
         avg_non_singleton = float(non_singleton_sum) / non_singleton_count if non_singleton_count > 0 else 0.0
 
         summary[row_idx, COMPONENT_THRESHOLD_COL] = threshold
@@ -89,8 +104,8 @@ def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_M
             else:
                 merge_impact = float(min(left_size, right_size))
 
-            _remove_sorted_size(sorted_sizes, left_size)
-            _remove_sorted_size(sorted_sizes, right_size)
+            heap_remove(left_size)
+            heap_remove(right_size)
 
             if left_size > 1:
                 non_singleton_count -= 1
@@ -103,7 +118,7 @@ def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_M
             parent[left_root] = right_root
             component_sizes[right_root] = merged_size
 
-            insort(sorted_sizes, merged_size)
+            heap_push(merged_size)
             non_singleton_count += 1
             non_singleton_sum += merged_size
 

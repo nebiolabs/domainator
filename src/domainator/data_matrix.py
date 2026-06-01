@@ -523,10 +523,11 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
         total_events = len(neighbor_rankings.target)
     else:
         total_events = sum(min(len(ranked_neighbors), max_k) for ranked_neighbors in neighbor_rankings)
-    activation_scores = np.empty(total_events, dtype=float)
-    activation_ranks = np.empty(total_events, dtype=np.int16)
-    activation_source = np.empty(total_events, dtype=np.int32)
-    activation_target = np.empty(total_events, dtype=np.int32)
+    # Pack all activation fields into one structured array so the sort is in-place
+    # and avoids a separate O(total_events) argsort index array.
+    act_dtype = np.dtype([('score', np.float64), ('rank', np.int16),
+                          ('source', np.int32), ('target', np.int32)])
+    activations = np.empty(total_events, dtype=act_dtype)
 
     activation_idx = 0
     for source_idx, row_target, row_score in _iter_neighbor_ranking_rows(neighbor_rankings):
@@ -535,18 +536,15 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
                 edge_source, edge_target = source_idx, target_idx
             else:
                 edge_source, edge_target = target_idx, source_idx
-            activation_scores[activation_idx] = float(score)
-            activation_ranks[activation_idx] = rank
-            activation_source[activation_idx] = edge_source
-            activation_target[activation_idx] = edge_target
+            activations['score'][activation_idx] = float(score)
+            activations['rank'][activation_idx] = rank
+            activations['source'][activation_idx] = edge_source
+            activations['target'][activation_idx] = edge_target
             activation_idx += 1
 
     if total_events > 0:
-        order = np.argsort(-activation_scores, kind="stable")
-        activation_scores = activation_scores[order]
-        activation_ranks = activation_ranks[order]
-        activation_source = activation_source[order]
-        activation_target = activation_target[order]
+        activations.sort(order='score', kind='stable')  # ascending in-place
+        activations = activations[::-1]                  # descending view
 
     active_edge_min_rank = dict()
     non_mst_rank_counts = np.zeros(max_k + 1, dtype=int)
@@ -559,9 +557,9 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
     for threshold_idx, mst_edge in enumerate(tree.mst_edges):
         threshold = thresholds[threshold_idx]
 
-        while activation_idx < total_events and _score_passes_lower_bound(activation_scores[activation_idx], threshold, include_equal=include_equal):
-            rank = int(activation_ranks[activation_idx])
-            edge = edge_key(activation_source[activation_idx], activation_target[activation_idx])
+        while activation_idx < total_events and _score_passes_lower_bound(activations['score'][activation_idx], threshold, include_equal=include_equal):
+            rank = int(activations['rank'][activation_idx])
+            edge = edge_key(activations['source'][activation_idx], activations['target'][activation_idx])
             current_rank = active_edge_min_rank.get(edge)
 
             if current_rank is None:

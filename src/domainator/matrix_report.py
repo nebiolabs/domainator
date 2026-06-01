@@ -13,7 +13,6 @@ from bashplotlib.histogram import plot_hist
 import io
 from contextlib import ExitStack, redirect_stdout
 from domainator.summary_report import histplot_base64
-import statistics
 import numpy as np
 import json
 from domainator.ssn_hierarchy import (
@@ -193,14 +192,21 @@ class SummaryTextWriter():
     def write_header(self, tree, edge_scores):
         non_zero_values = edge_scores
         n_nodes = tree.n_nodes
-        
+        n = len(non_zero_values)
+        # edge_scores is SortedUndirectedEdges.score — already sorted descending,
+        # so min/max/median are O(1) index accesses and mean avoids a Python-level loop.
+        mean_val   = float(np.mean(non_zero_values)) if n > 0 else 0
+        median_val = float(non_zero_values[n // 2]) if n % 2 == 1 else (float(non_zero_values[n // 2 - 1]) + float(non_zero_values[n // 2])) / 2 if n > 0 else 0
+        min_val    = float(non_zero_values[-1]) if n > 0 else 0
+        max_val    = float(non_zero_values[0])  if n > 0 else 0
+
         print(f"""Matrix Report
 Nodes: {n_nodes}
-Non-zero edges: {len(non_zero_values)}
-Mean: {statistics.mean(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
-Median: {statistics.median(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
-Min: {min(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
-Max: {max(non_zero_values) if len(non_zero_values) > 0 else 0:.1f}
+Non-zero edges: {n}
+Mean: {mean_val:.1f}
+Median: {median_val:.1f}
+Min: {min_val:.1f}
+Max: {max_val:.1f}
         """, file=self.out_handle)
         
     def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
@@ -295,7 +301,13 @@ class SummaryHTMLWriter():
     def write_header(self, tree, edge_scores):
         non_zero_values = edge_scores
         n_nodes = tree.n_nodes
-        
+        n = len(non_zero_values)
+        # edge_scores is SortedUndirectedEdges.score — already sorted descending.
+        mean_val   = float(np.mean(non_zero_values)) if n > 0 else 0
+        median_val = float(non_zero_values[n // 2]) if n % 2 == 1 else (float(non_zero_values[n // 2 - 1]) + float(non_zero_values[n // 2])) / 2 if n > 0 else 0
+        min_val    = float(non_zero_values[-1]) if n > 0 else 0
+        max_val    = float(non_zero_values[0])  if n > 0 else 0
+
         print(f"""<!doctype html><html><head><meta charset="UTF-8" /><title>Matrix Report</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
@@ -470,7 +482,7 @@ class SummaryHTMLWriter():
         print(f"""<div><h2>Summary</h2>""", file=self.out_handle)
         print(f"""<table>""", file=self.out_handle)
         print(f"""<tr><th>Nodes</th><th>Non-zero edges</th><th>Mean</th><th>Median</th><th>Min</th><th>Max</th></tr>""", file=self.out_handle)
-        print(f"""<tr><td>{n_nodes}</td><td>{len(non_zero_values)}</td><td>{statistics.mean(non_zero_values) if len(non_zero_values) > 0 else 0 : .1f}</td><td>{statistics.median(non_zero_values) if len(non_zero_values) > 0 else 0 : .1f}</td><td>{min(non_zero_values) if len(non_zero_values) > 0 else 0 : .1f}</td><td>{max(non_zero_values) if len(non_zero_values) > 0 else 0 : .1f}</td></tr>""", file=self.out_handle)
+        print(f"""<tr><td>{n_nodes}</td><td>{n}</td><td>{mean_val : .1f}</td><td>{median_val : .1f}</td><td>{min_val : .1f}</td><td>{max_val : .1f}</td></tr>""", file=self.out_handle)
         print(f"""</table>""", file=self.out_handle)
         print(f"""</div>""", file=self.out_handle)
     
@@ -1009,6 +1021,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
         progress_callback("building edge table")
     stage_start = perf_counter()
     edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
+    del matrix  # free O(n²) data array; edge_table holds all we need
     _record_stage_timing(stage_timings, "build_edge_table", stage_start, n_edges=len(edge_table), n_nodes=edge_table.n_nodes)
 
     if progress_callback is not None:
@@ -1039,7 +1052,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
         if progress_callback is not None:
             progress_callback("building MST_KNN threshold counts")
         stage_start = perf_counter()
-        mst_knn_counts = mst_knn_edge_counts_by_threshold(matrix, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
+        mst_knn_counts = mst_knn_edge_counts_by_threshold(None, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
         _record_stage_timing(
             stage_timings,
             "build_mst_knn_counts",
