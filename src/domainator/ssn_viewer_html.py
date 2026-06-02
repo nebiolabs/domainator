@@ -1839,158 +1839,107 @@ def ssn_viewer_html(
         }});
     }}
 
-    function splitSampledMembers(componentId, sampledMembers) {{
-        const hierarchy = state.bundle.graph.hierarchy;
-        const component = hierarchy.nodes[componentId];
-        if (!component || component.kind === 'leaf') {{
-            return null;
-        }}
-        const leftNode = hierarchy.nodes[component.left];
-        const leftBoundary = leftNode.leaf_start + leftNode.leaf_count;
-        let splitIndex = sampledMembers.findIndex(member => member.leafPosition >= leftBoundary);
-        if (splitIndex < 0) {{
-            splitIndex = sampledMembers.length;
-        }}
-        const leftMembers = sampledMembers.slice(0, splitIndex);
-        const rightMembers = sampledMembers.slice(splitIndex);
-        if (leftMembers.length === 0 || rightMembers.length === 0) {{
-            return null;
-        }}
-        return {{
-            leftId: component.left,
-            rightId: component.right,
-            leftMembers,
-            rightMembers,
-        }};
-    }}
-
-    function positionCentroid(positions) {{
-        if (positions.length === 0) {{
+    function squareToDiskPoint(u, v) {{
+        // Shirley-Chiu concentric square-to-disk map. Area-preserving (uniform dot
+        // density) and locality-preserving (a compact square region maps to a compact
+        // annular-sector region of the disk).
+        if (u === 0 && v === 0) {{
             return {{x: 0, y: 0}};
         }}
-        const sum = positions.reduce((accumulator, position) => {{
-            accumulator.x += position.x;
-            accumulator.y += position.y;
-            return accumulator;
-        }}, {{x: 0, y: 0}});
-        return {{x: sum.x / positions.length, y: sum.y / positions.length}};
+        let radius;
+        let phi;
+        if (Math.abs(u) > Math.abs(v)) {{
+            radius = u;
+            phi = (Math.PI / 4) * (v / u);
+        }} else {{
+            radius = v;
+            phi = (Math.PI / 2) - (Math.PI / 4) * (u / v);
+        }}
+        return {{x: radius * Math.cos(phi), y: radius * Math.sin(phi)}};
     }}
 
-    function orderedRadialPositions(positions) {{
-        if (positions.length <= 1) {{
-            return [...positions];
+    function subdivisionDotLayout(componentId, sampledMembers) {{
+        // Space-filling layout that keeps each subtree's members in a compact,
+        // contiguous, area-proportional patch of the bubble. Works because subtrees
+        // occupy contiguous ranges of leaf_order (and of the order-preserving sample),
+        // so we recursively subdivide the unit square by the hierarchy split point and
+        // map cell centers to the unit disk. Iterative (explicit stack) so deep trees
+        // cannot overflow the call stack.
+        const n = sampledMembers.length;
+        if (n <= 6) {{
+            // Keep the tuned ring placement for tiny clusters; avoids degenerate cells.
+            return radialDotLayout(sampledMembers);
         }}
-        const centroid = positionCentroid(positions);
-        return [...positions].sort((left, right) => {{
-            const leftAngle = Math.atan2(left.y - centroid.y, left.x - centroid.x);
-            const rightAngle = Math.atan2(right.y - centroid.y, right.x - centroid.x);
-            if (Math.abs(leftAngle - rightAngle) > 1e-6) {{
-                return leftAngle - rightAngle;
+        const nodes = state.bundle.graph.hierarchy.nodes;
+        const LOPSIDED_FRACTION = 0.18;
+        const out = new Array(n);
+        // Each frame: {{lo, hi, nodeId, x0, y0, x1, y1}}. nodeId === -1 means "median
+        // mode": split the rank range in half and ignore the hierarchy (used for the
+        // deep/lopsided caterpillar splits that would otherwise produce thin slivers).
+        const stack = [{{lo: 0, hi: n, nodeId: componentId, x0: 0, y0: 0, x1: 1, y1: 1}}];
+        while (stack.length > 0) {{
+            const frame = stack.pop();
+            const lo = frame.lo;
+            const hi = frame.hi;
+            const k = hi - lo;
+            if (k <= 0) {{ continue; }}
+            if (k === 1) {{
+                const disk = squareToDiskPoint(frame.x0 + frame.x1 - 1, frame.y0 + frame.y1 - 1);
+                out[lo] = {{memberIndex: sampledMembers[lo].nodeIndex, x: disk.x, y: disk.y}};
+                continue;
             }}
-            const leftDistance = Math.hypot(left.x - centroid.x, left.y - centroid.y);
-            const rightDistance = Math.hypot(right.x - centroid.x, right.y - centroid.y);
-            return leftDistance - rightDistance || left.sampleIndex - right.sampleIndex;
-        }});
-    }}
 
-    function positionClusterScore(positions) {{
-        if (positions.length <= 1) {{
-            return 0;
-        }}
-        const centroid = positionCentroid(positions);
-        let maxExtent = 0;
-        let sumSq = 0;
-        positions.forEach(position => {{
-            const distance = Math.hypot(position.x - centroid.x, position.y - centroid.y);
-            maxExtent = Math.max(maxExtent, distance);
-            sumSq += distance * distance;
-        }});
-        return (maxExtent * 2.4) + (sumSq / positions.length);
-    }}
-
-    function splitRadialPositionsForSubclusters(positions, leftCount, componentId, depth = 0) {{
-        if (leftCount <= 0 || leftCount >= positions.length) {{
-            return null;
-        }}
-        const centroid = positionCentroid(positions);
-        const candidateCount = 8;
-        const baseAngle = ((depth % 4) * (Math.PI / 8)) + ((seededUnit(componentId, depth + 151) - 0.5) * 0.36);
-        let best = null;
-
-        for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++) {{
-            const angle = baseAngle + (candidateIndex * (Math.PI / candidateCount));
-            const axisX = Math.cos(angle);
-            const axisY = Math.sin(angle);
-            const normalX = -axisY;
-            const normalY = axisX;
-
-            for (const direction of [1, -1]) {{
-                const sorted = [...positions].sort((left, right) => {{
-                    const leftProjection = ((((left.x - centroid.x) * axisX) + ((left.y - centroid.y) * axisY))) * direction;
-                    const rightProjection = ((((right.x - centroid.x) * axisX) + ((right.y - centroid.y) * axisY))) * direction;
-                    if (Math.abs(leftProjection - rightProjection) > 1e-6) {{
-                        return leftProjection - rightProjection;
+            let splitIndex = -1;
+            let leftId = -1;
+            let rightId = -1;
+            const node = frame.nodeId >= 0 ? nodes[frame.nodeId] : null;
+            if (node && node.kind !== 'leaf') {{
+                const leftNode = nodes[node.left];
+                const leftBoundary = leftNode.leaf_start + leftNode.leaf_count;
+                // First index in [lo, hi) whose leafPosition >= leftBoundary (lowerBound).
+                let searchLo = lo;
+                let searchHi = hi;
+                while (searchLo < searchHi) {{
+                    const mid = (searchLo + searchHi) >> 1;
+                    if (sampledMembers[mid].leafPosition >= leftBoundary) {{
+                        searchHi = mid;
+                    }} else {{
+                        searchLo = mid + 1;
                     }}
-                    const leftOrthogonal = ((left.x - centroid.x) * normalX) + ((left.y - centroid.y) * normalY);
-                    const rightOrthogonal = ((right.x - centroid.x) * normalX) + ((right.y - centroid.y) * normalY);
-                    return leftOrthogonal - rightOrthogonal || left.sampleIndex - right.sampleIndex;
-                }});
-                const leftPositions = sorted.slice(0, leftCount);
-                const rightPositions = sorted.slice(leftCount);
-                if (rightPositions.length === 0) {{
-                    continue;
                 }}
-                const score = positionClusterScore(leftPositions) + positionClusterScore(rightPositions);
-                if (!best || score < best.score) {{
-                    best = {{score, leftPositions, rightPositions}};
+                const leftCount = searchLo - lo;
+                const rightCount = hi - searchLo;
+                const smaller = Math.min(leftCount, rightCount);
+                if (leftCount > 0 && rightCount > 0 && smaller >= LOPSIDED_FRACTION * k) {{
+                    splitIndex = searchLo;
+                    leftId = node.left;
+                    rightId = node.right;
                 }}
             }}
+            if (splitIndex < 0) {{
+                // Median fallback (also handles median mode and leaf/degenerate nodes).
+                splitIndex = lo + (k >> 1);
+            }}
+
+            const width = frame.x1 - frame.x0;
+            const height = frame.y1 - frame.y0;
+            const frac = (splitIndex - lo) / k;
+            if (width >= height) {{
+                const xm = frame.x0 + width * frac;
+                stack.push({{lo: splitIndex, hi: hi, nodeId: rightId, x0: xm, y0: frame.y0, x1: frame.x1, y1: frame.y1}});
+                stack.push({{lo: lo, hi: splitIndex, nodeId: leftId, x0: frame.x0, y0: frame.y0, x1: xm, y1: frame.y1}});
+            }} else {{
+                const ym = frame.y0 + height * frac;
+                stack.push({{lo: splitIndex, hi: hi, nodeId: rightId, x0: frame.x0, y0: ym, x1: frame.x1, y1: frame.y1}});
+                stack.push({{lo: lo, hi: splitIndex, nodeId: leftId, x0: frame.x0, y0: frame.y0, x1: frame.x1, y1: ym}});
+            }}
         }}
-
-        return best
-            ? {{leftPositions: best.leftPositions, rightPositions: best.rightPositions}}
-            : null;
-    }}
-
-    function assignMembersToRadialPositions(componentId, sampledMembers, positions, depth = 0) {{
-        if (sampledMembers.length <= 1 || positions.length <= 1) {{
-            return sampledMembers.map((member, index) => {{
-                const position = positions[index] || {{x: 0, y: 0, sampleIndex: index}};
-                return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
-            }});
-        }}
-
-        const split = splitSampledMembers(componentId, sampledMembers);
-        if (!split || sampledMembers.length <= 4) {{
-            const orderedPositions = orderedRadialPositions(positions);
-            return sampledMembers.map((member, index) => {{
-                const position = orderedPositions[index];
-                return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
-            }});
-        }}
-
-        const positionSplit = splitRadialPositionsForSubclusters(positions, split.leftMembers.length, componentId, depth);
-        if (!positionSplit) {{
-            const orderedPositions = orderedRadialPositions(positions);
-            return sampledMembers.map((member, index) => {{
-                const position = orderedPositions[index];
-                return {{memberIndex: member.nodeIndex, x: position.x, y: position.y}};
-            }});
-        }}
-
-        return [
-            ...assignMembersToRadialPositions(split.leftId, split.leftMembers, positionSplit.leftPositions, depth + 1),
-            ...assignMembersToRadialPositions(split.rightId, split.rightMembers, positionSplit.rightPositions, depth + 1),
-        ];
-    }}
-
-    function groupedDotLayoutForNode(componentId, sampledMembers) {{
-        return assignMembersToRadialPositions(componentId, sampledMembers, radialDotPositions(sampledMembers.length));
+        return out;
     }}
 
     function normalizedComponentDotLayout(componentId, sampleCount, minimumDistance = 0) {{
         const arrangement = currentNodeArrangement();
-        const spacingKey = arrangement === 'grouped' ? 'radial-reassigned' : 'radial-direct';
+        const spacingKey = arrangement === 'grouped' ? 'subdivision' : 'radial-direct';
         const cacheKey = dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey);
         const cached = state.dotLayoutCache.get(cacheKey);
         if (cached) {{
@@ -1999,7 +1948,7 @@ def ssn_viewer_html(
 
         const sampledMembers = sampledMembersForComponent(componentId, sampleCount);
         const layout = arrangement === 'grouped'
-            ? groupedDotLayoutForNode(componentId, sampledMembers)
+            ? subdivisionDotLayout(componentId, sampledMembers)
             : radialDotLayout(sampledMembers);
         state.dotLayoutCache.set(cacheKey, layout);
         return layout;

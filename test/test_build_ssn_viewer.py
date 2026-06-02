@@ -271,12 +271,9 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'node-arrangement' in html_content
         assert '<option value="grouped">Grouped subclusters</option>' in html_content
         assert '<option value="radial" selected>Radial split order</option>' in html_content
-        assert 'groupedDotLayoutForNode' in html_content
+        assert 'subdivisionDotLayout' in html_content
+        assert 'squareToDiskPoint' in html_content
         assert 'radialDotPositions' in html_content
-        assert 'orderedRadialPositions' in html_content
-        assert 'positionClusterScore' in html_content
-        assert 'splitRadialPositionsForSubclusters' in html_content
-        assert 'assignMembersToRadialPositions' in html_content
         assert 'normalizedComponentDotLayout' in html_content
 
 
