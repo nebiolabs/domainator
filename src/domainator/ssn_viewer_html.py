@@ -3629,24 +3629,37 @@ def ssn_viewer_html(
                 clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
                 clusterContext.fill();
                 clusterContext.stroke();
+            }} else if (selectionState.allSelected) {{
+                // Cluster bounds are hidden, but keep a faint outline so the
+                // selection is still discernible.
+                clusterContext.strokeStyle = 'rgba(30, 42, 47, 0.45)';
+                clusterContext.lineWidth = 1.5 / drawScale;
+                clusterContext.beginPath();
+                clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
+                clusterContext.stroke();
             }}
 
-            if (!showNodes) {{
+            // When nodes are hidden we still need to know where the selected
+            // ones are so we can hint at them, otherwise skip the dot layout.
+            const needsSelectionHint = !selectionState.allSelected && selectionState.anySelected;
+            if (!showNodes && !needsSelectionHint) {{
                 return;
             }}
 
             const dotLayout = componentDotLayout(component, item);
             for (const dot of dotLayout) {{
-                // Use pre-computed color cache (#2)
-                const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
-                let bucket = dotColorBuckets.get(color);
-                if (bucket === undefined) {{
-                    bucket = [];
-                    dotColorBuckets.set(color, bucket);
+                if (showNodes) {{
+                    // Use pre-computed color cache (#2)
+                    const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
+                    let bucket = dotColorBuckets.get(color);
+                    if (bucket === undefined) {{
+                        bucket = [];
+                        dotColorBuckets.set(color, bucket);
+                    }}
+                    bucket.push(dot);
                 }}
-                bucket.push(dot);
                 if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {{
-                    selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius}});
+                    selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius, faint: !showNodes}});
                 }}
             }}
         }});
@@ -3666,14 +3679,21 @@ def ssn_viewer_html(
 
         if (selectedNodeOutlines.length > 0) {{
             clusterContext.save();
-            clusterContext.strokeStyle = '#1e2a2f';
-            clusterContext.lineWidth = 1.8;
             selectedNodeOutlines.forEach(outline => {{
                 const screenPoint = worldToScreenPoint(outline.x, outline.y);
                 const screenRadius = Math.max(3, (outline.radius * state.viewTransform.scale) + 1.6);
                 clusterContext.beginPath();
                 clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, TAU);
-                clusterContext.stroke();
+                if (outline.faint) {{
+                    // Nodes are hidden, so leave a faint mark where the selected
+                    // node sits instead of outlining a dot that isn't drawn.
+                    clusterContext.fillStyle = 'rgba(30, 42, 47, 0.30)';
+                    clusterContext.fill();
+                }} else {{
+                    clusterContext.strokeStyle = '#1e2a2f';
+                    clusterContext.lineWidth = 1.8;
+                    clusterContext.stroke();
+                }}
             }});
             clusterContext.restore();
         }}
