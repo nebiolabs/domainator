@@ -860,7 +860,7 @@ def ssn_viewer_html(
                     <div id="selection-summary" class="pill">0 nodes selected</div>
                 </div>
                 <div class="canvas-wrap"><canvas id="cluster-view" width="1100" height="700"></canvas></div>
-                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Click a cluster bubble to toggle every node inside it.</div>
+                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Hold Ctrl while Shift-dragging a box to select individual nodes within it. Hold Alt while Shift-dragging to deselect instead (combine with Ctrl to deselect individual nodes). Click a cluster bubble to toggle every node inside it.</div>
             </div>
         </section>
         <section class="panel sidebar">
@@ -4056,7 +4056,7 @@ def ssn_viewer_html(
         return (dx * dx) + (dy * dy) <= radius * radius;
     }}
 
-    function selectComponentsInBox(rect) {{
+    function selectComponentsInBox(rect, deselect) {{
         let changed = false;
         state.visibleLayout.forEach(item => {{
             const screenPoint = worldToScreenPoint(item.x, item.y);
@@ -4065,8 +4065,44 @@ def ssn_viewer_html(
                 return;
             }}
             componentMembers(item.componentId).forEach(nodeIndex => {{
-                if (!state.selectedNodeIndices.has(nodeIndex)) {{
+                if (deselect) {{
+                    if (state.selectedNodeIndices.delete(nodeIndex)) {{
+                        changed = true;
+                    }}
+                }} else if (!state.selectedNodeIndices.has(nodeIndex)) {{
                     state.selectedNodeIndices.add(nodeIndex);
+                    changed = true;
+                }}
+            }});
+        }});
+        if (changed) {{
+            renderClusterView();
+            updateMetadataTable();
+        }}
+    }}
+
+    function selectNodesInBox(rect, deselect) {{
+        let changed = false;
+        state.visibleLayout.forEach(item => {{
+            const screenPoint = worldToScreenPoint(item.x, item.y);
+            const screenRadius = item.radius * state.viewTransform.scale;
+            if (!circleIntersectsRect(screenPoint.x, screenPoint.y, screenRadius, rect)) {{
+                return;
+            }}
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const dotLayout = componentDotLayout(component, item);
+            dotLayout.forEach(dot => {{
+                const dotScreen = worldToScreenPoint(dot.x, dot.y);
+                const dotRadius = dot.radius * state.viewTransform.scale;
+                if (!circleIntersectsRect(dotScreen.x, dotScreen.y, dotRadius, rect)) {{
+                    return;
+                }}
+                if (deselect) {{
+                    if (state.selectedNodeIndices.delete(dot.memberIndex)) {{
+                        changed = true;
+                    }}
+                }} else if (!state.selectedNodeIndices.has(dot.memberIndex)) {{
+                    state.selectedNodeIndices.add(dot.memberIndex);
                     changed = true;
                 }}
             }});
@@ -4120,7 +4156,7 @@ def ssn_viewer_html(
         }}
         const point = canvasCoordinatesFromEvent(event);
         if (event.shiftKey) {{
-            state.dragState = {{mode: 'select', startX: point.x, startY: point.y, endX: point.x, endY: point.y, moved: false}};
+            state.dragState = {{mode: 'select', nodeMode: event.ctrlKey || event.metaKey, deselect: event.altKey, startX: point.x, startY: point.y, endX: point.x, endY: point.y, moved: false}};
             state.selectionBox = normalizedSelectionBox(state.dragState);
         }} else {{
             state.dragState = {{mode: 'pan', startX: point.x, startY: point.y, originOffsetX: state.viewTransform.offsetX, originOffsetY: state.viewTransform.offsetY, moved: false}};
@@ -4155,7 +4191,11 @@ def ssn_viewer_html(
         }}
         state.suppressClick = Boolean(state.dragState.moved);
         if (state.dragState.mode === 'select' && state.selectionBox && (state.selectionBox.width > 4 || state.selectionBox.height > 4)) {{
-            selectComponentsInBox(state.selectionBox);
+            if (state.dragState.nodeMode) {{
+                selectNodesInBox(state.selectionBox, state.dragState.deselect);
+            }} else {{
+                selectComponentsInBox(state.selectionBox, state.dragState.deselect);
+            }}
         }}
         state.dragState = null;
         state.selectionBox = null;
