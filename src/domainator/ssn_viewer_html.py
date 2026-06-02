@@ -912,6 +912,10 @@ def ssn_viewer_html(
                         </select>
                     </div>
                     <div class="control checkbox">
+                        <input id="reduce-elongation" type="checkbox" />
+                        <label for="reduce-elongation">Reduce subcluster elongation (grouped only)</label>
+                    </div>
+                    <div class="control checkbox">
                         <input id="leaf-pruning-only" type="checkbox" />
                         <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
                     </div>
@@ -1449,6 +1453,10 @@ def ssn_viewer_html(
         return document.getElementById('exact-node-rendering').checked;
     }}
 
+    function reduceElongationEnabled() {{
+        return document.getElementById('reduce-elongation').checked;
+    }}
+
     function currentColorField() {{
         return document.getElementById('color-by').value;
     }}
@@ -1921,6 +1929,90 @@ def ssn_viewer_html(
         return (maxY - minY) > (maxX - minX);
     }}
 
+    function regionPrincipalAxis(idx, pStart, pEnd, posX, posY) {{
+        // Principal (largest-variance) axis of the points in [pStart, pEnd), via the
+        // eigenvector of the 2x2 covariance matrix. Cutting perpendicular to this axis
+        // keeps each child region rounder than the bounding-box axis when the region is
+        // diagonally elongated. Used only when "reduce elongation" is enabled.
+        const m = pEnd - pStart;
+        let mx = 0;
+        let my = 0;
+        for (let k = pStart; k < pEnd; k++) {{
+            const pi = idx[k];
+            mx += posX[pi];
+            my += posY[pi];
+        }}
+        mx /= m;
+        my /= m;
+        let sxx = 0;
+        let sxy = 0;
+        let syy = 0;
+        for (let k = pStart; k < pEnd; k++) {{
+            const pi = idx[k];
+            const dx = posX[pi] - mx;
+            const dy = posY[pi] - my;
+            sxx += dx * dx;
+            sxy += dx * dy;
+            syy += dy * dy;
+        }}
+        const tr = sxx + syy;
+        const diff = sxx - syy;
+        const lambda = (tr / 2) + Math.sqrt(Math.max(0, (diff * diff) / 4 + sxy * sxy));
+        // Two candidate eigenvectors; use whichever is better-conditioned (larger norm).
+        const ax1 = lambda - syy;
+        const ay1 = sxy;
+        const ax2 = sxy;
+        const ay2 = lambda - sxx;
+        let ax;
+        let ay;
+        if ((ax1 * ax1 + ay1 * ay1) >= (ax2 * ax2 + ay2 * ay2)) {{ ax = ax1; ay = ay1; }} else {{ ax = ax2; ay = ay2; }}
+        const norm = Math.hypot(ax, ay);
+        if (norm < 1e-12) {{ return {{ax: 1, ay: 0}}; }}   // isotropic; any axis is fine
+        return {{ax: ax / norm, ay: ay / norm}};
+    }}
+
+    function selectByProjection(idx, start, end, leftCount, posX, posY, ax, ay) {{
+        // Like selectByCoord but partitions by projection onto an arbitrary axis (ax, ay)
+        // instead of a single coordinate. In-place Hoare quickselect, median-of-three.
+        const target = start + leftCount;
+        let lo = start;
+        let hi = end;
+        while (hi - lo > 1) {{
+            const a = lo;
+            const b = (lo + hi) >> 1;
+            const c = hi - 1;
+            const va = posX[idx[a]] * ax + posY[idx[a]] * ay;
+            const vb = posX[idx[b]] * ax + posY[idx[b]] * ay;
+            const vc = posX[idx[c]] * ax + posY[idx[c]] * ay;
+            let pivot;
+            if (va < vb) {{
+                pivot = vb < vc ? vb : (va < vc ? vc : va);
+            }} else {{
+                pivot = va < vc ? va : (vb < vc ? vc : vb);
+            }}
+            let i = lo;
+            let j = hi - 1;
+            while (i <= j) {{
+                while ((posX[idx[i]] * ax + posY[idx[i]] * ay) < pivot) {{ i++; }}
+                while ((posX[idx[j]] * ax + posY[idx[j]] * ay) > pivot) {{ j--; }}
+                if (i <= j) {{
+                    const t = idx[i];
+                    idx[i] = idx[j];
+                    idx[j] = t;
+                    i++;
+                    j--;
+                }}
+            }}
+            if (target <= j) {{
+                hi = j + 1;
+            }} else if (target >= i) {{
+                lo = i;
+            }} else {{
+                break;
+            }}
+        }}
+    }}
+
     function collectMajorChildren(nodes, sampledMembers, nodeId, lo, hi, frac) {{
         // Contract the lopsided-split chain rooted at nodeId into an ordered list of
         // "major children" that exactly tile [lo, hi) in increasing leaf_start order.
@@ -1977,12 +2069,13 @@ def ssn_viewer_html(
         return head;
     }}
 
-    function partitionAmongChildren(children, idx, posX, posY, pStart0, pEnd0, superStack) {{
+    function partitionAmongChildren(children, idx, posX, posY, pStart0, pEnd0, superStack, usePca) {{
         // Partition the point slice [pStart0, pEnd0) among the ordered child list by
         // recursively bisecting the LIST near its member-count median. Every list cut
         // falls between two children (a real sibling boundary), so no subtree is split.
-        // Points are split by the longer bounding-box axis. Emits a super-node frame per
-        // child. Own explicit stack.
+        // Points are split by the longer bounding-box axis, or (usePca) by the region's
+        // principal axis to reduce elongation. Emits a super-node frame per child. Own
+        // explicit stack.
         const partStack = [{{ci: 0, cj: children.length, pStart: pStart0, pEnd: pEnd0}}];
         while (partStack.length > 0) {{
             const f = partStack.pop();
@@ -2010,8 +2103,13 @@ def ssn_viewer_html(
             if (s >= cj) {{ s = cj - 1; }}
             const leftMembers = children[s].lo - mlo;
             const rightMembers = mhi - children[s].lo;
-            const useY = regionLongerAxisIsY(idx, ps, pe, posX, posY);
-            selectByCoord(idx, ps, pe, leftMembers, posX, posY, useY);
+            if (usePca) {{
+                const axis = regionPrincipalAxis(idx, ps, pe, posX, posY);
+                selectByProjection(idx, ps, pe, leftMembers, posX, posY, axis.ax, axis.ay);
+            }} else {{
+                const useY = regionLongerAxisIsY(idx, ps, pe, posX, posY);
+                selectByCoord(idx, ps, pe, leftMembers, posX, posY, useY);
+            }}
             const pSplit = ps + leftMembers;
             // Push the larger group first so the smaller is processed first (bounded stack).
             if (leftMembers >= rightMembers) {{
@@ -2024,7 +2122,7 @@ def ssn_viewer_html(
         }}
     }}
 
-    function groupedDotLayout(componentId, sampledMembers) {{
+    function groupedDotLayout(componentId, sampledMembers, usePca) {{
         // Assign each member to a phyllotaxis position (uniform spacing, from
         // radialDotPositions) so that each hierarchy subtree occupies a compact,
         // contiguous blob. Fully faithful: every cut lands on a true sibling boundary, so
@@ -2032,6 +2130,8 @@ def ssn_viewer_html(
         // "caterpillar" chains are contracted into multiway super-nodes (collectMajorChildren)
         // so cost stays O(n log n) without ever resorting to a hierarchy-independent cut.
         // Iterative (explicit stacks) so deep trees cannot overflow the call stack.
+        // usePca: cut along each region's principal axis instead of its bounding-box axis,
+        // which reduces elongation of subcluster blobs at some extra per-node cost.
         const n = sampledMembers.length;
         if (n <= 6) {{
             // Keep the tuned ring placement for tiny clusters.
@@ -2072,14 +2172,17 @@ def ssn_viewer_html(
                 }}
                 continue;
             }}
-            partitionAmongChildren(children, idx, posX, posY, pStart, pEnd, superStack);
+            partitionAmongChildren(children, idx, posX, posY, pStart, pEnd, superStack, usePca);
         }}
         return out;
     }}
 
     function normalizedComponentDotLayout(componentId, sampleCount, minimumDistance = 0) {{
         const arrangement = currentNodeArrangement();
-        const spacingKey = arrangement === 'grouped' ? 'grouped-phyllotaxis' : 'radial-direct';
+        const usePca = arrangement === 'grouped' && reduceElongationEnabled();
+        const spacingKey = arrangement === 'grouped'
+            ? (usePca ? 'grouped-pca' : 'grouped-phyllotaxis')
+            : 'radial-direct';
         const cacheKey = dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey);
         const cached = state.dotLayoutCache.get(cacheKey);
         if (cached) {{
@@ -2088,7 +2191,7 @@ def ssn_viewer_html(
 
         const sampledMembers = sampledMembersForComponent(componentId, sampleCount);
         const layout = arrangement === 'grouped'
-            ? groupedDotLayout(componentId, sampledMembers)
+            ? groupedDotLayout(componentId, sampledMembers, usePca)
             : radialDotLayout(sampledMembers);
         state.dotLayoutCache.set(cacheKey, layout);
         return layout;
@@ -4270,6 +4373,12 @@ def ssn_viewer_html(
         drawClusterView(true);
     }});
     document.getElementById('node-arrangement').addEventListener('change', () => {{
+        if (!state.bundle) {{
+            return;
+        }}
+        renderClusterView();
+    }});
+    document.getElementById('reduce-elongation').addEventListener('change', () => {{
         if (!state.bundle) {{
             return;
         }}

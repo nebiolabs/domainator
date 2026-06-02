@@ -277,6 +277,10 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'partitionAmongChildren' in html_content
         assert 'radialDotPositions' in html_content
         assert 'normalizedComponentDotLayout' in html_content
+        assert 'reduce-elongation' in html_content
+        assert 'reduceElongationEnabled' in html_content
+        assert 'regionPrincipalAxis' in html_content
+        assert 'selectByProjection' in html_content
 
 
 def test_build_ssn_viewer_writes_static_html_without_input():
