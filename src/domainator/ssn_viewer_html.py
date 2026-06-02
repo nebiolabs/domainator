@@ -1921,42 +1921,117 @@ def ssn_viewer_html(
         return (maxY - minY) > (maxX - minX);
     }}
 
-    function fallbackBisect(out, sampledMembers, idx, posX, posY, loRoot, hiRoot, pStartRoot, pEndRoot) {{
-        // Hierarchy-independent locality layout for a region with no large coherent
-        // subcluster (a deep lopsided chain): recursive median bisection of the points
-        // along the longer bounding-box axis. Own explicit stack so deep regions cannot
-        // overflow the call stack.
-        const stack = [{{lo: loRoot, hi: hiRoot, pStart: pStartRoot, pEnd: pEndRoot}}];
-        while (stack.length > 0) {{
-            const frame = stack.pop();
-            const lo = frame.lo;
-            const hi = frame.hi;
-            const pStart = frame.pStart;
-            const pEnd = frame.pEnd;
-            const m = hi - lo;
-            if (m <= 0) {{ continue; }}
-            if (m === 1) {{
-                const p = idx[pStart];
-                out[lo] = {{memberIndex: sampledMembers[lo].nodeIndex, x: posX[p], y: posY[p]}};
+    function collectMajorChildren(nodes, sampledMembers, nodeId, lo, hi, frac) {{
+        // Contract the lopsided-split chain rooted at nodeId into an ordered list of
+        // "major children" that exactly tile [lo, hi) in increasing leaf_start order.
+        // Descend the big-child chain: peel each small sibling as a major child, stop at
+        // the first balanced split (emit both children) or a leaf. This keeps every cut
+        // on a real sibling boundary (nothing straddled) while collapsing a deep chain
+        // into one multiway node so the layout stays O(n log n). Flat loop, no recursion.
+        const head = [];
+        const tail = [];
+        let cur = nodeId;
+        let curLo = lo;
+        let curHi = hi;
+        while (true) {{
+            const node = cur >= 0 ? nodes[cur] : null;
+            const m = curHi - curLo;
+            if (!node || node.kind === 'leaf' || m <= 1) {{
+                head.push({{node: cur, lo: curLo, hi: curHi}});
+                break;
+            }}
+            const leftNode = nodes[node.left];
+            const leftBoundary = leftNode.leaf_start + leftNode.leaf_count;
+            // lowerBound in [curLo, curHi): first member whose leafPosition >= leftBoundary.
+            let sLo = curLo;
+            let sHi = curHi;
+            while (sLo < sHi) {{
+                const mid = (sLo + sHi) >> 1;
+                if (sampledMembers[mid].leafPosition >= leftBoundary) {{ sHi = mid; }} else {{ sLo = mid + 1; }}
+            }}
+            const splitMember = sLo;
+            const leftCount = splitMember - curLo;
+            const rightCount = curHi - splitMember;
+            if (leftCount <= 0 || rightCount <= 0) {{
+                // Sampling can't resolve this boundary; keep cur as one atomic child.
+                head.push({{node: cur, lo: curLo, hi: curHi}});
+                break;
+            }}
+            if (Math.min(leftCount, rightCount) >= frac * m) {{
+                // Balanced split: emit both children (left precedes right) and stop.
+                head.push({{node: node.left, lo: curLo, hi: splitMember}});
+                head.push({{node: node.right, lo: splitMember, hi: curHi}});
+                break;
+            }}
+            // Lopsided: peel the smaller sibling, descend into the bigger.
+            if (leftCount <= rightCount) {{
+                head.push({{node: node.left, lo: curLo, hi: splitMember}});   // left precedes -> head
+                cur = node.right; curLo = splitMember;
+            }} else {{
+                tail.push({{node: node.right, lo: splitMember, hi: curHi}});   // right follows -> tail
+                cur = node.left; curHi = splitMember;
+            }}
+        }}
+        // tail holds right-peels in decreasing leaf_start; reverse to increasing and append.
+        for (let k = tail.length - 1; k >= 0; k--) {{ head.push(tail[k]); }}
+        return head;
+    }}
+
+    function partitionAmongChildren(children, idx, posX, posY, pStart0, pEnd0, superStack) {{
+        // Partition the point slice [pStart0, pEnd0) among the ordered child list by
+        // recursively bisecting the LIST near its member-count median. Every list cut
+        // falls between two children (a real sibling boundary), so no subtree is split.
+        // Points are split by the longer bounding-box axis. Emits a super-node frame per
+        // child. Own explicit stack.
+        const partStack = [{{ci: 0, cj: children.length, pStart: pStart0, pEnd: pEnd0}}];
+        while (partStack.length > 0) {{
+            const f = partStack.pop();
+            const ci = f.ci;
+            const cj = f.cj;
+            const ps = f.pStart;
+            const pe = f.pEnd;
+            if (cj - ci === 1) {{
+                const ch = children[ci];
+                superStack.push({{lo: ch.lo, hi: ch.hi, pStart: ps, pEnd: pe, nodeId: ch.node}});
                 continue;
             }}
-            const useY = regionLongerAxisIsY(idx, pStart, pEnd, posX, posY);
-            const half = m >> 1;
-            selectByCoord(idx, pStart, pEnd, half, posX, posY, useY);
-            const pMid = pStart + half;
-            stack.push({{lo: lo + half, hi: hi, pStart: pMid, pEnd: pEnd}});
-            stack.push({{lo: lo, hi: lo + half, pStart: pStart, pEnd: pMid}});
+            const mlo = children[ci].lo;
+            const mhi = children[cj - 1].hi;
+            const target = mlo + ((mhi - mlo) >> 1);
+            // First list index in (ci, cj) whose child.lo >= target (balanced member split).
+            let aLo = ci + 1;
+            let aHi = cj;
+            while (aLo < aHi) {{
+                const mid = (aLo + aHi) >> 1;
+                if (children[mid].lo >= target) {{ aHi = mid; }} else {{ aLo = mid + 1; }}
+            }}
+            let s = aLo;
+            if (s <= ci) {{ s = ci + 1; }}
+            if (s >= cj) {{ s = cj - 1; }}
+            const leftMembers = children[s].lo - mlo;
+            const rightMembers = mhi - children[s].lo;
+            const useY = regionLongerAxisIsY(idx, ps, pe, posX, posY);
+            selectByCoord(idx, ps, pe, leftMembers, posX, posY, useY);
+            const pSplit = ps + leftMembers;
+            // Push the larger group first so the smaller is processed first (bounded stack).
+            if (leftMembers >= rightMembers) {{
+                partStack.push({{ci: ci, cj: s, pStart: ps, pEnd: pSplit}});
+                partStack.push({{ci: s, cj: cj, pStart: pSplit, pEnd: pe}});
+            }} else {{
+                partStack.push({{ci: s, cj: cj, pStart: pSplit, pEnd: pe}});
+                partStack.push({{ci: ci, cj: s, pStart: ps, pEnd: pSplit}});
+            }}
         }}
     }}
 
     function groupedDotLayout(componentId, sampledMembers) {{
         // Assign each member to a phyllotaxis position (uniform spacing, from
         // radialDotPositions) so that each hierarchy subtree occupies a compact,
-        // contiguous blob. We recursively partition the SET of positions among subtrees,
-        // cutting only at true hierarchy boundaries -- so a subtree is never split across
-        // a cut, and large subclusters stay whole. Deep lopsided chains (caterpillar
-        // hierarchies, which contain no large coherent subcluster) are handed to a cheap
-        // locality fallback to keep cost O(n log n). Iterative (explicit stack).
+        // contiguous blob. Fully faithful: every cut lands on a true sibling boundary, so
+        // no subtree -- at any scale -- is ever split across a partition. Deep lopsided
+        // "caterpillar" chains are contracted into multiway super-nodes (collectMajorChildren)
+        // so cost stays O(n log n) without ever resorting to a hierarchy-independent cut.
+        // Iterative (explicit stacks) so deep trees cannot overflow the call stack.
         const n = sampledMembers.length;
         if (n <= 6) {{
             // Keep the tuned ring placement for tiny clusters.
@@ -1966,23 +2041,21 @@ def ssn_viewer_html(
         const phy = phyllotaxisFor(n);
         const posX = phy.posX;
         const posY = phy.posY;
-        const LOPSIDED_FRACTION = 0.18;
-        const RUN_LIMIT = 20;
+        const FRAC = 0.18;
 
         const idx = new Int32Array(n);
         for (let i = 0; i < n; i++) {{ idx[i] = i; }}
         const out = new Array(n);
 
-        // Frame invariant: pEnd - pStart === hi - lo (members paired one-to-one with the
-        // points allocated to this subtree). idx is partitioned in place; frames hold
-        // [pStart, pEnd) offsets into it -- no per-frame array copies.
-        const stack = [{{lo: 0, hi: n, pStart: 0, pEnd: n, nodeId: componentId, runLength: 0}}];
-        while (stack.length > 0) {{
-            const frame = stack.pop();
-            const lo = frame.lo;
-            const hi = frame.hi;
-            const pStart = frame.pStart;
-            const pEnd = frame.pEnd;
+        // Super-node frame invariant: pEnd - pStart === hi - lo (members paired one-to-one
+        // with the points allocated to this subtree). idx is partitioned in place.
+        const superStack = [{{lo: 0, hi: n, pStart: 0, pEnd: n, nodeId: componentId}}];
+        while (superStack.length > 0) {{
+            const fr = superStack.pop();
+            const lo = fr.lo;
+            const hi = fr.hi;
+            const pStart = fr.pStart;
+            const pEnd = fr.pEnd;
             const m = hi - lo;
             if (m <= 0) {{ continue; }}
             if (m === 1) {{
@@ -1990,56 +2063,16 @@ def ssn_viewer_html(
                 out[lo] = {{memberIndex: sampledMembers[lo].nodeIndex, x: posX[p], y: posY[p]}};
                 continue;
             }}
-            if (frame.runLength >= RUN_LIMIT) {{
-                fallbackBisect(out, sampledMembers, idx, posX, posY, lo, hi, pStart, pEnd);
-                continue;
-            }}
-
-            let splitMember = -1;
-            const node = frame.nodeId >= 0 ? nodes[frame.nodeId] : null;
-            if (node && node.kind !== 'leaf') {{
-                const leftNode = nodes[node.left];
-                const leftBoundary = leftNode.leaf_start + leftNode.leaf_count;
-                // First index in [lo, hi) whose leafPosition >= leftBoundary (lowerBound).
-                let searchLo = lo;
-                let searchHi = hi;
-                while (searchLo < searchHi) {{
-                    const mid = (searchLo + searchHi) >> 1;
-                    if (sampledMembers[mid].leafPosition >= leftBoundary) {{
-                        searchHi = mid;
-                    }} else {{
-                        searchLo = mid + 1;
-                    }}
+            const children = collectMajorChildren(nodes, sampledMembers, fr.nodeId, lo, hi, FRAC);
+            if (children.length <= 1) {{
+                // Atomic block (leaf with m>1, or unresolved sampling): assign in order.
+                for (let k = 0; k < m; k++) {{
+                    const p = idx[pStart + k];
+                    out[lo + k] = {{memberIndex: sampledMembers[lo + k].nodeIndex, x: posX[p], y: posY[p]}};
                 }}
-                splitMember = searchLo;
-            }}
-            if (splitMember <= lo || splitMember >= hi) {{
-                // Leaf node, or a 0-count side from sampling: no hierarchy split to honor.
-                fallbackBisect(out, sampledMembers, idx, posX, posY, lo, hi, pStart, pEnd);
                 continue;
             }}
-
-            const leftCount = splitMember - lo;
-            const rightCount = hi - splitMember;
-            const lopsided = Math.min(leftCount, rightCount) < LOPSIDED_FRACTION * m;
-            const nextRun = lopsided ? frame.runLength + 1 : 0;
-
-            // Partition idx[pStart, pEnd) along the longer bounding-box axis so the
-            // leftCount points with smallest coordinate on that axis become the left child.
-            const useY = regionLongerAxisIsY(idx, pStart, pEnd, posX, posY);
-            selectByCoord(idx, pStart, pEnd, leftCount, posX, posY, useY);
-            const pMid = pStart + leftCount;
-
-            const leftFrame = {{lo: lo, hi: splitMember, pStart: pStart, pEnd: pMid, nodeId: node.left, runLength: nextRun}};
-            const rightFrame = {{lo: splitMember, hi: hi, pStart: pMid, pEnd: pEnd, nodeId: node.right, runLength: nextRun}};
-            // Push the larger child first so the smaller is popped first (live stack O(log n)).
-            if (leftCount >= rightCount) {{
-                stack.push(leftFrame);
-                stack.push(rightFrame);
-            }} else {{
-                stack.push(rightFrame);
-                stack.push(leftFrame);
-            }}
+            partitionAmongChildren(children, idx, posX, posY, pStart, pEnd, superStack);
         }}
         return out;
     }}

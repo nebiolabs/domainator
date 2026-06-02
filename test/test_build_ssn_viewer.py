@@ -273,7 +273,8 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<option value="radial" selected>Radial split order</option>' in html_content
         assert 'groupedDotLayout' in html_content
         assert 'selectByCoord' in html_content
-        assert 'fallbackBisect' in html_content
+        assert 'collectMajorChildren' in html_content
+        assert 'partitionAmongChildren' in html_content
         assert 'radialDotPositions' in html_content
         assert 'normalizedComponentDotLayout' in html_content
 
