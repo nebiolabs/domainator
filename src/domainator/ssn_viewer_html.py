@@ -167,13 +167,43 @@ function normalizeComponentLayout(items, padding) {
         width: (maxX - minX) + padding * 2, height: (maxY - minY) + padding * 2,
     };
 }
+function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
+    const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
+    const tree = rootedTree(rootId, adjacency, hierarchyNodes);
+    const depthByNode = new Map([[rootId, 0]]);
+    tree.order.forEach(nodeId => { (tree.children.get(nodeId) || []).forEach(childId => { depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1); }); });
+    const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
+    const maxRadius = Math.max(...componentIds.map(id => radii.get(id) || 10), 10);
+    const siblingGap = Math.max(20, maxRadius * 0.42);
+    const levelGap = Math.max(168, maxRadius * 2.2 + 96);
+    const subtreeSpan = new Map();
+    [...tree.order].reverse().forEach(nodeId => {
+        const childIds = tree.children.get(nodeId) || [];
+        const nodeSpan = (radii.get(nodeId) || 12) * 2 + 18;
+        if (childIds.length === 0) { subtreeSpan.set(nodeId, nodeSpan); return; }
+        const childrenSpan = childIds.reduce((s, c) => s + subtreeSpan.get(c), 0) + Math.max(0, childIds.length - 1) * siblingGap;
+        subtreeSpan.set(nodeId, Math.max(nodeSpan, childrenSpan));
+    });
+    const positionById = new Map();
+    function placeNode(nodeId, topY) {
+        const nodeSpan = subtreeSpan.get(nodeId) || 26;
+        const childIds = tree.children.get(nodeId) || [];
+        const x = originX + (depthByNode.get(nodeId) || 0) * levelGap;
+        if (childIds.length === 0) { positionById.set(nodeId, {componentId: nodeId, x, y: topY + nodeSpan / 2, radius: radii.get(nodeId) || 10}); return; }
+        const childrenSpan = childIds.reduce((s, c) => s + subtreeSpan.get(c), 0) + Math.max(0, childIds.length - 1) * siblingGap;
+        let childCursor = topY + Math.max(0, (nodeSpan - childrenSpan) / 2);
+        const childCenters = [];
+        childIds.forEach(childId => { placeNode(childId, childCursor); childCenters.push(positionById.get(childId).y); childCursor += subtreeSpan.get(childId) + siblingGap; });
+        const centerY = childCenters.reduce((s, v) => s + v, 0) / Math.max(1, childCenters.length);
+        positionById.set(nodeId, {componentId: nodeId, x, y: centerY, radius: radii.get(nodeId) || 10});
+    }
+    placeNode(rootId, 0);
+    return {positionById, order: tree.order};
+}
 function simulateComponentLayout(componentIds, adjacency, options, hierarchyNodes) {
     options = options || {};
     const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
-    const tree = rootedTree(treeCenter(componentIds, adjacency, hierarchyNodes), adjacency, hierarchyNodes);
     const positions = new Map(), velocities = new Map(), anchors = new Map();
-    const baseSpacing = options.baseSpacing != null ? options.baseSpacing : 110;
-    const angleScale = options.angleScale != null ? options.angleScale : 0.5;
     const damping = options.damping != null ? options.damping : 0.8;
     const repulsion = options.repulsion != null ? options.repulsion : 6000;
     const spring = options.spring != null ? options.spring : 0.07;
@@ -182,24 +212,23 @@ function simulateComponentLayout(componentIds, adjacency, options, hierarchyNode
     const iterations = options.iterations != null ? options.iterations : 110;
     const preferredEdgeLength = options.preferredEdgeLength != null ? options.preferredEdgeLength : 120;
     const collisionStrength = options.collisionStrength != null ? options.collisionStrength : 0.28;
-    const orderedIds = componentLeafOrder(componentIds, hierarchyNodes);
-    const orderRank = new Map(orderedIds.map((id, i) => [id, i]));
-    const orderCenter = (orderedIds.length - 1) / 2;
-    tree.order.forEach((nodeId, index) => {
-        let depth = 0, cur = nodeId;
-        while (tree.parent.get(cur) !== null) { depth++; cur = tree.parent.get(cur); }
-        const rank = orderRank.has(nodeId) ? orderRank.get(nodeId) : index;
-        const angle = (rank / Math.max(1, tree.order.length)) * Math.PI * 2 * angleScale + (seededUnit(nodeId, 1) - 0.5) * 0.35;
-        const r = depth * baseSpacing;
-        const anchor = options.useTreeSeed === false
-            ? {x: Math.cos(angle) * r, y: Math.sin(angle) * r}
-            : {x: depth * baseSpacing, y: (rank - orderCenter) * Math.max(26, baseSpacing * 0.58) + (seededUnit(nodeId, 2) - 0.5) * 24};
-        anchors.set(nodeId, anchor);
-        positions.set(nodeId, {x: anchor.x + (seededUnit(nodeId, 3) - 0.5) * 18, y: anchor.y + (seededUnit(nodeId, 4) - 0.5) * 18});
-        velocities.set(nodeId, {x: 0, y: 0});
+    const maxStep = options.maxStep != null ? options.maxStep : 48;
+    const maxPhysicsNodes = options.maxPhysicsNodes != null ? options.maxPhysicsNodes : 500;
+    // Seed positions and anchors from the crossing-free tidy tree layout, centered on the origin.
+    const tidy = tidyComponentLayout(componentIds, adjacency, hierarchyNodes, 0);
+    let centerX = 0, centerY = 0;
+    componentIds.forEach(id => { const s = tidy.positionById.get(id) || {x: 0, y: 0}; centerX += s.x; centerY += s.y; });
+    centerX /= Math.max(1, componentIds.length); centerY /= Math.max(1, componentIds.length);
+    componentIds.forEach(id => {
+        const s = tidy.positionById.get(id) || {x: 0, y: 0};
+        const ax = s.x - centerX, ay = s.y - centerY;
+        anchors.set(id, {x: ax, y: ay});
+        positions.set(id, {x: ax, y: ay});
+        velocities.set(id, {x: 0, y: 0});
     });
     const edgePairs = [];
     componentIds.forEach(id => { (adjacency.get(id) || []).forEach(nid => { if (id < nid) { edgePairs.push([id, nid]); } }); });
+    if (componentIds.length <= maxPhysicsNodes) {
     for (let iter = 0; iter < iterations; iter++) {
         const forces = new Map(componentIds.map(id => [id, {x: 0, y: 0}]));
         for (let li = 0; li < componentIds.length; li++) {
@@ -212,7 +241,7 @@ function simulateComponentLayout(componentIds, adjacency, options, hierarchyNode
                     dy = (seededUnit(lid + rid, iter + 6) - 0.5) * 0.01;
                     dsq = dx * dx + dy * dy;
                 }
-                const dist = Math.sqrt(dsq), rf = repulsion / dsq;
+                const dist = Math.sqrt(dsq), rf = repulsion / Math.max(dsq, 16);
                 const ov = (radii.get(lid) || 0) + (radii.get(rid) || 0) + 12 - dist;
                 const cf = ov > 0 ? ov * collisionStrength : 0;
                 const fx = dx / dist * (rf + cf), fy = dy / dist * (rf + cf);
@@ -228,13 +257,19 @@ function simulateComponentLayout(componentIds, adjacency, options, hierarchyNode
             forces.get(lid).x += fx; forces.get(lid).y += fy;
             forces.get(rid).x -= fx; forces.get(rid).y -= fy;
         });
+        let totalMovement = 0;
         componentIds.forEach(id => {
             const pos = positions.get(id), vel = velocities.get(id), f = forces.get(id), anch = anchors.get(id);
             f.x += (anch.x - pos.x) * anchorStrength - pos.x * gravity;
             f.y += (anch.y - pos.y) * anchorStrength - pos.y * gravity;
             vel.x = (vel.x + f.x) * damping; vel.y = (vel.y + f.y) * damping;
+            const speed = Math.hypot(vel.x, vel.y);
+            if (speed > maxStep) { vel.x *= maxStep / speed; vel.y *= maxStep / speed; }
             pos.x += vel.x; pos.y += vel.y;
+            totalMovement += Math.abs(vel.x) + Math.abs(vel.y);
         });
+        if (iter > 12 && totalMovement / componentIds.length < 0.05) { break; }
+    }
     }
     const rawItems = componentIds.map(id => { const pos = positions.get(id); return {componentId: id, x: pos.x, y: pos.y, radius: radii.get(id) || 10}; });
     return normalizeComponentLayout(refineLayoutGeometry(rawItems, edgePairs, {
@@ -270,7 +305,16 @@ function clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEna
 function packLayouts(componentLayouts, options) {
     options = options || {};
     const gapX = options.gapX != null ? options.gapX : 120, gapY = options.gapY != null ? options.gapY : 120;
-    const rw = options.rowTargetWidth != null ? options.rowTargetWidth : 2200, op = options.outerPadding != null ? options.outerPadding : 72;
+    const op = options.outerPadding != null ? options.outerPadding : 72;
+    let rw;
+    if (options.rowTargetWidth != null) {
+        rw = options.rowTargetWidth;
+    } else {
+        const valid = componentLayouts.filter(c => c && c.items.length > 0);
+        const totalArea = valid.reduce((s, c) => s + c.width * c.height, 0);
+        const widest = valid.reduce((m, c) => Math.max(m, c.width), 0);
+        rw = Math.max(widest, Math.sqrt(totalArea) * 1.3) + op;
+    }
     const packed = []; let cx = op, cy = op, rh = 0;
     componentLayouts.forEach(comp => {
         if (!comp || !comp.items.length) { return; }
@@ -285,21 +329,13 @@ self.onmessage = function(event) {
     if (msg.type !== 'computeLayout') { return; }
     const {requestId, key, algorithm, visibleIds, links, hierarchyNodes, sortBySizeEnabled} = msg;
     const {adjacency, components} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
-    const isForce = algorithm === 'force';
-    const componentLayouts = components.map(ids => simulateComponentLayout(ids, adjacency, isForce ? {
-        useTreeSeed: true, baseSpacing: 104, repulsion: 8200, spring: 0.078, gravity: 0.009,
-        damping: 0.82, preferredEdgeLength: 124, iterations: Math.min(165, 78 + ids.length),
-        collisionStrength: 0.46, bubblePadding: 17, edgePadding: 10, geometryIterations: 7,
-        edgeIterations: 4, crossingIterations: 3, anchorStrength: 0.010, angleScale: 1,
-    } : {
-        useTreeSeed: true, baseSpacing: 112, repulsion: 9200, spring: 0.09, gravity: 0.012,
-        damping: 0.84, preferredEdgeLength: 132, iterations: Math.min(200, 108 + ids.length),
-        collisionStrength: 0.58, bubblePadding: 19, edgePadding: 12, geometryIterations: 8,
-        edgeIterations: 5, crossingIterations: 4, anchorStrength: 0.018, angleScale: 0.65,
+    const componentLayouts = components.map(ids => simulateComponentLayout(ids, adjacency, {
+        repulsion: 4000, spring: 0.08, gravity: 0.006,
+        damping: 0.82, preferredEdgeLength: 124, iterations: Math.min(70, 40 + ids.length),
+        collisionStrength: 0.5, bubblePadding: 17, edgePadding: 10, geometryIterations: 7,
+        edgeIterations: 4, crossingIterations: 4, anchorStrength: 0.12, maxPhysicsNodes: 500,
     }, hierarchyNodes));
-    const layout = packLayouts(componentLayouts, isForce
-        ? {gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}
-        : {gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72});
+    const layout = packLayouts(componentLayouts, {gapX: 36, gapY: 36, outerPadding: 72});
     self.postMessage({requestId, key, layout});
 };
 """
@@ -871,8 +907,8 @@ def ssn_viewer_html(
                         <select id="layout-algorithm">
                             <option value="tree">Tree</option>
                             <option value="force">Force-directed</option>
-                            <option value="organic">Organic</option>
                             <option value="grid" selected>Grid (no edges)</option>
+                            <option value="packed">Packed (no edges)</option>
                         </select>
                     </div>
                     <div class="control">
@@ -898,6 +934,14 @@ def ssn_viewer_html(
                     <div class="control checkbox">
                         <input id="show-edge-scores" type="checkbox" />
                         <label for="show-edge-scores">Show edge score labels</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="render-cluster-bounds" type="checkbox" checked />
+                        <label for="render-cluster-bounds">Render cluster bounds</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="render-nodes" type="checkbox" checked />
+                        <label for="render-nodes">Render nodes</label>
                     </div>
                     <div class="control checkbox">
                         <input id="reduce-elongation" type="checkbox" />
@@ -1405,7 +1449,8 @@ def ssn_viewer_html(
     function updateComponentSortButton() {{
         const button = document.getElementById('sort-components-by-size');
         const enabled = sortComponentsBySizeEnabled();
-        const gridMode = currentLayoutAlgorithm() === 'grid';
+        const layoutMode = currentLayoutAlgorithm();
+        const gridMode = layoutMode === 'grid' || layoutMode === 'packed';
         button.textContent = gridMode
             ? (enabled ? 'Sort clusters by size: On' : 'Sort clusters by size: Off')
             : (enabled ? 'Sort components by size: On' : 'Sort components by size: Off');
@@ -1424,6 +1469,14 @@ def ssn_viewer_html(
 
     function showEdgeScoresEnabled() {{
         return document.getElementById('show-edge-scores').checked;
+    }}
+
+    function renderClusterBoundsEnabled() {{
+        return document.getElementById('render-cluster-bounds').checked;
+    }}
+
+    function renderNodesEnabled() {{
+        return document.getElementById('render-nodes').checked;
     }}
 
     function reduceElongationEnabled() {{
@@ -2208,8 +2261,17 @@ def ssn_viewer_html(
     function packLayouts(componentLayouts, options = {{}}) {{
         const gapX = options.gapX ?? 120;
         const gapY = options.gapY ?? 120;
-        const rowTargetWidth = options.rowTargetWidth ?? 2200;
         const outerPadding = options.outerPadding ?? 72;
+        const valid = componentLayouts.filter(component => component && component.items.length > 0);
+        // Adaptive near-square arrangement when no explicit width is given: keeps many disconnected
+        // single-cluster components from spreading into a wide sparse grid (which would make
+        // fit-to-view collapse to invisible specks).
+        let rowTargetWidth = options.rowTargetWidth;
+        if (rowTargetWidth == null) {{
+            const totalArea = valid.reduce((sum, component) => sum + (component.width * component.height), 0);
+            const widest = valid.reduce((maxWidth, component) => Math.max(maxWidth, component.width), 0);
+            rowTargetWidth = Math.max(widest, Math.sqrt(totalArea) * 1.3) + outerPadding;
+        }}
         const packed = [];
         let cursorX = outerPadding;
         let cursorY = outerPadding;
@@ -2253,8 +2315,13 @@ def ssn_viewer_html(
                 radius: componentRadiusForSize(node.size),
             }};
         }});
-        const maxDiameter = Math.max(...items.map(item => item.radius * 2), 22);
-        const cellSize = maxDiameter + 34;
+        const radiiDesc = items.map(item => item.radius).sort((a, b) => b - a);
+        const r1 = radiiDesc[0] || 11;
+        const r2 = radiiDesc.length > 1 ? radiiDesc[1] : r1;
+        // Center-to-center = 0.5 * (largest diameter + second-largest diameter) = r1 + r2.
+        // This is the tightest square-grid spacing that still guarantees no overlap (the only
+        // pair that can touch is the single largest beside the second-largest). +12 visual gap.
+        const cellSize = Math.max(22, r1 + r2 + 12);
         const outerPadding = 58;
         const aspectRatio = clusterCanvas.width / Math.max(clusterCanvas.height, 1);
         const columnCount = Math.max(1, Math.ceil(Math.sqrt(items.length * Math.max(0.75, aspectRatio))));
@@ -2269,6 +2336,123 @@ def ssn_viewer_html(
                 y: outerPadding + (row * cellSize) + (cellSize / 2),
             }};
         }});
+    }}
+
+    // Place circle c externally tangent to already-placed circles a and b (Wang front-chain).
+    // Parameter order (b, a, c) mirrors d3's place() so the front-chain insertion stays overlap-free.
+    function packPlace(b, a, c) {{
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d2 = (dx * dx) + (dy * dy);
+        if (d2 > 1e-9) {{
+            const a2 = (a.radius + c.radius) * (a.radius + c.radius);
+            const b2 = (b.radius + c.radius) * (b.radius + c.radius);
+            if (a2 > b2) {{
+                const x = (d2 + b2 - a2) / (2 * d2);
+                const y = Math.sqrt(Math.max(0, (b2 / d2) - (x * x)));
+                c.x = b.x - (x * dx) - (y * dy);
+                c.y = b.y - (x * dy) + (y * dx);
+            }} else {{
+                const x = (d2 + a2 - b2) / (2 * d2);
+                const y = Math.sqrt(Math.max(0, (a2 / d2) - (x * x)));
+                c.x = a.x + (x * dx) - (y * dy);
+                c.y = a.y + (x * dy) + (y * dx);
+            }}
+        }} else {{
+            c.x = a.x + c.radius;
+            c.y = a.y;
+        }}
+    }}
+
+    function packIntersects(a, b) {{
+        const dr = a.radius + b.radius - 1e-6;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        return dr > 0 && (dr * dr) > ((dx * dx) + (dy * dy));
+    }}
+
+    function packScore(node) {{
+        const a = node._;
+        const b = node.next._;
+        const ab = a.radius + b.radius;
+        const dx = ((a.x * b.radius) + (b.x * a.radius)) / ab;
+        const dy = ((a.y * b.radius) + (b.y * a.radius)) / ab;
+        return (dx * dx) + (dy * dy);
+    }}
+
+    // Front-chain circle packing (the algorithm behind d3's packSiblings). Packs circles in the
+    // order given, compactly from the center outward, with no overlaps. Assigns x,y in place.
+    function packSiblingsTight(circles) {{
+        const n = circles.length;
+        if (n === 0) {{ return; }}
+        let a = circles[0];
+        a.x = 0; a.y = 0;
+        if (n === 1) {{ return; }}
+        let b = circles[1];
+        a.x = -b.radius; b.x = a.radius; b.y = 0;
+        if (n === 2) {{ return; }}
+        let c = circles[2];
+        packPlace(b, a, c);
+
+        let na = {{_: a, next: null, previous: null}};
+        let nb = {{_: b, next: null, previous: null}};
+        let nc = {{_: c, next: null, previous: null}};
+        na.next = nc.previous = nb;
+        nb.next = na.previous = nc;
+        nc.next = nb.previous = na;
+
+        pack: for (let i = 3; i < n; i++) {{
+            c = circles[i];
+            packPlace(na._, nb._, c);
+            nc = {{_: c, next: null, previous: null}};
+
+            let j = nb.next;
+            let k = na.previous;
+            let sj = nb._.radius;
+            let sk = na._.radius;
+            do {{
+                if (sj <= sk) {{
+                    if (packIntersects(j._, c)) {{
+                        nb = j; na.next = nb; nb.previous = na; i--;
+                        continue pack;
+                    }}
+                    sj += j._.radius; j = j.next;
+                }} else {{
+                    if (packIntersects(k._, c)) {{
+                        na = k; na.next = nb; nb.previous = na; i--;
+                        continue pack;
+                    }}
+                    sk += k._.radius; k = k.previous;
+                }}
+            }} while (j !== k.next);
+
+            nc.previous = na; nc.next = nb; na.next = nb.previous = nb = nc;
+
+            let aa = packScore(na);
+            let nn = nc;
+            while ((nn = nn.next) !== nb) {{
+                const ca = packScore(nn);
+                if (ca < aa) {{ na = nn; aa = ca; }}
+            }}
+            nb = na.next;
+        }}
+    }}
+
+    function packedClusterLayout(visibleIds) {{
+        if (visibleIds.length === 0) {{
+            clusterCanvas.height = 760;
+            return [];
+        }}
+        clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
+        const orderedIds = [...visibleIds].sort(compareVisibleClusterIds);
+        const circles = orderedIds.map(componentId => ({{
+            componentId,
+            radius: componentRadiusForSize(state.bundle.graph.hierarchy.nodes[componentId].size),
+            x: 0,
+            y: 0,
+        }}));
+        packSiblingsTight(circles);
+        return normalizeComponentLayout(circles, 40).items;
     }}
 
     function normalizeComponentLayout(items, padding = 20) {{
@@ -2543,12 +2727,9 @@ def ssn_viewer_html(
 
     function simulateComponentLayout(componentIds, adjacency, options = {{}}, hierarchyNodes) {{
         const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
-        const tree = rootedTree(treeCenter(componentIds, adjacency, hierarchyNodes), adjacency, hierarchyNodes);
         const positions = new Map();
         const velocities = new Map();
         const anchors = new Map();
-        const baseSpacing = options.baseSpacing ?? 110;
-        const angleScale = options.angleScale ?? 0.5;
         const damping = options.damping ?? 0.8;
         const repulsion = options.repulsion ?? 6000;
         const spring = options.spring ?? 0.07;
@@ -2557,31 +2738,29 @@ def ssn_viewer_html(
         const iterations = options.iterations ?? 110;
         const preferredEdgeLength = options.preferredEdgeLength ?? 120;
         const collisionStrength = options.collisionStrength ?? 0.28;
-        const orderedIds = componentLeafOrder(componentIds, hierarchyNodes);
-        const orderRank = new Map(orderedIds.map((nodeId, index) => [nodeId, index]));
-        const orderCenter = (orderedIds.length - 1) / 2;
+        const maxStep = options.maxStep ?? 48;
+        // Above this many nodes the O(n^2) physics is skipped entirely (the tidy seed is already a
+        // good, crossing-free layout) so large forests render fast instead of freezing.
+        const maxPhysicsNodes = options.maxPhysicsNodes ?? 500;
 
-        tree.order.forEach((nodeId, index) => {{
-            const depth = (() => {{
-                let currentDepth = 0;
-                let currentId = nodeId;
-                while (tree.parent.get(currentId) !== null) {{
-                    currentDepth += 1;
-                    currentId = tree.parent.get(currentId);
-                }}
-                return currentDepth;
-            }})();
-            const rank = orderRank.get(nodeId) ?? index;
-            const angle = ((rank / Math.max(1, tree.order.length)) * Math.PI * 2 * angleScale) + (seededUnit(nodeId, 1) - 0.5) * 0.35;
-            const radius = depth * baseSpacing;
-            const anchor = options.useTreeSeed === false
-                ? {{x: Math.cos(angle) * radius, y: Math.sin(angle) * radius}}
-                : {{x: depth * baseSpacing, y: (rank - orderCenter) * Math.max(26, baseSpacing * 0.58) + (seededUnit(nodeId, 2) - 0.5) * 24}};
-            anchors.set(nodeId, anchor);
-            positions.set(nodeId, {{
-                x: anchor.x + (seededUnit(nodeId, 3) - 0.5) * 18,
-                y: anchor.y + (seededUnit(nodeId, 4) - 0.5) * 18,
-            }});
+        // Seed positions AND anchors from the tidy tree layout: crossing-free for forest topology
+        // even with long branches. Centered on the origin so gravity pulls toward the middle.
+        const tidy = tidyComponentLayout(componentIds, adjacency, hierarchyNodes, 0);
+        let centerX = 0;
+        let centerY = 0;
+        componentIds.forEach(nodeId => {{
+            const seed = tidy.positionById.get(nodeId) || {{x: 0, y: 0}};
+            centerX += seed.x;
+            centerY += seed.y;
+        }});
+        centerX /= Math.max(1, componentIds.length);
+        centerY /= Math.max(1, componentIds.length);
+        componentIds.forEach(nodeId => {{
+            const seed = tidy.positionById.get(nodeId) || {{x: 0, y: 0}};
+            const anchorX = seed.x - centerX;
+            const anchorY = seed.y - centerY;
+            anchors.set(nodeId, {{x: anchorX, y: anchorY}});
+            positions.set(nodeId, {{x: anchorX, y: anchorY}});
             velocities.set(nodeId, {{x: 0, y: 0}});
         }});
 
@@ -2594,6 +2773,7 @@ def ssn_viewer_html(
             }});
         }});
 
+        if (componentIds.length <= maxPhysicsNodes) {{
         for (let iteration = 0; iteration < iterations; iteration++) {{
             const forces = new Map(componentIds.map(nodeId => [nodeId, {{x: 0, y: 0}}]));
             for (let leftIndex = 0; leftIndex < componentIds.length; leftIndex++) {{
@@ -2611,7 +2791,10 @@ def ssn_viewer_html(
                         distSq = (dx * dx) + (dy * dy);
                     }}
                     const dist = Math.sqrt(distSq);
-                    const repelForce = repulsion / distSq;
+                    // Floor the repulsion distance so two near-coincident nodes can't produce an
+                    // unbounded force that flings a node to infinity (the numerical blow-up that
+                    // collapsed fit-to-view to a single visible bubble).
+                    const repelForce = repulsion / Math.max(distSq, 16);
                     const overlap = ((radii.get(leftId) || 0) + (radii.get(rightId) || 0) + 12) - dist;
                     const collisionForce = overlap > 0 ? overlap * collisionStrength : 0;
                     const forceX = (dx / dist) * (repelForce + collisionForce);
@@ -2644,6 +2827,7 @@ def ssn_viewer_html(
                 forces.get(rightId).y -= forceY;
             }});
 
+            let totalMovement = 0;
             componentIds.forEach(nodeId => {{
                 const position = positions.get(nodeId);
                 const velocity = velocities.get(nodeId);
@@ -2655,9 +2839,21 @@ def ssn_viewer_html(
                 force.y += -position.y * gravity;
                 velocity.x = (velocity.x + force.x) * damping;
                 velocity.y = (velocity.y + force.y) * damping;
+                // Cap per-step displacement to keep the simulation numerically stable.
+                const speed = Math.hypot(velocity.x, velocity.y);
+                if (speed > maxStep) {{
+                    velocity.x *= maxStep / speed;
+                    velocity.y *= maxStep / speed;
+                }}
                 position.x += velocity.x;
                 position.y += velocity.y;
+                totalMovement += Math.abs(velocity.x) + Math.abs(velocity.y);
             }});
+            // Early-exit once the system has settled (avoids the worker hanging on big forests).
+            if (iteration > 12 && (totalMovement / componentIds.length) < 0.05) {{
+                break;
+            }}
+        }}
         }}
 
         const rawItems = componentIds.map(nodeId => {{
@@ -2682,52 +2878,77 @@ def ssn_viewer_html(
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
         const {{adjacency, components}} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
         const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
-            useTreeSeed: true,
-            baseSpacing: 104,
-            repulsion: 8200,
-            spring: 0.078,
-            gravity: 0.009,
+            repulsion: 4000,
+            spring: 0.08,
+            gravity: 0.006,
             damping: 0.82,
             preferredEdgeLength: 124,
-            iterations: Math.min(165, 78 + componentIds.length),
-            collisionStrength: 0.46,
+            iterations: Math.min(70, 40 + componentIds.length),
+            collisionStrength: 0.5,
             bubblePadding: 17,
             edgePadding: 10,
             geometryIterations: 7,
             edgeIterations: 4,
-            crossingIterations: 3,
-            anchorStrength: 0.010,
-            angleScale: 1,
+            crossingIterations: 4,
+            anchorStrength: 0.12,
+            maxPhysicsNodes: 500,
         }}, hierarchyNodes));
-        return packLayouts(componentLayouts, {{gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}});
+        return packLayouts(componentLayouts, {{gapX: 36, gapY: 36, outerPadding: 72}});
     }}
 
-    function organicForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
-        if (visibleIds.length === 0) {{
-            clusterCanvas.height = 760;
-            return [];
+    // Tidy (Reingold-Tilford style) layout for a single component, rooted at its tree center.
+    // Returns crossing-free positions for forest topology even with long branches. Shared by the
+    // Tree layout and used to seed the Force-directed simulation. O(n), x offset by originX.
+    function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {{
+        const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
+        const tree = rootedTree(rootId, adjacency, hierarchyNodes);
+        const depthByNode = new Map([[rootId, 0]]);
+        tree.order.forEach(nodeId => {{
+            (tree.children.get(nodeId) || []).forEach(childId => {{
+                depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1);
+            }});
+        }});
+        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
+        const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
+        const siblingGap = Math.max(20, maxRadius * 0.42);
+        const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
+        const subtreeSpan = new Map();
+        [...tree.order].reverse().forEach(nodeId => {{
+            const childIds = tree.children.get(nodeId) || [];
+            const nodeSpan = ((radii.get(nodeId) || 12) * 2) + 18;
+            if (childIds.length === 0) {{
+                subtreeSpan.set(nodeId, nodeSpan);
+                return;
+            }}
+            const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
+            subtreeSpan.set(nodeId, Math.max(nodeSpan, childrenSpan));
+        }});
+
+        const positionById = new Map();
+        function placeNode(nodeId, topY) {{
+            const nodeSpan = subtreeSpan.get(nodeId) || 26;
+            const childIds = tree.children.get(nodeId) || [];
+            const x = originX + (depthByNode.get(nodeId) || 0) * levelGap;
+            if (childIds.length === 0) {{
+                positionById.set(nodeId, {{componentId: nodeId, x, y: topY + (nodeSpan / 2), radius: radii.get(nodeId) || 10}});
+                return;
+            }}
+            const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
+            let childCursor = topY + Math.max(0, (nodeSpan - childrenSpan) / 2);
+            const childCenters = [];
+            childIds.forEach(childId => {{
+                placeNode(childId, childCursor);
+                childCenters.push(positionById.get(childId).y);
+                childCursor += subtreeSpan.get(childId) + siblingGap;
+            }});
+            const centerY = childCenters.reduce((sum, value) => sum + value, 0) / Math.max(1, childCenters.length);
+            positionById.set(nodeId, {{componentId: nodeId, x, y: centerY, radius: radii.get(nodeId) || 10}});
         }}
-        clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
-        const {{adjacency, components}} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
-        const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
-            useTreeSeed: true,
-            baseSpacing: 112,
-            repulsion: 9200,
-            spring: 0.09,
-            gravity: 0.012,
-            damping: 0.84,
-            preferredEdgeLength: 132,
-            iterations: Math.min(200, 108 + componentIds.length),
-            collisionStrength: 0.58,
-            bubblePadding: 19,
-            edgePadding: 12,
-            geometryIterations: 8,
-            edgeIterations: 5,
-            crossingIterations: 4,
-            anchorStrength: 0.018,
-            angleScale: 0.65,
-        }}, hierarchyNodes));
-        return packLayouts(componentLayouts, {{gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72}});
+
+        placeNode(rootId, 0);
+        const maxDepth = tree.order.reduce((maxValue, nodeId) => Math.max(maxValue, depthByNode.get(nodeId) || 0), 0);
+        const width = (maxDepth * levelGap) + (Math.max(...tree.order.map(nodeId => radii.get(nodeId) || 10), 10) * 2);
+        return {{positionById, order: tree.order, width}};
     }}
 
     function tidyForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
@@ -2745,68 +2966,9 @@ def ssn_viewer_html(
         let currentX = outerPadding;
 
         components.forEach(componentIds => {{
-            const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
-            const tree = rootedTree(rootId, adjacency, hierarchyNodes);
-            const depthByNode = new Map([[rootId, 0]]);
-            tree.order.forEach(nodeId => {{
-                (tree.children.get(nodeId) || []).forEach(childId => {{
-                    depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1);
-                }});
-            }});
-            const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
-            const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
-            const siblingGap = Math.max(20, maxRadius * 0.42);
-            const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
-            const subtreeSpan = new Map();
-            [...tree.order].reverse().forEach(nodeId => {{
-                const childIds = tree.children.get(nodeId) || [];
-                const nodeSpan = ((radii.get(nodeId) || 12) * 2) + 18;
-                if (childIds.length === 0) {{
-                    subtreeSpan.set(nodeId, nodeSpan);
-                    return;
-                }}
-                const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
-                subtreeSpan.set(nodeId, Math.max(nodeSpan, childrenSpan));
-            }});
-
-            const positionById = new Map();
-            function placeNode(nodeId, topY) {{
-                const nodeSpan = subtreeSpan.get(nodeId) || 26;
-                const childIds = tree.children.get(nodeId) || [];
-                const x = currentX + (depthByNode.get(nodeId) || 0) * levelGap;
-                if (childIds.length === 0) {{
-                    positionById.set(nodeId, {{
-                        componentId: nodeId,
-                        x,
-                        y: topY + (nodeSpan / 2),
-                        radius: radii.get(nodeId) || 10,
-                    }});
-                    return;
-                }}
-
-                const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
-                let childCursor = topY + Math.max(0, (nodeSpan - childrenSpan) / 2);
-                const childCenters = [];
-                childIds.forEach(childId => {{
-                    placeNode(childId, childCursor);
-                    childCenters.push(positionById.get(childId).y);
-                    childCursor += subtreeSpan.get(childId) + siblingGap;
-                }});
-                const centerY = childCenters.reduce((sum, value) => sum + value, 0) / Math.max(1, childCenters.length);
-                positionById.set(nodeId, {{
-                    componentId: nodeId,
-                    x,
-                    y: centerY,
-                    radius: radii.get(nodeId) || 10,
-                }});
-            }}
-
-            placeNode(rootId, outerPadding);
-            const componentLayout = tree.order.map(nodeId => positionById.get(nodeId));
-            layout.push(...componentLayout);
-            const maxDepth = tree.order.reduce((maxValue, nodeId) => Math.max(maxValue, depthByNode.get(nodeId) || 0), 0);
-            const componentWidth = (maxDepth * levelGap) + Math.max(...componentLayout.map(item => item.radius), 10) * 2 + outerPadding;
-            currentX += componentWidth + componentGap;
+            const tidy = tidyComponentLayout(componentIds, adjacency, hierarchyNodes, currentX);
+            tidy.order.forEach(nodeId => layout.push(tidy.positionById.get(nodeId)));
+            currentX += tidy.width + outerPadding + componentGap;
         }});
 
         return layout;
@@ -2834,7 +2996,7 @@ def ssn_viewer_html(
             return {{layout: cached.map(item => ({{...item}})), key, async: false}};
         }}
 
-        if ((algorithm === 'force' || algorithm === 'organic') && state.layoutWorker) {{
+        if (algorithm === 'force' && state.layoutWorker) {{
             const workerHierarchyNodes = {{}};
             visibleIds.forEach(id => {{
                 const node = hierarchyNodes[id];
@@ -2858,11 +3020,11 @@ def ssn_viewer_html(
             if (algorithm === 'grid') {{
                 return gridClusterLayout(visibleIds);
             }}
+            if (algorithm === 'packed') {{
+                return packedClusterLayout(visibleIds);
+            }}
             if (algorithm === 'force') {{
                 return forceDirectedForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
-            }}
-            if (algorithm === 'organic') {{
-                return organicForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
             }}
             return tidyForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
         }})();
@@ -3200,6 +3362,9 @@ def ssn_viewer_html(
         // Collect dots batched by color for batch drawing (#3)
         const dotColorBuckets = new Map();
 
+        const showClusterBounds = renderClusterBoundsEnabled();
+        const showNodes = renderNodesEnabled();
+
         state.visibleLayout.forEach(item => {{
             // Viewport culling (#4)
             if (item.x + item.radius < worldMinX || item.x - item.radius > worldMaxX ||
@@ -3211,13 +3376,19 @@ def ssn_viewer_html(
             const members = componentMembers(item.componentId);
             const selectionState = componentSelectionState(members);
 
-            clusterContext.fillStyle = 'rgba(248, 243, 235, 0.95)';
-            clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c8b8a6';
-            clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / drawScale;
-            clusterContext.beginPath();
-            clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
-            clusterContext.fill();
-            clusterContext.stroke();
+            if (showClusterBounds) {{
+                clusterContext.fillStyle = 'rgba(248, 243, 235, 0.95)';
+                clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c8b8a6';
+                clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / drawScale;
+                clusterContext.beginPath();
+                clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
+                clusterContext.fill();
+                clusterContext.stroke();
+            }}
+
+            if (!showNodes) {{
+                return;
+            }}
 
             const dotLayout = componentDotLayout(component, item);
             for (const dot of dotLayout) {{
@@ -3343,7 +3514,7 @@ def ssn_viewer_html(
 
     function applyComputedLayout(layout, visibleGraph, layoutAlgorithm, resetView) {{
         const layoutById = new Map(layout.map(item => [item.componentId, item]));
-        const links = layoutAlgorithm === 'grid'
+        const links = (layoutAlgorithm === 'grid' || layoutAlgorithm === 'packed')
             ? []
             : visibleGraph.links
                 .map(link => {{
@@ -4313,6 +4484,8 @@ def ssn_viewer_html(
         }}
         drawClusterView(true);
     }});
+    document.getElementById('render-cluster-bounds').addEventListener('change', renderClusterView);
+    document.getElementById('render-nodes').addEventListener('change', renderClusterView);
     document.getElementById('leaf-pruning-only').addEventListener('change', () => {{
         scheduleThresholdUI(true);
     }});

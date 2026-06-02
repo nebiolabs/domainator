@@ -219,9 +219,10 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'componentMembers' in html_content
         assert 'mstLinksForActiveClusters' in html_content
         assert 'tidyForestLayout' in html_content
+        assert 'tidyComponentLayout' in html_content
         assert 'forceDirectedForestLayout' in html_content
-        assert 'organicForestLayout' in html_content
         assert 'gridClusterLayout' in html_content
+        assert 'packedClusterLayout' in html_content
         assert 'computeVisibleLayout' in html_content
         assert 'renderClusterView' in html_content
         assert 'refineLayoutGeometry' in html_content
@@ -253,8 +254,9 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'Layout algorithm' in html_content
         assert '<option value="tree">Tree</option>' in html_content
         assert '<option value="force">Force-directed</option>' in html_content
-        assert '<option value="organic">Organic</option>' in html_content
+        assert '<option value="organic">' not in html_content
         assert '<option value="grid" selected>Grid (no edges)</option>' in html_content
+        assert '<option value="packed">Packed (no edges)</option>' in html_content
         assert '<input id="min-cluster-size" type="number" min="1" value="5" step="1" />' in html_content
         assert 'leaf-pruning-only' in html_content
         assert 'Minimum cluster size trims leaf clusters only' in html_content
