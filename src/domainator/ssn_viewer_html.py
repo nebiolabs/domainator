@@ -1839,59 +1839,163 @@ def ssn_viewer_html(
         }});
     }}
 
-    function squareToDiskPoint(u, v) {{
-        // Shirley-Chiu concentric square-to-disk map. Area-preserving (uniform dot
-        // density) and locality-preserving (a compact square region maps to a compact
-        // annular-sector region of the disk).
-        if (u === 0 && v === 0) {{
-            return {{x: 0, y: 0}};
+    const phyllotaxisCoordCache = new Map();
+
+    function phyllotaxisFor(n) {{
+        // Flat coordinate arrays for the phyllotaxis (sunflower) positions of size n.
+        // Positions for a given n are identical across components, so cache by n. The
+        // grouped layout only reads these, never mutates them, so sharing is safe.
+        let coords = phyllotaxisCoordCache.get(n);
+        if (coords === undefined) {{
+            const points = radialDotPositions(n);
+            const posX = new Float64Array(n);
+            const posY = new Float64Array(n);
+            for (let i = 0; i < n; i++) {{
+                posX[i] = points[i].x;
+                posY[i] = points[i].y;
+            }}
+            coords = {{posX: posX, posY: posY}};
+            phyllotaxisCoordCache.set(n, coords);
         }}
-        let radius;
-        let phi;
-        if (Math.abs(u) > Math.abs(v)) {{
-            radius = u;
-            phi = (Math.PI / 4) * (v / u);
-        }} else {{
-            radius = v;
-            phi = (Math.PI / 2) - (Math.PI / 4) * (u / v);
-        }}
-        return {{x: radius * Math.cos(phi), y: radius * Math.sin(phi)}};
+        return coords;
     }}
 
-    function subdivisionDotLayout(componentId, sampledMembers) {{
-        // Space-filling layout that keeps each subtree's members in a compact,
-        // contiguous, area-proportional patch of the bubble. Works because subtrees
-        // occupy contiguous ranges of leaf_order (and of the order-preserving sample),
-        // so we recursively subdivide the unit square by the hierarchy split point and
-        // map cell centers to the unit disk. Iterative (explicit stack) so deep trees
-        // cannot overflow the call stack.
-        const n = sampledMembers.length;
-        if (n <= 6) {{
-            // Keep the tuned ring placement for tiny clusters; avoids degenerate cells.
-            return radialDotLayout(sampledMembers);
+    function selectByCoord(idx, start, end, leftCount, posX, posY, useY) {{
+        // In-place Hoare quickselect: rearrange idx[start, end) so the leftCount entries
+        // with the smallest coordinate on the chosen axis occupy [start, start+leftCount).
+        // Coordinates are read indirectly via the shared position arrays. Deterministic
+        // (median-of-three pivot); no allocation, no closures.
+        const target = start + leftCount;
+        let lo = start;
+        let hi = end;
+        while (hi - lo > 1) {{
+            const a = lo;
+            const b = (lo + hi) >> 1;
+            const c = hi - 1;
+            const va = useY ? posY[idx[a]] : posX[idx[a]];
+            const vb = useY ? posY[idx[b]] : posX[idx[b]];
+            const vc = useY ? posY[idx[c]] : posX[idx[c]];
+            let pivot;
+            if (va < vb) {{
+                pivot = vb < vc ? vb : (va < vc ? vc : va);
+            }} else {{
+                pivot = va < vc ? va : (vb < vc ? vc : vb);
+            }}
+            let i = lo;
+            let j = hi - 1;
+            while (i <= j) {{
+                while ((useY ? posY[idx[i]] : posX[idx[i]]) < pivot) {{ i++; }}
+                while ((useY ? posY[idx[j]] : posX[idx[j]]) > pivot) {{ j--; }}
+                if (i <= j) {{
+                    const t = idx[i];
+                    idx[i] = idx[j];
+                    idx[j] = t;
+                    i++;
+                    j--;
+                }}
+            }}
+            if (target <= j) {{
+                hi = j + 1;
+            }} else if (target >= i) {{
+                lo = i;
+            }} else {{
+                break;
+            }}
         }}
-        const nodes = state.bundle.graph.hierarchy.nodes;
-        const LOPSIDED_FRACTION = 0.18;
-        const out = new Array(n);
-        // Each frame: {{lo, hi, nodeId, x0, y0, x1, y1}}. nodeId === -1 means "median
-        // mode": split the rank range in half and ignore the hierarchy (used for the
-        // deep/lopsided caterpillar splits that would otherwise produce thin slivers).
-        const stack = [{{lo: 0, hi: n, nodeId: componentId, x0: 0, y0: 0, x1: 1, y1: 1}}];
+    }}
+
+    function regionLongerAxisIsY(idx, pStart, pEnd, posX, posY) {{
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (let k = pStart; k < pEnd; k++) {{
+            const pi = idx[k];
+            const xx = posX[pi];
+            const yy = posY[pi];
+            if (xx < minX) {{ minX = xx; }}
+            if (xx > maxX) {{ maxX = xx; }}
+            if (yy < minY) {{ minY = yy; }}
+            if (yy > maxY) {{ maxY = yy; }}
+        }}
+        return (maxY - minY) > (maxX - minX);
+    }}
+
+    function fallbackBisect(out, sampledMembers, idx, posX, posY, loRoot, hiRoot, pStartRoot, pEndRoot) {{
+        // Hierarchy-independent locality layout for a region with no large coherent
+        // subcluster (a deep lopsided chain): recursive median bisection of the points
+        // along the longer bounding-box axis. Own explicit stack so deep regions cannot
+        // overflow the call stack.
+        const stack = [{{lo: loRoot, hi: hiRoot, pStart: pStartRoot, pEnd: pEndRoot}}];
         while (stack.length > 0) {{
             const frame = stack.pop();
             const lo = frame.lo;
             const hi = frame.hi;
-            const k = hi - lo;
-            if (k <= 0) {{ continue; }}
-            if (k === 1) {{
-                const disk = squareToDiskPoint(frame.x0 + frame.x1 - 1, frame.y0 + frame.y1 - 1);
-                out[lo] = {{memberIndex: sampledMembers[lo].nodeIndex, x: disk.x, y: disk.y}};
+            const pStart = frame.pStart;
+            const pEnd = frame.pEnd;
+            const m = hi - lo;
+            if (m <= 0) {{ continue; }}
+            if (m === 1) {{
+                const p = idx[pStart];
+                out[lo] = {{memberIndex: sampledMembers[lo].nodeIndex, x: posX[p], y: posY[p]}};
+                continue;
+            }}
+            const useY = regionLongerAxisIsY(idx, pStart, pEnd, posX, posY);
+            const half = m >> 1;
+            selectByCoord(idx, pStart, pEnd, half, posX, posY, useY);
+            const pMid = pStart + half;
+            stack.push({{lo: lo + half, hi: hi, pStart: pMid, pEnd: pEnd}});
+            stack.push({{lo: lo, hi: lo + half, pStart: pStart, pEnd: pMid}});
+        }}
+    }}
+
+    function groupedDotLayout(componentId, sampledMembers) {{
+        // Assign each member to a phyllotaxis position (uniform spacing, from
+        // radialDotPositions) so that each hierarchy subtree occupies a compact,
+        // contiguous blob. We recursively partition the SET of positions among subtrees,
+        // cutting only at true hierarchy boundaries -- so a subtree is never split across
+        // a cut, and large subclusters stay whole. Deep lopsided chains (caterpillar
+        // hierarchies, which contain no large coherent subcluster) are handed to a cheap
+        // locality fallback to keep cost O(n log n). Iterative (explicit stack).
+        const n = sampledMembers.length;
+        if (n <= 6) {{
+            // Keep the tuned ring placement for tiny clusters.
+            return radialDotLayout(sampledMembers);
+        }}
+        const nodes = state.bundle.graph.hierarchy.nodes;
+        const phy = phyllotaxisFor(n);
+        const posX = phy.posX;
+        const posY = phy.posY;
+        const LOPSIDED_FRACTION = 0.18;
+        const RUN_LIMIT = 20;
+
+        const idx = new Int32Array(n);
+        for (let i = 0; i < n; i++) {{ idx[i] = i; }}
+        const out = new Array(n);
+
+        // Frame invariant: pEnd - pStart === hi - lo (members paired one-to-one with the
+        // points allocated to this subtree). idx is partitioned in place; frames hold
+        // [pStart, pEnd) offsets into it -- no per-frame array copies.
+        const stack = [{{lo: 0, hi: n, pStart: 0, pEnd: n, nodeId: componentId, runLength: 0}}];
+        while (stack.length > 0) {{
+            const frame = stack.pop();
+            const lo = frame.lo;
+            const hi = frame.hi;
+            const pStart = frame.pStart;
+            const pEnd = frame.pEnd;
+            const m = hi - lo;
+            if (m <= 0) {{ continue; }}
+            if (m === 1) {{
+                const p = idx[pStart];
+                out[lo] = {{memberIndex: sampledMembers[lo].nodeIndex, x: posX[p], y: posY[p]}};
+                continue;
+            }}
+            if (frame.runLength >= RUN_LIMIT) {{
+                fallbackBisect(out, sampledMembers, idx, posX, posY, lo, hi, pStart, pEnd);
                 continue;
             }}
 
-            let splitIndex = -1;
-            let leftId = -1;
-            let rightId = -1;
+            let splitMember = -1;
             const node = frame.nodeId >= 0 ? nodes[frame.nodeId] : null;
             if (node && node.kind !== 'leaf') {{
                 const leftNode = nodes[node.left];
@@ -1907,31 +2011,34 @@ def ssn_viewer_html(
                         searchLo = mid + 1;
                     }}
                 }}
-                const leftCount = searchLo - lo;
-                const rightCount = hi - searchLo;
-                const smaller = Math.min(leftCount, rightCount);
-                if (leftCount > 0 && rightCount > 0 && smaller >= LOPSIDED_FRACTION * k) {{
-                    splitIndex = searchLo;
-                    leftId = node.left;
-                    rightId = node.right;
-                }}
+                splitMember = searchLo;
             }}
-            if (splitIndex < 0) {{
-                // Median fallback (also handles median mode and leaf/degenerate nodes).
-                splitIndex = lo + (k >> 1);
+            if (splitMember <= lo || splitMember >= hi) {{
+                // Leaf node, or a 0-count side from sampling: no hierarchy split to honor.
+                fallbackBisect(out, sampledMembers, idx, posX, posY, lo, hi, pStart, pEnd);
+                continue;
             }}
 
-            const width = frame.x1 - frame.x0;
-            const height = frame.y1 - frame.y0;
-            const frac = (splitIndex - lo) / k;
-            if (width >= height) {{
-                const xm = frame.x0 + width * frac;
-                stack.push({{lo: splitIndex, hi: hi, nodeId: rightId, x0: xm, y0: frame.y0, x1: frame.x1, y1: frame.y1}});
-                stack.push({{lo: lo, hi: splitIndex, nodeId: leftId, x0: frame.x0, y0: frame.y0, x1: xm, y1: frame.y1}});
+            const leftCount = splitMember - lo;
+            const rightCount = hi - splitMember;
+            const lopsided = Math.min(leftCount, rightCount) < LOPSIDED_FRACTION * m;
+            const nextRun = lopsided ? frame.runLength + 1 : 0;
+
+            // Partition idx[pStart, pEnd) along the longer bounding-box axis so the
+            // leftCount points with smallest coordinate on that axis become the left child.
+            const useY = regionLongerAxisIsY(idx, pStart, pEnd, posX, posY);
+            selectByCoord(idx, pStart, pEnd, leftCount, posX, posY, useY);
+            const pMid = pStart + leftCount;
+
+            const leftFrame = {{lo: lo, hi: splitMember, pStart: pStart, pEnd: pMid, nodeId: node.left, runLength: nextRun}};
+            const rightFrame = {{lo: splitMember, hi: hi, pStart: pMid, pEnd: pEnd, nodeId: node.right, runLength: nextRun}};
+            // Push the larger child first so the smaller is popped first (live stack O(log n)).
+            if (leftCount >= rightCount) {{
+                stack.push(leftFrame);
+                stack.push(rightFrame);
             }} else {{
-                const ym = frame.y0 + height * frac;
-                stack.push({{lo: splitIndex, hi: hi, nodeId: rightId, x0: frame.x0, y0: ym, x1: frame.x1, y1: frame.y1}});
-                stack.push({{lo: lo, hi: splitIndex, nodeId: leftId, x0: frame.x0, y0: frame.y0, x1: frame.x1, y1: ym}});
+                stack.push(rightFrame);
+                stack.push(leftFrame);
             }}
         }}
         return out;
@@ -1939,7 +2046,7 @@ def ssn_viewer_html(
 
     function normalizedComponentDotLayout(componentId, sampleCount, minimumDistance = 0) {{
         const arrangement = currentNodeArrangement();
-        const spacingKey = arrangement === 'grouped' ? 'subdivision' : 'radial-direct';
+        const spacingKey = arrangement === 'grouped' ? 'grouped-phyllotaxis' : 'radial-direct';
         const cacheKey = dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey);
         const cached = state.dotLayoutCache.get(cacheKey);
         if (cached) {{
@@ -1948,7 +2055,7 @@ def ssn_viewer_html(
 
         const sampledMembers = sampledMembersForComponent(componentId, sampleCount);
         const layout = arrangement === 'grouped'
-            ? subdivisionDotLayout(componentId, sampledMembers)
+            ? groupedDotLayout(componentId, sampledMembers)
             : radialDotLayout(sampledMembers);
         state.dotLayoutCache.set(cacheKey, layout);
         return layout;
