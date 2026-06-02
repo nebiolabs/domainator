@@ -262,15 +262,14 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'Show node count labels' in html_content
         assert 'show-edge-scores' in html_content
         assert 'Show edge score labels' in html_content
-        assert '<input id="exact-node-rendering" type="checkbox" checked />' in html_content
-        assert 'Render every node and scale bubble area exactly' in html_content
         assert '<input id="leaf-pruning-only" type="checkbox" />' in html_content
         assert '<button id="sort-components-by-size" type="button" aria-pressed="true" disabled>' in html_content
         assert 'initialPosition: 0' in html_content
         assert 'reset-view' in html_content
-        assert 'node-arrangement' in html_content
-        assert '<option value="grouped">Grouped subclusters</option>' in html_content
-        assert '<option value="radial" selected>Radial split order</option>' in html_content
+        # The node-arrangement dropdown and exact-node-rendering toggle were removed:
+        # dots are always grouped and every node is always rendered.
+        assert 'node-arrangement' not in html_content
+        assert 'exact-node-rendering' not in html_content
         assert 'groupedDotLayout' in html_content
         assert 'selectByCoord' in html_content
         assert 'collectMajorChildren' in html_content

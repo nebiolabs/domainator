@@ -14,9 +14,8 @@ function seededUnit(componentId, salt) {
     const raw = Math.sin((componentId + 1) * 12.9898 + salt * 78.233) * 43758.5453;
     return raw - Math.floor(raw);
 }
-function componentRadiusForSize(size, exactNodeRendering) {
-    if (exactNodeRendering) { return Math.sqrt(Math.max(1, size) * 48 / Math.PI); }
-    return Math.max(7, Math.min(52, 10 + Math.sqrt(size) * 4.7));
+function componentRadiusForSize(size) {
+    return Math.sqrt(Math.max(1, size) * 48 / Math.PI);
 }
 function componentLeafOrder(componentIds, hierarchyNodes) {
     return [...componentIds].sort((a, b) => {
@@ -168,9 +167,9 @@ function normalizeComponentLayout(items, padding) {
         width: (maxX - minX) + padding * 2, height: (maxY - minY) + padding * 2,
     };
 }
-function simulateComponentLayout(componentIds, adjacency, options, hierarchyNodes, exactNodeRendering) {
+function simulateComponentLayout(componentIds, adjacency, options, hierarchyNodes) {
     options = options || {};
-    const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size, exactNodeRendering)]));
+    const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
     const tree = rootedTree(treeCenter(componentIds, adjacency, hierarchyNodes), adjacency, hierarchyNodes);
     const positions = new Map(), velocities = new Map(), anchors = new Map();
     const baseSpacing = options.baseSpacing != null ? options.baseSpacing : 110;
@@ -284,7 +283,7 @@ function packLayouts(componentLayouts, options) {
 self.onmessage = function(event) {
     const msg = event.data;
     if (msg.type !== 'computeLayout') { return; }
-    const {requestId, key, algorithm, visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled} = msg;
+    const {requestId, key, algorithm, visibleIds, links, hierarchyNodes, sortBySizeEnabled} = msg;
     const {adjacency, components} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
     const isForce = algorithm === 'force';
     const componentLayouts = components.map(ids => simulateComponentLayout(ids, adjacency, isForce ? {
@@ -297,7 +296,7 @@ self.onmessage = function(event) {
         damping: 0.84, preferredEdgeLength: 132, iterations: Math.min(200, 108 + ids.length),
         collisionStrength: 0.58, bubblePadding: 19, edgePadding: 12, geometryIterations: 8,
         edgeIterations: 5, crossingIterations: 4, anchorStrength: 0.018, angleScale: 0.65,
-    }, hierarchyNodes, exactNodeRendering));
+    }, hierarchyNodes));
     const layout = packLayouts(componentLayouts, isForce
         ? {gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}
         : {gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72});
@@ -901,19 +900,8 @@ def ssn_viewer_html(
                         <label for="show-edge-scores">Show edge score labels</label>
                     </div>
                     <div class="control checkbox">
-                        <input id="exact-node-rendering" type="checkbox" checked />
-                        <label for="exact-node-rendering">Render every node and scale bubble area exactly</label>
-                    </div>
-                    <div class="control">
-                        <label for="node-arrangement">Node arrangement</label>
-                        <select id="node-arrangement">
-                            <option value="grouped">Grouped subclusters</option>
-                            <option value="radial" selected>Radial split order</option>
-                        </select>
-                    </div>
-                    <div class="control checkbox">
                         <input id="reduce-elongation" type="checkbox" />
-                        <label for="reduce-elongation">Reduce subcluster elongation (grouped only)</label>
+                        <label for="reduce-elongation">Reduce subcluster elongation</label>
                     </div>
                     <div class="control checkbox">
                         <input id="leaf-pruning-only" type="checkbox" />
@@ -1021,7 +1009,6 @@ def ssn_viewer_html(
     const splitContext = splitCanvas.getContext('2d');
     const clusterCanvas = document.getElementById('cluster-view');
     const clusterContext = clusterCanvas.getContext('2d');
-    const LARGE_BUNDLE_NODE_THRESHOLD = 4000;
     const DEFAULT_METADATA_PAGE_SIZE = 250;
     const EMBEDDED_BUNDLE_BASE64 = {json.dumps(embedded_bundle_base64)};
     const LAYOUT_WORKER_CODE = {layout_worker_code_json};
@@ -1046,9 +1033,6 @@ def ssn_viewer_html(
         document.body.removeChild(helper);
     }}
 
-    function isLargeBundle(bundle) {{
-        return (bundle?.graph?.nodes?.length || 0) > LARGE_BUNDLE_NODE_THRESHOLD;
-    }}
 
     function browserSupportsBundleLoading() {{
         return 'DecompressionStream' in window;
@@ -1137,10 +1121,6 @@ def ssn_viewer_html(
         rebuildMetadataCaches();
         rebuildNodeColorCache();
 
-        if (isLargeBundle(bundle)) {{
-            document.getElementById('node-arrangement').value = 'radial';
-        }}
-
         populateMetadataControls();
         const slider = document.getElementById('threshold-slider');
         slider.max = String(state.sliderModel.maxPosition);
@@ -1163,10 +1143,7 @@ def ssn_viewer_html(
         document.getElementById('metadata-prev-page').disabled = true;
         document.getElementById('metadata-next-page').disabled = true;
         setStatus(
-            'Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.' +
-            (isLargeBundle(bundle)
-                ? ' Exact node rendering was disabled and radial node placement selected automatically for faster startup.'
-                : '')
+            'Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.'
         );
         updateThresholdUI();
         updateMetadataTable();
@@ -1447,10 +1424,6 @@ def ssn_viewer_html(
 
     function showEdgeScoresEnabled() {{
         return document.getElementById('show-edge-scores').checked;
-    }}
-
-    function exactNodeRenderingEnabled() {{
-        return document.getElementById('exact-node-rendering').checked;
     }}
 
     function reduceElongationEnabled() {{
@@ -1762,19 +1735,16 @@ def ssn_viewer_html(
         return {{parent, order, children}};
     }}
 
-    function componentRadiusForSize(size, exactNodeRendering = exactNodeRenderingEnabled()) {{
-        if (exactNodeRendering) {{
-            const areaPerNode = 48;
-            return Math.sqrt((Math.max(1, size) * areaPerNode) / Math.PI);
-        }}
-        return Math.max(7, Math.min(52, 10 + Math.sqrt(size) * 4.7));
+    function componentRadiusForSize(size) {{
+        // Bubble radius scales so its area is proportional to the node count (every node
+        // is always drawn).
+        const areaPerNode = 48;
+        return Math.sqrt((Math.max(1, size) * areaPerNode) / Math.PI);
     }}
 
     function componentDotCount(componentSize) {{
-        if (exactNodeRenderingEnabled()) {{
-            return componentSize;
-        }}
-        return Math.min(componentSize, 140);
+        // Every node in the component is drawn as a dot.
+        return componentSize;
     }}
 
     function componentDotRadius(componentSize, bubbleRadius) {{
@@ -1808,9 +1778,6 @@ def ssn_viewer_html(
         }};
     }}
 
-    function currentNodeArrangement() {{
-        return document.getElementById('node-arrangement').value || 'radial';
-    }}
 
     function sampledMembersForComponent(componentId, sampleCount) {{
         const hierarchy = state.bundle.graph.hierarchy;
@@ -2178,21 +2145,18 @@ def ssn_viewer_html(
     }}
 
     function normalizedComponentDotLayout(componentId, sampleCount, minimumDistance = 0) {{
-        const arrangement = currentNodeArrangement();
-        const usePca = arrangement === 'grouped' && reduceElongationEnabled();
-        const spacingKey = arrangement === 'grouped'
-            ? (usePca ? 'grouped-pca' : 'grouped-phyllotaxis')
-            : 'radial-direct';
-        const cacheKey = dotLayoutCacheKey(componentId, sampleCount, arrangement, spacingKey);
+        // Dots are always laid out with the grouped (chain-contraction) algorithm; the
+        // arrangement dropdown was removed. The optional PCA axis reduces elongation.
+        const usePca = reduceElongationEnabled();
+        const spacingKey = usePca ? 'grouped-pca' : 'grouped-phyllotaxis';
+        const cacheKey = dotLayoutCacheKey(componentId, sampleCount, 'grouped', spacingKey);
         const cached = state.dotLayoutCache.get(cacheKey);
         if (cached) {{
             return cached;
         }}
 
         const sampledMembers = sampledMembersForComponent(componentId, sampleCount);
-        const layout = arrangement === 'grouped'
-            ? groupedDotLayout(componentId, sampledMembers, usePca)
-            : radialDotLayout(sampledMembers);
+        const layout = groupedDotLayout(componentId, sampledMembers, usePca);
         state.dotLayoutCache.set(cacheKey, layout);
         return layout;
     }}
@@ -2577,8 +2541,8 @@ def ssn_viewer_html(
         return raw - Math.floor(raw);
     }}
 
-    function simulateComponentLayout(componentIds, adjacency, options = {{}}, hierarchyNodes, exactNodeRendering) {{
-        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size, exactNodeRendering)]));
+    function simulateComponentLayout(componentIds, adjacency, options = {{}}, hierarchyNodes) {{
+        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
         const tree = rootedTree(treeCenter(componentIds, adjacency, hierarchyNodes), adjacency, hierarchyNodes);
         const positions = new Map();
         const velocities = new Map();
@@ -2710,7 +2674,7 @@ def ssn_viewer_html(
         return normalizeComponentLayout(refinedItems, 24);
     }}
 
-    function forceDirectedForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
+    function forceDirectedForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
             return [];
@@ -2734,11 +2698,11 @@ def ssn_viewer_html(
             crossingIterations: 3,
             anchorStrength: 0.010,
             angleScale: 1,
-        }}, hierarchyNodes, exactNodeRendering));
+        }}, hierarchyNodes));
         return packLayouts(componentLayouts, {{gapX: 130, gapY: 130, rowTargetWidth: 2300, outerPadding: 72}});
     }}
 
-    function organicForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
+    function organicForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
             return [];
@@ -2762,11 +2726,11 @@ def ssn_viewer_html(
             crossingIterations: 4,
             anchorStrength: 0.018,
             angleScale: 0.65,
-        }}, hierarchyNodes, exactNodeRendering));
+        }}, hierarchyNodes));
         return packLayouts(componentLayouts, {{gapX: 115, gapY: 115, rowTargetWidth: 2200, outerPadding: 72}});
     }}
 
-    function tidyForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
+    function tidyForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
             return [];
@@ -2789,7 +2753,7 @@ def ssn_viewer_html(
                     depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1);
                 }});
             }});
-            const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size, exactNodeRendering)]));
+            const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
             const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
             const siblingGap = Math.max(20, maxRadius * 0.42);
             const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
@@ -2849,7 +2813,7 @@ def ssn_viewer_html(
     }}
 
     function layoutCacheKey(visibleIds, links, algorithm) {{
-        const flags = (exactNodeRenderingEnabled() ? 1 : 0) | (sortComponentsBySizeEnabled() ? 2 : 0);
+        const flags = sortComponentsBySizeEnabled() ? 1 : 0;
         let h = flags;
         for (let i = 0; i < visibleIds.length; i++) {{
             h = (Math.imul(h, 1664525) + visibleIds[i] + 1013904223) | 0;
@@ -2863,7 +2827,7 @@ def ssn_viewer_html(
         return algorithm + ':' + flags + ':' + visibleIds.length + ':' + links.length + ':' + h;
     }}
 
-    function computeVisibleLayout(visibleIds, links, algorithm, hierarchyNodes, exactNodeRendering, sortBySizeEnabled) {{
+    function computeVisibleLayout(visibleIds, links, algorithm, hierarchyNodes, sortBySizeEnabled) {{
         const key = layoutCacheKey(visibleIds, links, algorithm);
         const cached = state.layoutCache.get(key);
         if (cached !== undefined) {{
@@ -2885,7 +2849,6 @@ def ssn_viewer_html(
                 visibleIds,
                 links: links.map(link => ({{sourceId: link.sourceId, targetId: link.targetId, weight: link.weight}})),
                 hierarchyNodes: workerHierarchyNodes,
-                exactNodeRendering,
                 sortBySizeEnabled,
             }});
             return {{layout: null, key, async: true}};
@@ -2896,12 +2859,12 @@ def ssn_viewer_html(
                 return gridClusterLayout(visibleIds);
             }}
             if (algorithm === 'force') {{
-                return forceDirectedForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
+                return forceDirectedForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
             }}
             if (algorithm === 'organic') {{
-                return organicForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
+                return organicForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
             }}
-            return tidyForestLayout(visibleIds, links, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
+            return tidyForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
         }})();
         state.layoutCache.set(key, layout.map(item => ({{...item}})));
         if (state.layoutCache.size > 24) {{
@@ -3162,16 +3125,7 @@ def ssn_viewer_html(
     function componentDotGeometry(component, item) {{
         const sampleCount = componentDotCount(component.size);
         const dotRadius = componentDotRadius(component.size, item.radius);
-        const availablePackingRadius = Math.max(0, item.radius - dotRadius - 0.6);
-        const targetPackingRadius = exactNodeRenderingEnabled()
-            ? availablePackingRadius
-            : Math.max(
-                dotRadius * 1.15,
-                dotRadius * Math.sqrt(Math.max(1, sampleCount)) * (sampleCount <= 6 ? 1.15 : 1.55),
-            );
-        const packingRadius = exactNodeRenderingEnabled()
-            ? availablePackingRadius
-            : Math.min(availablePackingRadius, targetPackingRadius);
+        const packingRadius = Math.max(0, item.radius - dotRadius - 0.6);
         return {{sampleCount, dotRadius, packingRadius}};
     }}
 
@@ -3419,7 +3373,6 @@ def ssn_viewer_html(
         const activeClusterIds = activeClustersAtThreshold(thresholdValue);
         const visibleGraph = mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnlyEnabled());
         const hierarchyNodes = state.bundle.graph.hierarchy.nodes;
-        const exactNodeRendering = exactNodeRenderingEnabled();
         const sortBySizeEnabled = sortComponentsBySizeEnabled();
 
         state.activeClusters = activeClusterIds;
@@ -3431,7 +3384,7 @@ def ssn_viewer_html(
         document.getElementById('stat-shown-nodes').textContent = shown.toLocaleString();
         document.getElementById('stat-hidden-nodes').textContent = hidden.toLocaleString();
 
-        const result = computeVisibleLayout(visibleGraph.visibleIds, visibleGraph.links, layoutAlgorithm, hierarchyNodes, exactNodeRendering, sortBySizeEnabled);
+        const result = computeVisibleLayout(visibleGraph.visibleIds, visibleGraph.links, layoutAlgorithm, hierarchyNodes, sortBySizeEnabled);
         if (result.async) {{
             state._pendingVisibleGraph = visibleGraph;
             state._pendingLayoutAlgorithm = layoutAlgorithm;
@@ -4338,7 +4291,9 @@ def ssn_viewer_html(
     document.getElementById('threshold-slider').addEventListener('change', () => {{
         const stop = currentSliderStop();
         snapSliderToStop(stop);
-        scheduleThresholdUI(true);
+        // Keep the user's current pan/zoom when the slider is released; only snap to the
+        // nearest stop. (Use the Reset view button to re-fit.)
+        scheduleThresholdUI(false);
     }});
     document.getElementById('threshold-input').addEventListener('change', jumpToThresholdValue);
     document.getElementById('threshold-input').addEventListener('keydown', event => {{
@@ -4366,18 +4321,6 @@ def ssn_viewer_html(
     document.getElementById('show-labels').addEventListener('change', renderClusterView);
     document.getElementById('show-node-counts').addEventListener('change', renderClusterView);
     document.getElementById('show-edge-scores').addEventListener('change', renderClusterView);
-    document.getElementById('exact-node-rendering').addEventListener('change', () => {{
-        if (!state.bundle) {{
-            return;
-        }}
-        drawClusterView(true);
-    }});
-    document.getElementById('node-arrangement').addEventListener('change', () => {{
-        if (!state.bundle) {{
-            return;
-        }}
-        renderClusterView();
-    }});
     document.getElementById('reduce-elongation').addEventListener('change', () => {{
         if (!state.bundle) {{
             return;
