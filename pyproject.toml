@@ -54,8 +54,14 @@ core = [
     "bashplotlib >=0.6.5",
     "requests >=2.31.0"
 ]
-test = ["pytest >=7.4.2", 
+test = ["pytest >=7.4.2",
         "pytest-datadir~=1.4.1"]
+# Browser-driven regression tests for the SSN viewer HTML. Not part of `test`
+# because Playwright also needs a one-time browser download:
+#   pip install -e ".[test,browser]" && playwright install chromium
+# The tests in test/test_ssn_viewer_browser.py skip automatically when the
+# `playwright` package is not importable.
+browser = ["pytest-playwright >=0.4.0"]
 # add dependency for Foldseek/ESM2 related stuff.
 
 [project.urls]

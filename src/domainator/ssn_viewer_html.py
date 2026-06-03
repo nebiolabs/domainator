@@ -483,15 +483,15 @@ def ssn_viewer_html(
 <style>
     :root {{
         color-scheme: light;
-        --bg: #f3efe7;
-        --panel: #fffaf2;
-        --panel-strong: #fffdf9;
+        --bg: #f4f5f7;
+        --panel: #ffffff;
+        --panel-strong: #ffffff;
         --ink: #1e2a2f;
         --muted: #5c6a70;
         --accent: #c8553d;
         --accent-soft: #f3cdb9;
-        --line: #d8cec2;
-        --shadow: 0 16px 40px rgba(61, 43, 31, 0.10);
+        --line: #d8dce2;
+        --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -499,8 +499,8 @@ def ssn_viewer_html(
         font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
         color: var(--ink);
         background:
-            radial-gradient(circle at top left, rgba(200, 85, 61, 0.10), transparent 30%),
-            linear-gradient(180deg, #f7f2eb 0%, var(--bg) 100%);
+            radial-gradient(circle at top left, rgba(200, 85, 61, 0.06), transparent 30%),
+            linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
     }}
     .shell {{
         max-width: 1680px;
@@ -514,8 +514,8 @@ def ssn_viewer_html(
         gap: 18px;
         margin-bottom: 20px;
         padding: 22px 24px;
-        background: rgba(255, 250, 242, 0.85);
-        border: 1px solid rgba(216, 206, 194, 0.8);
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(216, 220, 226, 0.8);
         box-shadow: var(--shadow);
         border-radius: 18px;
         backdrop-filter: blur(8px);
@@ -636,6 +636,146 @@ def ssn_viewer_html(
         min-width: 170px;
         flex: 1 1 200px;
     }}
+    .cp-overlay {{
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, 0.22);
+    }}
+    .cp-overlay[hidden] {{
+        display: none;
+    }}
+    .cp-dialog {{
+        width: min(560px, 92vw);
+        max-height: 86vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        padding: 20px 22px;
+    }}
+    .cp-head {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }}
+    .cp-head h3 {{
+        margin: 0;
+    }}
+    .cp-close {{
+        width: auto;
+        min-width: 0;
+        border: none;
+        background: transparent;
+        font-size: 1.4rem;
+        line-height: 1;
+        cursor: pointer;
+        color: var(--muted);
+    }}
+    .cp-body {{
+        overflow-y: auto;
+        flex: 1 1 auto;
+    }}
+    .cp-pager {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+    }}
+    .cp-pager button {{
+        width: auto;
+        min-width: 0;
+        flex: 0 0 auto;
+    }}
+    .cp-pager button:disabled {{
+        opacity: 0.45;
+        cursor: not-allowed;
+    }}
+    .cp-page-status {{
+        color: var(--muted);
+        font-size: 0.85rem;
+        flex: 1 1 auto;
+        text-align: center;
+    }}
+    .cp-swatches {{
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 52vh;
+        overflow-y: auto;
+    }}
+    .cp-swatch-row {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }}
+    .cp-swatch-row input[type="color"] {{
+        width: 38px;
+        height: 28px;
+        padding: 0;
+        flex: 0 0 auto;
+        border-radius: 8px;
+    }}
+    .cp-swatch-label {{
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }}
+    .cp-swatch-count {{
+        color: var(--muted);
+        font-size: 0.85rem;
+        flex: 0 0 auto;
+    }}
+    .cp-dialog input[type="color"] {{
+        padding: 2px;
+        height: 34px;
+        min-height: 34px;
+        cursor: pointer;
+    }}
+    .cp-stop {{
+        display: flex;
+        gap: 12px;
+    }}
+    .cp-stop .control {{
+        flex: 1 1 0;
+    }}
+    .cp-reset-values {{
+        width: auto;
+        min-width: 0;
+        margin-top: 4px;
+    }}
+    .cp-gradient {{
+        height: 22px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        margin-bottom: 6px;
+    }}
+    .cp-extent {{
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin-bottom: 12px;
+    }}
+    .cp-foot {{
+        margin-top: 14px;
+        margin-bottom: 0;
+    }}
+    .cp-hidden-file {{
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+    }}
     .split-topline {{
         display: block;
         margin-bottom: 12px;
@@ -679,7 +819,7 @@ def ssn_viewer_html(
         padding: 12px;
         border-radius: 12px;
         background: rgba(255,255,255,0.65);
-        border: 1px solid rgba(216, 206, 194, 0.7);
+        border: 1px solid rgba(216, 220, 226, 0.7);
     }}
     .stat strong {{
         display: block;
@@ -695,8 +835,8 @@ def ssn_viewer_html(
     .canvas-wrap {{
         border-radius: 16px;
         overflow: hidden;
-        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(248,242,234,0.92));
-        border: 1px solid rgba(216, 206, 194, 0.8);
+        background: #ffffff;
+        border: 1px solid rgba(216, 220, 226, 0.85);
     }}
     canvas {{
         display: block;
@@ -714,7 +854,7 @@ def ssn_viewer_html(
         max-height: 680px;
         overflow: auto;
         border-radius: 12px;
-        border: 1px solid rgba(216, 206, 194, 0.8);
+        border: 1px solid rgba(216, 220, 226, 0.8);
         background: rgba(255,255,255,0.72);
     }}
     .metadata-pager {{
@@ -753,7 +893,7 @@ def ssn_viewer_html(
     }}
     th, td {{
         padding: 8px 10px;
-        border-bottom: 1px solid rgba(216, 206, 194, 0.65);
+        border-bottom: 1px solid rgba(216, 220, 226, 0.65);
         text-align: left;
         vertical-align: top;
         white-space: nowrap;
@@ -763,14 +903,14 @@ def ssn_viewer_html(
     thead th {{
         position: sticky;
         top: 0;
-        background: #fffaf4;
+        background: #ffffff;
         z-index: 1;
     }}
     th.metadata-header {{
         position: sticky;
         top: 0;
         padding: 0;
-        background: #fffaf4;
+        background: #ffffff;
     }}
     .metadata-header-cell {{
         display: flex;
@@ -817,7 +957,7 @@ def ssn_viewer_html(
     }}
     .metadata-copy-button {{
         flex: 0 0 auto;
-        border: 1px solid rgba(216, 206, 194, 0.9);
+        border: 1px solid rgba(216, 220, 226, 0.9);
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.9);
         color: var(--muted);
@@ -850,7 +990,7 @@ def ssn_viewer_html(
         left: 5px;
         width: 2px;
         border-radius: 999px;
-        background: rgba(216, 206, 194, 0.95);
+        background: rgba(216, 220, 226, 0.95);
         transition: background 140ms ease;
     }}
     .metadata-resize-handle:hover::before {{
@@ -929,6 +1069,7 @@ def ssn_viewer_html(
         color: var(--ink);
     }}
     .legend-line::before,
+    .legend-sum::before,
     .legend-dot::before {{
         content: "";
         display: inline-block;
@@ -939,6 +1080,11 @@ def ssn_viewer_html(
         width: 18px;
         height: 2px;
         background: #c8553d;
+    }}
+    .legend-sum::before {{
+        width: 18px;
+        height: 2px;
+        background: #2f6f8f;
     }}
     .legend-dot::before {{
         width: 10px;
@@ -990,7 +1136,8 @@ def ssn_viewer_html(
                 <div class="canvas-wrap"><canvas id="split-chart" width="1100" height="320"></canvas></div>
                 <div class="split-legend">
                     <div class="split-legend-items">
-                        <span class="legend-line">Split impact trace</span>
+                        <span class="legend-line">Split impact</span>
+                        <span class="legend-sum">Moving sum (5% window)</span>
                         <span class="legend-dot legend-threshold-readout">Current threshold <span id="threshold-label" class="legend-threshold-value">∞</span></span>
                     </div>
                     <div class="threshold-jump">
@@ -1085,6 +1232,7 @@ def ssn_viewer_html(
                         <option value="8">8×</option>
                     </select>
                     <button id="export-svg" type="button" disabled>Export view SVG</button>
+                    <button id="customize-colors" type="button" disabled>Customize colors…</button>
                 </div>
                 <div class="note" id="selection-note">Load a bundle to begin exploring metadata.</div>
             </div>
@@ -1133,6 +1281,52 @@ def ssn_viewer_html(
         </section>
     </div>
 </div>
+<div id="color-picker-overlay" class="cp-overlay" hidden>
+    <div id="color-picker-dialog" class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="color-picker-title">
+        <div class="cp-head">
+            <h3 id="color-picker-title">Customize colors</h3>
+            <button id="color-picker-close" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <p class="note" id="color-picker-empty-note" hidden>Choose a column in “Color by” to customize its colors.</p>
+            <div id="color-picker-discrete" hidden>
+                <div class="cp-pager" id="color-picker-pager" hidden>
+                    <button id="color-picker-prev" type="button">‹ Prev</button>
+                    <span id="color-picker-page-status" class="cp-page-status"></span>
+                    <button id="color-picker-next" type="button">Next ›</button>
+                </div>
+                <div id="color-picker-swatch-list" class="cp-swatches"></div>
+            </div>
+            <div id="color-picker-continuous" hidden>
+                <div class="cp-gradient" id="color-gradient-preview"></div>
+                <div class="cp-extent"><span id="color-min-label"></span><span id="color-max-label"></span></div>
+                <div class="cp-stop">
+                    <div class="control"><label for="color-low">Low color</label><input id="color-low" type="color" /></div>
+                    <div class="control"><label for="color-low-value">Low value</label><input id="color-low-value" type="number" step="any" /></div>
+                </div>
+                <div class="control checkbox"><input id="color-mid-toggle" type="checkbox" /><label for="color-mid-toggle">Use midpoint color</label></div>
+                <div class="cp-stop">
+                    <div class="control"><label for="color-mid">Mid color</label><input id="color-mid" type="color" disabled /></div>
+                    <div class="control"><label for="color-mid-value">Mid value</label><input id="color-mid-value" type="number" step="any" /></div>
+                </div>
+                <div class="cp-stop">
+                    <div class="control"><label for="color-high">High color</label><input id="color-high" type="color" /></div>
+                    <div class="control"><label for="color-high-value">High value</label><input id="color-high-value" type="number" step="any" /></div>
+                </div>
+                <button id="color-reset-values" type="button" class="cp-reset-values">Reset values to data range</button>
+            </div>
+            <div class="control" id="color-null-control" hidden><label for="color-null">No-value color</label><input id="color-null" type="color" /></div>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="color-picker-reset" type="button">Reset to defaults</button>
+            <input id="color-table-file" type="file" accept=".tsv,.txt" class="cp-hidden-file" />
+            <button id="load-color-table" type="button">Load color table…</button>
+            <button id="save-color-table" type="button">Save color table</button>
+            <button id="export-legend-svg" type="button">Export legend SVG</button>
+            <button id="export-legend-png" type="button">Export legend PNG</button>
+        </div>
+    </div>
+</div>
 <script>
     const state = {{
         bundle: null,
@@ -1142,6 +1336,8 @@ def ssn_viewer_html(
         metadataColumnByName: new Map(),
         metadataColumnIndexByName: new Map(),
         metadataColorInfoByName: new Map(),
+        customPalettes: {{}},
+        colorPickerPage: 0,
         metadataColumnWidths: new Map(),
         metadataSearchTextByNodeIndex: [],
         metadataPage: 0,
@@ -1279,6 +1475,7 @@ def ssn_viewer_html(
         state.metadataColumns = bundle.metadata.columns || [];
         state.metadataRows = bundle.metadata.rows || [];
         state.metadataByNodeIndex = state.metadataRows;
+        state.customPalettes = {{}};
         state.metadataSort = {{columnKey: null, direction: 'asc'}};
         state.metadataColumnWidths = new Map();
         state.metadataPage = 0;
@@ -1306,6 +1503,10 @@ def ssn_viewer_html(
         document.getElementById('export-png').disabled = false;
         document.getElementById('export-png-scale').disabled = false;
         document.getElementById('export-svg').disabled = false;
+        document.getElementById('customize-colors').disabled = false;
+        if (colorPickerIsOpen()) {{
+            openColorPicker();
+        }}
         document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
         document.getElementById('metadata-select-nodes').disabled = true;
         document.getElementById('metadata-deselect-rows').disabled = true;
@@ -1698,11 +1899,78 @@ def ssn_viewer_html(
         return state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
     }}
 
-    function categoricalColor(value) {{
+    // Distinct values of a column, ordered by frequency (desc) then key (asc). Keyed by
+    // String(value) -- the same key categoricalColor hashes and the TSV/legend use. Null/
+    // empty cells are counted separately (nullCount) and never become a key. `cap` bounds
+    // the returned list (the picker/legend cap at 200; the TSV save path passes Infinity so
+    // the file round-trips); `overflow` flags that more distinct values exist than returned.
+    function distinctColumnValues(columnName, cap = 200) {{
+        const result = {{values: [], nullCount: 0, overflow: false, total: 0}};
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (columnIndex === undefined) {{
+            return result;
+        }}
+        const byKey = new Map();
+        state.metadataByNodeIndex.forEach(row => {{
+            const raw = row ? (row[columnIndex] ?? null) : null;
+            if (raw === null || raw === undefined || raw === '') {{
+                result.nullCount += 1;
+                return;
+            }}
+            const key = String(raw);
+            const existing = byKey.get(key);
+            if (existing) {{
+                existing.count += 1;
+            }} else {{
+                byKey.set(key, {{key, label: formatValue(raw), raw, count: 1}});
+            }}
+        }});
+        result.total = byKey.size;
+        const sorted = Array.from(byKey.values()).sort(
+            (a, b) => (b.count - a.count) || a.key.localeCompare(b.key)
+        );
+        if (sorted.length > cap) {{
+            result.overflow = true;
+            result.values = sorted.slice(0, cap);
+        }} else {{
+            result.values = sorted;
+        }}
+        return result;
+    }}
+
+    // Normalize a color string to '#RRGGBB' (uppercase), mirroring Python's
+    // normalize_color_hex. Returns null for anything that isn't a 6-digit hex.
+    function normalizeColorHex(text) {{
+        const trimmed = String(text).trim().toUpperCase();
+        const match = /^#?([0-9A-F]{{6}})$/.exec(trimmed);
+        return match ? '#' + match[1] : null;
+    }}
+
+    // Interpolate two '#rrggbb' colors channel-wise in RGB. t is clamped to [0, 1].
+    function lerpHexColor(a, b, t) {{
+        const clampT = Math.max(0, Math.min(1, t));
+        const parse = hex => {{
+            const value = parseInt(hex.slice(1), 16);
+            return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+        }};
+        const left = parse(a);
+        const right = parse(b);
+        const channel = index => Math.round(left[index] + ((right[index] - left[index]) * clampT));
+        const toHex = n => n.toString(16).padStart(2, '0');
+        return '#' + toHex(channel(0)) + toHex(channel(1)) + toHex(channel(2));
+    }}
+
+    // `palette` is an optional categorical custom palette ({{colors, nullColor}}). When
+    // absent (or missing an entry) the function reproduces the default hash-based hue
+    // exactly, so uncustomized views are byte-identical to before.
+    function categoricalColor(value, palette) {{
         if (value === null || value === undefined || value === '') {{
-            return '#b3a89d';
+            return (palette && palette.nullColor) || '#b3a89d';
         }}
         const text = String(value);
+        if (palette && palette.colors && palette.colors[text]) {{
+            return palette.colors[text];
+        }}
         let hash = 0;
         for (let i = 0; i < text.length; i++) {{
             hash = ((hash << 5) - hash) + text.charCodeAt(i);
@@ -1712,12 +1980,37 @@ def ssn_viewer_html(
         return 'hsl(' + hue + ' 58% 54%)';
     }}
 
-    function numericColor(value, minValue, maxValue) {{
+    // `palette` is an optional numeric custom palette ({{low, mid, high, nullColor}}).
+    // With low+high set, interpolate in RGB (low->mid->high split at 0.5 when mid is
+    // present); otherwise fall back to the default cyan->orange hsl gradient.
+    function numericColor(value, minValue, maxValue, palette) {{
         if (value === null || value === undefined || Number.isNaN(value)) {{
-            return '#b3a89d';
+            return (palette && palette.nullColor) || '#b3a89d';
         }}
-        const fraction = maxValue <= minValue ? 0.5 : (value - minValue) / (maxValue - minValue);
+        // Custom lower/upper bounds reshape the domain mapping (defaulting to the data
+        // min/max); they apply to both custom-color and default gradients.
+        const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : minValue;
+        const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : maxValue;
+        const fraction = ub <= lb ? 0.5 : (value - lb) / (ub - lb);
         const clamped = Math.max(0, Math.min(1, fraction));
+        if (palette && palette.low && palette.high) {{
+            const hasMidValue = palette.midValue !== null && palette.midValue !== undefined;
+            // The midpoint bends the gradient whenever a mid VALUE is set, even with no
+            // explicit mid color: an off-centre midpoint just places the low/high average
+            // there, compressing one side and stretching the other.
+            if (palette.mid || hasMidValue) {{
+                const midColor = palette.mid || lerpHexColor(palette.low, palette.high, 0.5);
+                let midFraction = 0.5;
+                if (hasMidValue && ub > lb) {{
+                    midFraction = (palette.midValue - lb) / (ub - lb);
+                }}
+                midFraction = Math.max(1e-6, Math.min(1 - 1e-6, midFraction));
+                return clamped <= midFraction
+                    ? lerpHexColor(palette.low, midColor, clamped / midFraction)
+                    : lerpHexColor(midColor, palette.high, (clamped - midFraction) / (1 - midFraction));
+            }}
+            return lerpHexColor(palette.low, palette.high, clamped);
+        }}
         const hue = 200 - (160 * clamped);
         const light = 72 - (24 * clamped);
         return 'hsl(' + hue + ' 72% ' + light + '%)';
@@ -1734,10 +2027,11 @@ def ssn_viewer_html(
         if (!info) {{
             return '#d88f3d';
         }}
+        const palette = state.customPalettes[columnName] || null;
         if (info.type === 'numeric') {{
-            return numericColor(value, info.min, info.max);
+            return numericColor(value, info.min, info.max, palette);
         }}
-        return categoricalColor(value);
+        return categoricalColor(value, palette);
     }}
 
     function labelForComponent(componentId) {{
@@ -3295,7 +3589,7 @@ def ssn_viewer_html(
 
     function drawSplitChart() {{
         splitContext.clearRect(0, 0, splitCanvas.width, splitCanvas.height);
-        splitContext.fillStyle = '#fffaf4';
+        splitContext.fillStyle = '#ffffff';
         splitContext.fillRect(0, 0, splitCanvas.width, splitCanvas.height);
 
         if (!state.bundle) {{
@@ -3306,7 +3600,8 @@ def ssn_viewer_html(
         }}
 
         const events = state.bundle.graph.merge_event_series;
-        const margin = {{top: 26, right: 30, bottom: 62, left: 76}};
+        const margin = {{top: 26, right: 80, bottom: 62, left: 76}};
+        const movingSumColor = '#2f6f8f';
         const width = splitCanvas.width - margin.left - margin.right;
         const height = splitCanvas.height - margin.top - margin.bottom;
 
@@ -3331,6 +3626,14 @@ def ssn_viewer_html(
         splitContext.textBaseline = 'alphabetic';
         splitContext.fillText('Split impact', 0, 0);
         splitContext.restore();
+        splitContext.save();
+        splitContext.translate(splitCanvas.width - 18, margin.top + (height / 2));
+        splitContext.rotate(-Math.PI / 2);
+        splitContext.textAlign = 'center';
+        splitContext.textBaseline = 'alphabetic';
+        splitContext.fillStyle = movingSumColor;
+        splitContext.fillText('Moving sum', 0, 0);
+        splitContext.restore();
 
         if (events.length === 0) {{
             splitContext.fillStyle = '#5c6a70';
@@ -3348,6 +3651,22 @@ def ssn_viewer_html(
 
         const xFor = value => margin.left + ((value - minThreshold) / thresholdSpan) * width;
         const yFor = value => margin.top + height - (value / maxImpact) * height;
+
+        // Moving sum of split impact over a centred window spanning 5% of the x-axis.
+        const sumWindow = thresholdSpan * 0.05;
+        const halfWindow = sumWindow / 2;
+        const movingSums = events.map(event => {{
+            const center = event.threshold_value;
+            let total = 0;
+            events.forEach(other => {{
+                if (Math.abs(other.threshold_value - center) <= halfWindow) {{
+                    total += other.merge_impact;
+                }}
+            }});
+            return total;
+        }});
+        const maxMovingSum = Math.max(...movingSums, 1);
+        const y2For = value => margin.top + height - (value / maxMovingSum) * height;
 
         splitContext.fillStyle = '#5c6a70';
         splitContext.font = '11px Georgia';
@@ -3383,23 +3702,40 @@ def ssn_viewer_html(
             splitContext.fillText(formatValue(impactValue), margin.left - tickLength - 6, y);
         }}
 
-        splitContext.strokeStyle = '#c8553d';
-        splitContext.lineWidth = 1.5;
+        // Right axis (moving sum scale).
+        const rightAxisX = margin.left + width;
+        splitContext.strokeStyle = 'rgba(92,106,112,0.35)';
+        splitContext.lineWidth = 1;
         splitContext.beginPath();
-        events.forEach((event, index) => {{
-            const x = xFor(event.threshold_value);
-            const y = yFor(event.merge_impact);
-            if (index === 0) {{
-                splitContext.moveTo(x, y);
-            }} else {{
-                splitContext.lineTo(x, y);
-            }}
-        }});
+        splitContext.moveTo(rightAxisX, margin.top);
+        splitContext.lineTo(rightAxisX, margin.top + height);
         splitContext.stroke();
+        splitContext.fillStyle = movingSumColor;
+        splitContext.textAlign = 'left';
+        splitContext.textBaseline = 'middle';
+        for (let tickIndex = 0; tickIndex < yTickCount; tickIndex++) {{
+            const fraction = tickIndex / (yTickCount - 1);
+            const sumValue = maxMovingSum * fraction;
+            const y = y2For(sumValue);
+            splitContext.strokeStyle = movingSumColor;
+            splitContext.lineWidth = 1;
+            splitContext.beginPath();
+            splitContext.moveTo(rightAxisX, y);
+            splitContext.lineTo(rightAxisX + tickLength, y);
+            splitContext.stroke();
+            splitContext.fillText(formatValue(sumValue), rightAxisX + tickLength + 4, y);
+        }}
 
+        // Lollipop stems + markers for each split event.
         events.forEach(event => {{
             const x = xFor(event.threshold_value);
             const y = yFor(event.merge_impact);
+            splitContext.strokeStyle = '#c8553d';
+            splitContext.lineWidth = 1.5;
+            splitContext.beginPath();
+            splitContext.moveTo(x, margin.top + height);
+            splitContext.lineTo(x, y);
+            splitContext.stroke();
             splitContext.fillStyle = '#f3cdb9';
             splitContext.beginPath();
             splitContext.arc(x, y, 4, 0, Math.PI * 2);
@@ -3407,6 +3743,21 @@ def ssn_viewer_html(
             splitContext.strokeStyle = '#8a3b2c';
             splitContext.stroke();
         }});
+
+        // Moving-sum trace (right axis scale).
+        splitContext.strokeStyle = movingSumColor;
+        splitContext.lineWidth = 1.75;
+        splitContext.beginPath();
+        events.forEach((event, index) => {{
+            const x = xFor(event.threshold_value);
+            const y = y2For(movingSums[index]);
+            if (index === 0) {{
+                splitContext.moveTo(x, y);
+            }} else {{
+                splitContext.lineTo(x, y);
+            }}
+        }});
+        splitContext.stroke();
 
         const stop = currentSliderStop();
         if (stop) {{
@@ -3496,7 +3847,7 @@ def ssn_viewer_html(
         const textWidth = clusterContext.measureText(text).width;
         const badgeWidth = textWidth + 12;
         const badgeHeight = 18;
-        clusterContext.fillStyle = 'rgba(255, 250, 242, 0.92)';
+        clusterContext.fillStyle = 'rgba(255, 255, 255, 0.92)';
         clusterContext.strokeStyle = 'rgba(92, 106, 112, 0.32)';
         clusterContext.lineWidth = 1;
         clusterContext.beginPath();
@@ -3590,7 +3941,7 @@ def ssn_viewer_html(
         const clusterContext = ctx;
         const clusterCanvas = {{width: viewWidth, height: viewHeight}};
         clusterContext.clearRect(0, 0, clusterCanvas.width, clusterCanvas.height);
-        clusterContext.fillStyle = '#fffaf4';
+        clusterContext.fillStyle = '#ffffff';
         clusterContext.fillRect(0, 0, clusterCanvas.width, clusterCanvas.height);
 
         if (!state.bundle) {{
@@ -3657,8 +4008,8 @@ def ssn_viewer_html(
             const selectionState = componentSelectionState(members);
 
             if (showClusterBounds) {{
-                clusterContext.fillStyle = 'rgba(248, 243, 235, 0.95)';
-                clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c8b8a6';
+                clusterContext.fillStyle = 'rgba(245, 246, 248, 0.95)';
+                clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c4cad2';
                 clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / drawScale;
                 clusterContext.beginPath();
                 clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
@@ -3815,7 +4166,7 @@ def ssn_viewer_html(
             const cx = clusterCanvas.width / 2;
             const cy = clusterCanvas.height / 2;
             clusterContext.save();
-            clusterContext.fillStyle = 'rgba(255, 250, 242, 0.72)';
+            clusterContext.fillStyle = 'rgba(255, 255, 255, 0.72)';
             clusterContext.fillRect(cx - 120, cy - 22, 240, 44);
             clusterContext.fillStyle = '#5c6a70';
             clusterContext.font = '600 14px Georgia';
@@ -4193,6 +4544,24 @@ def ssn_viewer_html(
         return {{color: normalized, opacity: 1}};
     }}
 
+    // Normalize any CSS color (hex, rgb, hsl) to '#rrggbb' using the canvas parser.
+    // <input type="color"> only accepts '#rrggbb', but the default schemes emit
+    // hsl(...), so color inputs must be seeded through this. Alpha is dropped.
+    function cssToHex(css) {{
+        clusterContext.fillStyle = '#000000';
+        clusterContext.fillStyle = css;
+        const normalized = clusterContext.fillStyle;
+        if (normalized.charAt(0) === '#') {{
+            return normalized.length === 7 ? normalized : normalized.slice(0, 7);
+        }}
+        const match = /rgba?\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*,\\s*([\\d.]+)/.exec(normalized);
+        if (!match) {{
+            return '#000000';
+        }}
+        const toHex = n => Math.round(Number(n)).toString(16).padStart(2, '0');
+        return '#' + toHex(match[1]) + toHex(match[2]) + toHex(match[3]);
+    }}
+
     // Render the current cluster view to a standalone SVG document. Geometry is
     // baked into screen space (every point passed through worldToScreenPoint)
     // so the markup needs no transforms and matches the canvas pixel-for-pixel.
@@ -4204,7 +4573,7 @@ def ssn_viewer_html(
         const parts = [];
         parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
             '" viewBox="0 0 ' + width + ' ' + height + '" font-family="Georgia, serif">');
-        parts.push('<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="#fffaf4"/>');
+        parts.push('<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="#ffffff"/>');
 
         if (!state.bundle) {{
             parts.push('<text x="30" y="50" font-size="18" fill="#5c6a70">Load a bundle to render cluster bubbles.</text>');
@@ -4255,7 +4624,7 @@ def ssn_viewer_html(
         const dotLabelCandidates = [];
         let dotLabelsOverflow = false;
 
-        const boundsFill = svgColorParts('rgba(248, 243, 235, 0.95)');
+        const boundsFill = svgColorParts('rgba(245, 246, 248, 0.95)');
         const boundsParts = [];
         const dotColorBuckets = new Map();
         const selectedNodeOutlines = [];
@@ -4273,7 +4642,7 @@ def ssn_viewer_html(
             const screenRadius = item.radius * drawScale;
 
             if (showClusterBounds) {{
-                const stroke = svgColorParts(selectionState.allSelected ? '#1e2a2f' : '#c8b8a6');
+                const stroke = svgColorParts(selectionState.allSelected ? '#1e2a2f' : '#c4cad2');
                 boundsParts.push('<circle cx="' + fmt(center.x) + '" cy="' + fmt(center.y) + '" r="' + fmt(screenRadius) +
                     '" fill="' + boundsFill.color + '" fill-opacity="' + boundsFill.opacity +
                     '" stroke="' + stroke.color + '" stroke-width="' + (selectionState.allSelected ? 3 : 1.5) + '"/>');
@@ -4359,7 +4728,7 @@ def ssn_viewer_html(
                 const badgeHeight = 18;
                 parts.push('<rect x="' + fmt(x - (badgeWidth / 2)) + '" y="' + fmt(y - (badgeHeight / 2)) +
                     '" width="' + fmt(badgeWidth) + '" height="' + badgeHeight + '" rx="8" ry="8"' +
-                    ' fill="#fffaf4" fill-opacity="0.92" stroke="rgb(92,106,112)" stroke-opacity="0.32" stroke-width="1"/>');
+                    ' fill="#ffffff" fill-opacity="0.92" stroke="rgb(92,106,112)" stroke-opacity="0.32" stroke-width="1"/>');
                 parts.push('<text x="' + fmt(x) + '" y="' + fmt(y + 0.5) + '" font-size="11" fill="#334147"' +
                     ' text-anchor="middle" dominant-baseline="central">' + escapeXml(text) + '</text>');
             }});
@@ -4415,6 +4784,487 @@ def ssn_viewer_html(
         const blob = new Blob([svg], {{type: 'image/svg+xml'}});
         const href = URL.createObjectURL(blob);
         triggerDownload(href, exportBaseName() + '_view.svg', true);
+    }}
+
+    // ---- Custom color palette: load/save color table TSV (categorical only) ----
+
+    // Guard shared by the TSV load/save paths: a 2-column value->color table only
+    // describes discrete mappings, so it applies to categorical columns. Returns the
+    // column name, or null after setting an explanatory status message.
+    function categoricalColumnForColorTable(action) {{
+        const columnName = currentColorField();
+        const info = colorInfo(columnName);
+        if (!columnName || !info) {{
+            setStatus(action + ' color table: choose a "Color by" column first.');
+            return null;
+        }}
+        if (info.type !== 'categorical') {{
+            setStatus(action + ' color table: only categorical columns use a value/color table (use the picker for "' + columnName + '").');
+            return null;
+        }}
+        return columnName;
+    }}
+
+    function loadColorTableText(text) {{
+        const columnName = categoricalColumnForColorTable('Load');
+        if (!columnName) {{
+            return;
+        }}
+        const colors = {{}};
+        let nullColor = null;
+        let loaded = 0;
+        let skipped = 0;
+        String(text).split('\\n').forEach(rawLine => {{
+            const line = rawLine.trim();
+            if (line === '') {{
+                return;
+            }}
+            const parts = line.split('\\t');
+            const hex = parts.length === 2 ? normalizeColorHex(parts[1]) : null;
+            if (parts.length !== 2 || !hex) {{
+                skipped += 1;
+                return;
+            }}
+            if (parts[0] === '\\u2014') {{
+                nullColor = hex;
+            }} else {{
+                colors[parts[0]] = hex;
+            }}
+            loaded += 1;
+        }});
+        state.customPalettes[columnName] = {{type: 'categorical', colors, nullColor}};
+        rebuildNodeColorCache();
+        renderClusterView();
+        if (colorPickerIsOpen()) {{
+            openColorPicker();
+        }}
+        setStatus('Loaded ' + loaded + ' colors for "' + columnName + '"' +
+            (skipped > 0 ? ', skipped ' + skipped + ' malformed line(s).' : '.'));
+    }}
+
+    function saveColorTableTSV() {{
+        const columnName = categoricalColumnForColorTable('Save');
+        if (!columnName) {{
+            return;
+        }}
+        const palette = state.customPalettes[columnName] || null;
+        const distinct = distinctColumnValues(columnName, Infinity);
+        // Write the effective on-screen color for every distinct value (custom override
+        // or the current default), so the file matches the view and round-trips on load.
+        const rows = distinct.values.map(entry => ({{
+            key: entry.key,
+            color: (palette && palette.colors && palette.colors[entry.key]) || cssToHex(categoricalColor(entry.raw, palette)),
+        }}));
+        rows.sort((a, b) => a.key.localeCompare(b.key));
+        if (distinct.nullCount > 0) {{
+            // Em-dash row carries the no-value color; written last (null sorts last).
+            rows.push({{key: '\\u2014', color: (palette && palette.nullColor) || cssToHex('#b3a89d')}});
+        }}
+        const tsv = rows.map(row => row.key + '\\t' + row.color).join('\\n') + '\\n';
+        const blob = new Blob([tsv], {{type: 'text/tab-separated-values'}});
+        const href = URL.createObjectURL(blob);
+        triggerDownload(href, exportBaseName() + '_' + columnName.replace(/\\s+/g, '_') + '_colors.tsv', true);
+    }}
+
+    // ---- Custom color palette: legend export (SVG + PNG) ----
+
+    // Build a standalone legend SVG for the current color column. Returns
+    // {{svg, width, height}}. Discrete columns get a box+label per value (ported from
+    // color_table_to_legend.py); numeric columns get a sampled gradient bar with
+    // min/mid/max ticks. All fills pass through svgColorParts so default hsl() colors
+    // become SVG-editor-safe rgb()+opacity. No external refs (keeps PNG untainted).
+    function buildLegendSVG() {{
+        const columnName = currentColorField();
+        const info = colorInfo(columnName);
+        const title = columnName || 'Legend';
+        const titleFontSize = 24;
+        const itemFontSize = 20;
+        const strokeWidth = 2;
+        const padding = 10;
+        const titleSpace = 40;
+        const parts = [];
+        const open = (width, height) => {{
+            parts.push('<?xml version="1.0" encoding="UTF-8" standalone="no"?>');
+            parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
+                '" viewBox="0 0 ' + width + ' ' + height + '">');
+            parts.push('<g font-family="Arial, sans-serif">');
+            parts.push('<rect x="0" y="0" width="' + width + '" height="' + height +
+                '" fill="white" stroke="black" stroke-width="' + strokeWidth + '"/>');
+            parts.push('<text x="' + padding + '" y="' + titleFontSize + '" font-size="' + titleFontSize +
+                '" font-weight="bold">' + escapeXml(title) + '</text>');
+        }};
+        const swatchRow = (color, label, y, boxHeight, boxWidth) => {{
+            const fill = svgColorParts(color);
+            parts.push('<rect x="' + padding + '" y="' + y + '" width="' + boxWidth + '" height="' + (boxHeight - 10) +
+                '" fill="' + fill.color + '" fill-opacity="' + fill.opacity +
+                '" stroke="black" stroke-width="' + strokeWidth + '"/>');
+            parts.push('<text x="' + (boxWidth + padding * 2) + '" y="' + (y + boxHeight / 2) +
+                '" font-size="' + itemFontSize + '" dominant-baseline="central">' + escapeXml(label) + '</text>');
+        }};
+
+        if (!info || info.type !== 'numeric') {{
+            // Discrete legend.
+            const palette = (info && state.customPalettes[columnName]) || null;
+            // Enumerate every distinct value (no cap) so the saved legend is complete.
+            const distinct = distinctColumnValues(columnName, Infinity);
+            const labels = distinct.values.map(entry => ({{color: categoricalColor(entry.raw, palette), label: entry.label}}));
+            if (distinct.nullCount > 0) {{
+                labels.push({{color: (palette && palette.nullColor) || '#b3a89d', label: '\\u2014'}});
+            }}
+            const boxHeight = itemFontSize * 2;
+            const boxWidth = boxHeight;
+            const longest = labels.reduce((max, item) => Math.max(max, item.label.length), 1);
+            const height = titleSpace + (labels.length * boxHeight) + (2 * padding);
+            const width = Math.max(
+                boxWidth + (padding * 3) + ((longest * itemFontSize) / 2),
+                (padding * 3) + ((title.length * titleFontSize) / 2)
+            );
+            open(width, height);
+            let y = titleSpace;
+            labels.forEach(item => {{
+                swatchRow(item.color, item.label, y, boxHeight, boxWidth);
+                y += boxHeight;
+            }});
+            parts.push('</g>');
+            parts.push('</svg>');
+            return {{svg: parts.join('\\n'), width, height}};
+        }}
+
+        // Continuous legend: sampled gradient bar with low/mid/high ticks. Custom
+        // bounds (lb/ub) and mid value reshape the domain shown on the bar.
+        const palette = state.customPalettes[columnName] || null;
+        const distinct = distinctColumnValues(columnName, 1);
+        const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : info.min;
+        const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : info.max;
+        const midV = (palette && palette.midValue !== null && palette.midValue !== undefined)
+            ? palette.midValue
+            : ((lb + ub) / 2);
+        const barX = padding;
+        const barY = titleSpace;
+        const barWidth = 320;
+        const barHeight = 30;
+        const tickFontSize = 16;
+        const sampleCount = 16;
+        const stops = [];
+        for (let i = 0; i <= sampleCount; i++) {{
+            const fraction = i / sampleCount;
+            const value = lb + (fraction * (ub - lb));
+            const fill = svgColorParts(numericColor(value, info.min, info.max, palette));
+            stops.push('<stop offset="' + (fraction * 100) + '%" stop-color="' + fill.color +
+                '" stop-opacity="' + fill.opacity + '"/>');
+        }}
+        const nullRow = distinct.nullCount > 0;
+        const height = titleSpace + barHeight + tickFontSize + (padding * 2) + (nullRow ? itemFontSize * 2 : 0);
+        const width = Math.max(barWidth + (padding * 2), (padding * 3) + ((title.length * titleFontSize) / 2));
+        open(width, height);
+        parts.push('<defs><linearGradient id="legend-gradient" x1="0%" y1="0%" x2="100%" y2="0%">' +
+            stops.join('') + '</linearGradient></defs>');
+        parts.push('<rect x="' + barX + '" y="' + barY + '" width="' + barWidth + '" height="' + barHeight +
+            '" fill="url(#legend-gradient)" stroke="black" stroke-width="' + strokeWidth + '"/>');
+        const tickY = barY + barHeight + tickFontSize;
+        const tick = (x, text, anchor) => parts.push('<text x="' + x + '" y="' + tickY + '" font-size="' + tickFontSize +
+            '" text-anchor="' + anchor + '">' + escapeXml(text) + '</text>');
+        tick(barX, formatValue(lb), 'start');
+        tick(barX + (barWidth / 2), formatValue(midV), 'middle');
+        tick(barX + barWidth, formatValue(ub), 'end');
+        if (nullRow) {{
+            swatchRow((palette && palette.nullColor) || '#b3a89d', '\\u2014', tickY + padding, itemFontSize * 2, itemFontSize * 2);
+        }}
+        parts.push('</g>');
+        parts.push('</svg>');
+        return {{svg: parts.join('\\n'), width, height}};
+    }}
+
+    function exportLegendSVG() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const legend = buildLegendSVG();
+        const blob = new Blob([legend.svg], {{type: 'image/svg+xml'}});
+        const href = URL.createObjectURL(blob);
+        triggerDownload(href, exportBaseName() + '_legend.svg', true);
+    }}
+
+    function exportLegendPNG() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const legend = buildLegendSVG();
+        const scaleFactor = selectedPngScale();
+        const svgUrl = URL.createObjectURL(new Blob([legend.svg], {{type: 'image/svg+xml'}}));
+        const image = new Image();
+        image.onload = () => {{
+            const target = document.createElement('canvas');
+            target.width = Math.max(1, Math.round(legend.width * scaleFactor));
+            target.height = Math.max(1, Math.round(legend.height * scaleFactor));
+            const targetContext = target.getContext('2d');
+            if (!targetContext) {{
+                URL.revokeObjectURL(svgUrl);
+                window.alert('Could not export legend PNG at ' + scaleFactor + 'x; try a lower resolution.');
+                return;
+            }}
+            targetContext.drawImage(image, 0, 0, target.width, target.height);
+            target.toBlob(blob => {{
+                URL.revokeObjectURL(svgUrl);
+                if (!blob) {{
+                    window.alert('The legend is too large to export as a ' + scaleFactor + 'x PNG. Try a lower resolution.');
+                    return;
+                }}
+                triggerDownload(URL.createObjectURL(blob), exportBaseName() + '_legend.png', true);
+            }}, 'image/png');
+        }};
+        image.onerror = () => {{
+            URL.revokeObjectURL(svgUrl);
+            setStatus('Legend PNG export failed.');
+        }};
+        image.src = svgUrl;
+    }}
+
+    // ---- Custom color palette: interactive picker (modal dialog) ----
+
+    function colorPickerIsOpen() {{
+        const overlay = document.getElementById('color-picker-overlay');
+        return overlay ? !overlay.hidden : false;
+    }}
+
+    function closeColorPicker() {{
+        const overlay = document.getElementById('color-picker-overlay');
+        if (overlay) {{
+            overlay.hidden = true;
+        }}
+    }}
+
+    function ensureCategoricalPalette(columnName) {{
+        let palette = state.customPalettes[columnName];
+        if (!palette || palette.type !== 'categorical') {{
+            palette = {{type: 'categorical', colors: {{}}, nullColor: null}};
+            state.customPalettes[columnName] = palette;
+        }}
+        return palette;
+    }}
+
+    function ensureNumericPalette(columnName) {{
+        let palette = state.customPalettes[columnName];
+        if (!palette || palette.type !== 'numeric') {{
+            palette = {{type: 'numeric', low: null, mid: null, high: null, nullColor: null,
+                lowValue: null, midValue: null, highValue: null}};
+            state.customPalettes[columnName] = palette;
+        }}
+        return palette;
+    }}
+
+    const COLOR_PICKER_PAGE_SIZE = 100;
+
+    function renderDiscretePicker(columnName) {{
+        const palette = state.customPalettes[columnName] || null;
+        // Enumerate every distinct value and page through them, so columns with
+        // thousands of categories stay editable (not just the first 200).
+        const distinct = distinctColumnValues(columnName, Infinity);
+        const total = distinct.values.length;
+        const pageCount = Math.max(1, Math.ceil(total / COLOR_PICKER_PAGE_SIZE));
+        const page = Math.max(0, Math.min(state.colorPickerPage, pageCount - 1));
+        state.colorPickerPage = page;
+        const start = page * COLOR_PICKER_PAGE_SIZE;
+        const pageValues = distinct.values.slice(start, start + COLOR_PICKER_PAGE_SIZE);
+
+        const pager = document.getElementById('color-picker-pager');
+        if (total > COLOR_PICKER_PAGE_SIZE) {{
+            document.getElementById('color-picker-page-status').textContent =
+                'Values ' + (start + 1).toLocaleString() + '\\u2013' + (start + pageValues.length).toLocaleString() +
+                ' of ' + total.toLocaleString() + ' (page ' + (page + 1) + '/' + pageCount + ')';
+            document.getElementById('color-picker-prev').disabled = page === 0;
+            document.getElementById('color-picker-next').disabled = page >= pageCount - 1;
+            pager.hidden = false;
+        }} else {{
+            pager.hidden = true;
+        }}
+
+        const list = document.getElementById('color-picker-swatch-list');
+        list.textContent = '';
+        pageValues.forEach(entry => {{
+            const row = document.createElement('div');
+            row.className = 'cp-swatch-row';
+            const input = document.createElement('input');
+            input.type = 'color';
+            const override = palette && palette.colors ? palette.colors[entry.key] : undefined;
+            input.value = override || cssToHex(categoricalColor(entry.raw, palette));
+            input.addEventListener('input', () => {{
+                ensureCategoricalPalette(columnName).colors[entry.key] = input.value;
+                rebuildNodeColorCache();
+                scheduleClusterRender();
+            }});
+            const label = document.createElement('span');
+            label.className = 'cp-swatch-label';
+            label.textContent = entry.label;
+            label.title = entry.label;
+            const count = document.createElement('span');
+            count.className = 'cp-swatch-count';
+            count.textContent = entry.count.toLocaleString();
+            row.appendChild(input);
+            row.appendChild(label);
+            row.appendChild(count);
+            list.appendChild(row);
+        }});
+        // Shared no-value input.
+        const nullInput = document.getElementById('color-null');
+        nullInput.value = (palette && palette.nullColor) || cssToHex('#b3a89d');
+        nullInput.oninput = () => {{
+            ensureCategoricalPalette(columnName).nullColor = nullInput.value;
+            rebuildNodeColorCache();
+            scheduleClusterRender();
+        }};
+    }}
+
+    function parseNumberOrNull(text) {{
+        if (text === '' || text === null || text === undefined) {{
+            return null;
+        }}
+        const value = Number(text);
+        return Number.isNaN(value) ? null : value;
+    }}
+
+    function updateGradientPreview() {{
+        const preview = document.getElementById('color-gradient-preview');
+        const low = document.getElementById('color-low').value;
+        const high = document.getElementById('color-high').value;
+        const midEnabled = document.getElementById('color-mid-toggle').checked;
+        // Mirror numericColor: a mid stop is placed at the mid value's position within
+        // [lb, ub]; its color is the explicit mid color when enabled, else the low/high
+        // average. A centred average mid is visually identical to a plain 2-stop ramp.
+        const mid = midEnabled ? document.getElementById('color-mid').value : lerpHexColor(low, high, 0.5);
+        const lb = parseNumberOrNull(document.getElementById('color-low-value').value);
+        const ub = parseNumberOrNull(document.getElementById('color-high-value').value);
+        const midValue = parseNumberOrNull(document.getElementById('color-mid-value').value);
+        let midPercent = 50;
+        if (lb !== null && ub !== null && midValue !== null && ub > lb) {{
+            midPercent = Math.max(0, Math.min(100, ((midValue - lb) / (ub - lb)) * 100));
+        }}
+        preview.style.background = 'linear-gradient(90deg, ' + low + ' 0%, ' + mid + ' ' + midPercent + '%, ' + high + ' 100%)';
+    }}
+
+    function renderContinuousPicker(columnName) {{
+        const palette = state.customPalettes[columnName] || null;
+        const info = colorInfo(columnName);
+        const min = info.min;
+        const max = info.max;
+        const lowInput = document.getElementById('color-low');
+        const midInput = document.getElementById('color-mid');
+        const highInput = document.getElementById('color-high');
+        const nullInput = document.getElementById('color-null');
+        const midToggle = document.getElementById('color-mid-toggle');
+        const lowValueInput = document.getElementById('color-low-value');
+        const midValueInput = document.getElementById('color-mid-value');
+        const highValueInput = document.getElementById('color-high-value');
+        lowInput.value = (palette && palette.low) || cssToHex(numericColor(min, min, max));
+        highInput.value = (palette && palette.high) || cssToHex(numericColor(max, min, max));
+        midInput.value = (palette && palette.mid) || cssToHex(numericColor((min + max) / 2, min, max));
+        nullInput.value = (palette && palette.nullColor) || cssToHex('#b3a89d');
+        const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : min;
+        const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : max;
+        const midV = (palette && palette.midValue !== null && palette.midValue !== undefined) ? palette.midValue : (min + max) / 2;
+        lowValueInput.value = lb;
+        highValueInput.value = ub;
+        midValueInput.value = midV;
+        midToggle.checked = !!(palette && palette.mid);
+        // Only the mid COLOR is gated by the toggle; the mid VALUE is always editable so
+        // it can shift the gradient even when the explicit mid color is off.
+        midInput.disabled = !midToggle.checked;
+        const refreshExtentLabels = () => {{
+            document.getElementById('color-min-label').textContent = formatValue(parseNumberOrNull(lowValueInput.value) ?? min);
+            document.getElementById('color-max-label').textContent = formatValue(parseNumberOrNull(highValueInput.value) ?? max);
+        }};
+        refreshExtentLabels();
+        updateGradientPreview();
+
+        const apply = () => {{
+            const stored = ensureNumericPalette(columnName);
+            stored.low = lowInput.value;
+            stored.high = highInput.value;
+            stored.mid = midToggle.checked ? midInput.value : null;
+            stored.nullColor = nullInput.value;
+            stored.lowValue = parseNumberOrNull(lowValueInput.value);
+            stored.highValue = parseNumberOrNull(highValueInput.value);
+            stored.midValue = parseNumberOrNull(midValueInput.value);
+            refreshExtentLabels();
+            updateGradientPreview();
+            rebuildNodeColorCache();
+            scheduleClusterRender();
+        }};
+        lowInput.oninput = apply;
+        highInput.oninput = apply;
+        midInput.oninput = apply;
+        nullInput.oninput = apply;
+        lowValueInput.oninput = apply;
+        midValueInput.oninput = apply;
+        highValueInput.oninput = apply;
+        midToggle.onchange = () => {{
+            midInput.disabled = !midToggle.checked;
+            apply();
+        }};
+        // Reset only the low/mid/high VALUES to the data range (keeps chosen colors).
+        document.getElementById('color-reset-values').onclick = () => {{
+            lowValueInput.value = min;
+            highValueInput.value = max;
+            midValueInput.value = (min + max) / 2;
+            apply();
+        }};
+    }}
+
+    // Step the discrete swatch pager (no-op for numeric/empty columns).
+    function changeColorPickerPage(delta) {{
+        const columnName = currentColorField();
+        const info = colorInfo(columnName);
+        if (!columnName || !info || info.type === 'numeric') {{
+            return;
+        }}
+        state.colorPickerPage += delta;
+        renderDiscretePicker(columnName);
+    }}
+
+    function openColorPicker() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        // A fresh open (column switch, reset, TSV load) starts at the first page.
+        state.colorPickerPage = 0;
+        const overlay = document.getElementById('color-picker-overlay');
+        const columnName = currentColorField();
+        const info = colorInfo(columnName);
+        const discretePanel = document.getElementById('color-picker-discrete');
+        const continuousPanel = document.getElementById('color-picker-continuous');
+        const nullControl = document.getElementById('color-null-control');
+        const emptyNote = document.getElementById('color-picker-empty-note');
+        document.getElementById('color-picker-title').textContent =
+            columnName ? ('Customize colors: ' + columnName) : 'Customize colors';
+        if (!columnName || !info) {{
+            discretePanel.hidden = true;
+            continuousPanel.hidden = true;
+            nullControl.hidden = true;
+            emptyNote.hidden = false;
+        }} else if (info.type === 'numeric') {{
+            emptyNote.hidden = true;
+            discretePanel.hidden = true;
+            continuousPanel.hidden = false;
+            nullControl.hidden = false;
+            renderContinuousPicker(columnName);
+        }} else {{
+            emptyNote.hidden = true;
+            continuousPanel.hidden = true;
+            discretePanel.hidden = false;
+            nullControl.hidden = false;
+            renderDiscretePicker(columnName);
+        }}
+        overlay.hidden = false;
+    }}
+
+    function resetColorPicker() {{
+        const columnName = currentColorField();
+        if (columnName) {{
+            delete state.customPalettes[columnName];
+            rebuildNodeColorCache();
+            scheduleClusterRender();
+            openColorPicker();
+        }}
     }}
 
     function updateThresholdUI(resetView = true) {{
@@ -5110,15 +5960,21 @@ def ssn_viewer_html(
         }}
         drawClusterView(true);
     }});
-    document.getElementById('render-cluster-bounds').addEventListener('change', renderClusterView);
-    document.getElementById('render-nodes').addEventListener('change', renderClusterView);
+    document.getElementById('render-cluster-bounds').addEventListener('change', () => renderClusterView());
+    document.getElementById('render-nodes').addEventListener('change', () => renderClusterView());
     document.getElementById('leaf-pruning-only').addEventListener('change', () => {{
         scheduleThresholdUI(true);
     }});
-    document.getElementById('color-by').addEventListener('change', () => {{ rebuildNodeColorCache(); renderClusterView(); }});
-    document.getElementById('label-by').addEventListener('change', renderClusterView);
-    document.getElementById('show-node-counts').addEventListener('change', renderClusterView);
-    document.getElementById('show-edge-scores').addEventListener('change', renderClusterView);
+    document.getElementById('color-by').addEventListener('change', () => {{
+        rebuildNodeColorCache();
+        renderClusterView();
+        if (colorPickerIsOpen()) {{
+            openColorPicker();
+        }}
+    }});
+    document.getElementById('label-by').addEventListener('change', () => renderClusterView());
+    document.getElementById('show-node-counts').addEventListener('change', () => renderClusterView());
+    document.getElementById('show-edge-scores').addEventListener('change', () => renderClusterView());
     document.getElementById('reduce-elongation').addEventListener('change', () => {{
         if (!state.bundle) {{
             return;
@@ -5138,6 +5994,40 @@ def ssn_viewer_html(
     document.getElementById('export-selected').addEventListener('click', exportSelection);
     document.getElementById('export-png').addEventListener('click', exportClusterPNG);
     document.getElementById('export-svg').addEventListener('click', exportClusterSVG);
+    document.getElementById('customize-colors').addEventListener('click', openColorPicker);
+    document.getElementById('color-picker-close').addEventListener('click', closeColorPicker);
+    document.getElementById('color-picker-overlay').addEventListener('click', event => {{
+        if (event.target === event.currentTarget) {{
+            closeColorPicker();
+        }}
+    }});
+    document.addEventListener('keydown', event => {{
+        if (event.key === 'Escape' && colorPickerIsOpen()) {{
+            closeColorPicker();
+        }}
+    }});
+    document.getElementById('color-picker-reset').addEventListener('click', resetColorPicker);
+    document.getElementById('color-picker-prev').addEventListener('click', () => changeColorPickerPage(-1));
+    document.getElementById('color-picker-next').addEventListener('click', () => changeColorPickerPage(1));
+    document.getElementById('load-color-table').addEventListener('click', () => document.getElementById('color-table-file').click());
+    document.getElementById('color-table-file').addEventListener('change', async event => {{
+        const file = event.target.files && event.target.files[0];
+        if (!file) {{
+            return;
+        }}
+        try {{
+            const text = await file.text();
+            loadColorTableText(text);
+        }} catch (error) {{
+            console.error(error);
+            setStatus('Failed to load color table: ' + error.message);
+        }} finally {{
+            event.target.value = '';
+        }}
+    }});
+    document.getElementById('save-color-table').addEventListener('click', saveColorTableTSV);
+    document.getElementById('export-legend-svg').addEventListener('click', exportLegendSVG);
+    document.getElementById('export-legend-png').addEventListener('click', exportLegendPNG);
     document.getElementById('metadata-deselect-rows').addEventListener('click', () => {{
         clearMetadataRowSelection();
         applyMetadataTableRowHighlights();
