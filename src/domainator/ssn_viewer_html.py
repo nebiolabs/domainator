@@ -1048,10 +1048,6 @@ def ssn_viewer_html(
                         <select id="label-by"></select>
                     </div>
                     <div class="control checkbox">
-                        <input id="show-labels" type="checkbox" />
-                        <label for="show-labels">Show labels for singletons and small clusters</label>
-                    </div>
-                    <div class="control checkbox">
                         <input id="show-node-counts" type="checkbox" checked />
                         <label for="show-node-counts">Show node count labels</label>
                     </div>
@@ -1081,6 +1077,14 @@ def ssn_viewer_html(
                     <button id="focus-largest-cluster" type="button" disabled>Focus largest cluster</button>
                     <button id="reset-view" disabled>Reset view</button>
                     <button id="clear-selection" disabled>Clear selection</button>
+                    <button id="export-png" type="button" disabled>Export view PNG</button>
+                    <select id="export-png-scale" title="PNG resolution" disabled>
+                        <option value="1">1× (screen)</option>
+                        <option value="2" selected>2×</option>
+                        <option value="4">4×</option>
+                        <option value="8">8×</option>
+                    </select>
+                    <button id="export-svg" type="button" disabled>Export view SVG</button>
                 </div>
                 <div class="note" id="selection-note">Load a bundle to begin exploring metadata.</div>
             </div>
@@ -1299,6 +1303,9 @@ def ssn_viewer_html(
         document.getElementById('sort-components-by-size').disabled = false;
         document.getElementById('focus-largest-cluster').disabled = false;
         document.getElementById('reset-view').disabled = false;
+        document.getElementById('export-png').disabled = false;
+        document.getElementById('export-png-scale').disabled = false;
+        document.getElementById('export-svg').disabled = false;
         document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
         document.getElementById('metadata-select-nodes').disabled = true;
         document.getElementById('metadata-deselect-rows').disabled = true;
@@ -1495,6 +1502,12 @@ def ssn_viewer_html(
         colorBy.appendChild(emptyOption.cloneNode(true));
         labelBy.appendChild(emptyOption.cloneNode(true));
 
+        // "Label by" can also use the sequence's node_id (not a metadata column).
+        const nodeIdOption = document.createElement('option');
+        nodeIdOption.value = '__node_id__';
+        nodeIdOption.textContent = 'node_id';
+        labelBy.appendChild(nodeIdOption);
+
         state.metadataColumns.forEach(column => {{
             const colorOption = document.createElement('option');
             colorOption.value = column.name;
@@ -1509,7 +1522,6 @@ def ssn_viewer_html(
 
         colorBy.value = state.bundle.defaults.color_by || '';
         labelBy.value = state.bundle.defaults.label_by || '';
-        document.getElementById('show-labels').checked = Boolean(state.bundle.defaults.label_by);
     }}
 
     function selectedThresholdValue() {{
@@ -1935,7 +1947,7 @@ def ssn_viewer_html(
 
         if (sampleCount <= 6) {{
             const ringRadius = sampleCount === 2
-                ? packingRadius * 0.58
+                ? packingRadius * 0.82
                 : sampleCount <= 4
                     ? packingRadius * 0.72
                     : packingRadius * 0.78;
@@ -3477,7 +3489,8 @@ def ssn_viewer_html(
         state.viewTransform.offsetY = padding + ((clusterCanvas.height - (padding * 2) - (height * scale)) / 2) - (bounds.minY * scale);
     }}
 
-    function drawBadge(text, x, y) {{
+    function drawBadge(ctx, text, x, y) {{
+        const clusterContext = ctx;
         clusterContext.save();
         clusterContext.font = '11px Georgia';
         const textWidth = clusterContext.measureText(text).width;
@@ -3506,8 +3519,16 @@ def ssn_viewer_html(
         }}
         const unitX = dx / distance;
         const unitY = dy / distance;
-        const leftOffset = Math.min(distance / 2, link.left.radius + 3);
-        const rightOffset = Math.min(distance / 2, link.right.radius + 3);
+        // Trim each end to its own bubble radius so the edge meets each boundary exactly. (Using a
+        // shared distance/2 cap would stop the edge at the midpoint — i.e. *inside* a much larger
+        // bubble.) If the two bubbles overlap, shrink proportionally so the edge never penetrates.
+        let leftOffset = link.left.radius;
+        let rightOffset = link.right.radius;
+        if (leftOffset + rightOffset > distance) {{
+            const k = distance / (leftOffset + rightOffset);
+            leftOffset *= k;
+            rightOffset *= k;
+        }}
         return {{
             startX: link.left.x + (unitX * leftOffset),
             startY: link.left.y + (unitY * leftOffset),
@@ -3562,7 +3583,12 @@ def ssn_viewer_html(
         }};
     }}
 
-    function renderClusterView() {{
+    function renderClusterView(ctx = clusterContext, viewWidth = clusterCanvas.width, viewHeight = clusterCanvas.height) {{
+        // Aliased so the body below can target any context (e.g. a scaled
+        // offscreen canvas for high-resolution PNG export) without rewriting
+        // every draw call. Defaults render to the on-screen canvas.
+        const clusterContext = ctx;
+        const clusterCanvas = {{width: viewWidth, height: viewHeight}};
         clusterContext.clearRect(0, 0, clusterCanvas.width, clusterCanvas.height);
         clusterContext.fillStyle = '#fffaf4';
         clusterContext.fillRect(0, 0, clusterCanvas.width, clusterCanvas.height);
@@ -3609,6 +3635,15 @@ def ssn_viewer_html(
 
         const showClusterBounds = renderClusterBoundsEnabled();
         const showNodes = renderNodesEnabled();
+
+        // Per-node ("Label by") labels attach to individual member dots. Collect candidates that are
+        // in the viewport during the dot pass; we draw them only when few enough nodes are visible
+        // (so labels appear progressively as you zoom in). Overlap is acceptable.
+        const dotLabelField = currentLabelField();
+        const MAX_LABELED_DOTS = 250;
+        const collectDotLabels = dotLabelField !== '' && showNodes && state.viewTransform.scale >= 0.11;
+        const dotLabelCandidates = [];
+        let dotLabelsOverflow = false;
 
         state.visibleLayout.forEach(item => {{
             // Viewport culling (#4)
@@ -3661,6 +3696,14 @@ def ssn_viewer_html(
                 if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {{
                     selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius, faint: !showNodes}});
                 }}
+                if (collectDotLabels && !dotLabelsOverflow &&
+                    dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {{
+                    if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
+                        dotLabelsOverflow = true;
+                    }} else {{
+                        dotLabelCandidates.push({{x: dot.x, y: dot.y, r: dot.radius, memberIndex: dot.memberIndex}});
+                    }}
+                }}
             }}
         }});
 
@@ -3707,38 +3750,54 @@ def ssn_viewer_html(
                 if (Math.hypot(dx, dy) < 46) {{
                     return;
                 }}
-                drawBadge(formatValue(link.threshold), left.x + (dx / 2), left.y + (dy / 2) - 8);
+                drawBadge(clusterContext, formatValue(link.threshold), left.x + (dx / 2), left.y + (dy / 2) - 8);
             }});
         }}
 
-        state.visibleLayout.forEach(item => {{
-            const screenPoint = worldToScreenPoint(item.x, item.y);
-            const screenRadius = item.radius * state.viewTransform.scale;
-            // Viewport culling for labels (#4)
-            if (screenPoint.x + screenRadius < 0 || screenPoint.x - screenRadius > clusterCanvas.width ||
-                screenPoint.y + screenRadius < 0 || screenPoint.y - screenRadius > clusterCanvas.height) {{
-                return;
-            }}
-            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
-            let labelText = '';
-            let labelY = screenPoint.y + 4;
-            let font = '600 12px Georgia';
-            if (document.getElementById('show-labels').checked && (component.size <= 8 || component.kind === 'leaf')) {{
-                labelText = labelForComponent(item.componentId).slice(0, 20);
-                labelY = screenPoint.y + screenRadius + 14;
-                font = component.size === 1 ? '12px Georgia' : '11px Georgia';
-            }} else if (showNodeCountsEnabled()) {{
-                labelText = component.size.toLocaleString();
-            }}
-            if (!labelText || state.viewTransform.scale < 0.11) {{
-                return;
-            }}
-            clusterContext.fillStyle = labelText === component.size.toLocaleString() ? '#5c6a70' : '#1e2a2f';
-            clusterContext.font = font;
+        // Node-count labels: one per cluster bubble, centered inside.
+        if (showNodeCountsEnabled() && state.viewTransform.scale >= 0.11) {{
+            clusterContext.fillStyle = '#5c6a70';
+            clusterContext.font = '600 12px Georgia';
             clusterContext.textAlign = 'center';
             clusterContext.textBaseline = 'middle';
-            clusterContext.fillText(labelText, screenPoint.x, labelY);
-        }});
+            state.visibleLayout.forEach(item => {{
+                const screenPoint = worldToScreenPoint(item.x, item.y);
+                const screenRadius = item.radius * state.viewTransform.scale;
+                if (screenPoint.x + screenRadius < 0 || screenPoint.x - screenRadius > clusterCanvas.width ||
+                    screenPoint.y + screenRadius < 0 || screenPoint.y - screenRadius > clusterCanvas.height) {{
+                    return;
+                }}
+                const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+                clusterContext.fillText(component.size.toLocaleString(), screenPoint.x, screenPoint.y + 4);
+            }});
+        }}
+
+        // "Label by" metadata labels: one per member node, drawn next to its dot. Shown only when
+        // few enough nodes are in view (collected above with a cap), so they appear as you zoom in.
+        if (collectDotLabels && !dotLabelsOverflow && dotLabelCandidates.length > 0) {{
+            clusterContext.fillStyle = '#1e2a2f';
+            clusterContext.font = '12px Georgia';
+            clusterContext.textAlign = 'center';
+            clusterContext.textBaseline = 'middle';
+            dotLabelCandidates.forEach(candidate => {{
+                let text;
+                if (dotLabelField === '__node_id__') {{
+                    text = nodeId(candidate.memberIndex);
+                }} else {{
+                    const value = metadataValue(candidate.memberIndex, dotLabelField);
+                    // Null/empty values are simply not labeled (no node_id fallback).
+                    if (value === null || value === undefined || value === '') {{
+                        return;
+                    }}
+                    text = formatValue(value);
+                }}
+                if (!text) {{
+                    return;
+                }}
+                const screenPoint = worldToScreenPoint(candidate.x, candidate.y);
+                clusterContext.fillText(String(text).slice(0, 24), screenPoint.x, screenPoint.y);
+            }});
+        }}
 
         if (state.selectionBox) {{
             const box = state.selectionBox;
@@ -4054,6 +4113,308 @@ def ssn_viewer_html(
         ).replace(/\\s+/g, '_');
         link.click();
         URL.revokeObjectURL(link.href);
+    }}
+
+    function exportBaseName() {{
+        return ((state.bundle && state.bundle.name) || 'network').replace(/\\s+/g, '_');
+    }}
+
+    function triggerDownload(href, filename, revoke) {{
+        const link = document.createElement('a');
+        link.href = href;
+        link.download = filename;
+        link.click();
+        if (revoke) {{
+            URL.revokeObjectURL(href);
+        }}
+    }}
+
+    function selectedPngScale() {{
+        const select = document.getElementById('export-png-scale');
+        const value = select ? Number(select.value) : 1;
+        return Number.isFinite(value) && value >= 1 ? value : 1;
+    }}
+
+    function exportClusterPNG() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const scaleFactor = selectedPngScale();
+        // Render into an offscreen canvas scaled by the chosen factor so the PNG
+        // is a true high-resolution re-rasterization (not an upscaled snapshot).
+        // The view transform and logical dimensions are unchanged, so the image
+        // shows exactly the current view at higher pixel density. Rendering
+        // offscreen also keeps any transient selection box out of the export.
+        const target = document.createElement('canvas');
+        target.width = Math.round(clusterCanvas.width * scaleFactor);
+        target.height = Math.round(clusterCanvas.height * scaleFactor);
+        const targetContext = target.getContext('2d');
+        if (!targetContext) {{
+            window.alert('Could not export PNG at ' + scaleFactor + '×; try a lower resolution.');
+            return;
+        }}
+        targetContext.scale(scaleFactor, scaleFactor);
+        renderClusterView(targetContext, clusterCanvas.width, clusterCanvas.height);
+        target.toBlob(blob => {{
+            if (!blob) {{
+                // Browsers (notably Safari, ~16.7M px) refuse to encode an
+                // oversized canvas and hand back null. Tell the user instead of
+                // failing silently.
+                window.alert('The view is too large to export as a ' + scaleFactor +
+                    '× PNG (' + target.width + '×' + target.height + ' px). Try a lower resolution or zoom in.');
+                return;
+            }}
+            const href = URL.createObjectURL(blob);
+            const suffix = scaleFactor > 1 ? '_view@' + scaleFactor + 'x.png' : '_view.png';
+            triggerDownload(href, exportBaseName() + suffix, true);
+        }}, 'image/png');
+    }}
+
+    function escapeXml(text) {{
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }}
+
+    // Normalize any CSS color (hex, rgb, rgba, hsl) into an SVG-friendly
+    // {{color, opacity}} pair using the canvas's own color parser. SVG editors
+    // such as Illustrator/Inkscape choke on rgba()/space-separated hsl(), so we
+    // split out the alpha into a separate opacity attribute.
+    function svgColorParts(css) {{
+        clusterContext.fillStyle = '#000000';
+        clusterContext.fillStyle = css;
+        const normalized = clusterContext.fillStyle;
+        const match = /^rgba\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)$/.exec(normalized);
+        if (match) {{
+            return {{color: 'rgb(' + match[1] + ',' + match[2] + ',' + match[3] + ')', opacity: Number(match[4])}};
+        }}
+        return {{color: normalized, opacity: 1}};
+    }}
+
+    // Render the current cluster view to a standalone SVG document. Geometry is
+    // baked into screen space (every point passed through worldToScreenPoint)
+    // so the markup needs no transforms and matches the canvas pixel-for-pixel.
+    // This mirrors renderClusterView(); keep the two in sync.
+    function buildClusterViewSVG() {{
+        const width = clusterCanvas.width;
+        const height = clusterCanvas.height;
+        const fmt = value => Math.round(value * 100) / 100;
+        const parts = [];
+        parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
+            '" viewBox="0 0 ' + width + ' ' + height + '" font-family="Georgia, serif">');
+        parts.push('<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="#fffaf4"/>');
+
+        if (!state.bundle) {{
+            parts.push('<text x="30" y="50" font-size="18" fill="#5c6a70">Load a bundle to render cluster bubbles.</text>');
+            parts.push('</svg>');
+            return parts.join('\\n');
+        }}
+
+        const TAU = Math.PI * 2;
+        const drawScale = Math.max(state.viewTransform.scale, 1e-9);
+        const worldMinX = (0 - state.viewTransform.offsetX) / drawScale;
+        const worldMaxX = (width - state.viewTransform.offsetX) / drawScale;
+        const worldMinY = (0 - state.viewTransform.offsetY) / drawScale;
+        const worldMaxY = (height - state.viewTransform.offsetY) / drawScale;
+
+        // Split links (edges).
+        const linkColor = svgColorParts('rgba(92, 106, 112, 0.42)');
+        const linkPaths = [];
+        state.splitLinks.forEach(link => {{
+            const segments = renderedLinkSegments(link);
+            if (segments.length === 0) {{
+                return;
+            }}
+            let d = '';
+            segments.forEach((segment, index) => {{
+                const start = worldToScreenPoint(segment.startX, segment.startY);
+                const end = worldToScreenPoint(segment.endX, segment.endY);
+                if (index === 0) {{
+                    d += 'M' + fmt(start.x) + ' ' + fmt(start.y);
+                }} else {{
+                    d += ' L' + fmt(start.x) + ' ' + fmt(start.y);
+                }}
+                d += ' L' + fmt(end.x) + ' ' + fmt(end.y);
+            }});
+            linkPaths.push('<path d="' + d + '"/>');
+        }});
+        if (linkPaths.length > 0) {{
+            parts.push('<g fill="none" stroke="' + linkColor.color + '" stroke-opacity="' + linkColor.opacity +
+                '" stroke-width="1.6">');
+            parts.push(linkPaths.join(''));
+            parts.push('</g>');
+        }}
+
+        const showClusterBounds = renderClusterBoundsEnabled();
+        const showNodes = renderNodesEnabled();
+        const dotLabelField = currentLabelField();
+        const MAX_LABELED_DOTS = 250;
+        const collectDotLabels = dotLabelField !== '' && showNodes && state.viewTransform.scale >= 0.11;
+        const dotLabelCandidates = [];
+        let dotLabelsOverflow = false;
+
+        const boundsFill = svgColorParts('rgba(248, 243, 235, 0.95)');
+        const boundsParts = [];
+        const dotColorBuckets = new Map();
+        const selectedNodeOutlines = [];
+
+        state.visibleLayout.forEach(item => {{
+            if (item.x + item.radius < worldMinX || item.x - item.radius > worldMaxX ||
+                item.y + item.radius < worldMinY || item.y - item.radius > worldMaxY) {{
+                return;
+            }}
+
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const members = componentMembers(item.componentId);
+            const selectionState = componentSelectionState(members);
+            const center = worldToScreenPoint(item.x, item.y);
+            const screenRadius = item.radius * drawScale;
+
+            if (showClusterBounds) {{
+                const stroke = svgColorParts(selectionState.allSelected ? '#1e2a2f' : '#c8b8a6');
+                boundsParts.push('<circle cx="' + fmt(center.x) + '" cy="' + fmt(center.y) + '" r="' + fmt(screenRadius) +
+                    '" fill="' + boundsFill.color + '" fill-opacity="' + boundsFill.opacity +
+                    '" stroke="' + stroke.color + '" stroke-width="' + (selectionState.allSelected ? 3 : 1.5) + '"/>');
+            }} else if (selectionState.allSelected) {{
+                const stroke = svgColorParts('rgba(30, 42, 47, 0.45)');
+                boundsParts.push('<circle cx="' + fmt(center.x) + '" cy="' + fmt(center.y) + '" r="' + fmt(screenRadius) +
+                    '" fill="none" stroke="' + stroke.color + '" stroke-opacity="' + stroke.opacity + '" stroke-width="1.5"/>');
+            }}
+
+            const needsSelectionHint = !selectionState.allSelected && selectionState.anySelected;
+            if (!showNodes && !needsSelectionHint) {{
+                return;
+            }}
+
+            const dotLayout = componentDotLayout(component, item);
+            for (const dot of dotLayout) {{
+                if (showNodes) {{
+                    const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
+                    let bucket = dotColorBuckets.get(color);
+                    if (bucket === undefined) {{
+                        bucket = [];
+                        dotColorBuckets.set(color, bucket);
+                    }}
+                    const dotCenter = worldToScreenPoint(dot.x, dot.y);
+                    bucket.push({{x: dotCenter.x, y: dotCenter.y, r: dot.radius * drawScale}});
+                }}
+                if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {{
+                    selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius, faint: !showNodes}});
+                }}
+                if (collectDotLabels && !dotLabelsOverflow &&
+                    dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {{
+                    if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
+                        dotLabelsOverflow = true;
+                    }} else {{
+                        dotLabelCandidates.push({{x: dot.x, y: dot.y, memberIndex: dot.memberIndex}});
+                    }}
+                }}
+            }}
+        }});
+
+        if (boundsParts.length > 0) {{
+            parts.push(boundsParts.join(''));
+        }}
+
+        dotColorBuckets.forEach((dots, color) => {{
+            const fill = svgColorParts(color);
+            const circles = dots.map(dot => '<circle cx="' + fmt(dot.x) + '" cy="' + fmt(dot.y) + '" r="' + fmt(dot.r) + '"/>').join('');
+            parts.push('<g fill="' + fill.color + '"' + (fill.opacity !== 1 ? ' fill-opacity="' + fill.opacity + '"' : '') + '>' + circles + '</g>');
+        }});
+
+        if (selectedNodeOutlines.length > 0) {{
+            const outlineParts = selectedNodeOutlines.map(outline => {{
+                const screenPoint = worldToScreenPoint(outline.x, outline.y);
+                const screenRadius = Math.max(3, (outline.radius * state.viewTransform.scale) + 1.6);
+                if (outline.faint) {{
+                    const fill = svgColorParts('rgba(30, 42, 47, 0.30)');
+                    return '<circle cx="' + fmt(screenPoint.x) + '" cy="' + fmt(screenPoint.y) + '" r="' + fmt(screenRadius) +
+                        '" fill="' + fill.color + '" fill-opacity="' + fill.opacity + '"/>';
+                }}
+                return '<circle cx="' + fmt(screenPoint.x) + '" cy="' + fmt(screenPoint.y) + '" r="' + fmt(screenRadius) +
+                    '" fill="none" stroke="#1e2a2f" stroke-width="1.8"/>';
+            }});
+            parts.push(outlineParts.join(''));
+        }}
+
+        // Edge score badges.
+        if (showEdgeScoresEnabled() && state.viewTransform.scale >= 0.16) {{
+            clusterContext.save();
+            clusterContext.font = '11px Georgia';
+            state.splitLinks.forEach(link => {{
+                const left = worldToScreenPoint(link.left.x, link.left.y);
+                const right = worldToScreenPoint(link.right.x, link.right.y);
+                const dx = right.x - left.x;
+                const dy = right.y - left.y;
+                if (Math.hypot(dx, dy) < 46) {{
+                    return;
+                }}
+                const text = formatValue(link.threshold);
+                const x = left.x + (dx / 2);
+                const y = left.y + (dy / 2) - 8;
+                const textWidth = clusterContext.measureText(text).width;
+                const badgeWidth = textWidth + 12;
+                const badgeHeight = 18;
+                parts.push('<rect x="' + fmt(x - (badgeWidth / 2)) + '" y="' + fmt(y - (badgeHeight / 2)) +
+                    '" width="' + fmt(badgeWidth) + '" height="' + badgeHeight + '" rx="8" ry="8"' +
+                    ' fill="#fffaf4" fill-opacity="0.92" stroke="rgb(92,106,112)" stroke-opacity="0.32" stroke-width="1"/>');
+                parts.push('<text x="' + fmt(x) + '" y="' + fmt(y + 0.5) + '" font-size="11" fill="#334147"' +
+                    ' text-anchor="middle" dominant-baseline="central">' + escapeXml(text) + '</text>');
+            }});
+            clusterContext.restore();
+        }}
+
+        // Node-count labels (one per bubble).
+        if (showNodeCountsEnabled() && state.viewTransform.scale >= 0.11) {{
+            state.visibleLayout.forEach(item => {{
+                const screenPoint = worldToScreenPoint(item.x, item.y);
+                const screenRadius = item.radius * state.viewTransform.scale;
+                if (screenPoint.x + screenRadius < 0 || screenPoint.x - screenRadius > width ||
+                    screenPoint.y + screenRadius < 0 || screenPoint.y - screenRadius > height) {{
+                    return;
+                }}
+                const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+                parts.push('<text x="' + fmt(screenPoint.x) + '" y="' + fmt(screenPoint.y + 4) + '" font-size="12" font-weight="600"' +
+                    ' fill="#5c6a70" text-anchor="middle" dominant-baseline="central">' + escapeXml(component.size.toLocaleString()) + '</text>');
+            }});
+        }}
+
+        // Per-node "Label by" metadata labels.
+        if (collectDotLabels && !dotLabelsOverflow && dotLabelCandidates.length > 0) {{
+            dotLabelCandidates.forEach(candidate => {{
+                let text;
+                if (dotLabelField === '__node_id__') {{
+                    text = nodeId(candidate.memberIndex);
+                }} else {{
+                    const value = metadataValue(candidate.memberIndex, dotLabelField);
+                    if (value === null || value === undefined || value === '') {{
+                        return;
+                    }}
+                    text = formatValue(value);
+                }}
+                if (!text) {{
+                    return;
+                }}
+                const screenPoint = worldToScreenPoint(candidate.x, candidate.y);
+                parts.push('<text x="' + fmt(screenPoint.x) + '" y="' + fmt(screenPoint.y) + '" font-size="12" fill="#1e2a2f"' +
+                    ' text-anchor="middle" dominant-baseline="central">' + escapeXml(String(text).slice(0, 24)) + '</text>');
+            }});
+        }}
+
+        parts.push('</svg>');
+        return parts.join('\\n');
+    }}
+
+    function exportClusterSVG() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const svg = buildClusterViewSVG();
+        const blob = new Blob([svg], {{type: 'image/svg+xml'}});
+        const href = URL.createObjectURL(blob);
+        triggerDownload(href, exportBaseName() + '_view.svg', true);
     }}
 
     function updateThresholdUI(resetView = true) {{
@@ -4756,7 +5117,6 @@ def ssn_viewer_html(
     }});
     document.getElementById('color-by').addEventListener('change', () => {{ rebuildNodeColorCache(); renderClusterView(); }});
     document.getElementById('label-by').addEventListener('change', renderClusterView);
-    document.getElementById('show-labels').addEventListener('change', renderClusterView);
     document.getElementById('show-node-counts').addEventListener('change', renderClusterView);
     document.getElementById('show-edge-scores').addEventListener('change', renderClusterView);
     document.getElementById('reduce-elongation').addEventListener('change', () => {{
@@ -4776,6 +5136,8 @@ def ssn_viewer_html(
         drawClusterView(true);
     }});
     document.getElementById('export-selected').addEventListener('click', exportSelection);
+    document.getElementById('export-png').addEventListener('click', exportClusterPNG);
+    document.getElementById('export-svg').addEventListener('click', exportClusterSVG);
     document.getElementById('metadata-deselect-rows').addEventListener('click', () => {{
         clearMetadataRowSelection();
         applyMetadataTableRowHighlights();
