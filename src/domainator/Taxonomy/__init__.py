@@ -71,6 +71,39 @@ def _fetch_remote_md5(url: str) -> str:
     resp.raise_for_status()
     return resp.text.strip().split()[0]
 
+def compact_lineage(parent, merged, deleted, tax_id):
+    '''
+        Walk the parent chain using compact int->int maps.
+
+        Mirrors NCBITaxonomy._lineage but operates on the lightweight structures
+        produced by NCBITaxonomy.compact_lineage_data (a parent taxid map, a
+        merged-taxid map, and a set of deleted taxids), so it can be cheaply
+        pickled into worker processes for taxonomy filtering.
+
+        Returns all parent nodes of tax_id (starting with tax_id itself).
+    '''
+    out_list = list()
+
+    if tax_id in merged:
+        tax_id = merged[tax_id]
+
+    if tax_id in deleted:
+        warnings.warn(f"Attempted to calculate lineage for a deleted taxid: {tax_id}, lineage search prematurely stopped, which might confuse lineage exclusions.")
+        return out_list
+
+    out_list.append(tax_id)
+
+    while parent[tax_id] != 1:
+        parent_taxid = parent[tax_id]
+        if parent_taxid in merged:
+            parent_taxid = merged[parent_taxid]
+        out_list.append(parent_taxid)
+        tax_id = parent_taxid
+
+    out_list.append(1)
+    return out_list
+
+
 class NCBITaxonomy:
     def __init__(self, local_path, overwrite=True):
         local_path = Path(local_path)
@@ -289,6 +322,23 @@ class NCBITaxonomy:
             returns all parent nodes of tax_id
         '''
         return self._lineage(self._nodes_tab, self._merged_tab, self._deleted_tab, tax_id)
+
+    def compact_lineage_data(self):
+        '''
+            Build lightweight int->int maps sufficient for lineage walks.
+
+            Returns (parent, merged, deleted) where:
+                parent:  {taxid: parent_taxid}
+                merged:  {old_taxid: new_taxid}
+                deleted: set of deleted taxids
+            These are far smaller than the full node/name tables and are cheap to
+            pickle into worker processes (see domain_search taxonomy filtering).
+            Pair with the module-level compact_lineage() function.
+        '''
+        parent = {tid: int(node['parent_tax_id']) for tid, node in self._nodes_tab.items()}
+        merged = {old: int(v['new_tax_id']) for old, v in self._merged_tab.items()}
+        deleted = set(self._deleted_tab)
+        return parent, merged, deleted
 
     def name(self, tax_id):
         '''

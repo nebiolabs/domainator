@@ -32,7 +32,7 @@ from typing import List, Tuple, Set, Optional
 from domainator import extract_peptides
 import warnings
 from pathlib import Path
-from domainator.Taxonomy import NCBITaxonomy
+from domainator.Taxonomy import NCBITaxonomy, compact_lineage
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 
 
@@ -61,9 +61,37 @@ def _write_records_with_limit(records, out_handle, current_output_bytes: int, ma
 
     return current_output_bytes
 
+# Per-process taxonomy lineage data, populated by the pool initializer. This lets
+# each worker process hold one lightweight copy of the lineage maps instead of the
+# full NCBITaxonomy being pickled into every task (one task per partition).
+_WORKER_LINEAGE = None  # (parent, merged, deleted)
+
+
+def _init_taxonomy_worker(parent, merged, deleted):
+    global _WORKER_LINEAGE
+    _WORKER_LINEAGE = (parent, merged, deleted)
+
+
+@functools.lru_cache(maxsize=None)
+def _lineage_matches(taxid: int, include_taxids: Optional[frozenset], exclude_taxids: Optional[frozenset]) -> bool:
+    """Return True if taxid's lineage passes the include/exclude filters.
+
+    Cached at module level (keyed only on its arguments, not on a worker
+    instance), so results are reused across every partition handled by a worker
+    process. Relies on _WORKER_LINEAGE being set by _init_taxonomy_worker.
+    """
+    parent, merged, deleted = _WORKER_LINEAGE
+    lineage = set(compact_lineage(parent, merged, deleted, taxid))
+    if include_taxids and not lineage.intersection(include_taxids):
+        return False
+    if exclude_taxids and lineage.intersection(exclude_taxids):
+        return False
+    return True
+
+
 class _domain_search_worker():
-    
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None):
+
+    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None):
 
         self.z = z
         self.evalue = evalue
@@ -78,9 +106,9 @@ class _domain_search_worker():
         self.translate = translate
         self.gene_call = gene_call
         self.min_evalue = min_evalue
-        self.ncbi_taxonomy = ncbi_taxonomy
-        self.include_taxids = include_taxids
-        self.exclude_taxids = exclude_taxids
+        # Stored as frozensets so they can be used as lru_cache keys for _lineage_matches.
+        self.include_taxids = frozenset(include_taxids) if include_taxids else None
+        self.exclude_taxids = frozenset(exclude_taxids) if exclude_taxids else None
         self.fasta_type = fasta_type
         self.max_mode = max_mode
         self.max_region_overlap = max_region_overlap
@@ -89,15 +117,6 @@ class _domain_search_worker():
         self.max_hits_per_contig = max_hits_per_contig
         #self.pre_parsed_references = domainate.read_references(references) #TODO: figure out why pickling pyhmmer peptides causes multithreading issues, and try to patch pyhmmer.
 
-    @functools.lru_cache(maxsize=None)
-    def _taxid_matches_taxonomy(self, taxid: int) -> bool:
-        lineage = set(self.ncbi_taxonomy.lineage(taxid))
-        if self.include_taxids and not lineage.intersection(self.include_taxids):
-            return False
-        if self.exclude_taxids and lineage.intersection(self.exclude_taxids):
-            return False
-        return True
-
     def _record_matches_taxonomy(self, record) -> bool:
         if not (self.include_taxids or self.exclude_taxids):
             return True
@@ -105,7 +124,7 @@ class _domain_search_worker():
         taxid = get_taxid(record)
         if taxid is None:
             return False
-        return self._taxid_matches_taxonomy(taxid)
+        return _lineage_matches(taxid, self.include_taxids, self.exclude_taxids)
 
 
     
@@ -239,10 +258,19 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     if exclude_taxids is not None:
         exclude_taxids = set(exclude_taxids)
 
-    out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, ncbi_taxonomy=ncbi_taxonomy, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig)
+    # Build the compact lineage maps once and pass them to each worker process via
+    # the pool initializer (pickled once per process, not once per partition). The
+    # full NCBITaxonomy is then released so the parent does not hold it for the run.
+    pool_kwargs = {}
+    if (include_taxids or exclude_taxids) and ncbi_taxonomy is not None:
+        parent, merged, deleted = ncbi_taxonomy.compact_lineage_data()
+        ncbi_taxonomy = None
+        pool_kwargs = dict(initializer=_init_taxonomy_worker, initargs=(parent, merged, deleted))
 
-    with make_pool(processes=cpu - 1) as pool:
+    out_heap = []
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig)
+
+    with make_pool(processes=cpu - 1, **pool_kwargs) as pool:
         # hits are lists of SeqRecords
         for hits in pool.imap_unordered(worker, partitions):
             

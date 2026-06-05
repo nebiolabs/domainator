@@ -542,7 +542,6 @@ def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch)
         normalize_direction=True,
         translate=False,
         batch_size=100,
-        ncbi_taxonomy=object(),
         include_taxids={2},
         exclude_taxids={1224},
         fasta_type="protein",
@@ -556,16 +555,20 @@ def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch)
     assert [rec.id for rec in out] == ["match_1"]
 
 
-def test_domain_search_taxonomy_cache_reuses_taxid_lineage():
-    class FakeTaxonomy:
-        def __init__(self):
-            self.calls = []
+def test_domain_search_taxonomy_cache_reuses_taxid_lineage(monkeypatch):
+    # The lineage-match cache is module-level (_lineage_matches), fed by the
+    # per-process lineage maps set via _init_taxonomy_worker. Verify that two
+    # records sharing a taxid only trigger a single lineage walk.
+    calls = []
 
-        def lineage(self, taxid):
-            self.calls.append(taxid)
-            return [1, 2, taxid]
+    def fake_compact_lineage(parent, merged, deleted, taxid):
+        calls.append(taxid)
+        return [1, 2, taxid]
 
-    fake_taxonomy = FakeTaxonomy()
+    monkeypatch.setattr(domain_search_module, "compact_lineage", fake_compact_lineage)
+    domain_search_module._init_taxonomy_worker({}, {}, set())
+    domain_search_module._lineage_matches.cache_clear()
+
     worker = domain_search_module._domain_search_worker(
         references=[],
         z=1000,
@@ -578,7 +581,6 @@ def test_domain_search_taxonomy_cache_reuses_taxid_lineage():
         normalize_direction=True,
         translate=False,
         batch_size=100,
-        ncbi_taxonomy=fake_taxonomy,
         include_taxids={2},
         exclude_taxids=None,
         fasta_type="protein",
@@ -594,7 +596,7 @@ def test_domain_search_taxonomy_cache_reuses_taxid_lineage():
 
     assert worker._record_matches_taxonomy(rec1)
     assert worker._record_matches_taxonomy(rec2)
-    assert fake_taxonomy.calls == [10]
+    assert calls == [10]
         
 
 
