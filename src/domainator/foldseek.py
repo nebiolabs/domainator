@@ -36,7 +36,7 @@ def search(database_path, proteins, foldseek, cpu, E) -> Iterable[FoldseekHit]:
                     protein = proteins[i]
                     protein = protein.textize()
 
-                    protein_f.write(f">{protein.name.decode('utf-8')} {protein.description.decode('utf-8')}\n{protein.sequence}\n")
+                    protein_f.write(f">{protein.name} {protein.description}\n{protein.sequence}\n")
                     threedi_f.write(foldseek_seq + "\n")
         
         if num_seqs == 0:
