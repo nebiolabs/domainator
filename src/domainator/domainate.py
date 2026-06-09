@@ -367,7 +367,7 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     
     return out
 
-def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False):
+def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None):
     """
     Args:
         proteins: list
@@ -418,7 +418,7 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
                 hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **varargs)
                 hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "phmmer", out)
             elif algorithm == "foldseek":
-                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue)
+                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue, device = foldseek_device)
                 foldseek_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "foldseek", out)
             elif algorithm == "nhmmer":
                 hits = pyhmmer.hmmer.nhmmer(db_dict[db_name].values(), nucleic_acids, cpus=cpu, E=evalue, incE=evalue)
@@ -789,7 +789,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
     """
 
     Args:
@@ -813,7 +813,7 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
     Returns:
         : 
     """
-    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
+    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
@@ -857,7 +857,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         rec.features.append(feature)
         i += 1
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -912,6 +912,9 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
 
         esm2_3Di_device: device to run esm2_3Di on. [default: None]
 
+        foldseek_device: device to run the foldseek search on. "cpu" (or None) for CPU search,
+            or a CUDA device string ("cuda", "cuda:0", ...) for GPU-accelerated search. [default: None]
+
     """
 
     if references is None and foldseek is None:
@@ -963,7 +966,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device)
             for contig_id in range(len(contigs_list)):
                 if contig_id in return_contigs:
                     yield contigs_list[contig_id]
@@ -974,7 +977,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device)
     #for contig_id in range(len(contigs_list)): #TODO: why did I think this more complicated loop was a good idea?
     #    if contig_id in return_contigs:
     for contig_id in return_contigs:
@@ -1001,6 +1004,11 @@ def main(argv):
                         help="checkpoint file for esm2_3Di model.") # TODO: this should be automated.
     parser.add_argument("--esm2_3Di_device", default="cuda:0", type=str, required=False,
                         help="device to use for esm2_3Di model.")
+    parser.add_argument("--foldseek_device", default="cpu", type=str, required=False,
+                        help="device to use for the foldseek search. 'cpu' for a CPU-only search, "
+                        "or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) to enable GPU-accelerated search. "
+                        "GPU search requires a recent foldseek and a GPU-compatible (padded) target database "
+                        "(see 'foldseek makepaddedseqdb'). [default: cpu]")
     
     parser.add_argument('-o', '--output', default=None, type=str, required=False,
                         help="output genbank filename. If not supplied, writes to stdout.")
@@ -1125,6 +1133,7 @@ def main(argv):
             foldseek=None,
             esm2_3Di_weights=params.esm2_3Di_weights,
             esm2_3Di_device=params.esm2_3Di_device,
+            foldseek_device=params.foldseek_device,
             overlap_by_db=params.overlap_by_db,
         ),
         out)

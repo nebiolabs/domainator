@@ -7,6 +7,7 @@ except ImportError:
     pass 
 
 import psutil
+import os
 import tempfile
 import subprocess
 from typing import List, Iterable, Tuple, Union, Iterator
@@ -17,7 +18,14 @@ FoldseekHit = namedtuple("Hit", ["query","target","qheader","theader","pident","
 
 MAX_PROTEIN_SIZE = 2500
 
-def search(database_path, proteins, foldseek, cpu, E) -> Iterable[FoldseekHit]:
+def search(database_path, proteins, foldseek, cpu, E, device=None) -> Iterable[FoldseekHit]:
+    """
+    Args:
+        device: which device foldseek should run the search on. Either None or "cpu" for
+            CPU-only search, or a CUDA device string ("cuda", "cuda:0", "cuda:1", ...) to
+            enable GPU-accelerated search. For a GPU search the target database must have
+            been built in a GPU-compatible (padded) format (see `foldseek makepaddedseqdb`).
+    """
     with tempfile.TemporaryDirectory() as tmpdirname:
         out_base_name = tmpdirname + "/output"
         protein_fasta_name = tmpdirname + "/protein.fasta"
@@ -46,7 +54,16 @@ def search(database_path, proteins, foldseek, cpu, E) -> Iterable[FoldseekHit]:
         foldseek_options = ["foldseek", "search", out_base_name, database_path, aln_path, foldseek_tmpfolder, "-e", str(E)]
         if cpu > 0 and cpu is not None:
             foldseek_options += ["--threads", str(cpu)]
-        foldseek_out = subprocess.Popen(foldseek_options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        foldseek_env = None
+        if device is not None and device != "cpu":
+            # GPU-accelerated search. foldseek selects the GPU via the CUDA_VISIBLE_DEVICES
+            # environment variable rather than a command line flag, so map a "cuda:N" device
+            # string onto that variable.
+            foldseek_options += ["--gpu", "1"]
+            if ":" in device:
+                foldseek_env = os.environ.copy()
+                foldseek_env["CUDA_VISIBLE_DEVICES"] = device.split(":", 1)[1]
+        foldseek_out = subprocess.Popen(foldseek_options, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=foldseek_env)
         foldseek_out.wait()
         if foldseek_out.returncode != 0:
             raise RuntimeError(f"foldseek exited with code {foldseek_out.returncode}:\n{foldseek_out.stderr.read().decode('utf-8')}")
