@@ -309,9 +309,10 @@ def worker_process(r, output_file_path, gene_call, num_recs, records_written, lo
         clear_best_annotation = True
         clear_domainator_annotations = True
         clear_CDS_annotations = True
-
-    assembly_long_name = r['ftp_path'].split('/')[-1]
-    remote_nucleotide_file = r['ftp_path'] + '/' + assembly_long_name + "_genomic.gbff.gz"
+    
+    ftp_path = r['ftp_path'].rstrip("/")
+    assembly_long_name = ftp_path.split('/')[-1]
+    remote_nucleotide_file = ftp_path + '/' + assembly_long_name + "_genomic.gbff.gz"
     
     session = requests.Session()
     retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[ 500, 502, 503, 504 ])
