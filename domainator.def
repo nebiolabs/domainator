@@ -3,6 +3,7 @@ From: condaforge/miniforge3:24.9.2-0
 
 %files
 ./src /opt/domainator/src
+./rust /opt/domainator/rust
 ./conda_env.yml /opt/domainator
 ./test /opt/domainator/test
 ./pyproject.toml /opt/domainator

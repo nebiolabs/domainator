@@ -4,8 +4,15 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from domainator.Bio import SeqIO, BiopythonParserWarning, BiopythonWarning
+from domainator.Bio import bgzf
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition
+import gzip
+from domainator import lean_record
+try:
+    from domainator import _gbfast  # optional native (Rust) acceleration
+except ImportError:
+    _gbfast = None
 from domainator.Taxonomy import NCBITaxonomy
 from pathlib import Path
 from datetime import date
@@ -48,6 +55,12 @@ EXTENSION_TO_TYPE = {
     "hdf":"hdf5",
     "h5":"hdf5",
 }
+
+# Compression suffixes that are stripped to reveal the underlying sequence format
+# (e.g. "foo.gb.gz" -> genbank). ".bgz"/".bgzf" indicate BGZF (random-access gzip).
+COMPRESSION_EXTENSIONS = {"gz", "bgz", "bgzf"}
+
+GZIP_MAGIC = b"\x1f\x8b"
 
 
 DEFAULT_BUFFER_SIZE = 5000
@@ -193,10 +206,98 @@ def read_infernal_cms(cm_files):
 
 def get_file_type(filename):
     out = None
-    file_extension = Path(filename).suffix[1:]
-    if file_extension in EXTENSION_TO_TYPE:
-        out = EXTENSION_TO_TYPE[file_extension]
+    suffixes = [s[1:].lower() for s in Path(filename).suffixes]
+    # Strip a trailing compression suffix so "foo.gb.gz" is treated as genbank.
+    if suffixes and suffixes[-1] in COMPRESSION_EXTENSIONS:
+        suffixes = suffixes[:-1]
+    if suffixes:
+        file_extension = suffixes[-1]
+        if file_extension in EXTENSION_TO_TYPE:
+            out = EXTENSION_TO_TYPE[file_extension]
     return out
+
+
+def detect_compression(path):
+    """Inspect magic bytes to classify a file as 'bgzf', 'gzip', or None.
+
+    BGZF blocks always start with b"\\x1f\\x8b\\x08\\x04" (gzip magic with the
+    FEXTRA flag set); plain gzip has the gzip magic but a different flag byte.
+    Returns None for uncompressed files (or if the path can't be read).
+    """
+    try:
+        with open(path, "rb") as fh:
+            magic = fh.read(4)
+    except (OSError, TypeError, ValueError):
+        return None
+    if magic[:2] != GZIP_MAGIC:
+        return None
+    if magic == b"\x1f\x8b\x08\x04":
+        return "bgzf"
+    return "gzip"
+
+
+def open_seqfile(filename_or_handle, binary=False):
+    """Open a sequence file for reading, transparently decompressing gzip/BGZF.
+
+    Returns (handle, input_type) where input_type is "name" (we opened it) or
+    "handle" (an already-open object was passed through unchanged).
+
+    BGZF inputs are opened via BgzfReader, whose tell()/seek() use 64-bit virtual
+    offsets, so the offset-partition scheme keeps working for parallel random
+    access. Plain (non-blocked) gzip is supported as a convenience but its seeks
+    re-decompress from the start of the file, which defeats parallel seeking, so
+    BGZF is the recommended compressed database format.
+    """
+    if not isinstance(filename_or_handle, (str, os.PathLike)):
+        return filename_or_handle, "handle"
+
+    compression = detect_compression(filename_or_handle)
+    if compression == "bgzf":
+        mode = "rb" if binary else "r"
+        return bgzf.BgzfReader(str(filename_or_handle), mode=mode), "name"
+    elif compression == "gzip":
+        mode = "rb" if binary else "rt"
+        return gzip.open(filename_or_handle, mode), "name"
+    else:
+        mode = "rb" if binary else "r"
+        return open(filename_or_handle, mode), "name"
+
+def is_compressed_path(path):
+    """Return True if the path's extension marks it as gzip/BGZF (.gz/.bgz/.bgzf)."""
+    if not isinstance(path, (str, os.PathLike)):
+        return False
+    suffixes = [s[1:].lower() for s in Path(path).suffixes]
+    return bool(suffixes) and suffixes[-1] in COMPRESSION_EXTENSIONS
+
+
+def open_writable_seqfile(path, compressed=None):
+    """Open a path for writing, using a BGZF writer for compressed outputs.
+
+    BGZF output is itself valid gzip (so ``gunzip`` reads it) but is also
+    randomly seekable, so the file can be re-used directly as a compressed,
+    partitionable input to the next domainator step. ``compressed`` overrides the
+    extension-based decision (useful when writing to a temp path whose own
+    extension does not reflect the final destination).
+    """
+    if compressed is None:
+        compressed = is_compressed_path(path)
+    if compressed:
+        return bgzf.BgzfWriter(str(path))
+    return open(path, "w")
+
+
+def open_if_is_name_for_write(filename_or_handle):
+    """Like open_if_is_name(mode="w") but routes compressed paths through BGZF.
+
+    Returns (handle, input_type) where input_type is "name" (we opened it) or
+    "handle" (an already-open object passed through unchanged).
+    """
+    if not isinstance(filename_or_handle, (str, os.PathLike)):
+        return filename_or_handle, "handle"
+    if is_compressed_path(filename_or_handle):
+        return bgzf.BgzfWriter(str(filename_or_handle)), "name"
+    return open(filename_or_handle, "w"), "name"
+
 
 def open_if_is_name(filename_or_handle, mode="r"):
     """
@@ -509,7 +610,7 @@ def write_genbank(seq_records, file_name, default_molecule_type="DNA", add_domai
     warnings.filterwarnings("ignore", category=BiopythonWarning, module=".*InsdcIO.*")
 
 
-    outfile, file_type = open_if_is_name(file_name, "w")
+    outfile, file_type = open_if_is_name_for_write(file_name)
 
     for record in seq_records:
         if preserve_original:
@@ -566,7 +667,124 @@ def copy_SeqRecord(seqrecord):
     return new_record
 
 
-def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None, max_recs=float("inf"), default_molecule_type='protein'):
+def _resolve_genbank_parser(requested):
+    """Decide which GenBank parser backend to use ("lean" or "biopython").
+
+    Two tiers: "lean" uses the optional native (Rust) ``_gbfast`` extension;
+    "biopython" uses the vendored Biopython parser (no build dependency). The
+    DOMAINATOR_GB_PARSER environment variable, if set, overrides the caller's
+    request. "lean" downgrades to "biopython" when the native extension is absent.
+    """
+    backend = os.environ.get("DOMAINATOR_GB_PARSER") or requested or "biopython"
+    backend = backend.lower()
+    if backend not in ("biopython", "lean"):
+        warnings.warn(
+            f"Unknown DOMAINATOR_GB_PARSER / genbank_parser value {backend!r}; "
+            "using the Biopython parser.",
+            RuntimeWarning,
+        )
+        backend = "biopython"
+    if backend == "lean" and _gbfast is None:
+        backend = "biopython"
+    return backend
+
+
+def _native_usable(file):
+    """True when the native (Rust) parser can be used for this file.
+
+    Applies to uncompressed real paths and to BGZF (the Rust parser seeks by the
+    64-bit virtual offset the Python offset scanner produces). Plain (non-blocked)
+    gzip has no random access, so it stays on the Biopython path.
+    """
+    if _gbfast is None or not isinstance(file, (str, os.PathLike)):
+        return False
+    return detect_compression(file) in (None, "bgzf")
+
+
+# Backwards-compatible alias (the GenBank-specific name used before FASTA support).
+_native_lean_usable = _native_usable
+
+
+def _iter_raw_genbank_records(file, seek_to, default_molecule_type, backend, max_recs=float("inf")):
+    """Yield pre-(name/id)-swap records for one GenBank file.
+
+    "lean" uses the native (Rust) parser to yield LeanContig/LeanSearchContig
+    objects and transparently falls back to the Biopython parser (resuming after
+    the records the native parser already emitted) for records it cannot handle
+    (e.g. a nonstandard LOCUS line or a sequence it rejects). It only applies to
+    uncompressed real paths; compressed/handle inputs use Biopython. Handles are
+    closed in a finally so abandoning the iterator early (e.g. on a max_recs
+    break) does not leak file descriptors.
+    """
+    if backend == "lean" and _native_usable(file):
+        compressed = detect_compression(file) == "bgzf"
+
+        def produce():
+            bound = int(max_recs) if max_recs != float("inf") else -1
+            yield from lean_record.iter_lean_search_native(
+                file, seek_to or 0, bound, default_molecule_type, compressed
+            )
+
+        emitted = 0
+        try:
+            for rec in produce():
+                emitted += 1
+                yield rec
+            return
+        except lean_record.LeanParseError as exc:
+            warnings.warn(
+                f"the native parser could not fully parse '{file}' ({exc}); falling "
+                "back to the Biopython GenBank parser for this file.",
+                RuntimeWarning,
+            )
+        # Native parser stopped early: re-read with Biopython, converting to lean
+        # and skipping the records already emitted.
+        bp_handle, bp_input_type = open_seqfile(file)
+        try:
+            if seek_to is not None:
+                bp_handle.seek(seek_to)
+            for skip_count, rec in enumerate(SeqIO.parse(bp_handle, "genbank")):
+                if skip_count < emitted:
+                    continue
+                yield lean_record.seqrecord_to_lean(rec)
+        finally:
+            if bp_input_type == "name":
+                bp_handle.close()
+    else:
+        handle, input_type = open_seqfile(file)
+        try:
+            if seek_to is not None:
+                handle.seek(seek_to)
+            for rec in SeqIO.parse(handle, "genbank"):
+                yield rec
+        finally:
+            if input_type == "name":
+                handle.close()
+
+
+def _iter_raw_fasta_records(file, seek_to, backend="biopython", default_molecule_type=None, max_recs=float("inf")):
+    """Yield records for one FASTA file.
+
+    With backend == "lean" and the native parser available, yields LeanFastaContig
+    objects (the bulk fast path). Otherwise yields Biopython SeqRecords.
+    """
+    if backend == "lean" and _native_usable(file) and getattr(lean_record, "LeanFastaContig", None) is not None:
+        compressed = detect_compression(file) == "bgzf"
+        bound = int(max_recs) if max_recs != float("inf") else -1
+        yield from lean_record.iter_lean_fasta_native(file, seek_to or 0, bound, default_molecule_type, compressed)
+        return
+    handle, input_type = open_seqfile(file)
+    try:
+        if seek_to is not None:
+            handle.seek(seek_to)
+        for rec in SeqIO.parse(handle, "fasta"):
+            yield rec
+    finally:
+        if input_type == "name":
+            handle.close()
+
+
+def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None, max_recs=float("inf"), default_molecule_type='protein', genbank_parser=None):
     """
         args:
             seqfiles: a genbank or fasta path
@@ -574,39 +792,57 @@ def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None,
             filetype_override: if supplied then don't try to guess filetype from the extension, just use the supplied filetype
             seek_to: seek to this position in the file before reading any records
             max_recs: stop after returning this many sequences
+            genbank_parser: which GenBank backend to use, "lean" or "biopython".
+                Defaults to Biopython; the DOMAINATOR_GB_PARSER env var overrides
+                this. The "lean" backend uses the optional native (Rust) parser
+                (yielding LeanContig objects) and is much faster, but falls back
+                to Biopython for records it cannot parse and when the native
+                extension is not built.
         output:
             yields genbank records one at a time
     """
-    
+
 
     for file in seqfiles:
         file_type = filetype_override
-        (infile, input_type) = open_if_is_name(file)
-        
-        if input_type == 'handle' and file_type is None:
-            raise ValueError(f"filetype_override must be specified when passing a handle.")
+        is_handle = not isinstance(file, (str, os.PathLike))
 
         if file_type is None:
+            if is_handle:
+                raise ValueError(f"filetype_override must be specified when passing a handle.")
             file_type = get_file_type(file)
             if file_type not in {"genbank", "fasta"}:
                 raise ValueError(f"file extension not recognized: {file}, please specify format.")
-        if seek_to is not None:
-            infile.seek(seek_to)
 
+        # the native parser needs a real, seekable binary path; arbitrary handles
+        # stay on the Biopython parser.
+        backend = "biopython" if is_handle else _resolve_genbank_parser(genbank_parser)
+        if file_type == "genbank":
+            raw_iter = _iter_raw_genbank_records(file, seek_to, default_molecule_type, backend, max_recs=max_recs)
+        else:
+            raw_iter = _iter_raw_fasta_records(file, seek_to, backend, default_molecule_type, max_recs)
+
+        lean_search_types = lean_record.LEAN_SEARCH_TYPES if lean_record is not None else ()
         recs_returned = 0
-        for rec in SeqIO.parse(infile, file_type):
-            if recs_returned >= max_recs:
-                break
-            if file_type == "genbank":
-                swap_name_id(rec)
-            if contigs is None or rec.id in contigs:
-                if 'molecule_type' not in rec.annotations:  # TODO: is this ok (will a nucleotide sequence always have molecule_type defined and a peptide sequence always not have?)
-                    rec.annotations['molecule_type'] = default_molecule_type
-                yield rec
-                recs_returned += 1
-                
-        if input_type == "name":
-            infile.close()
+        try:
+            for rec in raw_iter:
+                if recs_returned >= max_recs:
+                    break
+                # Native search records (GenBank/FASTA) are already post-swap and
+                # carry molecule_type internally, so they skip the swap /
+                # molecule_type fallback below.
+                is_search_contig = bool(lean_search_types) and isinstance(rec, lean_search_types)
+                if file_type == "genbank" and not is_search_contig:
+                    swap_name_id(rec)
+                if contigs is None or rec.id in contigs:
+                    if not is_search_contig and 'molecule_type' not in rec.annotations:  # TODO: is this ok (will a nucleotide sequence always have molecule_type defined and a peptide sequence always not have?)
+                        rec.annotations['molecule_type'] = default_molecule_type
+                    yield rec
+                    recs_returned += 1
+        finally:
+            # Closing the sub-generator runs its finally block, closing the handle
+            # even when we broke out early on max_recs.
+            raw_iter.close()
 
 def split_string_list(names, delimeter="::"):
     """
@@ -696,9 +932,10 @@ def i_get_fasta_offsets(input_path): #TODO: replace with cython
 
         yields: (file_offset, num_proteins)
                 note that a fasta file can only have one protein per record, so the num_proteins will always be 1.
-    
+
     """
-    with open(input_path,"rb") as infile:
+    infile, _ = open_seqfile(input_path, binary=True)
+    try:
         offset=0
         line = infile.readline()
         while line:
@@ -706,6 +943,8 @@ def i_get_fasta_offsets(input_path): #TODO: replace with cython
                 yield offset, 1
             offset = infile.tell()
             line = infile.readline()
+    finally:
+        infile.close()
 
 def i_get_genbank_offsets(input_path): #TODO: replace with cython
     """
@@ -719,7 +958,7 @@ def i_get_genbank_offsets(input_path): #TODO: replace with cython
     cdss = 0
     rec_type = ""
     locus_seen = False
-    with open(input_path,"rb") as infile:
+    with open_seqfile(input_path, binary=True)[0] as infile:
         line = infile.readline()
         while line:
             if line.startswith(b"LOCUS "):
@@ -769,7 +1008,7 @@ def get_fasta_offsets(input_path): #TODO: replace with cython
     """
     offsets = array("Q")
     num_proteins = array("Q")
-    with open(input_path,"rb") as infile:
+    with open_seqfile(input_path, binary=True)[0] as infile:
         offset=0
         line = infile.readline()
         while line:
@@ -795,7 +1034,7 @@ def get_genbank_offsets(input_path): #TODO: replace with cython
     num_proteins = array("Q")
     rec_type = ""
     locus_seen = False
-    with open(input_path,"rb") as infile:
+    with open_seqfile(input_path, binary=True)[0] as infile:
         line = infile.readline()
         while line:
             if line.startswith(b"LOCUS "):
@@ -837,6 +1076,24 @@ def get_genbank_offsets(input_path): #TODO: replace with cython
     
     return offsets, num_proteins
 
+def _gbfast_usable(input_path):
+    """True when the native offset scanner can be used: it's installed and the
+    file is an uncompressed real path (BGZF needs the Python virtual-offset path)."""
+    if _gbfast is None:
+        return False
+    if not isinstance(input_path, (str, os.PathLike)):
+        return False
+    return detect_compression(input_path) is None
+
+
+def _gbfast_offset_pairs(input_path, filetype):
+    if filetype == "fasta":
+        return _gbfast.fasta_offsets(str(input_path))
+    elif filetype == "genbank":
+        return _gbfast.genbank_offsets(str(input_path))
+    raise ValueError(f"Filetype not recognized for input file: {input_path}")
+
+
 def get_offsets(input_path):
     """
         input: a path to a fasta or genbank file
@@ -845,6 +1102,12 @@ def get_offsets(input_path):
     """
 
     filetype = get_file_type(input_path)
+    if _gbfast_usable(input_path):
+        pairs = _gbfast_offset_pairs(input_path, filetype)
+        offsets = array("Q", (p[0] for p in pairs))
+        num_proteins = array("Q", (p[1] for p in pairs))
+        return offsets, num_proteins
+
     if filetype == "fasta":
         offsets, num_proteins = get_fasta_offsets(input_path) # First array is file offsets of the record, second array is protein count (always 1 for fasta)
 
@@ -863,6 +1126,8 @@ def i_get_offsets(input_path):
     """
 
     filetype = get_file_type(input_path)
+    if _gbfast_usable(input_path):
+        return iter(_gbfast_offset_pairs(input_path, filetype))
     if filetype == "fasta":
         return i_get_fasta_offsets(input_path) # First array is file offsets of the record, second array is protein count (always 1 for fasta)
     elif filetype == "genbank":

@@ -1,0 +1,20 @@
+[package]
+name = "domainator-gbfast"
+version = "0.1.0"
+edition = "2021"
+description = "Fast GenBank offset scanner and parser for Domainator (optional native acceleration)."
+license = "MIT"
+
+[lib]
+name = "_gbfast"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+gb-io = "0.9"
+bgzf = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

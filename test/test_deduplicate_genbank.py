@@ -10,55 +10,6 @@ from domainator import deduplicate_genbank
 from domainator.Bio import Seq
 
 
-def _probe_diamond_cluster(bin_path):
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_fasta = Path(output_dir) / "input.fasta"
-        input_fasta.write_text(
-            ">seq1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR\n"
-            ">seq2\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR\n"
-            ">seq3\nMVLSAADKTNVKAAWGKVGGHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYA\n",
-            encoding="utf-8",
-        )
-        cluster_output = Path(output_dir) / "clusters.tsv"
-
-        try:
-            subprocess.run(
-                [bin_path, "cluster", "-d", str(input_fasta), "-o", str(cluster_output), "--approx-id", "99", "--threads", "1"],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            return False
-
-    return True
-
-
-def _find_working_diamond():
-    candidates = list()
-    which_diamond = shutil.which("diamond")
-    if which_diamond is not None:
-        candidates.append(which_diamond)
-
-    conda_prefix = os.environ.get("CONDA_PREFIX")
-    if conda_prefix is not None:
-        prefix_path = Path(conda_prefix).resolve()
-        package_dirs = [prefix_path / "pkgs", prefix_path.parent / "pkgs"]
-        for package_dir in package_dirs:
-            if package_dir.is_dir():
-                candidates.extend(str(path) for path in sorted(package_dir.glob("diamond-*/bin/diamond"), reverse=True))
-
-    seen = set()
-    for candidate in candidates:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if _probe_diamond_cluster(candidate):
-            return candidate
-
-    return None
-
-
 def test_deduplicate_genbank_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
@@ -287,7 +238,7 @@ def test_diamond_run_falls_back_to_longest_sequence(monkeypatch):
 
         def fake_run(args, stdout=None, stderr=None, encoding=None):
             calls.append(list(args))
-            return subprocess.CompletedProcess(args, 1, "", "Error: Record count not set\n")
+            return subprocess.CompletedProcess(args, 1, "", "Error: max_oid not set\n")
 
         monkeypatch.setattr(deduplicate_genbank.subprocess, "run", fake_run)
 
@@ -296,7 +247,7 @@ def test_diamond_run_falls_back_to_longest_sequence(monkeypatch):
         assert len(calls) == 1
         assert calls[0][calls[0].index("-d") + 1] == str(input_fasta)
         assert search.get_cluster_members() == {"seq2": ["seq1", "seq2", "seq3"]}
-        assert "Warning: diamond cluster failed with 'Record count not set'" in log_handle.getvalue()
+        assert "diamond cluster failed on a single all-encompassing cluster" in log_handle.getvalue()
 
 
 def test_diamond_parses_cluster_table():
@@ -334,10 +285,6 @@ def test_deduplicate_genbank_diamond_rejects_nucleotide_input():
 
 
 def test_deduplicate_genbank_diamond():
-    working_diamond = _find_working_diamond()
-    if working_diamond is None:
-        pytest.skip("No working diamond cluster binary available")
-
     with tempfile.TemporaryDirectory() as output_dir:
         input_fasta = Path(output_dir) / "input.fasta"
         out = Path(output_dir) / "deduplicate_out.fasta"
@@ -347,15 +294,15 @@ def test_deduplicate_genbank_diamond():
         input_fasta.write_text(
             ">seq1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR\n"
             ">seq2\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR\n"
-            ">seq3\nMVLSAADKTNVKAAWGKVGGHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYA\n",
+            ">seq3\nMVLSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHAGEYGAEALERKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVAASLDKFLASVSTVLTSKYA\n",
             encoding="utf-8",
         )
 
         deduplicate_genbank.main([
             "-i", str(input_fasta),
             "--algorithm", "diamond",
-            "--bin_path", working_diamond,
-            "--id", "0.99",
+            "--bin_path", "diamond",
+            "--id", "0.9999",
             "--cpu", "1",
             "--prefix_count",
             "--fasta_out",
@@ -382,10 +329,6 @@ def test_deduplicate_genbank_diamond():
 
 
 def test_deduplicate_genbank_diamond_single_centroid():
-    working_diamond = _find_working_diamond()
-    if working_diamond is None:
-        pytest.skip("No working diamond cluster binary available")
-
     with tempfile.TemporaryDirectory() as output_dir:
         input_fasta = Path(output_dir) / "input.fasta"
         out = Path(output_dir) / "deduplicate_out.fasta"
@@ -401,7 +344,7 @@ def test_deduplicate_genbank_diamond_single_centroid():
         deduplicate_genbank.main([
             "-i", str(input_fasta),
             "--algorithm", "diamond",
-            "--bin_path", working_diamond,
+            "--bin_path", "diamond",
             "--id", "0",
             "--cpu", "1",
             "--prefix_count",
@@ -421,7 +364,7 @@ def test_deduplicate_genbank_diamond_single_centroid():
         assert cluster_table[1].endswith("seq1 ; seq2") or cluster_table[1].endswith("seq2 ; seq1")
 
         log_file = log.read_text(encoding="utf-8")
-        assert "Warning: diamond cluster failed with 'Record count not set'" in log_file
+        assert "diamond cluster failed on a single all-encompassing cluster" in log_file
         assert "Input  size: 2" in log_file
         assert "Output size: 1" in log_file
 

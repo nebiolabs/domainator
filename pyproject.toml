@@ -1,6 +1,40 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
+requires = ["setuptools>=61.0.0", "wheel", "setuptools-rust>=1.7"]
 build-backend = "setuptools.build_meta"
+
+# Optional native acceleration (domainator._gbfast). `optional = true` means a
+# missing Rust toolchain does not fail the install; the Python code falls back to
+# the Biopython parser, so correctness never depends on this extension.
+[[tool.setuptools-rust.ext-modules]]
+target = "domainator._gbfast"
+path = "rust/Cargo.toml"
+binding = "PyO3"
+optional = true
+# Always build optimized (release), including for editable installs.
+debug = false
+
+[tool.cibuildwheel]
+# Build CPython wheels for the supported versions; skip 32-bit and musl.
+build = "cp310-* cp311-* cp312-* cp313-*"
+skip = "*_i686 *-musllinux_*"
+# Verify the native extension actually compiled into the wheel. domainator's
+# __init__ is lightweight, so importing _gbfast does not pull the heavy runtime
+# deps.
+test-command = "python -c \"from domainator import _gbfast; assert hasattr(_gbfast, 'parse_lean_search') and hasattr(_gbfast, 'genbank_offsets')\""
+
+[tool.cibuildwheel.linux]
+# manylinux_2_28 ships a modern toolchain; install Rust into the build container.
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+before-all = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
+
+[tool.cibuildwheel.macos]
+# GitHub macOS runners have Rust preinstalled via rustup.
+before-all = "rustup target add x86_64-apple-darwin aarch64-apple-darwin || true"
+
+[tool.cibuildwheel.windows]
+# GitHub Windows runners have Rust preinstalled.
 
 [project]
 name="domainator"
@@ -35,7 +69,8 @@ dependencies = [
     "tqdm >=4.65.0",
     "pyrodigal >=3.0.1",
     "bashplotlib >=0.6.5",
-    "requests >=2.31.0"
+    "requests >=2.31.0",
+    "urllib3 >=2.0"
 ]
 
 [project.optional-dependencies]
@@ -52,7 +87,8 @@ core = [
     "tqdm >=4.65.0",
     "pyrodigal >=3.0.1",
     "bashplotlib >=0.6.5",
-    "requests >=2.31.0"
+    "requests >=2.31.0",
+    "urllib3 >=2.0"
 ]
 test = ["pytest >=7.4.2",
         "pytest-datadir~=1.4.1"]

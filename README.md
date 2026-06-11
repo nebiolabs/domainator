@@ -1,6 +1,6 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.8.1
+Version 0.9.0
 
 [//]: # (remember to update version in domainator/__init__.py also)
 
@@ -102,7 +102,7 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 |  deduplicate_genbank.py |  runs a clustering algorithm, such as cdhit, usearch, or diamond on sequences from a genbank file to reduce redundancy.  | genbank nucleotide or peptide files  |  a genbank file  |  no  | yes |  |
 |  domain_search.py | Search a small number of protein or nucleic-acid references against a database | genbank (protein genbank, or nucleotide genbank with CDS annotations) or protein/nucleotide fasta files to search through. Protein HMMs and FASTA search CDSs or protein records; nucleotide FASTA, nucleotide HMMs, and infernal CMs search whole nucleotide contigs. |  a genbank file  |  no  | yes | Protein inputs cannot be searched with nucleotide references. |
 |  domainate.py  | annotates contig or protein sequences with protein or nucleic-acid hits | genbank (protein genbank, or nucleotide genbank with CDS annotations) or protein/nucleotide fasta files to annotate. Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CMs. | a genbank file with new annotations | no | yes | Nucleotide references search whole contigs rather than individual CDSs. Consider `domain_search.py` if searching for small numbers of references against large databases.  |
-|  domainator_db_download.py | Download databases from the internet in formats appropriate for domainator  |  None | genbank or fasta  | N/A  | use `-o /dev/stdout` |  |
+|  domainator_db_download.py | Download databases from the internet in formats appropriate for domainator  |  None | genbank or fasta  | N/A  | use `-o /dev/stdout` | For NCBI genome databases, the default `--download_backend datasets` uses the NCBI Datasets CLI (`ncbi-datasets-cli`, installed with the conda env) for NCBI-friendly bulk downloads. Use `--download_backend direct` for HTTPS downloads without that dependency; keep `--download_workers` low (~3) to avoid NCBI rate-limiting. |
 |  enum_report.py | from a genbank file generates a tab separated file of properties and metadata related to the input, for example the domain content of each contig or cds. | genbank files | a tab separated or html metadata table  | yes | yes |  |
 |  extract_domains.py | Takes a domainator-genbank file, looks for the specified domains, and extracts them from the contigs.  |  a (nucleotide or peptide) genbank file.  |  a genbank or fasta file of the same sequence-type (nucleotide or peptide) as the input  | yes  |  yes  | If you want to extract peptide domains from a nucleotide genbank, pass the output of this program into extract_peptides (or vice-versa) |
 |  extract_peptides.py | extracts translated peptide sequences from nucleotide genbank sequences, preserves the domainator annotations (other annotations are lost) |  nucleotide genbank file  |  peptide genbank file  | yes  | yes | |
