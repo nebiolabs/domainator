@@ -689,6 +689,29 @@ def _resolve_genbank_parser(requested):
     return backend
 
 
+# Paths for which we've already warned that the native parser fell back to
+# Biopython. The fallback is expected for some inputs (protein GenBank,
+# nonstandard LOCUS lines, '*'-containing sequences), and the per-partition parse
+# would otherwise emit one warning per partition, so warn at most once per file
+# (per process; spawned workers each warn once, which is still bounded).
+_native_fallback_warned_paths = set()
+
+
+def _warn_native_fallback(file):
+    key = str(file)
+    if key in _native_fallback_warned_paths:
+        return
+    _native_fallback_warned_paths.add(key)
+    warnings.warn(
+        f"The native (Rust) parser could not fully parse '{file}'; falling back to "
+        "the Biopython parser for this file. This is expected for protein GenBank, "
+        "nonstandard LOCUS lines, and '*'-containing sequences; results are "
+        "unaffected (only this file's parsing is slower).",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+
+
 def _native_usable(file):
     """True when the native (Rust) parser can be used for this file.
 
@@ -731,12 +754,8 @@ def _iter_raw_genbank_records(file, seek_to, default_molecule_type, backend, max
                 emitted += 1
                 yield rec
             return
-        except lean_record.LeanParseError as exc:
-            warnings.warn(
-                f"the native parser could not fully parse '{file}' ({exc}); falling "
-                "back to the Biopython GenBank parser for this file.",
-                RuntimeWarning,
-            )
+        except lean_record.LeanParseError:
+            _warn_native_fallback(file)
         # Native parser stopped early: re-read with Biopython, converting to lean
         # and skipping the records already emitted.
         bp_handle, bp_input_type = open_seqfile(file)

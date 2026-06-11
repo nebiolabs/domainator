@@ -45,6 +45,10 @@ def test_domain_search_fasta_query(shared_datadir):
         #compare_seqfiles(out, shared_datadir / "ccdb.gb")
 
 
+# The protein input here triggers the expected native-parser->Biopython fallback
+# (gb-io rejects the '*' / protein LOCUS); the test asserts the ValueError, not the
+# warning, so silence the incidental RuntimeWarning.
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_domain_search_rejects_protein_input_with_nucleotide_references(shared_datadir):
     protein_input = shared_datadir / "simple_genpept.gb"
     nucleotide_reference = shared_datadir / "simple_dna_queries.fna"
@@ -391,9 +395,12 @@ def test_domain_search_peptides(shared_datadir):
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
         args = ['--input'] + input_files + ["-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000"]
-        main(args)
+        # simple_genpept.gb (protein, contains '*') is expected to trigger the
+        # native-parser -> Biopython fallback warning.
+        with pytest.warns(RuntimeWarning, match="native .* parser could not fully parse"):
+            main(args)
         assert os.path.isfile(out)
-        
+
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 2
         assert utils.count_peptides_in_record(new_file[0]) == 1
@@ -784,7 +791,10 @@ def test_domain_search_bgzf_output(shared_datadir):
         for a, b in zip(plain_recs, comp_recs):
             compare_seqrecords(a, b)
 
-        # The compressed output is usable directly as a search input.
+        # The compressed output is usable directly as a search input. domainator's
+        # own output uses a long (accession-style) LOCUS name that the native
+        # parser can't parse, so it's expected to fall back to Biopython (over BGZF).
         out_rt = output_dir + "/roundtrip.gb"
-        main(["--input", str(out_comp), "-o", out_rt] + common)
+        with pytest.warns(RuntimeWarning, match="native .* parser could not fully parse"):
+            main(["--input", str(out_comp), "-o", out_rt] + common)
         assert len(list(utils.parse_seqfiles([out_rt], genbank_parser="biopython"))) == len(plain_recs)
