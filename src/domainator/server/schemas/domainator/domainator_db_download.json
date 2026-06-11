@@ -167,9 +167,89 @@
       "flags": [
         "--cpu"
       ]
+    },
+    {
+      "name": "Download Backend",
+      "parameter": "download_backend",
+      "help": "Network backend for NCBI genome downloads. 'datasets' uses the NCBI Datasets CLI dehydrate/rehydrate workflow (recommended for large jobs; NCBI's own bulk tool handles throttling). 'direct' downloads .gbff.gz files over HTTPS directly.",
+      "type": "string",
+      "default": "datasets",
+      "choices": [
+        "datasets",
+        "direct"
+      ],
+      "flags": [
+        "--download_backend"
+      ]
     }
   ],
   "advanced_parameters": [
+    {
+      "name": "Download Workers",
+      "parameter": "download_workers",
+      "help": "For the 'direct' backend: number of simultaneous HTTPS connections to the NCBI genomes server. NCBI rate-limits by concurrency, so keep this low (~3). 0 = use --cpu.",
+      "type": "integer",
+      "default": 3,
+      "flags": [
+        "--download_workers"
+      ]
+    },
+    {
+      "name": "Email",
+      "parameter": "email",
+      "help": "Contact email included in the User-Agent header sent to NCBI (politeness; not an API key). Falls back to the NCBI_EMAIL environment variable.",
+      "type": "string",
+      "flags": [
+        "--email"
+      ]
+    },
+    {
+      "name": "Ncbi Api Key",
+      "parameter": "ncbi_api_key",
+      "help": "NCBI API key passed to the 'datasets' backend (does not affect the 'direct' backend / raw FTP server). Falls back to the NCBI_API_KEY environment variable.",
+      "type": "string",
+      "flags": [
+        "--ncbi_api_key"
+      ]
+    },
+    {
+      "name": "Datasets Workdir",
+      "parameter": "datasets_workdir",
+      "help": "For the 'datasets' backend: working directory for the dehydrated package and rehydrated files. Required when --download_backend is 'datasets'.",
+      "type": "string",
+      "flags": [
+        "--datasets_workdir"
+      ]
+    },
+    {
+      "name": "Datasets Include",
+      "parameter": "datasets_include",
+      "help": "For the 'datasets' backend: value passed to `datasets ... --include`.",
+      "type": "string",
+      "default": "genome,gbff",
+      "flags": [
+        "--datasets_include"
+      ]
+    },
+    {
+      "name": "Datasets Max Workers",
+      "parameter": "datasets_max_workers",
+      "help": "For the 'datasets' backend: value passed to `datasets rehydrate --max-workers`. Keep low to be NCBI-friendly.",
+      "type": "integer",
+      "default": 1,
+      "flags": [
+        "--datasets_max_workers"
+      ]
+    },
+    {
+      "name": "Datasets Path",
+      "parameter": "datasets_path",
+      "help": "Path to the `datasets` (NCBI Datasets CLI) binary. If not given, it is looked up on PATH.",
+      "type": "string",
+      "flags": [
+        "--datasets_path"
+      ]
+    },
     {
       "name": "Before",
       "parameter": "before",

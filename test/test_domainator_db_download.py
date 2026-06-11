@@ -1,7 +1,48 @@
 from domainator import domainator_db_download
 import tempfile
+import gzip
+import shutil
 from domainator import utils
 from pathlib import Path
+
+
+def test_gzip_is_valid(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        good = Path(output_dir) / "good.gb.gz"
+        with open(shared_datadir / "bacillus_phage_SPR.gb", "rb") as src, gzip.open(good, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        assert domainator_db_download.gzip_is_valid(good) is True
+
+        # truncated / corrupt gzip
+        truncated = Path(output_dir) / "bad.gb.gz"
+        truncated.write_bytes(good.read_bytes()[: good.stat().st_size // 2])
+        assert domainator_db_download.gzip_is_valid(truncated) is False
+
+
+def test_process_local_gbff_no_gene_call(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        gbff_gz = Path(output_dir) / "genome.gbff.gz"
+        with open(shared_datadir / "bacillus_phage_SPR.gb", "rb") as src, gzip.open(gbff_gz, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        outfile = Path(output_dir) / "out.gb"
+        outfile.touch()
+
+        ok = domainator_db_download.process_local_gbff(str(gbff_gz), str(outfile), gene_call=None)
+        assert ok is True
+        recs = list(utils.parse_seqfiles([str(outfile)]))
+        assert len(recs) == 1
+        assert any(f.type == "CDS" for f in recs[0].features)
+
+
+def test_process_local_gbff_skips_corrupt_gzip(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        bad = Path(output_dir) / "genome.gbff.gz"
+        bad.write_bytes(b"not really gzip")
+        outfile = Path(output_dir) / "out.gb"
+        outfile.touch()
+        ok = domainator_db_download.process_local_gbff(str(bad), str(outfile), gene_call=None)
+        assert ok is False
+        assert outfile.stat().st_size == 0
 
 
 
@@ -32,7 +73,7 @@ def test_genbank_download_genbank_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "gb.gb"
-        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=1, cpus=3)
+        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=1, download_workers=3)
         assert outfile.exists()
         # read output file
         recs = list(utils.parse_seqfiles([str(outfile)]))
@@ -43,7 +84,7 @@ def test_genbank_download_genbank_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "gb.gb"
-        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=None, cpus=3)
+        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=None, download_workers=3)
         assert outfile.exists()
         # read output file
         recs = list(utils.parse_seqfiles([str(outfile)]))
@@ -54,7 +95,7 @@ def test_genbank_download_genbank_3(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         outfile = Path(output_dir) / "gb.gb"
-        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call="all", num_recs=None, cpus=2)
+        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call="all", num_recs=None, download_workers=2)
         assert outfile.exists()
         # read output file
         recs = list(utils.parse_seqfiles([str(outfile)]))

@@ -10,6 +10,7 @@ dependencies:
   - diamond>=2.0.0,<3.0
   - hmmer>=3.3.2,<4.0
   - usearch>=12.0_beta,<13.0
+  - ncbi-datasets-cli
   - pip:
     - -e .[test]
     - git+https://github.com/BernhoferM/TMbed.git
