@@ -7,7 +7,44 @@ From: condaforge/miniforge3:24.9.2-0
 ./conda_env.yml /opt/domainator
 ./test /opt/domainator/test
 ./pyproject.toml /opt/domainator
+./README.md /opt/domainator
 
 %post
 cd /opt/domainator
+
+# The base miniforge image has no C compiler/linker; cargo needs `cc` to link the
+# Rust extension (otherwise: "error: linker `cc` not found"). Install a C toolchain.
+apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+
 conda env update --name base --file conda_env.yml
+
+# The native (Rust) _gbfast extension must compile, or every run silently falls
+# back to the slow Biopython parser. `optional = true` makes a failed cargo build
+# skip silently (and pip hides successful build output), so we build the wheel
+# non-editable without isolation and HARD-FAIL if _gbfast.so is not inside it.
+# (The compile needs the C linker installed above and the rust toolchain below.)
+echo "=== rust toolchain check ==="
+which cargo rustc || { echo "ERROR: cargo/rustc not on PATH -- rust did not install"; exit 1; }
+cargo --version
+
+# setuptools-rust (and its semantic_version dep) must be present to build without
+# isolation; modern setuptools needs packaging>=24.2 (packaging.licenses) for
+# metadata generation. --no-deps keeps setuptools-rust from churning setuptools.
+pip install --no-deps "setuptools-rust>=1.7" semantic_version
+pip install -U "packaging>=24.2"
+
+echo "=== build wheel and verify it contains _gbfast.so ==="
+rm -rf /tmp/dwheel
+pip wheel --no-deps --no-build-isolation -w /tmp/dwheel /opt/domainator
+python - <<'PY'
+import glob, zipfile, sys
+whl = glob.glob('/tmp/dwheel/domainator-*.whl')[0]
+so = [n for n in zipfile.ZipFile(whl).namelist() if '_gbfast' in n and n.endswith('.so')]
+print("wheel:", whl, "\n_gbfast.so entries:", so)
+if not so:
+    sys.exit("FATAL: _gbfast.so not in wheel -- the Rust extension was skipped during the wheel build")
+PY
+pip install --no-deps --force-reinstall /tmp/dwheel/domainator-*.whl
+
+# Final guard: the extension must import from the installed package.
+python -c "import domainator._gbfast; print('native _gbfast OK:', domainator._gbfast.__file__)"
