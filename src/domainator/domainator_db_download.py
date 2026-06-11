@@ -314,14 +314,39 @@ def filter_by_assembly_level(genbank_accessions, categories={"Complete Genome"})
     print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by assembly_level in {categories}", file=sys.stderr)
     return filtered_gb_accessions
 
-def gzip_is_valid(path):
-    """Return True if the gzip file at path can be fully decompressed, False otherwise."""
+def _is_gzip(path):
+    """Return True if the file begins with the gzip magic bytes (1f 8b)."""
+    with open(path, "rb") as fh:
+        return fh.read(2) == b"\x1f\x8b"
+
+def _open_maybe_gzip(path, mode="rt"):
+    """Open a file that may or may not be gzip-compressed, chosen by magic bytes.
+
+    The direct backend downloads gzipped .gbff.gz files from the NCBI FTP server, while
+    the NCBI Datasets backend writes uncompressed genomic.gbff files; both flow through
+    process_local_gbff, so the opener must handle either.
+    """
+    if _is_gzip(path):
+        return gzip.open(path, mode)
+    return open(path, mode)
+
+def gbff_is_valid(path):
+    """Return True if path is a readable (optionally gzipped) GenBank flat file.
+
+    Rejects: truncated/corrupt gzip downloads (decompression fails partway), and content that
+    is not GenBank at all (e.g. a server error page, or a file that isn't really gzip) by
+    requiring it to begin with a LOCUS line. Reads the whole (decompressed) stream so a
+    truncation anywhere is caught before the file is appended to the database.
+    """
     try:
-        with gzip.open(path, "rb") as handle:
+        with _open_maybe_gzip(path, "rt") as handle:
+            head = handle.read(4096)
+            if not head.lstrip().startswith("LOCUS"):
+                return False
             while handle.read(1024 * 1024):
                 pass
         return True
-    except (OSError, EOFError):
+    except (OSError, EOFError, UnicodeDecodeError):
         return False
 
 def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, records_written=None, num_recs=None):
@@ -347,8 +372,8 @@ def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, record
     if gene_call not in (None, 'all', 'unannotated'):
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
 
-    if not gzip_is_valid(gbff_path):
-        print(f"error: gzip validation failed for {gbff_path}, skipping", file=sys.stderr)
+    if not gbff_is_valid(gbff_path):
+        print(f"error: gbff validation failed for {gbff_path}, skipping", file=sys.stderr)
         return False
 
     clear_domainator_annotations = True
@@ -372,8 +397,8 @@ def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, record
                     for record in records:
                         write_genbank((record,), output_handle)
                 else:
-                    with gzip.open(gbff_path, "rt") as gzipped_file:
-                        for line in gzipped_file:
+                    with _open_maybe_gzip(gbff_path, "rt") as gbff_in:
+                        for line in gbff_in:
                             output_handle.write(line)
             if num_recs is not None and records_written is not None:
                 records_written.value += 1
@@ -559,7 +584,11 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
         rehydrate_cmd += ["--api-key", api_key]
     run(rehydrate_cmd, retries=3)
 
-    gbff_files = sorted(extract_dir.glob("ncbi_dataset/data/*/*_genomic.gbff.gz"))
+    # NCBI Datasets writes one uncompressed ncbi_dataset/data/<accession>/genomic.gbff per
+    # assembly (not the FTP-style <accession>_<name>_genomic.gbff.gz). Match both the datasets
+    # layout and any gzipped .gbff, in case the naming/compression ever varies.
+    gbff_files = sorted(extract_dir.glob("ncbi_dataset/data/*/*.gbff")) \
+               + sorted(extract_dir.glob("ncbi_dataset/data/*/*.gbff.gz"))
 
     found_accessions = {p.parent.name.split(".")[0] for p in gbff_files}
     requested_accessions = {a.split(".")[0] for a in accessions}
@@ -577,7 +606,11 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     with make_manager() as manager:
         lock = manager.Lock()
         records_written = manager.Value('i', 0)
-        worker = functools.partial(_datasets_local_worker, output_file_path=output_file_path, gene_call=gene_call, lock=lock, records_written=records_written, num_recs=num_recs)
+        # The download was already capped to num_recs (the accessions slice above), so every
+        # rehydrated genome should be both appended AND logged. No early break here: breaking
+        # on records_written races with concurrent appends and can leave a genome in the .gb
+        # that never made it into the success log, which would duplicate it on the next resume.
+        worker = functools.partial(_datasets_local_worker, output_file_path=output_file_path, gene_call=gene_call, lock=lock, records_written=records_written, num_recs=None)
         with make_pool(processes=cpus) as pool:
             for accession, ok in tqdm.tqdm(pool.imap_unordered(worker, gbff_files), total=len(gbff_files), desc="Datasets genomes", leave=True, dynamic_ncols=True):
                 with lock:
@@ -587,8 +620,6 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
                             success_log_handle.write(accession + "\n")
                     else:
                         failed += 1
-                    if num_recs is not None and records_written.value >= num_recs:
-                        break
 
     if success_log_handle is not None:
         success_log_handle.close()
@@ -882,6 +913,18 @@ def main(argv):
     parser.add_argument('--config', action=ActionConfigFile)
 
     params = parser.parse_args(argv)
+
+    # Guard against wiping the canonical exclusion log: --success_rec_log is opened with "w"
+    # (truncated), so pointing it at the same file as --exclude_accessions_file would erase
+    # the list of already-downloaded accessions. Checked before the output is touched.
+    if (params.success_rec_log is not None and params.exclude_accessions_file is not None
+            and os.path.abspath(params.success_rec_log) == os.path.abspath(params.exclude_accessions_file)):
+        raise Exception(
+            "--success_rec_log and --exclude_accessions_file must be different files: "
+            "--success_rec_log is truncated on each run, which would erase the exclusion log. "
+            "Write new successes to a separate file (e.g. success_log_new.txt) and merge it "
+            "into the exclusion log after a clean run."
+        )
 
     if params.append:
         if not Path(params.output).is_file():
