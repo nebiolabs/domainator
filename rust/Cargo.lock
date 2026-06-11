@@ -60,6 +60,7 @@ version = "0.1.0"
 dependencies = [
  "bgzf",
  "gb-io",
+ "libdeflater",
  "pyo3",
 ]
 

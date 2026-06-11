@@ -7,18 +7,19 @@
 //! Increment 2 (this file): the offset scanner that replaces the pure-Python
 //! `get_genbank_offsets` / `get_fasta_offsets` byte iteration. It returns the
 //! same `(byte_offset, cds_count)` pairs, so the partition scheme is unchanged.
-//! Only uncompressed files are handled here; compressed (BGZF) inputs stay on the
-//! Python virtual-offset scanner.
+//! Uncompressed files are handled here; BGZF (block-gzip) inputs are scanned in
+//! `bgzf_scan` (virtual offsets), so both paths now avoid the Python scanner.
 
 use pyo3::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+mod bgzf_scan;
 mod parser;
 
 /// Return the 4th whitespace-delimited token of a LOCUS line, if present.
 /// Mirrors the Python scanner's `parts[3]` (the molecule-unit field: "aa"/"bp").
-fn locus_unit_is_aa(line: &[u8]) -> bool {
+pub(crate) fn locus_unit_is_aa(line: &[u8]) -> bool {
     let mut tokens = line.split(|&b| b == b' ' || b == b'\t' || b == b'\r' || b == b'\n').filter(|t| !t.is_empty());
     // tokens: [LOCUS, name, length, unit, ...]
     matches!(tokens.nth(3), Some(b"aa"))
@@ -113,6 +114,8 @@ fn fasta_offsets(path: &str) -> PyResult<Vec<(u64, u64)>> {
 fn _gbfast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(genbank_offsets, m)?)?;
     m.add_function(wrap_pyfunction!(fasta_offsets, m)?)?;
+    m.add_function(wrap_pyfunction!(bgzf_scan::genbank_offsets_bgzf, m)?)?;
+    m.add_function(wrap_pyfunction!(bgzf_scan::fasta_offsets_bgzf, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_lean, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_lean_search, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_fasta_search, m)?)?;

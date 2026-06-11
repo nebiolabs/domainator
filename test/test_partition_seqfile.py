@@ -1,5 +1,6 @@
 from math import prod
 from domainator.partition_seqfile import main
+import os
 import tempfile
 from glob import glob
 from io import StringIO
@@ -58,3 +59,72 @@ def test_gbfast_offsets_match_python(shared_datadir):
         assert list(zip(off, n)) == gbfast.fasta_offsets(f), f
         checked += 1
     assert checked > 0
+
+
+def test_gbfast_bgzf_offsets_match_python(shared_datadir, tmp_path):
+    """The native BGZF offset scanner must produce the exact same virtual offsets
+    (block_start<<16 | within) as the Python BgzfReader scanner, so partitions of
+    a BGZF database are identical to the uncompressed ones."""
+    import glob
+    from domainator import utils
+    from domainator.Bio import bgzf
+    gbfast = getattr(utils, "_gbfast", None)
+    if gbfast is None or not hasattr(gbfast, "genbank_offsets_bgzf"):
+        pytest.skip("native _gbfast BGZF scanner not built")
+
+    def bgzip(src):
+        dst = tmp_path / (os.path.basename(src) + ".bgz")
+        with open(src, "rb") as fh, bgzf.BgzfWriter(str(dst)) as w:
+            w.write(fh.read())
+        return str(dst)
+
+    checked = 0
+    for f in sorted(glob.glob(str(shared_datadir / "*.gb"))):
+        try:
+            py = list(zip(*utils.get_genbank_offsets(bgz := bgzip(f))))
+        except Exception:
+            continue
+        assert utils.detect_compression(bgz) == "bgzf"
+        assert py == gbfast.genbank_offsets_bgzf(bgz), f
+        # get_offsets must dispatch to the native scanner and agree.
+        off, n = utils.get_offsets(bgz)
+        assert list(zip(off, n)) == py, f
+        checked += 1
+    for f in sorted(glob.glob(str(shared_datadir / "*.fasta"))) + sorted(glob.glob(str(shared_datadir / "*.fna"))):
+        try:
+            py = list(zip(*utils.get_fasta_offsets(bgz := bgzip(f))))
+        except Exception:
+            continue
+        assert py == gbfast.fasta_offsets_bgzf(bgz), f
+        checked += 1
+    assert checked > 0
+
+
+def test_gbfast_bgzf_offsets_multiblock(shared_datadir, tmp_path):
+    """Records spanning many BGZF blocks: offsets must still match the Python
+    scanner exactly, and every offset must seek to a record boundary."""
+    from domainator import utils
+    from domainator.Bio import bgzf
+    gbfast = getattr(utils, "_gbfast", None)
+    if gbfast is None or not hasattr(gbfast, "genbank_offsets_bgzf"):
+        pytest.skip("native _gbfast BGZF scanner not built")
+
+    src = shared_datadir / "MT_nbs.gb"  # 20 records; repeat to span many blocks
+    data = src.read_bytes()
+    bgz = tmp_path / "multiblock.gb.bgz"
+    with bgzf.BgzfWriter(str(bgz)) as w:
+        for _ in range(50):
+            w.write(data)
+
+    py = list(zip(*utils.get_genbank_offsets(str(bgz))))
+    rust = gbfast.genbank_offsets_bgzf(str(bgz))
+    assert len({o >> 16 for o, _ in py}) > 1, "test file did not span multiple BGZF blocks"
+    assert py == rust
+
+    reader = bgzf.BgzfReader(str(bgz), "rb")
+    try:
+        for vo, _ in rust:
+            reader.seek(int(vo))
+            assert reader.readline().startswith(b"LOCUS "), vo
+    finally:
+        reader.close()

@@ -1096,21 +1096,35 @@ def get_genbank_offsets(input_path): #TODO: replace with cython
     return offsets, num_proteins
 
 def _gbfast_usable(input_path):
-    """True when the native offset scanner can be used: it's installed and the
-    file is an uncompressed real path (BGZF needs the Python virtual-offset path)."""
+    """True when a native offset scanner can be used: the extension is installed
+    and the file is a real path that is either uncompressed or BGZF. Plain gzip
+    (non-blocked) still falls back to the Python scanner."""
     if _gbfast is None:
         return False
     if not isinstance(input_path, (str, os.PathLike)):
         return False
-    return detect_compression(input_path) is None
+    compression = detect_compression(input_path)
+    if compression is None:
+        return True
+    if compression == "bgzf":
+        # BGZF support was added alongside genbank_offsets_bgzf; guard so an older
+        # built extension (uncompressed-only) cleanly falls back.
+        return hasattr(_gbfast, "genbank_offsets_bgzf")
+    return False
 
 
 def _gbfast_offset_pairs(input_path, filetype):
+    """Return native (offset, cds_count) pairs. Offsets are plain byte offsets for
+    uncompressed files and BGZF virtual offsets (block_start<<16 | within) for
+    BGZF, matching the Python scanners / Bio.bgzf and the parser's seek path."""
+    bgzf_input = detect_compression(input_path) == "bgzf"
     if filetype == "fasta":
-        return _gbfast.fasta_offsets(str(input_path))
+        scan = _gbfast.fasta_offsets_bgzf if bgzf_input else _gbfast.fasta_offsets
     elif filetype == "genbank":
-        return _gbfast.genbank_offsets(str(input_path))
-    raise ValueError(f"Filetype not recognized for input file: {input_path}")
+        scan = _gbfast.genbank_offsets_bgzf if bgzf_input else _gbfast.genbank_offsets
+    else:
+        raise ValueError(f"Filetype not recognized for input file: {input_path}")
+    return scan(str(input_path))
 
 
 def get_offsets(input_path):

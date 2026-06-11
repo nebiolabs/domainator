@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.22", features = ["extension-module"] }
 gb-io = "0.9"
 bgzf = "0.3"
+libdeflater = "1.25"
 
 [profile.release]
 opt-level = 3
