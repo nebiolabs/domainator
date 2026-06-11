@@ -28,6 +28,7 @@ import pyrodigal
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy
 from domainator import foldseek as foldseek_lib
+from domainator.lean_record import LeanContig, lean_to_seqrecord, lean_translate, LEAN_SEARCH_TYPES, materialize_lean_search
 
 #TODO: add support for distinguishing complete domains from cutoff domains. For example see the pfam or hmmer domain graphics. I think this can be done by comparing the size of the domain consensus to the domain border coords (from domain.Alignment) on the hits.
 #TODO: also look at: https://github.com/Larofeticus/hpc_hmmsearch, https://www.higithub.com/apcamargo/repo/hpc_pfam_search, https://docs.nersc.gov/performance/case-studies/hmmer3/
@@ -471,24 +472,92 @@ def clean_rec(rec, clear_best_hit=False, clear_domainator_annotations=False, cle
     rec.features = new_list
     return CDS_counter
 
-def get_prot_list(contig, unique_id):
-    """ 
+
+def _lean_clean(lean, clear_best_hit=False, clear_domainator_annotations=False, clear_CDS_annotations=False):
+    """clean_rec for a LeanContig (the bulk fast path).
+
+    Mirrors clean_rec's feature filtering and translation, but on lean features
+    and without building any Biopython objects. ``cds_id`` is *deferred* to
+    materialization (it is only needed for hit output), unlike clean_rec which
+    sets it eagerly. Feature order is preserved so the (contig_index, feature_index)
+    protein naming stays consistent with the materialized record.
+    """
+    new_list = []
+    CDS_counter = 0
+    is_protein = lean.annotations.get('molecule_type') == "protein"
+    for feature in lean.features:
+        if clear_best_hit and feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
+            continue
+        elif feature.type == DOMAIN_FEATURE_NAME and clear_domainator_annotations:
+            continue
+        elif feature.type == 'CDS' and clear_CDS_annotations:
+            continue
+
+        if not is_protein:
+            if feature.type == 'CDS' and "pseudo" not in feature.qualifiers and "pseudogene" not in feature.qualifiers:
+                CDS_counter += 1
+                translation = feature.qualifiers.get('translation')
+                if (translation is None) or (len(translation) == 0) or (len(translation[0]) == 0):
+                    feature.qualifiers['translation'] = [lean_translate(feature, lean.seq)]
+
+        new_list.append(feature)
+
+    lean.features = new_list
+    return CDS_counter
+
+
+def _materialize_lean_for_annotation(lean):
+    """Convert a hit LeanContig to a full SeqRecord and finish clean_rec's work.
+
+    Runs the cds_id-setting part of clean_rec (clear flags are False because
+    _lean_clean already filtered); translation is already set, so it is left
+    untouched. The result is identical to the SeqRecord the Biopython path would
+    hold at annotation time.
+    """
+    record = lean_to_seqrecord(lean)
+    clean_rec(record, clear_best_hit=False, clear_domainator_annotations=False, clear_CDS_annotations=False)
+    return record
+
+
+def get_prot_list(contig, unique_id, dropped_types=None):
+    """
 
     Gets a dictionary of every protein to be annotated from the contig
     if a peptide sequence is passed in, then return the peptide sequence
     if a DNA sequence is passed in then extract the CDS translations.
 
     Args:
-        contig: a SeqRecord
+        contig: a SeqRecord, LeanContig, or LeanSearchContig
         unique_id: a unique id for the contig
+        dropped_types: feature kinds cleared before indexing (for LeanSearchContig,
+            so the (contig, feature_index) names match the materialized record)
 
     Returns:
         iterator of (name, protein_sequence)
         sequence names are contig_index, cds_index
 
     """
-    #prot_list = list()
     i = unique_id
+
+    # Native search-record fast path (GenBank or FASTA): peptides come from Rust
+    # without building any per-feature Python objects (the bulk-path win). For
+    # FASTA nucleotide records cds_peptides() is empty (searched whole by nhmmer).
+    if LEAN_SEARCH_TYPES and isinstance(contig, LEAN_SEARCH_TYPES):
+        if contig.molecule_type == "protein":
+            prot = ''.join(filter(str.isalnum, contig.seq))
+            if len(prot) > MAX_PROTEIN_SIZE:
+                warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
+            else:
+                yield (f"{i},0", prot)
+        else:
+            for feature_index, prot in contig.cds_peptides(set(dropped_types) if dropped_types else set()):
+                if len(prot) > MAX_PROTEIN_SIZE:
+                    warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
+                else:
+                    yield (f"{i},{feature_index}", prot)
+        return
+
+    #prot_list = list()
     if contig.annotations['molecule_type'] == "protein":
         j = 0 #0 because there is only one
         prot = ''.join(filter(str.isalnum, str(contig.seq)))
@@ -789,7 +858,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None):
     """
 
     Args:
@@ -817,6 +886,14 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
+        # Hit-conversion boundary: a record only becomes a full SeqRecord once it
+        # has a hit. Non-hit lean/search records are never materialized.
+        if LEAN_SEARCH_TYPES and isinstance(contig, LEAN_SEARCH_TYPES):
+            contig = _materialize_lean_for_annotation(materialize_lean_search(contig, dropped_types))
+            contigs_list[contig_id] = contig
+        elif isinstance(contig, LeanContig):
+            contig = _materialize_lean_for_annotation(contig)
+            contigs_list[contig_id] = contig
         if contig.annotations['molecule_type'] == "protein":
             add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
         else:
@@ -934,6 +1011,17 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
         clear_domainator_annotations = True
         clear_CDS_annotations = True
 
+    # Feature kinds cleared before indexing. For the LeanSearchContig fast path this
+    # must be applied consistently when extracting search peptides and when
+    # materializing a hit, so the (contig_index, feature_index) names line up.
+    dropped_types = set()
+    if best_annotation:
+        dropped_types.add(DOMAIN_SEARCH_BEST_HIT_NAME)
+    if clear_domainator_annotations:
+        dropped_types.add(DOMAIN_FEATURE_NAME)
+    if clear_CDS_annotations:
+        dropped_types.add("CDS")
+
     if include_taxids is not None:
         include_taxids = set(include_taxids)
     if exclude_taxids is not None:
@@ -951,22 +1039,42 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
     nhmmer_extension = get_max_reference_length(reference_groups, "nhmmer")
     infernal_extension = get_max_reference_length(reference_groups, "infernal")
     
+    # The lean fast path handles the common case (no gene calling, no foldseek);
+    # other cases need a full SeqRecord, so materialize lean records up front.
+    needs_full_record = (gene_call is not None) or ("foldseek" in reference_groups)
+
     for rec in seq_iterator:
-        CDS_count = clean_rec(rec, best_annotation, clear_domainator_annotations, clear_CDS_annotations)
+        if LEAN_SEARCH_TYPES and isinstance(rec, LEAN_SEARCH_TYPES):
+            if needs_full_record:
+                # Complex case: materialize to a full record and treat as usual.
+                rec = lean_to_seqrecord(materialize_lean_search(rec, None))
+                CDS_count = clean_rec(rec, best_annotation, clear_domainator_annotations, clear_CDS_annotations)
+            else:
+                # Bulk fast path: no per-feature objects, no clean_rec; the search
+                # object yields peptides directly and is materialized only on hit.
+                CDS_count = 0
+        elif isinstance(rec, LeanContig):
+            if needs_full_record:
+                rec = lean_to_seqrecord(rec)
+                CDS_count = clean_rec(rec, best_annotation, clear_domainator_annotations, clear_CDS_annotations)
+            else:
+                CDS_count = _lean_clean(rec, best_annotation, clear_domainator_annotations, clear_CDS_annotations)
+        else:
+            CDS_count = clean_rec(rec, best_annotation, clear_domainator_annotations, clear_CDS_annotations)
         if CDS_count == 0 and rec.annotations['molecule_type'] != "protein" and gene_call is not None:
             prodigal_CDS_annotate(rec)
         contigs_list.append(rec)
         if "foldseek" in reference_groups:
-            foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index)])
+            foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index, dropped_types)])
         if "hmmsearch" in reference_groups or "phmmer" in reference_groups or "foldseek" in reference_groups:
-            proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index)])
+            proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index, dropped_types)])
         if "nhmmer" in reference_groups and rec.annotations['molecule_type'] != "protein":
             nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, nhmmer_extension)))
         if "infernal" in reference_groups and rec.annotations['molecule_type'] != "protein":
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types)
             for contig_id in range(len(contigs_list)):
                 if contig_id in return_contigs:
                     yield contigs_list[contig_id]
@@ -977,7 +1085,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types)
     #for contig_id in range(len(contigs_list)): #TODO: why did I think this more complicated loop was a good idea?
     #    if contig_id in return_contigs:
     for contig_id in return_contigs:

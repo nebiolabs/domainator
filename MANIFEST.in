@@ -1,0 +1,6 @@
+# Include the native (Rust) extension sources in the sdist so source installs can
+# compile domainator._gbfast (the build falls back to pure Python if Rust is absent).
+include rust/Cargo.toml
+recursive-include rust/src *.rs
+exclude rust/.gitignore
+prune rust/target

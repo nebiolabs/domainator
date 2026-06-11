@@ -31,3 +31,30 @@ def test_partition_seqfile(file, num_proteins, option, value, offsets, recs_to_r
                 produced_recs_to_read.append(int(parts[1]))
             assert produced_offsets == offsets
             assert produced_recs_to_read == recs_to_read
+
+
+def test_gbfast_offsets_match_python(shared_datadir):
+    """If the native _gbfast extension is built, its offsets must exactly match
+    the pure-Python scanner (so partitions are identical)."""
+    import glob
+    from domainator import utils
+    gbfast = getattr(utils, "_gbfast", None)
+    if gbfast is None:
+        import pytest
+        pytest.skip("native _gbfast extension not built")
+    checked = 0
+    for f in sorted(glob.glob(str(shared_datadir / "*.gb"))):
+        try:
+            off, n = utils.get_genbank_offsets(f)
+        except Exception:
+            continue
+        assert list(zip(off, n)) == gbfast.genbank_offsets(f), f
+        checked += 1
+    for f in sorted(glob.glob(str(shared_datadir / "*.fasta"))) + sorted(glob.glob(str(shared_datadir / "*.fna"))):
+        try:
+            off, n = utils.get_fasta_offsets(f)
+        except Exception:
+            continue
+        assert list(zip(off, n)) == gbfast.fasta_offsets(f), f
+        checked += 1
+    assert checked > 0

@@ -21,7 +21,7 @@ import functools
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, open_writable_seqfile, is_compressed_path
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -66,10 +66,26 @@ def _write_records_with_limit(records, out_handle, current_output_bytes: int, ma
 # full NCBITaxonomy being pickled into every task (one task per partition).
 _WORKER_LINEAGE = None  # (parent, merged, deleted)
 
+# Per-process parsed references, populated by the pool initializer. References are
+# parsed once per worker (from path strings passed through initargs) rather than
+# re-parsed for every partition. Only path strings cross the spawn boundary, so no
+# pyhmmer/pyinfernal object is ever pickled (see R4 in speed_up_plan.md).
+_WORKER_REFERENCES = None
 
-def _init_taxonomy_worker(parent, merged, deleted):
-    global _WORKER_LINEAGE
-    _WORKER_LINEAGE = (parent, merged, deleted)
+
+def _init_search_worker(reference_paths, foldseek_paths, lineage_data):
+    """Pool initializer: parse references once per worker, set lineage maps.
+
+    Args:
+        reference_paths: list of reference file paths (parsed inside the worker).
+        foldseek_paths: list of foldseek database paths, or None.
+        lineage_data: (parent, merged, deleted) tuple for taxonomy filtering, or
+            None if no taxonomy filtering is active.
+    """
+    global _WORKER_REFERENCES, _WORKER_LINEAGE
+    _WORKER_REFERENCES = domainate.read_references(reference_paths, foldseek=foldseek_paths)
+    if lineage_data is not None:
+        _WORKER_LINEAGE = lineage_data
 
 
 @functools.lru_cache(maxsize=None)
@@ -115,7 +131,8 @@ class _domain_search_worker():
         self.strand = strand
         self.decoy_names = decoy_names
         self.max_hits_per_contig = max_hits_per_contig
-        #self.pre_parsed_references = domainate.read_references(references) #TODO: figure out why pickling pyhmmer peptides causes multithreading issues, and try to patch pyhmmer.
+        # References are no longer parsed per-partition here; the pool initializer
+        # (_init_search_worker) parses them once per worker into _WORKER_REFERENCES.
 
     def _record_matches_taxonomy(self, record) -> bool:
         if not (self.include_taxids or self.exclude_taxids):
@@ -148,10 +165,11 @@ class _domain_search_worker():
                 list of SeqRecords
         """
         out = list()
-        
+
         for rec in domainate.domainate(
-                parse_seqfiles((partition[0],), None, filetype_override=None, seek_to=partition[1], max_recs=partition[2], default_molecule_type=self.fasta_type), #TODO: clear best_domain_hit ?
-                references=self.references,
+                parse_seqfiles((partition[0],), None, filetype_override=None, seek_to=partition[1], max_recs=partition[2], default_molecule_type=self.fasta_type, genbank_parser="lean"), #TODO: clear best_domain_hit ?
+                references=None,  # references are parsed once per worker by _init_search_worker (R4)
+                pre_parsed_references=_WORKER_REFERENCES,
                 z=self.z,
                 evalue=self.evalue,
                 max_overlap=self.max_overlap,
@@ -164,7 +182,6 @@ class _domain_search_worker():
                 min_evalue=self.min_evalue,
                 max_mode=self.max_mode,
                 max_hits_per_contig=self.max_hits_per_contig,
-                #pre_parsed_references=self.pre_parsed_references
             ):
             try:
                 # domain_search filters taxonomy after a target has matched so we do not
@@ -261,15 +278,27 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     # Build the compact lineage maps once and pass them to each worker process via
     # the pool initializer (pickled once per process, not once per partition). The
     # full NCBITaxonomy is then released so the parent does not hold it for the run.
-    pool_kwargs = {}
+    lineage_data = None
     if (include_taxids or exclude_taxids) and ncbi_taxonomy is not None:
-        parent, merged, deleted = ncbi_taxonomy.compact_lineage_data()
+        lineage_data = ncbi_taxonomy.compact_lineage_data()
         ncbi_taxonomy = None
-        pool_kwargs = dict(initializer=_init_taxonomy_worker, initargs=(parent, merged, deleted))
+
+    # Always use the pool initializer: it parses references once per worker (R4) and,
+    # when present, installs the lineage maps for taxonomy filtering.
+    pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, lineage_data))
 
     out_heap = []
     worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig)
 
+    # Pool tuning notes (speed_up_plan.md Q4):
+    #   - No maxtasksperchild: workers must persist so the references parsed once
+    #     by _init_search_worker (R4) stay loaded. Recycling workers would re-parse
+    #     references on every restart, defeating R4.
+    #   - No chunksize on imap_unordered: partitions are already large (~batch_size
+    #     CDSs each), so per-task dispatch overhead is negligible; chunking would
+    #     only coarsen load balancing. (hmmer_search.py reaches the same conclusion.)
+    #   - cpu - 1 workers: the parent process does the heap merge and GenBank
+    #     writing, so it is reserved one core rather than oversubscribing.
     with make_pool(processes=cpu - 1, **pool_kwargs) as pool:
         # hits are lists of SeqRecords
         for hits in pool.imap_unordered(worker, partitions):
@@ -300,7 +329,10 @@ def get_input_molecule_types(input_files: List[str], default_molecule_type="prot
         a set of molecule type names.
     """
 
-    return {x.annotations['molecule_type'] for x in parse_seqfiles(input_files, default_molecule_type=default_molecule_type, max_recs=1)}
+    # Only the first record of each file is read (max_recs=1) just to learn its
+    # molecule type; use the fast native parser (it falls back to Biopython for
+    # records it cannot parse) so this peek is cheap on large GenBank inputs.
+    return {x.annotations['molecule_type'] for x in parse_seqfiles(input_files, default_molecule_type=default_molecule_type, max_recs=1, genbank_parser="lean")}
 
 
 
@@ -317,7 +349,10 @@ def main(argv):
                         help="reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.") 
 
     parser.add_argument('-o', '--output', default=None, type=str, required=False,
-                        help="output genbank filename. If not supplied, writes to stdout.")
+                        help="output genbank filename. If not supplied, writes to stdout. "
+                        "If the filename ends in .gz/.bgz, the output is written as BGZF (block-gzip): "
+                        "it is gunzip-readable and ~3-4x smaller, and can be used directly as a "
+                        "random-access, partitionable compressed input to a later domainator step.")
 
 
     parser.add_argument('-Z', default=1000, type=int, 
@@ -400,7 +435,11 @@ def main(argv):
                        help="by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.")
 
     parser.add_argument("--batch_size", type=int, default=10000, required=False,
-                        help="Approximately how many target sequences to search at one time in a batch.")
+                        help="Approximately how many target sequences to search at one time in a batch. "
+                        "This also controls partition size: each parallel task processes about this many CDSs/sequences. "
+                        "Larger values mean fewer, bigger partitions (lower per-task overhead, but coarser load balancing); "
+                        "smaller values give finer parallelism at the cost of more tasks. The input is scanned once to find "
+                        "partition boundaries regardless of this value.")
 
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] "
@@ -424,6 +463,9 @@ def main(argv):
     if params.batch_size < 1:
         raise ValueError("batch_size must be > 0")
 
+    # Note: --max_output_gb is measured against UNCOMPRESSED GenBank size. For
+    # BGZF-compressed outputs (-o foo.gb.gz) the file on disk will be smaller than
+    # this limit (R1).
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     output_description = f"domain_search GenBank output '{params.output if params.output is not None else 'stdout'}'"
     mitigation_options = ["--max_hits", "--max_hits_per_contig", "--cds_range", "--kb_range"]
@@ -436,7 +478,10 @@ def main(argv):
         out = sys.stdout
     else:
         temp_output_path = make_temporary_output_path(params.output)
-        out = open(temp_output_path, "w")
+        # If the final output path is .gz/.bgz, write BGZF (random-access gzip) so
+        # the result is a compressed, partitionable input for the next step (R1).
+        # The compression decision follows params.output, not the .tmp temp path.
+        out = open_writable_seqfile(temp_output_path, compressed=is_compressed_path(params.output))
 
     if params.max_hits == 0:
         max_hits = None

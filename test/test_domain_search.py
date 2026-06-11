@@ -557,7 +557,7 @@ def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch)
 
 def test_domain_search_taxonomy_cache_reuses_taxid_lineage(monkeypatch):
     # The lineage-match cache is module-level (_lineage_matches), fed by the
-    # per-process lineage maps set via _init_taxonomy_worker. Verify that two
+    # per-process lineage maps set via _init_search_worker. Verify that two
     # records sharing a taxid only trigger a single lineage walk.
     calls = []
 
@@ -566,7 +566,7 @@ def test_domain_search_taxonomy_cache_reuses_taxid_lineage(monkeypatch):
         return [1, 2, taxid]
 
     monkeypatch.setattr(domain_search_module, "compact_lineage", fake_compact_lineage)
-    domain_search_module._init_taxonomy_worker({}, {}, set())
+    domain_search_module._init_search_worker([], None, ({}, {}, set()))
     domain_search_module._lineage_matches.cache_clear()
 
     worker = domain_search_module._domain_search_worker(
@@ -716,3 +716,75 @@ def test_domain_search_keeps_record_annotations(shared_datadir):
         assert output_record.features[0].type == "source"
         assert output_record.features[0].qualifiers == input_record.features[0].qualifiers
 
+
+
+def _write_bgzf_copy(src_path, dest_path):
+    """Write a BGZF-compressed copy of src_path to dest_path."""
+    from domainator.Bio import bgzf
+    with open(src_path, "rb") as fh:
+        data = fh.read()
+    with bgzf.BgzfWriter(str(dest_path)) as out:
+        out.write(data)
+
+
+def test_domain_search_bgzf_input_matches_uncompressed(shared_datadir):
+    """A BGZF-compressed GenBank input must produce identical output to the
+    uncompressed input (Q2: transparent compressed input with random access)."""
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+    gb_bgz = shared_datadir / "pDONR201.gb.bgz"
+    _write_bgzf_copy(gb, gb_bgz)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_u = output_dir + "/out_u.gb"
+        out_b = output_dir + "/out_b.gb"
+        common = ["-r", str(hmms), "--evalue", "0.1", "--max_overlap", "1", "-Z", "1000", "--add_annotations"]
+        main(["--input", str(gb), "-o", out_u] + common)
+        main(["--input", str(gb_bgz), "-o", out_b] + common)
+        compare_seqfiles(out_u, out_b)
+
+
+def test_domain_search_gzip_input_matches_uncompressed(shared_datadir):
+    """A plain-gzip GenBank input is supported as a convenience and must produce
+    the same output as the uncompressed input (single-worker whole-file read)."""
+    import gzip
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+    gb_gz = shared_datadir / "pDONR201.gb.gz"
+    with open(gb, "rb") as fh, gzip.open(str(gb_gz), "wb") as out:
+        out.write(fh.read())
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_u = output_dir + "/out_u.gb"
+        out_g = output_dir + "/out_g.gb"
+        common = ["-r", str(hmms), "--evalue", "0.1", "--max_overlap", "1", "-Z", "1000", "--add_annotations"]
+        main(["--input", str(gb), "-o", out_u] + common)
+        main(["--input", str(gb_gz), "-o", out_g] + common)
+        compare_seqfiles(out_u, out_g)
+
+
+def test_domain_search_bgzf_output(shared_datadir):
+    """-o foo.gb.gz must write BGZF that round-trips to the same records as plain
+    output and is re-usable as a compressed input (R1)."""
+    from domainator import utils
+    gb = shared_datadir / "pDONR201.gb"
+    hmms = shared_datadir / "CcdB.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_plain = output_dir + "/out.gb"
+        out_comp = output_dir + "/out.gb.gz"
+        common = ["-r", str(hmms), "--evalue", "0.1", "-Z", "1000", "--add_annotations"]
+        main(["--input", str(gb), "-o", out_plain] + common)
+        main(["--input", str(gb), "-o", out_comp] + common)
+
+        assert utils.detect_compression(out_comp) == "bgzf"
+
+        plain_recs = list(utils.parse_seqfiles([out_plain], genbank_parser="biopython"))
+        comp_recs = list(utils.parse_seqfiles([out_comp], genbank_parser="biopython"))
+        assert len(plain_recs) == len(comp_recs) > 0
+        for a, b in zip(plain_recs, comp_recs):
+            compare_seqrecords(a, b)
+
+        # The compressed output is usable directly as a search input.
+        out_rt = output_dir + "/roundtrip.gb"
+        main(["--input", str(out_comp), "-o", out_rt] + common)
+        assert len(list(utils.parse_seqfiles([out_rt], genbank_parser="biopython"))) == len(plain_recs)
