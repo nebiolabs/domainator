@@ -31,6 +31,7 @@ import gzip
 import os
 import shutil
 import subprocess
+import time
 import requests
 from domainator.Bio import SeqIO
 from domainator.Taxonomy import NCBITaxonomy
@@ -95,7 +96,7 @@ def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict
             f = (line.decode('utf-8') for line in response.iter_lines()) # returns a generator
             yield from parse_file(f)
 
-def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_database=None, filter_by_uniqueness=True, filter_by_complete_genome=False, no_na=False, gene_call=None, num_recs=None, ncbi_summary=None, before:Optional[datetime.date]=None, after:Optional[datetime.date]=None, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="genome,gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None):
+def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_database=None, filter_by_uniqueness=True, filter_by_complete_genome=False, no_na=False, gene_call=None, num_recs=None, ncbi_summary=None, before:Optional[datetime.date]=None, after:Optional[datetime.date]=None, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None):
     """
     Downloads nucleotide data from NCBI GenBank and writes it to a genbank file.
 
@@ -444,7 +445,7 @@ def process_genbank_accessions(genbank_accessions, output_file_path, gene_call, 
 
     success_log_handle = None
     if success_rec_log is not None:
-        success_log_handle = open(success_rec_log, "w")
+        success_log_handle = open(success_rec_log, "w", buffering=1)  # line-buffered: each accession is flushed as it is written, so the log stays in sync with the .gb on a crash
 
     appended = 0
     failed = 0
@@ -475,7 +476,7 @@ def _datasets_local_worker(gbff_path, output_file_path, gene_call, lock, records
     ok = process_local_gbff(str(gbff_path), output_file_path, gene_call, lock=lock, records_written=records_written, num_recs=num_recs)
     return (accession, ok)
 
-def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_recs, cpus, success_rec_log, datasets_workdir, datasets_include="genome,gbff", datasets_max_workers=1, api_key=None, datasets_path=None):
+def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_recs, cpus, success_rec_log, datasets_workdir, datasets_include="gbff", datasets_max_workers=1, api_key=None, datasets_path=None):
     """
     Download genomes using the NCBI Datasets CLI (dehydrate/rehydrate), then process them locally.
 
@@ -490,7 +491,8 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
         cpus (int): Number of processes for the local parse/gene-call/append pass (network is done).
         success_rec_log (str): Optional path to log successfully written versionless accessions.
         datasets_workdir (str): Working directory for the dehydrated package and rehydrated files.
-        datasets_include (str): Value for `datasets ... --include` (default "genome,gbff").
+        datasets_include (str): Value for `datasets ... --include` (default "gbff"; the genomic
+            FASTA is not used, so there is no need to also request "genome").
         datasets_max_workers (int): Value for `datasets rehydrate --max-workers` (keep low; default 1).
         api_key (str): Optional NCBI API key (passed to datasets; helps the Datasets service).
         datasets_path (str): Optional explicit path to the `datasets` binary (overrides PATH lookup).
@@ -513,6 +515,9 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     workdir.mkdir(parents=True, exist_ok=True)
 
     accessions = [r["assembly_accession"] for r in genbank_accessions]
+    if num_recs is not None:
+        # cap the *download* (not just the append) so --num_recs is a cheap end-to-end test
+        accessions = accessions[:num_recs]
     accession_file = workdir / "accessions.txt"
     with open(accession_file, "w") as fh:
         for acc in accessions:
@@ -522,25 +527,37 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     extract_dir = workdir / "extracted"
     extract_dir.mkdir(parents=True, exist_ok=True)
 
-    def run(cmd):
-        print("+ " + " ".join(str(c) for c in cmd), file=sys.stderr)
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-        if result.returncode != 0:
-            raise RuntimeError(f"command failed (rc={result.returncode}): {' '.join(str(c) for c in cmd)}\n{result.stdout}\n{result.stderr}".strip())
-        return result
+    def run(cmd, retries=1):
+        # Inherit stdout/stderr so the datasets progress bar is visible during long
+        # downloads. Network steps (download/rehydrate) can be retried; rehydrate in
+        # particular is resumable, so re-running it simply continues.
+        last_rc = None
+        for attempt in range(1, retries + 1):
+            print("+ " + " ".join(str(c) for c in cmd), file=sys.stderr)
+            result = subprocess.run(cmd)
+            if result.returncode == 0:
+                return result
+            last_rc = result.returncode
+            if attempt < retries:
+                wait = 30 * attempt
+                print(f"command failed (rc={last_rc}); retrying in {wait}s "
+                      f"(attempt {attempt}/{retries - 1} of retries used)", file=sys.stderr)
+                time.sleep(wait)
+        raise RuntimeError(f"command failed (rc={last_rc}) after {retries} attempt(s): "
+                           f"{' '.join(str(c) for c in cmd)}")
 
     download_cmd = [datasets_bin, "download", "genome", "accession", "--inputfile", str(accession_file),
                     "--include", datasets_include, "--dehydrated", "--filename", str(zip_path)]
     if api_key:
         download_cmd += ["--api-key", api_key]
-    run(download_cmd)
+    run(download_cmd, retries=3)
 
     run([unzip_bin, "-o", str(zip_path), "-d", str(extract_dir)])
 
     rehydrate_cmd = [datasets_bin, "rehydrate", "--directory", str(extract_dir), "--max-workers", str(datasets_max_workers)]
     if api_key:
         rehydrate_cmd += ["--api-key", api_key]
-    run(rehydrate_cmd)
+    run(rehydrate_cmd, retries=3)
 
     gbff_files = sorted(extract_dir.glob("ncbi_dataset/data/*/*_genomic.gbff.gz"))
 
@@ -552,7 +569,7 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
 
     success_log_handle = None
     if success_rec_log is not None:
-        success_log_handle = open(success_rec_log, "w")
+        success_log_handle = open(success_rec_log, "w", buffering=1)  # line-buffered: each accession is flushed as it is written, so the log stays in sync with the .gb on a crash
 
     appended = 0
     failed = 0
@@ -624,7 +641,7 @@ def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids
                         break
 
 
-def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="genome,gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None):
+def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None):
 
     if include_taxids is not None:
         include_taxids = set(include_taxids)
@@ -855,8 +872,8 @@ def main(argv):
                         help="NCBI API key passed to the 'datasets' backend (does not affect the raw FTP server / 'direct' backend). Falls back to the NCBI_API_KEY environment variable.")
     parser.add_argument('--datasets_workdir', type=str, default=None,
                         help="For the 'datasets' backend: working directory for the dehydrated package and rehydrated files. Required when --download_backend is 'datasets'.")
-    parser.add_argument('--datasets_include', type=str, default="genome,gbff",
-                        help="For the 'datasets' backend: value passed to `datasets ... --include`. [default: genome,gbff]")
+    parser.add_argument('--datasets_include', type=str, default="gbff",
+                        help="For the 'datasets' backend: value passed to `datasets ... --include`. Only the GenBank flat file (gbff) is used downstream, so the genomic FASTA is not requested by default. [default: gbff]")
     parser.add_argument('--datasets_max_workers', type=int, default=1,
                         help="For the 'datasets' backend: value passed to `datasets rehydrate --max-workers`. Keep low to be NCBI-friendly. [default: 1]")
     parser.add_argument('--datasets_path', type=str, default=None,
