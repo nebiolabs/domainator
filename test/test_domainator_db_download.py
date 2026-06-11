@@ -285,3 +285,40 @@ def test_success_log_equals_exclude_file_raises():
                 "--exclude_accessions_file", str(log),
             ])
         assert not out.exists()  # guard fires before the output is created/blanked
+
+
+def test_process_via_datasets_gzip_flag(shared_datadir, monkeypatch):
+    """datasets_gzip=True must add `--gzip` to the `datasets rehydrate` command (and not otherwise)."""
+    src_gb = shared_datadir / "bacillus_phage_SPR.gb"
+    accs = ["GCA_000000011.1"]
+
+    calls = []
+
+    class _Result:
+        returncode = 0
+
+    def _record(cmd, *a, **k):
+        calls.append(list(cmd))
+        return _Result()
+
+    monkeypatch.setattr(domainator_db_download.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(domainator_db_download.subprocess, "run", _record)
+
+    def _run(datasets_gzip):
+        calls.clear()
+        with tempfile.TemporaryDirectory() as td:
+            workdir = Path(td) / "workdir"
+            workdir.mkdir(parents=True, exist_ok=True)
+            _make_fake_rehydrated_tree(workdir, src_gb, accs)
+            domainator_db_download.process_via_datasets(
+                [{"assembly_accession": a} for a in accs], str(Path(td) / "out.gb"),
+                gene_call=None, num_recs=None, cpus=1, success_rec_log=None,
+                datasets_workdir=str(workdir), datasets_include="gbff", datasets_max_workers=10,
+                api_key=None, datasets_path="datasets", datasets_gzip=datasets_gzip)
+        return [c for c in calls if "rehydrate" in c]
+
+    on = _run(True)
+    assert on and all("--gzip" in c for c in on)
+
+    off = _run(False)
+    assert off and not any("--gzip" in c for c in off)

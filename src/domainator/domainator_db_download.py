@@ -96,7 +96,7 @@ def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict
             f = (line.decode('utf-8') for line in response.iter_lines()) # returns a generator
             yield from parse_file(f)
 
-def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_database=None, filter_by_uniqueness=True, filter_by_complete_genome=False, no_na=False, gene_call=None, num_recs=None, ncbi_summary=None, before:Optional[datetime.date]=None, after:Optional[datetime.date]=None, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None):
+def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_database=None, filter_by_uniqueness=True, filter_by_complete_genome=False, no_na=False, gene_call=None, num_recs=None, ncbi_summary=None, before:Optional[datetime.date]=None, after:Optional[datetime.date]=None, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False):
     """
     Downloads nucleotide data from NCBI GenBank and writes it to a genbank file.
 
@@ -151,7 +151,7 @@ def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_
     targeted = len(genbank_accessions)
     if download_backend == "datasets":
         summary = process_via_datasets(genbank_accessions, output_handle, gene_call, num_recs, cpus, success_rec_log,
-                                       datasets_workdir, datasets_include, datasets_max_workers, api_key, datasets_path)
+                                       datasets_workdir, datasets_include, datasets_max_workers, api_key, datasets_path, datasets_gzip)
     else:
         summary = process_genbank_accessions(genbank_accessions, output_handle, gene_call, num_recs, download_workers, success_rec_log, user_agent)
 
@@ -502,7 +502,7 @@ def _datasets_local_worker(gbff_path, output_file_path, gene_call, lock, records
     ok = process_local_gbff(str(gbff_path), output_file_path, gene_call, lock=lock, records_written=records_written, num_recs=num_recs)
     return (accession, ok)
 
-def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_recs, cpus, success_rec_log, datasets_workdir, datasets_include="gbff", datasets_max_workers=1, api_key=None, datasets_path=None):
+def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_recs, cpus, success_rec_log, datasets_workdir, datasets_include="gbff", datasets_max_workers=1, api_key=None, datasets_path=None, datasets_gzip=False):
     """
     Download genomes using the NCBI Datasets CLI (dehydrate/rehydrate), then process them locally.
 
@@ -581,6 +581,8 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     run([unzip_bin, "-o", str(zip_path), "-d", str(extract_dir)])
 
     rehydrate_cmd = [datasets_bin, "rehydrate", "--directory", str(extract_dir), "--max-workers", str(datasets_max_workers)]
+    if datasets_gzip:
+        rehydrate_cmd += ["--gzip"]  # store genomic.gbff.gz (smaller scratch dir); read transparently downstream
     if api_key:
         rehydrate_cmd += ["--api-key", api_key]
     run(rehydrate_cmd, retries=3)
@@ -673,7 +675,7 @@ def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids
                         break
 
 
-def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None):
+def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False):
 
     if include_taxids is not None:
         include_taxids = set(include_taxids)
@@ -690,6 +692,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
         datasets_max_workers=datasets_max_workers,
         api_key=api_key,
         datasets_path=datasets_path,
+        datasets_gzip=datasets_gzip,
     )
 
 
@@ -906,10 +909,12 @@ def main(argv):
                         help="For the 'datasets' backend: working directory for the dehydrated package and rehydrated files. Required when --download_backend is 'datasets'.")
     parser.add_argument('--datasets_include', type=str, default="gbff",
                         help="For the 'datasets' backend: value passed to `datasets ... --include`. Only the GenBank flat file (gbff) is used downstream, so the genomic FASTA is not requested by default. [default: gbff]")
-    parser.add_argument('--datasets_max_workers', type=int, default=1,
-                        help="For the 'datasets' backend: value passed to `datasets rehydrate --max-workers`. Keep low to be NCBI-friendly. [default: 1]")
+    parser.add_argument('--datasets_max_workers', type=int, default=10,
+                        help="For the 'datasets' backend: value passed to `datasets rehydrate --max-workers` (allowed range 1-30). 10 is the NCBI Datasets default and matches the 10 req/s API-key limit. [default: 10]")
     parser.add_argument('--datasets_path', type=str, default=None,
                         help="Path to the `datasets` (NCBI Datasets CLI) binary. If not given, it is looked up on PATH.")
+    parser.add_argument('--datasets_gzip', action="store_true",
+                        help="For the 'datasets' backend: pass `--gzip` to `datasets rehydrate` so the rehydrated genomic.gbff files are stored gzip-compressed (much smaller scratch dir; read transparently). Recommended for very large downloads.")
 
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -974,7 +979,8 @@ def main(argv):
     domainator_db_download(ncbi_taxonomy, params.output, params.include_taxids, params.exclude_taxids, params.db, params.gene_call, params.num_recs, params.ncbi_summary, before, after, cpus, success_rec_log=params.success_rec_log, exclude_accessions=exclude_accessions,
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
-                           datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path)
+                           datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,
+                           datasets_gzip=params.datasets_gzip)
 
 def _entrypoint():
     main(sys.argv[1:])
