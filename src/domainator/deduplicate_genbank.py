@@ -186,17 +186,27 @@ class Diamond(ClusterProgram):
         ]
         super().__init__(params, bin_path, log_handle=log_handle)
 
-    def _run_cluster(self):
+    # diamond's cluster output writer crashes when the whole input collapses into a single
+    # cluster, reporting "max_oid not set" (or "Record count not set" on older versions)
+    # even though the clustering itself succeeded. Detect that and treat the input as one
+    # cluster represented by its longest sequence.
+    _SINGLE_CLUSTER_ERRORS = ("max_oid not set", "Record count not set")
+
+    def run(self):
         try:
-            return subprocess.run(self.search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+            out = subprocess.run(self.search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
         except FileNotFoundError:
-            print(
-                f'Error executing clustering program: {self.bin_path} not found', file=self.log_handle)
+            print(f'Error executing clustering program: {self.search_args[0]} not found', file=self.log_handle)
             exit(1)
 
-    def _report_cluster_error(self, search_args, out):
-        print(
-            f'Error executing clustering program: {search_args}', file=self.log_handle)
+        if out.returncode == 0:
+            return
+
+        if out.stderr is not None and any(err in out.stderr for err in self._SINGLE_CLUSTER_ERRORS):
+            self._set_single_cluster_fallback()
+            return
+
+        print(f'Error executing clustering program: {self.search_args}', file=self.log_handle)
         if out.stdout:
             print(out.stdout, file=self.log_handle, end="")
         if out.stderr:
@@ -207,36 +217,23 @@ class Diamond(ClusterProgram):
         representative = None
         representative_length = -1
         members = list()
-
         for rec in SeqIO.parse(self.input_fasta_path, "fasta"):
             members.append(rec.id)
-            rec_length = len(rec.seq)
-            if rec_length > representative_length:
+            if len(rec.seq) > representative_length:
                 representative = rec.id
-                representative_length = rec_length
+                representative_length = len(rec.seq)
 
         if representative is None:
             raise RuntimeError("diamond fallback requires at least one sequence")
 
         self._cluster_members = {representative: members}
         print(
-            "Warning: diamond cluster failed with 'Record count not set'; "
-            f"using longest input sequence {representative} as the representative for a single cluster.",
+            "Warning: diamond cluster failed on a single all-encompassing cluster; "
+            f"using longest input sequence {representative} as the representative.",
             file=self.log_handle,
         )
 
-    def run(self):
-        out = self._run_cluster()
-        if out.returncode == 0:
-            return
-
-        if out.stderr is not None and "Record count not set" in out.stderr:
-            self._set_single_cluster_fallback()
-            return
-
-        self._report_cluster_error(self.search_args, out)
-
-    def _load_cluster_members(self):
+    def get_cluster_members(self):
         if self._cluster_members is not None:
             return self._cluster_members
 
@@ -266,13 +263,10 @@ class Diamond(ClusterProgram):
                 members.insert(0, representative)
 
         self._cluster_members = out
-        return self._cluster_members
-
-    def get_cluster_members(self):
-        return self._load_cluster_members()
+        return out
 
     def get_reduced_names(self):
-        return set(self._load_cluster_members().keys())
+        return set(self.get_cluster_members().keys())
    
 # class HashDedup(ClusterProgram):
 #     pass

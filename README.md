@@ -1,6 +1,6 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.8.1
+Version 0.9.0
 
 [//]: # (remember to update version in domainator/__init__.py also)
 
