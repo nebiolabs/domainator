@@ -44,6 +44,26 @@ def test_index_roundtrip_fasta(shared_datadir, tmp_path):
         assert list(roff) == list(off) and list(rnpr) == list(npr)
 
 
+def test_read_total_cds_from_header(shared_datadir, tmp_path):
+    """The total CDS count is available from the header in O(1), matches the body
+    sum, and is None when there is no usable/fresh index."""
+    f = tmp_path / "MT_nbs.gb"
+    shutil.copy(shared_datadir / "MT_nbs.gb", f)
+    off, npr = utils.get_offsets(str(f))
+    db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
+    assert db_index.read_total_cds(str(f), filetype="genbank", compression=None) == sum(npr)
+    assert utils.index_total_cds(str(f)) == sum(npr)
+    # stale source -> None (no count trusted)
+    with open(f, "ab") as fh:
+        fh.write(b"\n")
+    db_index._warned_index_paths.clear()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert db_index.read_total_cds(str(f), filetype="genbank", compression=None) is None
+    # no index at all
+    assert utils.index_total_cds(str(tmp_path / "absent.gb")) is None
+
+
 def test_get_offsets_uses_index(shared_datadir, tmp_path):
     """With a valid index present, get_offsets/i_get_offsets must return exactly the
     same arrays/tuples as a fresh scan."""

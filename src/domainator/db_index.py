@@ -39,12 +39,14 @@ _VER_MAJOR, _VER_MINOR = (int(x) for x in _INDEX_FILE_VERSION.split("."))
 INDEX_EXTENSION = ".didx"
 _MAGIC = b"DIDX"
 
-# 48-byte header: magic, version(major,minor), filetype flag, compression flag,
+# 56-byte header: magic, version(major,minor), filetype flag, compression flag,
 # 6 reserved/pad bytes (keeps the body 8-byte aligned), source size + mtime_ns
-# fingerprint, record count, reserved flags bitfield. Then record_count pairs.
-_HEADER_STRUCT = struct.Struct("<4sHHBB6xQQQQ")
+# fingerprint, record count, total CDS/protein count (sum of the body's second
+# column, so -Z 0 can read the target count without scanning the body), and a
+# reserved flags bitfield. Then record_count (offset, cds_count) pairs.
+_HEADER_STRUCT = struct.Struct("<4sHHBB6xQQQQQ")
 _PAIR_STRUCT = struct.Struct("<QQ")
-assert _HEADER_STRUCT.size == 48
+assert _HEADER_STRUCT.size == 56
 
 _FILETYPE_TO_FLAG = {"genbank": 0, "fasta": 1}
 _FLAG_TO_FILETYPE = {0: "genbank", 1: "fasta"}
@@ -104,17 +106,19 @@ def write_index(source_path, offsets, num_proteins, *, filetype, compression):
 
     size, mtime_ns = source_fingerprint(source_path)
     n = len(offsets)
+    total_cds = 0
     body = array("Q")
     for off, cds in zip(offsets, num_proteins):
         body.append(int(off))
         body.append(int(cds))
+        total_cds += int(cds)
     if sys.byteorder != "little":
         body.byteswap()
 
     index_path = index_path_for(source_path)
     header = _HEADER_STRUCT.pack(
         _MAGIC, _VER_MAJOR, _VER_MINOR, _FILETYPE_TO_FLAG[filetype], comp_flag,
-        size, mtime_ns, n, 0,
+        size, mtime_ns, n, total_cds, 0,
     )
     with open(index_path, "wb") as f:
         f.write(header)
@@ -124,8 +128,8 @@ def write_index(source_path, offsets, num_proteins, *, filetype, compression):
 
 def _validate_header(index_path, source_path, *, filetype, compression):
     """Open and validate the index header against the source. Return ``(handle,
-    record_count)`` if valid+fresh, else ``None`` (warning once on stale/corrupt).
-    The caller owns closing the returned handle."""
+    record_count, total_cds)`` if valid+fresh, else ``None`` (warning once on
+    stale/corrupt). The caller owns closing the returned handle."""
     try:
         f = open(index_path, "rb")
     except OSError:
@@ -136,7 +140,7 @@ def _validate_header(index_path, source_path, *, filetype, compression):
             _warn_once(index_path, f"Ignoring truncated index {index_path}; recomputing offsets.")
             f.close()
             return None
-        magic, maj, _minor, ft_flag, comp_flag, size, mtime_ns, n, _flags = _HEADER_STRUCT.unpack(header)
+        magic, maj, _minor, ft_flag, comp_flag, size, mtime_ns, n, total_cds, _flags = _HEADER_STRUCT.unpack(header)
         if magic != _MAGIC or maj != _VER_MAJOR:
             _warn_once(index_path, f"Ignoring unreadable/incompatible index {index_path}; recomputing offsets.")
             f.close()
@@ -161,7 +165,7 @@ def _validate_header(index_path, source_path, *, filetype, compression):
             _warn_once(index_path, f"Ignoring stale index {index_path} (source changed since it was built); recomputing offsets.")
             f.close()
             return None
-        return f, n
+        return f, n, total_cds
     except Exception:
         # Never let a malformed index raise into the offset path; recompute.
         _warn_once(index_path, f"Ignoring unreadable index {index_path}; recomputing offsets.")
@@ -179,7 +183,7 @@ def read_index(source_path, *, filetype, compression):
                                  filetype=filetype, compression=compression)
     if validated is None:
         return None
-    f, n = validated
+    f, n, _total_cds = validated
     try:
         body = f.read(n * _PAIR_STRUCT.size)
     finally:
@@ -198,7 +202,7 @@ def i_read_index(source_path, *, filetype, compression):
                                  filetype=filetype, compression=compression)
     if validated is None:
         return None
-    f, n = validated
+    f, n, _total_cds = validated
 
     def _gen():
         try:
@@ -217,6 +221,20 @@ def i_read_index(source_path, *, filetype, compression):
             f.close()
 
     return _gen()
+
+
+def read_total_cds(source_path, *, filetype, compression):
+    """Return the total CDS/protein count from the valid, fresh ``.didx`` header
+    (O(1): a single header read, no body scan), or ``None`` to signal the caller to
+    fall back to a full count. Used by ``domain_search -Z 0`` to learn the target
+    count cheaply across (possibly sharded) databases."""
+    validated = _validate_header(index_path_for(source_path), source_path,
+                                 filetype=filetype, compression=compression)
+    if validated is None:
+        return None
+    f, _n, total_cds = validated
+    f.close()
+    return total_cds
 
 
 # --- shard naming / resolution -------------------------------------------------

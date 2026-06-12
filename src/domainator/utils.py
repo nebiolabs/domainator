@@ -1140,6 +1140,17 @@ def _index_offsets(input_path, filetype):
     return db_index.read_index(input_path, filetype=filetype, compression=compression)
 
 
+def index_total_cds(input_path):
+    """Return the total CDS/protein count from a valid, fresh ``.didx`` header
+    (O(1), no scan), or None if there is no usable index for this file."""
+    if not isinstance(input_path, (str, os.PathLike)):
+        return None
+    compression = detect_compression(input_path)
+    if compression == "gzip":
+        return None
+    return db_index.read_total_cds(input_path, filetype=get_file_type(input_path), compression=compression)
+
+
 def get_offsets(input_path):
     """
         input: a path to a fasta or genbank file

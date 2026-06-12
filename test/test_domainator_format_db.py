@@ -171,3 +171,30 @@ def test_domain_search_over_shards_matches_unsharded(shared_datadir, tmp_path):
     recs_s = sorted(_records(out_s))
     assert len(recs_u) > 0
     assert recs_u == recs_s
+
+
+def test_domain_search_Z0_uses_index_count(shared_datadir, tmp_path):
+    """-Z 0 over an indexed sharded database (true target count read from the .didx
+    headers) must match -Z 0 over the equivalent unsharded file."""
+    one = (shared_datadir / "pDONR201.gb").read_bytes()
+    hmm = str(shared_datadir / "CcdB.hmm")
+
+    unsharded = tmp_path / "z0.gb"
+    with open(unsharded, "wb") as f:
+        for _ in range(4):
+            f.write(one)
+    sharded = tmp_path / "z0s.gb"
+    shutil.copy(unsharded, sharded)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        domainator_format_db.format_db([str(sharded)], shards=2, index=True, cpu=1)
+    os.remove(sharded)
+
+    common = ["-r", hmm, "--evalue", "0.1", "--max_overlap", "1", "-Z", "0", "--add_annotations"]
+    out_u = str(tmp_path / "z0_u.gb")
+    out_s = str(tmp_path / "z0_s.gb")
+    domain_search_main(["--input", str(unsharded), "-o", out_u] + common)
+    domain_search_main(["--input", str(sharded), "-o", out_s] + common)
+    recs_u = sorted(_records(out_u))
+    assert len(recs_u) > 0
+    assert recs_u == sorted(_records(out_s))

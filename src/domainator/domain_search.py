@@ -21,7 +21,7 @@ import functools
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, open_writable_seqfile, is_compressed_path
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, open_writable_seqfile, is_compressed_path, index_total_cds
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -513,15 +513,23 @@ def main(argv):
 
 
     #partition the input files for parallelization later
-    if params.Z == 0: #if Z is none, then we must read through the entire input to count CDSs and get file offsets. Luckily we can do this in parallel if there are multiple inputs.
-        #TODO: this is broken for taxonomy filtering, because it doesn't filter for taxonomy. 
-        cds_count = 0
-        partitions = list()
-        with make_pool(processes=cpus) as pool:
-            for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), input_files):
-                cds_count += file_cds_count
-                partitions.extend(file_partitions)
-        Z = cds_count
+    if params.Z == 0: #if Z is none, then we must know the total CDS count for per-sequence E-values.
+        #TODO: this is broken for taxonomy filtering, because it doesn't filter for taxonomy.
+        # If every input has a valid .didx index, the total count is in the headers
+        # (O(1) per file), so we can take the true count cheaply and still partition
+        # lazily. Otherwise fall back to an eager parallel count over all files.
+        header_counts = [index_total_cds(f) for f in input_files]
+        if header_counts and all(c is not None for c in header_counts):
+            Z = sum(header_counts)
+            partitions = partition_seqfile.i_partition_seqfiles(input_files, cdss_per_partition=params.batch_size)
+        else:
+            cds_count = 0
+            partitions = list()
+            with make_pool(processes=cpus) as pool:
+                for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), input_files):
+                    cds_count += file_cds_count
+                    partitions.extend(file_partitions)
+            Z = cds_count
     else: #Z is pre-set, so partitions can be a lazy iterator.
         partitions = partition_seqfile.i_partition_seqfiles(input_files, cdss_per_partition=params.batch_size)
         Z = params.Z
