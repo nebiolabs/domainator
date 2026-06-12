@@ -26,6 +26,7 @@ use gb_io::seq::{Date, Location, Seq, Topology};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::IntoPyObjectExt;  // .into_py_any(py) -> PyResult<Py<PyAny>>
 
 /// Open `path` and position a reader at `seek_to`, decompressing BGZF on the fly.
 ///
@@ -214,26 +215,27 @@ fn build_feature<'py>(
     let part_objs: Vec<Bound<'py, PyTuple>> = parts
         .iter()
         .map(|(s, e, st, b, a)| {
-            PyTuple::new_bound(py, [
-                (*s).into_py(py), (*e).into_py(py), (*st).into_py(py), (*b).into_py(py), (*a).into_py(py),
+            PyTuple::new(py, [
+                (*s).into_py_any(py)?, (*e).into_py_any(py)?, (*st).into_py_any(py)?,
+                (*b).into_py_any(py)?, (*a).into_py_any(py)?,
             ])
         })
-        .collect();
-    let parts_tuple = PyTuple::new_bound(py, &part_objs);
+        .collect::<PyResult<Vec<_>>>()?;
+    let parts_tuple = PyTuple::new(py, &part_objs)?;
 
-    let quals = PyDict::new_bound(py);
+    let quals = PyDict::new(py);
     for (key, value_opt) in &feature.qualifiers {
         let value = match value_opt {
             Some(v) => normalize_qualifier(key, v),
             None => String::new(),
         };
         match quals.get_item(key.as_ref())? {
-            Some(existing) => existing.downcast::<PyList>()?.append(value)?,
-            None => quals.set_item(key.as_ref(), PyList::new_bound(py, [value]))?,
+            Some(existing) => existing.cast::<PyList>()?.append(value)?,
+            None => quals.set_item(key.as_ref(), PyList::new(py, [value])?)?,
         }
     }
     let op_obj = match operator {
-        Some(s) => s.into_py(py),
+        Some(s) => s.into_py_any(py)?,
         None => py.None(),
     };
     Ok(Some(lean_feature_cls.call1((feature.kind.as_ref(), parts_tuple, op_obj, between, quals))?))
@@ -247,10 +249,10 @@ fn record_fields<'py>(
     seq: &Seq,
     dropped: &HashSet<String>,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
-    let lean_mod = py.import_bound("domainator.lean_record")?;
+    let lean_mod = py.import("domainator.lean_record")?;
     let lean_feature_cls = lean_mod.getattr("LeanFeature")?;
 
-    let features = PyList::empty_bound(py);
+    let features = PyList::empty(py);
     for feature in &seq.features {
         if !dropped.is_empty() && dropped.contains(feature.kind.as_ref()) {
             continue;
@@ -260,10 +262,10 @@ fn record_fields<'py>(
             None => return Ok(None),
         }
     }
-    Ok(Some(header_tuple(py, seq, features)))
+    Ok(Some(header_tuple(py, seq, features)?))
 }
 
-fn header_tuple<'py>(py: Python<'py>, seq: &Seq, features: Bound<'py, PyList>) -> Bound<'py, PyTuple> {
+fn header_tuple<'py>(py: Python<'py>, seq: &Seq, features: Bound<'py, PyList>) -> PyResult<Bound<'py, PyTuple>> {
     let circular = matches!(seq.topology, Topology::Circular);
     let date_str = seq.date.as_ref().map(fmt_date);
     let (source_name, source_organism) = match &seq.source {
@@ -271,21 +273,21 @@ fn header_tuple<'py>(py: Python<'py>, seq: &Seq, features: Bound<'py, PyList>) -
         None => (None, None),
     };
     let seq_str = String::from_utf8_lossy(&seq.seq.to_ascii_uppercase()).into_owned();
-    PyTuple::new_bound(py, [
-        seq.name.clone().into_py(py),
-        seq.accession.clone().into_py(py),
-        seq.version.clone().into_py(py),
-        seq.definition.clone().into_py(py),
-        seq.molecule_type.clone().into_py(py),
-        circular.into_py(py),
-        seq.division.clone().into_py(py),
-        date_str.into_py(py),
-        seq.keywords.clone().into_py(py),
-        source_name.into_py(py),
-        source_organism.into_py(py),
-        seq.dblink.clone().into_py(py),
-        seq_str.into_py(py),
-        features.into_py(py),
+    PyTuple::new(py, [
+        seq.name.clone().into_py_any(py)?,
+        seq.accession.clone().into_py_any(py)?,
+        seq.version.clone().into_py_any(py)?,
+        seq.definition.clone().into_py_any(py)?,
+        seq.molecule_type.clone().into_py_any(py)?,
+        circular.into_py_any(py)?,
+        seq.division.clone().into_py_any(py)?,
+        date_str.into_py_any(py)?,
+        seq.keywords.clone().into_py_any(py)?,
+        source_name.into_py_any(py)?,
+        source_organism.into_py_any(py)?,
+        seq.dblink.clone().into_py_any(py)?,
+        seq_str.into_py_any(py)?,
+        features.into_py_any(py)?,
     ])
 }
 
@@ -299,7 +301,7 @@ pub fn parse_lean<'py>(
     compressed: bool,
 ) -> PyResult<(Bound<'py, PyList>, bool, usize)> {
     let reader = SeqReader::new(open_at(path, seek_to, compressed)?);
-    let records = PyList::empty_bound(py);
+    let records = PyList::empty(py);
     let mut n_emitted = 0usize;
     let mut stopped_early = false;
     let empty: HashSet<String> = HashSet::new();
@@ -372,7 +374,7 @@ impl LeanSearchContig {
     /// get_contig_search_sequence read record.annotations.
     #[getter]
     fn annotations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let d = PyDict::new_bound(py);
+        let d = PyDict::new(py);
         if let Some(mt) = self.molecule_type() {
             d.set_item("molecule_type", mt)?;
         }
@@ -437,7 +439,7 @@ pub fn parse_lean_search<'py>(
     compressed: bool,
 ) -> PyResult<(Bound<'py, PyList>, bool, usize)> {
     let reader = SeqReader::new(open_at(path, seek_to, compressed)?);
-    let records = PyList::empty_bound(py);
+    let records = PyList::empty(py);
     let mut n_emitted = 0usize;
     let mut stopped_early = false;
 
@@ -526,7 +528,7 @@ impl LeanFastaContig {
     /// SeqRecord after parse_seqfiles sets molecule_type.
     #[getter]
     fn annotations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let d = PyDict::new_bound(py);
+        let d = PyDict::new(py);
         if let Some(mt) = &self.molecule_type {
             d.set_item("molecule_type", mt)?;
         }
@@ -546,12 +548,12 @@ impl LeanFastaContig {
     /// Materialize to the fields a minimal LeanContig is built from on the Python
     /// side: (id, description, seq, molecule_type). No features, no header
     /// normalization (matches Biopython's FASTA SeqRecord).
-    fn materialize<'py>(&self, py: Python<'py>, _dropped: HashSet<String>) -> Bound<'py, PyTuple> {
-        PyTuple::new_bound(py, [
-            self.record_id.clone().into_py(py),
-            self.description.clone().into_py(py),
-            self.seq.clone().into_py(py),
-            self.molecule_type.clone().into_py(py),
+    fn materialize<'py>(&self, py: Python<'py>, _dropped: HashSet<String>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, [
+            self.record_id.clone().into_py_any(py)?,
+            self.description.clone().into_py_any(py)?,
+            self.seq.clone().into_py_any(py)?,
+            self.molecule_type.clone().into_py_any(py)?,
         ])
     }
 }
@@ -571,7 +573,7 @@ pub fn parse_fasta_search<'py>(
     compressed: bool,
 ) -> PyResult<(Bound<'py, PyList>, bool, usize)> {
     let mut reader = BufReader::new(open_at(path, seek_to, compressed)?);
-    let records = PyList::empty_bound(py);
+    let records = PyList::empty(py);
     let mut n_emitted = 0usize;
 
     let mut title: Option<String> = None;

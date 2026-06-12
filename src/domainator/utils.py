@@ -668,6 +668,11 @@ def copy_SeqRecord(seqrecord):
     return new_record
 
 
+def native_parser_available():
+    """True when the optional native (Rust) ``_gbfast`` parser/scanner is installed."""
+    return _gbfast is not None
+
+
 def _resolve_genbank_parser(requested):
     """Decide which GenBank parser backend to use ("lean" or "biopython").
 

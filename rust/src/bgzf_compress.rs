@@ -107,7 +107,7 @@ pub fn bgzf_compress_file(
     };
     let superchunk_size = nthreads * BLOCKS_PER_THREAD * BGZF_BLOCK_SIZE;
 
-    let result: Result<(), String> = py.allow_threads(|| {
+    let result: Result<(), String> = py.detach(|| {
         let mut reader = BufReader::new(File::open(in_path).map_err(|e| format!("opening {in_path}: {e}"))?);
         let mut writer = BufWriter::new(File::create(out_path).map_err(|e| format!("creating {out_path}: {e}"))?);
         let mut buf = vec![0u8; superchunk_size];

@@ -132,6 +132,8 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 
 Domainator is developed on Linux, and has been tested on Mac. It probably won't work on Windows, except through WSL.
 
+Domainator ships an optional native (Rust) extension that greatly speeds up GenBank/FASTA parsing and offset scanning. Building it requires a **Rust toolchain (≥ 1.83)** — which the conda environment installs for you — and a **C compiler/linker** (`gcc`/`clang`). If either is unavailable the extension is skipped and Domainator falls back to a slower pure-Python parser; results are identical either way. See [Native (Rust) acceleration](#native-rust-acceleration) below.
+
 # Installation
 
 __NOTE:__ For Installation with ESM-2 3B 3Di and foldseek integration, see [here](docs/esm_3b_foldseek.md)
@@ -171,6 +173,40 @@ This will create a new conda environment called "domainator".
 conda activate domainator
 ```
 
+### Native (Rust) acceleration
+
+Domainator includes an optional native extension (`domainator._gbfast`) that makes
+GenBank/FASTA parsing and offset scanning several times faster. It is **optional**:
+Domainator runs correctly without it, just more slowly (it falls back to a pure-Python
+parser), so this step can be skipped if you can't build it.
+
+The conda environment already installs the Rust toolchain. You also need a C
+compiler/linker on your `PATH`:
+
+- **Linux:** `gcc` — e.g. `sudo apt install build-essential`, or, inside the conda env,
+  `conda install -c conda-forge c-compiler`
+- **macOS:** the Xcode command line tools — `xcode-select --install`
+
+With the environment activated, build the extension and confirm it loaded:
+
+```bash
+conda activate domainator
+pip install --no-deps --force-reinstall .
+python -c "from domainator import _gbfast; print('native (Rust) acceleration: ENABLED')"
+```
+
+If the import raises `ModuleNotFoundError`, the extension was not built — check that
+`cargo`/`rustc` and a C compiler are on your `PATH` — and Domainator will transparently
+use the slower Python parser instead.
+
+> Developing Domainator? Use an editable build instead so source edits take effect
+> without reinstalling. The editable + build-isolation path does **not** compile the
+> extension, so disable isolation and provide the build backend explicitly:
+> ```bash
+> pip install "setuptools-rust>=1.7"
+> pip install -e . --no-build-isolation
+> ```
+
 ## Apptainer (Singularity)
 
 Navigate to the directory containing this README file. It should also contain a file called `apptainer.def`. In that directory execute the command:
@@ -201,6 +237,8 @@ conda env create --yes -f conda_env.yml
 ```
 
 This will delete the old `domainator` conda environment and replace it with the updated version.
+
+If you use the [native (Rust) acceleration](#native-rust-acceleration), rebuild it after updating (`pip install --no-deps --force-reinstall .` with the environment activated).
 
 # Examples
 

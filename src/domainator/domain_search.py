@@ -21,7 +21,7 @@ import functools
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, open_writable_seqfile, is_compressed_path, index_total_cds
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -338,7 +338,12 @@ def get_input_molecule_types(input_files: List[str], default_molecule_type="prot
 
 
 def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    if native_parser_available():
+        parser_status = "Native (Rust) parser: installed (fast GenBank/FASTA parsing and offset scanning)."
+    else:
+        parser_status = ("Native (Rust) parser: NOT installed; using the slower Biopython parser. "
+                         "See the README 'Native (Rust) acceleration' section to build it.")
+    parser = ArgumentParser(f"\nversion: {__version__}\n\n{parser_status}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument('-i', '--input', default=None, required=True,
                        nargs='+', type=str,
