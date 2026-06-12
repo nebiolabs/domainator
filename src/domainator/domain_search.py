@@ -26,6 +26,7 @@ from domainator import __version__
 from domainator import select_by_cds
 import psutil
 from domainator import partition_seqfile
+from domainator import db_index
 from domainator import domainate, RawAndDefaultsFormatter
 import heapq
 from typing import List, Tuple, Set, Optional
@@ -496,7 +497,12 @@ def main(argv):
 
     kb_range, cds_range = select_by_cds.validate_range(params.kb_range, params.kb_up, params.kb_down, params.cds_range, params.cds_up, params.cds_down)
 
-    molecule_types = get_input_molecule_types(params.input, default_molecule_type=params.fasta_type)
+    # Expand each input to its shards: a logical database name (mydb.gb) resolves
+    # to its numbered shards (mydb.0.gb, mydb.1.gb, ...) if present, else to itself.
+    # Done once here so every downstream consumer sees the real per-shard files.
+    input_files = [shard for db in params.input for shard in db_index.resolve_database_shards(db)]
+
+    molecule_types = get_input_molecule_types(input_files, default_molecule_type=params.fasta_type)
     reference_groups = domainate.read_references(params.references, foldseek=None)
     domainate.validate_input_molecule_types(molecule_types, reference_groups)
     if len(molecule_types) > 1 and "protein" in molecule_types and not translate:
@@ -512,12 +518,12 @@ def main(argv):
         cds_count = 0
         partitions = list()
         with make_pool(processes=cpus) as pool:
-            for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), params.input):
+            for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), input_files):
                 cds_count += file_cds_count
                 partitions.extend(file_partitions)
         Z = cds_count
     else: #Z is pre-set, so partitions can be a lazy iterator.
-        partitions = partition_seqfile.i_partition_seqfiles(params.input, cdss_per_partition=params.batch_size)
+        partitions = partition_seqfile.i_partition_seqfiles(input_files, cdss_per_partition=params.batch_size)
         Z = params.Z
 
     ncbi_taxonomy = None

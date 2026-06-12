@@ -135,6 +135,7 @@ version = {attr = "domainator.__version__"}
 "domain_search.py" = "domainator:domain_search._entrypoint"
 "domainate.py" = "domainator:domainate._entrypoint"
 "domainator_db_download.py" = "domainator:domainator_db_download._entrypoint"
+"domainator_format_db.py" = "domainator:domainator_format_db._entrypoint"
 "enum_report.py" = "domainator:enum_report._entrypoint"
 "extract_domains.py" = "domainator:extract_domains._entrypoint"
 "extract_peptides.py" = "domainator:extract_peptides._entrypoint"

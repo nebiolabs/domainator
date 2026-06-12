@@ -1,0 +1,125 @@
+{
+  "id": "domainator_format_db",
+  "display_name": "Domainator Format Db",
+  "category": "Other",
+  "description": "Format domain_search databases: shard, BGZF-compress, and/or add `.didx` indexes.\n\nA *domain_search database* is a GenBank or FASTA file, optionally BGZF-compressed,\noptionally split into numbered shards. This tool prepares such databases:\n\n- ``--shards N`` splits each input into N files (``mydb.gb`` -> ``mydb.0.gb`` ...),\n  balanced by record count.\n- ``--compress`` writes BGZF output (block-gzip: gunzip-readable, ~3-4x smaller, and\n  still randomly seekable / partitionable), using the native parallel compressor.\n- ``--index`` writes a ``.didx`` offset index for each output file so ``domain_search``\n  skips the per-run offset scan.\n\nAt least one of ``--shards``, ``--compress``, or ``--index`` must be requested.\nOperations compose (e.g. a plain ``.gb`` -> N BGZF shards each with a ``.didx``).\nShard content is produced by byte-exact range copy of the (decompressed) record\nstream, so records are preserved exactly. Compressed inputs are decompressed to a\ntemporary working file first; uncompressed inputs are read in place.",
+  "runner": "module",
+  "entry_point": "domainator.domainator_format_db",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "GenBank or FASTA database file(s) to format. May be plain, gzip, or BGZF.",
+      "type": "file",
+      "required": true,
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "faa",
+        "fna",
+        "gz",
+        "bgz",
+        "bgzf"
+      ]
+    },
+    {
+      "name": "Shards",
+      "parameter": "shards",
+      "help": "Split each input into this many shards (balanced by record count). Shards are named '<base>.0.<ext>', '<base>.1.<ext>', ... Default: no sharding.",
+      "type": "integer",
+      "flags": [
+        "--shards"
+      ]
+    },
+    {
+      "name": "Compress",
+      "parameter": "compress",
+      "help": "Write BGZF (block-gzip) output (gunzip-readable, seekable, ~3-4x smaller).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--compress",
+        "--bgzf"
+      ]
+    },
+    {
+      "name": "Index",
+      "parameter": "index",
+      "help": "Write a .didx offset index for each output file (lets domain_search skip the per-run offset scan).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--index"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "Number of parallel workers (also threads for the BGZF compressor).",
+      "type": "integer",
+      "default": 1,
+      "flags": [
+        "--cpu"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Output Dir",
+      "parameter": "output_dir",
+      "help": "Directory to write outputs into. Default: alongside each input.",
+      "type": "output",
+      "flags": [
+        "--output_dir"
+      ]
+    },
+    {
+      "name": "Level",
+      "parameter": "level",
+      "help": "BGZF/deflate compression level (1-12).",
+      "type": "integer",
+      "default": 6,
+      "flags": [
+        "--level"
+      ]
+    },
+    {
+      "name": "Force",
+      "parameter": "force",
+      "help": "Overwrite existing outputs / rebuild indexes instead of skipping.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--force"
+      ]
+    },
+    {
+      "name": "Max Output Gb",
+      "parameter": "max_output_gb",
+      "help": "Fail if a projected output file would exceed this many GB. Set to 0 to disable the guardrail.",
+      "type": "number",
+      "default": 25.0,
+      "flags": [
+        "--max_output_gb"
+      ]
+    },
+    {
+      "name": "Log",
+      "parameter": "log",
+      "help": "Log file. Default: stderr.",
+      "type": "string",
+      "flags": [
+        "--log"
+      ]
+    }
+  ]
+}

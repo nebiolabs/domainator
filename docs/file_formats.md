@@ -115,3 +115,54 @@ CAT	#0000ff
 Condensation	#ff00ff
 2-oxoacid_dh	#ffffff
 ```
+
+## domain_search databases: shards and `.didx` indexes
+
+A *domain_search database* is a GenBank or FASTA file, optionally BGZF-compressed,
+optionally split into shards. `domainator_format_db.py` produces these; `domain_search.py`
+consumes them. They are created and read transparently — you normally just pass the
+logical database name.
+
+### Shard naming
+
+A shard inserts `.N` after the base name, before the format and compression suffixes:
+
+```
+mydb.gb         ->  mydb.0.gb,      mydb.1.gb,      ...
+mydb.gb.bgz     ->  mydb.0.gb.bgz,  mydb.1.gb.bgz,  ...
+```
+
+Leading zeros in the shard number are allowed but ignored (`mydb.00.gb` == shard 0;
+they are sorted numerically). `domain_search.py` expands a logical name (`mydb.gb`) to
+its shards automatically. If both an unsharded file and shards exist for the same name,
+the tools refuse to guess and raise an error — keep only one set.
+
+### `.didx` offset index
+
+An index caches the per-record offsets that `domain_search` would otherwise recompute by
+scanning the whole database each run. It is a sidecar named by appending `.didx` to the
+*full* file/shard name (`mydb.0.gb.bgz.didx`). Indexes are only supported for uncompressed
+or BGZF databases (plain gzip has no usable random-access offset space).
+
+The format is a little-endian binary file: a 48-byte header followed by `record_count`
+pairs of two `uint64`.
+
+| offset | field | type | notes |
+|--------|-------|------|-------|
+| 0  | magic            | `4s`  | `DIDX` |
+| 4  | version_major    | `<H`  | current `_INDEX_FILE_VERSION` major (see `db_index.py`) |
+| 6  | version_minor    | `<H`  | |
+| 8  | filetype_flag    | `<B`  | 0 = genbank, 1 = fasta |
+| 9  | compression_flag | `<B`  | 0 = none (byte offsets), 1 = bgzf (virtual offsets `block_start<<16 \| within`) |
+| 10 | reserved         | `6x`  | zero pad (body 8-byte aligned) |
+| 16 | source_size      | `<Q`  | source file size — staleness fingerprint |
+| 24 | source_mtime_ns  | `<Q`  | source mtime (ns) — staleness fingerprint |
+| 32 | record_count     | `<Q`  | |
+| 40 | flags            | `<Q`  | reserved bitfield |
+| 48+| body             | `<QQ` × N | `(offset, cds_count)` pairs, in file order |
+
+A reader **never trusts a stale or unreadable index**: if the magic, version, file kind,
+size, or the source size+mtime fingerprint do not match, it warns once and recomputes the
+offsets by scanning (an out-of-date offset would otherwise seek into the middle of a
+record). Bump the major version in `db_index.py` (`_INDEX_FILE_VERSION`) on any breaking
+layout change; a newer minor with the same major stays readable.

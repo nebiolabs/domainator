@@ -14,6 +14,7 @@ use pyo3::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+mod bgzf_compress;
 mod bgzf_scan;
 mod parser;
 
@@ -116,6 +117,7 @@ fn _gbfast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fasta_offsets, m)?)?;
     m.add_function(wrap_pyfunction!(bgzf_scan::genbank_offsets_bgzf, m)?)?;
     m.add_function(wrap_pyfunction!(bgzf_scan::fasta_offsets_bgzf, m)?)?;
+    m.add_function(wrap_pyfunction!(bgzf_compress::bgzf_compress_file, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_lean, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_lean_search, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_fasta_search, m)?)?;

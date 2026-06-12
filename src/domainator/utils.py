@@ -9,6 +9,7 @@ from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition
 import gzip
 from domainator import lean_record
+from domainator import db_index
 try:
     from domainator import _gbfast  # optional native (Rust) acceleration
 except ImportError:
@@ -1127,6 +1128,18 @@ def _gbfast_offset_pairs(input_path, filetype):
     return scan(str(input_path))
 
 
+def _index_offsets(input_path, filetype):
+    """Return (offsets, num_proteins) from a valid, fresh ``.didx`` sidecar, or None
+    to signal the caller to scan. Plain gzip never uses an index (no usable
+    random-access offset space)."""
+    if not isinstance(input_path, (str, os.PathLike)):
+        return None
+    compression = detect_compression(input_path)
+    if compression == "gzip":
+        return None
+    return db_index.read_index(input_path, filetype=filetype, compression=compression)
+
+
 def get_offsets(input_path):
     """
         input: a path to a fasta or genbank file
@@ -1135,6 +1148,9 @@ def get_offsets(input_path):
     """
 
     filetype = get_file_type(input_path)
+    indexed = _index_offsets(input_path, filetype)
+    if indexed is not None:
+        return indexed
     if _gbfast_usable(input_path):
         pairs = _gbfast_offset_pairs(input_path, filetype)
         offsets = array("Q", (p[0] for p in pairs))
@@ -1159,6 +1175,12 @@ def i_get_offsets(input_path):
     """
 
     filetype = get_file_type(input_path)
+    if isinstance(input_path, (str, os.PathLike)):
+        compression = detect_compression(input_path)
+        if compression != "gzip":
+            indexed = db_index.i_read_index(input_path, filetype=filetype, compression=compression)
+            if indexed is not None:
+                return indexed
     if _gbfast_usable(input_path):
         return iter(_gbfast_offset_pairs(input_path, filetype))
     if filetype == "fasta":
