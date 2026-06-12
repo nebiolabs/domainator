@@ -11,6 +11,8 @@ optionally split into numbered shards. This tool prepares such databases:
   skips the per-run offset scan.
 
 At least one of ``--shards``, ``--compress``, or ``--index`` must be requested.
+``--name`` renames the output database (keeping its format/compression extensions),
+which is most useful alongside ``--shards``/``--compress``.
 Operations compose (e.g. a plain ``.gb`` -> N BGZF shards each with a ``.didx``).
 Shard content is produced by byte-exact range copy of the (decompressed) record
 stream, so records are preserved exactly. Compressed inputs are decompressed to a
@@ -120,7 +122,7 @@ def _format_shard_task(task):
     return task.final_path, ("written" if task.needs_write else "indexed")
 
 
-def _plan_input(input_path, *, shards, compress, index, output_dir, level, force, log):
+def _plan_input(input_path, *, shards, compress, index, output_dir, name, level, force, log):
     """Plan the output tasks for one input. Returns ``(tasks, working_temp_or_None)``.
     Performs the per-input serial work (decompress + offset scan) up front so the
     returned tasks can be parallelized."""
@@ -130,7 +132,16 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, level, force
     in_comp = utils.detect_compression(input_path)
     out_dir = output_dir or (os.path.dirname(input_path) or ".")
     os.makedirs(out_dir, exist_ok=True)
-    base = os.path.join(out_dir, os.path.basename(input_path))
+    if name is not None:
+        # Rename the output database: keep the input's format + compression
+        # extensions, swap the stem to `name`.
+        _d, _stem, fmt, comp = db_index._split_db_name(input_path)
+        new_basename = f"{name}.{fmt}" if fmt else name
+        if comp:
+            new_basename = f"{new_basename}.{comp}"
+        base = os.path.join(out_dir, new_basename)
+    else:
+        base = os.path.join(out_dir, os.path.basename(input_path))
 
     # Preserve BGZF; uncompressed/gzip become BGZF only with --compress.
     out_bgzf = bool(compress) or (in_comp == "bgzf")
@@ -186,7 +197,12 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, level, force
             final = db_index.shard_path(base, shard_index=i, compress=out_bgzf)
             tasks.append(ShardTask(working, b_start, b_end, final, out_bgzf, True,
                                    index, filetype, level, 0, force))
-        if out_dir == (os.path.dirname(input_path) or ".") and os.path.exists(input_path):
+        # Only a concern when the shards share the input's name (so domain_search,
+        # given the input path, would resolve to both it and its shards). A --name
+        # that renames the database avoids the ambiguity.
+        _d, in_stem, _f, _c = db_index._split_db_name(input_path)
+        same_name = name is None or name == in_stem
+        if same_name and out_dir == (os.path.dirname(input_path) or ".") and os.path.exists(input_path):
             warnings.warn(
                 f"Wrote shards alongside the original '{input_path}'. Remove the original "
                 "(or use --output_dir) so domain_search does not see both the unsharded "
@@ -195,19 +211,28 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, level, force
 
 
 def format_db(inputs, *, shards=None, compress=False, index=False, output_dir=None,
-              cpu=1, level=6, max_output_bytes=None, force=False, log=sys.stderr):
+              name=None, cpu=1, level=6, max_output_bytes=None, force=False, log=sys.stderr):
     """Shard / compress / index domain_search databases. Returns the list of final
     output paths produced (or confirmed). At least one of ``shards``, ``compress``,
-    or ``index`` must be requested."""
+    or ``index`` must be requested. ``name`` renames the output database (its format
+    and compression extensions are preserved); it requires a single input."""
     if shards is None and not compress and not index:
         raise ValueError("Nothing to do: request at least one of --shards, --compress, or --index.")
+    if name is not None:
+        if len(inputs) > 1:
+            raise ValueError("--name cannot be used with multiple inputs (each would collide on the same name).")
+        if shards is None and not compress:
+            warnings.warn(
+                "--name on an index-only run copies the input to the new name before indexing "
+                "(an index alone cannot rename a database); --name is intended for --shards/--compress.",
+                RuntimeWarning, stacklevel=2)
     all_tasks = []
     working_temps = []
     try:
         for input_path in inputs:
             tasks, working_temp = _plan_input(
                 input_path, shards=shards, compress=compress, index=index,
-                output_dir=output_dir, level=level, force=force, log=log)
+                output_dir=output_dir, name=name, level=level, force=force, log=log)
             all_tasks.extend(tasks)
             if working_temp:
                 working_temps.append(working_temp)
@@ -254,6 +279,10 @@ def main(argv):
                              "skip the per-run offset scan).")
     parser.add_argument('--output_dir', default=None, type=str,
                         help="Directory to write outputs into. Default: alongside each input.")
+    parser.add_argument('--name', default=None, type=str,
+                        help="Base name for the output database (format/compression extensions are kept), "
+                             "e.g. --name mydb turns 'foo.gb' into 'mydb.gb' / 'mydb.0.gb.bgz'. Requires a "
+                             "single input; intended for --shards/--compress (warns on index-only runs).")
     parser.add_argument('--cpu', type=int, default=1,
                         help="Number of parallel workers (also threads for the BGZF compressor).")
     parser.add_argument('--level', type=int, default=6,
@@ -273,7 +302,7 @@ def main(argv):
     try:
         format_db(
             params.input, shards=params.shards, compress=params.compress, index=params.index,
-            output_dir=params.output_dir, cpu=params.cpu, level=params.level,
+            output_dir=params.output_dir, name=params.name, cpu=params.cpu, level=params.level,
             max_output_bytes=max_output_gb_to_bytes(params.max_output_gb),
             force=params.force, log=log,
         )

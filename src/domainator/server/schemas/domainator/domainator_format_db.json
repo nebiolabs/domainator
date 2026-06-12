@@ -83,6 +83,15 @@
       ]
     },
     {
+      "name": "Name",
+      "parameter": "name",
+      "help": "Base name for the output database (format/compression extensions are kept), e.g. --name mydb turns 'foo.gb' into 'mydb.gb' / 'mydb.0.gb.bgz'. Requires a single input; intended for --shards/--compress (warns on index-only runs).",
+      "type": "string",
+      "flags": [
+        "--name"
+      ]
+    },
+    {
       "name": "Level",
       "parameter": "level",
       "help": "BGZF/deflate compression level (1-12).",

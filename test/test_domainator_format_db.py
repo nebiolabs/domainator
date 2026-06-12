@@ -141,6 +141,45 @@ def test_nothing_to_do_raises(shared_datadir, tmp_path):
         domainator_format_db.format_db([str(src)], shards=None, compress=False, index=False)
 
 
+def test_name_renames_sharded_output(shared_datadir, tmp_path):
+    """--name renames the output database; format extension is preserved, and the
+    renamed shards reassemble to the original records."""
+    src = tmp_path / "foo.gb"
+    shutil.copy(shared_datadir / "MT_nbs.gb", src)
+    original = _records(str(src))
+    domainator_format_db.format_db([str(src)], shards=2, compress=True, index=True,
+                                   name="mydb", cpu=1)
+    shards = _shard_files(str(tmp_path / "mydb.*.gb.bgz"))
+    assert [os.path.basename(s) for s in shards] == ["mydb.0.gb.bgz", "mydb.1.gb.bgz"]
+    assert all(os.path.exists(db_index.index_path_for(s)) for s in shards)
+    # The original (foo.gb) is untouched and not shadowed (different name).
+    assert os.path.exists(src)
+    reassembled = []
+    for s in shards:
+        reassembled += _records(s)
+    assert sorted(reassembled) == sorted(original)
+
+
+def test_name_index_only_warns_and_copies(shared_datadir, tmp_path):
+    """--name on an index-only run warns, then copies the input to the new name and
+    indexes the copy (an index alone cannot rename a database)."""
+    src = tmp_path / "foo.gb"
+    shutil.copy(shared_datadir / "MT_nbs.gb", src)
+    with pytest.warns(RuntimeWarning, match="index-only"):
+        domainator_format_db.format_db([str(src)], index=True, name="renamed", cpu=1)
+    out = tmp_path / "renamed.gb"
+    assert out.exists() and os.path.exists(db_index.index_path_for(str(out)))
+    assert _records(str(out)) == _records(str(src))
+
+
+def test_name_multiple_inputs_raises(shared_datadir, tmp_path):
+    a = tmp_path / "a.gb"; b = tmp_path / "b.gb"
+    shutil.copy(shared_datadir / "MT_nbs.gb", a)
+    shutil.copy(shared_datadir / "MT_nbs.gb", b)
+    with pytest.raises(ValueError, match="multiple inputs"):
+        domainator_format_db.format_db([str(a), str(b)], compress=True, name="x", cpu=1)
+
+
 # --- end-to-end with domain_search --------------------------------------------
 
 def test_domain_search_over_shards_matches_unsharded(shared_datadir, tmp_path):
