@@ -150,7 +150,23 @@ def test_select_by_contig_phylogeny_filter_1(shared_datadir):
         seqs = list(utils.parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "sp|P0AGD1|SODC_ECOLI"
-        
+
+
+def test_select_by_contig_taxonomy_expr(shared_datadir):
+    # "1224" (Proteobacteria) is equivalent to --include_taxids 1224.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction_pept.gb"
+        select_by_contig.main([
+            "-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"),
+            "-o", out,
+            "--taxonomy_expr", "1224",
+            "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"),
+        ])
+
+        seqs = list(utils.parse_seqfiles([out]))
+        assert len(seqs) == 1
+        assert seqs[0].id == "sp|P0AGD1|SODC_ECOLI"
+
 def test_select_by_contig_unannotated_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"

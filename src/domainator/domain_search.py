@@ -17,11 +17,10 @@ If neither is set, then hits will be written on the fly and not sorted.
 
 import sys
 import io
-import functools
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -33,7 +32,7 @@ from typing import List, Tuple, Set, Optional
 from domainator import extract_peptides
 import warnings
 from pathlib import Path
-from domainator.Taxonomy import NCBITaxonomy, compact_lineage
+from domainator.Taxonomy import NCBITaxonomy
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 
 
@@ -62,10 +61,11 @@ def _write_records_with_limit(records, out_handle, current_output_bytes: int, ma
 
     return current_output_bytes
 
-# Per-process taxonomy lineage data, populated by the pool initializer. This lets
-# each worker process hold one lightweight copy of the lineage maps instead of the
-# full NCBITaxonomy being pickled into every task (one task per partition).
-_WORKER_LINEAGE = None  # (parent, merged, deleted)
+# Per-process taxonomy filter, populated by the pool initializer. The include/
+# exclude filter is "compiled" once in the parent into a frozenset of allowed
+# taxids (NCBITaxonomy.compile_taxonomy_filter); filtering is then a single O(1)
+# membership test and the set is pickled once per process, not per partition.
+_WORKER_ALLOWED_TAXIDS = None
 
 # Per-process parsed references, populated by the pool initializer. References are
 # parsed once per worker (from path strings passed through initargs) rather than
@@ -74,36 +74,18 @@ _WORKER_LINEAGE = None  # (parent, merged, deleted)
 _WORKER_REFERENCES = None
 
 
-def _init_search_worker(reference_paths, foldseek_paths, lineage_data):
-    """Pool initializer: parse references once per worker, set lineage maps.
+def _init_search_worker(reference_paths, foldseek_paths, allowed_taxids):
+    """Pool initializer: parse references once per worker, install the taxonomy filter.
 
     Args:
         reference_paths: list of reference file paths (parsed inside the worker).
         foldseek_paths: list of foldseek database paths, or None.
-        lineage_data: (parent, merged, deleted) tuple for taxonomy filtering, or
-            None if no taxonomy filtering is active.
+        allowed_taxids: frozenset of taxids that pass the taxonomy filter, or None
+            if no taxonomy filtering is active.
     """
-    global _WORKER_REFERENCES, _WORKER_LINEAGE
+    global _WORKER_REFERENCES, _WORKER_ALLOWED_TAXIDS
     _WORKER_REFERENCES = domainate.read_references(reference_paths, foldseek=foldseek_paths)
-    if lineage_data is not None:
-        _WORKER_LINEAGE = lineage_data
-
-
-@functools.lru_cache(maxsize=None)
-def _lineage_matches(taxid: int, include_taxids: Optional[frozenset], exclude_taxids: Optional[frozenset]) -> bool:
-    """Return True if taxid's lineage passes the include/exclude filters.
-
-    Cached at module level (keyed only on its arguments, not on a worker
-    instance), so results are reused across every partition handled by a worker
-    process. Relies on _WORKER_LINEAGE being set by _init_taxonomy_worker.
-    """
-    parent, merged, deleted = _WORKER_LINEAGE
-    lineage = set(compact_lineage(parent, merged, deleted, taxid))
-    if include_taxids and not lineage.intersection(include_taxids):
-        return False
-    if exclude_taxids and lineage.intersection(exclude_taxids):
-        return False
-    return True
+    _WORKER_ALLOWED_TAXIDS = allowed_taxids
 
 
 class _domain_search_worker():
@@ -123,9 +105,10 @@ class _domain_search_worker():
         self.translate = translate
         self.gene_call = gene_call
         self.min_evalue = min_evalue
-        # Stored as frozensets so they can be used as lru_cache keys for _lineage_matches.
-        self.include_taxids = frozenset(include_taxids) if include_taxids else None
-        self.exclude_taxids = frozenset(exclude_taxids) if exclude_taxids else None
+        # Kept for the constructor contract; the actual filter is the compiled
+        # frozenset of allowed taxids installed per worker process (_WORKER_ALLOWED_TAXIDS).
+        self.include_taxids = include_taxids
+        self.exclude_taxids = exclude_taxids
         self.fasta_type = fasta_type
         self.max_mode = max_mode
         self.max_region_overlap = max_region_overlap
@@ -136,13 +119,13 @@ class _domain_search_worker():
         # (_init_search_worker) parses them once per worker into _WORKER_REFERENCES.
 
     def _record_matches_taxonomy(self, record) -> bool:
-        if not (self.include_taxids or self.exclude_taxids):
+        if _WORKER_ALLOWED_TAXIDS is None:
             return True
 
         taxid = get_taxid(record)
         if taxid is None:
             return False
-        return _lineage_matches(taxid, self.include_taxids, self.exclude_taxids)
+        return taxid in _WORKER_ALLOWED_TAXIDS
 
 
     
@@ -237,7 +220,7 @@ class _partition_seqfile_worker():
         return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
     
 
-def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None):
+def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None):
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 
@@ -258,6 +241,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         ncbi_taxonomy: an NCBITaxonomy object (needed for filtering by taxonomy, otherwise not needed)
         include_taxids: only keep contigs with a taxonomy id in this list
         exclude_taxids: only keep contigs with a taxonomy id not in this list
+        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses) used to filter contigs by lineage, e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
         fasta_type: "protein" or "nucleotide", the type of fasta file to be searched.
         max_mode: if True, then only the best hit for each hmm will be returned, otherwise all hits will be returned
         max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. [default 1]
@@ -276,17 +260,22 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     if exclude_taxids is not None:
         exclude_taxids = set(exclude_taxids)
 
-    # Build the compact lineage maps once and pass them to each worker process via
-    # the pool initializer (pickled once per process, not once per partition). The
-    # full NCBITaxonomy is then released so the parent does not hold it for the run.
-    lineage_data = None
-    if (include_taxids or exclude_taxids) and ncbi_taxonomy is not None:
-        lineage_data = ncbi_taxonomy.compact_lineage_data()
+    if taxonomy_expr and (include_taxids or exclude_taxids):
+        raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
+
+    # "Compile" the taxonomy filter once in the parent into a frozenset of allowed
+    # taxids (a single O(N) pass over the tree), then hand it to each worker process
+    # via the pool initializer. Filtering in workers is then an O(1) membership test,
+    # and the set -- not the full NCBITaxonomy -- is pickled once per process. The
+    # full NCBITaxonomy is released afterward so the parent does not hold it.
+    allowed_taxids = None
+    if ncbi_taxonomy is not None:
+        allowed_taxids = compile_taxonomy_allowed(ncbi_taxonomy, include_taxids, exclude_taxids, taxonomy_expr)
         ncbi_taxonomy = None
 
     # Always use the pool initializer: it parses references once per worker (R4) and,
-    # when present, installs the lineage maps for taxonomy filtering.
-    pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, lineage_data))
+    # when present, installs the compiled taxonomy filter.
+    pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
 
     out_heap = []
     worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig)
@@ -385,6 +374,7 @@ def main(argv):
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
+    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
@@ -539,8 +529,11 @@ def main(argv):
         partitions = partition_seqfile.i_partition_seqfiles(input_files, cdss_per_partition=params.batch_size)
         Z = params.Z
 
+    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
+        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
+
     ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids:
+    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr:
         # create the path to the NCBI taxonomy database
         Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
         # load the NCBI taxonomy database
@@ -572,6 +565,7 @@ def main(argv):
             ncbi_taxonomy=ncbi_taxonomy,
             include_taxids=params.include_taxids,
             exclude_taxids=params.exclude_taxids,
+            taxonomy_expr=params.taxonomy_expr,
             fasta_type=params.fasta_type,
             max_mode=params.max_mode,
             max_region_overlap=params.max_region_overlap,

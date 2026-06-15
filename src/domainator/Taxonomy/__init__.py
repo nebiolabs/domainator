@@ -71,39 +71,6 @@ def _fetch_remote_md5(url: str) -> str:
     resp.raise_for_status()
     return resp.text.strip().split()[0]
 
-def compact_lineage(parent, merged, deleted, tax_id):
-    '''
-        Walk the parent chain using compact int->int maps.
-
-        Mirrors NCBITaxonomy._lineage but operates on the lightweight structures
-        produced by NCBITaxonomy.compact_lineage_data (a parent taxid map, a
-        merged-taxid map, and a set of deleted taxids), so it can be cheaply
-        pickled into worker processes for taxonomy filtering.
-
-        Returns all parent nodes of tax_id (starting with tax_id itself).
-    '''
-    out_list = list()
-
-    if tax_id in merged:
-        tax_id = merged[tax_id]
-
-    if tax_id in deleted:
-        warnings.warn(f"Attempted to calculate lineage for a deleted taxid: {tax_id}, lineage search prematurely stopped, which might confuse lineage exclusions.")
-        return out_list
-
-    out_list.append(tax_id)
-
-    while parent[tax_id] != 1:
-        parent_taxid = parent[tax_id]
-        if parent_taxid in merged:
-            parent_taxid = merged[parent_taxid]
-        out_list.append(parent_taxid)
-        tax_id = parent_taxid
-
-    out_list.append(1)
-    return out_list
-
-
 class NCBITaxonomy:
     def __init__(self, local_path, overwrite=True):
         local_path = Path(local_path)
@@ -323,22 +290,147 @@ class NCBITaxonomy:
         '''
         return self._lineage(self._nodes_tab, self._merged_tab, self._deleted_tab, tax_id)
 
-    def compact_lineage_data(self):
-        '''
-            Build lightweight int->int maps sufficient for lineage walks.
+    def _normalized_parent(self, tid):
+        '''Parent taxid of tid, following a merge if the parent itself was merged.'''
+        p = int(self._nodes_tab[tid]['parent_tax_id'])
+        if p in self._merged_tab:
+            p = int(self._merged_tab[p]['new_tax_id'])
+        return p
 
-            Returns (parent, merged, deleted) where:
-                parent:  {taxid: parent_taxid}
-                merged:  {old_taxid: new_taxid}
-                deleted: set of deleted taxids
-            These are far smaller than the full node/name tables and are cheap to
-            pickle into worker processes (see domain_search taxonomy filtering).
-            Pair with the module-level compact_lineage() function.
+    def _finalize_allowed(self, allowed, empty_lineage_passes):
+        '''Extend a set of allowed taxids with merged old-taxids (which inherit
+        their replacement's verdict) and, when the empty lineage satisfies the
+        filter, deleted taxids; then freeze it. Shared by the compile_* methods.'''
+        for old, v in self._merged_tab.items():
+            if int(v['new_tax_id']) in allowed:
+                allowed.add(old)
+        if empty_lineage_passes:
+            allowed.update(int(t) for t in self._deleted_tab)
+        return frozenset(allowed)
+
+    def compile_taxonomy_filter(self, include_taxids=None, exclude_taxids=None):
         '''
-        parent = {tid: int(node['parent_tax_id']) for tid, node in self._nodes_tab.items()}
-        merged = {old: int(v['new_tax_id']) for old, v in self._merged_tab.items()}
-        deleted = set(self._deleted_tab)
-        return parent, merged, deleted
+            "Compile" an include/exclude taxonomy filter into an O(1) lookup set.
+
+            Computes, in a single O(N) pass over the tree, the verdict for every
+            taxid and returns a frozenset of all taxids that pass the filter (a
+            taxid passes when its lineage intersects include_taxids -- if any --
+            and does not intersect exclude_taxids). This matches the semantics of
+            utils.record_matches_taxonomy / NCBITaxonomy.lineage-based filtering,
+            but lets callers replace a per-record lineage walk with a single set
+            membership test.
+
+            The returned set also covers merged old-taxids (which inherit their
+            new taxid's verdict) and, when there is no include filter, deleted
+            taxids (whose empty lineage cannot intersect an exclude set).
+
+            Returns None when neither include_taxids nor exclude_taxids is given.
+        '''
+        include = {int(t) for t in include_taxids} if include_taxids else None
+        exclude = {int(t) for t in exclude_taxids} if exclude_taxids else None
+        if not include and not exclude:
+            return None
+
+        # inc_memo[t]/exc_memo[t]: does t's lineage (self..root) hit include/exclude.
+        # Filled by an iterative, memoized walk toward the root so each node is
+        # resolved once -> O(N) total.
+        inc_memo = dict()
+        exc_memo = dict()
+
+        def _resolve(t0):
+            chain = list()
+            t = t0
+            while t not in inc_memo:
+                p = self._normalized_parent(t)
+                if p == t:  # root points to itself
+                    inc_memo[t] = include is not None and t in include
+                    exc_memo[t] = exclude is not None and t in exclude
+                    break
+                chain.append(t)
+                t = p
+            for t in reversed(chain):
+                p = self._normalized_parent(t)
+                inc_memo[t] = inc_memo[p] or (include is not None and t in include)
+                exc_memo[t] = exc_memo[p] or (exclude is not None and t in exclude)
+
+        allowed = set()
+        for tid in self._nodes_tab:
+            if tid not in inc_memo:
+                _resolve(tid)
+            if (include is None or inc_memo[tid]) and (exclude is None or not exc_memo[tid]):
+                allowed.add(tid)
+
+        return self._finalize_allowed(allowed, empty_lineage_passes=(include is None))
+
+    def compile_taxonomy_expression(self, expression):
+        '''
+            "Compile" a boolean taxonomy expression into an O(1) lookup set.
+
+            The expression uses the same operators as utils.BooleanEvaluator
+            (& AND, | OR, ~ NOT, with parentheses) over taxids. A taxid token is
+            True for a node when that taxid is in the node's lineage (i.e. the node
+            is that taxon or one of its descendants). For example "2 & ~1224"
+            selects taxa within Bacteria (2) that are not within Proteobacteria
+            (1224); "2 | 2157" selects Bacteria or Archaea.
+
+            Like compile_taxonomy_filter, this evaluates the verdict for every
+            taxid in a single O(N) pass and returns a frozenset of all taxids whose
+            lineage satisfies the expression (covering merged old-taxids and, when
+            the empty lineage satisfies the expression, deleted taxids), so callers
+            can replace a per-record lineage walk with one set-membership test.
+
+            Returns None for an empty/None expression.
+        '''
+        if expression is None or str(expression).strip() == "":
+            return None
+
+        # Imported lazily: utils imports this module at top level, so a top-level
+        # import here would be circular.
+        from domainator.utils import BooleanEvaluator
+
+        evaluator = BooleanEvaluator(expression)
+        # Expression tokens are taxids; a token is "present" for a node when it is
+        # an ancestor (or self) of that node.
+        marker_taxids = {int(tax) for tax in evaluator.tok_to_domain.values()}
+
+        # present[t]: frozenset of marker taxids in t's lineage (self..root),
+        # propagated downward in a single memoized O(N) pass.
+        present = dict()
+
+        def _resolve(t0):
+            chain = list()
+            t = t0
+            while t not in present:
+                p = self._normalized_parent(t)
+                if p == t:  # root points to itself
+                    present[t] = frozenset({t} & marker_taxids)
+                    break
+                chain.append(t)
+                t = p
+            for t in reversed(chain):
+                parent_present = present[self._normalized_parent(t)]
+                present[t] = (parent_present | {t}) if t in marker_taxids else parent_present
+
+        # eval() (inside check_expression) is comparatively expensive, so cache the
+        # verdict per distinct present-marker set -- there are far fewer of those
+        # than there are taxids.
+        verdict_cache = dict()
+
+        def _verdict(present_set):
+            if present_set not in verdict_cache:
+                verdict_cache[present_set] = bool(
+                    evaluator.check_expression({str(tax) for tax in present_set})
+                )
+            return verdict_cache[present_set]
+
+        allowed = set()
+        for tid in self._nodes_tab:
+            if tid not in present:
+                _resolve(tid)
+            if _verdict(present[tid]):
+                allowed.add(tid)
+
+        return self._finalize_allowed(allowed, empty_lineage_passes=_verdict(frozenset()))
 
     def name(self, tax_id):
         '''

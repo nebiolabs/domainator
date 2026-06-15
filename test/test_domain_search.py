@@ -507,6 +507,33 @@ def test_domain_search_taxonomy_1(shared_datadir):
         assert new_file[0].id == "sp|O31851|YOJM_BACSU"
 
 
+def test_domain_search_taxonomy_expr(shared_datadir):
+    # "2 & ~1224" is equivalent to --include_taxids 2 --exclude_taxids 1224, so this
+    # should select the same record as test_domain_search_taxonomy_1.
+    input = shared_datadir / "swissprot_CuSOD_subset.fasta"
+    hmms = shared_datadir / "swissprot_CuSOD_subset.fasta"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(input), "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--taxonomy_expr", "2 & ~1224"]
+        main(args)
+        assert os.path.isfile(out)
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert new_file[0].id == "sp|O31851|YOJM_BACSU"
+
+
+def test_domain_search_taxonomy_expr_mutually_exclusive(shared_datadir):
+    input = shared_datadir / "swissprot_CuSOD_subset.fasta"
+    hmms = shared_datadir / "swissprot_CuSOD_subset.fasta"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(input), "-r", str(hmms), "-o", str(out), "-Z", "1000", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--taxonomy_expr", "2", "--include_taxids", "2"]
+        with pytest.raises(ValueError):
+            main(args)
+
+
 def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch):
     input = shared_datadir / "pdonr_peptides.fasta"
     total_records = sum(1 for _ in SeqIO.parse(str(input), "fasta"))
@@ -562,19 +589,11 @@ def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch)
     assert [rec.id for rec in out] == ["match_1"]
 
 
-def test_domain_search_taxonomy_cache_reuses_taxid_lineage(monkeypatch):
-    # The lineage-match cache is module-level (_lineage_matches), fed by the
-    # per-process lineage maps set via _init_search_worker. Verify that two
-    # records sharing a taxid only trigger a single lineage walk.
-    calls = []
-
-    def fake_compact_lineage(parent, merged, deleted, taxid):
-        calls.append(taxid)
-        return [1, 2, taxid]
-
-    monkeypatch.setattr(domain_search_module, "compact_lineage", fake_compact_lineage)
-    domain_search_module._init_search_worker([], None, ({}, {}, set()))
-    domain_search_module._lineage_matches.cache_clear()
+def test_domain_search_taxonomy_compiled_filter_membership(monkeypatch):
+    # The taxonomy filter is compiled into a frozenset of allowed taxids and
+    # installed per worker process (_WORKER_ALLOWED_TAXIDS). Verify the worker
+    # filters records by O(1) membership in that set.
+    monkeypatch.setattr(domain_search_module, "_WORKER_ALLOWED_TAXIDS", frozenset({10}))
 
     worker = domain_search_module._domain_search_worker(
         references=[],
@@ -593,18 +612,17 @@ def test_domain_search_taxonomy_cache_reuses_taxid_lineage(monkeypatch):
         fasta_type="protein",
     )
 
-    rec1 = SeqRecord(Seq("MA"), id="rec1", description="rec1")
-    rec1.annotations["molecule_type"] = "protein"
-    rec1.annotations["ncbi_taxid"] = ["10"]
+    rec_in = SeqRecord(Seq("MA"), id="rec_in", description="rec_in")
+    rec_in.annotations["molecule_type"] = "protein"
+    rec_in.annotations["ncbi_taxid"] = ["10"]
 
-    rec2 = SeqRecord(Seq("MA"), id="rec2", description="rec2")
-    rec2.annotations["molecule_type"] = "protein"
-    rec2.annotations["ncbi_taxid"] = ["10"]
+    rec_out = SeqRecord(Seq("MA"), id="rec_out", description="rec_out")
+    rec_out.annotations["molecule_type"] = "protein"
+    rec_out.annotations["ncbi_taxid"] = ["99"]
 
-    assert worker._record_matches_taxonomy(rec1)
-    assert worker._record_matches_taxonomy(rec2)
-    assert calls == [10]
-        
+    assert worker._record_matches_taxonomy(rec_in)
+    assert not worker._record_matches_taxonomy(rec_out)
+
 
 
 def test_domain_search_strand_f_1(shared_datadir):

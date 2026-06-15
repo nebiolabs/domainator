@@ -85,7 +85,7 @@ def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
 
 
 
-def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain"):
+def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain"):
     """
 
         Args:
@@ -122,6 +122,8 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             include_taxids: only keep contigs with a taxonomy id in this list
 
             exclude_taxids: only keep contigs with a taxonomy id not in this list
+
+            taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
 
             databases: only consider domains from these databases
 
@@ -161,8 +163,8 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
     if exclude_taxids is not None:
         exclude_taxids = set(exclude_taxids)
 
-    if include_taxids or exclude_taxids:
-        contigs = filter_by_taxonomy(contigs, include_taxids, exclude_taxids, ncbi_taxonomy)
+    if include_taxids or exclude_taxids or taxonomy_expr:
+        contigs = filter_by_taxonomy(contigs, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
     
     if length_lb is not None or length_ub is not None:
         contigs = length_filter(contigs, length_lb, length_ub)
@@ -285,6 +287,7 @@ def main(argv):
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
+    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
@@ -352,8 +355,11 @@ def main(argv):
     else:
         output_handle = open(params.output, "w")
 
+    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
+        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
+
     ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids:
+    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr:
         # create the path to the NCBI taxonomy database
         Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
         # load the NCBI taxonomy database
@@ -379,6 +385,7 @@ def main(argv):
                     ncbi_taxonomy,
                     params.include_taxids,
                     params.exclude_taxids,
+                    taxonomy_expr=params.taxonomy_expr,
                     databases=params.databases,
                     unanntotated=params.unannotated,
                     search_score_lb=params.search_score_lb,

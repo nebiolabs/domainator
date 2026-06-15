@@ -1681,9 +1681,33 @@ def record_matches_taxonomy(record: SeqRecord, include_taxids, exclude_taxids, n
         return False
     return True
 
-def filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy):
+
+def compile_taxonomy_allowed(ncbi_taxonomy, include_taxids=None, exclude_taxids=None, taxonomy_expr=None):
+    """Compile taxonomy filtering criteria into a frozenset of allowed taxids.
+
+    taxonomy_expr is a boolean expression over taxids (operators & | ~ and
+    parentheses; see NCBITaxonomy.compile_taxonomy_expression) and is mutually
+    exclusive with include_taxids/exclude_taxids. The verdict for every taxid is
+    computed in a single O(N) pass, so callers can filter records by an O(1)
+    membership test. Returns None when no filtering criteria are given.
+    """
+    if taxonomy_expr and (include_taxids or exclude_taxids):
+        raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
+    if taxonomy_expr:
+        return ncbi_taxonomy.compile_taxonomy_expression(taxonomy_expr)
+    if include_taxids or exclude_taxids:
+        return ncbi_taxonomy.compile_taxonomy_filter(include_taxids, exclude_taxids)
+    return None
+
+
+def filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=None):
+    allowed = compile_taxonomy_allowed(ncbi_taxonomy, include_taxids, exclude_taxids, taxonomy_expr)
+    if allowed is None:
+        yield from records
+        return
     for record in records:
-        if record_matches_taxonomy(record, include_taxids, exclude_taxids, ncbi_taxonomy):
+        taxid = get_taxid(record)
+        if taxid is not None and taxid in allowed:
             yield record
 
 

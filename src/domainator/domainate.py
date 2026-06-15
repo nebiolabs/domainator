@@ -934,7 +934,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         rec.features.append(feature)
         i += 1
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -980,6 +980,8 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
         include_taxids: only keep contigs with a taxonomy id in this list
         
         exclude_taxids: only keep contigs with a taxonomy id not in this list
+
+        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
 
         max_mode: if True, then run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.
 
@@ -1033,8 +1035,8 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
     infernal_nucleic_acid_list = list()
     foldseek_list = list()
     contig_index = 0
-    if include_taxids or exclude_taxids:
-        seq_iterator = filter_by_taxonomy(seq_iterator, include_taxids, exclude_taxids, ncbi_taxonomy)
+    if include_taxids or exclude_taxids or taxonomy_expr:
+        seq_iterator = filter_by_taxonomy(seq_iterator, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
 
     nhmmer_extension = get_max_reference_length(reference_groups, "nhmmer")
     infernal_extension = get_max_reference_length(reference_groups, "infernal")
@@ -1142,6 +1144,7 @@ def main(argv):
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.")
+    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
@@ -1211,8 +1214,11 @@ def main(argv):
     if params.recs_to_read is not None:
         recs_to_read = params.recs_to_read
 
+    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
+        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
+
     ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids:
+    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr:
         # create the path to the NCBI taxonomy database
         Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
         # load the NCBI taxonomy database
@@ -1237,6 +1243,7 @@ def main(argv):
             ncbi_taxonomy=ncbi_taxonomy,
             include_taxids=params.include_taxids,
             exclude_taxids=params.exclude_taxids,
+            taxonomy_expr=params.taxonomy_expr,
             max_mode=params.max_mode,
             foldseek=None,
             esm2_3Di_weights=params.esm2_3Di_weights,

@@ -64,6 +64,15 @@
       ]
     },
     {
+      "name": "Taxonomy Expr",
+      "parameter": "taxonomy_expr",
+      "help": "A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. '2 & ~1224' (within Bacteria but not Proteobacteria). A taxid is true when it appears in the lineage. Mutually exclusive with include/exclude taxids. For prokaryote-only (_proks) databases, Eukaryota are excluded in addition.",
+      "type": "string",
+      "flags": [
+        "--taxonomy_expr"
+      ]
+    },
+    {
       "name": "Ncbi Taxonomy Path",
       "parameter": "ncbi_taxonomy_path",
       "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",

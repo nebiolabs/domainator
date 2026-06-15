@@ -124,6 +124,15 @@
       ]
     },
     {
+      "name": "Taxonomy Expr",
+      "parameter": "taxonomy_expr",
+      "help": "A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. '2 & ~1224' (within Bacteria but not Proteobacteria). A taxid is true when it appears in the lineage. Mutually exclusive with include/exclude taxids.",
+      "type": "string",
+      "flags": [
+        "--taxonomy_expr"
+      ]
+    },
+    {
       "name": "Threads",
       "parameter": "cpu",
       "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",

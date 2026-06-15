@@ -653,6 +653,21 @@ def test_domainate_taxonomy_1(shared_datadir):
         assert count_peptides_in_record(new_file[0]) == 1
         assert new_file[0].id == "sp|O31851|YOJM_BACSU"
 
+def test_domainate_taxonomy_expr(shared_datadir):
+    # "2 & ~1224" is equivalent to --include_taxids 2 --exclude_taxids 1224.
+    input = shared_datadir / "swissprot_CuSOD_subset.fasta"
+    hmms = shared_datadir / "swissprot_CuSOD_subset.fasta"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(input), "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--taxonomy_expr", "2 & ~1224"]
+        main(args)
+        assert os.path.isfile(out)
+
+        new_file = list(SeqIO.parse(out, "genbank"))
+        assert len(new_file) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
+        assert new_file[0].id == "sp|O31851|YOJM_BACSU"
+
 def test_domainate_mixed_query_1(shared_datadir):
     input = shared_datadir / "pDONR201.gb"
     hmms = shared_datadir / "pdonr_hmms.hmm"

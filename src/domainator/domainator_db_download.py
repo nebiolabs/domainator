@@ -38,7 +38,7 @@ from domainator.Taxonomy import NCBITaxonomy
 from pathlib import Path
 import sys
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
-from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager
+from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager, compile_taxonomy_allowed
 from domainator import __version__, RawAndDefaultsFormatter
 from typing import Dict, List, Set, Tuple, Union, Optional, Iterator
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
@@ -96,7 +96,7 @@ def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict
             f = (line.decode('utf-8') for line in response.iter_lines()) # returns a generator
             yield from parse_file(f)
 
-def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_database=None, filter_by_uniqueness=True, filter_by_complete_genome=False, no_na=False, gene_call=None, num_recs=None, ncbi_summary=None, before:Optional[datetime.date]=None, after:Optional[datetime.date]=None, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False):
+def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_database=None, filter_by_uniqueness=True, filter_by_complete_genome=False, no_na=False, gene_call=None, num_recs=None, ncbi_summary=None, before:Optional[datetime.date]=None, after:Optional[datetime.date]=None, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None):
     """
     Downloads nucleotide data from NCBI GenBank and writes it to a genbank file.
 
@@ -123,8 +123,8 @@ def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_
         ValueError: If the gene_call parameter is not one of None, 'all', or 'unannotated'.
     """
 
-    if (taxonomy_database is None and (include_taxa is not None or exclude_taxa is not None or filter_by_uniqueness == True)):
-        raise ValueError(f"if include_taxa, exclude_taxa, or filter_by_uniqueness are specified, then taxonomy_database must also be supplied")
+    if (taxonomy_database is None and (include_taxa is not None or exclude_taxa is not None or taxonomy_expr is not None or filter_by_uniqueness == True)):
+        raise ValueError(f"if include_taxa, exclude_taxa, taxonomy_expr, or filter_by_uniqueness are specified, then taxonomy_database must also be supplied")
 
     if gene_call not in (None, 'all', 'unannotated'):
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
@@ -143,7 +143,7 @@ def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_
     genbank_accessions = filter_by_ftp_path(genbank_accessions)
     genbank_accessions = filter_by_accession_exclusion(genbank_accessions, exclude_accessions)
     genbank_accessions = filter_by_date(genbank_accessions, before, after)
-    genbank_accessions = filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, exclude_taxa, taxonomy_database)
+    genbank_accessions = filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, exclude_taxa, taxonomy_database, taxonomy_expr=taxonomy_expr)
     genbank_accessions = filter_by_unique_taxid(genbank_accessions, taxonomy_database) if filter_by_uniqueness else genbank_accessions
     genbank_accessions = filter_by_assembly_level(genbank_accessions, categories={"Complete Genome"}) if filter_by_complete_genome else genbank_accessions
     genbank_accessions = filter_by_refseq_category(genbank_accessions) if no_na else genbank_accessions
@@ -218,7 +218,7 @@ def filter_by_ftp_path(genbank_accessions):
     print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt", file=sys.stderr)
     return filtered_gb_accessions
 
-def filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, exclude_taxa, taxonomy_database):
+def filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, exclude_taxa, taxonomy_database, taxonomy_expr=None):
     """
     Filters a list of GenBank accessions based on their taxonomy.
 
@@ -227,28 +227,16 @@ def filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, excl
         include_taxa (list): A list of NCBI taxids of clades to include in the filtered list.
         exclude_taxa (list): A list of NCBI taxids of clades to exclude from the filtered list.
         taxonomy_database (object): A domainator.Taxonomy.NCBITaxonomy object.
+        taxonomy_expr (str, optional): A boolean expression over taxids (operators & | ~ and parentheses). Mutually exclusive with include_taxa/exclude_taxa.
 
     Returns:
         list: A filtered list of GenBank accessions based on the provided taxonomy criteria.
     """
-    if include_taxa is None and exclude_taxa is None:
+    allowed = compile_taxonomy_allowed(taxonomy_database, include_taxa, exclude_taxa, taxonomy_expr)
+    if allowed is None:
         return genbank_accessions
 
-    filtered_gb_accessions = []
-    for r in genbank_accessions:
-        taxid = int(r['taxid'])
-        lineage = set(taxonomy_database.lineage(taxid))
-        should_download = True
-
-        if include_taxa is not None:
-            if len(lineage.intersection(include_taxa)) == 0:
-                should_download = False
-        if exclude_taxa is not None:
-            if len(lineage.intersection(exclude_taxa)) > 0:
-                should_download = False
-
-        if should_download:
-            filtered_gb_accessions.append(r)
+    filtered_gb_accessions = [r for r in genbank_accessions if int(r['taxid']) in allowed]
 
     print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by taxonomy", file=sys.stderr)
     return filtered_gb_accessions
@@ -633,15 +621,15 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
 
 ##### Uniprot #####
 
-def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None):
+def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None):
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
         with open(output_file_path, "w") as output_handle:
             with gzip.open(response.raw, "rt") as gzipped_file:
                 recs_written = 0
                 records = tqdm.tqdm(SeqIO.parse(gzipped_file, "swiss"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
-                if include_taxids or exclude_taxids:
-                    records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy)
+                if include_taxids or exclude_taxids or taxonomy_expr:
+                    records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
                 
                 for record in records:
                     features = [SeqFeature(FeatureLocation(0, len(record)), type="source", qualifiers={"db_xref": f"taxon:{record.annotations['ncbi_taxid'][0]}"})]
@@ -659,15 +647,15 @@ def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, excl
                     if num_recs is not None and recs_written >= num_recs:
                         break
 
-def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None):
+def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None):
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
         with open(output_file_path, "w") as output_handle:
             with gzip.open(response.raw, "rt") as gzipped_file:
                 recs_written = 0
                 records = tqdm.tqdm(parse_seqfiles([gzipped_file], filetype_override="fasta"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
-                if include_taxids or exclude_taxids:
-                    records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy)
+                if include_taxids or exclude_taxids or taxonomy_expr:
+                    records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
                 for record in records:
                     SeqIO.write(record, output_handle, "fasta")
                     recs_written += 1
@@ -675,12 +663,27 @@ def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids
                         break
 
 
-def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False):
+def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None):
+
+    if taxonomy_expr and (include_taxids or exclude_taxids):
+        raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
 
     if include_taxids is not None:
         include_taxids = set(include_taxids)
     if exclude_taxids is not None:
         exclude_taxids = set(exclude_taxids)
+
+    # Effective taxonomy criteria for prokaryote-only DBs, which always exclude
+    # Eukaryota (taxid 2759). include/exclude and taxonomy_expr are mutually
+    # exclusive, so combine the Eukaryota exclusion with whichever was supplied.
+    EUKARYOTA_TAXID = 2759
+    if taxonomy_expr:
+        prok_include, prok_exclude = None, None
+        prok_expr = f"({taxonomy_expr}) & ~{EUKARYOTA_TAXID}"
+    else:
+        prok_include = include_taxids
+        prok_exclude = (set(exclude_taxids) if exclude_taxids else set()) | {EUKARYOTA_TAXID}
+        prok_expr = None
 
     # Backend / NCBI-friendliness options forwarded to every download_ncbi() call below.
     ncbi_friendly_kwargs = dict(
@@ -704,6 +707,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             exclude_taxids,
             ncbi_taxonomy,
             num_recs=num_recs,
+            taxonomy_expr=taxonomy_expr,
         )
     if db.lower() in {"trembl_gb", "uniprot_gb"}:
         download_and_convert_uniprot_dat(
@@ -713,6 +717,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             exclude_taxids,
             ncbi_taxonomy,
             num_recs=num_recs,
+            taxonomy_expr=taxonomy_expr,
         )
     if db.lower() in {"swissprot", "uniprot"}:
         download_uniprot_fasta(
@@ -722,6 +727,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             exclude_taxids,
             ncbi_taxonomy,
             num_recs=num_recs,
+            taxonomy_expr=taxonomy_expr,
         )
     if db.lower() in {"trembl", "uniprot"}:
         download_uniprot_fasta(
@@ -731,15 +737,14 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             exclude_taxids,
             ncbi_taxonomy,
             num_recs=num_recs,
+            taxonomy_expr=taxonomy_expr,
         )
 
     if db.lower() == "ncbi_complete_genome_proks":
-        if exclude_taxids is None:
-            exclude_taxids = set()
         download_ncbi(
             output_file_path,
-            include_taxids,
-            exclude_taxids.union({2759}), # exclude Eukaryota
+            prok_include,
+            prok_exclude,
             ncbi_taxonomy,
             filter_by_uniqueness=False,
             no_na=False,
@@ -752,15 +757,14 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             cpus=cpus,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
+            taxonomy_expr=prok_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_complete_genome_nonredundant_proks":
-            if exclude_taxids is None:
-                exclude_taxids = set()
             download_ncbi(
                 output_file_path,
-                include_taxids,
-                exclude_taxids.union({2759}), # exclude Eukaryota
+                prok_include,
+                prok_exclude,
                 ncbi_taxonomy,
                 filter_by_uniqueness=True,
                 no_na=False,
@@ -773,16 +777,15 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
                 cpus=cpus,
                 success_rec_log=success_rec_log,
                 exclude_accessions=exclude_accessions,
+                taxonomy_expr=prok_expr,
                 **ncbi_friendly_kwargs,
             )
 
     if db.lower() == "ncbi_representative_proks":
-        if exclude_taxids is None:
-            exclude_taxids = set()
         download_ncbi(
             output_file_path,
-            include_taxids,
-            exclude_taxids.union({2759}), # exclude Eukaryota
+            prok_include,
+            prok_exclude,
             ncbi_taxonomy,
             filter_by_uniqueness=False,
             no_na=True,
@@ -794,6 +797,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             cpus=cpus,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
+            taxonomy_expr=prok_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_representative_all":
@@ -812,15 +816,14 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             cpus=cpus,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
+            taxonomy_expr=taxonomy_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_nonredundant_proks":
-        if exclude_taxids is None:
-            exclude_taxids = set()
         download_ncbi(
             output_file_path,
-            include_taxids,
-            exclude_taxids.union({2759}),
+            prok_include,
+            prok_exclude,
             ncbi_taxonomy,
             filter_by_uniqueness=True,
             no_na=False,
@@ -832,6 +835,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             cpus=cpus,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
+            taxonomy_expr=prok_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_nonredundant_all":
@@ -850,6 +854,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             cpus=cpus,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
+            taxonomy_expr=taxonomy_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_all":
@@ -868,6 +873,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             cpus=cpus,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
+            taxonomy_expr=taxonomy_expr,
             **ncbi_friendly_kwargs,
         )
 
@@ -877,6 +883,7 @@ def main(argv):
     parser.add_argument("-o", "--output", type=str, required=True, help="Output filename")
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
+    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a record when it is in the record's lineage. Mutually exclusive with --include_taxids/--exclude_taxids. For prokaryote-only (_proks) databases, Eukaryota are excluded in addition to this expression.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--skip_taxonomy_update", action="store_true", help="By default, if taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version. Setting this flag will skip this check.")
     parser.add_argument("--success_rec_log", type=str, default=None, help="Path to log file for successfully written records. If not specified, successfully written records will not be logged.")
@@ -943,8 +950,11 @@ def main(argv):
 
     exclude_accessions = list_and_file_to_dict_keys(params.exclude_accessions, params.exclude_accessions_file, as_set=True)
 
+    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
+        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
+
     ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids or params.db.lower().endswith("_proks"):
+    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr or params.db.lower().endswith("_proks"):
         # create the path to the NCBI taxonomy database
         Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
         # load the NCBI taxonomy database
@@ -980,7 +990,7 @@ def main(argv):
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
                            datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,
-                           datasets_gzip=params.datasets_gzip)
+                           datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr)
 
 def _entrypoint():
     main(sys.argv[1:])
