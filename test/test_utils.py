@@ -1,11 +1,68 @@
 from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import tempfile
 from domainator.Bio import SeqIO, SeqRecord, Seq
-from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
+from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
 import io
 import pytest
 from array import array
 import re
+
+
+def test_location_covers():
+    assert utils.location_covers([(0, 100)], [(10, 20)])
+    assert utils.location_covers([(0, 100)], [(0, 100)])
+    assert not utils.location_covers([(0, 50)], [(10, 60)])
+    # gappy outer (order with a gap 50..60): a region in a part is covered, one spanning the gap isn't
+    assert utils.location_covers([(0, 50), (60, 100)], [(10, 20)])
+    assert not utils.location_covers([(0, 50), (60, 100)], [(40, 70)])
+    # origin-spanning region expressed as two parts, both inside outer
+    assert utils.location_covers([(0, 100)], [(90, 100), (0, 10)])
+    # adjacent outer parts merge
+    assert utils.location_covers([(0, 50), (50, 100)], [(40, 60)])
+
+
+def _source_feature(taxid, parts, operator=None):
+    if operator:
+        loc = CompoundLocation([FeatureLocation(s, e) for s, e in parts], operator=operator)
+    else:
+        s, e = parts[0]
+        loc = FeatureLocation(s, e)
+    return SeqFeature(location=loc, type="source", qualifiers={"db_xref": [f"taxon:{taxid}"]})
+
+
+def test_location_taxid_longest_covering():
+    # Gappy host (order) covering everything except a prophage gap (400..600); prophage fills it.
+    host = _source_feature(100, [(0, 400), (600, 1000)], operator="order")
+    phage = _source_feature(200, [(400, 600)])
+    sources = [host, phage]
+    assert utils.location_taxid([(100, 200)], sources) == 100   # in a host part
+    assert utils.location_taxid([(450, 550)], sources) == 200   # in the prophage gap
+    assert utils.location_taxid([(0, 1000)], sources) is None   # no single source covers the whole contig
+    # Nested: a full-genome host source covers everything, so it wins as the longest covering.
+    host_full = _source_feature(100, [(0, 1000)])
+    assert utils.location_taxid([(450, 550)], [host_full, phage]) == 100
+    assert utils.location_taxid([(0, 1000)], [host_full, phage]) == 100  # whole-contig source exists
+    # Covered by a source with no taxon -> unidentified (32644), not None.
+    notax = SeqFeature(location=FeatureLocation(0, 1000), type="source", qualifiers={})
+    assert utils.location_taxid([(10, 20)], [notax]) == 32644
+    # Uncovered region -> None.
+    assert utils.location_taxid([(5000, 5001)], sources) is None
+
+
+def test_circular_wrapped_contig_hit_taxid():
+    # A nucleotide hit spanning the origin of a circular contig maps to a join; resolving it
+    # against the whole-contig source must keep it (not drop it as "uncovered"). This guards
+    # the nucleotide post-filter against using raw (start, end) for wrapped hits.
+    from types import SimpleNamespace
+    from domainator.domainate import build_contig_hit_location
+    contig = SeqRecord.SeqRecord(Seq.Seq("A" * 100), id="c", description="c")
+    contig.annotations = {"molecule_type": "DNA", "topology": "circular"}
+    src = SeqFeature(FeatureLocation(0, 100), type="source", qualifiers={"db_xref": ["taxon:42"]})
+    hit = SimpleNamespace(start=90, end=110, strand=1)  # wraps past the origin
+    loc = build_contig_hit_location(contig, hit)
+    region = [(int(p.start), int(p.end)) for p in loc.parts]
+    assert region == [(90, 100), (0, 10)]
+    assert utils.location_taxid(region, [src]) == 42
 
 def test_split_string_list():
     data=["abcde   asdfasdf   asdf", " abcdef::GACAF", ""]

@@ -534,7 +534,10 @@ def test_domain_search_taxonomy_expr_mutually_exclusive(shared_datadir):
             main(args)
 
 
-def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch):
+def test_domain_search_passes_allowed_taxids_to_domainate(shared_datadir, monkeypatch):
+    # Taxonomy filtering now happens *before* hmmer, inside domainate (per-CDS / per-region),
+    # so the worker hands the compiled allowed-taxid set to domainate and no longer
+    # post-filters records itself.
     input = shared_datadir / "pdonr_peptides.fasta"
     total_records = sum(1 for _ in SeqIO.parse(str(input), "fasta"))
 
@@ -545,83 +548,45 @@ def test_domain_search_taxonomy_only_checks_matches(shared_datadir, monkeypatch)
         rec.set_hit_best_score(42.0)
         return rec
 
-    matched_records = [
-        build_record("match_1", "keep_me"),
-        build_record("match_2", "drop_me"),
-    ]
-    taxonomy_calls = []
+    matched_records = [build_record("match_1", "keep_me"), build_record("match_2", "drop_me")]
+    captured = {}
 
     def fake_domainate(seq_iterator, **kwargs):
-        assert "ncbi_taxonomy" not in kwargs
-        assert "include_taxids" not in kwargs
-        assert "exclude_taxids" not in kwargs
+        captured.update(kwargs)
         return iter(matched_records)
 
-    def fake_record_matches_taxonomy(self, record):
-        taxonomy_calls.append(record.id)
-        return record.id == "match_1"
-
+    monkeypatch.setattr(domain_search_module, "_WORKER_ALLOWED_TAXIDS", frozenset({2, 198538}))
     monkeypatch.setattr(domain_search_module.domainate, "domainate", fake_domainate)
-    monkeypatch.setattr(domain_search_module._domain_search_worker, "_record_matches_taxonomy", fake_record_matches_taxonomy)
 
     worker = domain_search_module._domain_search_worker(
-        references=[str(input)],
-        z=1000,
-        evalue=0.1,
-        max_overlap=1,
-        add_annotations=False,
-        cds_range=None,
-        kb_range=None,
-        whole_contig=False,
-        normalize_direction=True,
-        translate=False,
-        batch_size=100,
-        include_taxids={2},
-        exclude_taxids={1224},
+        references=[str(input)], z=1000, evalue=0.1, max_overlap=1, add_annotations=False,
+        cds_range=None, kb_range=None, whole_contig=False, normalize_direction=True,
+        translate=False, batch_size=100, include_taxids={2}, exclude_taxids={1224},
         fasta_type="protein",
     )
-
     out = worker((str(input), 0, total_records))
 
-    assert total_records > len(matched_records)
-    assert taxonomy_calls == ["match_1", "match_2"]
-    assert len(taxonomy_calls) == len(matched_records)
-    assert [rec.id for rec in out] == ["match_1"]
+    # The compiled allowed set is handed to domainate (pre-hmmer filtering)...
+    assert captured.get("allowed_taxids") == frozenset({2, 198538})
+    # ...and the worker no longer applies its own taxonomy filter (passes hits through).
+    assert [rec.id for rec in out] == ["match_1", "match_2"]
 
 
-def test_domain_search_taxonomy_compiled_filter_membership(monkeypatch):
-    # The taxonomy filter is compiled into a frozenset of allowed taxids and
-    # installed per worker process (_WORKER_ALLOWED_TAXIDS). Verify the worker
-    # filters records by O(1) membership in that set.
-    monkeypatch.setattr(domain_search_module, "_WORKER_ALLOWED_TAXIDS", frozenset({10}))
+def test_get_prot_list_taxonomy_membership():
+    # The pre-hmmer filter yields a (protein) record's peptide only when its taxid is in the
+    # allowed set; with no filter, everything is yielded.
+    from domainator.domainate import get_prot_list
 
-    worker = domain_search_module._domain_search_worker(
-        references=[],
-        z=1000,
-        evalue=0.1,
-        max_overlap=1,
-        add_annotations=False,
-        cds_range=None,
-        kb_range=None,
-        whole_contig=False,
-        normalize_direction=True,
-        translate=False,
-        batch_size=100,
-        include_taxids={2},
-        exclude_taxids=None,
-        fasta_type="protein",
-    )
+    def prot(record_id, taxid):
+        rec = SeqRecord(Seq("MA"), id=record_id, description=record_id)
+        rec.annotations["molecule_type"] = "protein"
+        rec.annotations["ncbi_taxid"] = [str(taxid)]
+        return rec
 
-    rec_in = SeqRecord(Seq("MA"), id="rec_in", description="rec_in")
-    rec_in.annotations["molecule_type"] = "protein"
-    rec_in.annotations["ncbi_taxid"] = ["10"]
-
-    rec_out = SeqRecord(Seq("MA"), id="rec_out", description="rec_out")
-    rec_out.annotations["molecule_type"] = "protein"
-    rec_out.annotations["ncbi_taxid"] = ["99"]
-
-    assert worker._record_matches_taxonomy(rec_in)
-    assert not worker._record_matches_taxonomy(rec_out)
+    allowed = frozenset({10})
+    assert list(get_prot_list(prot("rec_in", 10), 0, allowed_taxids=allowed))       # taxid 10 -> searched
+    assert not list(get_prot_list(prot("rec_out", 99), 0, allowed_taxids=allowed))  # taxid 99 -> filtered
+    assert list(get_prot_list(prot("rec_out", 99), 0, allowed_taxids=None))         # no filter -> searched
 
 
 

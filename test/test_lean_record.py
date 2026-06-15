@@ -239,3 +239,86 @@ def test_native_bgzf_matches_uncompressed(shared_datadir, tmp_path):
         assert ma.id == mb.id
         assert ma.seq == mb.seq
         assert [_feat_key_lean(f) for f in ma.features] == [_feat_key_lean(f) for f in mb.features]
+
+
+@native_only
+def test_native_per_cds_taxid_matches_python(shared_datadir):
+    """The Rust per-CDS taxid (longest covering source) must equal the Python
+    location_taxid on the materialized record, on a gappy multi-source genome
+    (Staph_phages.gb: a host `order(...)` source + several prophage sources)."""
+    from domainator import utils
+    sc = list(lean_record.iter_lean_search_native(str(shared_datadir / "Staph_phages.gb"), 0, -1, "nucleotide"))[0]
+    rust = {idx: (32644 if t is None else t) for idx, _, t in sc.cds_peptides_with_taxid(set())}
+    rec = lean_record.lean_to_seqrecord(lean_record.materialize_lean_search(sc, None))
+    sources = utils.get_sources(rec)
+    checked = 0
+    for j, f in enumerate(rec.features):
+        if f.type == "CDS" and "pseudo" not in f.qualifiers and "pseudogene" not in f.qualifiers and j in rust:
+            py = utils.location_taxid(utils.feature_intervals(f), sources)
+            assert (32644 if py is None else py) == rust[j]
+            checked += 1
+    assert checked > 100
+    # Per-CDS resolution actually distinguishes host from prophages (the bug fix):
+    taxids = set(rust.values())
+    assert 198466 in taxids and 198538 in taxids and len(taxids) > 2
+    # No single source covers the whole contig -> gappy, needs per-region nucleotide filtering.
+    assert sc.whole_contig_taxid() is None
+
+
+@native_only
+def test_native_whole_contig_taxid_single_source(shared_datadir):
+    """A record whose single source covers the whole contig reports that taxid for the
+    bypass test (206.gb has one source covering the contig)."""
+    sc = list(lean_record.iter_lean_search_native(str(shared_datadir / "206.gb"), 0, -1, "nucleotide"))[0]
+    whole = sc.whole_contig_taxid()
+    assert whole is not None and whole == (sc.taxid())  # single source -> per-record == whole-contig
+
+
+@native_only
+def test_native_fasta_taxid(shared_datadir):
+    """LeanFastaContig.taxid parses ` OX=` from the description, matching get_taxid."""
+    from domainator import utils
+    recs = list(lean_record.iter_lean_fasta_native(str(shared_datadir / "swissprot_CuSOD_subset.fasta"), 0, -1, "protein"))
+    assert recs
+    assert any(r.taxid() is not None for r in recs)
+    for r in recs:
+        got = r.taxid()
+        assert (32644 if got is None else got) == utils.get_taxid(r)
+
+
+@native_only
+def test_get_prot_list_genbank_per_cds_filter(shared_datadir):
+    """get_prot_list with allowed_taxids yields only CDSs whose longest-covering-source
+    taxid is allowed -- per CDS, so a prophage filter selects only prophage CDSs."""
+    from domainator.domainate import get_prot_list
+    sc = list(lean_record.iter_lean_search_native(str(shared_datadir / "Staph_phages.gb"), 0, -1, "nucleotide"))[0]
+    taxid_of = {idx: (32644 if t is None else t) for idx, _, t in sc.cds_peptides_with_taxid(set())}
+
+    phage_names = [name for name, _ in get_prot_list(sc, 0, allowed_taxids=frozenset({198538}))]
+    assert phage_names
+    for name in phage_names:
+        assert taxid_of[int(name.split(",")[1])] == 198538
+
+    host_names = [name for name, _ in get_prot_list(sc, 0, allowed_taxids=frozenset({198466}))]
+    assert len(host_names) > len(phage_names)  # host has far more CDSs than one prophage
+    # no filter -> every searchable CDS
+    assert len(list(get_prot_list(sc, 0, allowed_taxids=None))) == len(taxid_of)
+
+
+@native_only
+def test_nucleotide_contig_searchable_bypass(shared_datadir):
+    """Pre-search nucleotide decision: single-source contig -> searched iff its taxid is
+    allowed (bypass); gappy multi-source contig -> searched iff some source (or 32644) is
+    allowed, else skipped pre-search."""
+    from domainator.domainate import _nucleotide_contig_searchable
+    staph = list(lean_record.iter_lean_search_native(str(shared_datadir / "Staph_phages.gb"), 0, -1, "nucleotide"))[0]
+    assert staph.whole_contig_taxid() is None  # gappy
+    assert _nucleotide_contig_searchable(staph, frozenset({198538}))      # a prophage source allowed -> search
+    assert not _nucleotide_contig_searchable(staph, frozenset({999999}))  # no source / 32644 allowed -> skip
+    assert _nucleotide_contig_searchable(staph, frozenset({32644}))       # unidentified allowed -> search (uncovered regions possible)
+    # single whole-contig source (206.gb) -> bypass: searchable iff that taxid is allowed
+    s206 = list(lean_record.iter_lean_search_native(str(shared_datadir / "206.gb"), 0, -1, "nucleotide"))[0]
+    whole = s206.whole_contig_taxid()
+    assert whole is not None
+    assert _nucleotide_contig_searchable(s206, frozenset({whole}))
+    assert not _nucleotide_contig_searchable(s206, frozenset({whole + 1}))

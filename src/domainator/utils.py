@@ -1669,6 +1669,90 @@ def get_taxid(record:SeqRecord) -> Optional[int]:
                             pass
     return taxid
 
+_UNIDENTIFIED_TAXID = 32644  # "unidentified", get_taxid's default for records lacking a taxid
+
+
+def _merge_intervals(intervals):
+    """Coalesce a list of (start, end) half-open intervals into sorted, disjoint runs."""
+    out = []
+    for s, e in sorted(intervals):
+        if out and s <= out[-1][1]:
+            if e > out[-1][1]:
+                out[-1] = (out[-1][0], e)
+        else:
+            out.append((s, e))
+    return out
+
+
+def feature_intervals(feature):
+    """(start, end) half-open intervals for a Biopython SeqFeature (``.location.parts``) or a
+    lean_record LeanFeature (``.parts`` tuples). Works on both so taxonomy resolution applies
+    to materialized SeqRecords and lean fallback records alike."""
+    loc = getattr(feature, "location", None)
+    if loc is not None:
+        return [(int(p.start), int(p.end)) for p in loc.parts]
+    return [(int(p[0]), int(p[1])) for p in feature.parts]  # LeanFeature parts
+
+
+def location_covers(outer_intervals, inner_intervals) -> bool:
+    """True iff every `inner` interval is contained in the union of `outer` intervals.
+
+    Intervals are (start, end) half-open, 0-based (the Biopython/lean convention). Origin-
+    spanning locations are already split into multiple parts upstream, so per-interval
+    containment is sufficient; `outer` is merged to handle adjacent/overlapping parts.
+    """
+    outer = _merge_intervals([(int(s), int(e)) for s, e in outer_intervals])
+    return all(
+        any(os <= int(s) and int(e) <= oe for os, oe in outer)
+        for s, e in inner_intervals
+    )
+
+
+def _feature_taxon(feature) -> Optional[int]:
+    for xref in feature.qualifiers.get("db_xref", []):
+        if xref.startswith("taxon:"):
+            try:
+                return int(xref.split(":")[-1])
+            except ValueError:
+                pass
+    return None
+
+
+def location_taxid(region_intervals, source_features) -> Optional[int]:
+    """Taxid of the longest `source` feature whose location *covers* `region_intervals`.
+
+    `region_intervals` is a list of (start, end) half-open intervals (a CDS, a whole contig
+    ``[(0, len)]``, or a hit region); `source_features` are the record's "source" features
+    (Biopython or LeanFeature, e.g. from get_sources). Returns the covering source's taxon,
+    _UNIDENTIFIED_TAXID if a source covers it but carries no taxon, or None if no source
+    covers it. None is distinguishable so a whole-contig coverage test can tell a
+    single-source contig (non-None) from a gappy multi-source one (None). Mirrors
+    get_taxid's longest-source rule, evaluated against a specific region.
+    """
+    ranked = sorted(
+        source_features,
+        key=lambda f: sum(e - s for s, e in feature_intervals(f)),
+        reverse=True,
+    )
+    for src in ranked:
+        if location_covers(feature_intervals(src), region_intervals):
+            taxon = _feature_taxon(src)
+            return taxon if taxon is not None else _UNIDENTIFIED_TAXID
+    return None
+
+
+def taxid_allowed(taxid, allowed_taxids) -> bool:
+    """True if `taxid` (None -> unidentified 32644) is in the allowed-taxid set."""
+    return (_UNIDENTIFIED_TAXID if taxid is None else taxid) in allowed_taxids
+
+
+def source_taxids(record):
+    """Taxids of the `source` features in a record (Biopython SeqRecord or LeanContig);
+    sources without a taxon db_xref are omitted. Mirrors the Rust LeanSearchContig.source_taxids
+    accessor (used to decide whether a gappy multi-source contig could yield an allowed hit)."""
+    return [t for t in (_feature_taxon(s) for s in get_sources(record)) if t is not None]
+
+
 def record_matches_taxonomy(record: SeqRecord, include_taxids, exclude_taxids, ncbi_taxonomy) -> bool:
     taxid = get_taxid(record)
     if taxid is None:

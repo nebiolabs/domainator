@@ -20,7 +20,7 @@ import io
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, get_taxid, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -118,18 +118,6 @@ class _domain_search_worker():
         # References are no longer parsed per-partition here; the pool initializer
         # (_init_search_worker) parses them once per worker into _WORKER_REFERENCES.
 
-    def _record_matches_taxonomy(self, record) -> bool:
-        if _WORKER_ALLOWED_TAXIDS is None:
-            return True
-
-        taxid = get_taxid(record)
-        if taxid is None:
-            return False
-        return taxid in _WORKER_ALLOWED_TAXIDS
-
-
-    
-
     def __call__(self, partition):
         """
             a single thread worker for domain_search
@@ -166,12 +154,9 @@ class _domain_search_worker():
                 min_evalue=self.min_evalue,
                 max_mode=self.max_mode,
                 max_hits_per_contig=self.max_hits_per_contig,
+                allowed_taxids=_WORKER_ALLOWED_TAXIDS,  # per-CDS / per-region pre-hmmer taxonomy filter
             ):
             try:
-                # domain_search filters taxonomy after a target has matched so we do not
-                # pay lineage lookup costs for every parsed input record.
-                if not self._record_matches_taxonomy(rec):
-                    continue
                 if rec.annotations['molecule_type'] == "protein":
                     if self.decoy_names is not None and rec.get_hit_names()[0] in self.decoy_names:
                         continue

@@ -203,6 +203,106 @@ fn translation_value(feature: &gb_io::seq::Feature) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
+/// "unidentified" taxid; matches utils.get_taxid's default for records lacking a taxon.
+const UNIDENTIFIED_TAXID: i64 = 32644;
+
+/// Alnum-filtered peptide for a CDS feature: the /translation if present, else the
+/// translated spliced nucleotide sequence. Shared by cds_peptides{,_with_taxid}.
+fn cds_peptide(feature: &gb_io::seq::Feature, seq: &[u8]) -> String {
+    let raw = match translation_value(feature) {
+        Some(tr) => tr.to_string(),
+        None => match extract_location_seq(&feature.location, seq) {
+            Some(nt) => translate_dna(&nt),
+            None => String::new(),
+        },
+    };
+    raw.chars().filter(|c| c.is_ascii_alphanumeric()).collect()
+}
+
+/// Parse the integer from a feature's /db_xref="taxon:NNN" qualifier (first match).
+fn feature_taxon(feature: &gb_io::seq::Feature) -> Option<i64> {
+    for (k, v) in &feature.qualifiers {
+        if k == "db_xref" {
+            if let Some(val) = v.as_deref() {
+                if let Some(rest) = val.trim_matches('"').strip_prefix("taxon:") {
+                    if let Ok(t) = rest.trim().parse::<i64>() {
+                        return Some(t);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Parse a taxid from a FASTA description's ` OX=` (UniProt) or ` TaxID=` (UniRef) token.
+fn parse_ox_taxid(desc: &str) -> Option<i64> {
+    for marker in [" OX=", " TaxID="] {
+        if let Some(pos) = desc.find(marker) {
+            if let Some(tok) = desc[pos + marker.len()..].split_whitespace().next() {
+                if let Ok(t) = tok.parse::<i64>() {
+                    return Some(t);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Flatten a location to normalized (start, end) half-open intervals. None for unmodelled.
+fn location_intervals(loc: &Location) -> Option<Vec<(i64, i64)>> {
+    let (_op, _between, parts) = lean_location(loc, 1)?;
+    Some(parts.into_iter().map(|(s, e, ..)| if s <= e { (s, e) } else { (e, s) }).collect())
+}
+
+fn merge_intervals(mut iv: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    iv.sort();
+    let mut out: Vec<(i64, i64)> = Vec::new();
+    for (s, e) in iv {
+        match out.last_mut() {
+            Some(last) if s <= last.1 => {
+                if e > last.1 {
+                    last.1 = e;
+                }
+            }
+            _ => out.push((s, e)),
+        }
+    }
+    out
+}
+
+fn intervals_cover(outer_merged: &[(i64, i64)], inner: &[(i64, i64)]) -> bool {
+    inner.iter().all(|&(s, e)| outer_merged.iter().any(|&(os, oe)| os <= s && e <= oe))
+}
+
+/// A `source` feature reduced to what taxonomy filtering needs.
+struct SourceInfo {
+    taxon: Option<i64>,
+    merged: Vec<(i64, i64)>,
+    length: i64,
+}
+
+/// Collect the record's `source` features as SourceInfo, sorted longest-first (so the
+/// first one covering a region is the longest covering it -- get_taxid's rule, per region).
+fn collect_sources(features: &[gb_io::seq::Feature]) -> Vec<SourceInfo> {
+    let mut v: Vec<SourceInfo> = Vec::new();
+    for f in features {
+        if f.kind.as_ref() == "source" {
+            if let Some(intervals) = location_intervals(&f.location) {
+                let length: i64 = intervals.iter().map(|&(s, e)| e - s).sum();
+                v.push(SourceInfo { taxon: feature_taxon(f), merged: merge_intervals(intervals), length });
+            }
+        }
+    }
+    v.sort_by(|a, b| b.length.cmp(&a.length));
+    v
+}
+
+/// The longest `source` (from a length-desc-sorted list) whose location covers `region`.
+fn longest_covering<'a>(sources: &'a [SourceInfo], region: &[(i64, i64)]) -> Option<&'a SourceInfo> {
+    sources.iter().find(|src| intervals_cover(&src.merged, region))
+}
+
 fn build_feature<'py>(
     py: Python<'py>,
     lean_feature_cls: &Bound<'py, PyAny>,
@@ -397,20 +497,57 @@ impl LeanSearchContig {
                 continue;
             }
             if is_searchable_cds(feature) {
-                let raw = match translation_value(feature) {
-                    Some(tr) => tr.to_string(),
-                    None => match extract_location_seq(&feature.location, &self.seq.seq) {
-                        Some(nt) => translate_dna(&nt),
-                        None => String::new(),
-                    },
-                };
-                // alnum filter matches get_prot_list (strips '*' stop chars etc.)
-                let pep: String = raw.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-                out.push((idx, pep));
+                out.push((idx, cds_peptide(feature, &self.seq.seq)));
             }
             idx += 1;
         }
         out
+    }
+
+    /// Like cds_peptides, but also the per-CDS taxid: the taxon of the longest `source`
+    /// feature whose location covers the CDS (UNIDENTIFIED_TAXID if covered by a source
+    /// with no taxon, None if no source covers it). Used for pre-hmmer taxonomy filtering;
+    /// kept separate so the no-filter path pays nothing.
+    fn cds_peptides_with_taxid(&self, dropped: HashSet<String>) -> Vec<(usize, String, Option<i64>)> {
+        let sources = collect_sources(&self.seq.features);
+        let mut out = Vec::new();
+        let mut idx = 0usize;
+        for feature in &self.seq.features {
+            if !dropped.is_empty() && dropped.contains(feature.kind.as_ref()) {
+                continue;
+            }
+            if is_searchable_cds(feature) {
+                let taxid = location_intervals(&feature.location)
+                    .and_then(|iv| longest_covering(&sources, &iv))
+                    .map(|src| src.taxon.unwrap_or(UNIDENTIFIED_TAXID));
+                out.push((idx, cds_peptide(feature, &self.seq.seq), taxid));
+            }
+            idx += 1;
+        }
+        out
+    }
+
+    /// Taxid of the longest `source` covering the whole contig `[0, len)`, else None.
+    /// None means no single source spans the contig (gappy multi-source); the nucleotide
+    /// search path then needs per-hit-region resolution instead of a contig-level bypass.
+    fn whole_contig_taxid(&self) -> Option<i64> {
+        let sources = collect_sources(&self.seq.features);
+        let len = self.seq.seq.len() as i64;
+        longest_covering(&sources, &[(0, len)]).map(|src| src.taxon.unwrap_or(UNIDENTIFIED_TAXID))
+    }
+
+    /// Every `source` feature's taxon (for the "is any source allowed?" pre-search skip).
+    fn source_taxids(&self) -> Vec<i64> {
+        self.seq.features.iter()
+            .filter(|f| f.kind.as_ref() == "source")
+            .filter_map(feature_taxon)
+            .collect()
+    }
+
+    /// Per-record taxid (longest source's taxon) -- for protein GenBank records, matching
+    /// utils.get_taxid's whole-record rule.
+    fn taxid(&self) -> Option<i64> {
+        collect_sources(&self.seq.features).first().and_then(|s| s.taxon)
     }
 
     /// Build the full record header tuple + LeanFeature list (hit path only),
@@ -543,6 +680,11 @@ impl LeanFastaContig {
     /// from `.seq` by get_prot_list, and nucleotide records are searched whole.
     fn cds_peptides(&self, _dropped: HashSet<String>) -> Vec<(usize, String)> {
         Vec::new()
+    }
+
+    /// Per-record taxid from the description's ` OX=` / ` TaxID=` token (None if absent).
+    fn taxid(&self) -> Option<i64> {
+        parse_ox_taxid(&self.description)
     }
 
     /// Materialize to the fields a minimal LeanContig is built from on the Python

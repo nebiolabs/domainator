@@ -28,7 +28,7 @@ import pyrodigal
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy
 from domainator import foldseek as foldseek_lib
-from domainator.lean_record import LeanContig, lean_to_seqrecord, lean_translate, LEAN_SEARCH_TYPES, materialize_lean_search
+from domainator.lean_record import LeanContig, lean_to_seqrecord, lean_translate, LEAN_SEARCH_TYPES, materialize_lean_search, LeanSearchContig, LeanFastaContig
 
 #TODO: add support for distinguishing complete domains from cutoff domains. For example see the pfam or hmmer domain graphics. I think this can be done by comparing the size of the domain consensus to the domain border coords (from domain.Alignment) on the hits.
 #TODO: also look at: https://github.com/Larofeticus/hpc_hmmsearch, https://www.higithub.com/apcamargo/repo/hpc_pfam_search, https://docs.nersc.gov/performance/case-studies/hmmer3/
@@ -519,7 +519,7 @@ def _materialize_lean_for_annotation(lean):
     return record
 
 
-def get_prot_list(contig, unique_id, dropped_types=None):
+def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
     """
 
     Gets a dictionary of every protein to be annotated from the contig
@@ -531,6 +531,9 @@ def get_prot_list(contig, unique_id, dropped_types=None):
         unique_id: a unique id for the contig
         dropped_types: feature kinds cleared before indexing (for LeanSearchContig,
             so the (contig, feature_index) names match the materialized record)
+        allowed_taxids: if not None, a set of allowed taxids; a CDS is yielded only when its
+            taxid -- the longest `source` feature covering it (per-record for protein/FASTA) --
+            is in the set. This is the pre-hmmer taxonomy filter: excluded CDSs are never searched.
 
     Returns:
         iterator of (name, protein_sequence)
@@ -544,21 +547,36 @@ def get_prot_list(contig, unique_id, dropped_types=None):
     # FASTA nucleotide records cds_peptides() is empty (searched whole by nhmmer).
     if LEAN_SEARCH_TYPES and isinstance(contig, LEAN_SEARCH_TYPES):
         if contig.molecule_type == "protein":
+            if allowed_taxids is not None and not utils.taxid_allowed(contig.taxid(), allowed_taxids):
+                return
             prot = ''.join(filter(str.isalnum, contig.seq))
             if len(prot) > MAX_PROTEIN_SIZE:
                 warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
             else:
                 yield (f"{i},0", prot)
         else:
-            for feature_index, prot in contig.cds_peptides(set(dropped_types) if dropped_types else set()):
-                if len(prot) > MAX_PROTEIN_SIZE:
-                    warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
-                else:
-                    yield (f"{i},{feature_index}", prot)
+            dropped = set(dropped_types) if dropped_types else set()
+            if allowed_taxids is not None:
+                # Per-CDS taxid (longest covering source) computed in Rust; skip excluded CDSs.
+                for feature_index, prot, taxid in contig.cds_peptides_with_taxid(dropped):
+                    if not utils.taxid_allowed(taxid, allowed_taxids):
+                        continue
+                    if len(prot) > MAX_PROTEIN_SIZE:
+                        warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
+                    else:
+                        yield (f"{i},{feature_index}", prot)
+            else:
+                for feature_index, prot in contig.cds_peptides(dropped):
+                    if len(prot) > MAX_PROTEIN_SIZE:
+                        warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
+                    else:
+                        yield (f"{i},{feature_index}", prot)
         return
 
     #prot_list = list()
     if contig.annotations['molecule_type'] == "protein":
+        if allowed_taxids is not None and not utils.taxid_allowed(utils.get_taxid(contig), allowed_taxids):
+            return
         j = 0 #0 because there is only one
         prot = ''.join(filter(str.isalnum, str(contig.seq)))
         if len(prot) > MAX_PROTEIN_SIZE:
@@ -566,16 +584,51 @@ def get_prot_list(contig, unique_id, dropped_types=None):
         else:
             yield (f"{i},{j}", prot)
     else:
+        sources = utils.get_sources(contig) if allowed_taxids is not None else None
         for j, feature in enumerate(contig.features):
             # skip over not cds features
             if feature.type == 'CDS' and "pseudo" not in feature.qualifiers and "pseudogene" not in feature.qualifiers:
+                if allowed_taxids is not None:
+                    taxid = utils.location_taxid(utils.feature_intervals(feature), sources)
+                    if not utils.taxid_allowed(taxid, allowed_taxids):
+                        continue
                 prot = ''.join(filter(str.isalnum, feature.qualifiers['translation'][0]))
                 if len(prot) > MAX_PROTEIN_SIZE:
                     warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
                 else:
                     yield (f"{i},{j}", prot)
-    
+
     #return prot_list
+
+
+def _nucleotide_contig_searchable(rec, allowed_taxids) -> bool:
+    """Whether a nucleotide contig should be searched under the taxonomy filter.
+
+    FASTA contigs carry one taxid in the description -> searchable iff that taxid is allowed.
+    For GenBank, if a single `source` covers the whole contig the contig has one taxid →
+    search only if allowed (the common-case pre-search bypass). If no source covers the whole
+    contig (gappy multi-source), a hit region resolves post-search to its longest covering
+    source's taxon, or 32644 for an uncovered region / no-taxon source -- so the contig can be
+    skipped pre-search only when none of those is allowed. Surviving gappy contigs are searched
+    and filtered per hit region in domainator_inner."""
+    if LeanFastaContig is not None and isinstance(rec, LeanFastaContig):
+        return utils.taxid_allowed(rec.taxid(), allowed_taxids)
+    if LeanSearchContig is not None and isinstance(rec, LeanSearchContig):
+        whole = rec.whole_contig_taxid()
+        gappy_source_taxids = rec.source_taxids
+    else:
+        sources = utils.get_sources(rec)
+        if not sources:  # FASTA-style materialized record: per-record taxid from description
+            return utils.taxid_allowed(utils.get_taxid(rec), allowed_taxids)
+        whole = utils.location_taxid([(0, len(rec.seq))], sources)
+        gappy_source_taxids = lambda: utils.source_taxids(rec)
+    if whole is not None:
+        return utils.taxid_allowed(whole, allowed_taxids)
+    # Gappy: skip only if neither an uncovered/no-taxon region (32644) nor any source is allowed.
+    if utils.taxid_allowed(None, allowed_taxids):
+        return True
+    return any(utils.taxid_allowed(t, allowed_taxids) for t in gappy_source_taxids())
+
 
 def get_pyhmmer_digital_sequence(name, prot):
     return pyhmmer.easel.TextSequence(name=bytes(name, encoding='utf8'),sequence=prot).digitize(pyhmmer.easel.Alphabet.amino())
@@ -858,7 +911,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None):
     """
 
     Args:
@@ -899,6 +952,23 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
         else:
             contig_hits = hits[contig_id].get(-1)
             cds_hits = {feature_id: feature_hits for feature_id, feature_hits in hits[contig_id].items() if feature_id != -1}
+            if contig_hits and allowed_taxids is not None:
+                # Whole-contig nucleotide hits couldn't be taxonomy-filtered pre-search (the
+                # region is only known now). For GenBank records, drop hits whose region's
+                # longest covering source is not allowed (a no-op for single-source contigs
+                # that already passed pre-search; the real work is gappy multi-source contigs).
+                # FASTA records have no source features -- their per-record taxid was already
+                # checked pre-search -- so leave their hits alone.
+                sources = utils.get_sources(contig)
+                if sources:
+                    # Use the mapped hit location (handles origin-spanning hits on circular
+                    # contigs, which build_contig_hit_location splits into a join) so the
+                    # region is resolved in the same coordinates as the source features.
+                    def _hit_allowed(h):
+                        loc = build_contig_hit_location(contig, h)
+                        region = [(int(p.start), int(p.end)) for p in loc.parts]
+                        return utils.taxid_allowed(utils.location_taxid(region, sources), allowed_taxids)
+                    contig_hits = [h for h in contig_hits if _hit_allowed(h)]
             if contig_hits:
                 add_contig_nucleic_acid_annotations(contig, contig_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
             if cds_hits:
@@ -934,7 +1004,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         rec.features.append(feature)
         i += 1
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -1067,16 +1137,21 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             prodigal_CDS_annotate(rec)
         contigs_list.append(rec)
         if "foldseek" in reference_groups:
-            foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index, dropped_types)])
+            foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index, dropped_types, allowed_taxids=allowed_taxids)])
         if "hmmsearch" in reference_groups or "phmmer" in reference_groups or "foldseek" in reference_groups:
-            proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index, dropped_types)])
-        if "nhmmer" in reference_groups and rec.annotations['molecule_type'] != "protein":
+            proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index, dropped_types, allowed_taxids=allowed_taxids)])
+        # Whole-contig nucleotide search can't pre-filter per region (the hit envelope is
+        # unknown until after the search), so we only skip a contig pre-search when its
+        # taxonomy excludes it entirely; surviving contigs are post-filtered per hit region
+        # in domainator_inner. _nucleotide_contig_searchable returns False to skip.
+        nucleotide_ok = allowed_taxids is None or _nucleotide_contig_searchable(rec, allowed_taxids)
+        if "nhmmer" in reference_groups and rec.annotations['molecule_type'] != "protein" and nucleotide_ok:
             nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, nhmmer_extension)))
-        if "infernal" in reference_groups and rec.annotations['molecule_type'] != "protein":
+        if "infernal" in reference_groups and rec.annotations['molecule_type'] != "protein" and nucleotide_ok:
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids)
             for contig_id in range(len(contigs_list)):
                 if contig_id in return_contigs:
                     yield contigs_list[contig_id]
@@ -1087,7 +1162,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids)
     #for contig_id in range(len(contigs_list)): #TODO: why did I think this more complicated loop was a good idea?
     #    if contig_id in return_contigs:
     for contig_id in return_contigs:
