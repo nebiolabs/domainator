@@ -28,12 +28,7 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator import utils, db_index, bgzf_compress
-from domainator.output_guardrails import (
-    add_max_output_gb_argument,
-    enforce_output_limit,
-    make_temporary_output_path,
-    max_output_gb_to_bytes,
-)
+from domainator.output_guardrails import make_temporary_output_path
 
 _COPY_CHUNK = 1 << 20
 
@@ -211,7 +206,7 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, name, level,
 
 
 def format_db(inputs, *, shards=None, compress=False, index=False, output_dir=None,
-              name=None, cpu=1, level=6, max_output_bytes=None, force=False, log=sys.stderr):
+              name=None, cpu=1, level=6, force=False, log=sys.stderr):
     """Shard / compress / index domain_search databases. Returns the list of final
     output paths produced (or confirmed). At least one of ``shards``, ``compress``,
     or ``index`` must be requested. ``name`` renames the output database (its format
@@ -236,14 +231,6 @@ def format_db(inputs, *, shards=None, compress=False, index=False, output_dir=No
             all_tasks.extend(tasks)
             if working_temp:
                 working_temps.append(working_temp)
-
-        # Conservative upper bound: total bytes to write (compression only shrinks).
-        projected = sum(t.byte_end - t.byte_start for t in all_tasks if t.needs_write)
-        enforce_output_limit(
-            projected_bytes=projected, max_output_bytes=max_output_bytes,
-            output_description=f"domainator_format_db output ({len(all_tasks)} file(s))",
-            mitigation_options=["--compress", "--shards"],
-        )
 
         # One Rust compressor thread per pooled worker avoids cpu^2 oversubscription;
         # a single output uses all cores for that one (possibly large) file.
@@ -289,7 +276,6 @@ def main(argv):
                         help="BGZF/deflate compression level (1-12).")
     parser.add_argument('--force', action='store_true', default=False,
                         help="Overwrite existing outputs / rebuild indexes instead of skipping.")
-    add_max_output_gb_argument(parser)
     parser.add_argument('--log', default=None, type=str,
                         help="Log file. Default: stderr.")
     parser.add_argument('--config', action=ActionConfigFile)
@@ -303,7 +289,6 @@ def main(argv):
         format_db(
             params.input, shards=params.shards, compress=params.compress, index=params.index,
             output_dir=params.output_dir, name=params.name, cpu=params.cpu, level=params.level,
-            max_output_bytes=max_output_gb_to_bytes(params.max_output_gb),
             force=params.force, log=log,
         )
     finally:
