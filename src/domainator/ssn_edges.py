@@ -362,6 +362,181 @@ def sorted_edges_from_edge_index_dict(n_nodes: int, edge_dict: Dict[Tuple[int, i
     )
 
 
+class StreamingMstKnnAccumulator:
+    """Compute MST ∪ OR-symmetric kNN edges from a stream of edges with bounded memory.
+
+    This is the streaming counterpart of
+    :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`. Instead of
+    materializing the full all-vs-all matrix and pruning afterwards, edges are fed in
+    one at a time via :meth:`add_edge` and only bounded state is retained:
+
+    * **MST** — exploiting the matroid property ``MSF(E1 ∪ E2) = MSF(MSF(E1) ∪ E2)``,
+      only the running maximum spanning forest (≤ ``n_nodes - 1`` edges) plus a bounded
+      buffer of unprocessed edges is kept. When the buffer fills, the forest of
+      ``running MSF ∪ buffer`` is recomputed with the existing batch :class:`MaxTree`
+      (Kruskal/union-find) and the buffer is cleared. This is **exact**: the final
+      forest equals a single batch ``MaxTree`` over all edges (ties among equal-weight
+      edges may resolve to a different but equally-valid forest).
+
+    * **kNN** — a per-node adjacency dict ``node -> {neighbor: [out_score, in_score]}``
+      where ``out_score`` is ``M[node, neighbor]`` and ``in_score`` is
+      ``M[neighbor, node]``; the symmetric ranking score is ``max(out_score, in_score)``,
+      matching :func:`build_symmetric_neighbor_rankings`. Each node's dict is trimmed to
+      ``knn_soft_cap`` neighbors (by descending symmetric score) when it grows past
+      ``2 * knn_soft_cap``. For symmetric input (e.g. ``compare_contigs``) this is exact;
+      for slightly-asymmetric input (e.g. ``seq_dist`` diamond bit scores) it is exact as
+      long as no node retains more than ``knn_soft_cap`` neighbors above its true top-k —
+      effectively always, except for pathological high-degree hubs.
+
+    The stored ``[out_score, in_score]`` also lets :meth:`to_csr` reproduce the directional
+    asymmetry of the batch path for the kept edges. If trimming has dropped both directions
+    of a kept (MST-only) edge, the symmetric MST score is written to both cells as a fallback.
+    """
+
+    def __init__(self, n_nodes: int, k: int, lower_bound: float = 0.0, include_equal: bool = False,
+                 mst_buffer_cap: Optional[int] = None, knn_soft_cap: Optional[int] = None):
+        if k < 1:
+            raise ValueError("k must be >= 1")
+        self.n_nodes = n_nodes
+        self.k = k
+        self.lower_bound = lower_bound
+        self.include_equal = include_equal
+        self.mst_buffer_cap = max(1, mst_buffer_cap) if mst_buffer_cap is not None else max(4 * n_nodes, 100_000)
+        # A soft cap below k could evict a true top-k neighbor, so never trim below k.
+        self.knn_soft_cap = max(k, knn_soft_cap) if knn_soft_cap is not None else max(4 * k, k + 16)
+
+        self._mst_edges: List[Tuple[int, int, float]] = []  # running maximum spanning forest
+        self._mst_buffer: List[Tuple[int, int, float]] = []
+        self._adj: List[Dict[int, List[float]]] = [dict() for _ in range(n_nodes)]  # node -> {nbr: [out, in]}
+        self._diagonal: Dict[int, float] = dict()
+
+    def add_edge(self, i: int, j: int, score: float) -> None:
+        """Feed one directed edge ``i -> j`` (value ``M[i, j]``) into the accumulator."""
+        score = float(score)
+        if i == j:
+            if score != 0:
+                previous = self._diagonal.get(i)
+                if previous is None or score > previous:
+                    self._diagonal[i] = score
+            return
+        if not _score_passes_lower_bound(score, self.lower_bound, include_equal=self.include_equal):
+            return
+
+        self._mst_buffer.append((i, j, score))
+        if len(self._mst_buffer) >= self.mst_buffer_cap:
+            self._flush_mst()
+
+        self._update_adj(i, j, score, direction=0)
+        self._update_adj(j, i, score, direction=1)
+
+    def _update_adj(self, node: int, neighbor: int, score: float, direction: int) -> None:
+        row = self._adj[node]
+        entry = row.get(neighbor)
+        if entry is None:
+            entry = [0.0, 0.0]
+            row[neighbor] = entry
+        if score > entry[direction]:
+            entry[direction] = score
+        if len(row) > 2 * self.knn_soft_cap:
+            self._trim_adj(node)
+
+    def _trim_adj(self, node: int) -> None:
+        row = self._adj[node]
+        # Keep the knn_soft_cap neighbors with the highest symmetric score.
+        ranked = sorted(row.items(), key=lambda item: (-max(item[1]), item[0]))
+        self._adj[node] = dict(ranked[:self.knn_soft_cap])
+
+    def _flush_mst(self) -> None:
+        if not self._mst_buffer and not self._mst_edges:
+            return
+        combined = self._mst_edges + self._mst_buffer
+        # Drop any zero/below-threshold edges ourselves so MaxTree(skip_zeros=True) emits no warning.
+        items = sorted(
+            ((float(s), int(a), int(b)) for (a, b, s) in combined if s != 0),
+            key=lambda item: (-item[0], item[1], item[2]),
+        )
+        if not items:
+            self._mst_edges = []
+            self._mst_buffer = []
+            return
+        edges = SortedUndirectedEdges(
+            n_nodes=self.n_nodes,
+            source=np.fromiter((a for _, a, _ in items), dtype=np.int32, count=len(items)),
+            target=np.fromiter((b for _, _, b in items), dtype=np.int32, count=len(items)),
+            score=np.fromiter((s for s, _, _ in items), dtype=float, count=len(items)),
+        )
+        tree = MaxTree(edges, skip_zeros=True)
+        self._mst_edges = list(tree.iter_mst_edges())
+        self._mst_buffer = []
+
+    def finalize(self) -> Dict[Tuple[int, int], float]:
+        """Return the union of MST and OR-symmetric kNN edges keyed by canonical ``(min, max)`` pair."""
+        self._flush_mst()
+
+        edge_dict: Dict[Tuple[int, int], float] = dict()
+        for source_idx, target_idx, score in self._mst_edges:
+            if source_idx == target_idx:
+                continue
+            edge = (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
+            # The MST tuple carries the surviving (max-direction) weight; trust it even if
+            # adjacency trimming has since dropped this pair from both neighbor dicts.
+            edge_dict[edge] = score
+
+        for node, row in enumerate(self._adj):
+            # Rank this node's neighbors exactly like symmetric_knn_edge_index_dict:
+            # descending symmetric score, ties broken by target index.
+            ranked = sorted(((max(entry), neighbor) for neighbor, entry in row.items()),
+                            key=lambda item: (-item[0], item[1]))
+            selected = 0
+            for score, neighbor in ranked:
+                if not _score_passes_lower_bound(score, self.lower_bound, include_equal=self.include_equal):
+                    break
+                edge = (node, neighbor) if node < neighbor else (neighbor, node)
+                edge_dict[edge] = score
+                selected += 1
+                if selected >= self.k:
+                    break
+
+        return edge_dict
+
+    def _directional_values(self, i: int, j: int, fallback: float) -> Tuple[float, float]:
+        """Return ``(M[i, j], M[j, i])`` for a kept pair, falling back to ``fallback``."""
+        entry = self._adj[i].get(j)
+        if entry is not None:
+            forward, reverse = entry[0], entry[1]
+        else:
+            mirror = self._adj[j].get(i)
+            if mirror is not None:
+                forward, reverse = mirror[1], mirror[0]
+            else:
+                forward = reverse = 0.0
+        if forward == 0.0 and reverse == 0.0:
+            # Both directions trimmed (only possible for a pure MST edge): use its weight.
+            forward = reverse = fallback
+        return forward, reverse
+
+    def to_csr(self, dtype=np.float64) -> scipy.sparse.csr_array:
+        """Assemble the pruned graph as a sparse CSR matrix.
+
+        Off-diagonal kept edges are written in both directions (using the retained
+        directional values ``M[i, j]`` / ``M[j, i]`` where available); the diagonal is
+        populated from self-edges seen during streaming. Mirrors the sparse branch of
+        :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`.
+        """
+        edge_dict = self.finalize()
+        out = scipy.sparse.dok_array((self.n_nodes, self.n_nodes), dtype=dtype)
+        for index, value in self._diagonal.items():
+            if value != 0:
+                out[index, index] = value
+        for (i, j), score in edge_dict.items():
+            forward, reverse = self._directional_values(i, j, score)
+            if forward != 0:
+                out[i, j] = forward
+            if reverse != 0:
+                out[j, i] = reverse
+        return scipy.sparse.csr_array(out)
+
+
 def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
                                      include_equal: bool = True,
                                      neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:

@@ -349,6 +349,58 @@ class _CaptureScoresReport(compare_contigs.DistanceReport):
         self.scores = scipy.sparse.csr_array(scores)
 
 
+def test_compare_contigs_mst_knn_matches_batch_transform():
+    from domainator import transform_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    # two clusters: {rec1..rec4} share domains, {rec5,rec6} share a disjoint set.
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+        _make_compare_contig_record("rec3", ["A", "C", "E"]),
+        _make_compare_contig_record("rec4", ["B", "C", "F"]),
+        _make_compare_contig_record("rec5", ["X", "Y", "Z"]),
+        _make_compare_contig_record("rec6", ["X", "Y", "W"]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        base_args = ["-i", input_path, "--ji", "0.5", "--ai", "0.5"]
+
+        # batch reference: full matrix, then post-hoc mst_knn
+        full_sparse = output_dir + "/full.hdf5"
+        batch_sparse = output_dir + "/batch.hdf5"
+        compare_contigs.main(base_args + ["--sparse", full_sparse])
+        transform_matrix.main(["-i", full_sparse, "--sparse", batch_sparse, "--mst_knn", "2"])
+
+        # streaming path
+        stream_sparse = output_dir + "/stream.hdf5"
+        compare_contigs.main(base_args + ["--sparse", stream_sparse, "--mst_knn", "2"])
+
+        batch_dm = DataMatrix.from_file(batch_sparse)
+        stream_dm = DataMatrix.from_file(stream_sparse)
+        batch = batch_dm.data.toarray()
+        stream = stream_dm.data.toarray()
+        assert batch_dm.rows == stream_dm.rows
+
+        # Equal-weight similarity edges make the maximum spanning forest non-unique (and a
+        # tie-chosen MST edge may or may not coincide with a kNN edge, changing the union
+        # size). The tie-invariant property is the connected-components partition, which is
+        # exactly what mst_knn is used for in SSN clustering. Byte-exact equivalence on
+        # distinct-weight inputs is covered in test_transform_matrix.
+        _, batch_labels = connected_components(batch > 0, directed=False)
+        _, stream_labels = connected_components(stream > 0, directed=False)
+        # same partition: two nodes share a component in batch iff they do in stream
+        batch_same = batch_labels[:, None] == batch_labels[None, :]
+        stream_same = stream_labels[:, None] == stream_labels[None, :]
+        np.testing.assert_array_equal(batch_same, stream_same)
+        # sanity: the two domain clusters stay separate
+        assert connected_components(stream > 0, directed=False)[0] == 2
+
+
 def test_compare_contigs_k_applies_to_combined_scores():
     records = [
         _make_compare_contig_record("rec1", []),

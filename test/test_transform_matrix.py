@@ -189,6 +189,107 @@ def test_transform_matrix_mst_knn_applied_after_mode_transform():
         assert dense_output_matrix.data_type == "bool"
 
 
+def _feed_matrix_entries(acc, data, order="forward"):
+    """Feed every nonzero entry of a dense matrix into a StreamingMstKnnAccumulator."""
+    entries = []
+    for i in range(data.shape[0]):
+        for j in range(data.shape[1]):
+            value = data[i, j]
+            if value != 0:
+                entries.append((i, j, float(value)))
+    if order == "reversed":
+        entries = entries[::-1]
+    elif order == "chunked":
+        # interleave to exercise the buffer flushing in a non-monotone order
+        entries = entries[0::2] + entries[1::2]
+    for i, j, value in entries:
+        acc.add_edge(i, j, value)
+    return acc
+
+
+@pytest.mark.parametrize("order", ["forward", "reversed", "chunked"])
+@pytest.mark.parametrize("buffer_cap,soft_cap", [(None, None), (1, 1), (2, 2)])
+def test_streaming_mst_knn_matches_batch(order, buffer_cap, soft_cap):
+    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    # symmetric matrix with all-distinct off-diagonal weights => unique MSF, no tie ambiguity.
+    data = np.array([
+        [5.0, 9.0, 1.0, 0.0, 2.0, 0.0],
+        [9.0, 5.0, 8.0, 3.0, 0.0, 0.0],
+        [1.0, 8.0, 5.0, 7.0, 0.0, 4.0],
+        [0.0, 3.0, 7.0, 5.0, 6.0, 0.0],
+        [2.0, 0.0, 0.0, 6.0, 5.0, 10.0],
+        [0.0, 0.0, 4.0, 0.0, 10.0, 5.0],
+    ])
+    labels = ["a", "b", "c", "d", "e", "f"]
+    k = 2
+
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    expected = apply_mst_knn_sparsification(matrix, k, lower_bound=0)
+
+    acc = StreamingMstKnnAccumulator(len(labels), k, lower_bound=0,
+                                     mst_buffer_cap=buffer_cap, knn_soft_cap=soft_cap)
+    _feed_matrix_entries(acc, data, order=order)
+    result = acc.to_csr()
+
+    np.testing.assert_array_equal(result.toarray(), expected.toarray())
+
+
+def test_streaming_mst_knn_respects_lower_bound():
+    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    data = np.array([
+        [0.0, 9.0, 1.0, 2.0],
+        [9.0, 0.0, 8.0, 3.0],
+        [1.0, 8.0, 0.0, 7.0],
+        [2.0, 3.0, 7.0, 0.0],
+    ])
+    labels = ["a", "b", "c", "d"]
+    k = 2
+    lb = 2.0
+
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    expected = apply_mst_knn_sparsification(matrix, k, lower_bound=lb)
+
+    acc = StreamingMstKnnAccumulator(len(labels), k, lower_bound=lb)
+    _feed_matrix_entries(acc, data)
+    result = acc.to_csr()
+
+    np.testing.assert_array_equal(result.toarray(), expected.toarray())
+
+
+def test_streaming_mst_knn_tie_tolerant_is_valid_forest():
+    # Repeated weights => MSF edge selection may differ; assert it is still a valid
+    # maximum spanning forest (same total weight + connectivity) and identical kNN edges.
+    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+    from scipy.sparse.csgraph import connected_components
+
+    data = np.array([
+        [0.0, 5.0, 5.0, 0.0],
+        [5.0, 0.0, 5.0, 0.0],
+        [5.0, 5.0, 0.0, 5.0],
+        [0.0, 0.0, 5.0, 0.0],
+    ])
+    labels = ["a", "b", "c", "d"]
+    k = 2
+
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    expected = apply_mst_knn_sparsification(matrix, k, lower_bound=0).toarray()
+
+    acc = StreamingMstKnnAccumulator(len(labels), k, lower_bound=0)
+    _feed_matrix_entries(acc, data)
+    result = acc.to_csr().toarray()
+
+    # same total retained weight and same connectivity
+    assert np.isclose(result.sum(), expected.sum())
+    n_exp = connected_components(expected > 0, directed=False)[0]
+    n_res = connected_components(result > 0, directed=False)[0]
+    assert n_exp == n_res
+
+
 def test_transform_matrix_max_output_gb_blocks_dense_output():
     with tempfile.TemporaryDirectory() as output_dir:
         input_data = np.array([

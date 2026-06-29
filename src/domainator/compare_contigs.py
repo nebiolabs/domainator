@@ -16,7 +16,8 @@ import scipy.spatial
 import scipy.cluster
 import math
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+from domainator.transform_matrix import _mst_knn_arg
 from domainator.filter_domains import filter_domains
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from typing import Optional, Set
@@ -277,6 +278,43 @@ def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, p
             chunk_builder.append_chunk(start, end, _compute_combined_similarity_chunk(prepared_metrics, start, end, chunk_k, chunk_lb))
 
     return chunk_builder.build()
+
+
+def _feed_chunk_to_accumulator(accumulator, start, chunk_matrix):
+    """Feed the nonzero entries of a per-row chunk into a StreamingMstKnnAccumulator."""
+    coo = scipy.sparse.coo_array(chunk_matrix)
+    for local_row, col, value in zip(coo.row, coo.col, coo.data):
+        accumulator.add_edge(int(start) + int(local_row), int(col), float(value))
+
+
+def _compute_mst_knn_sparse_similarity_matrix(prepared_metrics, mst_knn, lb, cpu=1, progress=False, desc=None):
+    """Stream per-row similarity chunks into an MST+kNN accumulator (bounded memory).
+
+    Equivalent to building the full combined similarity matrix and then applying
+    ``transform_matrix.apply_mst_knn_sparsification``, but the full matrix is never
+    materialized: each chunk's edges are fed into the accumulator and discarded.
+    Per-row top-k pruning is bypassed (``k=None``) so the accumulator's OR-symmetric
+    kNN sees the full candidate set; ``--lb`` pruning still happens per chunk.
+    """
+    n = prepared_metrics[0].feature_matrix.shape[0]
+    accumulator = StreamingMstKnnAccumulator(n, mst_knn, lower_bound=lb)
+
+    # k=None => _keep_top_k_per_row is a no-op, so the accumulator bounds the graph instead.
+    query_chunks = [(start, end, None, lb) for start, end in _iter_query_chunks(n, cpu)]
+
+    if cpu > 1 and len(query_chunks) > 1:
+        with make_pool(
+            processes=min(cpu, len(query_chunks)),
+            initializer=_init_combined_similarity_chunk_worker,
+            initargs=(prepared_metrics,),
+        ) as pool:
+            for start, end, chunk_matrix in _progress(pool.imap(_compute_combined_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
+                _feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
+    else:
+        for start, end, chunk_k, chunk_lb in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
+            _feed_chunk_to_accumulator(accumulator, start, _compute_combined_similarity_chunk(prepared_metrics, start, end, chunk_k, chunk_lb))
+
+    return accumulator.to_csr()
 
 
 def _keep_top_k_per_row(scores, k):
@@ -542,8 +580,8 @@ class DenseTableOutput(DistanceReport):
         )
         DataMatrix.write_dense(scores.toarray(), self.outpath, row_names, row_names, data_type="score")
 
-def compare_contigs(genbanks, metrics, reports, k, contigs, name_by_order, databases:Optional[Set[str]]=None, lb: float = 0.0, progress: bool = False, cpu: int = 1):
-    
+def compare_contigs(genbanks, metrics, reports, k, contigs, name_by_order, databases:Optional[Set[str]]=None, lb: float = 0.0, progress: bool = False, cpu: int = 1, mst_knn: Optional[int] = None):
+
     report_options = dict()
     if name_by_order:
         report_options["name_by_order"] = True
@@ -577,14 +615,24 @@ def compare_contigs(genbanks, metrics, reports, k, contigs, name_by_order, datab
         prepared_metrics.append(prepared_metric)
 
     if prepared_metrics is not None:
-        results_matrix = _compute_combined_sparse_similarity_matrix(
-            prepared_metrics,
-            k=k,
-            lb=lb,
-            cpu=cpu,
-            progress=progress,
-            desc="Scoring combined metrics",
-        )
+        if mst_knn is not None:
+            results_matrix = _compute_mst_knn_sparse_similarity_matrix(
+                prepared_metrics,
+                mst_knn=mst_knn,
+                lb=lb,
+                cpu=cpu,
+                progress=progress,
+                desc="Scoring combined metrics (MST+kNN)",
+            )
+        else:
+            results_matrix = _compute_combined_sparse_similarity_matrix(
+                prepared_metrics,
+                k=k,
+                lb=lb,
+                cpu=cpu,
+                progress=progress,
+                desc="Scoring combined metrics",
+            )
     else:
         results_matrix = scipy.sparse.csr_array(matrix_shape, dtype=np.float64)
         remaining_weight = sum(metric.weight for metric in metrics)
@@ -600,6 +648,13 @@ def compare_contigs(genbanks, metrics, reports, k, contigs, name_by_order, datab
         results_matrix = _keep_top_k_per_row(results_matrix, k)
         if lb > 0:
             results_matrix = _prune_scores_inplace(results_matrix, lb)
+
+        if mst_knn is not None:
+            from domainator.transform_matrix import apply_mst_knn_sparsification
+            from domainator.data_matrix import SparseDataMatrix
+            row_names = [rec.id for rec in recs]
+            wrapped = SparseDataMatrix(scipy.sparse.csr_array(results_matrix), row_names, row_names, data_type="score")
+            results_matrix = apply_mst_knn_sparsification(wrapped, mst_knn, lower_bound=lb)
 
     # write reports
     for report in reports:
@@ -628,6 +683,9 @@ def main(argv):
 
     parser.add_argument('--lb', default=0, type=float, required=False,
                         help="Round any final scores less than or equal to this down to zero. This is primarily useful for making sparse outputs smaller.")
+
+    parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
+                        help="Prune the output graph to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer > 1), computed as a streaming operation to keep memory and output size small. When set, --k is ignored (the accumulator sees the full candidate set). Best paired with --sparse.")
 
     # Metrics
     parser.add_argument("--ji", default=0.5, required=False, type=float,
@@ -718,7 +776,7 @@ def main(argv):
     
     # Run
     try:
-        compare_contigs(genbanks, metrics, reports, params.k, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.lb, progress=params.progress, cpu=cpus)
+        compare_contigs(genbanks, metrics, reports, params.k, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.lb, progress=params.progress, cpu=cpus, mst_knn=params.mst_knn)
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 

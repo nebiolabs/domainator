@@ -1295,4 +1295,5 @@ from .ssn_edges import (  # noqa: E402
     mst_knn_edge_index_dict,
     sorted_edges_from_edge_index_dict,
     mst_knn_edge_counts_by_threshold,
+    StreamingMstKnnAccumulator,
 )

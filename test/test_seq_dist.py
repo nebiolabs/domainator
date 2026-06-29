@@ -41,6 +41,61 @@ def test_seq_dist_2(shared_datadir):
         assert ((out_mat).sum(axis=1) == 3).all()
         assert dense_matrix.data_type == "bool"
 
+def test_seq_dist_mst_knn_matches_batch(shared_datadir):
+    from domainator import transform_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        full = output_dir + "/full.hdf5"
+        batch = output_dir + "/batch.hdf5"
+        stream = output_dir + "/stream.hdf5"
+
+        # batch reference: full matrix, then post-hoc mst_knn
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", full, "--mode", "score"])
+        transform_matrix.main(["-i", full, "--sparse", batch, "--mst_knn", "3"])
+
+        # streaming path
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", stream, "--mode", "score", "--mst_knn", "3"])
+
+        batch_dm = DataMatrix.from_file(batch)
+        stream_dm = DataMatrix.from_file(stream)
+        b = batch_dm.toarray()
+        s = stream_dm.toarray()
+        assert batch_dm.rows == stream_dm.rows
+        # diagonal (self-scores) preserved by the streaming path
+        np.testing.assert_array_equal(b.diagonal(), s.diagonal())
+        # tie-invariant equivalence: identical connected-components partition
+        _, bl = connected_components(b > 0, directed=False)
+        _, sl = connected_components(s > 0, directed=False)
+        np.testing.assert_array_equal(bl[:, None] == bl[None, :], sl[:, None] == sl[None, :])
+
+
+def test_seq_dist_mst_knn_rejects_non_streamable_mode(shared_datadir):
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        with pytest.raises(ValueError):
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "norm_score", "--mst_knn", "2"])
+
+
+def test_seq_dist_mst_knn_requires_symmetric_reference(shared_datadir):
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    ref = str(shared_datadir / "pdonr_peptides.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        with pytest.raises(ValueError):
+            seq_dist.main(["-i", fasta, "-r", ref, "--sparse", out, "--mode", "score", "--mst_knn", "2"])
+
+
+def test_seq_dist_mst_knn_rejects_k_below_two(shared_datadir):
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        with pytest.raises(SystemExit):
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "1"])
+
+
 def test_seq_hmmsearch_1(shared_datadir):
     expected = np.array([
      [0.0,0.0,0.0,0.0,0.0,0.0,0.0],
