@@ -563,9 +563,13 @@ class DataMatrix(ABC):
 
 
             if row_names is col_names and row_lengths is col_lengths:
-                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = True
+                # Store as int8 (0/1), not a Python/NumPy bool: HDF5 has no native
+                # boolean type, so h5py writes numpy bool_ as an enum that non-h5py
+                # readers may silently drop. int8 is unambiguously portable and is
+                # still read back truthily. (0 == not symmetric, 1 == symmetric.)
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = np.int8(1)
             else:
-                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = False
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = np.int8(0)
                 f.create_dataset(cls._COL_LABELS_DATASET, data=col_names, dtype=UTF8_h5py_encoding)
                 if col_lengths is not None:
                     f.create_dataset(cls._COL_LENGTHS_DATASET, data=col_lengths)
@@ -666,9 +670,13 @@ class DataMatrix(ABC):
 
 
             if row_names is col_names and row_lengths is col_lengths:
-                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = True
+                # Store as int8 (0/1), not a Python/NumPy bool: HDF5 has no native
+                # boolean type, so h5py writes numpy bool_ as an enum that non-h5py
+                # readers may silently drop. int8 is unambiguously portable and is
+                # still read back truthily. (0 == not symmetric, 1 == symmetric.)
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = np.int8(1)
             else:
-                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = False
+                f.attrs[cls._SYMMETRIC_LABELS_ATTR] = np.int8(0)
                 f.create_dataset(cls._COL_LABELS_DATASET, data=col_names, dtype=UTF8_h5py_encoding)
                 if col_lengths is not None:
                     f.create_dataset(cls._COL_LENGTHS_DATASET, data=col_lengths)
