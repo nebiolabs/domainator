@@ -69,8 +69,8 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
 
 def _mst_knn_arg(value: Union[str, int]) -> int:
     value = int(value)
-    if value <= 1:
-        raise ValueError("--mst_knn must be an integer greater than 1")
+    if value < 1:
+        raise ValueError("--mst_knn must be an integer >= 1")
     return value
 
 
@@ -317,7 +317,7 @@ def main(argv):
                                 "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
                                 "the minimum necessary to preserve the clusters.")
     sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                                help="Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, where K must be greater than 1.")
+                                help="Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, where K must be >= 1.")
 
     parser.add_argument('--config', action=ActionConfigFile)
 

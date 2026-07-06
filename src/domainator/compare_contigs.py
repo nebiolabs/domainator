@@ -685,7 +685,7 @@ def main(argv):
                         help="Round any final scores less than or equal to this down to zero. This is primarily useful for making sparse outputs smaller.")
 
     parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                        help="Prune the output graph to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer > 1), computed as a streaming operation to keep memory and output size small. When set, --k is ignored (the accumulator sees the full candidate set). Best paired with --sparse.")
+                        help="Prune the output graph to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer >= 1), computed as a streaming operation to keep memory and output size small. When set, --k is ignored (the accumulator sees the full candidate set). Best paired with --sparse.")
 
     # Metrics
     parser.add_argument("--ji", default=0.5, required=False, type=float,

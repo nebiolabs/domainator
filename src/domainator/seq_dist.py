@@ -655,7 +655,7 @@ def main(argv):
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
 
     parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                        help="Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer > 1), computed as a streaming operation to keep memory and output size small. Requires the reference to be the same file as the input (a square symmetric comparison) and --mode in {score, bool, efi_score}. Best paired with --sparse.")
+                        help="Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer >= 1), computed as a streaming operation to keep memory and output size small. Requires the reference to be the same file as the input (a square symmetric comparison) and --mode in {score, bool, efi_score}. Best paired with --sparse.")
 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")

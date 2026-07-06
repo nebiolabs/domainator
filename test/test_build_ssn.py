@@ -362,11 +362,21 @@ def test_iter_default_ssn_edges_uses_indices_and_lexical_endpoint_order():
     ]
 
 
-def test_build_ssn_mst_knn_requires_k_gt_one(shared_datadir):
+def test_build_ssn_mst_knn_accepts_k_one(shared_datadir):
+    # k == 1 reduces to the MST plus each node's single nearest neighbor.
+    with tempfile.TemporaryDirectory() as output_dir:
+        build_ssn.main([
+            "-i", str(shared_datadir / "FeSOD_dist.tsv"),
+            "--xgmml", str(Path(output_dir) / "out.xgmml"),
+            "--mst_knn", "1",
+        ])
+
+
+def test_build_ssn_mst_knn_requires_k_ge_one(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         with pytest.raises(SystemExit):
             build_ssn.main([
                 "-i", str(shared_datadir / "FeSOD_dist.tsv"),
                 "--xgmml", str(Path(output_dir) / "out.xgmml"),
-                "--mst_knn", "1",
+                "--mst_knn", "0",
             ])

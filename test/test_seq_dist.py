@@ -88,12 +88,20 @@ def test_seq_dist_mst_knn_requires_symmetric_reference(shared_datadir):
             seq_dist.main(["-i", fasta, "-r", ref, "--sparse", out, "--mode", "score", "--mst_knn", "2"])
 
 
-def test_seq_dist_mst_knn_rejects_k_below_two(shared_datadir):
+def test_seq_dist_mst_knn_accepts_k_one(shared_datadir):
+    # k == 1 reduces to the MST plus each node's single nearest neighbor.
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "1"])
+
+
+def test_seq_dist_mst_knn_rejects_k_below_one(shared_datadir):
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(SystemExit):
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "1"])
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "0"])
 
 
 def test_seq_hmmsearch_1(shared_datadir):

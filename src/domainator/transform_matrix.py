@@ -151,8 +151,8 @@ MODES = {
 
 def _mst_knn_arg(value):
     value = int(value)
-    if value <= 1:
-        raise ValueError("--mst_knn must be an integer greater than 1")
+    if value < 1:
+        raise ValueError("--mst_knn must be an integer >= 1")
     return value
 
 
