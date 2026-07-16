@@ -1180,6 +1180,7 @@ def ssn_viewer_html(
                             <option value="force">Force-directed</option>
                             <option value="grid" selected>Grid (no edges)</option>
                             <option value="packed">Packed (no edges)</option>
+                            <option value="treemap">Treemap (no edges)</option>
                         </select>
                     </div>
                     <div class="control">
@@ -1788,6 +1789,14 @@ def ssn_viewer_html(
         const enabled = sortComponentsBySizeEnabled();
         const layoutMode = currentLayoutAlgorithm();
         const gridMode = layoutMode === 'grid' || layoutMode === 'packed';
+        if (layoutMode === 'treemap') {{
+            // Treemap node positions are fixed by the lattice, so sorting has no effect.
+            button.disabled = true;
+            button.textContent = 'Sort clusters by size: n/a';
+            button.title = 'Treemap nodes follow a fixed lattice; size sorting does not apply.';
+            return;
+        }}
+        button.disabled = false;
         button.textContent = gridMode
             ? (enabled ? 'Sort clusters by size: On' : 'Sort clusters by size: Off')
             : (enabled ? 'Sort components by size: On' : 'Sort components by size: Off');
@@ -2885,6 +2894,162 @@ def ssn_viewer_html(
         return normalizeComponentLayout(circles, 40).items;
     }}
 
+    // Every treemap node is drawn at this fixed world size on one global fixed-pitch lattice, so
+    // a node looks identical everywhere and its position never changes with the threshold.
+    // TREEMAP_CELL = node square + surrounding padding; cluster boundaries are drawn on the
+    // padding between cells so they never overlap a node.
+    const TREEMAP_NODE = 13;   // node square side (world units)
+    const TREEMAP_CELL = 18;   // lattice pitch = node + padding (world units)
+    const TREEMAP_ORIGIN = 58; // world offset of lattice cell (0,0)
+
+    function sign2(value) {{
+        return (value > 0) - (value < 0);
+    }}
+
+    // Generalized Hilbert ("gilbert") curve: enumerate every cell of a width x height grid in a
+    // Hilbert-like order that works for non-power-of-two, non-square rectangles. Contiguous runs
+    // of the returned order are spatially compact and connected, which is what makes a contiguous
+    // dendrogram leaf range render as a compact blob with a single staircase boundary. Port of
+    // Jakub Cerveny's gilbert2d. Recursion depth is O(log(width*height)).
+    function gilbertCurve(width, height) {{
+        const out = [];
+        const generate = (x, y, ax, ay, bx, by) => {{
+            const w = Math.abs(ax + ay);
+            const h = Math.abs(bx + by);
+            const dax = sign2(ax), day = sign2(ay);
+            const dbx = sign2(bx), dby = sign2(by);
+            if (h === 1) {{
+                for (let i = 0; i < w; i++) {{ out.push([x, y]); x += dax; y += day; }}
+                return;
+            }}
+            if (w === 1) {{
+                for (let i = 0; i < h; i++) {{ out.push([x, y]); x += dbx; y += dby; }}
+                return;
+            }}
+            let ax2 = Math.floor(ax / 2), ay2 = Math.floor(ay / 2);
+            let bx2 = Math.floor(bx / 2), by2 = Math.floor(by / 2);
+            const w2 = Math.abs(ax2 + ay2);
+            const h2 = Math.abs(bx2 + by2);
+            if (2 * w > 3 * h) {{
+                if ((w2 % 2) && w > 2) {{ ax2 += dax; ay2 += day; }}
+                generate(x, y, ax2, ay2, bx, by);
+                generate(x + ax2, y + ay2, ax - ax2, ay - ay2, bx, by);
+            }} else {{
+                if ((h2 % 2) && h > 2) {{ bx2 += dbx; by2 += dby; }}
+                generate(x, y, bx2, by2, ax2, ay2);
+                generate(x + bx2, y + by2, ax, ay, bx - bx2, by - by2);
+                generate(x + (ax - dax) + (bx2 - dbx), y + (ay - day) + (by2 - dby),
+                    -bx2, -by2, -(ax - ax2), -(ay - ay2));
+            }}
+        }};
+        if (width >= height) {{
+            generate(0, 0, width, 0, 0, height);
+        }} else {{
+            generate(0, 0, 0, height, width, 0);
+        }}
+        return out;
+    }}
+
+    // Build (and cache) the global node lattice for the whole network. Every leaf (node) is
+    // assigned a fixed cell along a generalized Hilbert (gilbert) curve, whose locality means any
+    // contiguous leaf-order range -- i.e. any cluster at any threshold -- maps to a compact,
+    // near-square region. The arrangement is threshold-independent: changing the threshold only
+    // regroups these fixed cells. Cached by node count.
+    function ensureLatticeGlobal() {{
+        const leafOrder = state.bundle.graph.hierarchy.leaf_order;
+        const nodeCount = leafOrder.length;
+        if (state.latticeGlobal && state.latticeGlobal.nodeCount === nodeCount) {{
+            return state.latticeGlobal;
+        }}
+        const aspect = clusterCanvas.width / Math.max(clusterCanvas.height, 1);
+        const width = Math.max(1, Math.round(Math.sqrt(nodeCount * aspect)) || 1);
+        const height = Math.max(1, Math.ceil(nodeCount / width));
+        const curve = gilbertCurve(width, height);
+        const colOf = new Int32Array(nodeCount);
+        const rowOf = new Int32Array(nodeCount);
+        const cellNode = new Int32Array(width * height).fill(-1);
+        for (let position = 0; position < nodeCount; position++) {{
+            const cell = curve[position];
+            const nodeIndex = leafOrder[position];
+            colOf[nodeIndex] = cell[0];
+            rowOf[nodeIndex] = cell[1];
+            cellNode[(cell[1] * width) + cell[0]] = nodeIndex;
+        }}
+        state.latticeGlobal = {{nodeCount, width, height, colOf, rowOf, cellNode}};
+        return state.latticeGlobal;
+    }}
+
+    function latticeCellWorld(column, row) {{
+        return {{
+            x: TREEMAP_ORIGIN + ((column + 0.5) * TREEMAP_CELL),
+            y: TREEMAP_ORIGIN + ((row + 0.5) * TREEMAP_CELL),
+        }};
+    }}
+
+    // Node index under a world-space point, or -1. O(1) via the fixed lattice.
+    function latticeNodeAtWorld(worldX, worldY) {{
+        const lattice = state.latticeGlobal;
+        if (!lattice) {{ return -1; }}
+        const column = Math.floor((worldX - TREEMAP_ORIGIN) / TREEMAP_CELL);
+        const row = Math.floor((worldY - TREEMAP_ORIGIN) / TREEMAP_CELL);
+        if (column < 0 || row < 0 || column >= lattice.width || row >= lattice.height) {{ return -1; }}
+        const nodeIndex = lattice.cellNode[(row * lattice.width) + column];
+        if (nodeIndex < 0) {{ return -1; }}
+        // Only a hit if the point lands on the node square, not its surrounding padding.
+        const center = latticeCellWorld(column, row);
+        const half = TREEMAP_NODE / 2;
+        if (Math.abs(worldX - center.x) > half || Math.abs(worldY - center.y) > half) {{ return -1; }}
+        return nodeIndex;
+    }}
+
+    // Fixed-lattice "treemap". Node positions come from the global node lattice (built once and
+    // never moving with the threshold); this only turns the active clusters into lightweight items
+    // carrying a bounding box (for culling/fit) and the leaf range (for boundary tracing and
+    // hit-testing). Every active cluster is emitted regardless of minimum cluster size -- min size
+    // only governs which boundaries are drawn (see renderClusterView), never whether nodes shown.
+    function treemapClusterLayout(activeClusterIds) {{
+        if (activeClusterIds.length === 0) {{
+            clusterCanvas.height = 760;
+            return [];
+        }}
+        clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
+        const nodes = state.bundle.graph.hierarchy.nodes;
+        const leafOrder = state.bundle.graph.hierarchy.leaf_order;
+        const lattice = ensureLatticeGlobal();
+
+        const orderedIds = [...activeClusterIds].sort(
+            (a, b) => nodes[a].leaf_start - nodes[b].leaf_start || a - b);
+        return orderedIds.map(id => {{
+            const node = nodes[id];
+            const start = node.leaf_start;
+            const end = start + node.leaf_count;
+            let minCol = Infinity, minRow = Infinity, maxCol = -Infinity, maxRow = -Infinity;
+            for (let position = start; position < end; position++) {{
+                const nodeIndex = leafOrder[position];
+                const column = lattice.colOf[nodeIndex];
+                const row = lattice.rowOf[nodeIndex];
+                if (column < minCol) {{ minCol = column; }}
+                if (column > maxCol) {{ maxCol = column; }}
+                if (row < minRow) {{ minRow = row; }}
+                if (row > maxRow) {{ maxRow = row; }}
+            }}
+            const x0 = TREEMAP_ORIGIN + (minCol * TREEMAP_CELL);
+            const y0 = TREEMAP_ORIGIN + (minRow * TREEMAP_CELL);
+            const x1 = TREEMAP_ORIGIN + ((maxCol + 1) * TREEMAP_CELL);
+            const y1 = TREEMAP_ORIGIN + ((maxRow + 1) * TREEMAP_CELL);
+            return {{
+                componentId: id,
+                shape: 'lattice',
+                leafStart: start,
+                leafCount: node.leaf_count,
+                x0, y0, x1, y1,
+                x: (x0 + x1) / 2,
+                y: (y0 + y1) / 2,
+                radius: Math.hypot((x1 - x0) / 2, (y1 - y0) / 2),
+            }};
+        }});
+    }}
+
     function normalizeComponentLayout(items, padding = 20) {{
         if (items.length === 0) {{
             return {{items: [], width: 0, height: 0}};
@@ -3574,6 +3739,9 @@ def ssn_viewer_html(
             if (algorithm === 'packed') {{
                 return packedClusterLayout(visibleIds);
             }}
+            if (algorithm === 'treemap') {{
+                return treemapClusterLayout(visibleIds);
+            }}
             if (algorithm === 'force') {{
                 return forceDirectedForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
             }}
@@ -3809,10 +3977,17 @@ def ssn_viewer_html(
         let maxX = -Infinity;
         let maxY = -Infinity;
         state.visibleLayout.forEach(item => {{
-            minX = Math.min(minX, item.x - item.radius);
-            minY = Math.min(minY, item.y - item.radius);
-            maxX = Math.max(maxX, item.x + item.radius);
-            maxY = Math.max(maxY, item.y + item.radius);
+            if (item.shape === 'rect' || item.shape === 'lattice') {{
+                minX = Math.min(minX, item.x0);
+                minY = Math.min(minY, item.y0);
+                maxX = Math.max(maxX, item.x1);
+                maxY = Math.max(maxY, item.y1);
+            }} else {{
+                minX = Math.min(minX, item.x - item.radius);
+                minY = Math.min(minY, item.y - item.radius);
+                maxX = Math.max(maxX, item.x + item.radius);
+                maxY = Math.max(maxY, item.y + item.radius);
+            }}
         }});
         return {{minX, minY, maxX, maxY}};
     }}
@@ -3920,6 +4095,38 @@ def ssn_viewer_html(
         }}));
     }}
 
+    // Treemap member layout: every member sits at its fixed cell on the global gilbert lattice,
+    // so node positions are identical in every cluster and never move when the threshold changes.
+    function componentSquareLayout(component, item) {{
+        const members = componentMembers(item.componentId);
+        const results = [];
+        const lattice = state.latticeGlobal;
+        if (members.length === 0 || !lattice) {{ return results; }}
+        const dotRadius = TREEMAP_NODE / 2;
+        for (let i = 0; i < members.length; i++) {{
+            const nodeIndex = members[i];
+            const center = latticeCellWorld(lattice.colOf[nodeIndex], lattice.rowOf[nodeIndex]);
+            results.push({{
+                memberIndex: nodeIndex,
+                x: center.x,
+                y: center.y,
+                radius: dotRadius,
+                square: true,
+            }});
+        }}
+        return results;
+    }}
+
+    // Shape-aware member placement: lattice tiles read from the global node lattice, everything
+    // else keeps the circular phyllotaxis packing. Rendering, SVG export, and hit-testing all
+    // route through here so treemap and bubble modes stay in sync.
+    function componentMemberLayout(component, item) {{
+        if (item.shape === 'lattice') {{
+            return componentSquareLayout(component, item);
+        }}
+        return componentDotLayout(component, item);
+    }}
+
     function componentSelectionState(members) {{
         let selectedCount = 0;
         members.forEach(nodeIndex => {{
@@ -3981,11 +4188,17 @@ def ssn_viewer_html(
             clusterContext.stroke();
         }});
 
-        // Collect dots batched by color for batch drawing (#3)
+        // Collect dots batched by color for batch drawing (#3). Circular member dots and
+        // square treemap members are batched separately so each can use its own draw call.
         const dotColorBuckets = new Map();
+        const squareColorBuckets = new Map();
 
         const showClusterBounds = renderClusterBoundsEnabled();
         const showNodes = renderNodesEnabled();
+        // In the lattice ("treemap") layout nodes are never hidden; the minimum cluster size only
+        // decides which cluster boundaries get drawn (small clusters just go un-outlined).
+        const minOutlineSize = Math.max(1, Number(document.getElementById('min-cluster-size').value) || 1);
+        const lattice = state.latticeGlobal;
 
         // Per-node ("Label by") labels attach to individual member dots. Collect candidates that are
         // in the viewport during the dot pass; we draw them only when few enough nodes are visible
@@ -4007,22 +4220,60 @@ def ssn_viewer_html(
             const members = componentMembers(item.componentId);
             const selectionState = componentSelectionState(members);
 
-            if (showClusterBounds) {{
-                clusterContext.fillStyle = 'rgba(245, 246, 248, 0.95)';
-                clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c4cad2';
-                clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / drawScale;
-                clusterContext.beginPath();
-                clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
-                clusterContext.fill();
-                clusterContext.stroke();
-            }} else if (selectionState.allSelected) {{
-                // Cluster bounds are hidden, but keep a faint outline so the
-                // selection is still discernible.
-                clusterContext.strokeStyle = 'rgba(30, 42, 47, 0.45)';
-                clusterContext.lineWidth = 1.5 / drawScale;
-                clusterContext.beginPath();
-                clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
-                clusterContext.stroke();
+            if (item.shape === 'lattice') {{
+                // Lattice clusters are outlined with a staircase along the padding between cells.
+                // Nodes are never hidden; a cluster is only outlined when it is big enough (or
+                // fully selected). Node squares themselves are drawn in the shared dot pass below.
+                const outline = showClusterBounds && component.size >= minOutlineSize;
+                if ((outline || selectionState.allSelected) && lattice) {{
+                    const width = lattice.width;
+                    const cellSet = new Set();
+                    for (const nodeIndex of members) {{
+                        cellSet.add((lattice.rowOf[nodeIndex] * width) + lattice.colOf[nodeIndex]);
+                    }}
+                    clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f'
+                        : (outline ? '#9aa4ad' : 'rgba(30, 42, 47, 0.45)');
+                    clusterContext.lineWidth = (selectionState.allSelected ? 2.4 : 1.2) / drawScale;
+                    clusterContext.beginPath();
+                    for (const nodeIndex of members) {{
+                        const column = lattice.colOf[nodeIndex];
+                        const row = lattice.rowOf[nodeIndex];
+                        const ex0 = TREEMAP_ORIGIN + (column * TREEMAP_CELL);
+                        const ey0 = TREEMAP_ORIGIN + (row * TREEMAP_CELL);
+                        const ex1 = ex0 + TREEMAP_CELL;
+                        const ey1 = ey0 + TREEMAP_CELL;
+                        if (!cellSet.has((row * width) + (column - 1))) {{ clusterContext.moveTo(ex0, ey0); clusterContext.lineTo(ex0, ey1); }}
+                        if (!cellSet.has((row * width) + (column + 1))) {{ clusterContext.moveTo(ex1, ey0); clusterContext.lineTo(ex1, ey1); }}
+                        if (!cellSet.has(((row - 1) * width) + column)) {{ clusterContext.moveTo(ex0, ey0); clusterContext.lineTo(ex1, ey0); }}
+                        if (!cellSet.has(((row + 1) * width) + column)) {{ clusterContext.moveTo(ex0, ey1); clusterContext.lineTo(ex1, ey1); }}
+                    }}
+                    clusterContext.stroke();
+                }}
+            }} else {{
+                const isRect = item.shape === 'rect';
+                const traceBounds = () => {{
+                    clusterContext.beginPath();
+                    if (isRect) {{
+                        clusterContext.rect(item.x0, item.y0, item.x1 - item.x0, item.y1 - item.y0);
+                    }} else {{
+                        clusterContext.arc(item.x, item.y, item.radius, 0, TAU);
+                    }}
+                }};
+                if (showClusterBounds) {{
+                    clusterContext.fillStyle = 'rgba(245, 246, 248, 0.95)';
+                    clusterContext.strokeStyle = selectionState.allSelected ? '#1e2a2f' : '#c4cad2';
+                    clusterContext.lineWidth = (selectionState.allSelected ? 3 : 1.5) / drawScale;
+                    traceBounds();
+                    clusterContext.fill();
+                    clusterContext.stroke();
+                }} else if (selectionState.allSelected) {{
+                    // Cluster bounds are hidden, but keep a faint outline so the
+                    // selection is still discernible.
+                    clusterContext.strokeStyle = 'rgba(30, 42, 47, 0.45)';
+                    clusterContext.lineWidth = 1.5 / drawScale;
+                    traceBounds();
+                    clusterContext.stroke();
+                }}
             }}
 
             // When nodes are hidden we still need to know where the selected
@@ -4032,15 +4283,16 @@ def ssn_viewer_html(
                 return;
             }}
 
-            const dotLayout = componentDotLayout(component, item);
+            const dotLayout = componentMemberLayout(component, item);
             for (const dot of dotLayout) {{
                 if (showNodes) {{
                     // Use pre-computed color cache (#2)
                     const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
-                    let bucket = dotColorBuckets.get(color);
+                    const buckets = dot.square ? squareColorBuckets : dotColorBuckets;
+                    let bucket = buckets.get(color);
                     if (bucket === undefined) {{
                         bucket = [];
-                        dotColorBuckets.set(color, bucket);
+                        buckets.set(color, bucket);
                     }}
                     bucket.push(dot);
                 }}
@@ -4065,6 +4317,17 @@ def ssn_viewer_html(
             for (const dot of dots) {{
                 clusterContext.moveTo(dot.x + dot.radius, dot.y);
                 clusterContext.arc(dot.x, dot.y, dot.radius, 0, TAU);
+            }}
+            clusterContext.fill();
+        }});
+
+        // Batch draw treemap square members grouped by color.
+        squareColorBuckets.forEach((squares, color) => {{
+            clusterContext.fillStyle = color;
+            clusterContext.beginPath();
+            for (const square of squares) {{
+                const side = square.radius * 2;
+                clusterContext.rect(square.x - square.radius, square.y - square.radius, side, side);
             }}
             clusterContext.fill();
         }});
@@ -4189,7 +4452,7 @@ def ssn_viewer_html(
 
     function applyComputedLayout(layout, visibleGraph, layoutAlgorithm, resetView) {{
         const layoutById = new Map(layout.map(item => [item.componentId, item]));
-        const links = (layoutAlgorithm === 'grid' || layoutAlgorithm === 'packed')
+        const links = (layoutAlgorithm === 'grid' || layoutAlgorithm === 'packed' || layoutAlgorithm === 'treemap')
             ? []
             : visibleGraph.links
                 .map(link => {{
@@ -4201,6 +4464,22 @@ def ssn_viewer_html(
                 .filter(Boolean);
         state.visibleLayout = layout;
         state.splitLinks = links;
+        // For the lattice layout, map every node to the visible cluster item that owns it so a
+        // click can resolve cell -> node -> cluster in O(1) (bounding boxes overlap, so we can't
+        // hit-test clusters by bbox). Rebuilt whenever the visible cluster set changes.
+        if (layout.length > 0 && layout[0].shape === 'lattice') {{
+            const leafOrder = state.bundle.graph.hierarchy.leaf_order;
+            const nodeItem = new Int32Array(leafOrder.length).fill(-1);
+            layout.forEach((item, itemIndex) => {{
+                const end = item.leafStart + item.leafCount;
+                for (let position = item.leafStart; position < end; position++) {{
+                    nodeItem[leafOrder[position]] = itemIndex;
+                }}
+            }});
+            state.latticeNodeItem = nodeItem;
+        }} else {{
+            state.latticeNodeItem = null;
+        }}
         document.getElementById('stat-clusters').textContent = layout.length.toLocaleString();
         document.getElementById('stat-links').textContent = links.length.toLocaleString();
         if (resetView) {{ fitClusterViewToLayout(); }}
@@ -4217,16 +4496,25 @@ def ssn_viewer_html(
         const layoutAlgorithm = currentLayoutAlgorithm();
         const thresholdValue = selectedThresholdValue();
         const activeClusterIds = activeClustersAtThreshold(thresholdValue);
-        const visibleGraph = mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnlyEnabled());
         const hierarchyNodes = state.bundle.graph.hierarchy.nodes;
         const sortBySizeEnabled = sortComponentsBySizeEnabled();
+
+        // The lattice ("treemap") layout never hides nodes -- every active cluster is laid out and
+        // the minimum cluster size only suppresses small clusters' outlines. Every other layout
+        // filters nodes by minimum cluster size as usual.
+        const latticeMode = layoutAlgorithm === 'treemap';
+        const visibleGraph = latticeMode
+            ? {{visibleIds: activeClusterIds, links: [], hiddenNodes: 0}}
+            : mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnlyEnabled());
 
         state.activeClusters = activeClusterIds;
         state.visibleClusters = visibleGraph.visibleIds;
 
         const hidden = visibleGraph.hiddenNodes;
         const shown = state.bundle.graph.nodes.length - hidden;
-        document.getElementById('hidden-summary').textContent = hidden.toLocaleString() + ' nodes hidden by minimum cluster size';
+        document.getElementById('hidden-summary').textContent = latticeMode
+            ? 'All nodes shown; minimum cluster size hides only small-cluster outlines'
+            : (hidden.toLocaleString() + ' nodes hidden by minimum cluster size');
         document.getElementById('stat-shown-nodes').textContent = shown.toLocaleString();
         document.getElementById('stat-hidden-nodes').textContent = hidden.toLocaleString();
 
@@ -4618,6 +4906,8 @@ def ssn_viewer_html(
 
         const showClusterBounds = renderClusterBoundsEnabled();
         const showNodes = renderNodesEnabled();
+        const minOutlineSize = Math.max(1, Number(document.getElementById('min-cluster-size').value) || 1);
+        const lattice = state.latticeGlobal;
         const dotLabelField = currentLabelField();
         const MAX_LABELED_DOTS = 250;
         const collectDotLabels = dotLabelField !== '' && showNodes && state.viewTransform.scale >= 0.11;
@@ -4627,6 +4917,7 @@ def ssn_viewer_html(
         const boundsFill = svgColorParts('rgba(245, 246, 248, 0.95)');
         const boundsParts = [];
         const dotColorBuckets = new Map();
+        const squareColorBuckets = new Map();
         const selectedNodeOutlines = [];
 
         state.visibleLayout.forEach(item => {{
@@ -4640,16 +4931,61 @@ def ssn_viewer_html(
             const selectionState = componentSelectionState(members);
             const center = worldToScreenPoint(item.x, item.y);
             const screenRadius = item.radius * drawScale;
+            const isLattice = item.shape === 'lattice';
+            const isRect = item.shape === 'rect';
+            const rectTopLeft = isRect ? worldToScreenPoint(item.x0, item.y0) : null;
+            const rectWidth = isRect ? (item.x1 - item.x0) * drawScale : 0;
+            const rectHeight = isRect ? (item.y1 - item.y0) * drawScale : 0;
+            const boundsShape = (fillAttrs, strokeAttrs) => (isRect
+                ? '<rect x="' + fmt(rectTopLeft.x) + '" y="' + fmt(rectTopLeft.y) + '" width="' + fmt(rectWidth) +
+                    '" height="' + fmt(rectHeight) + '" ' + fillAttrs + ' ' + strokeAttrs + '/>'
+                : '<circle cx="' + fmt(center.x) + '" cy="' + fmt(center.y) + '" r="' + fmt(screenRadius) +
+                    '" ' + fillAttrs + ' ' + strokeAttrs + '/>');
 
-            if (showClusterBounds) {{
+            if (isLattice) {{
+                // Staircase outline traced along the padding between cells (screen space).
+                const outline = showClusterBounds && component.size >= minOutlineSize;
+                if ((outline || selectionState.allSelected) && lattice) {{
+                    const width = lattice.width;
+                    const cellSet = new Set();
+                    for (const nodeIndex of members) {{
+                        cellSet.add((lattice.rowOf[nodeIndex] * width) + lattice.colOf[nodeIndex]);
+                    }}
+                    let d = '';
+                    const edge = (wx0, wy0, wx1, wy1) => {{
+                        const a = worldToScreenPoint(wx0, wy0);
+                        const b = worldToScreenPoint(wx1, wy1);
+                        d += 'M' + fmt(a.x) + ' ' + fmt(a.y) + 'L' + fmt(b.x) + ' ' + fmt(b.y);
+                    }};
+                    for (const nodeIndex of members) {{
+                        const column = lattice.colOf[nodeIndex];
+                        const row = lattice.rowOf[nodeIndex];
+                        const ex0 = TREEMAP_ORIGIN + (column * TREEMAP_CELL);
+                        const ey0 = TREEMAP_ORIGIN + (row * TREEMAP_CELL);
+                        const ex1 = ex0 + TREEMAP_CELL;
+                        const ey1 = ey0 + TREEMAP_CELL;
+                        if (!cellSet.has((row * width) + (column - 1))) {{ edge(ex0, ey0, ex0, ey1); }}
+                        if (!cellSet.has((row * width) + (column + 1))) {{ edge(ex1, ey0, ex1, ey1); }}
+                        if (!cellSet.has(((row - 1) * width) + column)) {{ edge(ex0, ey0, ex1, ey0); }}
+                        if (!cellSet.has(((row + 1) * width) + column)) {{ edge(ex0, ey1, ex1, ey1); }}
+                    }}
+                    if (d !== '') {{
+                        const stroke = svgColorParts(selectionState.allSelected ? '#1e2a2f' : (outline ? '#9aa4ad' : 'rgba(30, 42, 47, 0.45)'));
+                        boundsParts.push('<path d="' + d + '" fill="none" stroke="' + stroke.color +
+                            (stroke.opacity !== 1 ? '" stroke-opacity="' + stroke.opacity : '') +
+                            '" stroke-width="' + (selectionState.allSelected ? 2.4 : 1.2) + '"/>');
+                    }}
+                }}
+            }} else if (showClusterBounds) {{
                 const stroke = svgColorParts(selectionState.allSelected ? '#1e2a2f' : '#c4cad2');
-                boundsParts.push('<circle cx="' + fmt(center.x) + '" cy="' + fmt(center.y) + '" r="' + fmt(screenRadius) +
-                    '" fill="' + boundsFill.color + '" fill-opacity="' + boundsFill.opacity +
-                    '" stroke="' + stroke.color + '" stroke-width="' + (selectionState.allSelected ? 3 : 1.5) + '"/>');
+                boundsParts.push(boundsShape(
+                    'fill="' + boundsFill.color + '" fill-opacity="' + boundsFill.opacity + '"',
+                    'stroke="' + stroke.color + '" stroke-width="' + (selectionState.allSelected ? 3 : 1.5) + '"'));
             }} else if (selectionState.allSelected) {{
                 const stroke = svgColorParts('rgba(30, 42, 47, 0.45)');
-                boundsParts.push('<circle cx="' + fmt(center.x) + '" cy="' + fmt(center.y) + '" r="' + fmt(screenRadius) +
-                    '" fill="none" stroke="' + stroke.color + '" stroke-opacity="' + stroke.opacity + '" stroke-width="1.5"/>');
+                boundsParts.push(boundsShape(
+                    'fill="none"',
+                    'stroke="' + stroke.color + '" stroke-opacity="' + stroke.opacity + '" stroke-width="1.5"'));
             }}
 
             const needsSelectionHint = !selectionState.allSelected && selectionState.anySelected;
@@ -4657,14 +4993,15 @@ def ssn_viewer_html(
                 return;
             }}
 
-            const dotLayout = componentDotLayout(component, item);
+            const dotLayout = componentMemberLayout(component, item);
             for (const dot of dotLayout) {{
                 if (showNodes) {{
                     const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
-                    let bucket = dotColorBuckets.get(color);
+                    const buckets = dot.square ? squareColorBuckets : dotColorBuckets;
+                    let bucket = buckets.get(color);
                     if (bucket === undefined) {{
                         bucket = [];
-                        dotColorBuckets.set(color, bucket);
+                        buckets.set(color, bucket);
                     }}
                     const dotCenter = worldToScreenPoint(dot.x, dot.y);
                     bucket.push({{x: dotCenter.x, y: dotCenter.y, r: dot.radius * drawScale}});
@@ -4691,6 +5028,13 @@ def ssn_viewer_html(
             const fill = svgColorParts(color);
             const circles = dots.map(dot => '<circle cx="' + fmt(dot.x) + '" cy="' + fmt(dot.y) + '" r="' + fmt(dot.r) + '"/>').join('');
             parts.push('<g fill="' + fill.color + '"' + (fill.opacity !== 1 ? ' fill-opacity="' + fill.opacity + '"' : '') + '>' + circles + '</g>');
+        }});
+
+        squareColorBuckets.forEach((squares, color) => {{
+            const fill = svgColorParts(color);
+            const rects = squares.map(square => '<rect x="' + fmt(square.x - square.r) + '" y="' + fmt(square.y - square.r) +
+                '" width="' + fmt(square.r * 2) + '" height="' + fmt(square.r * 2) + '"/>').join('');
+            parts.push('<g fill="' + fill.color + '"' + (fill.opacity !== 1 ? ' fill-opacity="' + fill.opacity + '"' : '') + '>' + rects + '</g>');
         }});
 
         if (selectedNodeOutlines.length > 0) {{
@@ -5700,15 +6044,26 @@ def ssn_viewer_html(
 
     function hitTestNodeAt(screenX, screenY) {{
         const worldPoint = screenToWorldPoint(screenX, screenY);
+        if (state.latticeNodeItem) {{
+            const nodeIndex = latticeNodeAtWorld(worldPoint.x, worldPoint.y);
+            return nodeIndex >= 0 ? nodeIndex : null;
+        }}
         for (let index = state.visibleLayout.length - 1; index >= 0; index--) {{
             const item = state.visibleLayout[index];
-            const dx = worldPoint.x - item.x;
-            const dy = worldPoint.y - item.y;
-            if ((dx * dx) + (dy * dy) > item.radius * item.radius) {{
-                continue;
+            if (item.shape === 'rect') {{
+                if (worldPoint.x < item.x0 || worldPoint.x > item.x1 ||
+                    worldPoint.y < item.y0 || worldPoint.y > item.y1) {{
+                    continue;
+                }}
+            }} else {{
+                const dx = worldPoint.x - item.x;
+                const dy = worldPoint.y - item.y;
+                if ((dx * dx) + (dy * dy) > item.radius * item.radius) {{
+                    continue;
+                }}
             }}
             const component = state.bundle.graph.hierarchy.nodes[item.componentId];
-            const dotLayout = componentDotLayout(component, item);
+            const dotLayout = componentMemberLayout(component, item);
             const dotRadius = dotLayout.length > 0 ? dotLayout[0].radius : componentDotGeometry(component, item).dotRadius;
             const hitRadius = Math.max(dotRadius, 5 / Math.max(state.viewTransform.scale, 0.1));
             let nearestNodeIndex = null;
@@ -5731,12 +6086,25 @@ def ssn_viewer_html(
 
     function hitTestComponentAt(screenX, screenY) {{
         const worldPoint = screenToWorldPoint(screenX, screenY);
+        if (state.latticeNodeItem) {{
+            const nodeIndex = latticeNodeAtWorld(worldPoint.x, worldPoint.y);
+            if (nodeIndex < 0) {{ return null; }}
+            const itemIndex = state.latticeNodeItem[nodeIndex];
+            return itemIndex >= 0 ? state.visibleLayout[itemIndex] : null;
+        }}
         for (let index = state.visibleLayout.length - 1; index >= 0; index--) {{
             const item = state.visibleLayout[index];
-            const dx = worldPoint.x - item.x;
-            const dy = worldPoint.y - item.y;
-            if ((dx * dx) + (dy * dy) <= item.radius * item.radius) {{
-                return item;
+            if (item.shape === 'rect') {{
+                if (worldPoint.x >= item.x0 && worldPoint.x <= item.x1 &&
+                    worldPoint.y >= item.y0 && worldPoint.y <= item.y1) {{
+                    return item;
+                }}
+            }} else {{
+                const dx = worldPoint.x - item.x;
+                const dy = worldPoint.y - item.y;
+                if ((dx * dx) + (dy * dy) <= item.radius * item.radius) {{
+                    return item;
+                }}
             }}
         }}
         return null;
@@ -5759,12 +6127,32 @@ def ssn_viewer_html(
         return (dx * dx) + (dy * dy) <= radius * radius;
     }}
 
+    // Axis-aligned overlap between a screen-space rectangle [ax0,ay0]-[ax1,ay1] (corners in
+    // any order) and a selection box {{left, top, width, height}}.
+    function rectIntersectsRect(ax0, ay0, ax1, ay1, rect) {{
+        const left = Math.min(ax0, ax1);
+        const right = Math.max(ax0, ax1);
+        const top = Math.min(ay0, ay1);
+        const bottom = Math.max(ay0, ay1);
+        return left <= (rect.left + rect.width) && right >= rect.left &&
+            top <= (rect.top + rect.height) && bottom >= rect.top;
+    }}
+
+    function itemIntersectsSelectionBox(item, rect) {{
+        if (item.shape === 'rect' || item.shape === 'lattice') {{
+            const p0 = worldToScreenPoint(item.x0, item.y0);
+            const p1 = worldToScreenPoint(item.x1, item.y1);
+            return rectIntersectsRect(p0.x, p0.y, p1.x, p1.y, rect);
+        }}
+        const screenPoint = worldToScreenPoint(item.x, item.y);
+        const screenRadius = item.radius * state.viewTransform.scale;
+        return circleIntersectsRect(screenPoint.x, screenPoint.y, screenRadius, rect);
+    }}
+
     function selectComponentsInBox(rect, deselect) {{
         let changed = false;
         state.visibleLayout.forEach(item => {{
-            const screenPoint = worldToScreenPoint(item.x, item.y);
-            const screenRadius = item.radius * state.viewTransform.scale;
-            if (!circleIntersectsRect(screenPoint.x, screenPoint.y, screenRadius, rect)) {{
+            if (!itemIntersectsSelectionBox(item, rect)) {{
                 return;
             }}
             componentMembers(item.componentId).forEach(nodeIndex => {{
@@ -5787,13 +6175,11 @@ def ssn_viewer_html(
     function selectNodesInBox(rect, deselect) {{
         let changed = false;
         state.visibleLayout.forEach(item => {{
-            const screenPoint = worldToScreenPoint(item.x, item.y);
-            const screenRadius = item.radius * state.viewTransform.scale;
-            if (!circleIntersectsRect(screenPoint.x, screenPoint.y, screenRadius, rect)) {{
+            if (!itemIntersectsSelectionBox(item, rect)) {{
                 return;
             }}
             const component = state.bundle.graph.hierarchy.nodes[item.componentId];
-            const dotLayout = componentDotLayout(component, item);
+            const dotLayout = componentMemberLayout(component, item);
             dotLayout.forEach(dot => {{
                 const dotScreen = worldToScreenPoint(dot.x, dot.y);
                 const dotRadius = dot.radius * state.viewTransform.scale;

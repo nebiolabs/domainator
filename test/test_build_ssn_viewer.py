@@ -257,6 +257,15 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<option value="organic">' not in html_content
         assert '<option value="grid" selected>Grid (no edges)</option>' in html_content
         assert '<option value="packed">Packed (no edges)</option>' in html_content
+        assert '<option value="treemap">Treemap (no edges)</option>' in html_content
+        assert '<option value="treemap-recursive"' not in html_content
+        assert 'treemapClusterLayout' in html_content
+        assert 'componentSquareLayout' in html_content
+        assert 'componentMemberLayout' in html_content
+        assert 'gilbertCurve' in html_content
+        assert 'ensureLatticeGlobal' in html_content
+        assert 'latticeNodeAtWorld' in html_content
+        assert 'rectIntersectsRect' in html_content
         assert '<input id="min-cluster-size" type="number" min="1" value="5" step="1" />' in html_content
         assert 'leaf-pruning-only' in html_content
         assert 'Minimum cluster size trims leaf clusters only' in html_content

@@ -440,3 +440,167 @@ def test_export_legend_png(meta_page):
     import os
     assert os.path.getsize(download.path()) > 0
     assert page.pageerrors == []
+
+
+# --- Treemap layout ---
+
+
+def _switch_to_treemap(page):
+    """Select the treemap layout and wait for the canvas to repaint."""
+    before = _canvas_snapshot(page)
+    page.select_option("#layout-algorithm", "treemap")
+    _wait_for_canvas_change(page, before)
+
+
+def test_treemap_layout_renders(page):
+    """Selecting the treemap layout repaints the viewport without JS errors."""
+    _switch_to_treemap(page)
+    snapshot = _canvas_snapshot(page)
+    assert snapshot.startswith("data:image/png;base64,")
+    assert len(snapshot) > 5000, "treemap canvas appears blank"
+    assert page.pageerrors == []
+
+
+def _fragment_threshold_to_multiple_clusters(page):
+    """Push the threshold to its maximum so the network splits into several clusters."""
+    page.evaluate(
+        """() => {
+            const slider = document.getElementById('threshold-slider');
+            slider.value = slider.max;
+            slider.dispatchEvent(new Event('input', {bubbles: true}));
+        }"""
+    )
+    page.wait_for_function(
+        "() => Number(document.getElementById('stat-clusters').textContent) > 1"
+    )
+
+
+def test_treemap_toggles_do_not_throw(page):
+    """Treemap-mode toggles (render nodes/bounds) repaint cleanly with no JS errors."""
+    _switch_to_treemap(page)
+    before = _canvas_snapshot(page)
+    page.uncheck("#render-nodes")
+    _wait_for_canvas_change(page, before)
+    page.check("#render-nodes")
+    page.click("#render-cluster-bounds")
+    page.click("#render-cluster-bounds")
+    assert page.pageerrors == []
+
+
+def test_treemap_nodes_are_fixed_size(page):
+    """Every treemap node square is the same fixed world size across all clusters, and
+    each tile renders squares for all its members (regression: nodes must always render)."""
+    _switch_to_treemap(page)
+    stats = page.evaluate(
+        """() => {
+            const radii = new Set();
+            let tilesWithoutSquares = 0;
+            state.visibleLayout.forEach(item => {
+                const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+                const layout = componentMemberLayout(component, item);
+                if (layout.length === 0) tilesWithoutSquares += 1;
+                layout.forEach(dot => radii.add(Math.round(dot.radius * 1000)));
+            });
+            return {distinctRadii: radii.size, tilesWithoutSquares};
+        }"""
+    )
+    assert stats["tilesWithoutSquares"] == 0
+    assert stats["distinctRadii"] == 1, "treemap node squares must all be the same size"
+    assert page.pageerrors == []
+
+
+def test_treemap_nodes_fixed_across_threshold(page):
+    """The core lattice invariant: node positions do not move when the threshold changes;
+    only which clusters they belong to changes."""
+    _switch_to_treemap(page)
+
+    def lattice_positions():
+        return page.evaluate(
+            """() => {
+                const g = state.latticeGlobal;
+                return {w: g.width, h: g.height,
+                        cols: Array.from(g.colOf), rows: Array.from(g.rowOf)};
+            }"""
+        )
+
+    before = lattice_positions()
+    cluster_count_before = int(page.locator("#stat-clusters").inner_text())
+    _fragment_threshold_to_multiple_clusters(page)
+    after = lattice_positions()
+    cluster_count_after = int(page.locator("#stat-clusters").inner_text())
+
+    assert cluster_count_after > cluster_count_before, "threshold change should split clusters"
+    assert after == before, "node lattice positions must not move when the threshold changes"
+    assert page.pageerrors == []
+
+
+def test_treemap_min_size_never_hides_nodes(page):
+    """Raising the minimum cluster size must not hide any nodes (option a): every node is
+    still laid out; min size only suppresses small-cluster outlines."""
+    _switch_to_treemap(page)
+    _fragment_threshold_to_multiple_clusters(page)
+
+    def rendered_node_count():
+        return page.evaluate(
+            """() => {
+                let total = 0;
+                state.visibleLayout.forEach(item => {
+                    const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+                    total += componentMemberLayout(component, item).length;
+                });
+                return total;
+            }"""
+        )
+
+    total_nodes = page.evaluate("() => state.bundle.graph.nodes.length")
+    assert rendered_node_count() == total_nodes
+    # Raising the minimum cluster size well past the largest cluster must not remove any nodes
+    # from the layout (it only affects which outlines are drawn).
+    page.fill("#min-cluster-size", "9999")
+    page.wait_for_timeout(300)
+    assert rendered_node_count() == total_nodes, "min cluster size must not hide nodes"
+    assert page.pageerrors == []
+
+
+def test_treemap_svg_export_has_rects(page):
+    """SVG export under treemap emits <rect> tiles/members and no JS errors."""
+    _switch_to_treemap(page)
+    with page.expect_download() as download_info:
+        page.click("#export-svg")
+    download = download_info.value
+    assert download.suggested_filename.endswith(".svg")
+    content = open(download.path(), encoding="utf-8").read()
+    assert "<svg" in content
+    assert "<rect" in content
+    assert page.pageerrors == []
+
+
+def test_treemap_click_selection(page):
+    """Ctrl-clicking a treemap node square selects it via the rect hit-test."""
+    _switch_to_treemap(page)
+    assert page.is_disabled("#clear-selection")
+    # Locate the first member square in canvas-CSS coordinates (relative to the
+    # canvas element) so the click lands on a node rather than in the inter-square
+    # gap of the grid. locator.click(position=...) auto-scrolls the canvas into view.
+    point = page.evaluate(
+        """() => {
+            const item = state.visibleLayout[0];
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const dot = componentMemberLayout(component, item)[0];
+            const sp = worldToScreenPoint(dot.x, dot.y);
+            const canvas = document.getElementById('cluster-view');
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: sp.x * (rect.width / canvas.width),
+                y: sp.y * (rect.height / canvas.height),
+            };
+        }"""
+    )
+    page.locator("#cluster-view").click(
+        position={"x": point["x"], "y": point["y"]}, modifiers=["Control"]
+    )
+    # A successful rect hit-test selects a member, which enables Clear selection.
+    page.wait_for_function(
+        "() => !document.getElementById('clear-selection').disabled"
+    )
+    assert page.pageerrors == []
