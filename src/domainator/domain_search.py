@@ -90,7 +90,7 @@ def _init_search_worker(reference_paths, foldseek_paths, allowed_taxids):
 
 class _domain_search_worker():
 
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None):
+    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None):
 
         self.z = z
         self.evalue = evalue
@@ -115,6 +115,12 @@ class _domain_search_worker():
         self.strand = strand
         self.decoy_names = decoy_names
         self.max_hits_per_contig = max_hits_per_contig
+        # When max_hits is set, each worker keeps only its own top-max_hits records
+        # (by best domain score) before returning, so the parent receives at most
+        # O(workers * max_hits) records to merge instead of every hit. The global
+        # top-max_hits is unchanged: a single worker can contribute at most max_hits
+        # records to a global top-max_hits, so trimming per worker is lossless.
+        self.max_hits = max_hits
         # References are no longer parsed per-partition here; the pool initializer
         # (_init_search_worker) parses them once per worker into _WORKER_REFERENCES.
 
@@ -133,10 +139,24 @@ class _domain_search_worker():
                 kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output.
                 whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
                 normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
-            returns: 
-                list of SeqRecords
+            returns:
+                list of SeqRecords. When max_hits is set, at most max_hits records
+                (the highest scoring for this partition) are returned.
         """
         out = list()
+        max_hits = self.max_hits
+
+        def _emit(record):
+            # Bounded min-heap over this worker's own hits: with max_hits set the
+            # worker never holds (or returns) more than max_hits records. Domainator
+            # SeqRecords compare by DOMAINATOR_HIT_BEST_SCORE_ANNOTATION, so the heap
+            # root is always this partition's weakest kept hit.
+            if max_hits is None:
+                out.append(record)
+            elif len(out) < max_hits:
+                heapq.heappush(out, record)
+            else:
+                heapq.heappushpop(out, record)
 
         for rec in domainate.domainate(
                 parse_seqfiles((partition[0],), None, filetype_override=None, seek_to=partition[1], max_recs=partition[2], default_molecule_type=self.fasta_type, genbank_parser="lean"), #TODO: clear best_domain_hit ?
@@ -161,7 +181,7 @@ class _domain_search_worker():
                     if self.decoy_names is not None and rec.get_hit_names()[0] in self.decoy_names:
                         continue
                     rec.set_dist_to_start(0)
-                    out.append(rec)
+                    _emit(rec)
                 else: # it's a nucleotide, so pass it through select_by_cds
                     if not self.translate: 
                         for region in select_by_cds.select_by_cds(
@@ -178,7 +198,7 @@ class _domain_search_worker():
                             _from_domain_search=True,
                             _domain_search_negatives=self.decoy_names
                             ):
-                                out.append(region)
+                                _emit(region)
                     else: # self.translate == True, so we need to translate it
                         for peptide in extract_peptides.extract_peptides(
                             (rec,),
@@ -191,7 +211,7 @@ class _domain_search_worker():
                             _domain_search_negatives=self.decoy_names
                         ):
                             rec.set_dist_to_start(0)
-                            out.append(peptide)
+                            _emit(peptide)
             except Exception as e:
                 warnings.warn(f"Error processing {rec.id}.")
                 raise e
@@ -263,7 +283,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
 
     out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig)
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits)
 
     # Pool tuning notes (speed_up_plan.md Q4):
     #   - No maxtasksperchild: workers must persist so the references parsed once
@@ -275,9 +295,12 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     #   - cpu - 1 workers: the parent process does the heap merge and GenBank
     #     writing, so it is reserved one core rather than oversubscribing.
     with make_pool(processes=cpu - 1, **pool_kwargs) as pool:
-        # hits are lists of SeqRecords
+        # hits are lists of SeqRecords. When max_hits is set, each list is already
+        # trimmed to that worker's own top-max_hits (see _domain_search_worker), so
+        # the parent merges O(workers * max_hits) records rather than every hit; the
+        # central heap below still selects the global top-max_hits.
         for hits in pool.imap_unordered(worker, partitions):
-            
+
             for rec in hits:
                 if max_hits is None:
                     yield rec
