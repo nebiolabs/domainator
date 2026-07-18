@@ -34,7 +34,7 @@ import subprocess
 import time
 import requests
 from domainator.Bio import SeqIO
-from domainator.Taxonomy import NCBITaxonomy
+from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
 import sys
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
@@ -884,7 +884,7 @@ def main(argv):
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a record when it is in the record's lineage. Mutually exclusive with --include_taxids/--exclude_taxids. For prokaryote-only (_proks) databases, Eukaryota are excluded in addition to this expression.")
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
+    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--skip_taxonomy_update", action="store_true", help="By default, if taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version. Setting this flag will skip this check.")
     parser.add_argument("--success_rec_log", type=str, default=None, help="Path to log file for successfully written records. If not specified, successfully written records will not be logged.")
 

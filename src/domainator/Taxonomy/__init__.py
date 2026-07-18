@@ -6,9 +6,28 @@ import tarfile
 import warnings
 import io
 import os
+import getpass
 import fcntl
 from contextlib import contextmanager
 from typing import Iterator, Union, TextIO
+
+
+def default_ncbi_taxonomy_path() -> str:
+    """Default location for the cached NCBI taxonomy database.
+
+    Namespaced by user so that separate users on a shared machine do not collide
+    on the same directory/lockfile (which causes PermissionError when one user
+    tries to write a lockfile owned by another). Concurrent runs by the *same*
+    user share this directory and are coordinated safely via the fcntl locks in
+    ``NCBITaxonomy``.
+    """
+    try:
+        user = getpass.getuser()
+    except Exception:
+        # getpass.getuser() can raise if no username can be resolved from the
+        # environment or the password database; fall back to the numeric uid.
+        user = str(os.getuid())
+    return f"/tmp/ncbi_taxonomy_{user}"
 
 def download_url(url : str, target_dir : Path) -> Path:
     '''

@@ -37,7 +37,7 @@ from typing import Dict, List
 from bashplotlib.histogram import plot_hist
 import io
 from contextlib import redirect_stdout
-from domainator.Taxonomy import NCBITaxonomy
+from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from collections import deque
 from domainator.filter_domains import filter_domains
@@ -564,7 +564,7 @@ def main(argv):
                         help="Write a summary of the taxonomic origins of the contigs.")
 
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
+    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
 
 
     parser.add_argument('--contigs', type=str, default=None, nargs='+',

@@ -18,7 +18,7 @@ from typing import List, Tuple, Union, Dict, Any
 import json
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Taxonomy import NCBITaxonomy
+from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.filter_domains import filter_domains
 import re
 
@@ -916,7 +916,7 @@ def main(argv):
     parser.add_argument('--taxname', nargs="+", action=DynamicArg, const="taxname", dest=COLS_ARG_NAME, help="The taxname at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxname available for the record, the column will be named 'taxname_[rank]") #
 
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
+    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
 
     parser.add_argument('--qualifier', nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="qualifier",
                         help="Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'.")

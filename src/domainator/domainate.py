@@ -26,7 +26,7 @@ import pyinfernal
 from domainator import __version__, RawAndDefaultsFormatter
 import pyrodigal
 from pathlib import Path
-from domainator.Taxonomy import NCBITaxonomy
+from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator import foldseek as foldseek_lib
 from domainator.lean_record import LeanContig, lean_to_seqrecord, lean_translate, LEAN_SEARCH_TYPES, materialize_lean_search, LeanSearchContig, LeanFastaContig
 
@@ -1220,7 +1220,7 @@ def main(argv):
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default="/tmp/ncbi_taxonomy", help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
+    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
     parser.add_argument('--cpu', type=int, default=0,
