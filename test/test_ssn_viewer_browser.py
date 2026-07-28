@@ -169,7 +169,7 @@ def _yield_loaded_page(html_path):
         page.on("pageerror", lambda exc: pageerrors.append(str(exc)))
         page.pageerrors = pageerrors
         page.goto(html_path.as_uri())
-        # Default layout is the synchronous "grid" algorithm, so the first
+        # Default layout is the synchronous "packed" algorithm, so the first
         # render lands as soon as the embedded bundle finishes decompressing.
         # stat-clusters flips from "0" once applyComputedLayout runs.
         page.wait_for_function(
@@ -600,6 +600,36 @@ def test_treemap_click_selection(page):
         position={"x": point["x"], "y": point["y"]}, modifiers=["Control"]
     )
     # A successful rect hit-test selects a member, which enables Clear selection.
+    page.wait_for_function(
+        "() => !document.getElementById('clear-selection').disabled"
+    )
+    assert page.pageerrors == []
+
+
+def test_treemap_click_in_node_gap_still_selects(page):
+    """A click in the padding gap between nodes still selects (the whole lattice cell is
+    clickable, not just the drawn node square) -- regression for gap clicks falling through."""
+    _switch_to_treemap(page)
+    assert page.is_disabled("#clear-selection")
+    # Shift the click into the padding: a node square is TREEMAP_NODE (13) wide, so a point
+    # 7.5px right of a member center lands in the inter-node gap, outside the drawn square.
+    point = page.evaluate(
+        """() => {
+            const item = state.visibleLayout[0];
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const dot = componentMemberLayout(component, item)[0];
+            const sp = worldToScreenPoint(dot.x + 7.5, dot.y);
+            const canvas = document.getElementById('cluster-view');
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: sp.x * (rect.width / canvas.width),
+                y: sp.y * (rect.height / canvas.height),
+            };
+        }"""
+    )
+    page.locator("#cluster-view").click(
+        position={"x": point["x"], "y": point["y"]}, modifiers=["Control"]
+    )
     page.wait_for_function(
         "() => !document.getElementById('clear-selection').disabled"
     )

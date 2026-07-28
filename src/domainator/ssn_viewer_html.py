@@ -1178,14 +1178,14 @@ def ssn_viewer_html(
                         <select id="layout-algorithm">
                             <option value="tree">Tree</option>
                             <option value="force">Force-directed</option>
-                            <option value="grid" selected>Grid (no edges)</option>
-                            <option value="packed">Packed (no edges)</option>
+                            <option value="grid">Grid (no edges)</option>
+                            <option value="packed" selected>Packed (no edges)</option>
                             <option value="treemap">Treemap (no edges)</option>
                         </select>
                     </div>
                     <div class="control">
                         <label for="min-cluster-size">Minimum cluster size</label>
-                        <input id="min-cluster-size" type="number" min="1" value="5" step="1" />
+                        <input id="min-cluster-size" type="number" min="1" value="1" step="1" />
                     </div>
                     <div class="control">
                         <label for="color-by">Color by</label>
@@ -2986,20 +2986,18 @@ def ssn_viewer_html(
         }};
     }}
 
-    // Node index under a world-space point, or -1. O(1) via the fixed lattice.
+    // Node index under a world-space point, or -1. O(1) via the fixed lattice. The whole cell
+    // (node square + its surrounding padding) counts as a hit, not just the drawn square: each
+    // cell's padding splits evenly to its neighbours, so a click in the gap between two nodes
+    // snaps to the nearer one. This keeps clicks between nodes selecting their cluster instead of
+    // falling through. Empty cells (no node) still miss.
     function latticeNodeAtWorld(worldX, worldY) {{
         const lattice = state.latticeGlobal;
         if (!lattice) {{ return -1; }}
         const column = Math.floor((worldX - TREEMAP_ORIGIN) / TREEMAP_CELL);
         const row = Math.floor((worldY - TREEMAP_ORIGIN) / TREEMAP_CELL);
         if (column < 0 || row < 0 || column >= lattice.width || row >= lattice.height) {{ return -1; }}
-        const nodeIndex = lattice.cellNode[(row * lattice.width) + column];
-        if (nodeIndex < 0) {{ return -1; }}
-        // Only a hit if the point lands on the node square, not its surrounding padding.
-        const center = latticeCellWorld(column, row);
-        const half = TREEMAP_NODE / 2;
-        if (Math.abs(worldX - center.x) > half || Math.abs(worldY - center.y) > half) {{ return -1; }}
-        return nodeIndex;
+        return lattice.cellNode[(row * lattice.width) + column];
     }}
 
     // Fixed-lattice "treemap". Node positions come from the global node lattice (built once and
