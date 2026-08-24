@@ -1,0 +1,113 @@
+{
+  "id": "ssn_navigator",
+  "display_name": "SSN Navigator",
+  "category": "Summary reports",
+  "description": "Navigate a build_ssn_viewer .ssnv bundle and emit compact JSON summaries of clusters and their metadata at a chosen similarity threshold.",
+  "runner": "module",
+  "priority": 1,
+  "entry_point": "domainator.ssn_navigator",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "An SSN viewer bundle (.ssnv) produced by build_ssn_viewer.py.",
+      "type": "file",
+      "required": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "ssnv",
+        "gz",
+        "json"
+      ]
+    },
+    {
+      "name": "Mode",
+      "parameter": "mode",
+      "help": "Which navigation query to run.",
+      "type": "string",
+      "default": "overview",
+      "choices": [
+        "overview",
+        "thresholds",
+        "clusters",
+        "cluster",
+        "node"
+      ],
+      "flags": [
+        "--mode"
+      ]
+    },
+    {
+      "name": "Threshold",
+      "parameter": "threshold",
+      "help": "Similarity threshold to cut the network at (higher = finer clusters). Omit or pass 'inf' for one cluster per connected component. Required for the 'clusters' and 'cluster' modes.",
+      "type": "string",
+      "flags": [
+        "--threshold"
+      ]
+    },
+    {
+      "name": "Cluster Id",
+      "parameter": "id",
+      "help": "Cluster id to describe (see the 'clusters' mode). For the 'cluster' mode.",
+      "type": "integer",
+      "flags": [
+        "--id"
+      ]
+    },
+    {
+      "name": "Node",
+      "parameter": "node",
+      "help": "Node id/name to describe or locate. For the 'cluster' and 'node' modes.",
+      "type": "string",
+      "flags": [
+        "--node"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Write JSON to this file. Default: stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Min Size",
+      "parameter": "min_size",
+      "help": "Only report clusters with at least this many members (clusters mode).",
+      "type": "integer",
+      "default": 1,
+      "flags": [
+        "--min_size"
+      ]
+    },
+    {
+      "name": "Top N",
+      "parameter": "top_n",
+      "help": "Bound list output: at most this many clusters, category values, etc.",
+      "type": "integer",
+      "default": 50,
+      "flags": [
+        "--top_n"
+      ]
+    },
+    {
+      "name": "Members",
+      "parameter": "members",
+      "help": "Include the full member id list in the 'cluster' mode output.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--members"
+      ]
+    }
+  ]
+}

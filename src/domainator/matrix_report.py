@@ -185,10 +185,55 @@ def _estimate_mst_knn_counts_bytes(n_thresholds: int, max_k: int) -> int:
         return 0
     return int(n_thresholds) * int(max_k - MST_KNN_MIN_K + 1) * np.dtype(int).itemsize
 
-class SummaryTextWriter():
-    def __init__(self, out_handle): 
+class SummaryJSONWriter():
+    """Emit a compact JSON summary of the matrix/network (agent-friendly).
+
+    Includes edge-score stats, the connected-component count, and the bounded
+    strongest-split-event series, but omits the bulky per-node arrays that the
+    HTML report embeds for the browser.
+    """
+    def __init__(self, out_handle, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
         self.out_handle = out_handle
-    
+        self.payload = {}
+
+    def write_header(self, tree, edge_scores):
+        n = len(edge_scores)
+        self.payload["nodes"] = tree.n_nodes
+        self.payload["non_zero_edges"] = n
+        if n > 0:
+            median = (float(edge_scores[n // 2]) if n % 2 == 1
+                      else (float(edge_scores[n // 2 - 1]) + float(edge_scores[n // 2])) / 2)
+            self.payload["edge_scores"] = {
+                "mean": float(np.mean(edge_scores)),
+                "median": median,
+                "min": float(edge_scores[-1]),
+                "max": float(edge_scores[0]),
+            }
+        else:
+            self.payload["edge_scores"] = None
+
+    def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
+        cluster_by_thresh = tree.cluster_count_by_threshold
+        self.payload["connected_components"] = (
+            int(cluster_by_thresh[-1][1]) if len(cluster_by_thresh) > 0 else tree.n_nodes
+        )
+        self.payload["merge_impact_metric"] = merge_impact_metric
+        if component_summary is not None and len(component_summary) > 1:
+            merge_event_rows = filter_merge_event_rows(
+                threshold_merge_event_rows(component_summary), max_merge_events=max_merge_events
+            )
+            self.payload["split_events"] = merge_event_rows
+        else:
+            self.payload["split_events"] = []
+
+    def write_footer(self):
+        json.dump(_json_ready(self.payload), self.out_handle, separators=(",", ":"))
+        self.out_handle.write("\n")
+
+class SummaryTextWriter():
+    def __init__(self, out_handle):
+        self.out_handle = out_handle
+
     def write_header(self, tree, edge_scores):
         non_zero_values = edge_scores
         n_nodes = tree.n_nodes
@@ -999,7 +1044,7 @@ class SummaryHTMLWriter():
 def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
                   profile_stages: bool = False, stage_timings=None, progress_callback=None,
-                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS):
+                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, out_json_handle=None):
     """
         Write a report on the matrix to the given handles.
     """
@@ -1013,6 +1058,8 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
         longform_outputs.append(SummaryTextWriter(out_text_handle))
     if out_html_handle is not None:
         longform_outputs.append(SummaryHTMLWriter(out_html_handle))
+    if out_json_handle is not None:
+        longform_outputs.append(SummaryJSONWriter(out_json_handle, max_merge_events=max_merge_events))
 
     if stage_timings is None:
         stage_timings = []
@@ -1082,6 +1129,8 @@ def main(argv):
     
     parser.add_argument('--html', default=None, required=False,
                         help="html file to write output to.")
+    parser.add_argument('--json', default=None, required=False,
+                        help="Write a compact JSON summary (edge stats, connected components, split-event series) to this file. Use '-' for stdout.")
     parser.add_argument('--include_mst_knn', action='store_true', default=False,
                         help="Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.")
     parser.add_argument('--merge_impact_metric', choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
@@ -1097,12 +1146,18 @@ def main(argv):
 
     params = parser.parse_args(argv)
 
-    if params.output is None and params.html is None:
-        parser.error("No output file specified. Use --output, and/or --html to specify at least one output file.")
+    if params.output is None and params.html is None and params.json is None:
+        parser.error("No output file specified. Use --output, --html, and/or --json to specify at least one output file.")
 
     with ExitStack() as output_stack:
         out = output_stack.enter_context(open(params.output, "w")) if params.output is not None else None
         out_html_handle = output_stack.enter_context(open(params.html, "w")) if params.html is not None else None
+        if params.json is None:
+            out_json_handle = None
+        elif params.json == "-":
+            out_json_handle = sys.stdout
+        else:
+            out_json_handle = output_stack.enter_context(open(params.json, "w"))
 
         progress_callback = None
         if params.progress or params.profile_stages:
@@ -1117,7 +1172,7 @@ def main(argv):
             _record_stage_timing(stage_timings, "load_matrix", stage_start, shape=matrix.shape, matrix_type=type(matrix).__name__)
 
         ### Run
-        if params.output is not None or params.html is not None:
+        if params.output is not None or params.html is not None or params.json is not None:
             stage_start = perf_counter()
             matrix_report(
                 matrix,
@@ -1129,6 +1184,7 @@ def main(argv):
                 stage_timings=stage_timings,
                 progress_callback=progress_callback,
                 max_merge_events=params.max_merge_events,
+                out_json_handle=out_json_handle,
             )
             if params.profile_stages:
                 _record_stage_timing(stage_timings, "matrix_report_total", stage_start)

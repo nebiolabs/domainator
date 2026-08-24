@@ -9,7 +9,7 @@ from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_
 from pathlib import Path
 from typing import List, Tuple, Union, Iterable, Dict
 import json
-from domainator.enum_report import DynamicArg, COLS_ARG_NAME, EnumTSVWriter, EnumHTMLWriter, get_analysis_names
+from domainator.enum_report import DynamicArg, COLS_ARG_NAME, EnumTSVWriter, EnumHTMLWriter, EnumJSONWriter, get_analysis_names
 import pyhmmer
 import os
 from io import IOBase
@@ -52,9 +52,9 @@ def append_factory(spec):
     }
 
 
-def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, tsv_out_handle, html_out_handle, column_names, html_max_height):
+def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, json_out_handle=None):
     """
-      input: 
+      input:
         records: a list of tuples of tuple of (database_name, iterator of pyhmmer.plan7.HMM)
         by: One line in output for every by contig, cds or domain. default: by contig
         analyses: what data to report
@@ -62,6 +62,7 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
         html_out_handle: a file handle to write html formatted output to.
         column_names: If supplied, then this list will be used instead of the default column names.
         html_max_height: Max height in pixels to set the html output to.
+        json_out_handle: a file handle to write streaming NDJSON (one object per profile) to.
     """
     
     STATIC_ANALYSES = {"source": {"columns": ["source"], "column_types": ["str"], "function": lambda source,rec: source},
@@ -100,6 +101,8 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
         writers.append(EnumTSVWriter(headers, column_types, tsv_out_handle))
     if html_out_handle is not None:
         writers.append(EnumHTMLWriter(headers, column_types, html_out_handle, html_max_height))
+    if json_out_handle is not None:
+        writers.append(EnumJSONWriter(headers, column_types, json_out_handle))
 
     for writer in writers:
         writer.write_header()
@@ -130,11 +133,13 @@ def main(argv):
 
     parser.add_argument('-o', '--output', default=None, required=False, 
                         help="The name of the output tsv file.")
-    parser.add_argument('--html', default=None, required=False, 
+    parser.add_argument('--html', default=None, required=False,
                         help="Write a table in html format to this file.")
+    parser.add_argument('--json', default=None, required=False,
+                        help="Write streaming NDJSON (one compact JSON object per profile) to this file. Use '-' for stdout.")
     parser.add_argument('--html_max_height', default=None, required=False, type=int,
                         help="Max height in pixels to set the html output to.")
-   
+
     parser.add_argument('--column_names', nargs='+', default=None, required=False, type=str,
                         help="If supplied, then this list will be used instead of the default column names.")
 
@@ -174,21 +179,28 @@ def main(argv):
     if params.html is not None:
         html_out_handle = open(params.html, "w")
 
-    if out is None and html_out_handle is None:
-        raise ValueError("You must supply either --output or --html or both.")
+    json_out_handle = None
+    if params.json is not None:
+        json_out_handle = sys.stdout if params.json == "-" else open(params.json, "w")
+
+    if out is None and html_out_handle is None and json_out_handle is None:
+        raise ValueError("You must supply at least one of --output, --html, or --json.")
 
     analyses = list()
-    if hasattr(params, COLS_ARG_NAME): 
+    if hasattr(params, COLS_ARG_NAME):
         analyses = getattr(params, COLS_ARG_NAME)
 
     # Run
-    hmmer_report(read_hmms_to_iterators(inputs), analyses, out, html_out_handle, params.column_names, params.html_max_height)
+    hmmer_report(read_hmms_to_iterators(inputs), analyses, out, html_out_handle, params.column_names, params.html_max_height, json_out_handle=json_out_handle)
 
     if params.output is not None:
         out.close()
-    
+
     if params.html is not None:
         html_out_handle.close()
+
+    if json_out_handle is not None and json_out_handle is not sys.stdout:
+        json_out_handle.close()
 
 def _entrypoint():
     main(sys.argv[1:])

@@ -95,6 +95,58 @@ CDSs per 10 kb: {num_cdss / ((sum(lengths)+0.01)/10000) : .2f}
     def write_footer(self):
         pass
 
+class SummaryJSONWriter():
+    """Accumulates the summary into a single compact JSON object (agent-friendly).
+
+    Mirrors the text/HTML writer interface; the full document is emitted on
+    write_footer so the object is self-contained and easily parsed.
+    """
+    def __init__(self, out_handle):
+        self.out_handle = out_handle
+        self.payload = {}
+
+    def write_header(self, num_contigs, num_cdss, lengths):
+        length_stats = None
+        if len(lengths) != 0:
+            arr = np.asarray(lengths, dtype=float)
+            length_stats = {
+                "min": int(np.min(arr)),
+                "max": int(np.max(arr)),
+                "mean": float(np.mean(arr)),
+                "median": float(np.percentile(arr, 50)),
+                "total": int(np.sum(arr)),
+            }
+        self.payload["contig_stats"] = {
+            "contigs": num_contigs,
+            "cdss": num_cdss,
+            "cds_per_10kb": num_cdss / ((sum(lengths) + 0.01) / 10000),
+            "length": length_stats,
+        }
+
+    def write_domain_table(self, domain_table_df, domain_cooccurence_df):
+        self.payload["domain_frequency"] = domain_table_df.rename(
+            columns={"avg score": "avg_score"}
+        ).to_dict(orient="records")
+        if domain_cooccurence_df is not None and len(domain_cooccurence_df) > 0:
+            self.payload["domain_cooccurrence"] = domain_cooccurence_df.to_dict(orient="index")
+        else:
+            self.payload["domain_cooccurrence"] = None
+
+    def write_taxonomy(self, taxa_data):
+        self.payload["taxonomy"] = [
+            {
+                "taxid": taxid,
+                "name": taxa_data[taxid]["data"].names[-1],
+                "rank": taxa_data[taxid]["data"].ranks[-1],
+                "count": taxa_data[taxid]["count"],
+            }
+            for taxid in taxa_data
+        ]
+
+    def write_footer(self):
+        json.dump(self.payload, self.out_handle, separators=(",", ":"), default=str)
+        self.out_handle.write("\n")
+
 class SummaryHTMLWriter():
     def __init__(self, out_handle): #TODO: consolidate with TSVWriter with a super class?
         self.out_handle = out_handle
@@ -411,7 +463,7 @@ def tax_data_to_hierarchy(tax_data):
 
     
 
-def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurence_fraction_outfile=None, co_occurence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None):
+def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurence_fraction_outfile=None, co_occurence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None):
     """
 
         Args:
@@ -425,6 +477,8 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
         longform_outputs.append(SummaryTextWriter(out_text_handle))
     if out_html_handle is not None:
         longform_outputs.append(SummaryHTMLWriter(out_html_handle))
+    if out_json_handle is not None:
+        longform_outputs.append(SummaryJSONWriter(out_json_handle))
     
 
     num_contigs = 0
@@ -551,6 +605,9 @@ def main(argv):
     parser.add_argument('--html', default=None, required=False,
                         help="html file to write output to.")
 
+    parser.add_argument('--json', default=None, required=False,
+                        help="Write the full summary as a single compact JSON object to this file. Use '-' for stdout.")
+
     parser.add_argument('--domains_table', default=None, required=False,
                         help="Write a tab-separated table of domain frequencies to this file. Headers are: domain, database, count, description, avg score.")
 
@@ -589,17 +646,21 @@ def main(argv):
     # TODO: domain_search scores histogram
     params = parser.parse_args(argv)
 
-    if params.output is None and params.html is None and params.co_occurence_fraction is None and params.co_occurence_count is None and params.domains_table is None:
-        parser.error("No output file specified. Use --output, --html, --co_occurence_fraction, and/or --co_occurence_count and/or --domains_table to specify at least one output file.")
+    if params.output is None and params.html is None and params.json is None and params.co_occurence_fraction is None and params.co_occurence_count is None and params.domains_table is None:
+        parser.error("No output file specified. Use --output, --html, --json, --co_occurence_fraction, and/or --co_occurence_count and/or --domains_table to specify at least one output file.")
 
 
     out = None
     if params.output is not None:
         out = open(params.output, "w")
-    
+
     out_html_handle = None
     if params.html is not None:
         out_html_handle = open(params.html, "w")
+
+    out_json_handle = None
+    if params.json is not None:
+        out_json_handle = sys.stdout if params.json == "-" else open(params.json, "w")
  
 
     # decide whether input is from stdin
@@ -638,13 +699,17 @@ def main(argv):
         ncbi_taxonomy=ncbi_taxonomy,
         domains_table=params.domains_table,
         databases=databases,
+        out_json_handle=out_json_handle,
     )
 
     if params.output is not None and params.output != "-":
         out.close()
-    
+
     if params.html is not None:
         out_html_handle.close()
+
+    if out_json_handle is not None and out_json_handle is not sys.stdout:
+        out_json_handle.close()
 
 def _entrypoint():
     main(sys.argv[1:])    

@@ -211,6 +211,40 @@ class EnumTSVWriter():
     def write_footer(self):
         pass
 
+class EnumJSONWriter():
+    """Streaming NDJSON writer: one compact JSON object per record, keyed by column name.
+
+    NDJSON keeps the writer streaming (no need to buffer every row) while staying
+    trivially parseable by agents. Values are coerced by column type; missing
+    values are emitted as null so the schema is stable across rows.
+    """
+    def __init__(self, columns, column_types, out_handle):
+        self.columns = columns
+        self.column_types = column_types
+        self.out_handle = out_handle
+
+    def write_header(self):
+        pass
+
+    def _coerce(self, value, data_type):
+        if value is None:
+            return None
+        if data_type == "int":
+            return int(value)
+        if data_type == "float":
+            return float(value)
+        return str(value)
+
+    def write_row(self, values):
+        record = {
+            column: self._coerce(value, self.column_types[i])
+            for i, (column, value) in enumerate(zip(self.columns, values))
+        }
+        print(json.dumps(record, separators=(",", ":")), file=self.out_handle)
+
+    def write_footer(self):
+        pass
+
 class EnumHTMLWriter():
     sorters = {"str": "string", "int": "number", "float": "number"}
     def __init__(self, columns, column_types, out_handle, max_height): #TODO: consolidate with TSVWriter with a super class?
@@ -737,9 +771,9 @@ def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None
             rec.annotations["_source_filename"] = filename
             yield rec
 
-def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None):
+def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None, json_out_handle=None):
     """
-      input: 
+      input:
         records: an iterator of SeqRecords
         by: One line in output for every by contig, cds or domain. default: by contig
         analyses: what data to report
@@ -747,6 +781,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
         html_out_handle: a file handle to write html formatted output to.
         column_names: If supplied, then this list will be used instead of the default column names.
         html_max_height: Max height in pixels to set the html output to.
+        json_out_handle: a file handle to write streaming NDJSON (one object per record) to.
     """
     
     # {command_line_variable: {"columns":[names_to_appear_in_output], "function": function_mapping_SeqRec_to_table_value} }
@@ -817,6 +852,8 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
         writers.append(EnumTSVWriter(headers, column_types, tsv_out_handle))
     if html_out_handle is not None:
         writers.append(EnumHTMLWriter(headers, column_types, html_out_handle, html_max_height))
+    if json_out_handle is not None:
+        writers.append(EnumJSONWriter(headers, column_types, json_out_handle))
 
     for writer in writers:
         writer.write_header()
@@ -840,8 +877,10 @@ def main(argv):
 
     parser.add_argument('-o', '--output', default=None, required=False, 
                         help="The name of the output tsv file.")
-    parser.add_argument('--html', default=None, required=False, 
+    parser.add_argument('--html', default=None, required=False,
                         help="Write a table in html format to this file.")
+    parser.add_argument('--json', default=None, required=False,
+                        help="Write streaming NDJSON (one compact JSON object per record) to this file. Use '-' for stdout.")
     parser.add_argument('--html_max_height', default=None, required=False, type=int,
                         help="Max height in pixels to set the html output to.")
 
@@ -974,8 +1013,12 @@ def main(argv):
     if params.html is not None:
         html_out_handle = open(params.html, "w")
 
-    if out is None and html_out_handle is None:
-        raise ValueError("You must supply either --output or --html or both.")
+    json_out_handle = None
+    if params.json is not None:
+        json_out_handle = sys.stdout if params.json == "-" else open(params.json, "w")
+
+    if out is None and html_out_handle is None and json_out_handle is None:
+        raise ValueError("You must supply at least one of --output, --html, or --json.")
 
     #print(getattr(params, COLS_ARG_NAME))
     # figure out other parameters
@@ -1018,14 +1061,18 @@ def main(argv):
                 params.column_names,
                 params.html_max_height,
                 ncbi_taxonomy=ncbi_taxonomy,
-                databases=databases
+                databases=databases,
+                json_out_handle=json_out_handle
                 )
 
     if params.output is not None:
         out.close()
-    
+
     if params.html is not None:
         html_out_handle.close()
+
+    if json_out_handle is not None and json_out_handle is not sys.stdout:
+        json_out_handle.close()
 
 
 def _entrypoint():
