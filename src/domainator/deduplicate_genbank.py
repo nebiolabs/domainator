@@ -186,84 +186,22 @@ class Diamond(ClusterProgram):
         ]
         super().__init__(params, bin_path, log_handle=log_handle)
 
-    # diamond's cluster output writer crashes when the whole input collapses into a single
-    # cluster, reporting "max_oid not set" (or "Record count not set" on older versions)
-    # even though the clustering itself succeeded. Detect that and treat the input as one
-    # cluster represented by its longest sequence.
-    _SINGLE_CLUSTER_ERRORS = ("max_oid not set", "Record count not set")
-
-    def run(self):
-        try:
-            out = subprocess.run(self.search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-        except FileNotFoundError:
-            print(f'Error executing clustering program: {self.search_args[0]} not found', file=self.log_handle)
-            exit(1)
-
-        if out.returncode == 0:
-            return
-
-        if out.stderr is not None and any(err in out.stderr for err in self._SINGLE_CLUSTER_ERRORS):
-            self._set_single_cluster_fallback()
-            return
-
-        print(f'Error executing clustering program: {self.search_args}', file=self.log_handle)
-        if out.stdout:
-            print(out.stdout, file=self.log_handle, end="")
-        if out.stderr:
-            print(out.stderr, file=self.log_handle, end="")
-        exit(1)
-
-    def _set_single_cluster_fallback(self):
-        representative = None
-        representative_length = -1
-        members = list()
-        for rec in SeqIO.parse(self.input_fasta_path, "fasta"):
-            members.append(rec.id)
-            if len(rec.seq) > representative_length:
-                representative = rec.id
-                representative_length = len(rec.seq)
-
-        if representative is None:
-            raise RuntimeError("diamond fallback requires at least one sequence")
-
-        self._cluster_members = {representative: members}
-        print(
-            "Warning: diamond cluster failed on a single all-encompassing cluster; "
-            f"using longest input sequence {representative} as the representative.",
-            file=self.log_handle,
-        )
-
     def get_cluster_members(self):
-        if self._cluster_members is not None:
-            return self._cluster_members
-
-        out = dict()
-        with open(self.cluster_assignment_path, "r") as cluster_file:
-            for line in cluster_file:
-                line = line.strip()
-                if line == "":
-                    continue
-
-                parts = line.split("\t")
-                if len(parts) < 2:
-                    continue
-
-                representative = parts[0]
-                member = parts[1]
-                if representative.lower() == "representative" and member.lower() == "member":
-                    continue
-
-                if representative not in out:
-                    out[representative] = list()
-                if member not in out[representative]:
-                    out[representative].append(member)
-
-        for representative, members in out.items():
-            if representative not in members:
-                members.insert(0, representative)
-
-        self._cluster_members = out
-        return out
+        # diamond writes one "representative<tab>member" line per sequence, including a line
+        # where the representative is its own member, so no post-processing is needed.
+        if self._cluster_members is None:
+            out = dict()
+            with open(self.cluster_assignment_path, "r") as cluster_file:
+                for line in cluster_file:
+                    parts = line.strip().split("\t")
+                    if len(parts) < 2:
+                        continue
+                    representative, member = parts[0], parts[1]
+                    if member.lower() == "member":  # header line, only written with --header
+                        continue
+                    out.setdefault(representative, list()).append(member)
+            self._cluster_members = out
+        return self._cluster_members
 
     def get_reduced_names(self):
         return set(self.get_cluster_members().keys())

@@ -1,8 +1,6 @@
-import io
 import os
 import pytest
 import shutil
-import subprocess
 from domainator import utils
 from pathlib import Path
 import tempfile
@@ -222,34 +220,6 @@ def test_diamond_builds_cluster_command():
     assert search.search_args[-2:] == ["--member-cover", "90"]
 
 
-def test_diamond_run_falls_back_to_longest_sequence(monkeypatch):
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_fasta = Path(output_dir) / "input.fasta"
-        input_fasta.write_text(
-            ">seq1\nMFTLPPLPYPTNALEPYLDTQTLEIHFGKHHATYLKNLNDLLPEKSDADLIPVLQHLDDLPQDIRVKVRNNAGGVYNHNLYWQCMSPKSKSPSPRLLSSIESGFGTLDAFKEKFSQAALTHFGSGWAWLVKGTKGLEIVTTPNQDSPVSTGLTPILGLDVWEHAYYLKYQNRRVEYIQAWWNVVNWDYVSSLLADR\n"
-            ">seq2\nMFTLPPLPYPTNALEPYLDTQTLEIHFGKHHATYLKNLNDLLPEKSDADLIPVLQHLDDLPQDIRVKVRNNAGGVYNHNLYWQCMSPKSKSPSPRLLSSIESGFGTLDAFKEKFSQAALTHFGSGWAWLVKGTKGLEIVTTPNQDSPVSTGLTPILGLDVWEHAYYLKYQNRRVEYIQAWWNVVNWDYVSSLLADRAAAAA\n"
-            ">seq3\nMFTLPPLPYPTNALEPYLDTQTLEIHFGKHHATYLKNLNDLLPEKSDADLIPVLQHLDDLPQDIRVKVRNNAGGVYNHNLYWQCMSPKSKSPSPRLLSSIESGFGTLDAFKEKFSQAALTHFGSGWAWLVKGTKGLEIVTTPNQDSPVSTGLTPILGLDVWEHAYYLKYQNRRVEYIQAWWNVVNWDYVSSLL\n",
-            encoding="utf-8",
-        )
-
-        log_handle = io.StringIO()
-        search = deduplicate_genbank.Diamond(str(input_fasta), 0.0, {}, cpus=1, log_handle=log_handle)
-        calls = list()
-
-        def fake_run(args, stdout=None, stderr=None, encoding=None):
-            calls.append(list(args))
-            return subprocess.CompletedProcess(args, 1, "", "Error: max_oid not set\n")
-
-        monkeypatch.setattr(deduplicate_genbank.subprocess, "run", fake_run)
-
-        search.run()
-
-        assert len(calls) == 1
-        assert calls[0][calls[0].index("-d") + 1] == str(input_fasta)
-        assert search.get_cluster_members() == {"seq2": ["seq1", "seq2", "seq3"]}
-        assert "diamond cluster failed on a single all-encompassing cluster" in log_handle.getvalue()
-
-
 def test_diamond_parses_cluster_table():
     with tempfile.TemporaryDirectory() as output_dir:
         input_fasta = Path(output_dir) / "input.fasta"
@@ -257,7 +227,7 @@ def test_diamond_parses_cluster_table():
 
         search = deduplicate_genbank.Diamond(str(input_fasta), 0.99, {}, cpus=1)
         Path(search.cluster_assignment_path).write_text(
-            "representative\tmember\n1\t0\n2\t2\n",
+            "centroid\tmember\n1\t1\n1\t0\n2\t2\n",
             encoding="utf-8",
         )
 
@@ -357,14 +327,13 @@ def test_deduplicate_genbank_diamond_single_centroid():
         assert out.is_file()
         recs = list(utils.parse_seqfiles([str(out)]))
         assert len(recs) == 1
-        assert recs[0].id == "2-seq1"
+        assert recs[0].id in {"2-seq1", "2-seq2"}
 
         cluster_table = cluster_table_out.read_text(encoding="utf-8").splitlines()
         assert cluster_table[0] == "representative\tcontigs"
-        assert cluster_table[1].endswith("seq1 ; seq2") or cluster_table[1].endswith("seq2 ; seq1")
+        assert set(cluster_table[1].split("\t")[1].split(" ; ")) == {"seq1", "seq2"}
 
         log_file = log.read_text(encoding="utf-8")
-        assert "diamond cluster failed on a single all-encompassing cluster" in log_file
         assert "Input  size: 2" in log_file
         assert "Output size: 1" in log_file
 
