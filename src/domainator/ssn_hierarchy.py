@@ -146,7 +146,10 @@ def threshold_merge_event_rows(component_summary):
             last_row = component_summary[row_idx]
             row_idx += 1
 
-        edge_index = row_idx - 2
+        # The MST edge index of the last edge scoring strictly above this threshold, so a
+        # stop labelled `threshold_to` reproduces the `--lb threshold_to` cut exactly (the
+        # tie group at that threshold is excluded, as `--lb` excludes it).
+        edge_index = first_summary_row_idx - 2
 
         event_rows.append({
             "edge_index": int(edge_index),

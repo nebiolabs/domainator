@@ -1070,9 +1070,10 @@ class TestMaxTree:
         tree = MaxTree(matrix)
         result = tree.edges_by_threshold
         
-        # Should have 2 rows (one per MST edge)
-        assert result.shape[0] == 2
-        assert result.shape[1] == 2
+        # One row per distinct MST weight (10, 8) plus the `--lb 0` full-graph row.
+        # Each row holds the edges a `--lb <threshold>` cut keeps (scores strictly above).
+        assert result.shape == (3, 2)
+        assert result.tolist() == [[0.0, 10.0], [1.0, 8.0], [3.0, 0.0]]
         
         # Check thresholds are in descending order
         thresholds = result[:, 1]
@@ -1112,23 +1113,21 @@ class TestMaxTree:
         tree = MaxTree(matrix)
         result = tree.cluster_count_by_threshold
         
-        # Should have n rows (one per MST edge plus initial state)
-        assert result.shape[0] == 3  # n_nodes = 3, so 2 MST edges + 1 initial = 3
-        assert result.shape[1] == 2
+        # One row per distinct MST weight (10, 8) plus the `--lb 0` full-graph row; each
+        # row is the cluster count of the `--lb <threshold>` cut.
+        assert result.shape == (3, 2)
+        assert result.tolist() == [[10.0, 3.0], [8.0, 2.0], [0.0, 1.0]]
         
-        # First row: infinite threshold, n clusters
-        assert result[0, 0] == float('inf')
+        # Highest threshold keeps nothing, lowest keeps everything
         assert result[0, 1] == 3
-        
-        # Last row: should have 1 cluster (fully connected)
         assert result[-1, 1] == 1
         
         # Cluster counts should be decreasing
         cluster_counts = result[:, 1]
         assert all(cluster_counts[i] >= cluster_counts[i+1] for i in range(len(cluster_counts)-1))
         
-        # Thresholds should be decreasing (after the first inf)
-        thresholds = result[1:, 0]
+        # Thresholds should be decreasing
+        thresholds = result[:, 0]
         assert all(thresholds[i] >= thresholds[i+1] for i in range(len(thresholds)-1))
     
     def test_cluster_count_by_threshold_four_nodes(self):
@@ -1200,22 +1199,15 @@ class TestMaxTree:
         tree = MaxTree(matrix)
         result = tree.cluster_count_by_edge_count
         
-        # For each MST edge added, cluster count should decrease by 1
-        # Starting from n_nodes clusters at 0 edges
-        assert result[0, 1] == 4  # 4 nodes, 0 edges -> 4 clusters
+        # Rows are the `--lb <threshold>` cuts, keyed by the edge count each one keeps.
+        assert result[0].tolist() == [0.0, 4.0]   # nothing above the top weight
+        assert result[-1].tolist() == [6.0, 1.0]  # `--lb 0`: every edge, one cluster
         
-        # Find rows corresponding to MST edges
-        edges_by_thresh = tree.edges_by_threshold
-        mst_edge_counts = edges_by_thresh[:, 0]
-        
-        for i, mst_edge_count in enumerate(mst_edge_counts):
-            # Find this edge count in result
-            matching_rows = np.where(result[:, 0] == mst_edge_count)[0]
-            if len(matching_rows) > 0:
-                cluster_count = result[matching_rows[-1], 1]
-                # After i+1 MST edges, should have n_nodes - (i+1) clusters
-                expected_clusters = 4 - (i + 1)
-                assert cluster_count == expected_clusters
+        # Cluster count is always n_nodes minus the MST edges strictly above the threshold
+        for row_idx, threshold in enumerate(tree.thresholds):
+            mst_above = sum(1 for _, _, weight in tree.mst_edges if weight > threshold)
+            assert result[row_idx, 1] == tree.n_nodes - mst_above
+            assert result[row_idx, 0] == tree.edges_by_threshold[row_idx, 0]
     
     def test_single_node(self):
         """Test MaxTree with single node (edge case)"""
@@ -1315,3 +1307,47 @@ class TestMaxTree:
         
         # MST values should be in descending order (processed highest first)
         assert all(mst_values[i] >= mst_values[i+1] for i in range(len(mst_values)-1))
+
+def test_sparse_write_narrows_index_dtype(tmp_path):
+    """int64 index arrays are written as int32 when the matrix is small enough to address."""
+    import h5py
+    from domainator.data_matrix import _sparse_index_dtype
+
+    data = np.array([
+        [0.0, 5.0, 1.0],
+        [5.0, 0.0, 2.0],
+        [1.0, 2.0, 0.0],
+    ])
+    labels = ['a', 'b', 'c']
+
+    wide = scipy.sparse.csr_array(data)
+    wide.indices = wide.indices.astype(np.int64)
+    wide.indptr = wide.indptr.astype(np.int64)
+
+    out_file = tmp_path / "narrowed.sparse.hdf5"
+    SparseDataMatrix(wide, labels, labels, data_type="score").write(out_file, "sparse")
+
+    with h5py.File(out_file, "r") as handle:
+        assert handle["SPARSE_CSR_INDICES"].dtype == np.int32
+        assert handle["SPARSE_CSR_INDPTR"].dtype == np.int32
+
+    # values are untouched and the matrix round trips
+    read_back = DataMatrix.from_file(out_file)
+    np.testing.assert_array_equal(read_back.toarray(), data)
+    assert read_back.rows == labels
+
+    # the guardrail estimate must assume the same (narrowed) width as the write
+    estimate = SparseDataMatrix.estimate_sparse_hdf5_size(wide, labels, labels, data_type="score")
+    assert estimate >= out_file.stat().st_size
+
+    class _FakeMatrix:
+        def __init__(self, shape, nnz):
+            self.shape = shape
+            self.nnz = nnz
+
+    int32_max = np.iinfo(np.int32).max
+    assert _sparse_index_dtype(_FakeMatrix((10, 10), 50)) == np.int32
+    # too many non-zeros for int32 indptr, or too many rows/columns for int32 indices
+    assert _sparse_index_dtype(_FakeMatrix((10, 10), int32_max)) == np.int32
+    assert _sparse_index_dtype(_FakeMatrix((10, 10), int32_max + 1)) == np.int64
+    assert _sparse_index_dtype(_FakeMatrix((int32_max + 1, 10), 50)) == np.int64

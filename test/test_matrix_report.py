@@ -136,8 +136,9 @@ def test_mst_knn_edge_counts_by_threshold_monotonic():
 
     counts = mst_knn_edge_counts_by_threshold(matrix, tree, 3)
 
-    assert counts.shape == (len(tree.mst_edges), 2)
-    assert np.all(counts[:, 0] >= np.arange(1, len(tree.mst_edges) + 1))
+    # One row per distinct threshold, each describing the `--lb <threshold>` cut
+    assert counts.shape == (len(tree.thresholds), 2)
+    assert np.all(counts[:, 0] >= tree.mst_edges_above_threshold)
     assert np.all(counts[:, 1] >= counts[:, 0])
 
 
@@ -156,14 +157,15 @@ def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():
     sparse_tree = MaxTree(sparse_matrix)
 
     def brute_force_counts(array, tree, max_k):
-        counts = np.zeros((len(tree.mst_edges), max_k - 1), dtype=int)
-        mst_prefix_edges = set()
-        thresholds = tree.edges_by_threshold[:, 1]
+        counts = np.zeros((len(tree.thresholds), max_k - 1), dtype=int)
 
-        for threshold_idx, mst_edge in enumerate(tree.mst_edges):
-            source_idx, target_idx, _ = mst_edge
-            mst_prefix_edges.add((source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx))
-            threshold = thresholds[threshold_idx]
+        # `--lb threshold` semantics throughout: only scores strictly above the
+        # threshold survive, for both the MST prefix and the kNN candidates.
+        for threshold_idx, threshold in enumerate(tree.thresholds):
+            mst_prefix_edges = {
+                (source_idx, target_idx) if source_idx < target_idx else (target_idx, source_idx)
+                for source_idx, target_idx, weight in tree.mst_edges if weight > threshold
+            }
 
             edge_min_rank = {}
             for row_idx in range(array.shape[0]):
@@ -171,7 +173,7 @@ def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():
                 candidates = [
                     (target_idx, row_scores[target_idx])
                     for target_idx in range(array.shape[0])
-                    if target_idx != row_idx and row_scores[target_idx] >= threshold and row_scores[target_idx] > 0
+                    if target_idx != row_idx and row_scores[target_idx] > threshold
                 ]
                 candidates.sort(key=lambda item: (-item[1], item[0]))
 
@@ -260,7 +262,12 @@ def test_matrix_report_includes_merge_event_outputs():
         payload = _embedded_report_payload(html_content)
         assert len(payload['merge_event_series']) == 3
         assert payload['slider_stops'][0]['edge_index'] == -1
-        assert [stop['edge_index'] for stop in payload['slider_stops'][1:]] == [0, 1, 2]
+        # A stop labelled T shows the `--lb T` cut, so it excludes T's own tie group:
+        # edge_index is the last MST edge scoring strictly above T.
+        assert [stop['edge_index'] for stop in payload['slider_stops'][1:]] == [-1, 0, 1]
+        # threshold_index points at the matching row of edges_by_thresh / mst_knn_counts
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2]
+        assert [row[1] for row in payload['edges_by_thresh']] == [10.0, 7.0, 4.0, 0.0]
         assert 'Clusters and Edge Count vs Threshold' in html_content
         assert 'id="edges-by-threshold"' not in html_content
         assert '<div class="chart chart-wide">\n        <div id="cluster-discontinuity-by-threshold"></div>' in html_content
@@ -353,8 +360,9 @@ def test_matrix_report_max_merge_events_filters_html_payload():
         payload = _embedded_report_payload(html_content)
 
         assert len(payload['merge_event_series']) == 2
-        assert [row['edge_index'] for row in payload['merge_event_series']] == [3, 4]
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 3, 4]
+        assert [row['edge_index'] for row in payload['merge_event_series']] == [2, 3]
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 2, 3]
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 3, 4]
         assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 9500]
         assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
@@ -386,7 +394,8 @@ def test_matrix_report_max_merge_events_zero_includes_all_html_events():
         payload = _embedded_report_payload(html_content)
 
         assert len(payload['merge_event_series']) == 5
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4]
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, -1, 0, 1, 2, 3]
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4]
         assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 2750, 5000, 7250, 9500]
         assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
@@ -555,3 +564,69 @@ def test_matrix_report_progress_emits_live_updates(capsys):
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+def _tie_group_matrix():
+    """Symmetric matrix whose MST contains a deliberate tie group (three edges at 5)."""
+    data = np.array([
+        [0.0, 9.0, 5.0, 5.0, 0.0, 0.0],
+        [9.0, 0.0, 5.0, 0.0, 3.0, 0.0],
+        [5.0, 5.0, 0.0, 5.0, 0.0, 2.0],
+        [5.0, 0.0, 5.0, 0.0, 7.0, 0.0],
+        [0.0, 3.0, 0.0, 7.0, 0.0, 2.0],
+        [0.0, 0.0, 2.0, 0.0, 2.0, 0.0],
+    ])
+    labels = ['a', 'b', 'c', 'd', 'e', 'f']
+    return data, labels
+
+
+def test_threshold_tables_match_build_ssn_lb():
+    """Every threshold row must equal what `build_ssn --lb <threshold>` actually emits.
+
+    This is the invariant that keeps matrix_report's numbers honest: report rows are keyed
+    by distinct threshold and count only scores strictly above it, exactly as --lb does.
+    """
+    from domainator.build_ssn import iter_default_ssn_edges, cluster_labels_from_graph
+
+    data, labels = _tie_group_matrix()
+    for matrix in (DenseDataMatrix(data, labels, labels, data_type="score"),
+                   SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")):
+        tree = MaxTree(matrix)
+
+        # a tie group is present: two MST edges share a weight, so per-MST-edge rows
+        # would have disagreed with each other at that threshold
+        mst_weights = [weight for _, _, weight in tree.mst_edges]
+        assert len(set(mst_weights)) < len(mst_weights)
+        assert len(set(tree.thresholds.tolist())) == len(tree.thresholds)
+
+        for row_idx, threshold in enumerate(tree.thresholds):
+            expected_edges = len(list(iter_default_ssn_edges(matrix, threshold)))
+            expected_clusters = len(set(cluster_labels_from_graph(matrix, threshold)))
+
+            assert tree.edges_by_threshold[row_idx, 0] == expected_edges, f"edges at lb={threshold}"
+            assert tree.edges_by_threshold[row_idx, 1] == threshold
+            assert tree.cluster_count_by_threshold[row_idx, 0] == threshold
+            assert tree.cluster_count_by_threshold[row_idx, 1] == expected_clusters, f"clusters at lb={threshold}"
+            assert tree.cluster_count_by_edge_count[row_idx].tolist() == [expected_edges, expected_clusters]
+
+        # the `--lb 0` row closes the table out with the complete graph
+        assert tree.thresholds[-1] == 0
+        assert tree.edges_by_threshold[-1, 0] == np.count_nonzero(np.tril(data, k=-1))
+        assert tree.cluster_count_by_threshold[-1, 1] == tree.n_nodes - len(tree.mst_edges)
+
+
+def test_mst_knn_counts_match_build_ssn_lb_mst_knn():
+    """Projected MST_KNN counts must equal what `build_ssn --lb T --mst_knn k` emits."""
+    from domainator.data_matrix import mst_knn_edge_index_dict
+
+    data, labels = _tie_group_matrix()
+    matrix = DenseDataMatrix(data, labels, labels, data_type="score")
+    tree = MaxTree(matrix)
+    max_k = 3
+
+    counts = mst_knn_edge_counts_by_threshold(matrix, tree, max_k)
+    assert counts.shape == (len(tree.thresholds), max_k - 1)
+
+    for row_idx, threshold in enumerate(tree.thresholds):
+        for k in range(2, max_k + 1):
+            expected = len(mst_knn_edge_index_dict(matrix, k, lower_bound=threshold))
+            assert counts[row_idx, k - 2] == expected, f"lb={threshold} k={k}"

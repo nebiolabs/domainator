@@ -52,9 +52,10 @@ def _get_mst_knn_report_config(tree):
     }
 
 
-def _slider_stop_rows(merge_event_rows):
+def _slider_stop_rows(merge_event_rows, tree=None):
     stops = [{
         "edge_index": -1,
+        "threshold_index": -1,
         "threshold_label": "∞",
         "threshold_value": None,
         "slider_position": 0,
@@ -62,6 +63,9 @@ def _slider_stop_rows(merge_event_rows):
     for merge_row in merge_event_rows:
         stops.append({
             "edge_index": int(merge_row["edge_index"]),
+            # Row in tree.edges_by_threshold / the MST_KNN counts for this cut. Both are
+            # keyed by distinct threshold, not by MST edge, so the lookup is separate.
+            "threshold_index": -1 if tree is None else tree.threshold_row_index(merge_row["threshold_value"]),
             "threshold_label": merge_row["threshold_to"],
             "threshold_value": merge_row["threshold_value"],
             "slider_position": 0,
@@ -145,7 +149,7 @@ def _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_
         "mst_knn_counts": mst_knn_counts if mst_knn_counts is not None else [],
         "mst_knn_min_k": mst_knn_config['min_k'] if mst_knn_config is not None else 0,
         "merge_event_series": filtered_merge_event_rows,
-        "slider_stops": _slider_stop_rows(filtered_merge_event_rows),
+        "slider_stops": _slider_stop_rows(filtered_merge_event_rows, tree=tree),
     }
 
 
@@ -213,10 +217,7 @@ class SummaryJSONWriter():
             self.payload["edge_scores"] = None
 
     def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
-        cluster_by_thresh = tree.cluster_count_by_threshold
-        self.payload["connected_components"] = (
-            int(cluster_by_thresh[-1][1]) if len(cluster_by_thresh) > 0 else tree.n_nodes
-        )
+        self.payload["connected_components"] = tree.n_nodes - len(tree.mst_edges)
         self.payload["merge_impact_metric"] = merge_impact_metric
         if component_summary is not None and len(component_summary) > 1:
             merge_event_rows = filter_merge_event_rows(
@@ -299,14 +300,14 @@ Max: {max_val:.1f}
         
         edges_by_thresh = tree.edges_by_threshold
         if len(edges_by_thresh) > 0:
-            print(f"\nEdge counts at key thresholds:", file=self.out_handle)
+            print(f"\nEdges kept at key thresholds (equivalent to build_ssn --lb <threshold>):", file=self.out_handle)
             show_indices = [0, 1, 2, len(edges_by_thresh)//2, -3, -2, -1]
             seen = set()
             for i in show_indices:
                 if 0 <= i < len(edges_by_thresh) and i not in seen:
                     seen.add(i)
                     edges, thresh = edges_by_thresh[i]
-                    print(f"  Threshold: {thresh:.2f} → Cumulative edges: {int(edges)}", file=self.out_handle)
+                    print(f"  Threshold: {thresh:.2f} → Edges: {int(edges)}", file=self.out_handle)
 
         if mst_knn_counts is not None and len(mst_knn_counts) > 0:
             report_k = mst_knn_config["default_k"]
@@ -607,8 +608,8 @@ class SummaryHTMLWriter():
             mst_knn_current_k_expr = "parseInt(document.getElementById('mst-knn-k-slider').value)"
             mst_knn_update_block = """
         let mstKnnEdgeCount = 0;
-        if (edgeIndex >= 0 && edgeIndex < MST_KNN_COUNTS.length) {
-            mstKnnEdgeCount = MST_KNN_COUNTS[edgeIndex][currentK - MST_KNN_MIN_K];
+        if (thresholdIndex >= 0 && thresholdIndex < MST_KNN_COUNTS.length) {
+            mstKnnEdgeCount = MST_KNN_COUNTS[thresholdIndex][currentK - MST_KNN_MIN_K];
         }
         document.getElementById('mst-knn-edges').textContent = formatNumber(mstKnnEdgeCount);
         document.getElementById('mst-knn-k-number').textContent = currentK.toString();"""
@@ -633,7 +634,7 @@ class SummaryHTMLWriter():
     <div class="chart-with-controls">
         <div class="slider-container">
             <label for="threshold-slider">
-                Threshold: <span id="threshold-number">∞</span>
+                Threshold (build_ssn --lb): <span id="threshold-number">∞</span>
             </label>
             <div class="threshold-slider-track">
                 <input type="range" id="threshold-slider" min="0" max="{SLIDER_POSITION_SCALE if len(slider_stops) > 0 else 0}" value="0" step="1">
@@ -654,7 +655,7 @@ class SummaryHTMLWriter():
                 <span id="largest-cluster">1</span>
             </div>
             <div class="stat-box">
-                <strong>Number of Edges</strong>
+                <strong>Edges kept</strong>
                 <span id="num-edges">0</span>
             </div>
             <div class="stat-box">
@@ -882,8 +883,8 @@ class SummaryHTMLWriter():
         
         // Clusters and edges vs threshold
         Plotly.newPlot('cluster-by-threshold', [{{
-            x: CLUSTER_BY_THRESH.slice(1).map(d => d[0]),
-            y: CLUSTER_BY_THRESH.slice(1).map(d => d[1]),
+            x: CLUSTER_BY_THRESH.map(d => d[0]),
+            y: CLUSTER_BY_THRESH.map(d => d[1]),
             mode: 'lines',
             name: 'Clusters',
             line: {{color: '#1f77b4', width: 2}},
@@ -902,7 +903,7 @@ class SummaryHTMLWriter():
             xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
             yaxis: {{title: 'Number of Clusters'}},
             yaxis2: {{
-                title: 'Cumulative Edges',
+                title: 'Edges kept (--lb threshold)',
                 overlaying: 'y',
                 side: 'right'
             }},
@@ -979,10 +980,12 @@ class SummaryHTMLWriter():
         document.getElementById('num-singletons').textContent = formatNumber(sizes.filter(size => size === 1).length);
         document.getElementById('largest-cluster').textContent = formatNumber(sizes[0] || 0);
         
-        // Get the actual edge count from EDGES_BY_THRESH
+        // Edge count for this cut. EDGES_BY_THRESH has one row per distinct threshold
+        // (not per MST edge), and each row is what `build_ssn --lb <threshold>` keeps.
+        const thresholdIndex = sliderStop ? sliderStop.threshold_index : -1;
         let edgeCount = 0;
-        if (edgeIndex >= 0 && edgeIndex < EDGES_BY_THRESH.length) {{
-            edgeCount = EDGES_BY_THRESH[edgeIndex][0];
+        if (thresholdIndex >= 0 && thresholdIndex < EDGES_BY_THRESH.length) {{
+            edgeCount = EDGES_BY_THRESH[thresholdIndex][0];
         }}
         document.getElementById('num-edges').textContent = formatNumber(edgeCount);
 {mst_knn_update_block}
@@ -1092,7 +1095,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
             stage_start,
             max_k=mst_knn_config["max_k"],
             kept_directed_edges=len(neighbor_rankings.target),
-            estimated_counts_bytes=_estimate_mst_knn_counts_bytes(len(tree.mst_edges), mst_knn_config["max_k"]),
+            estimated_counts_bytes=_estimate_mst_knn_counts_bytes(len(tree.thresholds), mst_knn_config["max_k"]),
         )
 
     if include_mst_knn:
@@ -1104,7 +1107,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
             stage_timings,
             "build_mst_knn_counts",
             stage_start,
-            thresholds=len(tree.mst_edges),
+            thresholds=len(tree.thresholds),
             max_k=mst_knn_config["max_k"],
             output_shape=mst_knn_counts.shape,
             output_bytes=mst_knn_counts.nbytes,

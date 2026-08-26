@@ -57,6 +57,27 @@ _HDF5_DATASET_OVERHEAD_ESTIMATE = 4 * 1024
 _HDF5_ATTRIBUTE_OVERHEAD_ESTIMATE = 2 * 1024
 
 
+def _sparse_index_dtype(matrix: scipy.sparse.csr_array) -> np.dtype:
+    """Return the narrowest dtype that can index this CSR matrix.
+
+    scipy keeps whatever index width an input carried, so a matrix derived from an
+    int64-indexed file (e.g. a large all-vs-all matrix passed through
+    ``transform_matrix --lb``) stays int64 even when int32 would address it. Narrowing
+    saves 4 bytes per non-zero on write. ``indices`` holds column indices (< n_cols) and
+    ``indptr`` counts up to nnz, so int32 is safe whenever both fit.
+    """
+    max_index = max(matrix.shape[0], matrix.shape[1], matrix.nnz)
+    if max_index <= np.iinfo(np.int32).max:
+        return np.dtype(np.int32)
+    return np.dtype(np.int64)
+
+
+def _narrowed_sparse_index_arrays(matrix: scipy.sparse.csr_array) -> Tuple[np.ndarray, np.ndarray]:
+    """Return ``(indices, indptr)`` cast to :func:`_sparse_index_dtype` (no copy if already narrow)."""
+    dtype = _sparse_index_dtype(matrix)
+    return matrix.indices.astype(dtype, copy=False), matrix.indptr.astype(dtype, copy=False)
+
+
 def _triangle_col_bounds(row_idx: int, side: str, include_diagonal: bool, n_cols: int) -> Tuple[int, int]:
     """Return the [start, end) column range for the triangular part of one row."""
     if side == "lower":
@@ -443,8 +464,10 @@ class DataMatrix(ABC):
 
         estimated_size = _HDF5_FILE_OVERHEAD_ESTIMATE + _HDF5_ATTRIBUTE_OVERHEAD_ESTIMATE
         estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + int(matrix.data.nbytes)
-        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + int(matrix.indices.nbytes)
-        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + int(matrix.indptr.nbytes)
+        # Match write_sparse, which narrows the index arrays before writing them.
+        index_itemsize = _sparse_index_dtype(matrix).itemsize
+        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + len(matrix.indices) * index_itemsize
+        estimated_size += _HDF5_DATASET_OVERHEAD_ESTIMATE + len(matrix.indptr) * index_itemsize
         estimated_size += _estimate_label_dataset_size(row_names)
         estimated_size += _estimate_optional_array_size(row_lengths)
 
@@ -552,9 +575,13 @@ class DataMatrix(ABC):
             f.attrs[cls._MATRIX_FILE_VERSION_ATTR] = cls._MATRIX_FILE_VERSION
             f.attrs[cls._ARRAY_TYPE_ATTR] = cls._SPARSE_CSR
 
+            # Narrow the index arrays if they are wider than this matrix needs; the read
+            # path hands them straight to csr_array, which accepts either width.
+            indices, indptr = _narrowed_sparse_index_arrays(matrix)
+
             f.create_dataset(cls._SPARSE_VALUES_DATASET, data=matrix.data)
-            f.create_dataset(cls._SPARSE_CSR_INDICES_DATASET, data=matrix.indices)
-            f.create_dataset(cls._SPARSE_CSR_INDPTR_DATASET, data=matrix.indptr)
+            f.create_dataset(cls._SPARSE_CSR_INDICES_DATASET, data=indices)
+            f.create_dataset(cls._SPARSE_CSR_INDPTR_DATASET, data=indptr)
 
             f.create_dataset(cls._ROW_LABELS_DATASET, data=row_names, dtype=UTF8_h5py_encoding)
             

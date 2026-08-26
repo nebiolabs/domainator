@@ -36,7 +36,7 @@ from domainator.utils import list_and_file_to_dict_keys
 
 
 SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
-SSN_VIEWER_BUNDLE_VERSION = 1
+SSN_VIEWER_BUNDLE_VERSION = 2  # v2: thresholds mean `--lb threshold` (scores strictly above)
 
 
 def _infer_metadata_type(series: pd.Series) -> str:
@@ -103,15 +103,17 @@ def _json_ready(value):
     return value
 
 
-def _slider_stops(merge_event_rows):
+def _slider_stops(merge_event_rows, tree=None):
     stops = [{
         "edge_index": -1,
+        "threshold_index": -1,
         "threshold_label": "∞",
         "threshold_value": None,
     }]
     for merge_row in merge_event_rows:
         stops.append({
             "edge_index": int(merge_row["edge_index"]),
+            "threshold_index": -1 if tree is None else tree.threshold_row_index(merge_row["threshold_value"]),
             "threshold_label": merge_row["threshold_to"],
             "threshold_value": float(merge_row["threshold_value"]),
         })
@@ -171,7 +173,7 @@ def build_ssn_viewer_bundle(
             "edges_by_threshold": tree.edges_by_threshold,
             "merge_impact_metric": merge_impact_metric,
             "merge_event_series": merge_event_series,
-            "slider_stops": _slider_stops(merge_event_series),
+            "slider_stops": _slider_stops(merge_event_series, tree=tree),
             "hierarchy": hierarchy,
         },
         "metadata": _metadata_payload(node_data),

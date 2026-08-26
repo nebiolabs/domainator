@@ -548,16 +548,22 @@ class StreamingMstKnnAccumulator:
 
 
 def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
-                                     include_equal: bool = True,
+                                     include_equal: bool = False,
                                      neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:
-    """Return exact MST-kNN edge counts for each MST threshold and k in [2, max_k]."""
+    """Return exact MST-kNN edge counts for each threshold of ``tree`` and k in [2, max_k].
+
+    Row ``i`` corresponds to ``tree.thresholds[i]`` and counts the edges a
+    ``--lb <threshold> --mst_knn <k>`` run would emit: by default only scores strictly
+    greater than the threshold are kept, matching ``--lb``. Pass ``include_equal=True``
+    to count ties at the threshold as well.
+    """
     if max_k < 2:
         raise ValueError("max_k must be >= 2")
 
     if neighbor_rankings is None:
         neighbor_rankings = build_symmetric_neighbor_rankings(matrix, max_k=max_k)
 
-    thresholds = tree.edges_by_threshold[:, 1]
+    thresholds = tree.thresholds
     counts = np.zeros((len(thresholds), max_k - 1), dtype=int)
     if len(thresholds) == 0:
         return counts
@@ -597,9 +603,10 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
     def edge_key(source_idx: int, target_idx: int) -> int:
         return int(source_idx) * tree.n_nodes + int(target_idx)
 
-    for threshold_idx, mst_edge in enumerate(tree.mst_edges):
-        threshold = thresholds[threshold_idx]
+    mst_edge_list = tree.mst_edges  # descending weight, same order as thresholds
+    mst_idx = 0
 
+    for threshold_idx, threshold in enumerate(thresholds):
         while activation_idx < total_events and _score_passes_lower_bound(activations['score'][activation_idx], threshold, include_equal=include_equal):
             rank = int(activations['rank'][activation_idx])
             edge = edge_key(activations['source'][activation_idx], activations['target'][activation_idx])
@@ -617,12 +624,17 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
 
             activation_idx += 1
 
-        source_idx, target_idx, _ = mst_edge
-        edge = edge_key(source_idx, target_idx) if source_idx < target_idx else edge_key(target_idx, source_idx)
-        mst_prefix_edges.add(edge)
-        current_rank = active_edge_min_rank.get(edge)
-        if current_rank is not None:
-            non_mst_rank_counts[current_rank] -= 1
+        # Absorb every MST edge this cut keeps. Ranks are registered by the activation
+        # loop above, so an MST edge is always activated before it is absorbed.
+        while mst_idx < len(mst_edge_list) and _score_passes_lower_bound(mst_edge_list[mst_idx][2], threshold, include_equal=include_equal):
+            source_idx, target_idx, _ = mst_edge_list[mst_idx]
+            edge = edge_key(source_idx, target_idx) if source_idx < target_idx else edge_key(target_idx, source_idx)
+            if edge not in mst_prefix_edges:
+                mst_prefix_edges.add(edge)
+                current_rank = active_edge_min_rank.get(edge)
+                if current_rank is not None:
+                    non_mst_rank_counts[current_rank] -= 1
+            mst_idx += 1
 
         cumulative_non_mst = np.cumsum(non_mst_rank_counts)
         counts[threshold_idx, :] = len(mst_prefix_edges) + cumulative_non_mst[2:]
@@ -656,11 +668,17 @@ class MaxTree():
         edges: Array of shape (n_edges, 4) containing [node_i, node_j, weight, gap_count]
                where gap_count is the number of edges between consecutive MST edges
         mst: Array of indices indicating which edges are in the MST
-        edges_by_threshold: Array of (edge_count, threshold) pairs for MST edges
-        cluster_count_by_threshold: Array of (threshold, cluster_count) showing how
-                                   clusters form at different thresholds
-        cluster_count_by_edge_count: Array of (edge_count, cluster_count) including
-                                    non-MST edges between MST edges
+        n_edges: Number of edges scanned (the whole graph, not just the MST)
+        thresholds: Descending distinct MST weights; the threshold table row keys
+        edges_above_threshold: Edges scoring strictly above each entry of thresholds
+        mst_edges_above_threshold: MST edges scoring strictly above each entry of thresholds
+        edges_by_threshold: Array of (edge_count, threshold) pairs, one row per distinct
+                            threshold. edge_count is the number of edges a
+                            ``--lb threshold`` cut keeps (scores strictly greater).
+        cluster_count_by_threshold: Array of (threshold, cluster_count) pairs for the same
+                                   ``--lb threshold`` cuts
+        cluster_count_by_edge_count: Array of (edge_count, cluster_count) pairs for the
+                                    same cuts, keyed by edge count
 
     Properties:
         mst_edges: List of (node_i, node_j, weight) tuples for MST edges only
@@ -742,15 +760,31 @@ class MaxTree():
 
         mst_edges = []
         edge_count = 0
+        # Per MST edge, how many edges (and MST edges) score strictly higher than it.
+        # Because the scan is descending, that is simply the size of the prefix that
+        # precedes the edge's tie group, which is what a "--lb <weight>" cut keeps.
+        edges_above_by_mst_edge = []
+        mst_edges_above_by_mst_edge = []
+        group_score = None
+        group_edges_above = 0
+        group_mst_above = 0
         for edge_i in range(len(sorted_edges)):
             node_1 = int(sorted_edges.source[edge_i])
             node_2 = int(sorted_edges.target[edge_i])
             score = float(sorted_edges.score[edge_i])
             edge_count += 1
 
+            if score != group_score:
+                # First edge of a new tie group: everything already scanned scores higher.
+                group_score = score
+                group_edges_above = edge_i
+                group_mst_above = len(mst_edges)
+
             # Only add edge if it connects different components
             if union(node_1, node_2):
                 mst_edges.append((node_1, node_2, score, edge_count))
+                edges_above_by_mst_edge.append(group_edges_above)
+                mst_edges_above_by_mst_edge.append(group_mst_above)
                 edge_count = 0
 
         if len(mst_edges) > 0:
@@ -759,9 +793,12 @@ class MaxTree():
             self.edges = np.zeros((0, 4), dtype=float)
         self.mst = np.arange(len(self.edges), dtype=int)
 
-        self.edges_by_threshold = self._edges_by_threshold()
-        self.cluster_count_by_threshold = self._cluster_count_by_threshold()
-        self.cluster_count_by_edge_count = self._cluster_count_by_edge_count()
+        self.n_edges = len(sorted_edges)
+        self._min_score = float(sorted_edges.score[-1]) if len(sorted_edges) > 0 else 0.0
+        self._edges_above_by_mst_edge = np.asarray(edges_above_by_mst_edge, dtype=np.int64)
+        self._mst_edges_above_by_mst_edge = np.asarray(mst_edges_above_by_mst_edge, dtype=np.int64)
+
+        self._build_threshold_tables()
 
     @property
     def mst_edges(self) -> List[Tuple[int,int,float]]: # (node_i, node_j, edge_value)
@@ -780,65 +817,49 @@ class MaxTree():
             yield int(edge[0]), int(edge[1]), float(edge[2])
 
 
-    def _edges_by_threshold(self):
+    def _build_threshold_tables(self):
+        """Build the per-threshold tables, one row per distinct threshold.
+
+        Every row describes exactly the graph that ``--lb <threshold>`` keeps: the edges
+        scoring **strictly greater** than the threshold, and the components they form.
+        Keying rows by distinct threshold rather than by MST edge means a threshold has a
+        single answer even when many MST edges share a weight, and makes the numbers
+        reproducible with build_ssn (see docs/file_formats.md).
+
+        A cut at the lowest MST weight still drops that weight's own tie group, so when
+        every score is positive an extra ``threshold = 0`` row is appended for the
+        complete graph -- the ``--lb 0`` default of build_ssn.
         """
-        Returns array of (edge_count, threshold) pairs.
-        Each row represents the cumulative edge count and threshold at each MST edge.
-        """
-        edges_by_threshold = np.zeros((len(self.mst), 2)) # edge_count, threshold
-        edges_count = 0
-        for i in range(len(self.mst)):
-            mst_edge_idx = self.mst[i]
-            edges_count += int(self.edges[mst_edge_idx, 3])
-            threshold = self.edges[mst_edge_idx, 2]
-            edges_by_threshold[i, 0] = edges_count
-            edges_by_threshold[i, 1] = threshold
-        return edges_by_threshold
+        if len(self.edges) == 0:
+            thresholds = np.zeros(0, dtype=float)
+            edges_above = np.zeros(0, dtype=np.int64)
+            mst_above = np.zeros(0, dtype=np.int64)
+        else:
+            weights = self.edges[self.mst, 2].astype(float)
+            group_start = np.ones(len(weights), dtype=bool)
+            group_start[1:] = weights[1:] != weights[:-1]
+            thresholds = weights[group_start]
+            edges_above = self._edges_above_by_mst_edge[group_start]
+            mst_above = self._mst_edges_above_by_mst_edge[group_start]
 
-    def _cluster_count_by_threshold(self):
-        """
-        Returns array of (threshold, cluster_count) pairs.
-        For each MST edge threshold, calculates how many clusters would result
-        if we only include edges with values >= that threshold.
-        """
-        cluster_counts = np.zeros((len(self.mst) + 1, 2))  # threshold, cluster_count
+            if self._min_score > 0:
+                thresholds = np.append(thresholds, 0.0)
+                edges_above = np.append(edges_above, self.n_edges)
+                mst_above = np.append(mst_above, len(self.edges))
 
-        # Start with all nodes as separate clusters
-        cluster_counts[0, 0] = float('inf')  # threshold = infinity
-        cluster_counts[0, 1] = self.n_nodes  # all nodes separate
+        self.thresholds = thresholds
+        self.edges_above_threshold = edges_above
+        self.mst_edges_above_threshold = mst_above
+        self._threshold_row_index = {float(value): idx for idx, value in enumerate(thresholds)}
 
-        # Process MST edges from highest to lowest threshold
-        for i in range(len(self.mst)):
-            mst_edge_idx = self.mst[i]
-            threshold = self.edges[mst_edge_idx, 2]
-            # Each MST edge reduces cluster count by 1
-            cluster_counts[i + 1, 0] = threshold
-            cluster_counts[i + 1, 1] = self.n_nodes - (i + 1)
+        cluster_counts = self.n_nodes - mst_above
+        self.edges_by_threshold = np.column_stack([edges_above, thresholds]).astype(float)
+        self.cluster_count_by_threshold = np.column_stack([thresholds, cluster_counts]).astype(float)
+        self.cluster_count_by_edge_count = np.column_stack([edges_above, cluster_counts]).astype(float)
 
-        return cluster_counts
-
-    def _cluster_count_by_edge_count(self):
-        """
-        Returns array of (edge_count, cluster_count) pairs.
-        For each cumulative edge count, calculates the number of clusters.
-        This includes non-MST edges between MST edges.
-        """
-        edges_by_thresh = self.edges_by_threshold
-
-        if len(edges_by_thresh) == 0:
-            return np.array([[0, self.n_nodes]])
-
-        # Calculate cluster counts
-        result = []
-        result.append([0, self.n_nodes])  # Start with 0 edges, all nodes separate
-
-        for i in range(len(edges_by_thresh)):
-            edge_count = int(edges_by_thresh[i, 0])
-            # Each MST edge reduces cluster count by 1
-            cluster_count = self.n_nodes - (i + 1)
-            result.append([edge_count, cluster_count])
-
-        return np.array(result)
+    def threshold_row_index(self, threshold) -> int:
+        """Return the row index of ``threshold`` in the threshold tables, or -1 if absent."""
+        return self._threshold_row_index.get(float(threshold), -1)
 
     def export_for_interactive_viz(self):
         """

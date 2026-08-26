@@ -63,7 +63,10 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         assert bundle["graph"]["nodes"] == row_names
         assert len(bundle["graph"]["mst_edges"]) == 3
         assert len(bundle["graph"]["merge_event_series"]) == 3
-        assert [stop["edge_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, 0, 1, 2]
+        # A stop labelled T shows the `--lb T` cut, so edge_index is the last MST edge
+        # scoring strictly above T (T's own tie group is excluded).
+        assert [stop["edge_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, -1, 0, 1]
+        assert [stop["threshold_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, 0, 1, 2]
         assert bundle["graph"]["hierarchy"]["roots"] == [6]
         assert bundle["graph"]["hierarchy"]["leaf_order"] == [0, 1, 2, 3]
         assert bundle["graph"]["hierarchy"]["nodes"][6]["leaf_count"] == 4
@@ -100,11 +103,11 @@ def test_build_ssn_viewer_cluster_counts_match_maxtree():
 
         bundle = _read_bundle(bundle_file)
 
-        expected_counts = [[None, int(tree.n_nodes)]]
-        expected_counts.extend([
+        # One row per distinct threshold now; no separate "infinite threshold" row.
+        expected_counts = [
             [float(row[0]), int(row[1])]
-            for row in tree.cluster_count_by_threshold[1:]
-        ])
+            for row in tree.cluster_count_by_threshold
+        ]
 
         assert bundle["graph"]["cluster_count_by_threshold"] == expected_counts
         assert bundle["graph"]["edges_by_threshold"] == [

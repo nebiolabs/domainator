@@ -1745,7 +1745,9 @@ def ssn_viewer_html(
                 active.push(componentId);
                 continue;
             }}
-            if (component.threshold < thresholdValue) {{
+            // Strictly-above, matching `build_ssn --lb thresholdValue`: a component that
+            // merged exactly at the threshold is split back apart here.
+            if (component.threshold <= thresholdValue) {{
                 stack.push(component.right);
                 stack.push(component.left);
                 continue;

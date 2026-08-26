@@ -126,7 +126,15 @@ SPARSE_CSR_INDPTR: list of int # row pointer offsets for CSR sparse data
 (optional) COL_LENGTHS: list of int # not used if SYMMETRIC LABELS is True
 ```
 
-Sparse matrices are stored as canonical CSR arrays: explicit zero values are removed and indices are sorted when written or loaded. Dense files preserve every matrix cell, including zero values, and are usually preferable when most entries are non-zero. Sparse files are usually preferable for sequence similarity graphs or other matrices where most entries are zero.
+Sparse matrices are stored as canonical CSR arrays: explicit zero values are removed and indices are sorted when written or loaded. `SPARSE_CSR_INDICES` and `SPARSE_CSR_INDPTR` are written at the narrowest width that can address the matrix (int32 unless the number of rows, columns, or non-zeros exceeds the int32 maximum), so files written by different tools may use different index widths; readers must accept either. Dense files preserve every matrix cell, including zero values, and are usually preferable when most entries are non-zero. Sparse files are usually preferable for sequence similarity graphs or other matrices where most entries are zero.
+
+Threshold tables derived from a matrix (`matrix_report.py`, `build_ssn_viewer.py`) use
+one row per distinct maximum-spanning-tree edge weight, and every row describes the graph
+that `build_ssn --lb <threshold>` keeps: edges scoring **strictly above** the threshold.
+An extra `threshold = 0` row (the `--lb 0` default) closes the table out with the complete
+graph when every score is positive. Ties at a threshold are excluded from that
+threshold's own row, so counts are a function of the threshold alone rather than of the
+order in which equal-weight edges happened to be sorted.
 
 `MATRIX_FILE_VERSION` is the compatibility marker for this schema. It should be incremented when a change would prevent older Domainator versions from reading a file correctly or would change the meaning of an existing dataset or attribute.
 

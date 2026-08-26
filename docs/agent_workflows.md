@@ -78,6 +78,13 @@ is present only with `--taxonomy`.
 `edge_scores` is `null` for a matrix with no non-zero edges. `split_events` is
 bounded by `--max_merge_events`; a `threshold_value` of `null` denotes ∞.
 
+Every threshold matrix_report reports means the same thing as `build_ssn --lb`: the
+graph of edges scoring **strictly above** the threshold. So a reported threshold `T`
+and its edge/cluster counts are exactly what `build_ssn.py -i <matrix> --lb T` emits,
+and `split_events[i].edge_index` is the last MST edge scoring above that threshold.
+Thresholds equal to a score are therefore exclusive of that score's own ties -- the
+merge listed at threshold `T` becomes visible at the next lower threshold.
+
 ### `ssn_navigator` (one shape per `--mode`)
 
 ```jsonc
