@@ -9,7 +9,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.097440548" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n1" label="n1">
     <att type="string" name="Description" value="FeSOD_A0A067LT26|unreviewed|Superoxide" />
@@ -20,7 +20,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.828329655" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#FF7F0E" />
   </node>
   <node id="n2" label="n2">
     <att type="string" name="Description" value="FeSOD_A0A2E1RF15|unreviewed|Superoxide" />
@@ -31,7 +31,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.340114417" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n3" label="n3">
     <att type="string" name="Description" value="FeSOD_A0A538G8K1|unreviewed|Superoxide" />
@@ -42,7 +42,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.021717089" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n4" label="n4">
     <att type="string" name="Description" value="FeSOD_A0A6L8W9C4|unreviewed|Superoxide" />
@@ -53,7 +53,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.05147778" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n5" label="n5">
     <att type="string" name="Description" value="FeSOD_A0A2H0YVA1|unreviewed|Superoxide" />
@@ -64,7 +64,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.08286451" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n6" label="n6">
     <att type="string" name="Description" value="FeSOD_R7J7P3|unreviewed|Superoxide" />
@@ -75,7 +75,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.029610013" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n7" label="n7">
     <att type="string" name="Description" value="FeSOD_B8LFE6|unreviewed|Superoxide" />
@@ -86,7 +86,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.433221718" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#FF7F0E" />
   </node>
   <node id="n8" label="n8">
     <att type="string" name="Description" value="FeSOD_A0A1C0AS03|unreviewed|Superoxide" />
@@ -97,7 +97,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.59654186" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#FF7F0E" />
   </node>
   <node id="n9" label="n9">
     <att type="string" name="Description" value="FeSOD_A0A2M8Q2V9|unreviewed|Superoxide" />
@@ -108,7 +108,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.146398972" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n10" label="n10">
     <att type="string" name="Description" value="FeSOD_A0A2E1VW30|unreviewed|Superoxide" />
@@ -119,7 +119,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.450472955" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n11" label="n11">
     <att type="string" name="Description" value="FeSOD_A0A1V4UH29|unreviewed|Superoxide" />
@@ -130,7 +130,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.549335033" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#FF7F0E" />
   </node>
   <node id="n12" label="n12">
     <att type="string" name="Description" value="FeSOD_A0A7V9SPC9|unreviewed|Superoxide" />
@@ -141,7 +141,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.129515554" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#FF7F0E" />
   </node>
   <node id="n13" label="n13">
     <att type="string" name="Description" value="FeSOD_R7F5H2|unreviewed|Superoxide" />
@@ -152,7 +152,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.441960291" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#ff7f0e" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#2CA02C" />
   </node>
   <node id="n14" label="n14">
     <att type="string" name="Description" value="FeSOD_A0A2N5YS14|unreviewed|Superoxide" />
@@ -163,7 +163,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="0" />
     <att type="real" name="expression level" value="0.91315881" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n15" label="n15">
     <att type="string" name="Description" value="FeSOD_A0A0F6MY72|unreviewed|Superoxide" />
@@ -174,7 +174,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.341330749" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n16" label="n16">
     <att type="string" name="Description" value="FeSOD_A0A060HP82|unreviewed|Superoxide" />
@@ -185,7 +185,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.602844258" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n17" label="n17">
     <att type="string" name="Description" value="FeSOD_A0A4P7WS39|unreviewed|Superoxide" />
@@ -196,7 +196,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.468473632" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <node id="n18" label="n18">
     <att type="string" name="Description" value="FeSOD_A0A076JJX0|unreviewed|Superoxide" />
@@ -207,7 +207,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.342002723" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#aec7e8" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#FF7F0E" />
   </node>
   <node id="n19" label="n19">
     <att type="string" name="Description" value="FeSOD_G8R729|unreviewed|Superoxide" />
@@ -218,7 +218,7 @@
     <att type="string" name="Substrate" value="Superoxide" />
     <att type="integer" name="active" value="1" />
     <att type="real" name="expression level" value="0.265199983" />
-    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1f77b4" />
+    <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" fill="#1F77B4" />
   </node>
   <edge id="e0" label="e0" source="n0" target="n3">
     <att type="real" name="SSN_SCORE" value="199.0" />

@@ -1,4 +1,5 @@
 from domainator import build_ssn
+from domainator.utils import OTHER_COLOR
 from domainator.data_matrix import DenseDataMatrix, SparseDataMatrix, MaxTree, mst_knn_edge_index_dict
 import pytest
 import tempfile
@@ -69,6 +70,30 @@ def test_build_ssn_3(shared_datadir):
         assert set(color_table_dict.keys()) == {"1","2","3"}
         assert all([re.match(r"#[0-9a-fA-F]{6}",x) for x in color_table_dict.values()])
         assert len(set(color_table_dict.values())) == 3
+
+def test_build_ssn_max_color_groups(shared_datadir):
+    """Only the largest clusters get their own color; the tail shares OTHER_COLOR."""
+    input_file = "FeSOD_dist.tsv"
+    with tempfile.TemporaryDirectory() as output_dir:
+        metadata = str(shared_datadir / "FeSOD_metadata.tsv")
+        out_color_table = output_dir + "/color_table.tsv"
+        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml", output_dir + "/out.xgmml",
+                        "--lb", "175", "--color_by", "SSN_cluster", "--cluster_tsv", output_dir + "/clusters.tsv",
+                        "--metadata", metadata, "--color_table_out", out_color_table,
+                        "--max_color_groups", "2"])
+
+        color_table = {}
+        with open(out_color_table, "r") as f:
+            for line in f:
+                cluster, color = line.strip().split("\t")
+                color_table[cluster] = color
+
+        # all three clusters are still listed, so the table still round-trips
+        assert list(color_table.keys()) == ["1", "2", "3"]
+        assert len({color_table["1"], color_table["2"]}) == 2
+        assert OTHER_COLOR not in {color_table["1"], color_table["2"]}
+        assert color_table["3"] == OTHER_COLOR
+
 
 def test_build_ssn_4(shared_datadir):
     input_file = "FeSOD_dist.tsv"

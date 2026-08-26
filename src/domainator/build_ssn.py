@@ -19,7 +19,7 @@ from pathlib import Path
 from domainator import __version__, RawAndDefaultsFormatter
 from typing import List, Union, Dict
 import numpy as np
-from domainator.utils import get_palette, list_and_file_to_dict_keys
+from domainator.utils import get_palette, sort_palette_values, list_and_file_to_dict_keys
 from domainator.color_genbank import read_color_table
 
 SCORE_COLUMN="SSN_SCORE"
@@ -154,7 +154,7 @@ def iter_mst_knn_ssn_edges(edge_dict, rows):
 
 
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None, max_output_bytes=None):
+              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None, max_output_bytes=None, max_color_groups:int=None):
     """build a sequence similarity network from a matrix
 
     Args:
@@ -170,6 +170,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         mst (bool, optional): If True, then write 
         mst_knn (int, optional): If set, emit the union of the MST and an OR-symmetric kNN graph. 0 emits just the MST.
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
+        max_color_groups (int, optional): if set, only this many of the largest color_by groups get distinct colors, the rest share a neutral gray. Defaults to None, meaning every group gets a color.
 
     Raises:
         ValueError: if the input does not have symmetric row and column labels
@@ -232,7 +233,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
 
     if color_by is not None:
         if color_table is None:
-            color_table = get_palette(node_data[color_by].unique())
+            color_table = get_palette(node_data[color_by], max_groups=max_color_groups)
 
     if xgmml is not None:
         temp_xgmml_path = make_temporary_output_path(xgmml)
@@ -264,11 +265,11 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         node_data[CLUSTER_COLUMN].to_csv(cluster_tsv, index_label=index_label, header=header, sep="\t")
     
     if color_table_out is not None:
+        if color_table is None:
+            raise ValueError("--color_table_out requires either --color_by or --color_table, otherwise there are no colors to write.")
         with open(color_table_out, "w") as out:
-            color_table_items = list(color_table.items())
-            color_table_items.sort(key=lambda x: (x[0] is None, x[0])) # sort lexically
-            for domain, color in color_table_items:
-                out.write(f"{domain}\t{color}\n")
+            for value in sort_palette_values(color_table.keys()):
+                out.write(f"{value}\t{color_table[value]}\n")
 
 
 def main(argv):
@@ -295,6 +296,7 @@ def main(argv):
     parser.add_argument('--color_by', type=str, required=False, default=None,
                         help="Color the points in the output image based on this column of the metadata table.")
     parser.add_argument("--color_table", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000")
+    parser.add_argument("--max_color_groups", required=False, default=None, type=int, help="Give distinct colors only to this many of the largest --color_by groups, all remaining groups share a neutral gray. By default every group gets a color, cycling over a palette of 64 distinguishable colors.")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
 
     parser.add_argument('--xgmml', type=str, required=True, default=None, #TODO: what other kinds of output might be useful?
@@ -354,7 +356,8 @@ def main(argv):
         load_lower_bound = params.lb if (params.mst_knn is None and not params.mst) else None
         build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.lb, params.metadata, params.color_by, color_table,
                   params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
-                  params.mst, params.mst_knn, subset_labels, max_output_bytes=max_output_bytes)
+                  params.mst, params.mst_knn, subset_labels, max_output_bytes=max_output_bytes,
+                  max_color_groups=params.max_color_groups)
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 

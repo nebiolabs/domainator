@@ -111,6 +111,16 @@
   ],
   "advanced_parameters": [
     {
+      "name": "Max Color Groups",
+      "parameter": "max_color_groups",
+      "help": "Give distinct colors only to this many of the largest Color By groups, all remaining groups share a neutral gray. By default every group gets a color, cycling over a palette of 64 distinguishable colors.",
+      "type": "integer",
+      "min": 1,
+      "flags": [
+        "--max_color_groups"
+      ]
+    },
+    {
       "name": "Color Table Out",
       "parameter": "color_table_out",
       "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",

@@ -9,6 +9,7 @@ from pandas.api.types import is_integer_dtype, is_float_dtype
 import xml.etree.ElementTree as ET
 from typing import Dict, Iterable, Iterator, Optional, Sequence, Tuple
 
+from domainator.utils import OTHER_COLOR
 from domainator.output_guardrails import build_output_limit_message, OutputSizeLimitExceeded
 
 MAX_DOUBLE = np.finfo(np.float64).max
@@ -163,7 +164,7 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, edge_rows=None, edge_column_
             elif str(row[col_to_idx[color_by]]) in palette:
                 color = palette[str(row[col_to_idx[color_by]])]
             else:
-                color = palette[None]
+                color = palette.get(None, OTHER_COLOR)
 
         elem_dict = {"type":shape, "x":"0.0", "y":"0.0", "w":str(shape_x), "h":str(shape_y), "z":"0.0"}
         if color is not None:

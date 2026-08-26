@@ -6,6 +6,7 @@ import io
 import pytest
 from array import array
 import re
+import pandas as pd
 
 
 def test_location_covers():
@@ -199,6 +200,46 @@ def test_get_palette_1():
     assert len(palette) == 3
     assert len(set(palette.values())) == 3
     assert all([re.match(r"#[0-9a-fA-F]{6}",x) for x in palette.values()])
+
+
+def test_get_palette_cycles_over_full_palette():
+    """More groups than colors cycles, but adjacent numbers never collide."""
+    palette = utils.get_palette(list(range(1, 201)))
+    assert len(set(palette.values())) == len(utils.DISTINCT_COLORS)
+    assert all(palette[i] != palette[i + 1] for i in range(1, 200))
+    # the only collisions are a full palette apart
+    assert palette[1] == palette[1 + len(utils.DISTINCT_COLORS)]
+
+
+def test_get_palette_assignment_is_sorted():
+    """Colors follow the values, not the order they happen to appear in."""
+    assert utils.get_palette([3, 1, 2]) == utils.get_palette([1, 2, 3])
+    assert utils.get_palette([3, 1, 2])[1] == utils.DISTINCT_COLORS[0]
+    # numeric-looking strings sort numerically, not lexically
+    assert utils.get_palette(["10", "2", "1"])["2"] == utils.DISTINCT_COLORS[1]
+
+
+def test_get_palette_max_groups():
+    values = pd.Series(["a"] * 10 + ["b"] * 5 + ["c"] * 2 + ["d"])
+    palette = utils.get_palette(values, max_groups=2)
+    assert len(palette) == 4
+    assert len({palette["a"], palette["b"]}) == 2
+    assert palette["c"] == palette["d"] == utils.OTHER_COLOR
+    # max_groups at or above the group count changes nothing
+    assert utils.get_palette(values, max_groups=4) == utils.get_palette(values)
+
+
+def test_get_palette_missing_values():
+    """NaN gets the neutral color under key None, without consuming a palette slot."""
+    palette = utils.get_palette(pd.Series(["A", "B", None]))
+    assert palette == {"A": utils.DISTINCT_COLORS[0], "B": utils.DISTINCT_COLORS[1],
+                       None: utils.OTHER_COLOR}
+
+
+def test_sort_palette_values():
+    """Mixed-type columns sort without raising: numbers, then strings, then missing."""
+    assert utils.sort_palette_values(["10", "2", "zed", "1", None, "apple"]) == \
+        ["1", "2", "10", "apple", "zed", None]
 
 
 class TestBooleanEvaluatorSanitizeIdentifier:
