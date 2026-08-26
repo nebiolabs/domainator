@@ -1,6 +1,6 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.10.0
+Version 0.11.0
 
 [//]: # (remember to update version in domainator/__init__.py also)
 
@@ -38,6 +38,7 @@ Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port`
   - [Agent-driven workflows](docs/agent_workflows.md) (see also [AGENTS.md](AGENTS.md))
   - [Advanced examples](https://github.com/nebiolabs/domainator_examples)
   - [Developing Domainator](docs/developing_domainator.md)
+  - [Structure search and annotation](docs/structure_search.md)
   - [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
   - [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
   - [Domainator Web UI](docs/server/techincal_overview.md)
@@ -124,6 +125,9 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 |  select_by_cds.py |  Extract contigs or contig regions based on CDS names or domain content within individual CDSs | domainator-annotated nucleotide genbank files  |  a genbank file  |  yes |  yes  | Supports boolean logic for domain selector statements. If `--pad` option is set, then output streaming is not in real-time and memory usage will be higher, because all records need to be read before padding sizes can be calculated.  |
 |  select_by_contig.py | Extract a subset of contigs based on domain content of the entire contig | domainator-annotated genbank files  |  a genbank file | yes |  yes  | Supports boolean logic for domain selector statements. |
 |  seq_dist.py | calculates similarity scores between protein sequences |  two peptide sequence files (genbank or fasta), a sequence file and an hmm file, or two hmm files.  |  a sparse or dense matrix of similarity scores  | no  |  no  |  Typically the input and reference will be the same sequence file, creating a pairwise similarity matrix. It can also use an hmm file as a reference to make a table of profile scores for each input peptide. |
+|  structure_domainate.py | annotates protein structures with hits to reference structures | structure files (pdb/cif, optionally gzipped; files, a glob, or a directory searched recursively) or a prebuilt foldseek database, plus reference structures or a foldseek database | a protein genbank file, one record per structure chain, with `Domainator` annotations | no | yes | The structure-input counterpart of `domainate.py`. Every input chain is written, whether or not it had hits. Because the databases are built from real structures they carry C-alpha coordinates, so `--alignment_type 1` (TM-align) and the `--metrics` tmscore/lddt/rmsd are available. Consider `structure_search.py` when searching a large database with a few references. |
+|  structure_search.py | searches a structure database with a small number of reference structures | a prebuilt foldseek database (for example one built from AlphaFold DB), or structure files to build one from, plus reference structures | a protein genbank file of the hit records, each with a `Domain_Search` annotation | no | yes | The structure-input counterpart of `domain_search.py`. Hit records are built from the sequences the aligner reports, so the searched database is never read end to end. `--max_seqs` bounds how many hits the aligner keeps per reference; raise it for large databases, and note the warning when a reference saturates it. |
+|  structure_to_genbank.py | converts protein structures into a protein genbank file | structure files (pdb/cif, optionally gzipped) or a prebuilt foldseek database | a protein genbank file, one record per structure chain | no | yes | Makes structures ordinary Domainator inputs, so the sequence-based tools work on them unchanged. `--keep_db` also persists the aligner database, which carries C-alpha coordinates and can be reused as the input or reference of the other two structure tools. |
 |  summary_report.py |  Calculates statistics such as number of contigs, average contig length, and frequency of each domain   |  a domainator-annotated genbank file  |  an html file of the report (with figures/statistics), a text report, and/or a compact JSON summary (`--json`) |  yes  |  no  |  'focus domains' can be specified, which will make the output include information about the co-occurrence and distance of those domains with other domains. Can also write a report to the console. |
 |  transform_matrix.py | Converts matrices in score format to matrices in various normalized score formats  |  a dense or sparse data matrix of scores  | a dense or sparse data matrix of normalized scores  |  no  |  no  |  |
 |  trim_contigs.py | trim the ends of contigs | nucleotide or protein genbank or fasta files |  a genbank file  |  yes |  yes  | Supports boolean logic for domain selector statements. |

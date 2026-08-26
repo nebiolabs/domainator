@@ -151,9 +151,9 @@
     {
       "name": "Mst KNN",
       "parameter": "mst_knn",
-      "help": "Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. K must be greater than 1. Mutually exclusive with Mst.",
+      "help": "Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. K must be at least 0; K=0 gives just the maximum spanning tree. Mutually exclusive with Mst.",
       "type": "integer",
-      "min": 2,
+      "min": 0,
       "flags": [
         "--mst_knn"
       ]

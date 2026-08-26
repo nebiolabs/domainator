@@ -1,5 +1,15 @@
+[index](README.md)
+# ESM-2 3B 3Di and foldseek integration
+
 Domainator can support sequence searches at high sensitivity across deep evolutionary distances by leveraging the ESM-2 3B 3Di model, described in the manuscript:
 [https://www.biorxiv.org/content/10.1101/2023.07.26.550718v1](https://www.biorxiv.org/content/10.1101/2023.07.26.550718v1)
+
+This page covers annotating *sequences* that have no structure, by predicting their 3Di
+alphabet with ESM-2 3B. If you already have structures (pdb/cif files, or a foldseek
+database built from them), use the structure tools described in
+[Structure search and annotation](structure_search.md) instead: they align real coordinates,
+support TM-align and the TM-score/lDDT/RMSD metrics, and need only the foldseek binary — no
+PyTorch, no esmologs, and no checkpoint.
 
 # Installation
 In addition to Domainator, the esmologs package ([https://github.com/seanrjohnson/esmologs](https://github.com/seanrjohnson/esmologs)) and pytorch with CUDA support must be installed. The easiest way to accomplish this is to create a new conda environment with esmologs, and install domainator into that environment.
@@ -51,7 +61,7 @@ exit # or ctrl + d
 
 In this workflow, we first create a reference Foldseek 3Di database, and then use domainator to annotate contigs from that database
 
-(Note that domain_search.py with ESM-2 3B 3Di is not yet supported)
+(Note that domain_search.py with ESM-2 3B 3Di is not supported. To search a large structure database with a small number of queries, use [structure_search.py](structure_search.md).)
 
 ## conda
 ```bash

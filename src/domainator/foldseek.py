@@ -6,8 +6,8 @@ try:
 except ImportError: 
     pass 
 
-import psutil
 import os
+import shutil
 import tempfile
 import subprocess
 from typing import List, Iterable, Tuple, Union, Iterator
@@ -18,14 +18,46 @@ FoldseekHit = namedtuple("Hit", ["query","target","qheader","theader","pident","
 
 MAX_PROTEIN_SIZE = 2500
 
-def search(database_path, proteins, foldseek, cpu, E, device=None) -> Iterable[FoldseekHit]:
+
+def resolve_foldseek_path(foldseek_path=None) -> str:
+    """Resolve the foldseek executable, raising a descriptive error if it is missing."""
+    if foldseek_path is not None:
+        return foldseek_path
+    resolved = shutil.which("foldseek")
+    if resolved is None:
+        raise RuntimeError(
+            "Could not find 'foldseek' on PATH. Install foldseek "
+            "(for example 'conda install -c conda-forge -c bioconda foldseek') "
+            "or pass an explicit path."
+        )
+    return resolved
+
+
+def _run(argv, description, env=None):
+    """Run a foldseek subcommand, raising RuntimeError with stderr on failure.
+
+    Uses subprocess.run rather than Popen+wait: the previous form read stderr only
+    after the process exited, which deadlocks once stderr fills the pipe buffer.
+    """
+    completed = subprocess.run(argv, capture_output=True, env=env)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"{description} exited with code {completed.returncode}:\n"
+            + completed.stderr.decode("utf-8", errors="replace")
+        )
+    return completed
+
+def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path=None) -> Iterable[FoldseekHit]:
     """
     Args:
+        foldseek_path: explicit path to the foldseek executable. If None, it is
+            looked up on PATH.
         device: which device foldseek should run the search on. Either None or "cpu" for
             CPU-only search, or a CUDA device string ("cuda", "cuda:0", "cuda:1", ...) to
             enable GPU-accelerated search. For a GPU search the target database must have
             been built in a GPU-compatible (padded) format (see `foldseek makepaddedseqdb`).
     """
+    foldseek_bin = resolve_foldseek_path(foldseek_path)
     with tempfile.TemporaryDirectory() as tmpdirname:
         out_base_name = tmpdirname + "/output"
         protein_fasta_name = tmpdirname + "/protein.fasta"
@@ -51,7 +83,7 @@ def search(database_path, proteins, foldseek, cpu, E, device=None) -> Iterable[F
             return # no sequences to search, yield nothing
         
         fasta2foldseek(protein_fasta_name, threedi_fasta_name, out_base_name)
-        foldseek_options = ["foldseek", "search", out_base_name, database_path, aln_path, foldseek_tmpfolder, "-e", str(E)]
+        foldseek_options = [foldseek_bin, "search", out_base_name, database_path, aln_path, foldseek_tmpfolder, "-e", str(E)]
         if cpu > 0 and cpu is not None:
             foldseek_options += ["--threads", str(cpu)]
         foldseek_env = None
@@ -63,15 +95,14 @@ def search(database_path, proteins, foldseek, cpu, E, device=None) -> Iterable[F
             if ":" in device:
                 foldseek_env = os.environ.copy()
                 foldseek_env["CUDA_VISIBLE_DEVICES"] = device.split(":", 1)[1]
-        foldseek_out = subprocess.Popen(foldseek_options, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=foldseek_env)
-        foldseek_out.wait()
-        if foldseek_out.returncode != 0:
-            raise RuntimeError(f"foldseek exited with code {foldseek_out.returncode}:\n{foldseek_out.stderr.read().decode('utf-8')}")
+        _run(foldseek_options, "foldseek", env=foldseek_env)
 
-        convertalis_out = subprocess.Popen(["foldseek", "convertalis", "--format-output", "query,target,qheader,theader,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qlen,tlen", out_base_name, database_path, aln_path, foldseek_tmpfolder + "/results.tsv"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        convertalis_out.wait()
-        if convertalis_out.returncode != 0:
-            raise RuntimeError(f"convertalis exited with code {convertalis_out.returncode}:\n{convertalis_out.stderr.read().decode('utf-8')}")
+        _run(
+            [foldseek_bin, "convertalis", "--format-output",
+             "query,target,qheader,theader,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qlen,tlen",
+             out_base_name, database_path, aln_path, foldseek_tmpfolder + "/results.tsv"],
+            "convertalis",
+        )
 
         with open(foldseek_tmpfolder + "/results.tsv", "r") as f:
             for line in f:

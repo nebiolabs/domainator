@@ -1,0 +1,113 @@
+{
+  "id": "structure_to_genbank",
+  "display_name": "Structure To Genbank",
+  "category": "Editors",
+  "description": "Convert protein structures into a protein genbank file\n\nReads structure files (pdb/cif, optionally gzipped, given as files, globs, or a directory\nsearched recursively) or a prebuilt foldseek database, and writes one protein genbank\nrecord per structure chain. This makes structures ordinary domainator inputs, so the\nsequence-based tools (domainate.py, domain_search.py, seq_dist.py, build_ssn.py, the\nreports) work on them with no further conversion.\n\nChain splitting, structure parsing and naming are all done by the structural aligner, so\nrecords are named exactly as they are in a search against the same structures.\n\nUse --keep_db to also persist the aligner database that was built along the way. That\ndatabase carries C-alpha coordinates, so it can be reused as the -i or -r argument of\nstructure_domainate.py / structure_search.py without paying to rebuild it, and it is how\nyou turn a directory of reference structures into a reusable reference database.\n\nNote that record coordinates are indices into the *observed* residue sequence extracted\nfrom the structure, not original PDB residue numbers: a chain with a disordered loop has a\nsequence shorter than its residue-number span.",
+  "runner": "module",
+  "entry_point": "domainator.structure_to_genbank",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "structure files (pdb/cif, optionally gzipped), a directory to search recursively, a glob, or the prefix of a prebuilt foldseek database.",
+      "type": "file",
+      "required": true,
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "pdb",
+        "cif",
+        "mmcif",
+        "ent",
+        "gz"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "output genbank filename. If not supplied, or if given as '-', writes to stdout. Optional when --keep_db is given.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Keep Db",
+      "parameter": "keep_db",
+      "help": "also write the aligner database built from the input structures, using this path as its prefix. The database keeps C-alpha coordinates, so it can be reused as an input or reference for structure_domainate.py and structure_search.py.",
+      "type": "string",
+      "flags": [
+        "--keep_db"
+      ]
+    },
+    {
+      "name": "Store 3Di",
+      "parameter": "store_3di",
+      "help": "store each chain's 3Di structural alphabet string in a /threedi qualifier on a full-length misc_feature. Note that this qualifier is a single opaque string, so it does not survive tools that slice records (extract_domains.py, select_by_coord.py).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--store_3di"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "number of threads to give the backend. 0 lets the backend use all available cores.",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ],
+      "min": 0
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "structural alignment backend to use.",
+      "type": "string",
+      "choices": [
+        "foldseek"
+      ],
+      "default": "foldseek",
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
+      "name": "Foldseek Path",
+      "parameter": "foldseek_path",
+      "help": "path to the foldseek executable. If not supplied, foldseek is looked up on PATH.",
+      "type": "file",
+      "flags": [
+        "--foldseek_path"
+      ]
+    },
+    {
+      "name": "Aligner Arg",
+      "parameter": "aligner_arg",
+      "help": "extra arguments appended verbatim to the backend's search command line, for options domainator does not wrap. Example: --aligner_arg --prefilter-mode 2",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--aligner_arg"
+      ]
+    },
+    {
+      "name": "Tmp Dir",
+      "parameter": "tmp_dir",
+      "help": "parent directory for temporary databases and alignment files. Structural searches can need a lot of scratch space, so point this at a large filesystem for big inputs.",
+      "type": "file",
+      "flags": [
+        "--tmp_dir"
+      ]
+    }
+  ],
+  "priority": 3
+}

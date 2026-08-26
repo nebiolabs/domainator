@@ -347,3 +347,45 @@ def test_transform_matrix_output_format_conversions():
         np.testing.assert_array_equal(dense_text_matrix.data, expected)
         np.testing.assert_array_equal(sparse_matrix.data.toarray(), expected)
         assert sparse_matrix.data_type == "bool"
+
+def test_mst_knn_k_zero_is_mst_only():
+    """--mst_knn 0 selects no kNN edges, so the result is exactly the MST."""
+    from domainator.data_matrix import SparseDataMatrix, MaxTree, mst_knn_edge_index_dict, StreamingMstKnnAccumulator
+    from domainator.ssn_edges import mst_edge_index_dict
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    data = np.array([
+        [5.0, 9.0, 1.0, 0.0, 2.0, 0.0],
+        [9.0, 5.0, 8.0, 3.0, 0.0, 0.0],
+        [1.0, 8.0, 5.0, 7.0, 0.0, 4.0],
+        [0.0, 3.0, 7.0, 5.0, 6.0, 0.0],
+        [2.0, 0.0, 0.0, 6.0, 5.0, 10.0],
+        [0.0, 0.0, 4.0, 0.0, 10.0, 5.0],
+    ])
+    labels = ["a", "b", "c", "d", "e", "f"]
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+
+    mst_edges = mst_edge_index_dict(MaxTree(matrix), lower_bound=0)
+    assert mst_knn_edge_index_dict(matrix, 0, lower_bound=0) == mst_edges
+    # k >= 1 must be a superset of the MST.
+    assert set(mst_edges) < set(mst_knn_edge_index_dict(matrix, 2, lower_bound=0))
+
+    expected = np.zeros_like(data)
+    np.fill_diagonal(expected, np.diagonal(data))
+    for (i, j) in mst_edges:
+        expected[i, j] = data[i, j]
+        expected[j, i] = data[j, i]
+    np.testing.assert_array_equal(apply_mst_knn_sparsification(matrix, 0, lower_bound=0).toarray(), expected)
+
+    acc = StreamingMstKnnAccumulator(len(labels), 0, lower_bound=0)
+    _feed_matrix_entries(acc, data)
+    assert acc.finalize() == mst_edges
+    np.testing.assert_array_equal(acc.to_csr().toarray(), expected)
+
+
+def test_mst_knn_arg_rejects_negative():
+    from domainator.transform_matrix import _mst_knn_arg
+
+    assert _mst_knn_arg("0") == 0
+    with pytest.raises(ValueError):
+        _mst_knn_arg("-1")

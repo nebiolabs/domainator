@@ -16,11 +16,10 @@ If neither is set, then hits will be written on the fly and not sorted.
 """
 
 import sys
-import io
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -33,33 +32,8 @@ from domainator import extract_peptides
 import warnings
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path, write_records_with_limit
 
-
-def _estimate_genbank_record_size_bytes(record) -> int:
-    buffer = io.StringIO()
-    write_genbank((record,), buffer, preserve_original=True)
-    return len(buffer.getvalue().encode("utf-8"))
-
-
-def _write_records_with_limit(records, out_handle, current_output_bytes: int, max_output_bytes: Optional[int], output_description: str, mitigation_options, extra_guidance: Optional[str] = None) -> int:
-    if max_output_bytes is None:
-        write_genbank(records, out_handle)
-        return current_output_bytes
-
-    for record in records:
-        record_bytes = _estimate_genbank_record_size_bytes(record)
-        enforce_output_limit(
-            projected_bytes=current_output_bytes + record_bytes,
-            max_output_bytes=max_output_bytes,
-            output_description=output_description,
-            mitigation_options=mitigation_options,
-            extra_guidance=extra_guidance,
-        )
-        write_genbank((record,), out_handle)
-        current_output_bytes += record_bytes
-
-    return current_output_bytes
 
 # Per-process taxonomy filter, populated by the pool initializer. The include/
 # exclude filter is "compiled" once in the parent into a frozenset of allowed
@@ -583,7 +557,7 @@ def main(argv):
             ):
             if not pad:
                 if not deduplicate or (record.id not in seen):
-                    current_output_bytes = _write_records_with_limit(
+                    current_output_bytes = write_records_with_limit(
                         (record,),
                         out,
                         current_output_bytes,
@@ -600,7 +574,7 @@ def main(argv):
         if pad:
             records.sort(reverse=True)
             select_by_cds.pad_records(records)
-            current_output_bytes = _write_records_with_limit(
+            current_output_bytes = write_records_with_limit(
                 records,
                 out,
                 current_output_bytes,

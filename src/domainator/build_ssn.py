@@ -69,8 +69,8 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
 
 def _mst_knn_arg(value: Union[str, int]) -> int:
     value = int(value)
-    if value < 1:
-        raise ValueError("--mst_knn must be an integer >= 1")
+    if value < 0:
+        raise ValueError("--mst_knn must be an integer >= 0")
     return value
 
 
@@ -168,7 +168,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         no_cluster_header (bool, optional): If True, then the cluster tsv file will not have a header. Defaults to False.
         color_table_out (str, optional): write a color table to this path. Defaults to None.
         mst (bool, optional): If True, then write 
-        mst_knn (int, optional): If set, emit the union of the MST and an OR-symmetric kNN graph.
+        mst_knn (int, optional): If set, emit the union of the MST and an OR-symmetric kNN graph. 0 emits just the MST.
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
 
     Raises:
@@ -317,7 +317,7 @@ def main(argv):
                                 "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
                                 "the minimum necessary to preserve the clusters.")
     sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                                help="Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, where K must be >= 1.")
+                                help="Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, where K must be >= 0. K=0 gives just the maximum spanning tree (equivalent to --mst).")
 
     parser.add_argument('--config', action=ActionConfigFile)
 

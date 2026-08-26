@@ -132,8 +132,60 @@ class SearchResult(NamedTuple):
     """name of program that made the hit (hmmsearch, phmmer, foldseek)"""
     strand: int = 1
     """strand of the hit on the target sequence"""
+    tmscore: Optional[float] = None
+    """structural alignment TM-score, if the backend computed one"""
+    lddt: Optional[float] = None
+    """structural alignment lDDT, if the backend computed one"""
+    rmsd: Optional[float] = None
+    """structural alignment RMSD, in Angstroms, if the backend computed one"""
+    prob: Optional[float] = None
+    """backend-reported probability that the hit is a true homolog, if computed"""
 
 
+
+
+# Optional metrics that only structural backends produce. Emitted as qualifiers only
+# when present, so GenBank output from the sequence backends is unchanged.
+STRUCTURAL_METRIC_FIELDS = ("tmscore", "lddt", "rmsd", "prob")
+
+
+def domain_feature_qualifiers(hit: SearchResult, cds_id: str) -> Dict[str, List[str]]:
+    """Build the qualifier dict shared by every Domainator/Domain_Search feature.
+
+    Args:
+        hit (SearchResult): the hit to describe.
+        cds_id (str): value for the cds_id qualifier. Protein records use
+            f'0_1_{len(contig)}', CDS hits use the parent CDS's cds_id, and whole-contig
+            nucleic acid hits use '.'.
+
+    Returns:
+        dict of qualifier name -> single-element list of strings.
+    """
+    desc = hit.desc
+    if desc.strip() == "":
+        desc = "."
+    acc = hit.acc
+    if acc.strip() == "":
+        acc = "."
+    qualifiers = {
+        'program': [hit.program],
+        'database': [hit.database],
+        'description': [desc],
+        'accession': [acc],
+        'evalue': [f"{hit.evalue:.1e}"],
+        'score': [f"{hit.score:.1f}"],
+        'name': [hit.name],
+        'identity': [f"{hit.identity:.1f}"],
+        'cds_id': [cds_id],
+        'rstart': [f"{hit.rstart}"],
+        'rend': [f"{hit.rend}"],
+        'rlen': [f"{hit.rlen}"],
+    }
+    for field in STRUCTURAL_METRIC_FIELDS:
+        value = getattr(hit, field, None)
+        if value is not None:
+            qualifiers[field] = [f"{value:.3f}"]
+    return qualifiers
 
 
 def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, program, out):
@@ -191,6 +243,10 @@ def foldseek_hits_to_search_results(hits, references, evalue, db_name, min_evalu
         domain_accession = ""
         domain_description = hit.theader
         domain_evalue = float(hit.evalue)
+        # foldseek's own -e already bounds this, but --min_evalue has no foldseek
+        # equivalent, so both bounds are applied here to match the hmmer path.
+        if not (domain_evalue < evalue and domain_evalue >= min_evalue):
+            continue
         score = float(hit.bits)
         start = int(hit.qstart) - 1 #TODO: double check this for off-by-one
         end = int(hit.qend) #TODO: double check this for off-by-one
@@ -364,7 +420,7 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     if foldseek is not None:
         out["foldseek"] = dict()
         for file in foldseek:
-            out["foldseek"][Path(file).stem] = file
+            out["foldseek"][Path(file).name] = file
     
     return out
 
@@ -745,32 +801,16 @@ def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max
         hit = hits_list[0]
         location = FeatureLocation(hit.start, hit.end, strand=1)
         #namedtuple("SearchResult", ["name", "desc", "evalue", "score", "start", "end", "database"])
-        desc = hit.desc
-        if desc.strip() == "":
-            desc = "."
-        acc = hit.acc
-        if acc.strip() == "":
-            acc = "."
         f = SeqFeature(location=location, type=DOMAIN_SEARCH_BEST_HIT_NAME,
-                        qualifiers={'program': [hit.program], "database":[hit.database], 'description': [desc], 'accession': [acc], 'evalue': [f"{hit.evalue:.1e}"],
-                                    'score': [f"{hit.score:.1f}"], 'name':[hit.name], 'identity': [f"{hit.identity:.1f}"], 'cds_id': [f'0_1_{len(contig)}'],
-                                    'rstart': [f"{hit.rstart}"], 'rend': [f"{hit.rend}"], 'rlen': [f"{hit.rlen}"]})
+                        qualifiers=domain_feature_qualifiers(hit, f'0_1_{len(contig)}'))
         contig.features.append(f)
     if not no_annotations:
         for hit in filter_by_overlap(hits_list[:max_hits], max_overlap,  presorted=True, by_db=overlap_by_db):
             # Create new domain feature with information on the HMMER hit
             location = FeatureLocation(hit.start, hit.end, strand=1)
             #namedtuple("SearchResult", ["name", "desc", "evalue", "score", "start", "end", "database"])
-            desc = hit.desc
-            if desc.strip() == "":
-                desc = "."
-            acc = hit.acc
-            if acc.strip() == "":
-                acc = "."
             f = SeqFeature(location=location, type=DOMAIN_FEATURE_NAME,
-                            qualifiers={'program': [hit.program], "database":[hit.database], 'description': [desc], 'accession': [acc], 'evalue': [f"{hit.evalue:.1e}"], 'score': [f"{hit.score:.1f}"],
-                                        'name':[hit.name], 'identity': [f"{hit.identity:.1f}"], 'cds_id': [f'0_1_{len(contig)}'], 'rstart': [f"{hit.rstart}"],
-                                        'rend': [f"{hit.rend}"], 'rlen': [f"{hit.rlen}"]})
+                            qualifiers=domain_feature_qualifiers(hit, f'0_1_{len(contig)}'))
             contig.features.append(f)
 
 #contig.features, cds_index, seq_group_index, contig_index, db_index, database_names, hits, max_hits, max_overlap
@@ -802,16 +842,8 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
             except:
                 warnings.warn(f"Could not overlay location for {hit.name} on {contig.name}, {feature.qualifiers['cds_id'][0]}. Skipping annotation.")
                 continue
-            desc = hit.desc
-            if desc.strip() == "":
-                desc = "."
-            acc = hit.acc
-            if acc.strip() == "":
-                acc = "."
             f = SeqFeature(location=location, type=DOMAIN_SEARCH_BEST_HIT_NAME, 
-                            qualifiers={'program': [hit.program], "database":[hit.database], 'description': [desc], 'accession': [acc], 'evalue': [f"{hit.evalue:.1e}"], 'score': [f"{hit.score:.1f}"], 
-                                        'name':[hit.name], 'identity': [f"{hit.identity:.1f}"], 'cds_id': [feature.qualifiers['cds_id'][0]], 'rstart': [f"{hit.rstart}"],
-                                        'rend': [f"{hit.rend}"], 'rlen': [f"{hit.rlen}"]})
+                            qualifiers=domain_feature_qualifiers(hit, feature.qualifiers['cds_id'][0]))
 
             contig.features.append(f)
         
@@ -825,17 +857,8 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
                     warnings.warn(f"Could not overlay location for {hit.name} on {contig.name}, {feature.qualifiers['cds_id'][0]}. Skipping annotation.")
                     continue
 
-                desc = hit.desc
-                if desc.strip() == "":
-                    desc = "."
-
-                acc = hit.acc
-                if acc.strip() == "":
-                    acc = "."
                 f = SeqFeature(location=location, type=DOMAIN_FEATURE_NAME, 
-                                qualifiers={'program': [hit.program], "database":[hit.database], 'description': [desc], 'accession': [acc], 'evalue': [f"{hit.evalue:.1e}"], 'score': [f"{hit.score:.1f}"], 
-                                            'name':[hit.name], 'identity': [f"{hit.identity:.1f}"], 'cds_id': [feature.qualifiers['cds_id'][0]], 'rstart': [f"{hit.rstart}"], 
-                                            'rend': [f"{hit.rend}"], 'rlen': [f"{hit.rlen}"]})
+                                qualifiers=domain_feature_qualifiers(hit, feature.qualifiers['cds_id'][0]))
 
                 contig.features.append(f)
     
@@ -854,27 +877,12 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
     if best_annotation:
         best_hits = filter_by_overlap(hits_list if max_hits_per_contig is None else hits_list[:max_hits_per_contig], max_overlap, presorted=True, by_db=overlap_by_db)
         for hit in best_hits:
-            desc = hit.desc if hit.desc.strip() else "."
-            acc = hit.acc if hit.acc.strip() else "."
             feature_index = len(contig.features)
             contig.features.append(
                 SeqFeature(
                     location=build_contig_hit_location(contig, hit),
                     type=DOMAIN_SEARCH_BEST_HIT_NAME,
-                    qualifiers={
-                        'program': [hit.program],
-                        'database': [hit.database],
-                        'description': [desc],
-                        'accession': [acc],
-                        'evalue': [f"{hit.evalue:.1e}"],
-                        'score': [f"{hit.score:.1f}"],
-                        'name': [hit.name],
-                        'identity': [f"{hit.identity:.1f}"],
-                        'cds_id': ['.'],
-                        'rstart': [f"{hit.rstart}"],
-                        'rend': [f"{hit.rend}"],
-                        'rlen': [f"{hit.rlen}"],
-                    },
+                    qualifiers=domain_feature_qualifiers(hit, '.'),
                 )
             )
             hit_scores[feature_index] = hit.score
@@ -887,26 +895,11 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         return
 
     for hit in filter_by_overlap(hits_list[:max_hits], max_overlap, presorted=True, by_db=overlap_by_db):
-        desc = hit.desc if hit.desc.strip() else "."
-        acc = hit.acc if hit.acc.strip() else "."
         contig.features.append(
             SeqFeature(
                 location=build_contig_hit_location(contig, hit),
                 type=DOMAIN_FEATURE_NAME,
-                qualifiers={
-                    'program': [hit.program],
-                    'database': [hit.database],
-                    'description': [desc],
-                    'accession': [acc],
-                    'evalue': [f"{hit.evalue:.1e}"],
-                    'score': [f"{hit.score:.1f}"],
-                    'name': [hit.name],
-                    'identity': [f"{hit.identity:.1f}"],
-                    'cds_id': ['.'],
-                    'rstart': [f"{hit.rstart}"],
-                    'rend': [f"{hit.rend}"],
-                    'rlen': [f"{hit.rlen}"],
-                },
+                qualifiers=domain_feature_qualifiers(hit, '.'),
             )
         )
         

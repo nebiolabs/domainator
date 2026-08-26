@@ -1,0 +1,265 @@
+{
+  "id": "structure_search",
+  "display_name": "Structure Search",
+  "category": "Editors",
+  "description": "Search a structure database with a small number of reference structures\n\nThe structure-input counterpart of domain_search.py. For searching large structure\ndatabases (for example a foldseek database built from AlphaFold DB) with a handful of\nreference structures.\n\nOnly records that had a hit are written. Each one carries a Domain_Search feature marking\nthe region homologous to the best-matching reference; pass --add_annotations to also write\na Domainator feature for every hit.\n\nReferences are aligned as the query and the searched database as the target, which is both\nwhat foldseek is optimized for and what makes --evalue mean the same thing it means\nelsewhere in domainator: it is computed against the database being searched. The hit\ncoordinates are positions on the database record; the matching positions on the reference\nare recorded in the /rstart, /rend and /rlen qualifiers.\n\nHit records are built from the sequences the backend reports, so the searched database is\nnever read end to end and its size does not bound memory. Note that --max_seqs bounds how\nmany hits the backend keeps per reference; the default is low for a large database, and a\nwarning is issued whenever a reference saturates it.\n\nUse structure_domainate.py instead to annotate every input structure rather than select\nhits, and structure_to_genbank.py to convert structures without searching at all.",
+  "runner": "module",
+  "entry_point": "domainator.structure_search",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "the structure database to search: the prefix of a prebuilt foldseek database, or pdb/cif files (optionally gzipped), a directory to search recursively, or a glob.",
+      "type": "file",
+      "required": true,
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "pdb",
+        "cif",
+        "mmcif",
+        "ent",
+        "gz"
+      ]
+    },
+    {
+      "name": "References",
+      "parameter": "references",
+      "help": "reference structures to search with. Same accepted forms as --input.",
+      "type": "string",
+      "required": true,
+      "multiple": true,
+      "flags": [
+        "-r",
+        "--references"
+      ],
+      "file_types": [
+        "pdb",
+        "cif",
+        "mmcif",
+        "ent",
+        "gz"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "output genbank filename. If not supplied, or if given as '-', writes to stdout.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "threshold E value for a hit. E values are computed against the searched database.",
+      "type": "number",
+      "default": 0.001,
+      "flags": [
+        "-e",
+        "--evalue"
+      ],
+      "step": "any"
+    },
+    {
+      "name": "Max Hits",
+      "parameter": "max_hits",
+      "help": "return at most this many records, the best-scoring ones. Applies to the whole search, not per reference. When set, output is sorted best-first and written after the search completes.",
+      "type": "integer",
+      "flags": [
+        "--max_hits"
+      ]
+    },
+    {
+      "name": "Max Seqs",
+      "parameter": "max_seqs",
+      "help": "maximum number of hits the backend keeps per reference. Raise this when searching a large database, otherwise coverage is silently capped.",
+      "type": "integer",
+      "default": 1000,
+      "flags": [
+        "--max_seqs"
+      ]
+    },
+    {
+      "name": "Alignment Type",
+      "parameter": "alignment_type",
+      "help": "how to compute the alignment: 0 = 3Di only, 1 = TM-align, 2 = 3Di+AA. Type 1 requires C-alpha coordinates in both databases.",
+      "type": "integer",
+      "choices": [
+        0,
+        1,
+        2
+      ],
+      "default": 2,
+      "flags": [
+        "--alignment_type"
+      ]
+    },
+    {
+      "name": "Metrics",
+      "parameter": "metrics",
+      "help": "additional per-hit structural metrics to compute and store as feature qualifiers. tmscore, lddt and rmsd require C-alpha coordinates in both databases.",
+      "type": "string",
+      "multiple": true,
+      "choices": [
+        "tmscore",
+        "lddt",
+        "rmsd",
+        "prob"
+      ],
+      "flags": [
+        "--metrics"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "number of threads to give the backend. 0 lets the backend use all available cores.",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ],
+      "min": 0
+    },
+    {
+      "name": "Device",
+      "parameter": "device",
+      "help": "where to run the search. 'cpu' for a CPU-only search, or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) for a GPU-accelerated search. GPU search requires a recent foldseek. [default: cpu]",
+      "type": "string",
+      "default": "cpu",
+      "flags": [
+        "--device"
+      ]
+    },
+    {
+      "name": "Add Annotations",
+      "parameter": "add_annotations",
+      "help": "also write a Domainator feature for every hit, in addition to the Domain_Search feature for the best hit.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--add_annotations"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Min Evalue",
+      "parameter": "min_evalue",
+      "help": "minimum E value for a hit. Useful for excluding a reference's match to its own copy in the database.",
+      "type": "number",
+      "default": 0.0,
+      "flags": [
+        "--min_evalue"
+      ]
+    },
+    {
+      "name": "Max Overlap",
+      "parameter": "max_overlap",
+      "help": "maximum fraction of overlap allowed between annotations on one record. 1 disables overlap filtering.",
+      "type": "number",
+      "default": 1,
+      "flags": [
+        "--max_overlap"
+      ],
+      "min": 0,
+      "max": 1,
+      "step": "any"
+    },
+    {
+      "name": "Overlap By Db",
+      "parameter": "overlap_by_db",
+      "help": "filter overlapping annotations within each database independently, instead of across all databases.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--overlap_by_db"
+      ]
+    },
+    {
+      "name": "Database Name",
+      "parameter": "database_name",
+      "help": "value for the /database qualifier on the annotations. Defaults to the reference database or directory name.",
+      "type": "file",
+      "flags": [
+        "--database_name"
+      ]
+    },
+    {
+      "name": "Keep Db",
+      "parameter": "keep_db",
+      "help": "when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.",
+      "type": "string",
+      "flags": [
+        "--keep_db"
+      ]
+    },
+    {
+      "name": "Hits Tsv",
+      "parameter": "hits_tsv",
+      "help": "write the backend's raw hit table here, for debugging or for cross-checking against a hand-run search.",
+      "type": "string",
+      "flags": [
+        "--hits_tsv"
+      ]
+    },
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "structural alignment backend to use.",
+      "type": "string",
+      "choices": [
+        "foldseek"
+      ],
+      "default": "foldseek",
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
+      "name": "Foldseek Path",
+      "parameter": "foldseek_path",
+      "help": "path to the foldseek executable. If not supplied, foldseek is looked up on PATH.",
+      "type": "file",
+      "flags": [
+        "--foldseek_path"
+      ]
+    },
+    {
+      "name": "Aligner Arg",
+      "parameter": "aligner_arg",
+      "help": "extra arguments appended verbatim to the backend's search command line, for options domainator does not wrap. Example: --aligner_arg --prefilter-mode 2",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--aligner_arg"
+      ]
+    },
+    {
+      "name": "Tmp Dir",
+      "parameter": "tmp_dir",
+      "help": "parent directory for temporary databases and alignment files. Structural searches can need a lot of scratch space, so point this at a large filesystem for big inputs.",
+      "type": "file",
+      "flags": [
+        "--tmp_dir"
+      ]
+    },
+    {
+      "name": "Max Output Gb",
+      "parameter": "max_output_gb",
+      "help": "Fail if a projected output file would exceed this many GB. Set to 0 to disable the guardrail.",
+      "type": "number",
+      "default": 25.0,
+      "flags": [
+        "--max_output_gb"
+      ]
+    }
+  ],
+  "priority": 4
+}

@@ -4,6 +4,7 @@
 - [Examples](examples.md)
 - [Agent-driven workflows](agent_workflows.md)
 - [Developing Domainator](developing_domainator.md)
+- [Structure search and annotation](structure_search.md)
 - [ESM-2 3B 3Di and foldseek integration](esm_3b_foldseek.md)
 - [Limitations and FAQ](limitations_and_FAQ.md)
 - [Server Web UI](server/technical_overview.md)

@@ -372,11 +372,35 @@ def test_build_ssn_mst_knn_accepts_k_one(shared_datadir):
         ])
 
 
-def test_build_ssn_mst_knn_requires_k_ge_one(shared_datadir):
+def test_build_ssn_mst_knn_rejects_negative_k(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         with pytest.raises(SystemExit):
             build_ssn.main([
                 "-i", str(shared_datadir / "FeSOD_dist.tsv"),
                 "--xgmml", str(Path(output_dir) / "out.xgmml"),
-                "--mst_knn", "0",
+                "--mst_knn", "-1",
             ])
+
+
+def test_build_ssn_mst_knn_zero_matches_mst(shared_datadir):
+    """--mst_knn 0 emits the same edges as --mst."""
+    input_file = "FeSOD_dist.tsv"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_mst = output_dir + "/out_mst.xgmml"
+        out_mst_knn_0 = output_dir + "/out_mst_knn_0.xgmml"
+
+        for out_path, sparsify_args in ((out_mst, ["--mst"]), (out_mst_knn_0, ["--mst_knn", "0"])):
+            build_ssn.main([
+                "-i", str(shared_datadir / input_file),
+                "--xgmml", out_path,
+                "--lb", "175",
+                *sparsify_args,
+            ])
+
+        def edge_lines(path):
+            with open(path) as f:
+                return sorted(line.strip() for line in f if '<edge' in line)
+
+        mst_lines = edge_lines(out_mst)
+        assert len(mst_lines) > 0
+        assert edge_lines(out_mst_knn_0) == mst_lines

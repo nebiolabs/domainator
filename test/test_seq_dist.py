@@ -96,12 +96,25 @@ def test_seq_dist_mst_knn_accepts_k_one(shared_datadir):
         seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "1"])
 
 
-def test_seq_dist_mst_knn_rejects_k_below_one(shared_datadir):
+def test_seq_dist_mst_knn_k_zero_is_mst_only(shared_datadir):
+    # k == 0 keeps only the maximum spanning forest: at most n - 1 off-diagonal edges.
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "0"])
+        matrix = DataMatrix.from_file(out)
+        array = matrix.toarray()
+        n = len(matrix.rows)
+        off_diagonal = np.count_nonzero(array) - np.count_nonzero(array.diagonal())
+        assert 0 < off_diagonal <= 2 * (n - 1)
+
+
+def test_seq_dist_mst_knn_rejects_negative_k(shared_datadir):
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(SystemExit):
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "0"])
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst_knn", "-1"])
 
 
 def test_seq_hmmsearch_1(shared_datadir):

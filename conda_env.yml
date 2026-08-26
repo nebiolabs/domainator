@@ -9,6 +9,7 @@ dependencies:
   - rust>=1.83  # PyO3 0.29 requires Rust >= 1.83
   - cd-hit>=4.8.1,<5.0
   - diamond>=2.2.5,<3.0
+  - foldseek>=10.941cd33
   - hmmer>=3.3.2,<4.0
   - usearch>=12.0_beta,<13.0
   - ncbi-datasets-cli

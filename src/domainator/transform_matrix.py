@@ -151,8 +151,8 @@ MODES = {
 
 def _mst_knn_arg(value):
     value = int(value)
-    if value < 1:
-        raise ValueError("--mst_knn must be an integer >= 1")
+    if value < 0:
+        raise ValueError("--mst_knn must be an integer >= 0")
     return value
 
 
@@ -232,7 +232,7 @@ def main(argv):
     parser.add_argument('--lb', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
     parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                        help="Keep only the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, using the post-transform values.")
+                        help="Keep only the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, using the post-transform values. Set to 0 to keep only the maximum spanning tree.")
 
     add_max_output_gb_argument(parser)
     

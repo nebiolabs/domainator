@@ -28,7 +28,32 @@ Domainator produces and understands some feature types particular to it.
 ```
 
 
-`Domain_Search` features are added by `domain_search.py`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domain_search.py`, and there are exactly one per contig on sequences returned by `domain_search.py`. Other programs, such as `extract_domains.py`, `select_by_cds.py`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, typically by using the `--search_hits` command line argument.
+Annotations produced by a structural aligner (`structure_domainate.py`, `structure_search.py`) carry the same qualifiers, with `program` naming the aligner (for example `foldseek`). They may additionally carry `tmscore`, `lddt`, `rmsd` and `prob` when those were requested with `--metrics`. These four qualifiers are optional and are simply absent when the aligner did not compute them, so files written by the sequence-based tools are unchanged. They are scores for the alignment as a whole, on their own scales rather than on the `score` bitscore scale, so they should not be compared against `score` or against each other.
+
+```javascript
+     Domainator      1..76
+                     /program="foldseek"
+                     /database="refs"
+                     /description="."
+                     /evalue="3.1e-18"
+                     /score="635.0"
+                     /name="UBQref_A"
+                     /identity="100.0"
+                     /cds_id="0_1_76"
+                     /rstart="1"
+                     /rend="76"
+                     /rlen="76"
+                     /tmscore="1.013"
+                     /lddt="1.000"
+                     /rmsd="0.015"
+                     /prob="1.000"
+```
+
+Note that for structure-derived records, all coordinates are indices into the *observed* residue sequence that the aligner extracted from the structure file, not original PDB residue numbers. A chain with a disordered loop has a sequence shorter than its residue-number span, so positions cannot be mapped back to the structure's own numbering.
+
+`misc_feature` features carrying a `threedi` qualifier are written by `structure_to_genbank.py --store_3di`. The qualifier holds the chain's full-length 3Di structural-alphabet string, one character per residue. It is a single opaque string rather than a per-residue annotation, so it does not survive tools that slice records (`extract_domains.py`, `select_by_coord.py`).
+
+`Domain_Search` features are added by `domain_search.py` and `structure_search.py`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domain_search.py`, and there are exactly one per contig on sequences returned by `domain_search.py`. Other programs, such as `extract_domains.py`, `select_by_cds.py`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, typically by using the `--search_hits` command line argument.
 
 ### Taxonomy
 

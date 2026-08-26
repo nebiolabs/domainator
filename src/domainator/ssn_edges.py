@@ -291,8 +291,10 @@ def build_symmetric_neighbor_rankings(matrix: Union['DataMatrix', SortedUndirect
 def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
                                   neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return OR-symmetric kNN edges keyed by undirected index pairs."""
-    if k < 1:
-        raise ValueError("k must be >= 1")
+    if k < 0:
+        raise ValueError("k must be >= 0")
+    if k == 0:
+        return dict()
 
     if neighbor_rankings is None:
         neighbor_rankings = build_symmetric_neighbor_rankings(matrix, max_k=k)
@@ -324,7 +326,10 @@ def mst_edge_index_dict(tree: 'MaxTree', lower_bound: float = 0, include_equal: 
 def mst_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
                             tree: Optional['MaxTree'] = None,
                             neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
-    """Return the union of MST and OR-symmetric kNN edges keyed by undirected index pair."""
+    """Return the union of MST and OR-symmetric kNN edges keyed by undirected index pair.
+
+    ``k = 0`` selects no kNN edges, so the result is just the MST.
+    """
     if tree is None:
         tree = MaxTree(matrix)
 
@@ -388,6 +393,8 @@ class StreamingMstKnnAccumulator:
       long as no node retains more than ``knn_soft_cap`` neighbors above its true top-k —
       effectively always, except for pathological high-degree hubs.
 
+    ``k = 0`` selects no kNN edges, so the result is just the maximum spanning forest.
+
     The stored ``[out_score, in_score]`` also lets :meth:`to_csr` reproduce the directional
     asymmetry of the batch path for the kept edges. If trimming has dropped both directions
     of a kept (MST-only) edge, the symmetric MST score is written to both cells as a fallback.
@@ -395,8 +402,8 @@ class StreamingMstKnnAccumulator:
 
     def __init__(self, n_nodes: int, k: int, lower_bound: float = 0.0, include_equal: bool = False,
                  mst_buffer_cap: Optional[int] = None, knn_soft_cap: Optional[int] = None):
-        if k < 1:
-            raise ValueError("k must be >= 1")
+        if k < 0:
+            raise ValueError("k must be >= 0")
         self.n_nodes = n_nodes
         self.k = k
         self.lower_bound = lower_bound
@@ -481,6 +488,9 @@ class StreamingMstKnnAccumulator:
             # The MST tuple carries the surviving (max-direction) weight; trust it even if
             # adjacency trimming has since dropped this pair from both neighbor dicts.
             edge_dict[edge] = score
+
+        if self.k == 0:
+            return edge_dict
 
         for node, row in enumerate(self._adj):
             # Rank this node's neighbors exactly like symmetric_knn_edge_index_dict:

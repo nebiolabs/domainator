@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
 import tempfile
@@ -147,3 +148,39 @@ def make_temporary_output_path(target_path: str) -> str:
     )
     os.close(file_descriptor)
     return temp_path
+
+
+def estimate_genbank_record_size_bytes(record) -> int:
+    """Bytes this record would occupy when written as GenBank."""
+    from domainator.utils import write_genbank
+
+    buffer = io.StringIO()
+    write_genbank((record,), buffer, preserve_original=True)
+    return len(buffer.getvalue().encode("utf-8"))
+
+
+def write_records_with_limit(records, out_handle, current_output_bytes: int, max_output_bytes: int | None, output_description: str, mitigation_options, extra_guidance: str | None = None) -> int:
+    """Write GenBank records one at a time, enforcing the output size limit as it goes.
+
+    Returns the running output byte count. When max_output_bytes is None the limit is
+    disabled and the records are written in one call.
+    """
+    from domainator.utils import write_genbank
+
+    if max_output_bytes is None:
+        write_genbank(records, out_handle)
+        return current_output_bytes
+
+    for record in records:
+        record_bytes = estimate_genbank_record_size_bytes(record)
+        enforce_output_limit(
+            projected_bytes=current_output_bytes + record_bytes,
+            max_output_bytes=max_output_bytes,
+            output_description=output_description,
+            mitigation_options=mitigation_options,
+            extra_guidance=extra_guidance,
+        )
+        write_genbank((record,), out_handle)
+        current_output_bytes += record_bytes
+
+    return current_output_bytes
