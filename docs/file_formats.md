@@ -81,6 +81,25 @@ If no taxid is noted in either place, the Taxid will be assigned [32644](https:/
     record.name = id
 ```
 
+## Protein structures
+
+The `structure_*` tools read protein structure files: `.pdb`, `.pdb1`, `.ent`, `.cif`,
+`.mmcif` and `.bcif`, optionally gzipped. Domainator does not parse these itself — the
+structural aligner does, which is also what splits multi-chain structures into one record
+per chain and names them `<file basename>_<chain>`.
+
+These extensions are recognized by `domainator.utils.get_file_type`, which reports them as
+type `structure`. That type is deliberately not readable by any sequence reader: every
+consumer of `get_file_type` whitelists the types it accepts, so a structure file handed to
+`domainate.py`, `domain_search.py` or any other sequence tool is rejected with a message
+pointing at [structure_to_genbank.py and friends](structure_search.md) rather than a generic
+"extension not recognized".
+
+Aligner databases are *not* identified by extension. A foldseek database is a set of files
+sharing a prefix, detected by the presence of `<prefix>.dbtype` and `<prefix>.index`; a
+reseek database is a single `.bcb`/`.bca` file, detected by its magic bytes. Extension-based
+detection is avoided for both so that a mis-named file is not mistaken for a database.
+
 ## hdf5
 
 Domainator uses hdf5 files to store data matrices in both dense and sparse formats. Code for reading, writing, and using data matrices is found in the `data_matrix.py` file (which is not executable, but imported by various other scripts).

@@ -45,4 +45,6 @@ pandoc -V geometry:margin=0.5in -V geometry:paperwidth=13.5in  README.md -o READ
   - pyhmmer
   - umap-learn
   - diamond
+  - foldseek (optional, for the structure_* tools; installed with the conda environment)
+  - reseek (optional, alternative structure backend; must be built from source, see [Structure search and annotation](structure_search.md))
   - coverage

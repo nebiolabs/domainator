@@ -92,14 +92,13 @@
     {
       "name": "Alignment Type",
       "parameter": "alignment_type",
-      "help": "how to compute the alignment: 0 = 3Di only, 1 = TM-align, 2 = 3Di+AA. Type 1 requires C-alpha coordinates in both databases.",
+      "help": "foldseek only: how to compute the alignment: 0 = 3Di only, 1 = TM-align, 2 = 3Di+AA (the default when unset). Type 1 requires C-alpha coordinates in both databases. reseek has no alignment-type option and rejects this.",
       "type": "integer",
       "choices": [
         0,
         1,
         2
       ],
-      "default": 2,
       "flags": [
         "--alignment_type"
       ]
@@ -139,6 +138,20 @@
       "default": "cpu",
       "flags": [
         "--device"
+      ]
+    },
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "structural alignment backend to use.",
+      "type": "string",
+      "choices": [
+        "foldseek",
+        "reseek"
+      ],
+      "default": "foldseek",
+      "flags": [
+        "--algorithm"
       ]
     },
     {
@@ -204,23 +217,10 @@
     {
       "name": "Hits Tsv",
       "parameter": "hits_tsv",
-      "help": "write the backend's raw hit table here, for debugging or for cross-checking against a hand-run search.",
+      "help": "write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference cap is applied, so it may hold more rows than the output.",
       "type": "string",
       "flags": [
         "--hits_tsv"
-      ]
-    },
-    {
-      "name": "Algorithm",
-      "parameter": "algorithm",
-      "help": "structural alignment backend to use.",
-      "type": "string",
-      "choices": [
-        "foldseek"
-      ],
-      "default": "foldseek",
-      "flags": [
-        "--algorithm"
       ]
     },
     {
@@ -254,12 +254,12 @@
     {
       "name": "Max Seqs",
       "parameter": "max_seqs",
-      "help": "maximum number of hits the backend keeps per reference. Raise this when searching a large database, otherwise coverage is silently capped.",
+      "help": "maximum number of hits to keep per reference, keeping the most significant ones. Defaults to the backend's own default: 1000 for foldseek, no cap for reseek. For foldseek this bounds the search itself, so raising it costs time but improves coverage; for reseek it bounds only the output, since reseek has no native cap and does the full search either way. A warning is printed whenever a reference saturates the cap.",
       "type": "integer",
-      "default": 1000,
       "flags": [
         "--max_seqs"
-      ]
+      ],
+      "min": 1
     },
     {
       "name": "Max Output Gb",
@@ -269,6 +269,44 @@
       "default": 25.0,
       "flags": [
         "--max_output_gb"
+      ]
+    },
+    {
+      "name": "Reseek Path",
+      "parameter": "reseek_path",
+      "type": "string",
+      "help": "path to the reseek executable. If not supplied, reseek is looked up on PATH.",
+      "flags": [
+        "--reseek_path"
+      ]
+    },
+    {
+      "name": "Reseek Stats",
+      "parameter": "reseek_stats",
+      "type": "string",
+      "choices": [
+        "family",
+        "superfamily",
+        "fold"
+      ],
+      "default": "superfamily",
+      "help": "reseek only: SCOP level that reseek's p-value model is calibrated against. This shifts p-values by orders of magnitude, so it changes which hits pass the E-value threshold. Ignored by other backends.",
+      "flags": [
+        "--reseek_stats"
+      ]
+    },
+    {
+      "name": "Reseek Sensitivity",
+      "parameter": "reseek_sensitivity",
+      "type": "string",
+      "choices": [
+        "fast",
+        "sensitive"
+      ],
+      "default": "sensitive",
+      "help": "reseek only: search sensitivity. Ignored by other backends.",
+      "flags": [
+        "--reseek_sensitivity"
       ]
     }
   ],

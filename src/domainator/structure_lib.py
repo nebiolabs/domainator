@@ -29,7 +29,10 @@ path (see structure_hits_to_search_results).
 
 import contextlib
 import glob as glob_module
+import heapq
+import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,9 +51,13 @@ from domainator.output_guardrails import (
 )
 from domainator.utils import open_if_is_name_for_write
 
-# Structure file extensions foldseek and reseek can read. Deliberately NOT added to
-# utils.EXTENSION_TO_TYPE: that map feeds parse_seqfiles, which cannot read structures.
-STRUCTURE_EXTENSIONS = {"pdb", "cif", "mmcif", "ent", "bcif", "pdb1", "ent"}
+# Structure file extensions, taken from the shared extension map so there is one source of
+# truth. All of these are accepted by foldseek; reseek documents pdb/cif/mmcif/ent, and
+# reports its own error for anything else.
+STRUCTURE_EXTENSIONS = frozenset(
+    extension for extension, file_type in utils.EXTENSION_TO_TYPE.items()
+    if file_type == "structure"
+)
 
 # Optional per-hit metrics a backend may be asked to compute. These map onto the
 # same-named optional fields of domainate.SearchResult.
@@ -63,16 +70,30 @@ COORDINATE_METRICS = frozenset({"tmscore", "lddt", "rmsd"})
 COORDINATE_ALIGNMENT_TYPES = frozenset({1})
 
 
+# reseek stores a whole database in one binary file. The header is
+# 'uint32 magic; uint64 chain_count', so the entry count is an O(1) read -- which matters
+# because reseek reports p-values and the E-value has to be derived from the database size
+# (see ReseekAligner). Magic values are BCA_MAGIC/BCB_MAGIC in reseek's bcadata.h.
+RESEEK_BCA_MAGIC = 0xBCABC2
+RESEEK_BCB_MAGIC = 0xBCBBC2
+RESEEK_DB_MAGICS = (RESEEK_BCA_MAGIC, RESEEK_BCB_MAGIC)
+RESEEK_DB_EXTENSIONS = {"bcb", "bca"}
+
+# reseek silently drops chains shorter than this when building a database.
+RESEEK_MIN_CHAIN_LENGTH = 32
+
+
 class StructureInputError(ValueError):
     """Raised when a -i/-r value cannot be interpreted as structures or a database."""
 
 
 def is_structure_path(path) -> bool:
-    """Whether path looks like a structure file, ignoring one compression suffix."""
-    suffixes = [s[1:].lower() for s in Path(path).suffixes]
-    if suffixes and suffixes[-1] in utils.COMPRESSION_EXTENSIONS:
-        suffixes = suffixes[:-1]
-    return bool(suffixes) and suffixes[-1] in STRUCTURE_EXTENSIONS
+    """Whether path looks like a structure file, ignoring one compression suffix.
+
+    Delegates to utils.get_file_type, which already strips a trailing compression suffix,
+    so 'x.cif.gz' is recognized.
+    """
+    return utils.get_file_type(path) == "structure"
 
 
 def is_aligner_db(value) -> bool:
@@ -81,6 +102,34 @@ def is_aligner_db(value) -> bool:
     Both files are required: a lone .dbtype would also match some unrelated paths.
     """
     return Path(f"{value}.dbtype").is_file() and Path(f"{value}.index").is_file()
+
+
+def read_reseek_db_header(path) -> Optional[Tuple[int, int]]:
+    """Read (magic, chain_count) from a reseek database file, or None if it is not one."""
+    try:
+        with open(path, "rb") as handle:
+            header = handle.read(12)
+    except OSError:
+        return None
+    if len(header) < 12:
+        return None
+    magic = int.from_bytes(header[0:4], "little")
+    if magic not in RESEEK_DB_MAGICS:
+        return None
+    return magic, int.from_bytes(header[4:12], "little")
+
+
+def is_reseek_db(value) -> bool:
+    """Whether value is a reseek .bcb/.bca database, checked by magic rather than name."""
+    return Path(value).is_file() and read_reseek_db_header(value) is not None
+
+
+def reseek_db_size(path) -> int:
+    """Number of chains in a reseek database."""
+    header = read_reseek_db_header(path)
+    if header is None:
+        raise RuntimeError(f"'{path}' is not a readable reseek database.")
+    return header[1]
 
 
 def resolve_structure_input(value) -> Tuple[str, List[str]]:
@@ -93,9 +142,10 @@ def resolve_structure_input(value) -> Tuple[str, List[str]]:
     Directories are searched recursively. Globs are expanded here rather than relying on
     the shell, because values coming from a --config file are never shell-expanded.
     """
+
     value = str(value)
 
-    if is_aligner_db(value):
+    if is_aligner_db(value) or is_reseek_db(value):
         return "db", [value]
 
     path = Path(value)
@@ -269,6 +319,13 @@ class StructureDB(NamedTuple):
         return Path(f"{self.prefix}_ca").is_file()
 
 
+def _neg_log10(value: float) -> float:
+    """-log10(value), with a finite ceiling so an underflowed p-value stays sortable."""
+    if value <= 0.0:
+        return 999.0
+    return -math.log10(value)
+
+
 def resolve_binary(name: str, override: Optional[str] = None, install_hint: str = "") -> str:
     """Resolve an external executable, raising a descriptive error when it is missing."""
     if override is not None:
@@ -285,7 +342,8 @@ def resolve_binary(name: str, override: Optional[str] = None, install_hint: str 
     return resolved
 
 
-def run_command(argv: Sequence[str], description: str, expect: Optional[str] = None, env=None) -> None:
+def run_command(argv: Sequence[str], description: str, expect: Optional[str] = None, env=None,
+                capture: bool = False):
     """Run an external command, raising RuntimeError with stderr on failure.
 
     A nonzero exit code alone is not treated as failure when `expect` names an artifact
@@ -294,13 +352,16 @@ def run_command(argv: Sequence[str], description: str, expect: Optional[str] = N
 
     subprocess.run rather than Popen followed by stderr.read(), which deadlocks once the
     child writes more than the pipe buffer.
+
+    Returns the CompletedProcess when capture is set, for callers that need to inspect the
+    command's own output (reseek reports how many chains it skipped, for example).
     """
     argv = [str(a) for a in argv]
     completed = subprocess.run(argv, capture_output=True, env=env)
     if completed.returncode == 0:
-        return
+        return completed if capture else None
     if expect is not None and Path(expect).exists():
-        return
+        return completed if capture else None
     stderr = completed.stderr.decode("utf-8", errors="replace")
     tail = "\n".join(stderr.strip().split("\n")[-25:])
     raise RuntimeError(
@@ -317,17 +378,74 @@ class StructureAligner(ABC):
     """
 
     name: str = "abstract"
+
+    # Alignment types this backend understands, and the one it uses when the caller does
+    # not ask for a specific one. --alignment_type defaults to None so that a backend with
+    # no such concept (reseek) can reject only an *explicit* request.
     supports_alignment_types: FrozenSet[int] = frozenset()
+    default_alignment_type: Optional[int] = None
+
+    # Optional per-hit metrics this backend can compute (subset of METRIC_CHOICES).
     supports_metrics: FrozenSet[str] = frozenset()
+
+    # Whether the backend can emit a 3Di-style structural alphabet per entry.
+    supports_3di: bool = False
+
+    # Whether search output carries each hit target's full sequence. When False, callers
+    # that build records from hits have to resolve sequences from the database instead.
+    provides_target_sequence: bool = False
+
+    # Whether the backend can cap hits per reference itself, keeping the best ones. A
+    # backend that cannot must reject --max_seqs rather than have the cap applied after the
+    # fact: its output is not ordered by significance, so a post-hoc cap would discard the
+    # best hits arbitrarily.
+    supports_max_seqs: bool = False
+    default_max_seqs: Optional[int] = None
+
+    # Names of the raw hit tables this backend leaves in the work directory, most-processed
+    # first. --hits_tsv exports the first one that exists, so it reflects what the run
+    # actually used rather than an intermediate.
+    results_filenames: Tuple[str, ...] = ()
+
     path_option: str = "--aligner_path"
 
     def __init__(self, bin_path: Optional[str] = None, cpu: int = 0, device: Optional[str] = None,
-                 extra_args: Optional[Sequence[str]] = None, tmp_dir: Optional[str] = None):
+                 extra_args: Optional[Sequence[str]] = None, tmp_dir: Optional[str] = None,
+                 options: Optional[dict] = None):
         self.cpu = cpu
         self.device = device
         self.extra_args = list(extra_args) if extra_args else []
         self.tmp_dir = tmp_dir
+        self.options = dict(options or {})
         self.bin_path = self._resolve_bin(bin_path)
+
+    def resolve_alignment_type(self, alignment_type: Optional[int]) -> Optional[int]:
+        """Fill in the backend's default when the caller did not ask for a specific type."""
+        return self.default_alignment_type if alignment_type is None else alignment_type
+
+    def effective_max_seqs(self, max_seqs: Optional[int]) -> Optional[int]:
+        """The per-reference hit cap actually in force, or None if there is none.
+
+        Raises when a cap was explicitly requested from a backend that cannot apply one.
+        """
+        if max_seqs is None:
+            return self.default_max_seqs
+        if not self.supports_max_seqs:
+            raise RuntimeError(
+                f"Backend '{self.name}' has no per-reference hit cap, so --max_seqs cannot "
+                "be applied. Its output is not ordered by significance, so capping it "
+                "afterwards would discard the best hits arbitrarily. Bound the results "
+                "with --evalue instead, or limit the number of returned records with "
+                "--max_hits."
+            )
+        return max_seqs
+
+    def database_has_coordinates(self, db: StructureDB) -> bool:
+        """Whether this database carries the C-alpha coordinates some options need."""
+        return db.has_coordinates()
+
+    def validate_database(self, db: StructureDB) -> None:
+        """Raise if db is not in a format this backend can read."""
 
     @abstractmethod
     def _resolve_bin(self, bin_path: Optional[str]) -> str:
@@ -356,14 +474,18 @@ class StructureAligner(ABC):
         """Yield (name, 3Di_sequence) for every entry, if the backend has 3Di states."""
         raise NotImplementedError(f"{self.name} does not expose a 3Di alphabet.")
 
-    def check_capabilities(self, alignment_type: int, metrics: Sequence[str],
+    def check_capabilities(self, alignment_type: Optional[int], metrics: Sequence[str],
                            databases: Sequence[StructureDB]) -> None:
         """Fail early on an unsupported or impossible request."""
-        if alignment_type not in self.supports_alignment_types:
+        if alignment_type is not None and alignment_type not in self.supports_alignment_types:
+            supported = sorted(self.supports_alignment_types)
+            detail = f"Supported: {supported}." if supported else \
+                "It has no alignment-type option at all."
             raise RuntimeError(
                 f"Backend '{self.name}' does not support alignment type {alignment_type}. "
-                f"Supported: {sorted(self.supports_alignment_types)}."
+                + detail
             )
+        alignment_type = self.resolve_alignment_type(alignment_type)
         unsupported = sorted(set(metrics) - set(self.supports_metrics))
         if unsupported:
             raise RuntimeError(
@@ -377,7 +499,7 @@ class StructureAligner(ABC):
         if not needs_coordinates:
             return
         for db in databases:
-            if not db.has_coordinates():
+            if not self.database_has_coordinates(db):
                 verb = "requires" if len(needs_coordinates) == 1 else "require"
                 raise RuntimeError(
                     f"{', '.join(needs_coordinates)} {verb} C-alpha coordinates, but the "
@@ -393,7 +515,13 @@ class FoldseekAligner(StructureAligner):
 
     name = "foldseek"
     supports_alignment_types = frozenset({0, 1, 2})
+    default_alignment_type = 2
     supports_metrics = frozenset(METRIC_CHOICES)
+    supports_3di = True
+    provides_target_sequence = True          # convertalis tseq
+    supports_max_seqs = True                 # --max-seqs, applied during the search
+    default_max_seqs = 1000                  # foldseek's own default
+    results_filenames = ("results.by_target.tsv", "results.tsv")
     path_option = "--foldseek_path"
 
     # convertalis column name for each metric we expose.
@@ -412,6 +540,19 @@ class FoldseekAligner(StructureAligner):
             "foldseek", bin_path,
             install_hint="Install it with 'conda install -c conda-forge -c bioconda foldseek'.",
         )
+
+    def validate_database(self, db: StructureDB) -> None:
+        if is_reseek_db(db.prefix):
+            raise RuntimeError(
+                f"'{db.prefix}' is a reseek database, which foldseek cannot read. "
+                "Use --algorithm reseek, or point --input/--references at structure files "
+                "or a foldseek database."
+            )
+        if not is_aligner_db(db.prefix):
+            raise RuntimeError(
+                f"'{db.prefix}' is not a foldseek database "
+                f"('{db.prefix}.dbtype' and '{db.prefix}.index' do not both exist)."
+            )
 
     def _thread_args(self) -> List[str]:
         # cpu == 0 means "let foldseek decide", which is its own default.
@@ -583,6 +724,8 @@ class FoldseekAligner(StructureAligner):
 
     def search(self, query_db, target_db, *, evalue, max_seqs, want_tseq,
                alignment_type, metrics, work_dir, sort_by_target=False):
+        alignment_type = self.resolve_alignment_type(alignment_type)
+        max_seqs = self.effective_max_seqs(max_seqs)
         columns = list(self.BASE_COLUMNS)
         if want_tseq:
             columns.append("tseq")
@@ -670,7 +813,280 @@ class FoldseekAligner(StructureAligner):
                 yield StructureHit(**values)
 
 
-ALIGNERS = {"foldseek": FoldseekAligner}
+class ReseekAligner(StructureAligner):
+    """reseek backend (v3.0 / release tag v3.01 and later).
+
+    reseek differs from foldseek in four ways that the interface has to absorb:
+
+    * A database is one binary .bcb file built with 'reseek -convert', not a set of files
+      sharing a prefix. Note that v3.0's -search accepts *only* a binary database for both
+      the query and the target side, despite what its --help implies, so structure files
+      are always converted first.
+    * There is no alignment-type option and no TM-score/lDDT/RMSD output, so those are
+      declared unsupported rather than silently ignored.
+    * It reports a p-value. Its 'evalue' column is explicitly a SCOP40-referenced rescaling
+      (evalue = pvalue * 8290) that does not depend on the database actually being
+      searched, so it is not used; see _search_pvalue / E-value handling below.
+    * Search output has no full target sequence (the documented trowg column is not
+      implemented in v3.0, and trow is the local aligned row only), so
+      provides_target_sequence is False and callers resolve sequences from the database.
+
+    reseek also drops chains shorter than RESEEK_MIN_CHAIN_LENGTH residues when building a
+    database. That would silently lose input records, so build_db warns about it.
+    """
+
+    name = "reseek"
+    supports_alignment_types = frozenset()       # no such concept
+    default_alignment_type = None
+    supports_metrics = frozenset()               # no tmscore/lddt/rmsd/prob
+    supports_3di = False                         # reseek's Mu alphabet is not exposed in v3.0
+    provides_target_sequence = False
+    # reseek has no per-reference cap of its own, so --max_seqs is applied here by keeping
+    # the best hits per query (see _apply_max_seqs). Unlike foldseek's --max-seqs, which
+    # bounds the prefilter, this bounds output only: reseek still does the full search.
+    # There is no cap unless one is asked for; --evalue is the bound that limits work.
+    supports_max_seqs = True
+    default_max_seqs = None
+    results_filenames = ("reseek_hits.by_target.tsv", "reseek_hits.tsv")
+    path_option = "--reseek_path"
+
+    # reseek's 'evalue' column is pvalue * this fixed SCOP40 size. Recorded to explain why
+    # the column is ignored, not used in any calculation.
+    SCOP40_SIZE = 8290
+
+    COLUMNS = ("query", "target", "qlo", "qhi", "ql", "tlo", "thi", "tl", "pctid", "pvalue")
+
+    def _resolve_bin(self, bin_path):
+        return resolve_binary(
+            "reseek", bin_path,
+            install_hint="Build it from https://github.com/rcedgar/reseek "
+                         "(the v3.01 release binary requires AVX-512).",
+        )
+
+    def _stats_level(self) -> str:
+        """SCOP level the p-value null model is calibrated against.
+
+        Required by reseek v3.0, and it moves p-values by orders of magnitude, so it is a
+        real knob rather than an internal detail.
+        """
+        return self.options.get("reseek_stats") or "superfamily"
+
+    def _sensitivity_arg(self) -> str:
+        sensitivity = self.options.get("reseek_sensitivity") or "sensitive"
+        return f"-{sensitivity}"
+
+    def _thread_args(self) -> List[str]:
+        # cpu == 0 means "use every core", which is reseek's own default.
+        return ["-threads", str(self.cpu)] if self.cpu and self.cpu > 0 else []
+
+    def database_has_coordinates(self, db: StructureDB) -> bool:
+        # A reseek database is C-alpha coordinates by construction.
+        return True
+
+    def validate_database(self, db: StructureDB) -> None:
+        if not is_reseek_db(db.prefix):
+            hint = ""
+            if is_aligner_db(db.prefix):
+                hint = (" It looks like a foldseek database; use --algorithm foldseek, or "
+                        "rebuild it for reseek from the original structures.")
+            raise RuntimeError(
+                f"'{db.prefix}' is not a reseek database (.bcb/.bca).{hint}"
+            )
+
+    def build_db(self, inputs, out_prefix) -> StructureDB:
+        """reseek -convert, driven by a .files list of input paths."""
+        inputs = list(inputs)
+        if not inputs:
+            raise StructureInputError("No structure files to build a database from.")
+        # reseek requires a '.bcb' name for a searchable database.
+        db_path = out_prefix if str(out_prefix).endswith(".bcb") else f"{out_prefix}.bcb"
+        list_path = f"{db_path}.files"
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(list_path, "w") as handle:
+            for path in inputs:
+                handle.write(f"{os.path.abspath(path)}\n")
+
+        completed = run_command(
+            [self.bin_path, "-convert", list_path, "-bcb", db_path],
+            "reseek -convert", expect=db_path, capture=True,
+        )
+        if not Path(db_path).is_file():
+            raise RuntimeError(
+                f"reseek -convert produced no database at '{db_path}'. "
+                "Check that the input files are readable structures."
+            )
+        self._warn_on_dropped_chains(completed, db_path)
+        return StructureDB(prefix=db_path, owned=True, source_paths=tuple(inputs))
+
+    def _warn_on_dropped_chains(self, completed, db_path) -> None:
+        """Surface reseek's minimum-length filter, which would otherwise lose records."""
+        if completed is None:
+            return
+        output = (completed.stdout or b"").decode("utf-8", errors="replace") + \
+                 (completed.stderr or b"").decode("utf-8", errors="replace")
+        match = re.search(r"(\d+) too short", output)
+        if match and int(match.group(1)) > 0:
+            warnings.warn(
+                f"reseek skipped {match.group(1)} chain(s) shorter than "
+                f"{RESEEK_MIN_CHAIN_LENGTH} residues while building '{db_path}'; those "
+                "structures will be absent from the results.",
+                RuntimeWarning,
+            )
+
+    def _search_pvalue(self, evalue: float, target_db: StructureDB) -> Tuple[float, int]:
+        """Convert an E-value threshold into the p-value threshold reseek wants.
+
+        reseek reports a per-comparison p-value, while domainator's -e is an E-value
+        against the database being searched. For N database entries the two are related by
+        E = p * N, so the threshold converts as p = E / N. Keeping this relationship means
+        -e means the same thing for reseek as it does for foldseek, instead of reseek's own
+        'evalue' column, which is a rescaling against a fixed SCOP40 size and so ignores
+        the database actually being searched.
+        """
+        db_size = max(1, reseek_db_size(target_db.prefix))
+        return min(1.0, evalue / db_size), db_size
+
+    def search(self, query_db, target_db, *, evalue, max_seqs, want_tseq,
+               alignment_type, metrics, work_dir, sort_by_target=False):
+        if metrics:
+            raise RuntimeError(
+                f"Backend 'reseek' cannot compute {sorted(metrics)}."
+            )
+        max_seqs = self.effective_max_seqs(max_seqs)
+        pvalue, db_size = self._search_pvalue(evalue, target_db)
+        results_path = os.path.join(work_dir, "reseek_hits.tsv")
+
+        argv = [self.bin_path, "-search", query_db.prefix,
+                "-db", target_db.prefix,
+                "-output", results_path,
+                self._sensitivity_arg(),
+                "-pvalue", repr(pvalue),
+                "-stats", self._stats_level(),
+                "-columns", "+".join(self.COLUMNS)]
+        argv += self._thread_args() + self.extra_args
+        run_command(argv, "reseek -search", expect=results_path)
+
+        if max_seqs:
+            # Capped by significance rather than by file position: reseek's output is not
+            # sorted, so taking the first max_seqs lines would discard the best hits. The
+            # survivors are bounded by (queries x max_seqs) and are already in memory from
+            # the capping pass, so they are sorted and parsed directly rather than being
+            # written out and re-read.
+            lines = self._apply_max_seqs(results_path, max_seqs)
+            if sort_by_target:
+                target_index = self.COLUMNS.index("target")
+                lines.sort(key=lambda line: line.split("\t")[target_index])
+            yield from self._parse_results(lines, db_size)
+            return
+
+        if sort_by_target:
+            # Uncapped output is unbounded, so grouping by target goes through an external
+            # (disk-backed) sort rather than memory.
+            target_column = self.COLUMNS.index("target") + 1
+            sorted_path = os.path.join(work_dir, "reseek_hits.by_target.tsv")
+            run_command(
+                ["sort", "-t", "\t", f"-k{target_column},{target_column}",
+                 "-T", work_dir, "-o", sorted_path, results_path],
+                "sorting reseek results by target", expect=sorted_path,
+            )
+            results_path = sorted_path
+
+        with open(results_path) as handle:
+            yield from self._parse_results(handle, db_size)
+
+    def _apply_max_seqs(self, results_path: str, max_seqs: int) -> List[str]:
+        """Return the best max_seqs hit lines per query.
+
+        One streaming pass over reseek's output, holding a bounded max-heap per query keyed
+        on p-value, so memory is O(number of queries * max_seqs) rather than O(all hits).
+        The heap is ordered by -pvalue so that heap[0] is the *worst* kept hit and can be
+        evicted in O(log n) when a better one arrives.
+        """
+        pvalue_index = self.COLUMNS.index("pvalue")
+        heaps: Dict[str, list] = {}
+        counter = 0
+        with open(results_path) as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) != len(self.COLUMNS):
+                    raise RuntimeError(
+                        f"Unexpected reseek output: got {len(fields)} columns, expected "
+                        f"{len(self.COLUMNS)} ({'+'.join(self.COLUMNS)}) in line: {line[:200]}"
+                    )
+                query = fields[0]
+                pvalue = float(fields[pvalue_index])
+                counter += 1
+                # counter keeps ties deterministic and stops comparison before the payload
+                entry = (-pvalue, -counter, line)
+                heap = heaps.setdefault(query, [])
+                if len(heap) < max_seqs:
+                    heapq.heappush(heap, entry)
+                elif entry > heap[0]:
+                    # entry > heap[0] means a smaller p-value, i.e. a better hit
+                    heapq.heapreplace(heap, entry)
+
+        # best-first within each query, which is the order reseek should have used
+        return [line for heap in heaps.values()
+                for _, _, line in sorted(heap, reverse=True)]
+
+    def _parse_results(self, lines: Iterable[str], db_size) -> Iterator[StructureHit]:
+        for line in lines:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            fields = line.split("\t")
+            if len(fields) != len(self.COLUMNS):
+                raise RuntimeError(
+                    f"Unexpected reseek output: got {len(fields)} columns, expected "
+                    f"{len(self.COLUMNS)} ({'+'.join(self.COLUMNS)}) in line: {line[:200]}"
+                )
+            row = dict(zip(self.COLUMNS, fields))
+            pvalue = float(row["pvalue"])
+            yield StructureHit(
+                query=row["query"],
+                target=row["target"],
+                qstart=int(row["qlo"]),
+                qend=int(row["qhi"]),
+                qlen=int(row["ql"]),
+                tstart=int(row["tlo"]),
+                tend=int(row["thi"]),
+                tlen=int(row["tl"]),
+                # E = p * N, so -e keeps its domainator-wide meaning. See _search_pvalue.
+                evalue=pvalue * db_size,
+                # reseek reports no bitscore. -log10(p) is monotonic in significance and
+                # positive for significant hits, which is what filter_by_overlap needs.
+                bits=_neg_log10(pvalue),
+                # pctid is already a percentage, unlike foldseek's fractional fident.
+                fident=float(row["pctid"]) / 100.0,
+                alnlen=abs(int(row["thi"]) - int(row["tlo"])) + 1,
+            )
+
+    def iter_sequences(self, db: StructureDB):
+        """reseek -convert <db> -fasta. reseek records no source-file map, so provenance
+        is unavailable and reported as None."""
+        with tempfile.TemporaryDirectory(dir=self.tmp_dir) as scratch:
+            fasta_path = os.path.join(scratch, "sequences.fasta")
+            run_command([self.bin_path, "-convert", db.prefix, "-fasta", fasta_path],
+                        "reseek -convert -fasta", expect=fasta_path)
+            with open(fasta_path) as handle:
+                name = None
+                chunks: List[str] = []
+                for line in handle:
+                    line = line.rstrip("\n")
+                    if line.startswith(">"):
+                        if name is not None:
+                            yield name, "".join(chunks), None
+                        name = line[1:].split()[0] if line[1:].strip() else ""
+                        chunks = []
+                    elif line:
+                        chunks.append(line.strip())
+                if name is not None:
+                    yield name, "".join(chunks), None
+
+
+ALIGNERS = {"foldseek": FoldseekAligner, "reseek": ReseekAligner}
 
 
 def structure_hits_to_search_results(
@@ -768,15 +1184,26 @@ def add_backend_arguments(parser, include_search_arguments: bool = True) -> None
                         help="number of threads to give the backend. 0 lets the backend use all available cores.")
     parser.add_argument('--tmp_dir', default=None, type=str,
                         help="parent directory for temporary databases and alignment files. Structural searches can need a lot of scratch space, so point this at a large filesystem for big inputs.")
+    parser.add_argument('--reseek_stats', default="superfamily", type=str,
+                        choices=["family", "superfamily", "fold"],
+                        help="reseek only: SCOP level that reseek's p-value model is calibrated against. This shifts p-values by orders of magnitude, so it changes which hits pass --evalue. Ignored by other backends.")
+    parser.add_argument('--reseek_sensitivity', default="sensitive", type=str,
+                        choices=["fast", "sensitive"],
+                        help="reseek only: search sensitivity. Ignored by other backends.")
     if include_search_arguments:
-        parser.add_argument('--alignment_type', type=int, default=2, choices=[0, 1, 2],
-                            help="how to compute the alignment: 0 = 3Di only, 1 = TM-align, 2 = 3Di+AA. Type 1 requires C-alpha coordinates in both databases.")
+        parser.add_argument('--alignment_type', type=int, default=None, choices=[0, 1, 2],
+                            help="foldseek only: how to compute the alignment: 0 = 3Di only, 1 = TM-align, 2 = 3Di+AA (the default when unset). Type 1 requires C-alpha coordinates in both databases. reseek has no alignment-type option and rejects this.")
         parser.add_argument('--metrics', nargs='+', default=None, type=str, choices=list(METRIC_CHOICES),
                             help="additional per-hit structural metrics to compute and store as feature qualifiers. tmscore, lddt and rmsd require C-alpha coordinates in both databases.")
-        parser.add_argument('--max_seqs', type=int, default=1000,
-                            help="maximum number of hits the backend keeps per reference. Raise this when searching a large database, otherwise coverage is silently capped.")
+        parser.add_argument('--max_seqs', type=int, default=None,
+                            help="maximum number of hits to keep per reference, keeping the most significant ones. Defaults to the backend's own default: 1000 for foldseek, no cap for reseek. For foldseek this bounds the search itself, so raising it costs time but improves coverage; for reseek it bounds only the output, since reseek has no native cap and does the full search either way. A warning is printed whenever a reference saturates the cap.")
         parser.add_argument('--device', default="cpu", type=str,
                             help="where to run the search. 'cpu' for a CPU-only search, or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) for a GPU-accelerated search. GPU search requires a recent foldseek. [default: cpu]")
+
+
+# Backend-specific options, passed through to the aligner as `options`. Named with the
+# backend prefix on the command line so it is obvious which backend they apply to.
+BACKEND_OPTIONS = ("reseek_stats", "reseek_sensitivity")
 
 
 def build_aligner(params) -> StructureAligner:
@@ -788,6 +1215,7 @@ def build_aligner(params) -> StructureAligner:
         device=getattr(params, "device", None),
         extra_args=getattr(params, "aligner_arg", None),
         tmp_dir=getattr(params, "tmp_dir", None),
+        options={name: getattr(params, name, None) for name in BACKEND_OPTIONS},
     )
 
 
@@ -822,12 +1250,14 @@ def prepared_databases(aligner: StructureAligner, input_values: Sequence[str],
     with tempfile.TemporaryDirectory(dir=tmp_dir) as work_dir:
         if input_kind == "db":
             input_db = StructureDB(prefix=input_resolved[0])
+            aligner.validate_database(input_db)
         else:
             prefix = keep_db if keep_db is not None else os.path.join(work_dir, "inputdb")
             input_db = aligner.build_db(input_resolved, prefix)
 
         if reference_kind == "db":
             reference_db = StructureDB(prefix=reference_resolved[0])
+            aligner.validate_database(reference_db)
         else:
             reference_db = aligner.build_db(reference_resolved, os.path.join(work_dir, "refdb"))
 
@@ -840,12 +1270,14 @@ def prepared_databases(aligner: StructureAligner, input_values: Sequence[str],
         )
 
 
-def warn_on_saturation(hit_counts: Dict[str, int], max_seqs: int) -> None:
+def warn_on_saturation(hit_counts: Dict[str, int], max_seqs: Optional[int]) -> None:
     """Warn when a reference returned exactly --max_seqs hits, i.e. was likely truncated.
 
     Silent truncation reads as "this reference has few homologs" when it may have many, so
     it must never pass unreported.
     """
+    if max_seqs is None:
+        return
     saturated = sorted(name for name, count in hit_counts.items() if count >= max_seqs)
     if saturated:
         warnings.warn(
@@ -889,18 +1321,22 @@ def group_hits_by_target(hits: Iterable[StructureHit], db_name: str, evalue: flo
         yield current_target, current, current_sequence
 
 
-def copy_hits_tsv(work_dir: str, destination: str) -> None:
+def copy_hits_tsv(work_dir: str, destination: str, aligner: StructureAligner) -> None:
     """Copy the backend's raw hit table out of the scratch directory.
 
     The table is written by the backend inside work_dir, which is deleted when the search
-    finishes, so it has to be copied out while the search context is still open.
+    finishes, so it has to be copied out while the search context is still open. Which
+    filenames to look for is a property of the backend, since each names its own.
     """
-    for candidate in ("results.by_target.tsv", "results.tsv"):
+    for candidate in aligner.results_filenames:
         source = os.path.join(work_dir, candidate)
         if os.path.isfile(source):
             shutil.copyfile(source, destination)
             return
-    warnings.warn(f"No raw hit table was found in '{work_dir}'; --hits_tsv not written.")
+    warnings.warn(
+        f"No raw hit table was found in '{work_dir}' for backend '{aligner.name}'; "
+        "--hits_tsv not written."
+    )
 
 
 def write_records(records, output, max_output_bytes, output_description, mitigation_options):

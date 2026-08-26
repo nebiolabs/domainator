@@ -17,13 +17,55 @@ There are three tools, mirroring the sequence-based ones:
 
 ## Requirements
 
-The structure tools shell out to [foldseek](https://github.com/steineggerlab/foldseek),
-which is installed with the conda environment. Nothing else is needed — in particular these
-tools do **not** need PyTorch, `esmologs`, or the ESM-2 3B checkpoint. That stack is only
-needed for [annotating sequences that have no structure](esm_3b_foldseek.md).
+The structure tools shell out to a structural aligner. Two backends are supported, selected
+with `--algorithm`:
 
-Check that foldseek is available with `foldseek version`, or pass an explicit path with
-`--foldseek_path`.
+| backend | install | notes |
+| ---- | ---- | ---- |
+| `foldseek` (default) | installed with the conda environment | full feature set |
+| `reseek` | build from source, see below | no alignment types or structural metrics |
+
+Neither needs PyTorch, `esmologs`, or the ESM-2 3B checkpoint. That stack is only needed for
+[annotating sequences that have no structure](esm_3b_foldseek.md).
+
+Check availability with `foldseek version` / `reseek`, or pass an explicit path with
+`--foldseek_path` / `--reseek_path`.
+
+### Building reseek
+
+reseek is not on bioconda yet, and two things make the published v3.01 artifacts unusable on
+many machines, so it has to be built from source:
+
+* The **precompiled `reseek-v3.01-linux-x86` release binary** is compiled with
+  `-march=native` on a machine with AVX-512. On any CPU without AVX-512 it dies immediately
+  with `Illegal instruction` (SIGILL) before printing anything.
+* The **v3.01 source tag** does not compile with GCC 13 or later: it copy-initializes
+  `std::atomic` (`atomic<uint> m_NextQueryIdx = 0;`), whose copy constructor is deleted.
+
+Both are fixed in commits after the v3.01 tag, so build from the default branch:
+
+```bash
+git clone https://github.com/rcedgar/reseek.git
+cd reseek/src
+bash gitver.bash          # generates git_hash.h, which the checked-in Makefile does not
+make -j$(nproc) \
+    CFLAGS="-flto -ffast-math -march=x86-64-v3 -O3 -DNDEBUG" \
+    CPPFLAGS="-flto -ffast-math -march=x86-64-v3 -O3 -DNDEBUG" \
+    LDFLAGS="-flto -ffast-math -march=x86-64-v3 -O3 -static"
+cp ../bin/reseek /somewhere/on/your/PATH
+```
+
+Two notes on that command. `bash gitver.bash` is required because the checked-in `Makefile`
+includes `git_hash.h` but has no rule to generate it — only reseek's own
+`vcxproj_make.py` build path wires the two together, so a plain `make` fails with
+`fatal error: git_hash.h: No such file or directory`. And the `-march=x86-64-v3` override
+replaces the `Makefile`'s `-march=native`; `x86-64-v3` is what upstream switched its default
+to after v3.01 "for wider CPU compatibility", and it requires only AVX2, so the resulting
+binary runs on anything from Haswell onward.
+
+Note that the binary reports itself as `reseek v3.0` even when built from the v3.01 tag or
+later — the internal version string was not bumped. The bracketed git hash in the banner is
+what actually identifies the build.
 
 ## Accepted inputs
 
@@ -82,9 +124,10 @@ rather than with the whole result set.
 
 Two knobs matter at scale:
 
-* `--max_seqs` bounds how many hits foldseek keeps **per reference**. The default of 1000 is
-  low for a database of hundreds of millions of structures. A warning is printed whenever a
-  reference saturates it, so truncation is never silent.
+* `--max_seqs` bounds how many hits are kept **per reference**. foldseek defaults to 1000,
+  which is low for a database of hundreds of millions of structures; reseek applies no cap
+  unless asked. A warning is printed whenever a reference saturates the cap, so truncation
+  is never silent.
 * `--max_hits` bounds how many **records** are returned, keeping the best-scoring ones. It
   applies to the whole search, not per reference, and makes the output sorted best-first and
   written after the search completes.
@@ -137,6 +180,55 @@ an intermediate file for those (as above).
 Note that it is one opaque string per record, so it does not survive tools that slice
 records.
 
+## How the reseek backend differs
+
+reseek is an independent implementation, and the interface reflects what it can actually do
+rather than pretending the two backends are interchangeable. Requesting something reseek
+cannot do is an error, not a silent no-op.
+
+| | foldseek | reseek |
+| ---- | ---- | ---- |
+| `--alignment_type` | `0`/`1`/`2`, default `2` | not supported (no such concept) |
+| `--metrics` | `tmscore`, `lddt`, `rmsd`, `prob` | none |
+| `--store_3di` | supported | not supported |
+| database | a set of files sharing a prefix | one `.bcb` file |
+| minimum chain length | none | 32 residues; shorter chains are dropped |
+| provenance in record descriptions | yes | no source map available |
+| sensitivity knobs | `--alignment_type`, `--aligner_arg` | `--reseek_sensitivity`, `--reseek_stats` |
+| `--max_seqs` | bounds the search, default 1000 | bounds the output only, no cap by default |
+
+Two reseek-specific options:
+
+* `--reseek_sensitivity {fast,sensitive}` (default `sensitive`).
+* `--reseek_stats {family,superfamily,fold}` (default `superfamily`) — the SCOP level
+  reseek's p-value model is calibrated against. This is not cosmetic: it shifts p-values by
+  orders of magnitude and therefore changes which hits pass `--evalue`. `superfamily` is the
+  usual remote-homology setting.
+
+**`--max_seqs` bounds output, not work.** foldseek's `--max-seqs` bounds its prefilter, so
+raising it costs time and improves coverage. reseek has no equivalent option and always does
+the full search, so Domainator applies the cap itself, keeping the most significant hits per
+reference in a single streaming pass over reseek's output. This matters because reseek's
+output is *not* ordered by significance — taking the first N lines would discard the best
+hits. The knob that actually limits reseek's work is `--evalue`. There is no cap by default.
+
+**Short chains.** reseek drops any chain shorter than 32 residues when building its
+database, so those structures are simply absent from the output. A warning is printed
+whenever this happens, since otherwise the records would vanish with no explanation.
+
+**E-values.** reseek reports a per-comparison p-value, not an E-value. Its own `evalue`
+output column is a rescaling against a fixed SCOP40 size (`evalue = pvalue * 8290`) and so
+ignores the database actually being searched, which would break the invariant described
+below. Domainator therefore derives the E-value itself from the p-value and the real
+database size, `E = p * N`, and converts the `--evalue` threshold the same way. That keeps
+`--evalue` meaning exactly what it means for foldseek. `N` is read from the `.bcb` header,
+so this costs nothing.
+
+**Scores.** reseek reports no bitscore, so the `/score` qualifier holds `-log10(p)`. It is
+monotonic in significance, which is what the overlap filtering needs, but it is not
+comparable to a foldseek bitscore — don't mix annotations from the two backends and then
+filter on score.
+
 ## Choosing an alignment direction, and what `--evalue` means
 
 References are always aligned as the **query** and the input as the **target**. This is what
@@ -160,8 +252,10 @@ Domainator applies this bound itself.
 
 ## Cross-checking against foldseek directly
 
-`--hits_tsv` writes the raw foldseek hit table alongside the genbank output, which makes the
-results directly comparable to a hand-run search:
+`--hits_tsv` writes the aligner's own hit table alongside the genbank output, which makes the
+results directly comparable to a hand-run search. Note that with reseek this is the table as
+reseek produced it, before Domainator applies `--max_seqs`, so it can contain more rows than
+the genbank output has records.
 
 ```bash
 foldseek easy-search refs/*.pdb $db ref.tsv tmp --format-mode 4 -e 0.001 \
@@ -188,5 +282,11 @@ structure_search.py -i $db -r refs/ --aligner_arg --prefilter-mode 2 -o hits.gb
   genbank output — they would inflate records several-fold, exceed what standard genbank
   parsers accept on one line, and would be silently wrong after any tool that slices
   records. Persist the aligner database with `--keep_db` instead.
-* **One backend.** foldseek is currently the only backend. `--algorithm` and `--aligner_arg`
-  exist so that others can be added without changing the interface.
+* **Backend-specific gaps.** See the comparison table above: reseek has no alignment types,
+  no structural metrics, no 3Di output, no provenance, and a 32-residue minimum chain
+  length.
+* **LoLalign** is not in any foldseek release yet. When it lands, `--aligner_arg` should
+  make it reachable without a Domainator release.
+* **Scores are not comparable across backends.** foldseek reports a bitscore and reseek
+  reports `-log10(p)`. Annotations from the two are individually meaningful but must not be
+  pooled and then filtered or sorted on `/score`.

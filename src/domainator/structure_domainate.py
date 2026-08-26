@@ -37,7 +37,7 @@ MITIGATION_OPTIONS = ["--hits_only", "--max_domains", "-e/--evalue", "--no_annot
 def structure_domainate(input_values, reference_values, aligner, evalue=0.001, min_evalue=0.0,
                         max_domains=sys.maxsize, max_overlap=1.0, overlap_by_db=False,
                         hits_only=False, no_annotations=False, alignment_type=2, metrics=None,
-                        max_seqs=1000, tmp_dir=None, keep_db=None, database_name=None,
+                        max_seqs=None, tmp_dir=None, keep_db=None, database_name=None,
                         hits_tsv=None):
     """Yield annotated protein SeqRecords, one per input structure chain.
 
@@ -85,9 +85,9 @@ def structure_domainate(input_values, reference_values, aligner, evalue=0.001, m
         for hit in hits:
             hit_counts[hit.query] = hit_counts.get(hit.query, 0) + 1
             materialized.append(hit)
-        structure_lib.warn_on_saturation(hit_counts, max_seqs)
+        structure_lib.warn_on_saturation(hit_counts, aligner.effective_max_seqs(max_seqs))
         if hits_tsv is not None:
-            structure_lib.copy_hits_tsv(work_dir, hits_tsv)
+            structure_lib.copy_hits_tsv(work_dir, hits_tsv, aligner)
 
         by_target = structure_lib.structure_hits_to_search_results(
             materialized, db_name, evalue, min_evalue, aligner.name)
@@ -132,7 +132,7 @@ def main(argv):
     parser.add_argument('--keep_db', default=None, type=str,
                         help="also write the aligner database built from the input structures, using this path as its prefix, so it can be reused as --input later.")
     parser.add_argument('--hits_tsv', default=None, type=str,
-                        help="write the backend's raw hit table here, for debugging or for cross-checking against a hand-run search.")
+                        help="write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output.")
     structure_lib.add_backend_arguments(parser)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
@@ -149,6 +149,11 @@ def main(argv):
     max_domains = params.max_domains if params.max_domains > 0 else sys.maxsize
 
     aligner = structure_lib.build_aligner(params)
+    # Validate the backend-capability arguments before any database is built, so an
+    # unsupported request fails immediately rather than after the expensive step.
+    aligner.effective_max_seqs(params.max_seqs)
+    aligner.check_capabilities(params.alignment_type, params.metrics or [], [])
+
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     output_description = f"structure_domainate genbank output ({params.output or 'stdout'})"
 

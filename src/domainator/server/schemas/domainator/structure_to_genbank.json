@@ -55,6 +55,20 @@
       ]
     },
     {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "structural alignment backend to use.",
+      "type": "string",
+      "choices": [
+        "foldseek",
+        "reseek"
+      ],
+      "default": "foldseek",
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
       "name": "Cpu",
       "parameter": "cpu",
       "help": "number of threads to give the backend. 0 lets the backend use all available cores.",
@@ -67,19 +81,6 @@
     }
   ],
   "advanced_parameters": [
-    {
-      "name": "Algorithm",
-      "parameter": "algorithm",
-      "help": "structural alignment backend to use.",
-      "type": "string",
-      "choices": [
-        "foldseek"
-      ],
-      "default": "foldseek",
-      "flags": [
-        "--algorithm"
-      ]
-    },
     {
       "name": "Foldseek Path",
       "parameter": "foldseek_path",
@@ -106,6 +107,44 @@
       "type": "file",
       "flags": [
         "--tmp_dir"
+      ]
+    },
+    {
+      "name": "Reseek Path",
+      "parameter": "reseek_path",
+      "type": "string",
+      "help": "path to the reseek executable. If not supplied, reseek is looked up on PATH.",
+      "flags": [
+        "--reseek_path"
+      ]
+    },
+    {
+      "name": "Reseek Stats",
+      "parameter": "reseek_stats",
+      "type": "string",
+      "choices": [
+        "family",
+        "superfamily",
+        "fold"
+      ],
+      "default": "superfamily",
+      "help": "reseek only: SCOP level that reseek's p-value model is calibrated against. This shifts p-values by orders of magnitude, so it changes which hits pass the E-value threshold. Ignored by other backends.",
+      "flags": [
+        "--reseek_stats"
+      ]
+    },
+    {
+      "name": "Reseek Sensitivity",
+      "parameter": "reseek_sensitivity",
+      "type": "string",
+      "choices": [
+        "fast",
+        "sensitive"
+      ],
+      "default": "sensitive",
+      "help": "reseek only: search sensitivity. Ignored by other backends.",
+      "flags": [
+        "--reseek_sensitivity"
       ]
     }
   ],

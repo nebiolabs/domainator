@@ -91,6 +91,13 @@ def main(argv):
 
     aligner = structure_lib.build_aligner(params)
 
+    if params.store_3di and not aligner.supports_3di:
+        raise RuntimeError(
+            f"--store_3di is not available with the '{aligner.name}' backend, which does "
+            "not expose a per-residue structural alphabet. Use --algorithm foldseek, or "
+            "drop --store_3di."
+        )
+
     # None or "-" means stdout, matching the rest of the suite.
     out = sys.stdout if params.output in (None, "-") else params.output
 

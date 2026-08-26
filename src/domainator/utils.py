@@ -55,6 +55,16 @@ EXTENSION_TO_TYPE = {
     "hdf5":"hdf5",
     "hdf":"hdf5",
     "h5":"hdf5",
+    # Protein structure files, read by the structure_* tools via an external structural
+    # aligner. No sequence reader here handles them: every consumer of get_file_type
+    # whitelists the types it accepts, so these are recognized only so that callers can say
+    # "that is a structure file" instead of "extension not recognized".
+    "pdb":"structure",
+    "pdb1":"structure",
+    "ent":"structure",
+    "cif":"structure",
+    "mmcif":"structure",
+    "bcif":"structure",
 }
 
 # Compression suffixes that are stripped to reveal the underlying sequence format
@@ -836,6 +846,12 @@ def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None,
             if is_handle:
                 raise ValueError(f"filetype_override must be specified when passing a handle.")
             file_type = get_file_type(file)
+            if file_type == "structure":
+                raise ValueError(
+                    f"'{file}' is a protein structure file, not a sequence file. Convert it "
+                    "with structure_to_genbank.py first, or use structure_domainate.py / "
+                    "structure_search.py to work with structures directly."
+                )
             if file_type not in {"genbank", "fasta"}:
                 raise ValueError(f"file extension not recognized: {file}, please specify format.")
 

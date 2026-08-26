@@ -39,7 +39,7 @@ MITIGATION_OPTIONS = ["--max_hits", "-e/--evalue", "--no_annotations"]
 
 def structure_search(input_values, reference_values, aligner, evalue=0.001, min_evalue=0.0,
                      max_hits=None, max_overlap=1.0, overlap_by_db=False,
-                     add_annotations=False, alignment_type=2, metrics=None, max_seqs=1000,
+                     add_annotations=False, alignment_type=2, metrics=None, max_seqs=None,
                      tmp_dir=None, keep_db=None, database_name=None, hits_tsv=None):
     """Yield protein SeqRecords for database records that matched a reference.
 
@@ -81,9 +81,6 @@ def structure_search(input_values, reference_values, aligner, evalue=0.001, min_
                               alignment_type=alignment_type, metrics=metrics,
                               work_dir=prepared.work_dir, sort_by_target=True)
 
-        # tseq carries each hit target's full sequence, so records are built without ever
-        # reading the searched database. group_hits_by_target hands each group its own
-        # sequence, so --max_hits bounds how many sequences are held at once.
         hit_counts = {}
 
         def counted(hit_iterable):
@@ -94,13 +91,26 @@ def structure_search(input_values, reference_values, aligner, evalue=0.001, min_
         groups = structure_lib.group_hits_by_target(
             counted(hits), db_name, evalue, min_evalue, aligner.name)
 
-        for record in _emit_groups(groups, max_hits, max_overlap, overlap_by_db,
-                                   add_annotations):
+        if aligner.provides_target_sequence:
+            # Search output carries each hit target's full sequence, so records are built
+            # without ever reading the searched database. group_hits_by_target hands each
+            # group its own sequence, so --max_hits bounds how many are held at once.
+            emitted = _emit_groups(groups, max_hits, max_overlap, overlap_by_db,
+                                   add_annotations)
+        else:
+            # The backend reports no target sequence (reseek), so the hits are collected
+            # first and the sequences are then resolved in one pass over the database.
+            # Memory is bounded by the selected hits, not by the database.
+            emitted = _emit_groups_with_db_sequences(
+                groups, aligner, prepared.input_db, max_hits, max_overlap, overlap_by_db,
+                add_annotations)
+
+        for record in emitted:
             yield record
 
-        structure_lib.warn_on_saturation(hit_counts, max_seqs)
+        structure_lib.warn_on_saturation(hit_counts, aligner.effective_max_seqs(max_seqs))
         if hits_tsv is not None:
-            structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv)
+            structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv, aligner)
 
 
 def _build_record(target, record_hits, sequence, max_overlap, overlap_by_db, add_annotations):
@@ -149,6 +159,62 @@ def _emit_groups(groups, max_hits, max_overlap, overlap_by_db, add_annotations):
                             overlap_by_db, add_annotations)
 
 
+def _emit_groups_with_db_sequences(groups, aligner, input_db, max_hits, max_overlap,
+                                   overlap_by_db, add_annotations):
+    """Emit records for backends whose search output has no target sequences.
+
+    The hit groups are collected and reduced to the selected set first, then the database
+    is streamed once to attach sequences. Records come out in database order rather than
+    score order, which is why the score-ordered case is handled separately.
+    """
+    selected = {}
+    heap = []
+    counter = 0
+    for target, record_hits, _ in groups:
+        best_score = max(hit.score for hit in record_hits)
+        counter += 1
+        entry = (best_score, -counter, target)
+        if max_hits is None:
+            selected[target] = record_hits
+            continue
+        if len(heap) < max_hits:
+            heapq.heappush(heap, entry)
+            selected[target] = record_hits
+        elif entry > heap[0]:
+            _, _, evicted = heapq.heapreplace(heap, entry)
+            selected.pop(evicted, None)
+            selected[target] = record_hits
+
+    if not selected:
+        return
+
+    if max_hits is None:
+        order = None
+    else:
+        # emit best-first, matching the behavior of the sequence-carrying path
+        order = {target: rank for rank, (_, _, target)
+                 in enumerate(sorted(heap, reverse=True))}
+
+    found = {}
+    for name, sequence, _ in aligner.iter_sequences(input_db):
+        if name in selected:
+            found[name] = sequence
+            if len(found) == len(selected):
+                break
+
+    missing = sorted(set(selected) - set(found))
+    if missing:
+        raise RuntimeError(
+            f"{len(missing)} hit target(s) are absent from the searched database "
+            f"(for example {missing[:3]}), so their records cannot be built."
+        )
+
+    targets = sorted(selected, key=lambda t: order[t]) if order is not None else list(found)
+    for target in targets:
+        yield _build_record(target, selected[target], found[target], max_overlap,
+                            overlap_by_db, add_annotations)
+
+
 def main(argv):
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
@@ -175,7 +241,7 @@ def main(argv):
     parser.add_argument('--keep_db', default=None, type=str,
                         help="when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.")
     parser.add_argument('--hits_tsv', default=None, type=str,
-                        help="write the backend's raw hit table here, for debugging or for cross-checking against a hand-run search.")
+                        help="write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output.")
     structure_lib.add_backend_arguments(parser)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
@@ -190,6 +256,11 @@ def main(argv):
         raise RuntimeError("--max_hits must be at least 1.")
 
     aligner = structure_lib.build_aligner(params)
+    # Validate the backend-capability arguments before any database is built, so an
+    # unsupported request fails immediately rather than after the expensive step.
+    aligner.effective_max_seqs(params.max_seqs)
+    aligner.check_capabilities(params.alignment_type, params.metrics or [], [])
+
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     output_description = f"structure_search genbank output ({params.output or 'stdout'})"
 

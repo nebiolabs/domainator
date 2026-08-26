@@ -391,6 +391,13 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     if reference_files is not None:
         for file in reference_files:
             file_type = get_file_type(file)
+            if file_type == "structure":
+                raise RuntimeError(
+                    f"'{file}' is a protein structure file, which cannot be used as a "
+                    "domainate.py reference. Use structure_domainate.py to annotate with "
+                    "reference structures, or turn them into a foldseek database with "
+                    "'structure_to_genbank.py --keep_db' and pass that with --foldseek."
+                )
             if file_type not in {"fasta", "hmm", "cm"}:
                 raise RuntimeError("Reference files must be fasta, hmmer, or infernal cm.")
             if file_type == "hmm":
