@@ -5,7 +5,7 @@ import html
 import seaborn as sns
 import pandas as pd
 from itertools import chain
-from pandas.api.types import is_integer_dtype, is_float_dtype
+from pandas.api.types import is_bool_dtype, is_integer_dtype, is_float_dtype
 import xml.etree.ElementTree as ET
 from typing import Dict, Iterable, Iterator, Optional, Sequence, Tuple
 
@@ -41,7 +41,11 @@ def get_column_types(df):
     out = dict()
     for column, datatype in types.items():
         # Handle pandas extension dtypes like StringDtype that numpy cannot interpret.
-        if is_integer_dtype(datatype):
+        # bool is checked first: pandas treats it as its own dtype, but a nullable
+        # boolean column would otherwise fall through to 'string'.
+        if is_bool_dtype(datatype):
+            out[column] = 'boolean'
+        elif is_integer_dtype(datatype):
             out[column] = 'integer'
         elif is_float_dtype(datatype):
             out[column] = 'real'
@@ -53,14 +57,15 @@ def get_column_types(df):
 def check_null(value, xgmml_type):
     """
         value: a value from a pandas dataframe
-        xgmml_type: "string", "integer", "real"
+        xgmml_type: "string", "integer", "real", "boolean"
 
         if value is not null, then return the value, otherwise return a default based on the type.
         string: ''
         integer: 0
         real: 0.0
+        boolean: False
     """
-    defaults = {"string":'', "integer":0, "real":0.0}
+    defaults = {"string":'', "integer":0, "real":0.0, "boolean":False}
     if pd.isna(value):
         return defaults[xgmml_type]
     if xgmml_type == "real":
@@ -74,6 +79,18 @@ def check_null(value, xgmml_type):
         if value < MIN_INT:
             return MIN_INT
     return value
+
+
+def format_att_value(value, xgmml_type):
+    """Render a value for an xgmml att, filling in a type-appropriate default if null.
+
+    Booleans are written as the lowercase 'true'/'false' that Cytoscape expects,
+    not Python's 'True'/'False'.
+    """
+    value = check_null(value, xgmml_type)
+    if xgmml_type == "boolean":
+        return "true" if value else "false"
+    return str(value)
         
 
 
@@ -155,7 +172,7 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, edge_rows=None, edge_column_
         for key, idx in col_to_idx.items():
             value = row[idx]
             if key != x_col and key != y_col and key != z_col:
-                ET.SubElement(node, "att", {"type":metadata_types[key], "name":str(key), "value":html.escape(str(check_null(value, metadata_types[key])))})
+                ET.SubElement(node, "att", {"type":metadata_types[key], "name":str(key), "value":html.escape(format_att_value(value, metadata_types[key]))})
 
         color = None
         if color_by is not None:
@@ -188,7 +205,7 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, edge_rows=None, edge_column_
             edge = ET.Element("edge", {"id":f"e{i}", "label":f"e{i}", "source": source, "target": target})
             for key in row._fields[1:]:
                 value = getattr(row, key)
-                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":str(check_null(value, edge_metadata_types[key]))})
+                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":format_att_value(value, edge_metadata_types[key])})
 
             tail = "\n" if i == edge_count - 1 else "\n  "
             yield _serialize_xgmml_element(edge, tail)
@@ -208,7 +225,7 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, edge_rows=None, edge_column_
 
             edge = ET.Element("edge", {"id":f"e{i}", "label":f"e{i}", "source": source_id, "target": target_id})
             for key, value in zip(edge_column_names, row[2:]):
-                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":str(check_null(value, edge_metadata_types[key]))})
+                ET.SubElement(edge, "att", {"type":edge_metadata_types[key], "name":str(key), "value":format_att_value(value, edge_metadata_types[key])})
 
             tail = "\n" if is_last else "\n  "
             yield _serialize_xgmml_element(edge, tail)

@@ -121,6 +121,16 @@
       ]
     },
     {
+      "name": "Mark Mst",
+      "parameter": "mark_mst",
+      "help": "Give every edge a boolean 'MST' property saying whether it belongs to the maximum spanning tree. Useful for styling or filtering the MST backbone within a larger network in Cytoscape.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--mark_mst"
+      ]
+    },
+    {
       "name": "Color Table Out",
       "parameter": "color_table_out",
       "help": "tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.",
@@ -159,9 +169,19 @@
       ]
     },
     {
+      "name": "KNN",
+      "parameter": "knn",
+      "help": "Include OR-symmetric k-nearest-neighbor edges (K at least 1). On its own this can split a cluster of the full graph into several clusters; combine with Mst to keep the graph's connectivity. Mutually exclusive with Mst KNN.",
+      "type": "integer",
+      "min": 1,
+      "flags": [
+        "--knn"
+      ]
+    },
+    {
       "name": "Mst KNN",
       "parameter": "mst_knn",
-      "help": "Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. K must be at least 0; K=0 gives just the maximum spanning tree. Mutually exclusive with Mst.",
+      "help": "Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. Equivalent to Mst plus KNN. K must be at least 0; K=0 gives just the maximum spanning tree. Mutually exclusive with Mst and KNN.",
       "type": "integer",
       "min": 0,
       "flags": [

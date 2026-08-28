@@ -394,6 +394,8 @@ class StreamingMstKnnAccumulator:
       effectively always, except for pathological high-degree hubs.
 
     ``k = 0`` selects no kNN edges, so the result is just the maximum spanning forest.
+    ``include_mst=False`` drops the forest instead, leaving a pure kNN graph; the MST
+    buffer is then never allocated, so only the bounded adjacency state is kept.
 
     The stored ``[out_score, in_score]`` also lets :meth:`to_csr` reproduce the directional
     asymmetry of the batch path for the kept edges. If trimming has dropped both directions
@@ -401,13 +403,18 @@ class StreamingMstKnnAccumulator:
     """
 
     def __init__(self, n_nodes: int, k: int, lower_bound: float = 0.0, include_equal: bool = False,
-                 mst_buffer_cap: Optional[int] = None, knn_soft_cap: Optional[int] = None):
+                 mst_buffer_cap: Optional[int] = None, knn_soft_cap: Optional[int] = None,
+                 include_mst: bool = True):
         if k < 0:
             raise ValueError("k must be >= 0")
+        if not include_mst and k < 1:
+            raise ValueError("k must be >= 1 when the maximum spanning tree is excluded, "
+                             "otherwise no edges would be selected at all")
         self.n_nodes = n_nodes
         self.k = k
         self.lower_bound = lower_bound
         self.include_equal = include_equal
+        self.include_mst = include_mst
         self.mst_buffer_cap = max(1, mst_buffer_cap) if mst_buffer_cap is not None else max(4 * n_nodes, 100_000)
         # A soft cap below k could evict a true top-k neighbor, so never trim below k.
         self.knn_soft_cap = max(k, knn_soft_cap) if knn_soft_cap is not None else max(4 * k, k + 16)
@@ -429,9 +436,10 @@ class StreamingMstKnnAccumulator:
         if not _score_passes_lower_bound(score, self.lower_bound, include_equal=self.include_equal):
             return
 
-        self._mst_buffer.append((i, j, score))
-        if len(self._mst_buffer) >= self.mst_buffer_cap:
-            self._flush_mst()
+        if self.include_mst:
+            self._mst_buffer.append((i, j, score))
+            if len(self._mst_buffer) >= self.mst_buffer_cap:
+                self._flush_mst()
 
         self._update_adj(i, j, score, direction=0)
         self._update_adj(j, i, score, direction=1)
@@ -454,6 +462,8 @@ class StreamingMstKnnAccumulator:
         self._adj[node] = dict(ranked[:self.knn_soft_cap])
 
     def _flush_mst(self) -> None:
+        if not self.include_mst:
+            return
         if not self._mst_buffer and not self._mst_edges:
             return
         combined = self._mst_edges + self._mst_buffer
@@ -477,7 +487,11 @@ class StreamingMstKnnAccumulator:
         self._mst_buffer = []
 
     def finalize(self) -> Dict[Tuple[int, int], float]:
-        """Return the union of MST and OR-symmetric kNN edges keyed by canonical ``(min, max)`` pair."""
+        """Return the selected edges keyed by canonical ``(min, max)`` pair.
+
+        The union of MST and OR-symmetric kNN edges, or just the kNN edges when this
+        accumulator was built with ``include_mst=False``.
+        """
         self._flush_mst()
 
         edge_dict: Dict[Tuple[int, int], float] = dict()

@@ -27,7 +27,7 @@ from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.hmmer_search import compare_hmmer
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
-from domainator.transform_matrix import MODES, _mst_knn_arg, LOG10_2
+from domainator.transform_matrix import MODES, _mst_knn_arg, _knn_arg, LOG10_2
 
 # Modes whose post-transform values are computable per edge (no global matrix maxes),
 # and therefore compatible with streaming --mst_knn pruning.
@@ -436,21 +436,27 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst_knn=None):
+def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst_knn=None, knn=None):
     """
 
     """
-    if mst_knn is not None:
+    if mst_knn is not None and knn is not None:
+        raise ValueError("--mst_knn already includes the kNN edges; pass either --mst_knn or --knn, not both.")
+    # One streaming accumulator serves both flags; only the spanning tree differs.
+    sparsify_k = mst_knn if mst_knn is not None else knn
+    sparsify_include_mst = mst_knn is not None
+    if sparsify_k is not None:
+        option = "--mst_knn" if sparsify_include_mst else "--knn"
         if mode not in MST_KNN_STREAMABLE_MODES:
             raise ValueError(
-                f"--mst_knn is only supported with --mode {sorted(MST_KNN_STREAMABLE_MODES)} "
+                f"{option} is only supported with --mode {sorted(MST_KNN_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
                 f"For '{mode}', run 'seq_dist --mode score --sparse out.hdf5' then "
-                f"'transform_matrix -i out.hdf5 --mode {mode} --mst_knn {mst_knn} --sparse pruned.hdf5'."
+                f"'transform_matrix -i out.hdf5 --mode {mode} {option} {sparsify_k} --sparse pruned.hdf5'."
             )
         if reference_path != input_path:
             raise ValueError(
-                "--mst_knn requires a square, symmetric comparison (reference must be the same file as input)."
+                f"{option} requires a square, symmetric comparison (reference must be the same file as input)."
             )
     if sparse is not None and mode == "score_dist":
         warnings.warn(f"Sparse output requested for a score_dist matrix. Distance matrices are usually not sparse. This may use more memory and have a larger output file size than expected.")
@@ -530,13 +536,15 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
 
         
 
-        if mst_knn is not None:
-            # Stream edges straight into the MST+kNN accumulator (bounded memory); the
-            # full all-vs-all matrix is never materialized. mode value is computed per
-            # edge (no global maxima needed for score/bool/efi_score). The raw-score --lb
-            # gate runs first (matching the help text), then mst_knn prunes on values > 0.
+        if sparsify_k is not None:
+            # Stream edges straight into the kNN (optionally plus MST) accumulator with
+            # bounded memory; the full all-vs-all matrix is never materialized. mode value
+            # is computed per edge (no global maxima needed for score/bool/efi_score). The
+            # raw-score --lb gate runs first (matching the help text), then the
+            # accumulator prunes on values > 0.
             log_lengths = np.log10(np.asarray(query_idx_to_len, dtype=np.float64)) if mode == "efi_score" else None
-            accumulator = StreamingMstKnnAccumulator(len(query_name_to_idx), mst_knn, lower_bound=0)
+            accumulator = StreamingMstKnnAccumulator(len(query_name_to_idx), sparsify_k, lower_bound=0,
+                                                     include_mst=sparsify_include_mst)
             for (score, query_id, subject_id) in _progress(results_iter, score_progress, desc="Scoring pairs"):
                 if score <= lb:
                     continue
@@ -573,7 +581,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
     db_idx_to_len = np.array(db_idx_to_len)
     if progress:
         print("Transforming matrix...", flush=True, file=sys.stderr)
-    if mst_knn is None and MODES[mode] is not None:
+    if sparsify_k is None and MODES[mode] is not None:
         matrix = MODES[mode](matrix, query_idx_to_len, db_idx_to_len)
 
 
@@ -654,8 +662,11 @@ def main(argv):
     parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices={"diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"},
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
 
-    parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
+    sparsify_group = parser.add_mutually_exclusive_group(required=False)
+    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
                         help="Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer >= 0, where 0 keeps only the maximum spanning tree), computed as a streaming operation to keep memory and output size small. Requires the reference to be the same file as the input (a square symmetric comparison) and --mode in {score, bool, efi_score}. Best paired with --sparse.")
+    sparsify_group.add_argument('--knn', type=_knn_arg, required=False, default=None,
+                        help="Prune the output to OR-symmetric k-nearest-neighbor edges only (integer >= 1), computed as a streaming operation. Unlike --mst_knn this does not preserve the connected components of the full comparison. Same requirements as --mst_knn.")
 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")
@@ -708,7 +719,7 @@ def main(argv):
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst_knn=params.mst_knn)
+    seq_dist(params.input, input_type, reference_path, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst_knn=params.mst_knn, knn=params.knn)
 
 def _entrypoint():
     main(sys.argv[1:])

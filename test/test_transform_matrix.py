@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import scipy
 import scipy.sparse
-from domainator.data_matrix import DataMatrix, DenseDataMatrix
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix
 from helpers import compare_iterables
 import pytest
 
@@ -389,3 +389,104 @@ def test_mst_knn_arg_rejects_negative():
     assert _mst_knn_arg("0") == 0
     with pytest.raises(ValueError):
         _mst_knn_arg("-1")
+
+
+def _bridged_triangles():
+    """Two triangles joined by a weak bridge, all weights distinct.
+
+    The bridge is nobody's nearest neighbor, so a pure kNN graph drops it while the
+    maximum spanning tree keeps it: exactly the difference between --knn and --mst_knn.
+    """
+    labels = list("abcdef")
+    weights = {("a", "b"): 10.0, ("a", "c"): 9.0, ("b", "c"): 8.0,
+               ("d", "e"): 7.0, ("d", "f"): 6.0, ("e", "f"): 5.0,
+               ("c", "d"): 1.0}
+    data = np.zeros((6, 6))
+    for (left, right), value in weights.items():
+        i, j = labels.index(left), labels.index(right)
+        data[i, j] = data[j, i] = value
+    return data, labels
+
+
+def _off_diagonal_pairs(array):
+    return sorted({(min(i, j), max(i, j)) for i, j in zip(*np.nonzero(array)) if i != j})
+
+
+def test_transform_matrix_knn_excludes_mst():
+    """--knn keeps only kNN edges; --mst_knn adds the spanning tree on top."""
+    data, labels = _bridged_triangles()
+    bridge = (labels.index("c"), labels.index("d"))
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = output_dir + "/input.hdf5"
+        DenseDataMatrix(data, labels, labels, data_type="score").write(input_file, "dense")
+
+        results = {}
+        for tag, args in (("knn1", ["--knn", "1"]), ("mst_knn1", ["--mst_knn", "1"]),
+                          ("knn2", ["--knn", "2"]), ("mst_knn2", ["--mst_knn", "2"])):
+            out_file = output_dir + f"/{tag}.hdf5"
+            transform_matrix.main(["-i", input_file, "--dense", out_file] + args)
+            results[tag] = _off_diagonal_pairs(DataMatrix.from_file(out_file).toarray())
+
+        # the bridge is only reachable through the spanning tree
+        assert bridge not in results["knn1"]
+        assert bridge in results["mst_knn1"]
+        assert bridge not in results["knn2"]
+        assert bridge in results["mst_knn2"]
+
+        # kNN edges are a subset of the union, and every kept value is the input value
+        assert set(results["knn1"]) < set(results["mst_knn1"])
+        assert set(results["knn2"]) < set(results["mst_knn2"])
+        assert results["knn2"] == [(0, 1), (0, 2), (1, 2), (3, 4), (3, 5), (4, 5)]
+
+
+def test_transform_matrix_knn_matches_sparsification_without_mst():
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    data, labels = _bridged_triangles()
+    for matrix in (DenseDataMatrix(data, labels, labels, data_type="score"),
+                   SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")):
+        knn_only = apply_mst_knn_sparsification(matrix, 2, lower_bound=0, include_mst=False)
+        with_mst = apply_mst_knn_sparsification(matrix, 2, lower_bound=0, include_mst=True)
+        knn_array = knn_only.toarray() if scipy.sparse.issparse(knn_only) else knn_only
+        mst_array = with_mst.toarray() if scipy.sparse.issparse(with_mst) else with_mst
+
+        assert _off_diagonal_pairs(knn_array) == [(0, 1), (0, 2), (1, 2), (3, 4), (3, 5), (4, 5)]
+        assert set(_off_diagonal_pairs(knn_array)) < set(_off_diagonal_pairs(mst_array))
+
+
+def test_streaming_knn_without_mst_matches_batch():
+    from domainator.data_matrix import StreamingMstKnnAccumulator
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    data, labels = _bridged_triangles()
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    k = 2
+
+    expected = apply_mst_knn_sparsification(matrix, k, lower_bound=0, include_mst=False)
+
+    acc = StreamingMstKnnAccumulator(len(labels), k, lower_bound=0, include_mst=False)
+    _feed_matrix_entries(acc, data)
+    np.testing.assert_array_equal(acc.to_csr().toarray(), expected.toarray())
+
+
+def test_knn_arg_requires_at_least_one():
+    from domainator.transform_matrix import _knn_arg
+    from domainator.data_matrix import StreamingMstKnnAccumulator
+
+    assert _knn_arg("1") == 1
+    with pytest.raises(ValueError):
+        _knn_arg("0")
+    # the accumulator refuses the same degenerate request
+    with pytest.raises(ValueError):
+        StreamingMstKnnAccumulator(4, 0, include_mst=False)
+
+
+def test_transform_matrix_knn_and_mst_knn_are_mutually_exclusive():
+    data, labels = _bridged_triangles()
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = output_dir + "/input.hdf5"
+        DenseDataMatrix(data, labels, labels, data_type="score").write(input_file, "dense")
+        with pytest.raises(SystemExit):
+            transform_matrix.main(["-i", input_file, "--dense", output_dir + "/out.hdf5",
+                                   "--knn", "2", "--mst_knn", "2"])

@@ -117,6 +117,10 @@ matrix_report.py -i efi_scores.sparse.hdf5 -o /dev/stdout
 # --cluster creates a new metadata column called 'SSN_cluster', following connectivity. 
 # --color_by can be any column from the metadata table, or SSN_cluster (if --cluster is set)
 # --color_table_out saves the color table to a tsv file.
+# To thin out a hairball, sparsify: --mst keeps just the maximum spanning tree, --knn K keeps
+# each node's K nearest neighbors, and --mst --knn K (or the shorthand --mst_knn K) keeps both.
+# Only the options that include --mst preserve the clusters of the full graph; --knn on its own
+# can break one cluster into several.
 build_ssn.py -i efi_scores.sparse.hdf5 --xgmml sequence_similarity_network.xgmml --lb 50 --cluster --cluster_tsv clusters.tsv --color_by SSN_cluster --color_table_out clusters_colors.tsv --metadata metadata.tsv
 
 # generates a nice figure legend from the cluster labels.

@@ -501,3 +501,66 @@ def test_compare_contigs_combined_sparse_metric_path_matches_fallback():
         fallback = compare_contigs._prune_scores_inplace(fallback, 0.2)
 
         assert np.allclose(combined.toarray(), fallback.toarray())
+
+
+def test_compare_contigs_knn_matches_batch_transform():
+    """Streaming --knn equals the full matrix followed by transform_matrix --knn."""
+    from domainator import transform_matrix
+
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+        _make_compare_contig_record("rec3", ["A", "C", "E"]),
+        _make_compare_contig_record("rec4", ["B", "C", "F"]),
+        _make_compare_contig_record("rec5", ["X", "Y", "Z"]),
+        _make_compare_contig_record("rec6", ["X", "Y", "W"]),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        base_args = ["-i", input_path, "--ji", "0.5", "--ai", "0.5"]
+
+        full_sparse = output_dir + "/full.hdf5"
+        batch_sparse = output_dir + "/batch.hdf5"
+        stream_sparse = output_dir + "/stream.hdf5"
+        compare_contigs.main(base_args + ["--sparse", full_sparse])
+        transform_matrix.main(["-i", full_sparse, "--sparse", batch_sparse, "--knn", "2"])
+        compare_contigs.main(base_args + ["--sparse", stream_sparse, "--knn", "2"])
+
+        batch_dm = DataMatrix.from_file(batch_sparse)
+        stream_dm = DataMatrix.from_file(stream_sparse)
+        assert batch_dm.rows == stream_dm.rows
+
+        def off_diagonal_pairs(matrix):
+            array = matrix.data.toarray()
+            return {(min(i, j), max(i, j)) for i, j in zip(*np.nonzero(array)) if i != j}
+
+        # Equal similarity scores make the selected edge set tie-dependent in the same way
+        # as --mst_knn, so compare the kept pair count and the containment property that
+        # holds regardless of tie order.
+        assert len(off_diagonal_pairs(stream_dm)) == len(off_diagonal_pairs(batch_dm))
+
+        mst_knn_sparse = output_dir + "/mst_knn.hdf5"
+        compare_contigs.main(base_args + ["--sparse", mst_knn_sparse, "--mst_knn", "2"])
+        mst_knn_pairs = off_diagonal_pairs(DataMatrix.from_file(mst_knn_sparse))
+        assert off_diagonal_pairs(stream_dm) <= mst_knn_pairs
+
+
+def test_compare_contigs_knn_rejects_invalid_use():
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+    ]
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+        args = ["-i", input_path, "--ji", "0.5", "--ai", "0.5", "--sparse", output_dir + "/out.hdf5"]
+
+        with pytest.raises(SystemExit):  # k must be >= 1
+            compare_contigs.main(args + ["--knn", "0"])
+        with pytest.raises(SystemExit):  # mutually exclusive
+            compare_contigs.main(args + ["--knn", "2", "--mst_knn", "2"])

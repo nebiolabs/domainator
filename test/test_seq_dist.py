@@ -505,3 +505,58 @@ def test_hmm_compare_1(shared_datadir):
 #     ])
 
 #     assert (seq_dist.MODES[mode](input) == expected).all()
+
+
+def test_seq_dist_knn_matches_batch_transform(shared_datadir):
+    """Streaming --knn equals a full comparison followed by transform_matrix --knn."""
+    from domainator import transform_matrix
+
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        full = output_dir + "/full.hdf5"
+        batch = output_dir + "/batch.hdf5"
+        stream = output_dir + "/stream.hdf5"
+
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", full, "--mode", "score"])
+        transform_matrix.main(["-i", full, "--sparse", batch, "--knn", "3"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", stream, "--mode", "score", "--knn", "3"])
+
+        batch_dm = DataMatrix.from_file(batch)
+        stream_dm = DataMatrix.from_file(stream)
+        assert batch_dm.rows == stream_dm.rows
+        np.testing.assert_array_equal(batch_dm.toarray(), stream_dm.toarray())
+
+
+def test_seq_dist_knn_keeps_fewer_edges_than_mst_knn(shared_datadir):
+    """--knn is a subset of --mst_knn: no spanning tree edges are added."""
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        knn_out = output_dir + "/knn.hdf5"
+        mst_knn_out = output_dir + "/mst_knn.hdf5"
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", knn_out, "--mode", "score", "--knn", "1"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", mst_knn_out, "--mode", "score", "--mst_knn", "1"])
+
+        def off_diagonal_pairs(path):
+            array = DataMatrix.from_file(path).toarray()
+            return {(min(i, j), max(i, j)) for i, j in zip(*np.nonzero(array)) if i != j}
+
+        knn_pairs = off_diagonal_pairs(knn_out)
+        mst_knn_pairs = off_diagonal_pairs(mst_knn_out)
+        assert len(knn_pairs) > 0
+        assert knn_pairs <= mst_knn_pairs
+
+
+def test_seq_dist_knn_rejects_invalid_use(shared_datadir):
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    ref = str(shared_datadir / "pdonr_peptides.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        with pytest.raises(SystemExit):  # k must be >= 1
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--knn", "0"])
+        with pytest.raises(SystemExit):  # --knn and --mst_knn are mutually exclusive
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+                           "--knn", "2", "--mst_knn", "2"])
+        with pytest.raises(ValueError):  # same streaming requirements as --mst_knn
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "norm_score", "--knn", "2"])
+        with pytest.raises(ValueError):
+            seq_dist.main(["-i", fasta, "-r", ref, "--sparse", out, "--mode", "score", "--knn", "2"])

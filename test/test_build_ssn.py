@@ -256,6 +256,55 @@ def test_build_ssn_mst_knn_preserves_ssn_cluster_colors(shared_datadir):
         assert len(set(baseline_color_table.values())) == len(expected_clusters)
 
 
+def _read_edges(xgmml_path):
+    """Return [(mst_att_value_or_None, score), ...] for every edge in an xgmml file."""
+    text = Path(xgmml_path).read_text()
+    edges = []
+    for edge in re.findall(r"<edge .*?</edge>", text, re.S):
+        mst = re.search(r'name="MST" value="(\w+)"', edge)
+        score = re.search(r'name="SSN_SCORE" value="([\d.]+)"', edge)
+        edges.append((mst.group(1) if mst else None, score.group(1)))
+    return edges
+
+
+@pytest.mark.parametrize("extra_args,expect_non_mst", [
+    ([], True),                  # full graph: MST backbone plus the rest
+    (["--mst"], False),          # only MST edges are emitted, so all are marked true
+    (["--mst_knn", "2"], True),  # MST plus kNN edges around it
+])
+def test_build_ssn_mark_mst(extra_args, expect_non_mst, shared_datadir):
+    """--mark_mst tags every edge, and finds the same MST on all three edge paths."""
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_cytoscape = output_dir + "/out.xgmml"
+        build_ssn.main(["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--xgmml", out_cytoscape,
+                        "--lb", "175", "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"),
+                        "--mark_mst"] + extra_args)
+
+        edges = _read_edges(out_cytoscape)
+        assert len(edges) > 0
+        assert all(mst in ("true", "false") for mst, _ in edges)
+        # 20 nodes in 3 clusters, so the maximum spanning forest has 20 - 3 = 17 edges
+        assert sum(1 for mst, _ in edges if mst == "true") == 17
+        assert any(mst == "false" for mst, _ in edges) == expect_non_mst
+
+
+def test_build_ssn_mark_mst_is_additive(shared_datadir):
+    """--mark_mst only adds the attribute: clusters and edges are otherwise unchanged."""
+    with tempfile.TemporaryDirectory() as output_dir:
+        common = ["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--lb", "175",
+                  "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"),
+                  "--color_by", "SSN_cluster"]
+        build_ssn.main(common + ["--xgmml", output_dir + "/off.xgmml",
+                                 "--cluster_tsv", output_dir + "/off.tsv"])
+        build_ssn.main(common + ["--xgmml", output_dir + "/on.xgmml",
+                                 "--cluster_tsv", output_dir + "/on.tsv", "--mark_mst"])
+
+        compare_files(output_dir + "/off.tsv", output_dir + "/on.tsv")
+        off, on = _read_edges(output_dir + "/off.xgmml"), _read_edges(output_dir + "/on.xgmml")
+        assert all(mst is None for mst, _ in off)
+        assert [score for _, score in off] == [score for _, score in on]
+
+
 def test_build_ssn_max_output_gb_blocks_xgmml(shared_datadir):
     input_file = "FeSOD_dist.tsv"
     with tempfile.TemporaryDirectory() as output_dir:
@@ -429,3 +478,100 @@ def test_build_ssn_mst_knn_zero_matches_mst(shared_datadir):
         mst_lines = edge_lines(out_mst)
         assert len(mst_lines) > 0
         assert edge_lines(out_mst_knn_0) == mst_lines
+
+
+def _bridged_triangles_matrix():
+    """Two triangles joined by a weak bridge that is nobody's nearest neighbor."""
+    labels = list("abcdef")
+    weights = {("a", "b"): 10.0, ("a", "c"): 9.0, ("b", "c"): 8.0,
+               ("d", "e"): 7.0, ("d", "f"): 6.0, ("e", "f"): 5.0,
+               ("c", "d"): 1.0}
+    data = np.zeros((6, 6))
+    for (left, right), value in weights.items():
+        i, j = labels.index(left), labels.index(right)
+        data[i, j] = data[j, i] = value
+    return DenseDataMatrix(data, labels, labels, data_type="score"), labels
+
+
+def _xgmml_edge_names(path, labels):
+    """Return the sorted (source, target) label pairs of an xgmml network.
+
+    Node ids are written as n<row index> in matrix row order by both the index-style and
+    name-style edge writers, so the row labels translate them back.
+    """
+    pairs = re.findall(r'<edge[^>]*source="n(\d+)"[^>]*target="n(\d+)"', Path(path).read_text())
+    return sorted(tuple(sorted((labels[int(source)], labels[int(target)]))) for source, target in pairs)
+
+
+def test_build_ssn_knn_and_mst_combinations(shared_datadir):
+    """--mst --knn K == --mst_knn K, and --knn alone drops the connecting bridge."""
+    matrix, labels = _bridged_triangles_matrix()
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = output_dir + "/input.hdf5"
+        matrix.write(input_file, "dense")
+
+        outputs = {}
+        clusters = {}
+        for tag, args in (("full", []), ("mst", ["--mst"]), ("knn1", ["--knn", "1"]),
+                          ("knn2", ["--knn", "2"]), ("mst_knn1", ["--mst_knn", "1"]),
+                          ("mst+knn1", ["--mst", "--knn", "1"]), ("mst_knn0", ["--mst_knn", "0"])):
+            xgmml = output_dir + f"/{tag}.xgmml"
+            cluster_tsv = output_dir + f"/{tag}.tsv"
+            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--cluster_tsv", cluster_tsv] + args)
+            outputs[tag] = _xgmml_edge_names(xgmml, labels)
+            clusters[tag] = len({line.split("\t")[1] for line in
+                                 Path(cluster_tsv).read_text().splitlines()[1:]})
+
+        # the documented equivalences
+        assert outputs["mst+knn1"] == outputs["mst_knn1"]
+        assert outputs["mst_knn0"] == outputs["mst"]
+
+        # a pure kNN graph keeps neighbors but loses the bridge, so it splits the cluster
+        assert ("c", "d") in outputs["full"]
+        assert ("c", "d") in outputs["mst_knn1"]
+        assert ("c", "d") not in outputs["knn1"]
+        assert ("c", "d") not in outputs["knn2"]
+        assert clusters["full"] == 1
+        assert clusters["mst"] == 1
+        assert clusters["mst_knn1"] == 1
+        assert clusters["knn1"] == 2
+        assert clusters["knn2"] == 2
+
+        # kNN edges are always a subset of the corresponding union
+        assert set(outputs["knn1"]) < set(outputs["mst_knn1"])
+        assert outputs["knn2"] == [("a", "b"), ("a", "c"), ("b", "c"), ("d", "e"), ("d", "f"), ("e", "f")]
+
+
+def test_build_ssn_knn_marks_mst_edges():
+    """--mark_mst still labels which of the kept kNN edges are MST edges."""
+    matrix, labels = _bridged_triangles_matrix()
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = output_dir + "/input.hdf5"
+        matrix.write(input_file, "dense")
+        xgmml = output_dir + "/knn_marked.xgmml"
+        build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "2", "--mark_mst"])
+
+        text = Path(xgmml).read_text()
+        assert 'name="MST"' in text
+        # a, b, c triangle: a-b and a-c are MST edges, b-c is not
+        assert text.count('name="MST" value="true"') == 4
+        assert text.count('name="MST" value="false"') == 2
+
+
+def test_build_ssn_knn_rejects_invalid_combinations():
+    matrix, labels = _bridged_triangles_matrix()
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = output_dir + "/input.hdf5"
+        matrix.write(input_file, "dense")
+        xgmml = output_dir + "/out.xgmml"
+
+        # k must select at least one neighbor when there is no spanning tree to fall back on
+        with pytest.raises(SystemExit):
+            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "0"])
+
+        # --mst_knn is shorthand for --mst --knn, so it cannot be combined with either
+        with pytest.raises(SystemExit):
+            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "2", "--mst_knn", "2"])
+        with pytest.raises(ValueError):
+            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--mst", "--mst_knn", "2"])

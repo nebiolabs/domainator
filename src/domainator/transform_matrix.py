@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.data_matrix import DataMatrix, mst_knn_edge_index_dict
+from domainator.data_matrix import DataMatrix, mst_knn_edge_index_dict, symmetric_knn_edge_index_dict
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
 import scipy.sparse
@@ -156,6 +156,15 @@ def _mst_knn_arg(value):
     return value
 
 
+def _knn_arg(value):
+    value = int(value)
+    if value < 1:
+        # Without the spanning tree there is nothing else to select, so k=0 would
+        # empty the matrix; --mst_knn 0 is the way to ask for just the tree.
+        raise ValueError("--knn must be an integer >= 1")
+    return value
+
+
 def apply_lower_bound(array, lower_bound):
     if lower_bound is None:
         return array
@@ -171,11 +180,20 @@ def apply_lower_bound(array, lower_bound):
     return out
 
 
-def apply_mst_knn_sparsification(matrix, k, lower_bound=0):
-    if matrix.shape[0] != matrix.shape[1]:
-        raise ValueError("--mst_knn requires a square matrix.")
+def apply_mst_knn_sparsification(matrix, k, lower_bound=0, include_mst=True):
+    """Keep only the OR-symmetric kNN edges, plus the maximum spanning tree if asked.
 
-    edge_dict = mst_knn_edge_index_dict(matrix, k, lower_bound=lower_bound)
+    include_mst=True is ``--mst_knn k``; include_mst=False is a pure ``--knn k`` graph,
+    which does not preserve the connected components of the input.
+    """
+    option = "--mst_knn" if include_mst else "--knn"
+    if matrix.shape[0] != matrix.shape[1]:
+        raise ValueError(f"{option} requires a square matrix.")
+
+    if include_mst:
+        edge_dict = mst_knn_edge_index_dict(matrix, k, lower_bound=lower_bound)
+    else:
+        edge_dict = symmetric_knn_edge_index_dict(matrix, k, lower_bound=lower_bound)
     diagonal_indices = np.arange(matrix.shape[0])
 
     if scipy.sparse.issparse(matrix.data):
@@ -231,8 +249,11 @@ def main(argv):
 
     parser.add_argument('--lb', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
-    parser.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
+    sparsify_group = parser.add_mutually_exclusive_group(required=False)
+    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
                         help="Keep only the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, using the post-transform values. Set to 0 to keep only the maximum spanning tree.")
+    sparsify_group.add_argument('--knn', type=_knn_arg, required=False, default=None,
+                        help="Keep only OR-symmetric k-nearest-neighbor edges (K >= 1), using the post-transform values. Unlike --mst_knn this does not preserve the connected components of the input.")
 
     add_max_output_gb_argument(parser)
     
@@ -285,8 +306,11 @@ def main(argv):
 
         matrix.data_type = requested_mode
 
-    if params.mst_knn is not None:
-        matrix.data = apply_mst_knn_sparsification(matrix, params.mst_knn, lower_bound=0 if params.lb is None else params.lb)
+    if params.mst_knn is not None or params.knn is not None:
+        include_mst = params.mst_knn is not None
+        k = params.mst_knn if include_mst else params.knn
+        matrix.data = apply_mst_knn_sparsification(matrix, k, lower_bound=0 if params.lb is None else params.lb,
+                                                   include_mst=include_mst)
 
     if params.lb is not None:
         matrix.data = apply_lower_bound(matrix.data, params.lb)
@@ -304,7 +328,7 @@ def main(argv):
                 data_type=matrix.data_type,
                 max_output_bytes=max_output_bytes,
                 output_path=dense,
-                mitigation_options=["--sparse", "--lb", "--mst_knn"],
+                mitigation_options=["--sparse", "--lb", "--mst_knn", "--knn"],
             )
             matrix.write(dense, "dense")
         if dense_text is not None:
@@ -318,7 +342,7 @@ def main(argv):
                 data_type=matrix.data_type,
                 max_output_bytes=max_output_bytes,
                 output_path=dense_text,
-                mitigation_options=["--sparse", "--lb", "--mst_knn"],
+                mitigation_options=["--sparse", "--lb", "--mst_knn", "--knn"],
             )
             matrix.write(dense_text,"dense_text")
         if sparse:
@@ -332,7 +356,7 @@ def main(argv):
                 data_type=matrix.data_type,
                 max_output_bytes=max_output_bytes,
                 output_path=sparse,
-                mitigation_options=["--lb", "--mst_knn"],
+                mitigation_options=["--lb", "--mst_knn", "--knn"],
             )
             matrix.write(sparse, "sparse")
     except OutputSizeLimitExceeded as exc:
