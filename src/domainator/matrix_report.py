@@ -23,6 +23,8 @@ from domainator.ssn_hierarchy import (
     component_size_summary_by_threshold,
     filter_merge_event_rows,
     format_merge_impact_metric,
+    merge_event_moving_sum,
+    merge_impact_axis_labels,
     merge_event_table_rows,
     threshold_merge_event_rows,
 )
@@ -35,7 +37,7 @@ SLIDER_LEFT_STOP_PADDING_FRACTION = 0.05
 SPLIT_PLOT_MARGIN_TOP = 72
 SPLIT_PLOT_MARGIN_BOTTOM = 50
 SPLIT_PLOT_MARGIN_LEFT = 60
-SPLIT_PLOT_MARGIN_RIGHT = 20
+SPLIT_PLOT_MARGIN_RIGHT = 64  # room for the moving-sum axis on the right
 SLIDER_PANEL_PADDING = 15
 THRESHOLD_SLIDER_ALIGN_LEFT = max(0, SPLIT_PLOT_MARGIN_LEFT - SLIDER_PANEL_PADDING)
 THRESHOLD_SLIDER_ALIGN_RIGHT = max(0, SPLIT_PLOT_MARGIN_RIGHT - SLIDER_PANEL_PADDING)
@@ -140,6 +142,9 @@ def _merge_event_table_rows(component_summary, max_items=25):
 def _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_summary, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
     merge_event_rows = threshold_merge_event_rows(component_summary) if component_summary is not None else []
     filtered_merge_event_rows = filter_merge_event_rows(merge_event_rows, max_merge_events=max_merge_events)
+    # From the unfiltered rows: filtering keeps the top rows by merge_impact, so a moving
+    # sum over the filtered series would drop exactly the small events it exists to show.
+    moving_sum = merge_event_moving_sum(merge_event_rows)
     return {
         "viz_data": tree.export_for_interactive_viz(),
         "cluster_by_thresh": tree.cluster_count_by_threshold,
@@ -149,6 +154,7 @@ def _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_
         "mst_knn_counts": mst_knn_counts if mst_knn_counts is not None else [],
         "mst_knn_min_k": mst_knn_config['min_k'] if mst_knn_config is not None else 0,
         "merge_event_series": filtered_merge_event_rows,
+        "merge_moving_sum": moving_sum,
         "slider_stops": _slider_stop_rows(filtered_merge_event_rows, tree=tree),
     }
 
@@ -547,6 +553,7 @@ class SummaryHTMLWriter():
         mst_knn_listener_block = ""
         component_signal_chart = ""
         component_signal_plot_block = ""
+        axis_labels = merge_impact_axis_labels(merge_impact_metric)
         if include_component_summary and len(filtered_merge_event_rows) > 0:
             component_signal_chart = """
     <div class=\"chart chart-wide\">
@@ -554,37 +561,78 @@ class SummaryHTMLWriter():
     </div>"""
             component_signal_plot_block = f"""
 
+        // Stems carry the LARGEST single merge at each threshold, with one bead per distinct
+        // merge size; the right-axis line carries the moving sum of every merge nearby. A
+        // tall stem with one bead is one large clean split, short stems under a high line are
+        // wholesale fragmentation into small pieces.
         const mergeEventPoints = MERGE_EVENT_SERIES;
         const mergeEventStemX = [];
         const mergeEventStemY = [];
+        const mergeBeadX = [];
+        const mergeBeadY = [];
+        const mergeBeadCustom = [];
         mergeEventPoints.forEach(d => {{
             mergeEventStemX.push(d.threshold_value, d.threshold_value, null);
-            mergeEventStemY.push(0, d.merge_impact, null);
+            mergeEventStemY.push(0, d.largest_merge, null);
+            Object.entries(d.merge_size_counts || {{}}).forEach(([size, n]) => {{
+                mergeBeadX.push(d.threshold_value);
+                // JSON object keys are always strings, so this Number() is required.
+                mergeBeadY.push(Number(size));
+                mergeBeadCustom.push([n, d.merge_count, d.merge_impact, d.threshold_from, d.threshold_to]);
+            }});
         }});
+        const mergeMovingSum = MERGE_MOVING_SUM;
+        const mergeMovingSumWindow = mergeMovingSum && mergeMovingSum.window ? mergeMovingSum.window : 0;
         Plotly.newPlot('cluster-discontinuity-by-threshold', [
             {{
                 x: mergeEventStemX,
                 y: mergeEventStemY,
                 mode: 'lines',
                 name: 'Split event',
-                line: {{color: '#72b7b2', width: 1}},
+                line: {{color: '#a8d2cf', width: 1.6}},
+                legendgroup: 'splits',
+                showlegend: false,
                 hoverinfo: 'skip'
             }},
             {{
-                x: mergeEventPoints.map(d => d.threshold_value),
-                y: mergeEventPoints.map(d => d.merge_impact),
+                x: mergeBeadX,
+                y: mergeBeadY,
                 mode: 'markers',
-                name: 'Split size',
-                marker: {{color: '#e45756', size: 6, opacity: 0.75}},
-                customdata: mergeEventPoints.map(d => [d.threshold_from, d.threshold_to]),
-                hovertemplate: 'Threshold: %{{x:.2f}}<br>Smallest new cluster: %{{y:.2f}}<br>From: %{{customdata[0]}}<br>To: %{{customdata[1]}}<extra></extra>'
+                name: 'Individual cluster split',
+                legendgroup: 'splits',
+                showlegend: true,
+                // width 0 matters: on a stem carrying several close beads the outlines merge
+                // into a band that erases the stem. Bead and stem differ by shade, not outline.
+                marker: {{color: '#72b7b2', size: 5, line: {{width: 0}}}},
+                customdata: mergeBeadCustom,
+                hovertemplate: 'Threshold: %{{x:.2f}}<br>%{{customdata[0]}} split(s) of %{{y}} node(s)<br>%{{customdata[1]}} split(s) here, %{{customdata[2]}} nodes total<br>From: %{{customdata[3]}}<br>To: %{{customdata[4]}}<extra></extra>'
+            }},
+            {{
+                x: mergeMovingSum ? mergeMovingSum.x : [],
+                y: mergeMovingSum ? mergeMovingSum.y : [],
+                yaxis: 'y2',
+                mode: 'lines',
+                name: '{axis_labels['moving_sum_short']}',
+                // 'hv': a moving sum over discrete events genuinely is a step function.
+                line: {{color: '#e45756', width: 2, shape: 'hv'}},
+                hovertemplate: 'Threshold: %{{x:.2f}}<br>Nodes displaced within \u00b1' + (mergeMovingSumWindow / 2).toFixed(2) + ': %{{y}}<extra></extra>'
             }}
         ], {{
             ...chartLayout,
             margin: {{t: {SPLIT_PLOT_MARGIN_TOP}, b: {SPLIT_PLOT_MARGIN_BOTTOM}, l: {SPLIT_PLOT_MARGIN_LEFT}, r: {SPLIT_PLOT_MARGIN_RIGHT}}},
             title: 'Cluster Splits vs Threshold',
             xaxis: {{title: 'Threshold', type: 'linear', autorange: true}},
-            yaxis: {{title: 'Size of smallest new cluster'}},
+            // Both axes pin zero to the plot floor so the stems and the moving-sum line
+            // share a baseline; without this the two zeros land at different heights and
+            // the line appears to dip below the axis.
+            yaxis: {{title: '{axis_labels['largest']}', rangemode: 'tozero'}},
+            yaxis2: {{
+                title: '{axis_labels['moving_sum']}',
+                overlaying: 'y',
+                side: 'right',
+                rangemode: 'tozero',
+                showgrid: false
+            }},
             legend: {{
                 orientation: 'h',
                 yanchor: 'bottom',
@@ -682,6 +730,7 @@ class SummaryHTMLWriter():
     let MST_KNN_COUNTS;
     let MST_KNN_MIN_K;
     let MERGE_EVENT_SERIES;
+    let MERGE_MOVING_SUM;
     let SLIDER_STOPS;
     let CLUSTER_CHECKPOINTS = [];
     const CLUSTER_CHECKPOINT_STRIDE = 50;
@@ -714,6 +763,7 @@ class SummaryHTMLWriter():
         MST_KNN_COUNTS = reportData.mst_knn_counts;
         MST_KNN_MIN_K = reportData.mst_knn_min_k;
         MERGE_EVENT_SERIES = reportData.merge_event_series;
+        MERGE_MOVING_SUM = reportData.merge_moving_sum;
         SLIDER_STOPS = reportData.slider_stops;
     }}
     

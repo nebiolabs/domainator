@@ -246,9 +246,12 @@ def test_matrix_report_includes_merge_event_outputs():
         assert 'Cluster Splits vs Threshold' in html_content
         assert 'class="threshold-slider-track"' in html_content
         assert 'padding-left: 45px;' in html_content
-        assert 'padding-right: 5px;' in html_content
+        assert 'padding-right: 49px;' in html_content
         assert "title: 'Cluster Splits vs Threshold',\n            xaxis: {title: 'Threshold', type: 'linear', autorange: true}" in html_content
-        assert 'Size of smallest new cluster' in html_content
+        assert 'Largest single split (nodes)' in html_content
+        assert 'Size of smallest new cluster' not in html_content
+        assert "shape: 'hv'" in html_content
+        assert 'MERGE_MOVING_SUM' in html_content
         assert "updateHistogramFromSliderPosition(position, false);" in html_content
         assert "document.getElementById('threshold-slider').addEventListener('change'" in html_content
         assert "orientation: 'h'" in html_content
@@ -261,6 +264,14 @@ def test_matrix_report_includes_merge_event_outputs():
         assert 'MERGE_EVENT_SERIES' in html_content
         payload = _embedded_report_payload(html_content)
         assert len(payload['merge_event_series']) == 3
+        for event in payload['merge_event_series']:
+            counts = event['merge_size_counts']
+            assert sum(counts.values()) == event['merge_count']
+            assert max(int(size) for size in counts) == event['largest_merge']
+            assert sum(int(size) * n for size, n in counts.items()) == event['merge_impact']
+        moving_sum = payload['merge_moving_sum']
+        assert len(moving_sum['x']) == len(moving_sum['y']) > 0
+        assert moving_sum['window'] > 0
         assert payload['slider_stops'][0]['edge_index'] == -1
         # A stop labelled T shows the `--lb T` cut, so it excludes T's own tie group:
         # edge_index is the last MST edge scoring strictly above T.
@@ -313,6 +324,12 @@ def test_matrix_report_supports_product_merge_impact_metric():
         assert 'Clusters and Edge Count vs Threshold' in html_content
         assert 'Cluster Splits vs Threshold' in html_content
         assert 'Largest Merge Events (product)' not in html_content
+        # A `product` impact is a product of two component sizes, not a count of nodes,
+        # so the split chart must not label its axes as though it were.
+        assert 'Largest single split (size product)' in html_content
+        assert 'Moving sum of split impact (5% window)' in html_content
+        assert 'Largest single split (nodes)' not in html_content
+        assert '{{' not in html_content
 
 
 def test_matrix_report_default_excludes_mst_knn(shared_datadir):

@@ -29,6 +29,7 @@ from domainator.ssn_hierarchy import (
     build_mst_component_hierarchy,
     component_size_summary_by_threshold,
     filter_merge_event_rows,
+    merge_event_moving_sum,
     threshold_merge_event_rows,
 )
 from domainator.ssn_viewer_html import write_ssn_viewer_html
@@ -36,7 +37,7 @@ from domainator.utils import list_and_file_to_dict_keys
 
 
 SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
-SSN_VIEWER_BUNDLE_VERSION = 2  # v2: thresholds mean `--lb threshold` (scores strictly above)
+SSN_VIEWER_BUNDLE_VERSION = 3  # v3: per-event merge_size_counts/largest_merge/merge_count + graph.merge_moving_sum
 
 
 def _infer_metadata_type(series: pd.Series) -> str:
@@ -155,10 +156,13 @@ def build_ssn_viewer_bundle(
     rows = list(matrix.rows)  # save label names before freeing matrix
     del matrix                # free O(n²) data array
     component_summary = component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
+    merge_event_rows = threshold_merge_event_rows(component_summary)
     merge_event_series = filter_merge_event_rows(
-        threshold_merge_event_rows(component_summary),
+        merge_event_rows,
         max_merge_events=max_merge_events,
     )
+    # From the unfiltered rows -- see merge_event_moving_sum's docstring.
+    merge_moving_sum = merge_event_moving_sum(merge_event_rows)
     hierarchy = build_mst_component_hierarchy(tree)
 
     bundle = {
@@ -173,6 +177,7 @@ def build_ssn_viewer_bundle(
             "edges_by_threshold": tree.edges_by_threshold,
             "merge_impact_metric": merge_impact_metric,
             "merge_event_series": merge_event_series,
+            "merge_moving_sum": merge_moving_sum,
             "slider_stops": _slider_stops(merge_event_series, tree=tree),
             "hierarchy": hierarchy,
         },

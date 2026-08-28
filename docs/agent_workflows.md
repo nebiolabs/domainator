@@ -70,6 +70,7 @@ is present only with `--taxonomy`.
   "split_events": [
     {"edge_index": 0, "threshold_from": "∞", "threshold_to": "287.00",
      "threshold_value": 287.0, "merge_impact": 1.0,
+     "merge_size_counts": {"1": 1}, "largest_merge": 1.0, "merge_count": 1,
      "delta_largest": 1.0, "delta_avg_non_singleton": 2.0}
   ]
 }
@@ -77,6 +78,15 @@ is present only with `--taxonomy`.
 
 `edge_scores` is `null` for a matrix with no non-zero edges. `split_events` is
 bounded by `--max_merge_events`; a `threshold_value` of `null` denotes ∞.
+
+`merge_impact` is the **sum** of every merge at that threshold, so it cannot by itself
+distinguish one large cluster splitting off from a swarm of small ones. The other three
+keys describe its terms: `merge_size_counts` maps each distinct merge size to how many
+merges of that size occurred, `merge_count` is their total, and `largest_merge` is the
+biggest single one. `sum(size * count) == merge_impact` holds exactly, and
+`largest_merge == merge_impact` only when `merge_count` is 1. A threshold reporting
+`{"3": 1, "1": 33}` is one 3-node cluster plus thirty-three single nodes falling off at
+once -- `merge_impact` 36, but no cluster larger than 3.
 
 Every threshold matrix_report reports means the same thing as `build_ssn --lb`: the
 graph of edges scoring **strictly above** the threshold. So a reported threshold `T`

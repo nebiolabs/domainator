@@ -16,6 +16,15 @@ MERGE_IMPACT_MIN_CHILD = "min_child"
 MERGE_IMPACT_CHOICES = (MERGE_IMPACT_PRODUCT, MERGE_IMPACT_MIN_CHILD)
 DEFAULT_MAX_MERGE_EVENTS = 500
 
+# Width of the centred moving-sum window, as a fraction of the plotted threshold range,
+# and how many points to sample it at. The moving sum answers "how much of the graph is
+# decomposing around here overall?", as a counterweight to the per-threshold largest
+# single merge that the split chart's stems show.
+MOVING_SUM_WINDOW_FRACTION = 0.05
+MOVING_SUM_GRID_POINTS = 800
+# The window fraction as a whole-number percent, for axis titles and legends.
+MOVING_SUM_WINDOW_PERCENT = int(round(MOVING_SUM_WINDOW_FRACTION * 100))
+
 
 def format_threshold_value(threshold):
     if math.isinf(float(threshold)):
@@ -29,6 +38,44 @@ def format_merge_impact_metric(metric: str) -> str:
     if metric == MERGE_IMPACT_MIN_CHILD:
         return "min_child"
     raise ValueError(f"Unsupported merge impact metric: {metric}")
+
+
+def merge_impact_axis_labels(metric: str) -> dict:
+    """Axis titles for the split chart, which depend on what merge_impact measures.
+
+    Under ``min_child`` an impact is a count of nodes; under ``product`` it is a product of
+    two component sizes, which is not a node count and must not be labelled as one. Both
+    the Plotly chart in matrix_report and the canvas chart in the SSN viewer read these so
+    the two cannot drift apart.
+    """
+    if metric == MERGE_IMPACT_PRODUCT:
+        return {
+            "largest": "Largest single split (size product)",
+            "moving_sum": f"Moving sum of split impact ({MOVING_SUM_WINDOW_PERCENT}% window)",
+            "moving_sum_short": f"Moving sum ({MOVING_SUM_WINDOW_PERCENT}% window)",
+        }
+    if metric == MERGE_IMPACT_MIN_CHILD:
+        return {
+            "largest": "Largest single split (nodes)",
+            "moving_sum": f"Moving sum of split size ({MOVING_SUM_WINDOW_PERCENT}% window)",
+            "moving_sum_short": f"Moving sum ({MOVING_SUM_WINDOW_PERCENT}% window)",
+        }
+    raise ValueError(f"Unsupported merge impact metric: {metric}")
+
+
+def _merge_size_key(size):
+    """Histogram key for one individual merge size.
+
+    Integral sizes key as ``int`` so the payload carries ``{"1": 33}`` rather than
+    ``{"1.0": 33}``, which measurably shrinks the embedded JSON. Both current metrics are
+    integral (``min_child`` is a min of two component sizes, ``product`` their product), but
+    a non-integral size from some future metric keys by its full float value rather than
+    being truncated by ``int()``, which would silently collide distinct sizes.
+    """
+    value = float(size)
+    if value.is_integer():
+        return int(value)
+    return value
 
 
 def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_MIN_CHILD):
@@ -139,10 +186,23 @@ def threshold_merge_event_rows(component_summary):
         first_summary_row_idx = row_idx
         threshold_value = float(component_summary[row_idx, COMPONENT_THRESHOLD_COL])
         merge_impact = 0.0
+        # The individual per-edge impacts behind that sum. Summing alone cannot distinguish
+        # one large cluster splitting off from a swarm of tiny ones, so keep the terms too.
+        merge_size_counts = {}
+        merge_count = 0
+        largest_merge = 0.0
         last_row = component_summary[row_idx]
 
         while row_idx < len(component_summary) and float(component_summary[row_idx, COMPONENT_THRESHOLD_COL]) == threshold_value:
-            merge_impact += float(component_summary[row_idx, COMPONENT_MERGE_IMPACT_COL])
+            row_impact = float(component_summary[row_idx, COMPONENT_MERGE_IMPACT_COL])
+            merge_impact += row_impact
+            if row_impact > 0.0:
+                # A zero impact means the edge's endpoints were already in one component,
+                # so it joined nothing and is not a merge.
+                size_key = _merge_size_key(row_impact)
+                merge_size_counts[size_key] = merge_size_counts.get(size_key, 0) + 1
+                merge_count += 1
+                largest_merge = max(largest_merge, row_impact)
             last_row = component_summary[row_idx]
             row_idx += 1
 
@@ -160,12 +220,73 @@ def threshold_merge_event_rows(component_summary):
             "threshold_to": format_threshold_value(last_row[COMPONENT_THRESHOLD_COL]),
             "threshold_value": float(last_row[COMPONENT_THRESHOLD_COL]),
             "merge_impact": float(merge_impact),
+            # merge_impact is the sum over the tie group; these three describe its terms.
+            # largest_merge and merge_count are emitted rather than derived downstream so
+            # they stay correct even if merge_size_counts is ever truncated for payload size.
+            "merge_size_counts": merge_size_counts,
+            "largest_merge": float(largest_merge),
+            "merge_count": int(merge_count),
             "delta_largest": float(abs(last_row[COMPONENT_LARGEST_COL] - previous_row[COMPONENT_LARGEST_COL])),
             "delta_avg_non_singleton": float(abs(last_row[COMPONENT_AVG_NON_SINGLETON_COL] - previous_row[COMPONENT_AVG_NON_SINGLETON_COL])),
         })
         previous_row = last_row
 
     return event_rows
+
+
+def merge_event_moving_sum(event_rows,
+                           window_fraction=MOVING_SUM_WINDOW_FRACTION,
+                           grid_points=MOVING_SUM_GRID_POINTS):
+    """Centred moving sum of ``merge_impact`` over the plotted threshold range.
+
+    Call this with the rows straight from :func:`threshold_merge_event_rows`, *before*
+    :func:`filter_merge_event_rows` caps them. Filtering keeps the top rows ranked by
+    ``merge_impact``, so a moving sum taken afterwards undercounts on any network with
+    more than ``max_merge_events`` threshold groups -- and it undercounts precisely the
+    small events this series exists to reveal.
+
+    Sums ``merge_impact`` (the per-threshold total), not ``largest_merge``: the contrast
+    between the two is what the split chart is for. Returns
+    ``{"window": W, "x": [...], "y": [...]}``, with empty series when there is no finite
+    threshold range to slide a window over.
+    """
+    empty = {"window": 0.0, "x": [], "y": []}
+    if not event_rows or grid_points < 2:
+        return empty
+
+    thresholds = np.array([float(row["threshold_value"]) for row in event_rows], dtype=float)
+    impacts = np.array([float(row["merge_impact"]) for row in event_rows], dtype=float)
+    finite = np.isfinite(thresholds) & np.isfinite(impacts)
+    if not finite.any():
+        return empty
+    thresholds = thresholds[finite]
+    impacts = impacts[finite]
+
+    lo = float(thresholds.min())
+    hi = float(thresholds.max())
+    if not math.isfinite(lo) or not math.isfinite(hi) or hi == lo:
+        return empty
+
+    window = float(window_fraction) * (hi - lo)
+    half_window = window / 2.0
+
+    # searchsorted against a prefix sum turns the window scan into O(n log n + grid)
+    # instead of the O(n * grid) a nested loop would cost.
+    order = np.argsort(thresholds, kind="stable")
+    sorted_thresholds = thresholds[order]
+    cumulative = np.concatenate(([0.0], np.cumsum(impacts[order])))
+
+    grid = np.linspace(lo, hi, int(grid_points))
+    # 'left'/'right' make the window inclusive at both ends, matching |t - g| <= W/2.
+    starts = np.searchsorted(sorted_thresholds, grid - half_window, side="left")
+    ends = np.searchsorted(sorted_thresholds, grid + half_window, side="right")
+    totals = cumulative[ends] - cumulative[starts]
+
+    return {
+        "window": window,
+        "x": [float(value) for value in grid],
+        "y": [int(value) if float(value).is_integer() else float(value) for value in totals],
+    }
 
 
 def summarize_merge_events(component_summary, max_items=5):

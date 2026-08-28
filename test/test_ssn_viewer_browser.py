@@ -253,9 +253,17 @@ def test_render_cluster_bounds_toggle_updates_viewport_immediately(page):
 
 
 def test_split_chart_renders_with_moving_sum(page):
-    """The split chart (lollipops + moving-sum trace) renders without errors."""
-    # The legend advertises the moving-sum trace.
+    """The split chart (stems + beads + moving-sum trace) renders without errors."""
+    # The legend advertises both series.
     assert page.is_visible(".legend-sum")
+    assert page.is_visible(".legend-line")
+    # The moving sum is computed in Python and shipped in the bundle, not derived here.
+    assert page.evaluate("() => Array.isArray(state.bundle.graph.merge_moving_sum.y)")
+    # Stems are drawn at the largest single merge, so every event carries the new keys.
+    assert page.evaluate(
+        "() => state.bundle.graph.merge_event_series.every("
+        "e => typeof e.largest_merge === 'number' && e.merge_size_counts !== undefined)"
+    )
     snapshot = page.eval_on_selector("#split-chart", "c => c.toDataURL()")
     assert snapshot.startswith("data:image/png;base64,")
     assert len(snapshot) > 5000, "split chart appears blank"

@@ -5,6 +5,11 @@ import json
 from pathlib import Path
 
 from domainator.output_guardrails import make_temporary_output_path
+from domainator.ssn_hierarchy import (
+    MERGE_IMPACT_CHOICES,
+    MERGE_IMPACT_MIN_CHILD,
+    merge_impact_axis_labels,
+)
 
 
 def _layout_worker_js() -> str:
@@ -474,6 +479,15 @@ def ssn_viewer_html(
     if embedded_bundle_json is not None:
         embedded_bundle_base64 = base64.b64encode(embedded_bundle_json).decode("ascii")
     layout_worker_code_json = json.dumps(_layout_worker_js())
+    # Generated from the same helper matrix_report uses, keyed by metric so a bundle built
+    # with --merge_impact_metric product gets titles that match what its numbers mean.
+    split_axis_labels_js = json.dumps({
+        metric: {
+            "largest": merge_impact_axis_labels(metric)["largest"],
+            "movingSum": merge_impact_axis_labels(metric)["moving_sum_short"],
+        }
+        for metric in MERGE_IMPACT_CHOICES
+    })
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1136,7 +1150,7 @@ def ssn_viewer_html(
                 <div class="canvas-wrap"><canvas id="split-chart" width="1100" height="320"></canvas></div>
                 <div class="split-legend">
                     <div class="split-legend-items">
-                        <span class="legend-line">Split impact</span>
+                        <span class="legend-line">Largest single split</span>
                         <span class="legend-sum">Moving sum (5% window)</span>
                         <span class="legend-dot legend-threshold-readout">Current threshold <span id="threshold-label" class="legend-threshold-value">∞</span></span>
                     </div>
@@ -3755,6 +3769,16 @@ def ssn_viewer_html(
         return {{layout, key, async: false}};
     }}
 
+    // Axis titles for the split chart. A `product` merge impact is a product of two
+    // component sizes, not a count of nodes, so it must not be labelled as one.
+    function splitAxisLabels() {{
+        const labels = {split_axis_labels_js};
+        const metric = state.bundle && state.bundle.graph
+            ? state.bundle.graph.merge_impact_metric
+            : null;
+        return labels[metric] || labels['{MERGE_IMPACT_MIN_CHILD}'];
+    }}
+
     function drawSplitChart() {{
         splitContext.clearRect(0, 0, splitCanvas.width, splitCanvas.height);
         splitContext.fillStyle = '#ffffff';
@@ -3792,7 +3816,7 @@ def ssn_viewer_html(
         splitContext.rotate(-Math.PI / 2);
         splitContext.textAlign = 'center';
         splitContext.textBaseline = 'alphabetic';
-        splitContext.fillText('Split impact', 0, 0);
+        splitContext.fillText(splitAxisLabels().largest, 0, 0);
         splitContext.restore();
         splitContext.save();
         splitContext.translate(splitCanvas.width - 18, margin.top + (height / 2));
@@ -3800,7 +3824,7 @@ def ssn_viewer_html(
         splitContext.textAlign = 'center';
         splitContext.textBaseline = 'alphabetic';
         splitContext.fillStyle = movingSumColor;
-        splitContext.fillText('Moving sum', 0, 0);
+        splitContext.fillText(splitAxisLabels().movingSum, 0, 0);
         splitContext.restore();
 
         if (events.length === 0) {{
@@ -3810,30 +3834,25 @@ def ssn_viewer_html(
             return;
         }}
 
-        const impacts = events.map(event => event.merge_impact);
-        const maxImpact = Math.max(...impacts, 1);
-        const minThreshold = Math.min(...events.map(event => event.threshold_value));
-        const maxThreshold = Math.max(...events.map(event => event.threshold_value));
+        // Stems show the LARGEST single merge at each threshold, not the tie group's sum:
+        // one big cluster splitting off and a swarm of singletons are opposite stories that
+        // the sum renders identically.
+        const maxImpact = Math.max(...events.map(event => event.largest_merge), 1);
+        const movingSum = state.bundle.graph.merge_moving_sum || {{x: [], y: []}};
+        const movingSumX = movingSum.x || [];
+        const movingSumY = movingSum.y || [];
+        // The moving sum is computed in Python over the UNFILTERED event rows, so its x range
+        // can extend past the capped merge_event_series; plot over the union of the two.
+        const thresholdValues = events.map(event => event.threshold_value).concat(movingSumX);
+        const minThreshold = Math.min(...thresholdValues);
+        const maxThreshold = Math.max(...thresholdValues);
         const thresholdSpan = Math.max(1e-9, maxThreshold - minThreshold || 1);
         const tickLength = 6;
 
         const xFor = value => margin.left + ((value - minThreshold) / thresholdSpan) * width;
         const yFor = value => margin.top + height - (value / maxImpact) * height;
 
-        // Moving sum of split impact over a centred window spanning 5% of the x-axis.
-        const sumWindow = thresholdSpan * 0.05;
-        const halfWindow = sumWindow / 2;
-        const movingSums = events.map(event => {{
-            const center = event.threshold_value;
-            let total = 0;
-            events.forEach(other => {{
-                if (Math.abs(other.threshold_value - center) <= halfWindow) {{
-                    total += other.merge_impact;
-                }}
-            }});
-            return total;
-        }});
-        const maxMovingSum = Math.max(...movingSums, 1);
+        const maxMovingSum = Math.max(...movingSumY, 1);
         const y2For = value => margin.top + height - (value / maxMovingSum) * height;
 
         splitContext.fillStyle = '#5c6a70';
@@ -3894,38 +3913,44 @@ def ssn_viewer_html(
             splitContext.fillText(formatValue(sumValue), rightAxisX + tickLength + 4, y);
         }}
 
-        // Lollipop stems + markers for each split event.
+        // Stem to the largest single split, then one bead per distinct merge size. Beads are
+        // drawn unoutlined: on a stem carrying several close beads the outlines would merge
+        // into a band that erases the stem. Bead and stem differ by shade, not by outline.
         events.forEach(event => {{
             const x = xFor(event.threshold_value);
-            const y = yFor(event.merge_impact);
-            splitContext.strokeStyle = '#c8553d';
+            splitContext.strokeStyle = '#dd9687';
             splitContext.lineWidth = 1.5;
             splitContext.beginPath();
             splitContext.moveTo(x, margin.top + height);
-            splitContext.lineTo(x, y);
+            splitContext.lineTo(x, yFor(event.largest_merge));
             splitContext.stroke();
-            splitContext.fillStyle = '#f3cdb9';
-            splitContext.beginPath();
-            splitContext.arc(x, y, 4, 0, Math.PI * 2);
-            splitContext.fill();
-            splitContext.strokeStyle = '#8a3b2c';
-            splitContext.stroke();
+            splitContext.fillStyle = '#c8553d';
+            Object.keys(event.merge_size_counts || {{}}).forEach(size => {{
+                // JSON object keys are always strings, so this Number() is required.
+                splitContext.beginPath();
+                splitContext.arc(x, yFor(Number(size)), 4, 0, Math.PI * 2);
+                splitContext.fill();
+            }});
         }});
 
-        // Moving-sum trace (right axis scale).
-        splitContext.strokeStyle = movingSumColor;
-        splitContext.lineWidth = 1.75;
-        splitContext.beginPath();
-        events.forEach((event, index) => {{
-            const x = xFor(event.threshold_value);
-            const y = y2For(movingSums[index]);
-            if (index === 0) {{
-                splitContext.moveTo(x, y);
-            }} else {{
-                splitContext.lineTo(x, y);
+        // Moving-sum trace (right axis scale), drawn as a step function -- a moving sum over
+        // discrete events genuinely is one, and smoothing misrepresents where the events sit.
+        if (movingSumX.length > 0) {{
+            splitContext.strokeStyle = movingSumColor;
+            splitContext.lineWidth = 1.75;
+            splitContext.beginPath();
+            for (let index = 0; index < movingSumX.length; index++) {{
+                const x = xFor(movingSumX[index]);
+                const y = y2For(movingSumY[index]);
+                if (index === 0) {{
+                    splitContext.moveTo(x, y);
+                }} else {{
+                    splitContext.lineTo(x, y2For(movingSumY[index - 1]));
+                    splitContext.lineTo(x, y);
+                }}
             }}
-        }});
-        splitContext.stroke();
+            splitContext.stroke();
+        }}
 
         const stop = currentSliderStop();
         if (stop) {{

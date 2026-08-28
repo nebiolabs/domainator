@@ -63,6 +63,14 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         assert bundle["graph"]["nodes"] == row_names
         assert len(bundle["graph"]["mst_edges"]) == 3
         assert len(bundle["graph"]["merge_event_series"]) == 3
+        for event in bundle["graph"]["merge_event_series"]:
+            counts = event["merge_size_counts"]
+            assert sum(counts.values()) == event["merge_count"]
+            assert max(int(size) for size in counts) == event["largest_merge"]
+            assert sum(int(size) * n for size, n in counts.items()) == event["merge_impact"]
+        moving_sum = bundle["graph"]["merge_moving_sum"]
+        assert len(moving_sum["x"]) == len(moving_sum["y"]) > 0
+        assert moving_sum["window"] > 0
         # A stop labelled T shows the `--lb T` cut, so edge_index is the last MST edge
         # scoring strictly above T (T's own tie group is excluded).
         assert [stop["edge_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, -1, 0, 1]
@@ -146,6 +154,17 @@ def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
         assert len(bundle["graph"]["slider_stops"]) == 3
         assert bundle["graph"]["slider_stops"][0]["threshold_value"] is None
 
+        # The moving sum must come from the UNFILTERED rows. The cap keeps only t=10.0 and
+        # t=5.0, so a sum taken over the filtered series would span [5.0, 10.0] and never
+        # see the dropped events at all.
+        kept = {event["threshold_value"] for event in bundle["graph"]["merge_event_series"]}
+        assert kept == {10.0, 5.0}
+        moving_sum = bundle["graph"]["merge_moving_sum"]
+        assert min(moving_sum["x"]) == pytest.approx(1.0)
+        assert max(moving_sum["x"]) == pytest.approx(10.0)
+        # The window at the bottom of the range still counts the dropped t=1.0 merge.
+        assert moving_sum["y"][0] >= 1
+
 
 def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
     data = np.array([
@@ -217,7 +236,8 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'threshold-max-label' in html_content
         assert 'threshold-input' in html_content
         assert 'Jump to threshold' in html_content
-        assert 'Split impact' in html_content
+        assert 'Largest single split' in html_content
+        assert 'Split impact' not in html_content
         assert 'Threshold' in html_content
         assert 'componentMembers' in html_content
         assert 'mstLinksForActiveClusters' in html_content
