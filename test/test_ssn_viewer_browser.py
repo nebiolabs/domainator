@@ -2128,9 +2128,14 @@ def test_cluster_column_agrees_with_the_tsv_export(meta_page, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _save_extraction(page, out_dir, filename="extraction.ssnv"):
+def _save_extraction(page, out_dir, filename="extraction.ssnv", name=None):
+    """Click "Save extraction…", name it in the dialog, and save the download."""
+    page.click("#save-extraction")
+    page.wait_for_selector("#name-overlay:not([hidden])")
+    if name is not None:
+        page.fill("#name-value", name)
     with page.expect_download() as download_info:
-        page.click("#save-extraction")
+        page.click("#name-apply")
     target = out_dir / filename
     download_info.value.save_as(str(target))
     return target
@@ -2434,4 +2439,204 @@ def test_extraction_slider_keeps_the_floor_stop(meta_page, tmp_path):
         " snapSliderToStop(currentSliderStop()); updateThresholdUI(false); }"
     )
     page.wait_for_function("() => document.getElementById('stat-clusters').textContent === '1'")
+    assert page.pageerrors == []
+
+
+def test_session_restores_categorical_colouring_of_a_numeric_column(meta_page, tmp_path):
+    """A numeric column marked categorical must come back *coloured* that way.
+
+    Regression: whether a numeric column colours as discrete categories is derived
+    from state.categoricalColumns by rebuildMetadataCaches, which runs before a
+    session is applied. Restoring the set alone left the derived flag stale, so the
+    checkbox read categorical while the colours and the picker stayed on the
+    gradient until the box was toggled by hand.
+    """
+    page = meta_page
+    page.select_option("#color-by", "score")
+    page.evaluate(
+        "() => { setColumnCategorical('score', true);"
+        " rebuildNodeColorCache(); renderClusterView(); }"
+    )
+    assert page.evaluate("() => colorInfo('score').type") == "categorical"
+    categorical_colors = page.evaluate("() => state.nodeColorCache.slice()")
+
+    saved = _save_session(page, tmp_path, "categorical.ssnv")
+    _load_bundle_file(page, saved)
+
+    assert page.evaluate("() => state.categoricalColumns.has('score')") is True
+    assert page.evaluate("() => colorInfo('score').type") == "categorical"
+    assert page.evaluate("() => state.nodeColorCache.slice()") == categorical_colors
+
+    _open_color_picker(page)
+    assert page.eval_on_selector("#color-as-categorical", "e => e.checked") is True
+    assert page.eval_on_selector("#color-picker-discrete", "e => e.hidden") is False
+    assert page.eval_on_selector("#color-picker-continuous", "e => e.hidden") is True
+    assert page.pageerrors == []
+
+
+def test_session_restores_gradient_colouring_when_the_flag_was_cleared(numeric_categorical_page, tmp_path):
+    """The same derivation has to run the other way too.
+
+    This bundle ships --categorical score, so a session that turned it *off* must
+    come back on the gradient rather than inheriting the bundle's default.
+    """
+    page = numeric_categorical_page
+    assert page.evaluate("() => colorInfo('score').type") == "categorical"
+    page.evaluate(
+        "() => { setColumnCategorical('score', false);"
+        " rebuildNodeColorCache(); renderClusterView(); }"
+    )
+    gradient_colors = page.evaluate("() => state.nodeColorCache.slice()")
+
+    saved = _save_session(page, tmp_path, "gradient.ssnv")
+    _load_bundle_file(page, saved)
+
+    assert page.evaluate("() => state.categoricalColumns.has('score')") is False
+    assert page.evaluate("() => colorInfo('score').type") == "numeric"
+    assert page.evaluate("() => state.nodeColorCache.slice()") == gradient_colors
+
+    _open_color_picker(page)
+    assert page.eval_on_selector("#color-as-categorical", "e => e.checked") is False
+    assert page.eval_on_selector("#color-picker-continuous", "e => e.hidden") is False
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Naming
+# ---------------------------------------------------------------------------
+
+
+def test_rename_network_updates_heading_tab_and_bundle(meta_page):
+    page = meta_page
+    page.click("#rename-network")
+    page.wait_for_selector("#name-overlay:not([hidden])")
+    assert page.eval_on_selector("#name-value", "e => e.value") == "Color Test Viewer"
+
+    page.fill("#name-value", "GH17 family")
+    page.click("#name-apply")
+
+    assert page.eval_on_selector("#name-overlay", "e => e.hidden") is True
+    assert page.evaluate("() => state.bundle.name") == "GH17 family"
+    assert page.eval_on_selector("#viewer-title", "e => e.textContent") == (
+        "Domainator Similarity Network Viewer: GH17 family"
+    )
+    assert page.title() == "GH17 family"
+    assert page.pageerrors == []
+
+
+def test_double_clicking_the_heading_opens_the_rename_dialog(meta_page):
+    page = meta_page
+    page.dblclick("#viewer-title")
+    page.wait_for_selector("#name-overlay:not([hidden])")
+    assert page.eval_on_selector("#name-dialog-title", "e => e.textContent") == "Rename network"
+    assert page.eval_on_selector("#name-value", "e => e.value") == "Color Test Viewer"
+    assert page.pageerrors == []
+
+
+def test_rename_is_carried_into_saved_files(meta_page, tmp_path):
+    """The name is stored in the bundle and names the file it is saved to."""
+    page = meta_page
+    page.click("#rename-network")
+    page.fill("#name-value", "renamed net")
+    page.click("#name-apply")
+
+    with page.expect_download() as download_info:
+        page.click("#save-session")
+    download = download_info.value
+    assert download.suggested_filename == "renamed_net_session.ssnv"
+    saved = tmp_path / "renamed.ssnv"
+    download.save_as(str(saved))
+    assert _read_session_bundle(saved)["name"] == "renamed net"
+
+    _load_bundle_file(page, saved)
+    assert page.eval_on_selector("#viewer-title", "e => e.textContent").endswith("renamed net")
+    assert page.pageerrors == []
+
+
+def test_rename_dialog_rejects_an_empty_name(meta_page):
+    page = meta_page
+    page.click("#rename-network")
+    page.fill("#name-value", "   ")
+    page.click("#name-apply")
+
+    # The dialog stays open so the name can be corrected.
+    assert page.eval_on_selector("#name-overlay", "e => e.hidden") is False
+    assert page.evaluate("() => state.bundle.name") == "Color Test Viewer"
+    assert "Enter a name" in page.eval_on_selector("#bundle-status", "e => e.textContent")
+    page.click("#name-cancel")
+    assert page.pageerrors == []
+
+
+def test_extraction_is_named_through_the_dialog(meta_page, tmp_path):
+    page = meta_page
+    _select_nodes(page, [0, 1, 2])
+    page.click("#save-extraction")
+    page.wait_for_selector("#name-overlay:not([hidden])")
+
+    assert page.eval_on_selector("#name-dialog-title", "e => e.textContent") == "Save extraction"
+    # Pre-filled with a sensible default, and says what is being extracted.
+    assert page.eval_on_selector("#name-value", "e => e.value") == "Color Test Viewer_extraction"
+    assert "3 of 6 nodes" in page.eval_on_selector("#name-dialog-note", "e => e.textContent")
+
+    page.fill("#name-value", "clade A")
+    with page.expect_download() as download_info:
+        page.click("#name-apply")
+    download = download_info.value
+    assert download.suggested_filename == "clade_A.ssnv"
+    saved = tmp_path / "cladeA.ssnv"
+    download.save_as(str(saved))
+
+    bundle = _read_session_bundle(saved)
+    assert bundle["name"] == "clade A"
+    assert bundle["graph"]["nodes"] == ["A", "B", "C"]
+    # The source network keeps its own name.
+    assert page.evaluate("() => state.bundle.name") == "Color Test Viewer"
+
+    _load_bundle_file(page, saved)
+    assert page.eval_on_selector("#viewer-title", "e => e.textContent").endswith("clade A")
+    assert page.pageerrors == []
+
+
+def test_cancelling_the_extraction_dialog_saves_nothing(meta_page):
+    page = meta_page
+    _select_nodes(page, [0, 1, 2])
+    page.click("#save-extraction")
+    page.wait_for_selector("#name-overlay:not([hidden])")
+
+    downloads = []
+    page.on("download", lambda download: downloads.append(download))
+    page.click("#name-cancel")
+
+    assert page.eval_on_selector("#name-overlay", "e => e.hidden") is True
+    assert downloads == []
+    assert page.pageerrors == []
+
+
+def test_a_refused_extraction_never_asks_for_a_name(meta_page):
+    """Validation runs first, so an impossible extraction is not named first."""
+    page = meta_page
+    _select_nodes(page, [0, 5])          # two pieces, no MST path between them
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.click("#save-extraction")
+    page.wait_for_function(
+        "() => document.getElementById('bundle-status').textContent.includes('pieces')"
+    )
+    assert page.eval_on_selector("#name-overlay", "e => e.hidden") is True
+    assert page.pageerrors == []
+
+
+def test_digit_shortcuts_are_inert_while_naming(meta_page):
+    """Typing a digit into the name field must not recall a preset."""
+    page = meta_page
+    _select_nodes(page, [0, 1])
+    page.keyboard.press("Shift+Digit3")
+    page.click("#clear-selection")
+
+    page.click("#rename-network")
+    page.fill("#name-value", "")
+    page.keyboard.press("Digit3")
+
+    assert page.eval_on_selector("#name-value", "e => e.value") == "3"
+    assert page.evaluate("() => state.selectedNodeIndices.size") == 0
+    page.click("#name-cancel")
     assert page.pageerrors == []

@@ -392,6 +392,12 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function applySessionState(appState)' in html_content
         assert 'function saveSessionFile()' in html_content
         assert '<button id="save-extraction"' in html_content
+        # The rename control lives beside the heading it edits, as a pencil glyph.
+        assert '<button id="rename-network" type="button" class="title-edit"' in html_content
+        assert '<div class="hero-title">' in html_content
+        assert '<div id="name-overlay"' in html_content
+        assert 'function openNameDialog(options)' in html_content
+        assert 'function renameNetwork(name)' in html_content
         assert 'function saveExtractionFile()' in html_content
         assert 'function buildExtractionHierarchy(nodeCount, edges)' in html_content
         assert 'function extractionMergeEventRows(nodeCount, edges, metric)' in html_content
@@ -445,7 +451,7 @@ def test_build_ssn_viewer_writes_static_html_without_input():
 
         assert '<title>Viewer Only</title>' in html_content
         # The tab keeps the bare name; the heading spells out the app.
-        assert ('<h1 id="viewer-title">Domainator Similarity Network Viewer: Viewer Only</h1>'
+        assert ('>Domainator Similarity Network Viewer: Viewer Only</h1>'
                 in html_content)
         assert 'const EMBEDDED_BUNDLE_BASE64 = null;' in html_content
         assert 'No bundle loaded.' in html_content

@@ -707,7 +707,19 @@ def _session_state_js() -> str:
             section: 'colors',
             key: 'categorical_columns',
             get: () => Array.from(state.categoricalColumns),
-            set: value => { state.categoricalColumns = new Set(value || []); },
+            set: value => {
+                state.categoricalColumns = new Set(value || []);
+                // Whether a numeric column colors as categories is *derived* from this
+                // set, and rebuildMetadataCaches -- which derives it -- has already run
+                // by the time a session is applied. Without recomputing it here the
+                // checkbox would read categorical while the colors and the picker
+                // stayed in gradient mode until the box was toggled by hand.
+                state.metadataColorInfoByName.forEach((info, columnName) => {
+                    if (info.baseType === 'numeric') {
+                        info.type = state.categoricalColumns.has(columnName) ? 'categorical' : 'numeric';
+                    }
+                });
+            },
         },
         {
             section: 'selection',
@@ -778,13 +790,90 @@ def _session_state_js() -> str:
         return notes.length > 0 ? ' (' + notes.join('; ') + ')' : '';
     }
 
+    // One small dialog serves both "Rename network" and naming an extraction: the
+    // network's name is a single field on the bundle, and it drives the heading, the
+    // browser tab and the name of every file saved from here.
+    function openNameDialog(options) {
+        state.pendingNameAction = options.onConfirm;
+        document.getElementById('name-dialog-title').textContent = options.title;
+        document.getElementById('name-dialog-label').textContent = options.label;
+        document.getElementById('name-dialog-note').textContent = options.note || '';
+        document.getElementById('name-apply').textContent = options.confirmLabel || 'Apply';
+        const input = document.getElementById('name-value');
+        input.value = options.value || '';
+        document.getElementById('name-overlay').hidden = false;
+        input.focus();
+        input.select();
+    }
+
+    function closeNameDialog() {
+        document.getElementById('name-overlay').hidden = true;
+        state.pendingNameAction = null;
+    }
+
+    function nameDialogIsOpen() {
+        return !document.getElementById('name-overlay').hidden;
+    }
+
+    function confirmNameDialog() {
+        const value = document.getElementById('name-value').value.trim();
+        if (value === '') {
+            setStatus('Enter a name.');
+            return;
+        }
+        const action = state.pendingNameAction;
+        closeNameDialog();
+        if (action) {
+            action(value);
+        }
+    }
+
+    function renameNetwork(name) {
+        if (!state.bundle) { return; }
+        const previous = state.bundle.name || '';
+        state.bundle.name = name;
+        updateViewerTitle(name);
+        setStatus('Renamed "' + previous + '" to "' + name + '". Files saved from here use the new name.');
+    }
+
+    function openRenameNetworkDialog() {
+        if (!state.bundle) { return; }
+        openNameDialog({
+            title: 'Rename network',
+            label: 'Network name',
+            note: 'Shown in the heading and the browser tab, stored in the bundle, and used to name saved files.',
+            value: state.bundle.name || '',
+            confirmLabel: 'Rename',
+            onConfirm: renameNetwork,
+        });
+    }
+
+    function setupNameDialog() {
+        document.getElementById('name-cancel').addEventListener('click', closeNameDialog);
+        document.getElementById('name-apply').addEventListener('click', confirmNameDialog);
+        document.getElementById('name-overlay').addEventListener('click', event => {
+            if (event.target === event.currentTarget) { closeNameDialog(); }
+        });
+        document.getElementById('name-value').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                confirmNameDialog();
+            }
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && nameDialogIsOpen()) { closeNameDialog(); }
+        });
+        // The heading shows the name, so it is the obvious thing to double-click.
+        document.getElementById('viewer-title').addEventListener('dblclick', openRenameNetworkDialog);
+    }
+
     function browserSupportsBundleSaving() {
         return 'CompressionStream' in window;
     }
 
     // Serialize a bundle and hand it to the browser as a download. Shared by
     // "Save session" and "Save extraction" so both produce the same file format.
-    async function downloadBundleFile(payload, filenameSuffix, description) {
+    async function downloadBundleFile(payload, filenameBase, description) {
         try {
             setStatus(description + '...');
             const bytes = new TextEncoder().encode(JSON.stringify(payload));
@@ -799,7 +888,7 @@ def _session_state_js() -> str:
                 blob = new Blob([bytes], {type: 'application/json'});
                 extension = '.json';
             }
-            triggerDownload(URL.createObjectURL(blob), exportBaseName() + filenameSuffix + extension, true);
+            triggerDownload(URL.createObjectURL(blob), filenameBase + extension, true);
             setStatus(description + ' (' + Math.round(blob.size / 1024).toLocaleString() + ' KB).');
             return true;
         } catch (error) {
@@ -816,7 +905,7 @@ def _session_state_js() -> str:
         // and this viewer can both open.
         await downloadBundleFile(
             Object.assign({}, state.bundle, {version: BUNDLE_VERSION, app_state: collectSessionState()}),
-            '_session',
+            exportBaseName() + '_session',
             'Saved session'
         );
     }
@@ -941,7 +1030,7 @@ def _selection_presets_js() -> str:
         if (!state.bundle) { return; }
         if (event.ctrlKey || event.metaKey || event.altKey) { return; }
         if (keyboardTargetIsTextEntry(event.target)) { return; }
-        if (colorPickerIsOpen() || metadataPasteDialogIsOpen()) { return; }
+        if (colorPickerIsOpen() || metadataPasteDialogIsOpen() || nameDialogIsOpen()) { return; }
         const match = /^Digit([0-9])$/.exec(event.code || '');
         if (!match) { return; }
         const slot = Number(match[1]);
@@ -2060,19 +2149,33 @@ def _extraction_js() -> str:
         };
     }
 
-    async function saveExtractionFile() {
+    function saveExtractionFile() {
         if (!state.bundle) { return; }
+        // Validate before asking for a name, so a selection that cannot be extracted
+        // is refused without making the user name it first.
         const built = buildExtractionBundle();
         if (built.error) {
             setStatus(built.error);
             window.alert(built.error);
             return;
         }
-        await downloadBundleFile(
-            built.bundle,
-            '_extraction',
-            'Saved an extraction of ' + built.nodeCount.toLocaleString() + ' nodes'
-        );
+        openNameDialog({
+            title: 'Save extraction',
+            label: 'Name for the extracted network',
+            note: 'Names the new bundle and the file it is saved to. The extraction contains '
+                + built.nodeCount.toLocaleString() + ' of '
+                + state.bundle.graph.nodes.length.toLocaleString() + ' nodes.',
+            value: built.bundle.name,
+            confirmLabel: 'Save',
+            onConfirm: name => {
+                built.bundle.name = name;
+                downloadBundleFile(
+                    built.bundle,
+                    name.replace(/\s+/g, '_'),
+                    'Saved "' + name + '": an extraction of ' + built.nodeCount.toLocaleString() + ' nodes'
+                );
+            },
+        });
     }
 """
 
@@ -2177,6 +2280,34 @@ def ssn_viewer_html(
         font-size: clamp(1.25rem, 2vw, 1.75rem);
         font-weight: 600;
         letter-spacing: -0.02em;
+    }}
+    /* The name lives in the heading, so the control that edits it sits there too. */
+    .hero-title {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }}
+    /* Sits outside `.toolbar`, so it carries its own chrome rather than inheriting. */
+    button.title-edit {{
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 9px;
+        padding: 2px 10px;
+        font: inherit;
+        font-size: 1.2rem;
+        line-height: 1.4;
+        color: var(--muted);
+        cursor: pointer;
+        transition: background 140ms ease, color 140ms ease;
+    }}
+    button.title-edit:hover:not(:disabled) {{
+        background: #fff;
+        color: var(--ink);
+    }}
+    button.title-edit:disabled {{
+        opacity: 0.45;
+        cursor: not-allowed;
     }}
     .loader {{
         display: flex;
@@ -2846,8 +2977,9 @@ def ssn_viewer_html(
 <body>
 <div class="shell">
     <section class="hero">
-        <div>
-            <h1 id="viewer-title">{escaped_heading}</h1>
+        <div class="hero-title">
+            <h1 id="viewer-title" title="Double-click to rename this network">{escaped_heading}</h1>
+            <button id="rename-network" type="button" class="title-edit" disabled aria-label="Rename this network" title="Rename this network. The name appears in the heading and the browser tab, is stored in the bundle, and names every file saved from here. You can also double-click the heading.">&#9998;</button>
         </div>
         <div class="loader">
             <input id="bundle-file" type="file" accept=".ssnv,.gz,.json,.ssnview" />
@@ -3074,6 +3206,24 @@ def ssn_viewer_html(
         </section>
     </div>
 </div>
+<div id="name-overlay" class="cp-overlay" hidden>
+    <div class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="name-dialog-title">
+        <div class="cp-head">
+            <h3 id="name-dialog-title">Rename network</h3>
+            <button id="name-cancel" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <div class="control">
+                <label for="name-value" id="name-dialog-label">Network name</label>
+                <input id="name-value" type="text" />
+            </div>
+            <p class="note" id="name-dialog-note"></p>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="name-apply" type="button">Apply</button>
+        </div>
+    </div>
+</div>
 <div id="metadata-paste-overlay" class="cp-overlay" hidden>
     <div class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="metadata-paste-title">
         <div class="cp-head">
@@ -3174,6 +3324,7 @@ def ssn_viewer_html(
         selectionPresets: new Map(),
         presetPreviewSlot: null,
         metadataEditCell: null,
+        pendingNameAction: null,
         nodeIndexById: null,
         pendingRestoreViewTransform: null,
         sessionMissingNodeIds: 0,
@@ -3367,6 +3518,7 @@ def ssn_viewer_html(
         document.getElementById('export-svg').disabled = false;
         document.getElementById('customize-colors').disabled = false;
         document.getElementById('save-session').disabled = false;
+        document.getElementById('rename-network').disabled = false;
         state.presetPreviewSlot = null;
         if (colorPickerIsOpen()) {{
             openColorPicker();
@@ -8554,6 +8706,7 @@ def ssn_viewer_html(
     document.getElementById('export-svg').addEventListener('click', exportClusterSVG);
     document.getElementById('customize-colors').addEventListener('click', openColorPicker);
     document.getElementById('save-session').addEventListener('click', saveSessionFile);
+    document.getElementById('rename-network').addEventListener('click', openRenameNetworkDialog);
     document.getElementById('save-extraction').addEventListener('click', saveExtractionFile);
     document.getElementById('color-picker-close').addEventListener('click', closeColorPicker);
     document.getElementById('color-picker-overlay').addEventListener('click', event => {{
@@ -8647,6 +8800,7 @@ def ssn_viewer_html(
     setupMetadataTableDelegation();
     setupSelectionPresets();
     setupMetadataEditing();
+    setupNameDialog();
     populateColorPaletteMenu();
     warnIfUnsupported();
     updateComponentSortButton();
