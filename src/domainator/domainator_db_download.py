@@ -541,24 +541,32 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     extract_dir = workdir / "extracted"
     extract_dir.mkdir(parents=True, exist_ok=True)
 
-    def run(cmd, retries=1):
+    def run(cmd, retries=1, check=True):
         # Inherit stdout/stderr so the datasets progress bar is visible during long
         # downloads. Network steps (download/rehydrate) can be retried; rehydrate in
         # particular is resumable, so re-running it simply continues.
+        # With check=False, the exhausted-retries case returns the failed result instead
+        # of raising, so the caller can decide whether a nonzero exit is actually fatal.
         last_rc = None
+        last_result = None
         for attempt in range(1, retries + 1):
             print("+ " + " ".join(str(c) for c in cmd), file=sys.stderr)
             result = subprocess.run(cmd)
             if result.returncode == 0:
                 return result
             last_rc = result.returncode
+            last_result = result
             if attempt < retries:
                 wait = 30 * attempt
                 print(f"command failed (rc={last_rc}); retrying in {wait}s "
                       f"(attempt {attempt}/{retries - 1} of retries used)", file=sys.stderr)
                 time.sleep(wait)
-        raise RuntimeError(f"command failed (rc={last_rc}) after {retries} attempt(s): "
-                           f"{' '.join(str(c) for c in cmd)}")
+        if check:
+            raise RuntimeError(f"command failed (rc={last_rc}) after {retries} attempt(s): "
+                               f"{' '.join(str(c) for c in cmd)}")
+        print(f"command failed (rc={last_rc}) after {retries} attempt(s): "
+              f"{' '.join(str(c) for c in cmd)}", file=sys.stderr)
+        return last_result
 
     download_cmd = [datasets_bin, "download", "genome", "accession", "--inputfile", str(accession_file),
                     "--include", datasets_include, "--dehydrated", "--filename", str(zip_path)]
@@ -573,7 +581,12 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
         rehydrate_cmd += ["--gzip"]  # store genomic.gbff.gz (smaller scratch dir); read transparently downstream
     if api_key:
         rehydrate_cmd += ["--api-key", api_key]
-    run(rehydrate_cmd, retries=3)
+    # `datasets rehydrate` exits non-zero if ANY requested assembly is unavailable (e.g. a
+    # withdrawn/suppressed accession that 404s), even when every other genome fetched fine.
+    # A single such failure must not abort a large batch, so don't raise on it: run the
+    # retries, then proceed with whatever rehydrated (the `missing` accounting below reports
+    # the gap). Only a rehydrate that produced no genome files at all is treated as fatal.
+    rehydrate_result = run(rehydrate_cmd, retries=3, check=False)
 
     # NCBI Datasets writes one uncompressed ncbi_dataset/data/<accession>/genomic.gbff per
     # assembly (not the FTP-style <accession>_<name>_genomic.gbff.gz). Match both the datasets
@@ -581,9 +594,19 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     gbff_files = sorted(extract_dir.glob("ncbi_dataset/data/*/*.gbff")) \
                + sorted(extract_dir.glob("ncbi_dataset/data/*/*.gbff.gz"))
 
+    if not gbff_files:
+        raise RuntimeError(
+            "rehydrate produced no genome files; every requested assembly was unavailable "
+            "or the dehydrated package was empty. See the datasets errors above."
+        )
+
     found_accessions = {p.parent.name.split(".")[0] for p in gbff_files}
     requested_accessions = {a.split(".")[0] for a in accessions}
     missing = len(requested_accessions - found_accessions)
+    if rehydrate_result is not None and rehydrate_result.returncode != 0:
+        print(f"warning: `datasets rehydrate` exited rc={rehydrate_result.returncode} "
+              f"(some assemblies unavailable); proceeding with the {len(gbff_files)} genome(s) "
+              f"that rehydrated.", file=sys.stderr)
     if missing:
         print(f"warning: {missing} requested assemblies have no .gbff.gz after rehydrate", file=sys.stderr)
 
