@@ -1,6 +1,6 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.12.0
+Version 0.11.0
 
 [//]: # (remember to update version in domainator/__init__.py also)
 
@@ -118,6 +118,7 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 |  hmmer_select.py | Extracts a subset of profiles from .hmm files  | one or more .hmm files  | an hmm files  | yes  | yes  |  |
 |  kmer_dist.py | calculates exact k-mer similarity scores between sequence records | two sequence files (genbank or fasta). Protein inputs use protein k-mers; nucleotide inputs use translated CDS protein k-mers by default or strand-invariant nucleotide k-mers with `--nucleotide_kmers`. Use `--fasta_type` to disambiguate FASTA inputs and `--gene_call` to create CDS annotations for nucleotide FASTA. | a sparse or dense matrix of similarity scores | no | no | Supports `max_containment`, `min_containment`, and `jaccard` metrics. |
 |  matrix_report.py | generates a histogram and summary statistics from a data matrix | a dense or sparse data matrix | a report with graphics and statistics (html), a text report, or a compact JSON summary (`--json`) | no | no |  |
+|  build_ssn_viewer.py | builds an `.ssnv` bundle and/or a standalone, dependency-free HTML viewer for exploring a sequence similarity network in a browser | a symmetric similarity matrix. optionally, tables of node metadata | an `.ssnv` bundle (gzip JSON) and/or a self-contained HTML file (`--html`, with `--embed_data` to inline the bundle) | no | no | The viewer reconstructs clusters at any threshold from an MST hierarchy, so the bundle scales with node count rather than edge count. Metadata can be edited and annotated in the browser, and "Save session" writes a bundle carrying those edits plus the viewer state. |
 |  ssn_navigator.py | read-only navigation of a build_ssn_viewer `.ssnv` bundle: lists clusters, cluster contents, and per-cluster metadata distributions at a chosen similarity threshold | an `.ssnv` SSN viewer bundle | compact JSON (overview / thresholds / clusters / cluster / node queries) | no | no | Agent-friendly companion to the interactive HTML SSN viewer. |
 |  partition_seqfile.py | Scans through a genbank or fasta file and finds file byte offsets to partition the file into subsets. | a genbank or fasta file  |  tab separted text `offset, recs`  | no | yes | This is useful for parallelizing searches, in combination with the `--offset` and `--recs_to_read` parameters of `domainate.py` and `domain_search.py` |
 |  domainator_format_db.py | Prepares a `domain_search` database: split into shards (`--shards N`), BGZF-compress (`--compress`), and/or write `.didx` offset indexes. | genbank or fasta file(s), optionally gzip/BGZF | optional shard files (`<base>.N.<ext>`), optional `.bgz` compression, and optional `.didx` index sidecars | no | no | Operations are opt-in (`--shards`/`--compress`/`--index`). Indexes let `domain_search` skip the per-run offset scan; a logical db name auto-resolves to its shards. |

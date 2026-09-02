@@ -4,13 +4,31 @@ import base64
 import json
 from pathlib import Path
 
+from domainator import __version__
 from domainator.output_guardrails import make_temporary_output_path
+from domainator.ssn_bundle import (
+    SSN_VIEWER_BUNDLE_FORMAT,
+    SSN_VIEWER_BUNDLE_VERSION,
+    SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS,
+)
 from domainator.ssn_hierarchy import (
     MERGE_IMPACT_CHOICES,
     MERGE_IMPACT_MIN_CHILD,
     merge_impact_axis_labels,
 )
 from domainator.utils import NAMED_CATEGORICAL_PALETTES, OTHER_COLOR
+
+
+VIEWER_APP_NAME = "Domainator Similarity Network Viewer"
+# Titles that name no particular network, so the heading shows the app name alone
+# rather than "<app name>: Domainator SSN Viewer".
+_GENERIC_TITLES = frozenset({"", VIEWER_APP_NAME, "Domainator SSN Viewer"})
+
+
+def viewer_heading(network_name: str | None) -> str:
+    """The page's <h1>: the app name, plus the network name when there is one."""
+    name = (network_name or "").strip()
+    return VIEWER_APP_NAME if name in _GENERIC_TITLES else f"{VIEWER_APP_NAME}: {name}"
 
 
 def _layout_worker_js() -> str:
@@ -471,15 +489,1615 @@ self.onmessage = function(event) {
 """
 
 
+def _session_state_js() -> str:
+    """Session save/load: the `app_state` section of a v4 bundle.
+
+    Plain (non-f) string like `_layout_worker_js`, so the JavaScript below uses
+    normal single braces. It is interpolated into the viewer's one `<script>`
+    scope, so it can call `state`, `renderClusterView()` and friends directly,
+    and its function declarations hoist above the listener wiring.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Session state
+    //
+    // A saved session is an ordinary bundle whose `metadata` carries whatever
+    // the user edited plus one extra top-level section, `app_state`. Because
+    // the viewer's UI is expected to churn, state is *not* dumped ad hoc:
+    // every persisted control is one entry in VIEW_STATE_FIELDS below.
+    // Serializing walks the registry; applying looks each saved key up in it.
+    // That makes both directions tolerant -- a key this build dropped is
+    // skipped and reported, and a key the file omits keeps its default -- so
+    // old files open in new viewers and new files open in old ones.
+    // ---------------------------------------------------------------------
+    const SESSION_STATE_VERSION = 1;
+    const PRESET_SLOT_COUNT = 10;
+
+    function domValueField(section, key, elementId, options) {
+        const parse = (options && options.parse) || (value => value);
+        const format = (options && options.format) || (value => String(value));
+        return {
+            section,
+            key,
+            get: () => parse(document.getElementById(elementId).value),
+            set: value => {
+                const element = document.getElementById(elementId);
+                const text = format(value);
+                if (element.tagName === 'SELECT' &&
+                        !Array.from(element.options).some(option => option.value === text)) {
+                    // Restoring a column or option this bundle does not have would
+                    // silently blank the control; report it as skipped instead.
+                    throw new Error('no option "' + text + '"');
+                }
+                element.value = text;
+            },
+        };
+    }
+
+    function domCheckboxField(section, key, elementId) {
+        return {
+            section,
+            key,
+            get: () => document.getElementById(elementId).checked,
+            set: value => { document.getElementById(elementId).checked = Boolean(value); },
+        };
+    }
+
+    function nodeIndexByIdMap() {
+        if (!state.nodeIndexById) {
+            state.nodeIndexById = new Map(state.bundle.graph.nodes.map((id, index) => [id, index]));
+        }
+        return state.nodeIndexById;
+    }
+
+    // Selections persist as node ids, never indices: an index is a position in
+    // graph.nodes and silently means a different sequence if the bundle is
+    // rebuilt or subsetted. Unmatched ids are counted so the load can say so.
+    function nodeIndicesFromIds(ids) {
+        const map = nodeIndexByIdMap();
+        const indices = [];
+        let missing = 0;
+        (ids || []).forEach(id => {
+            const index = map.get(id);
+            if (index === undefined) { missing += 1; } else { indices.push(index); }
+        });
+        state.sessionMissingNodeIds += missing;
+        return indices;
+    }
+
+    function nodeIdsFromIndices(indices) {
+        return Array.from(indices).sort((left, right) => left - right).map(index => nodeId(index));
+    }
+
+    function serializeSelectionPresets() {
+        const presets = {};
+        state.selectionPresets.forEach((preset, slot) => {
+            presets[String(slot)] = {
+                node_ids: nodeIdsFromIndices(preset.nodeIndices),
+                saved_at: preset.savedAt || null,
+            };
+        });
+        return presets;
+    }
+
+    function deserializeSelectionPresets(presets) {
+        state.selectionPresets = new Map();
+        Object.keys(presets || {}).forEach(slotKey => {
+            const slot = Number.parseInt(slotKey, 10);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= PRESET_SLOT_COUNT) {
+                throw new Error('bad preset slot "' + slotKey + '"');
+            }
+            const entry = presets[slotKey] || {};
+            const indices = nodeIndicesFromIds(entry.node_ids);
+            if (indices.length === 0) { return; }
+            state.selectionPresets.set(slot, {
+                nodeIndices: new Set(indices),
+                savedAt: entry.saved_at || null,
+            });
+        });
+    }
+
+    const VIEW_STATE_FIELDS = [
+        domValueField('view', 'layout_algorithm', 'layout-algorithm'),
+        domValueField('view', 'min_cluster_size', 'min-cluster-size'),
+        domValueField('view', 'color_by', 'color-by'),
+        domValueField('view', 'label_by', 'label-by'),
+        domValueField('view', 'export_png_scale', 'export-png-scale'),
+        domCheckboxField('view', 'show_node_counts', 'show-node-counts'),
+        domCheckboxField('view', 'show_edge_scores', 'show-edge-scores'),
+        domCheckboxField('view', 'render_cluster_bounds', 'render-cluster-bounds'),
+        domCheckboxField('view', 'render_nodes', 'render-nodes'),
+        domCheckboxField('view', 'reduce_elongation', 'reduce-elongation'),
+        domCheckboxField('view', 'leaf_pruning_only', 'leaf-pruning-only'),
+        {
+            section: 'view',
+            key: 'sort_components_by_size',
+            get: () => sortComponentsBySizeEnabled(),
+            set: value => {
+                document.getElementById('sort-components-by-size')
+                    .setAttribute('aria-pressed', value ? 'true' : 'false');
+            },
+        },
+        {
+            // The threshold is stored as its value, not as the slider position:
+            // positions are derived from the bundle's slider_stops and shift
+            // whenever --max_merge_events changes.
+            section: 'view',
+            key: 'threshold_value',
+            get: () => {
+                const value = selectedThresholdValue();
+                return Number.isFinite(value) ? value : null;
+            },
+            set: value => {
+                if (value === null || value === undefined) {
+                    const infinityStop = state.sliderModel.stops.find(stop => stop.threshold_value === null);
+                    snapSliderToStop(infinityStop);
+                    return;
+                }
+                const target = Number(value);
+                if (!Number.isFinite(target)) { throw new Error('not a number: ' + value); }
+                snapSliderToStop(nearestStopForThreshold(target));
+            },
+        },
+        {
+            section: 'view',
+            key: 'view_transform',
+            get: () => ({
+                scale: state.viewTransform.scale,
+                offsetX: state.viewTransform.offsetX,
+                offsetY: state.viewTransform.offsetY,
+            }),
+            set: value => {
+                if (!value || !Number.isFinite(value.scale) || value.scale <= 0 ||
+                        !Number.isFinite(value.offsetX) || !Number.isFinite(value.offsetY)) {
+                    throw new Error('malformed view transform');
+                }
+                // Consumed by applyComputedLayout once a layout exists, which is
+                // also what would otherwise auto-fit the view and discard this.
+                state.pendingRestoreViewTransform = {
+                    scale: value.scale, offsetX: value.offsetX, offsetY: value.offsetY,
+                };
+            },
+        },
+        domValueField('table', 'filter', 'metadata-filter'),
+        domValueField('table', 'null_order', 'metadata-null-order'),
+        domValueField('table', 'rows_per_page', 'metadata-rows-per-page'),
+        {
+            section: 'table',
+            key: 'sort',
+            get: () => ({
+                column_key: state.metadataSort.columnKey,
+                direction: state.metadataSort.direction,
+            }),
+            set: value => {
+                const columnKey = value && value.column_key;
+                if (columnKey && !metadataColumnKeys().includes(columnKey)) {
+                    throw new Error('no column "' + columnKey + '"');
+                }
+                state.metadataSort = {
+                    columnKey: columnKey || null,
+                    direction: (value && value.direction === 'desc') ? 'desc' : 'asc',
+                };
+            },
+        },
+        {
+            section: 'table',
+            key: 'column_widths',
+            get: () => Object.fromEntries(state.metadataColumnWidths),
+            set: value => {
+                const widths = new Map();
+                Object.keys(value || {}).forEach(columnKey => {
+                    const width = Number(value[columnKey]);
+                    if (!Number.isFinite(width)) { return; }
+                    widths.set(columnKey, Math.max(96, Math.min(640, Math.round(width))));
+                });
+                state.metadataColumnWidths = widths;
+            },
+        },
+        {
+            section: 'colors',
+            key: 'custom_palettes',
+            get: () => state.customPalettes,
+            set: value => {
+                if (value === null || typeof value !== 'object') { throw new Error('not an object'); }
+                state.customPalettes = value;
+            },
+        },
+        {
+            section: 'colors',
+            key: 'categorical_columns',
+            get: () => Array.from(state.categoricalColumns),
+            set: value => { state.categoricalColumns = new Set(value || []); },
+        },
+        {
+            section: 'selection',
+            key: 'node_ids',
+            get: () => nodeIdsFromIndices(state.selectedNodeIndices),
+            set: value => { state.selectedNodeIndices = new Set(nodeIndicesFromIds(value)); },
+        },
+        {
+            section: 'selection',
+            key: 'presets',
+            get: () => serializeSelectionPresets(),
+            set: value => { deserializeSelectionPresets(value); },
+        },
+    ];
+
+    function collectSessionState() {
+        const sections = {};
+        VIEW_STATE_FIELDS.forEach(field => {
+            if (!sections[field.section]) { sections[field.section] = {}; }
+            sections[field.section][field.key] = field.get();
+        });
+        return Object.assign({
+            state_version: SESSION_STATE_VERSION,
+            saved_by: DOMAINATOR_VERSION,
+            saved_at: new Date().toISOString(),
+        }, sections);
+    }
+
+    // Returns a human-readable summary of anything that could not be restored.
+    function applySessionState(appState) {
+        if (!appState || typeof appState !== 'object') { return ''; }
+        state.sessionMissingNodeIds = 0;
+        const fieldsByPath = new Map(
+            VIEW_STATE_FIELDS.map(field => [field.section + '.' + field.key, field])
+        );
+        const skipped = [];
+        Object.keys(appState).forEach(sectionName => {
+            const section = appState[sectionName];
+            // Scalars at the top level are metadata about the save itself
+            // (state_version, saved_by, saved_at), not restorable fields.
+            if (!section || typeof section !== 'object' || Array.isArray(section)) { return; }
+            Object.keys(section).forEach(key => {
+                const field = fieldsByPath.get(sectionName + '.' + key);
+                if (!field) {
+                    skipped.push(sectionName + '.' + key + ' (unknown)');
+                    return;
+                }
+                try {
+                    field.set(section[key]);
+                } catch (error) {
+                    skipped.push(sectionName + '.' + key + ' (' + error.message + ')');
+                }
+            });
+        });
+
+        // Controls whose appearance is derived from the values just restored.
+        updateComponentSortButton();
+
+        const notes = [];
+        if (skipped.length > 0) {
+            notes.push('skipped ' + skipped.length + ' saved setting' + (skipped.length === 1 ? '' : 's') +
+                ': ' + skipped.join(', '));
+        }
+        if (state.sessionMissingNodeIds > 0) {
+            notes.push(state.sessionMissingNodeIds.toLocaleString() +
+                ' saved node id' + (state.sessionMissingNodeIds === 1 ? '' : 's') + ' are not in this bundle');
+        }
+        return notes.length > 0 ? ' (' + notes.join('; ') + ')' : '';
+    }
+
+    function browserSupportsBundleSaving() {
+        return 'CompressionStream' in window;
+    }
+
+    // Serialize a bundle and hand it to the browser as a download. Shared by
+    // "Save session" and "Save extraction" so both produce the same file format.
+    async function downloadBundleFile(payload, filenameSuffix, description) {
+        try {
+            setStatus(description + '...');
+            const bytes = new TextEncoder().encode(JSON.stringify(payload));
+            let blob;
+            let extension;
+            if (browserSupportsBundleSaving()) {
+                const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+                blob = await new Response(stream).blob();
+                extension = '.ssnv';
+            } else {
+                // decodeBundleFile falls back to plain JSON, so this still round-trips.
+                blob = new Blob([bytes], {type: 'application/json'});
+                extension = '.json';
+            }
+            triggerDownload(URL.createObjectURL(blob), exportBaseName() + filenameSuffix + extension, true);
+            setStatus(description + ' (' + Math.round(blob.size / 1024).toLocaleString() + ' KB).');
+            return true;
+        } catch (error) {
+            console.error(error);
+            setStatus(description + ' failed: ' + error.message);
+            return false;
+        }
+    }
+
+    async function saveSessionFile() {
+        if (!state.bundle) { return; }
+        // state.metadataByNodeIndex is bundle.metadata.rows, so table edits are
+        // already in here; the file stays a valid bundle that Python readers
+        // and this viewer can both open.
+        await downloadBundleFile(
+            Object.assign({}, state.bundle, {version: BUNDLE_VERSION, app_state: collectSessionState()}),
+            '_session',
+            'Saved session'
+        );
+    }
+"""
+
+def _selection_presets_js() -> str:
+    """Ten keyboard-addressable selection presets with a hover preview.
+
+    Plain (non-f) string like `_layout_worker_js`; see `_session_state_js`.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Selection presets
+    //
+    // Ten slots above the hierarchy view. Press 0-9 to recall a slot (or click
+    // it), Shift+0-9 to store the current selection into one, and hover a slot
+    // to outline its nodes in gray without disturbing the live selection.
+    //
+    // Storing is bound to Shift rather than Ctrl/Cmd because browsers reserve
+    // Ctrl/Cmd+1-9 for tab switching and Ctrl/Cmd+0 for zoom reset; a page
+    // cannot intercept those. Slots are keyed off event.code (Digit0..Digit9)
+    // so neither the keyboard layout nor Shift's symbol mapping matters.
+    // ---------------------------------------------------------------------
+
+    function presetPreviewNodeSet() {
+        if (state.presetPreviewSlot === null) { return null; }
+        const preset = state.selectionPresets.get(state.presetPreviewSlot);
+        return preset && preset.nodeIndices.size > 0 ? preset.nodeIndices : null;
+    }
+
+    function renderPresetSlots() {
+        const container = document.getElementById('preset-slots');
+        if (!container) { return; }
+        container.querySelectorAll('[data-preset-slot]').forEach(button => {
+            const slot = Number(button.dataset.presetSlot);
+            const preset = state.selectionPresets.get(slot);
+            const count = preset ? preset.nodeIndices.size : 0;
+            button.classList.toggle('preset-slot-filled', count > 0);
+            button.disabled = !state.bundle;
+            button.title = count > 0
+                ? 'Preset ' + slot + ': ' + count.toLocaleString() + ' nodes.' +
+                  ' Click (or press ' + slot + ') to replace the selection with it;' +
+                  ' Shift-click to add it; Alt+Shift-click to subtract it;' +
+                  ' hover to preview; Shift+' + slot + ' to overwrite it.'
+                : 'Preset ' + slot + ' is empty. Select nodes, then press Shift+' + slot + ' to store them here.';
+        });
+    }
+
+    function storeSelectionPreset(slot) {
+        if (!state.bundle) { return; }
+        if (state.selectedNodeIndices.size === 0) {
+            // Storing nothing is how you clear a slot.
+            state.selectionPresets.delete(slot);
+            setStatus('Cleared preset ' + slot + ' (nothing was selected).');
+        } else {
+            state.selectionPresets.set(slot, {
+                nodeIndices: new Set(state.selectedNodeIndices),
+                savedAt: new Date().toISOString(),
+            });
+            setStatus('Stored ' + state.selectedNodeIndices.size.toLocaleString() +
+                ' nodes in preset ' + slot + '.');
+        }
+        renderPresetSlots();
+        scheduleClusterRender();
+    }
+
+    // mode: 'replace' (the default), 'add' to union the preset into the current
+    // selection, or 'subtract' to remove it. Shift/Alt+Shift on a slot button pick
+    // the latter two, matching the canvas box-select gesture where Shift selects
+    // and adding Alt deselects.
+    function recallSelectionPreset(slot, mode = 'replace') {
+        if (!state.bundle) { return; }
+        const preset = state.selectionPresets.get(slot);
+        if (!preset) {
+            setStatus('Preset ' + slot + ' is empty.');
+            return;
+        }
+        const before = state.selectedNodeIndices.size;
+        if (mode === 'add') {
+            preset.nodeIndices.forEach(nodeIndex => state.selectedNodeIndices.add(nodeIndex));
+        } else if (mode === 'subtract') {
+            preset.nodeIndices.forEach(nodeIndex => state.selectedNodeIndices.delete(nodeIndex));
+        } else {
+            state.selectedNodeIndices = new Set(preset.nodeIndices);
+        }
+        const after = state.selectedNodeIndices.size;
+        resetMetadataPage();
+        clearMetadataRowSelection();
+        if (mode === 'add') {
+            setStatus('Added preset ' + slot + ' to the selection (+' +
+                (after - before).toLocaleString() + ' nodes, ' + after.toLocaleString() + ' total).');
+        } else if (mode === 'subtract') {
+            setStatus('Subtracted preset ' + slot + ' from the selection (-' +
+                (before - after).toLocaleString() + ' nodes, ' + after.toLocaleString() + ' remaining).');
+        } else {
+            setStatus('Recalled preset ' + slot + ' (' + after.toLocaleString() + ' nodes).');
+        }
+        renderClusterView();
+        updateMetadataTable();
+    }
+
+    function presetClickMode(event) {
+        if (!event.shiftKey) { return 'replace'; }
+        return event.altKey ? 'subtract' : 'add';
+    }
+
+    function setPresetPreviewSlot(slot) {
+        if (state.presetPreviewSlot === slot) { return; }
+        state.presetPreviewSlot = slot;
+        scheduleClusterRender();
+    }
+
+    // True when a keystroke belongs to a control the user is typing into, in
+    // which case the bare-digit shortcuts must not fire.
+    function keyboardTargetIsTextEntry(target) {
+        if (!target || !target.tagName) { return false; }
+        if (target.isContentEditable) { return true; }
+        return ['INPUT', 'SELECT', 'TEXTAREA', 'OPTION'].includes(target.tagName);
+    }
+
+    function handlePresetKeydown(event) {
+        if (!state.bundle) { return; }
+        if (event.ctrlKey || event.metaKey || event.altKey) { return; }
+        if (keyboardTargetIsTextEntry(event.target)) { return; }
+        if (colorPickerIsOpen() || metadataPasteDialogIsOpen()) { return; }
+        const match = /^Digit([0-9])$/.exec(event.code || '');
+        if (!match) { return; }
+        const slot = Number(match[1]);
+        event.preventDefault();
+        if (event.shiftKey) {
+            storeSelectionPreset(slot);
+        } else {
+            recallSelectionPreset(slot);
+        }
+    }
+
+    function setupSelectionPresets() {
+        const container = document.getElementById('preset-slots');
+        container.addEventListener('click', event => {
+            const button = event.target.closest('[data-preset-slot]');
+            if (button) {
+                recallSelectionPreset(Number(button.dataset.presetSlot), presetClickMode(event));
+            }
+        });
+        // mouseover/mouseout (not mouseenter/mouseleave) so one delegated pair
+        // covers all ten buttons.
+        container.addEventListener('mouseover', event => {
+            const button = event.target.closest('[data-preset-slot]');
+            if (button) { setPresetPreviewSlot(Number(button.dataset.presetSlot)); }
+        });
+        container.addEventListener('mouseout', event => {
+            const button = event.target.closest('[data-preset-slot]');
+            if (button) { setPresetPreviewSlot(null); }
+        });
+        // Keyboard focus should preview too, so the slots are usable without a mouse.
+        container.addEventListener('focusin', event => {
+            const button = event.target.closest('[data-preset-slot]');
+            if (button) { setPresetPreviewSlot(Number(button.dataset.presetSlot)); }
+        });
+        container.addEventListener('focusout', () => setPresetPreviewSlot(null));
+        document.addEventListener('keydown', handlePresetKeydown);
+        renderPresetSlots();
+    }
+"""
+
+def _table_editing_js() -> str:
+    """Editable metadata cells, user-added columns, and bulk fills.
+
+    Plain (non-f) string like `_layout_worker_js`; see `_session_state_js`.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Metadata editing
+    //
+    // Edits write straight into state.metadataByNodeIndex, which *is*
+    // bundle.metadata.rows (installBundle assigns it by reference). A saved
+    // session is therefore an ordinary bundle whose metadata simply reflects
+    // the annotations -- no overlay to reconcile, and Python readers
+    // (ssn_bundle, ssn_navigator) see the edits with no extra work.
+    //
+    // node_id is not editable: it is the graph key that node indices, the
+    // hierarchy and every saved selection resolve through.
+    // ---------------------------------------------------------------------
+
+    function columnIsEditable(columnKey) {
+        return Boolean(state.bundle) && columnKey !== 'node_id' && Boolean(metadataColumn(columnKey));
+    }
+
+    function columnIsViewerAdded(columnKey) {
+        const column = metadataColumn(columnKey);
+        return Boolean(column && column.origin === 'viewer');
+    }
+
+    // Parse user text into the column's declared type. Returns {ok, value, widenTo}
+    // so callers can reject rather than silently coercing "abc" in a numeric
+    // column to NaN (or quietly turning the whole column into text).
+    //
+    // Typing 12.5 into an int column widens the column to float rather than
+    // truncating to 12: the type was only inferred from the values that happened
+    // to be in the source TSV, so widening is what Python would have inferred had
+    // the data looked like this to begin with, and it loses nothing.
+    function parseMetadataInput(columnKey, rawText) {
+        const text = String(rawText === null || rawText === undefined ? '' : rawText).trim();
+        if (text === '' || text === '—') {
+            return {ok: true, value: null};
+        }
+        const columnType = metadataColumnType(columnKey);
+        if (columnType === 'int' || columnType === 'float') {
+            // Reject "12abc": Number() is lenient about surrounding whitespace but
+            // not about trailing garbage, which is the failure mode worth catching.
+            const numeric = Number(text);
+            if (!Number.isFinite(numeric)) {
+                return {ok: false, reason: '"' + text + '" is not a number'};
+            }
+            if (columnType === 'int' && !Number.isInteger(numeric)) {
+                return {ok: true, value: numeric, widenTo: 'float'};
+            }
+            return {ok: true, value: numeric};
+        }
+        return {ok: true, value: text};
+    }
+
+    // Applies a parse result's requested type widening, if any. Returns whether
+    // the column list changed, so callers can refresh the column-driven menus.
+    function applyColumnWidening(columnName, parsed) {
+        if (!parsed.widenTo) { return false; }
+        const column = metadataColumn(columnName);
+        if (!column || column.type === parsed.widenTo) { return false; }
+        column.type = parsed.widenTo;
+        setStatus('Column "' + columnName + '" now holds fractional values; its type widened to float.');
+        return true;
+    }
+
+    // Writes the value without touching caches; callers batch a single
+    // refreshAfterMetadataEdit() so a bulk fill rebuilds caches once, not once
+    // per row (rebuildMetadataCaches is O(rows x columns)).
+    function writeMetadataValue(nodeIndex, columnName, value) {
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (columnIndex === undefined) { return false; }
+        const row = state.metadataByNodeIndex[nodeIndex];
+        if (!row) { return false; }
+        row[columnIndex] = value;
+        return true;
+    }
+
+    // Everything downstream of a metadata value: the search index and numeric
+    // min/max live in rebuildMetadataCaches, node colors are cached separately.
+    function refreshAfterMetadataEdit(options) {
+        const settings = options || {};
+        rebuildMetadataCaches();
+        if (settings.columnsChanged) {
+            populateMetadataControlsPreservingSelection();
+            populateEditableColumnMenus();
+        }
+        rebuildNodeColorCache();
+        updateMetadataTable();
+        renderClusterView();
+        if (colorPickerIsOpen()) {
+            openColorPicker();
+        }
+    }
+
+    // populateMetadataControls resets color-by/label-by to the bundle defaults,
+    // which would undo the user's choice every time a column is added.
+    function populateMetadataControlsPreservingSelection() {
+        const colorBy = document.getElementById('color-by');
+        const labelBy = document.getElementById('label-by');
+        const previousColor = colorBy.value;
+        const previousLabel = labelBy.value;
+        populateMetadataControls();
+        if (Array.from(colorBy.options).some(option => option.value === previousColor)) {
+            colorBy.value = previousColor;
+        }
+        if (Array.from(labelBy.options).some(option => option.value === previousLabel)) {
+            labelBy.value = previousLabel;
+        }
+    }
+
+    function setMetadataValue(nodeIndex, columnName, rawText) {
+        if (!columnIsEditable(columnName)) { return false; }
+        const parsed = parseMetadataInput(columnName, rawText);
+        if (!parsed.ok) {
+            setStatus('Cannot set "' + columnName + '": ' + parsed.reason + '.');
+            return false;
+        }
+        if (!writeMetadataValue(nodeIndex, columnName, parsed.value)) { return false; }
+        const widened = applyColumnWidening(columnName, parsed);
+        refreshAfterMetadataEdit({columnsChanged: widened});
+        return true;
+    }
+
+    // ---- in-place cell editing ----
+
+    function beginMetadataCellEdit(cell) {
+        if (state.metadataEditCell) { return; }
+        const row = cell.closest('tr[data-node-index]');
+        const columnKey = cell.dataset.columnKey;
+        if (!row || !columnIsEditable(columnKey)) { return; }
+        const nodeIndex = Number(row.dataset.nodeIndex);
+        const value = metadataValue(nodeIndex, columnKey);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'metadata-cell-input';
+        input.value = isMissingMetadataValue(value) ? '' : String(value);
+        input.setAttribute('aria-label', 'Edit ' + columnKey);
+        cell.textContent = '';
+        cell.appendChild(input);
+        state.metadataEditCell = {cell, nodeIndex, columnKey};
+        input.focus();
+        input.select();
+
+        const commit = () => finishMetadataCellEdit(true);
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.removeEventListener('blur', commit);
+                finishMetadataCellEdit(true);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                input.removeEventListener('blur', commit);
+                finishMetadataCellEdit(false);
+            }
+        });
+    }
+
+    function finishMetadataCellEdit(commit) {
+        const editing = state.metadataEditCell;
+        if (!editing) { return; }
+        state.metadataEditCell = null;
+        const input = editing.cell.querySelector('input');
+        const rawText = input ? input.value : '';
+        // Clicking away from an untouched cell is the common case, and it should
+        // not pay for a cache rebuild -- it only needs the <input> swapped out.
+        const parsed = commit ? parseMetadataInput(editing.columnKey, rawText) : null;
+        const unchanged = parsed && parsed.ok && !parsed.widenTo &&
+            parsed.value === metadataValue(editing.nodeIndex, editing.columnKey);
+        if (!commit || unchanged ||
+                !setMetadataValue(editing.nodeIndex, editing.columnKey, rawText)) {
+            // Cancelled, unchanged, or rejected: repaint to restore the cell text.
+            updateMetadataTable();
+        }
+    }
+
+    // ---- adding and removing columns ----
+
+    // Shared by add and rename. `node_id` is reserved: it is the table's synthetic
+    // first column, so a metadata column of that name would be unreachable.
+    function validateColumnName(name) {
+        const columnName = String(name || '').trim();
+        if (columnName === '') {
+            return {ok: false, reason: 'Enter a column name.'};
+        }
+        if (columnName === 'node_id' || state.metadataColumnIndexByName.has(columnName)) {
+            return {ok: false, reason: 'A column named "' + columnName + '" already exists.'};
+        }
+        return {ok: true, name: columnName};
+    }
+
+    function addMetadataColumn(name, columnType) {
+        if (!state.bundle) { return false; }
+        const validated = validateColumnName(name);
+        if (!validated.ok) {
+            setStatus(validated.reason);
+            return false;
+        }
+        const columnName = validated.name;
+        // `origin` marks columns created here so they can be deleted again. It is
+        // additive: build_ssn_viewer writes only {name, type} and no reader
+        // inspects extra keys, so a bundle carrying it stays valid.
+        state.metadataColumns.push({
+            name: columnName,
+            type: columnType === 'number' ? 'float' : 'str',
+            origin: 'viewer',
+        });
+        state.metadataByNodeIndex.forEach(row => { row.push(null); });
+        refreshAfterMetadataEdit({columnsChanged: true});
+        setStatus('Added column "' + columnName + '".');
+        return true;
+    }
+
+    // Menus whose option values are column names. Which column each one points at
+    // is held in the DOM rather than in `state`, so it is one more thing keyed by
+    // column name that a rename has to carry across.
+    const COLUMN_NAME_MENU_IDS = [
+        'color-by',
+        'label-by',
+        'metadata-fill-column',
+        'metadata-paste-column',
+        'metadata-rename-column',
+        'metadata-delete-column',
+    ];
+
+    // Retarget every menu currently pointing at `oldName`. Rewriting the option
+    // updates its select's value, so the rebuild that follows -- which restores
+    // whatever each menu was showing -- carries the choice over on its own.
+    function renameColumnInMenus(oldName, newName) {
+        COLUMN_NAME_MENU_IDS.forEach(menuId => {
+            Array.from(document.getElementById(menuId).options).forEach(option => {
+                if (option.value === oldName) {
+                    option.value = newName;
+                }
+            });
+        });
+    }
+
+    // The viewer's counterpart to `build_ssn.py --lb <threshold> --cluster`: writes
+    // the connected-component number at the current threshold into a column. The
+    // default name matches that tool's CLUSTER_COLUMN so the two are interchangeable
+    // downstream, and an existing column of the same name is overwritten, as there.
+    function addClusterColumn(name) {
+        if (!state.bundle) { return false; }
+        const columnName = String(name || '').trim() || 'SSN_cluster';
+        if (columnName === 'node_id') {
+            setStatus('"node_id" is reserved; choose another column name.');
+            return false;
+        }
+        const existing = metadataColumn(columnName);
+        if (existing && existing.origin !== 'viewer' &&
+                !window.confirm('Overwrite the column "' + columnName + '" with cluster numbers?\n\n' +
+                    'It came from this bundle\'s metadata, not from the viewer, and its current values will be lost.')) {
+            return false;
+        }
+
+        const clusterNumbers = clusterNumbersAtCurrentThreshold();
+        if (!existing) {
+            state.metadataColumns.push({name: columnName, type: 'int', origin: 'viewer'});
+            state.metadataByNodeIndex.forEach(row => { row.push(null); });
+        } else {
+            existing.type = 'int';
+        }
+        rebuildMetadataCaches();  // so writeMetadataValue can find the new column index
+        state.allNodeIndices.forEach(nodeIndex => {
+            writeMetadataValue(nodeIndex, columnName, clusterNumbers.numberFor(nodeIndex));
+        });
+        // Cluster ids are labels, not magnitudes, so colour them as discrete
+        // categories -- the same thing build_ssn_viewer.py's --categorical asks for.
+        state.categoricalColumns.add(columnName);
+
+        refreshAfterMetadataEdit({columnsChanged: !existing});
+        const stop = currentSliderStop();
+        setStatus('Wrote ' + clusterNumbers.clusterCount.toLocaleString() + ' cluster numbers into "' +
+            columnName + '" at threshold ' + (stop ? stop.threshold_label : '∞') + '.');
+        return true;
+    }
+
+    // Moves any state that is keyed by column name along with the column. Values
+    // themselves are positional, so the rows need no rewriting.
+    function renameMetadataColumn(oldName, newName) {
+        if (!state.bundle || !columnIsEditable(oldName)) { return false; }
+        const trimmed = String(newName || '').trim();
+        if (trimmed === oldName) { return true; }
+        const validated = validateColumnName(trimmed);
+        if (!validated.ok) {
+            setStatus(validated.reason);
+            return false;
+        }
+        const columnName = validated.name;
+
+        // Both palette spellings, because paletteKey() suffixes a numeric column
+        // that is currently colored categorically.
+        ['', '\u0000categorical'].forEach(suffix => {
+            const fromKey = oldName + suffix;
+            if (Object.prototype.hasOwnProperty.call(state.customPalettes, fromKey)) {
+                state.customPalettes[columnName + suffix] = state.customPalettes[fromKey];
+                delete state.customPalettes[fromKey];
+            }
+        });
+        if (state.categoricalColumns.delete(oldName)) {
+            state.categoricalColumns.add(columnName);
+        }
+        if (state.metadataColumnWidths.has(oldName)) {
+            state.metadataColumnWidths.set(columnName, state.metadataColumnWidths.get(oldName));
+            state.metadataColumnWidths.delete(oldName);
+        }
+        if (state.metadataSort.columnKey === oldName) {
+            state.metadataSort.columnKey = columnName;
+        }
+        renameColumnInMenus(oldName, columnName);
+        metadataColumn(oldName).name = columnName;
+
+        refreshAfterMetadataEdit({columnsChanged: true});
+        setStatus('Renamed column "' + oldName + '" to "' + columnName + '".');
+        return true;
+    }
+
+    function deleteMetadataColumn(columnName) {
+        if (!columnIsEditable(columnName)) { return false; }
+        // Dropping a column that came from the source data is the one destructive,
+        // un-undoable edit in the viewer -- and it only really bites once the
+        // session is saved over the original. Columns created here are cheap to
+        // recreate, so they go without a prompt.
+        if (!columnIsViewerAdded(columnName) &&
+                !window.confirm('Delete the column "' + columnName + '"?\n\n' +
+                    'It came from this bundle\'s metadata, not from the viewer. ' +
+                    'Reload the bundle to get it back; a session saved after this will not contain it.')) {
+            return false;
+        }
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        state.metadataColumns.splice(columnIndex, 1);
+        state.metadataByNodeIndex.forEach(row => { row.splice(columnIndex, 1); });
+        state.metadataColumnWidths.delete(columnName);
+        // Palettes are stored under paletteKey(), which suffixes a numeric column
+        // that is being colored categorically; clear both spellings.
+        delete state.customPalettes[columnName];
+        delete state.customPalettes[columnName + '\u0000categorical'];
+        state.categoricalColumns.delete(columnName);
+        if (state.metadataSort.columnKey === columnName) {
+            state.metadataSort = {columnKey: null, direction: 'asc'};
+        }
+        refreshAfterMetadataEdit({columnsChanged: true});
+        setStatus('Deleted column "' + columnName + '".');
+        return true;
+    }
+
+    // ---- bulk fill ----
+
+    // The three fill targets. "selection" is the annotation workflow (select a
+    // cluster on the canvas, label it); "rows" uses the table's staged rows;
+    // "page" matches what the per-column Copy button copies.
+    function bulkFillTargetNodeIndices(target) {
+        if (target === 'rows') {
+            return Array.from(state.selectedMetadataNodeIndices).sort((left, right) => left - right);
+        }
+        if (target === 'page') {
+            return state.renderedNodeIndices.slice();
+        }
+        if (target === 'all') {
+            return state.allNodeIndices.slice();
+        }
+        return Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
+    }
+
+    function bulkFillTargetLabel(target) {
+        if (target === 'rows') { return 'staged table rows'; }
+        if (target === 'page') { return 'rows on this page'; }
+        if (target === 'all') { return 'nodes in the network'; }
+        return 'selected nodes';
+    }
+
+    function applyBulkFill() {
+        if (!state.bundle) { return; }
+        const columnName = document.getElementById('metadata-fill-column').value;
+        const target = document.getElementById('metadata-fill-target').value;
+        const rawText = document.getElementById('metadata-fill-value').value;
+        if (!columnIsEditable(columnName)) {
+            setStatus('Choose a column to fill.');
+            return;
+        }
+        const nodeIndices = bulkFillTargetNodeIndices(target);
+        if (nodeIndices.length === 0) {
+            setStatus('No ' + bulkFillTargetLabel(target) + ' to fill.');
+            return;
+        }
+        const parsed = parseMetadataInput(columnName, rawText);
+        if (!parsed.ok) {
+            setStatus('Cannot fill "' + columnName + '": ' + parsed.reason + '.');
+            return;
+        }
+        nodeIndices.forEach(nodeIndex => writeMetadataValue(nodeIndex, columnName, parsed.value));
+        const widened = applyColumnWidening(columnName, parsed);
+        refreshAfterMetadataEdit({columnsChanged: widened});
+        setStatus('Set "' + columnName + '" on ' + nodeIndices.length.toLocaleString() + ' ' +
+            bulkFillTargetLabel(target) + '.');
+    }
+
+    // Paste applies to the rendered page in display order -- the exact inverse
+    // of the per-column Copy button. Counts must match: a short or long paste
+    // almost always means the page, filter or sort moved since the copy, and
+    // silently filling a prefix would mislabel rows.
+    function applyPastedColumn() {
+        if (!state.bundle) { return; }
+        const columnName = document.getElementById('metadata-paste-column').value;
+        const text = document.getElementById('metadata-paste-values').value;
+        if (!columnIsEditable(columnName)) {
+            setStatus('Choose a column to paste into.');
+            return;
+        }
+        const lines = text.split(/\r?\n/);
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+            lines.pop();
+        }
+        const nodeIndices = state.renderedNodeIndices;
+        if (lines.length !== nodeIndices.length) {
+            setStatus('Paste has ' + lines.length.toLocaleString() + ' values but this page shows ' +
+                nodeIndices.length.toLocaleString() + ' rows; they must match.');
+            return;
+        }
+        const parsedValues = [];
+        let widenTo = null;
+        for (let i = 0; i < lines.length; i++) {
+            // Tolerate a pasted multi-column block by taking the first field.
+            const parsed = parseMetadataInput(columnName, lines[i].split('\t')[0]);
+            if (!parsed.ok) {
+                setStatus('Cannot paste into "' + columnName + '" at line ' + (i + 1) + ': ' + parsed.reason + '.');
+                return;
+            }
+            widenTo = widenTo || parsed.widenTo || null;
+            parsedValues.push(parsed.value);
+        }
+        nodeIndices.forEach((nodeIndex, position) => {
+            writeMetadataValue(nodeIndex, columnName, parsedValues[position]);
+        });
+        const widened = applyColumnWidening(columnName, {widenTo});
+        refreshAfterMetadataEdit({columnsChanged: widened});
+        closeMetadataPasteDialog();
+        setStatus('Pasted ' + parsedValues.length.toLocaleString() + ' values into "' + columnName + '".');
+    }
+
+    // ---- editing controls ----
+
+    function populateEditableColumnMenus() {
+        const editable = state.metadataColumns.map(column => column.name);
+        [
+            document.getElementById('metadata-fill-column'),
+            document.getElementById('metadata-paste-column'),
+            document.getElementById('metadata-rename-column'),
+        ].forEach(select => {
+            const previous = select.value;
+            select.innerHTML = '';
+            editable.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+            if (editable.includes(previous)) { select.value = previous; }
+            select.disabled = editable.length === 0;
+        });
+
+        const deleteSelect = document.getElementById('metadata-delete-column');
+        const previousDelete = deleteSelect.value;
+        deleteSelect.innerHTML = '';
+        state.metadataColumns.forEach(column => {
+            const option = document.createElement('option');
+            option.value = column.name;
+            // Say where each column came from, since deleting a source column
+            // discards data the viewer cannot regenerate.
+            option.textContent = column.name +
+                (column.origin === 'viewer' ? ' (added here)' : ' (from bundle)');
+            deleteSelect.appendChild(option);
+        });
+        if (editable.includes(previousDelete)) { deleteSelect.value = previousDelete; }
+        deleteSelect.disabled = editable.length === 0;
+        document.getElementById('metadata-delete-column-apply').disabled = editable.length === 0;
+        document.getElementById('metadata-fill-apply').disabled = editable.length === 0;
+        document.getElementById('metadata-paste-open').disabled = editable.length === 0;
+        document.getElementById('metadata-rename-apply').disabled = editable.length === 0;
+        updateDeleteColumnNote();
+    }
+
+    function updateDeleteColumnNote() {
+        const note = document.getElementById('metadata-delete-note');
+        const columnName = document.getElementById('metadata-delete-column').value;
+        if (!columnIsEditable(columnName)) {
+            note.textContent = 'There are no columns to delete.';
+        } else if (columnIsViewerAdded(columnName)) {
+            note.textContent = 'Created in the viewer.';
+        } else {
+            note.textContent = 'From the bundle — reload it to restore this column.';
+        }
+    }
+
+    // One panel at a time: showing every editing control at once made the panel
+    // busy, and these are occasional actions rather than per-row ones.
+    const METADATA_EDIT_PANELS = ['add', 'set', 'rename', 'delete'];
+
+    function toggleMetadataEditPanel(name) {
+        const wasOpen = document.getElementById('metadata-panel-' + name)
+            .getAttribute('aria-expanded') === 'true';
+        METADATA_EDIT_PANELS.forEach(panelName => {
+            const open = !wasOpen && panelName === name;
+            document.getElementById('metadata-panel-' + panelName)
+                .setAttribute('aria-expanded', open ? 'true' : 'false');
+            document.getElementById('metadata-' + panelName + '-panel').hidden = !open;
+        });
+        if (wasOpen) { return; }
+        populateEditableColumnMenus();
+        const focusTarget = {
+            add: 'metadata-new-column-name',
+            set: 'metadata-fill-value',
+            rename: 'metadata-rename-value',
+            delete: 'metadata-delete-column',
+        }[name];
+        document.getElementById(focusTarget).focus();
+    }
+
+    function closeMetadataEditPanels() {
+        METADATA_EDIT_PANELS.forEach(panelName => {
+            document.getElementById('metadata-panel-' + panelName).setAttribute('aria-expanded', 'false');
+            document.getElementById('metadata-' + panelName + '-panel').hidden = true;
+        });
+    }
+
+    function applyColumnRename() {
+        const input = document.getElementById('metadata-rename-value');
+        if (renameMetadataColumn(document.getElementById('metadata-rename-column').value, input.value)) {
+            input.value = '';
+        }
+    }
+
+    function openMetadataPasteDialog() {
+        populateEditableColumnMenus();
+        document.getElementById('metadata-paste-count').textContent =
+            state.renderedNodeIndices.length.toLocaleString();
+        document.getElementById('metadata-paste-values').value = '';
+        document.getElementById('metadata-paste-overlay').hidden = false;
+        document.getElementById('metadata-paste-values').focus();
+    }
+
+    function closeMetadataPasteDialog() {
+        document.getElementById('metadata-paste-overlay').hidden = true;
+    }
+
+    function metadataPasteDialogIsOpen() {
+        return !document.getElementById('metadata-paste-overlay').hidden;
+    }
+
+    function setupMetadataEditing() {
+        METADATA_EDIT_PANELS.forEach(panelName => {
+            document.getElementById('metadata-panel-' + panelName)
+                .addEventListener('click', () => toggleMetadataEditPanel(panelName));
+        });
+        document.getElementById('metadata-delete-column')
+            .addEventListener('change', updateDeleteColumnNote);
+        document.getElementById('metadata-rename-apply').addEventListener('click', applyColumnRename);
+        document.getElementById('metadata-rename-value').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyColumnRename();
+            }
+        });
+
+        const tbody = document.querySelector('#metadata-table tbody');
+        tbody.addEventListener('dblclick', event => {
+            const cell = event.target.closest('td[data-column-key]');
+            if (cell) {
+                event.preventDefault();
+                beginMetadataCellEdit(cell);
+            }
+        });
+
+        document.getElementById('metadata-add-column').addEventListener('click', () => {
+            const nameInput = document.getElementById('metadata-new-column-name');
+            if (addMetadataColumn(nameInput.value, document.getElementById('metadata-new-column-type').value)) {
+                nameInput.value = '';
+            }
+        });
+        document.getElementById('metadata-add-cluster-column').addEventListener('click', () => {
+            const nameInput = document.getElementById('metadata-new-column-name');
+            if (addClusterColumn(nameInput.value)) {
+                nameInput.value = '';
+            }
+        });
+        document.getElementById('metadata-new-column-name').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                document.getElementById('metadata-add-column').click();
+            }
+        });
+        document.getElementById('metadata-delete-column-apply').addEventListener('click', () => {
+            deleteMetadataColumn(document.getElementById('metadata-delete-column').value);
+        });
+        document.getElementById('metadata-fill-apply').addEventListener('click', applyBulkFill);
+        document.getElementById('metadata-fill-value').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyBulkFill();
+            }
+        });
+        document.getElementById('metadata-paste-open').addEventListener('click', openMetadataPasteDialog);
+        document.getElementById('metadata-paste-cancel').addEventListener('click', closeMetadataPasteDialog);
+        document.getElementById('metadata-paste-apply').addEventListener('click', applyPastedColumn);
+        document.getElementById('metadata-paste-overlay').addEventListener('click', event => {
+            if (event.target === event.currentTarget) { closeMetadataPasteDialog(); }
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && metadataPasteDialogIsOpen()) {
+                closeMetadataPasteDialog();
+            }
+        });
+    }
+"""
+
+def _extraction_js() -> str:
+    """"Save extraction": a new bundle over just the selected nodes.
+
+    Plain (non-f) string like `_layout_worker_js`; see `_session_state_js`.
+    The hierarchy and merge-series maths here are ports of `ssn_hierarchy.py`
+    (`build_mst_component_hierarchy`, `component_size_summary_by_threshold`,
+    `threshold_merge_event_rows`, `merge_event_moving_sum`,
+    `filter_merge_event_rows`) and must stay in step with them.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Save extraction
+    //
+    // Writes a self-contained bundle over just the selected nodes.
+    //
+    // Nodes that the MST joins must stay joined in the selection, wherever the
+    // slider happens to sit. The MST is a lossy summary: it kept one path
+    // between any two nodes and discarded every other edge. So if the selection
+    // drops the nodes along that path, the bundle holds no evidence of how the
+    // remaining pieces relate, and writing them out as separate components
+    // would assert an absence of similarity that only the original all-vs-all
+    // matrix could establish. Subset that matrix with
+    // build_ssn_viewer.py --subset instead, which measures the relationship
+    // rather than guessing at it.
+    //
+    // Nodes in *different* components of the original network are exempt: they
+    // were already unrelated before the extraction, so keeping them apart
+    // invents nothing. That is what lets a whole multi-component network be
+    // extracted, and it is checked per original component rather than globally.
+    // ---------------------------------------------------------------------
+    const MOVING_SUM_WINDOW_FRACTION = 0.05;
+    const MOVING_SUM_GRID_POINTS = 800;
+    const DEFAULT_MAX_MERGE_EVENTS = 500;
+
+    function makeUnionFind(size) {
+        const parent = new Int32Array(size);
+        for (let i = 0; i < size; i++) { parent[i] = i; }
+        function find(index) {
+            let root = index;
+            while (parent[root] !== root) { root = parent[root]; }
+            while (parent[index] !== index) {
+                const next = parent[index];
+                parent[index] = root;
+                index = next;
+            }
+            return root;
+        }
+        return {find, union: (a, b) => { parent[find(a)] = find(b); }};
+    }
+
+    // Port of ssn_hierarchy.format_threshold_value.
+    function formatThresholdValue(threshold) {
+        return Number.isFinite(threshold) ? Number(threshold).toFixed(2) : '∞';
+    }
+
+    // The selected nodes plus the MST edges with both ends inside, re-indexed into
+    // the extraction. `pieces` is how many MST-connected components the selection
+    // falls into; anything above 1 is what makes an extraction unfaithful.
+    function extractionInducedGraph() {
+        const nodeIndices = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
+        const newIndexByOld = new Map(nodeIndices.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+        const edges = [];
+        // Original order is weight-descending, which every consumer below relies on.
+        state.bundle.graph.mst_edges.forEach(edge => {
+            const left = newIndexByOld.get(edge[0]);
+            const right = newIndexByOld.get(edge[1]);
+            if (left !== undefined && right !== undefined) {
+                edges.push([left, right, edge[2]]);
+            }
+        });
+
+        const unionFind = makeUnionFind(nodeIndices.length);
+        edges.forEach(edge => unionFind.union(edge[0], edge[1]));
+
+        // Split each original network component's share of the selection into the
+        // pieces it fell into. A component contributing more than one piece is the
+        // failure case: the MST joined those nodes and the selection broke them up.
+        const originalRoot = originalComponentByNode();
+        const piecesByComponent = new Map();
+        nodeIndices.forEach((oldIndex, newIndex) => {
+            const component = originalRoot[oldIndex];
+            if (!piecesByComponent.has(component)) { piecesByComponent.set(component, new Set()); }
+            piecesByComponent.get(component).add(unionFind.find(newIndex));
+        });
+        let brokenComponents = 0;
+        let brokenPieces = 0;
+        piecesByComponent.forEach(pieces => {
+            if (pieces.size > 1) {
+                brokenComponents += 1;
+                brokenPieces += pieces.size;
+            }
+        });
+        return {nodeIndices, newIndexByOld, edges, brokenComponents, brokenPieces};
+    }
+
+    // Which top-level component of the full MST forest each node belongs to.
+    function originalComponentByNode() {
+        const hierarchy = state.bundle.graph.hierarchy;
+        const componentOf = new Int32Array(state.bundle.graph.nodes.length).fill(-1);
+        hierarchy.roots.forEach(rootId => {
+            const root = hierarchy.nodes[rootId];
+            for (let i = root.leaf_start; i < root.leaf_start + root.leaf_count; i++) {
+                componentOf[hierarchy.leaf_order[i]] = rootId;
+            }
+        });
+        return componentOf;
+    }
+
+    // Port of ssn_hierarchy.build_mst_component_hierarchy.
+    function buildExtractionHierarchy(nodeCount, edges) {
+        const unionFind = makeUnionFind(nodeCount);
+        const nodes = [];
+        const componentIdByRoot = new Map();
+        const sizeById = [];
+        const minLeafById = [];
+        for (let nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
+            nodes.push({id: nodeIndex, kind: 'leaf', node_index: nodeIndex, size: 1, parent: null});
+            componentIdByRoot.set(nodeIndex, nodeIndex);
+            sizeById.push(1);
+            minLeafById.push(nodeIndex);
+        }
+
+        edges.forEach(edge => {
+            const leftRoot = unionFind.find(edge[0]);
+            const rightRoot = unionFind.find(edge[1]);
+            if (leftRoot === rightRoot) { return; }
+            let leftId = componentIdByRoot.get(leftRoot);
+            let rightId = componentIdByRoot.get(rightRoot);
+            if (minLeafById[leftId] > minLeafById[rightId]) {
+                const swap = leftId; leftId = rightId; rightId = swap;
+            }
+            const componentId = nodes.length;
+            nodes[leftId].parent = componentId;
+            nodes[rightId].parent = componentId;
+            nodes.push({
+                id: componentId,
+                kind: 'cluster',
+                left: leftId,
+                right: rightId,
+                threshold: edge[2],
+                size: sizeById[leftId] + sizeById[rightId],
+                parent: null,
+            });
+            sizeById.push(sizeById[leftId] + sizeById[rightId]);
+            minLeafById.push(Math.min(minLeafById[leftId], minLeafById[rightId]));
+            unionFind.union(leftRoot, rightRoot);
+            componentIdByRoot.delete(leftRoot);
+            componentIdByRoot.set(unionFind.find(rightRoot), componentId);
+        });
+
+        const roots = Array.from(componentIdByRoot.values())
+            .sort((left, right) => nodes[right].size - nodes[left].size || left - right);
+
+        const leafOrder = [];
+        const stack = [];
+        for (let i = roots.length - 1; i >= 0; i--) { stack.push([roots[i], false]); }
+        while (stack.length > 0) {
+            const [componentId, visited] = stack.pop();
+            const node = nodes[componentId];
+            if (node.kind === 'leaf') {
+                node.leaf_start = leafOrder.length;
+                node.leaf_count = 1;
+                leafOrder.push(node.node_index);
+                continue;
+            }
+            if (visited) {
+                node.leaf_start = nodes[node.left].leaf_start;
+                node.leaf_count = nodes[node.left].leaf_count + nodes[node.right].leaf_count;
+                continue;
+            }
+            stack.push([componentId, true]);
+            stack.push([node.right, false]);
+            stack.push([node.left, false]);
+        }
+        return {nodes, roots, leaf_order: leafOrder};
+    }
+
+    // Port of ssn_hierarchy.component_size_summary_by_threshold followed by
+    // threshold_merge_event_rows: one row per distinct MST edge weight.
+    function extractionMergeEventRows(nodeCount, edges, metric) {
+        if (nodeCount === 0 || edges.length === 0) { return []; }
+        const unionFind = makeUnionFind(nodeCount);
+        const componentSizes = new Int32Array(nodeCount).fill(1);
+        // Sizes only ever grow, so the running maximum is the largest component.
+        let largest = nodeCount > 0 ? 1 : 0;
+        let nonSingletonCount = 0;
+        let nonSingletonSum = 0;
+        const summary = [{threshold: Infinity, largest, avg: 0, impact: 0}];
+
+        edges.forEach(edge => {
+            const leftRoot = unionFind.find(edge[0]);
+            const rightRoot = unionFind.find(edge[1]);
+            let impact = 0;
+            if (leftRoot !== rightRoot) {
+                const leftSize = componentSizes[leftRoot];
+                const rightSize = componentSizes[rightRoot];
+                impact = metric === 'product' ? leftSize * rightSize : Math.min(leftSize, rightSize);
+                if (leftSize > 1) { nonSingletonCount -= 1; nonSingletonSum -= leftSize; }
+                if (rightSize > 1) { nonSingletonCount -= 1; nonSingletonSum -= rightSize; }
+                const mergedSize = leftSize + rightSize;
+                unionFind.union(leftRoot, rightRoot);
+                componentSizes[unionFind.find(rightRoot)] = mergedSize;
+                largest = Math.max(largest, mergedSize);
+                nonSingletonCount += 1;
+                nonSingletonSum += mergedSize;
+            }
+            summary.push({
+                threshold: edge[2],
+                largest,
+                avg: nonSingletonCount > 0 ? nonSingletonSum / nonSingletonCount : 0,
+                impact,
+            });
+        });
+
+        const rows = [];
+        let previous = summary[0];
+        let rowIndex = 1;
+        while (rowIndex < summary.length) {
+            const firstRowIndex = rowIndex;
+            const thresholdValue = summary[rowIndex].threshold;
+            let mergeImpact = 0;
+            let mergeCount = 0;
+            let largestMerge = 0;
+            const mergeSizeCounts = {};
+            let lastRow = summary[rowIndex];
+            while (rowIndex < summary.length && summary[rowIndex].threshold === thresholdValue) {
+                const impact = summary[rowIndex].impact;
+                mergeImpact += impact;
+                if (impact > 0) {
+                    // A zero impact means both ends were already in one component.
+                    const key = Number.isInteger(impact) ? String(impact) : String(impact);
+                    mergeSizeCounts[key] = (mergeSizeCounts[key] || 0) + 1;
+                    mergeCount += 1;
+                    largestMerge = Math.max(largestMerge, impact);
+                }
+                lastRow = summary[rowIndex];
+                rowIndex += 1;
+            }
+            rows.push({
+                edge_index: firstRowIndex - 2,
+                summary_row_from: firstRowIndex,
+                summary_row_to: rowIndex - 1,
+                threshold_from_value: previous.threshold,
+                threshold_from: formatThresholdValue(previous.threshold),
+                threshold_to: formatThresholdValue(lastRow.threshold),
+                threshold_value: lastRow.threshold,
+                merge_impact: mergeImpact,
+                merge_size_counts: mergeSizeCounts,
+                largest_merge: largestMerge,
+                merge_count: mergeCount,
+                delta_largest: Math.abs(lastRow.largest - previous.largest),
+                delta_avg_non_singleton: Math.abs(lastRow.avg - previous.avg),
+            });
+            previous = lastRow;
+        }
+        return rows;
+    }
+
+    // Port of ssn_hierarchy.filter_merge_event_rows.
+    function filterExtractionMergeEventRows(rows, maxMergeEvents = DEFAULT_MAX_MERGE_EVENTS) {
+        if (maxMergeEvents === 0 || rows.length <= maxMergeEvents) { return rows.slice(); }
+        return rows.slice()
+            .sort((left, right) =>
+                right.merge_impact - left.merge_impact ||
+                right.delta_largest - left.delta_largest ||
+                right.delta_avg_non_singleton - left.delta_avg_non_singleton ||
+                left.edge_index - right.edge_index)
+            .slice(0, maxMergeEvents)
+            .sort((left, right) => left.edge_index - right.edge_index);
+    }
+
+    // Port of ssn_hierarchy.merge_event_moving_sum. Runs over the UNFILTERED rows:
+    // filtering keeps the strongest events, so summing afterwards would undercount
+    // exactly the small ones this series exists to show.
+    function extractionMovingSum(rows) {
+        const empty = {window: 0, x: [], y: []};
+        if (rows.length === 0) { return empty; }
+        const points = rows
+            .filter(row => Number.isFinite(row.threshold_value) && Number.isFinite(row.merge_impact))
+            .map(row => ({threshold: row.threshold_value, impact: row.merge_impact}))
+            .sort((left, right) => left.threshold - right.threshold);
+        if (points.length === 0) { return empty; }
+        const lo = points[0].threshold;
+        const hi = points[points.length - 1].threshold;
+        if (hi === lo) { return empty; }
+
+        const window = MOVING_SUM_WINDOW_FRACTION * (hi - lo);
+        const halfWindow = window / 2;
+        const sortedThresholds = points.map(point => point.threshold);
+        const cumulative = [0];
+        points.forEach(point => cumulative.push(cumulative[cumulative.length - 1] + point.impact));
+
+        // Inclusive at both ends, matching numpy searchsorted 'left'/'right'.
+        const lowerBound = value => {
+            let low = 0, high = sortedThresholds.length;
+            while (low < high) {
+                const mid = (low + high) >> 1;
+                if (sortedThresholds[mid] < value) { low = mid + 1; } else { high = mid; }
+            }
+            return low;
+        };
+        const upperBound = value => {
+            let low = 0, high = sortedThresholds.length;
+            while (low < high) {
+                const mid = (low + high) >> 1;
+                if (sortedThresholds[mid] <= value) { low = mid + 1; } else { high = mid; }
+            }
+            return low;
+        };
+
+        const x = [];
+        const y = [];
+        for (let i = 0; i < MOVING_SUM_GRID_POINTS; i++) {
+            const gridValue = lo + ((hi - lo) * i) / (MOVING_SUM_GRID_POINTS - 1);
+            x.push(gridValue);
+            y.push(cumulative[upperBound(gridValue + halfWindow)] - cumulative[lowerBound(gridValue - halfWindow)]);
+        }
+        return {window, x, y};
+    }
+
+    // Distinct MST edge weights and the component count at each, mirroring
+    // MaxTree's cluster_count_by_threshold.
+    function extractionClusterCountByThreshold(nodeCount, edges) {
+        const table = [];
+        const rowIndexByThreshold = new Map();
+        for (let i = 0; i < edges.length; i++) {
+            if (i === 0 || edges[i][2] !== edges[i - 1][2]) {
+                // Edges are weight-descending, so every earlier edge is strictly above.
+                rowIndexByThreshold.set(edges[i][2], table.length);
+                table.push([edges[i][2], nodeCount - i]);
+            }
+        }
+        if (edges.length > 0 && edges[edges.length - 1][2] > 0) {
+            // The --lb 0 default: the complete graph, when every score is positive.
+            rowIndexByThreshold.set(0, table.length);
+            table.push([0, nodeCount - edges.length]);
+        }
+        return {table, rowIndexByThreshold};
+    }
+
+    // Mirrors build_ssn_viewer._slider_stops, including its trailing floor stop:
+    // every other stop excludes its own tie group, so without one strictly below the
+    // weakest edge the fully merged network cannot be reached on the slider.
+    function extractionSliderStops(rows, rowIndexByThreshold, edges) {
+        const stops = [{edge_index: -1, threshold_index: -1, threshold_label: '∞', threshold_value: null}];
+        rows.forEach(row => {
+            stops.push({
+                edge_index: row.edge_index,
+                threshold_index: rowIndexByThreshold.has(row.threshold_value)
+                    ? rowIndexByThreshold.get(row.threshold_value)
+                    : -1,
+                threshold_label: row.threshold_to,
+                threshold_value: row.threshold_value,
+            });
+        });
+        if (edges.length > 0) {
+            // edges are weight-descending.
+            const floorValue = extractionFloorThreshold(edges[edges.length - 1][2], edges[0][2]);
+            stops.push({
+                edge_index: edges.length - 1,   // every MST edge is strictly above
+                // Stands for the complete-graph cut, so it reads counts from that row.
+                threshold_index: rowIndexByThreshold.has(0) ? rowIndexByThreshold.get(0) : -1,
+                threshold_label: formatThresholdValue(floorValue),
+                threshold_value: floorValue,
+            });
+        }
+        return stops;
+    }
+
+    // Port of ssn_hierarchy.floor_threshold_value.
+    const FLOOR_THRESHOLD_SPAN_FRACTION = 0.01;
+
+    function extractionFloorThreshold(lowestMstWeight, highestMstWeight) {
+        const span = highestMstWeight - lowestMstWeight;
+        if (span > 0) {
+            return lowestMstWeight - (FLOOR_THRESHOLD_SPAN_FRACTION * span);
+        }
+        const step = Math.abs(lowestMstWeight) * FLOOR_THRESHOLD_SPAN_FRACTION;
+        return lowestMstWeight - (step > 0 ? step : 1);
+    }
+
+    // The session state, with every saved node id that did not survive dropped, so
+    // the extraction opens without complaining about ids it does not contain.
+    function extractionAppState(keptIds) {
+        const appState = collectSessionState();
+        const keep = ids => (ids || []).filter(id => keptIds.has(id));
+        appState.selection.node_ids = keep(appState.selection.node_ids);
+        const presets = appState.selection.presets || {};
+        Object.keys(presets).forEach(slot => {
+            const surviving = keep(presets[slot].node_ids);
+            if (surviving.length === 0) {
+                delete presets[slot];
+            } else {
+                presets[slot].node_ids = surviving;
+            }
+        });
+        return appState;
+    }
+
+    function buildExtractionBundle() {
+        const induced = extractionInducedGraph();
+        if (induced.nodeIndices.length === 0) {
+            return {error: 'Select some nodes or clusters first.'};
+        }
+        if (induced.brokenComponents > 0) {
+            return {error: 'The selection splits ' + induced.brokenComponents.toLocaleString() +
+                ' network component' + (induced.brokenComponents === 1 ? '' : 's') + ' into ' +
+                induced.brokenPieces.toLocaleString() + ' pieces by leaving out the nodes that ' +
+                'join them in the MST. The bundle records no similarity between those pieces, so ' +
+                'extracting them would assert they are unrelated. Select the nodes that link them ' +
+                '(raising the threshold shows where the links are), or subset the original matrix ' +
+                'with build_ssn_viewer.py --subset.'};
+        }
+
+        const nodeCount = induced.nodeIndices.length;
+        const metric = state.bundle.graph.merge_impact_metric;
+        const eventRows = extractionMergeEventRows(nodeCount, induced.edges, metric);
+        const clusterCounts = extractionClusterCountByThreshold(nodeCount, induced.edges);
+        const filteredRows = filterExtractionMergeEventRows(eventRows);
+        const keptIds = new Set(induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)));
+
+        return {
+            bundle: {
+                format: BUNDLE_FORMAT,
+                version: BUNDLE_VERSION,
+                name: ((state.bundle.name || 'network') + '_extraction'),
+                domainator_version: DOMAINATOR_VERSION,
+                graph: {
+                    nodes: induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)),
+                    mst_edges: induced.edges,
+                    cluster_count_by_threshold: clusterCounts.table,
+                    // Counts of *all* graph edges above each threshold. The bundle only
+                    // ever carried the MST, so this cannot be recomputed here; it is
+                    // left empty rather than filled with MST counts that would read as
+                    // full-graph ones. No reader consumes it.
+                    edges_by_threshold: [],
+                    merge_impact_metric: metric,
+                    merge_event_series: filteredRows,
+                    // From the unfiltered rows -- see extractionMovingSum.
+                    merge_moving_sum: extractionMovingSum(eventRows),
+                    slider_stops: extractionSliderStops(filteredRows, clusterCounts.rowIndexByThreshold, induced.edges),
+                    hierarchy: buildExtractionHierarchy(nodeCount, induced.edges),
+                },
+                metadata: {
+                    columns: state.metadataColumns.map(column => ({...column})),
+                    rows: induced.nodeIndices.map(nodeIndex => state.metadataByNodeIndex[nodeIndex].slice()),
+                },
+                defaults: {
+                    color_by: currentColorField() || null,
+                    label_by: currentLabelField() === '__node_id__' ? null : (currentLabelField() || null),
+                    categorical_columns: Array.from(state.categoricalColumns),
+                },
+                app_state: extractionAppState(keptIds),
+            },
+            nodeCount,
+        };
+    }
+
+    async function saveExtractionFile() {
+        if (!state.bundle) { return; }
+        const built = buildExtractionBundle();
+        if (built.error) {
+            setStatus(built.error);
+            window.alert(built.error);
+            return;
+        }
+        await downloadBundleFile(
+            built.bundle,
+            '_extraction',
+            'Saved an extraction of ' + built.nodeCount.toLocaleString() + ' nodes'
+        );
+    }
+"""
+
 def ssn_viewer_html(
     title: str = "Domainator SSN Viewer",
     embedded_bundle_json: bytes | None = None,
 ) -> str:
-    escaped_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    def escape_html(text):
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    # The browser tab keeps the bare network name: it is the part that
+    # distinguishes one open viewer from another once the tab is truncated.
+    escaped_title = escape_html(title)
+    escaped_heading = escape_html(viewer_heading(title))
     embedded_bundle_base64 = None
     if embedded_bundle_json is not None:
         embedded_bundle_base64 = base64.b64encode(embedded_bundle_json).decode("ascii")
     layout_worker_code_json = json.dumps(_layout_worker_js())
+    # Plain-string JS modules (single braces, no f-string escaping). They are
+    # interpolated into the one <script> scope below, so they share `state` and
+    # can call the functions defined around them; declarations hoist.
+    session_state_js = _session_state_js()
+    selection_presets_js = _selection_presets_js()
+    table_editing_js = _table_editing_js()
+    extraction_js = _extraction_js()
     # Generated from the same helper matrix_report uses, keyed by metric so a bundle built
     # with --merge_impact_metric product gets titles that match what its numbers mean.
     split_axis_labels_js = json.dumps({
@@ -501,6 +2119,13 @@ def ssn_viewer_html(
         for palette in NAMED_CATEGORICAL_PALETTES
     ])
     other_color_js = json.dumps(OTHER_COLOR)
+    # Kept in lockstep with ssn_bundle.py so the browser and the Python readers
+    # agree on which bundle revisions they understand.
+    bundle_format_js = json.dumps(SSN_VIEWER_BUNDLE_FORMAT)
+    bundle_version_js = json.dumps(SSN_VIEWER_BUNDLE_VERSION)
+    supported_bundle_versions_js = json.dumps(list(SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS))
+    domainator_version_js = json.dumps(__version__)
+    viewer_app_name_js = json.dumps(VIEWER_APP_NAME)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -549,15 +2174,9 @@ def ssn_viewer_html(
     }}
     .hero h1 {{
         margin: 0;
-        font-size: clamp(2rem, 4vw, 3.6rem);
+        font-size: clamp(1.25rem, 2vw, 1.75rem);
         font-weight: 600;
-        letter-spacing: -0.03em;
-    }}
-    .hero p {{
-        margin: 8px 0 0 0;
-        max-width: 60ch;
-        color: var(--muted);
-        line-height: 1.45;
+        letter-spacing: -0.02em;
     }}
     .loader {{
         display: flex;
@@ -649,6 +2268,9 @@ def ssn_viewer_html(
     .toolbar button:hover:not(:disabled) {{
         transform: translateY(-1px);
         background: #fff;
+    }}
+    .toolbar button[aria-pressed="true"]:hover:not(:disabled) {{
+        background: rgba(200, 85, 61, 0.2);
     }}
     .toolbar button[aria-pressed="true"] {{
         background: rgba(200, 85, 61, 0.14);
@@ -1126,6 +2748,90 @@ def ssn_viewer_html(
         gap: 10px;
         flex-wrap: wrap;
         margin-bottom: 12px;
+        align-items: center;
+    }}
+    .toolbar button.metadata-edit-toggle[aria-expanded="true"] {{
+        border-color: #1e2a2f;
+        background: #1e2a2f;
+        color: #ffffff;
+    }}
+    .toolbar button.metadata-edit-toggle[aria-expanded="true"]:hover:not(:disabled) {{
+        background: #3a4a52;
+    }}
+    .metadata-edit-panel {{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 10px 0 0 0;
+        padding: 12px 14px;
+        border: 1px solid #d0d5db;
+        border-radius: 10px;
+        background: #eef0f3;
+    }}
+    .metadata-edit-panel[hidden] {{
+        display: none;
+    }}
+    .metadata-edit-label {{
+        font-size: 0.9rem;
+        color: #5c6a70;
+    }}
+    .metadata-cell-editable {{
+        cursor: cell;
+    }}
+    .metadata-cell-input {{
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        padding: 1px 3px;
+        border: 1px solid #1e2a2f;
+        border-radius: 3px;
+    }}
+    .metadata-paste-values {{
+        width: 100%;
+        box-sizing: border-box;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85rem;
+    }}
+    .preset-slots {{
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }}
+    .preset-slots-label {{
+        font-size: 0.9rem;
+        color: #5c6a70;
+        margin-right: 4px;
+    }}
+    .preset-slot {{
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid #c4cad2;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #5c6a70;
+        font: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }}
+    .preset-slot:disabled {{
+        opacity: 0.45;
+        cursor: default;
+    }}
+    .preset-slot:not(:disabled):hover {{
+        border-color: #9aa4ad;
+        background: #f0f2f4;
+    }}
+    .preset-slot-filled {{
+        border-color: #1e2a2f;
+        background: #1e2a2f;
+        color: #ffffff;
+        font-weight: 600;
+    }}
+    .preset-slot-filled:not(:disabled):hover {{
+        background: #3a4a52;
+        border-color: #3a4a52;
     }}
     .panel-body.tight {{
         padding-top: 12px;
@@ -1141,8 +2847,7 @@ def ssn_viewer_html(
 <div class="shell">
     <section class="hero">
         <div>
-            <h1>{escaped_title}</h1>
-            <p>Open a Domainator SSN viewer bundle produced by build_ssn_viewer.py. The viewer runs entirely in the browser, reconstructs threshold-dependent components from the MST hierarchy, and supports cluster selection, metadata export, and basic styling without any backend.</p>
+            <h1 id="viewer-title">{escaped_heading}</h1>
         </div>
         <div class="loader">
             <input id="bundle-file" type="file" accept=".ssnv,.gz,.json,.ssnview" />
@@ -1191,11 +2896,24 @@ def ssn_viewer_html(
             <h2>Hierarchy View</h2>
             <div class="panel-body">
                 <div class="network-summary">
+                    <div id="preset-slots" class="preset-slots" role="group" aria-label="Selection presets">
+                        <span class="preset-slots-label">Presets</span>
+                        <button type="button" class="preset-slot" data-preset-slot="0" disabled>0</button>
+                        <button type="button" class="preset-slot" data-preset-slot="1" disabled>1</button>
+                        <button type="button" class="preset-slot" data-preset-slot="2" disabled>2</button>
+                        <button type="button" class="preset-slot" data-preset-slot="3" disabled>3</button>
+                        <button type="button" class="preset-slot" data-preset-slot="4" disabled>4</button>
+                        <button type="button" class="preset-slot" data-preset-slot="5" disabled>5</button>
+                        <button type="button" class="preset-slot" data-preset-slot="6" disabled>6</button>
+                        <button type="button" class="preset-slot" data-preset-slot="7" disabled>7</button>
+                        <button type="button" class="preset-slot" data-preset-slot="8" disabled>8</button>
+                        <button type="button" class="preset-slot" data-preset-slot="9" disabled>9</button>
+                    </div>
                     <div id="hidden-summary" class="pill">0 nodes hidden</div>
                     <div id="selection-summary" class="pill">0 nodes selected</div>
                 </div>
                 <div class="canvas-wrap"><canvas id="cluster-view" width="1100" height="700"></canvas></div>
-                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Hold Ctrl while Shift-dragging a box to select individual nodes within it. Hold Alt while Shift-dragging to deselect instead (combine with Ctrl to deselect individual nodes). Click a cluster bubble to toggle every node inside it.</div>
+                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Hold Ctrl while Shift-dragging a box to select individual nodes within it. Hold Alt while Shift-dragging to deselect instead (combine with Ctrl to deselect individual nodes). Click a cluster bubble to toggle every node inside it. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its nodes in gray. Shift-click a preset button to add it to the current selection, or Alt+Shift-click to subtract it.</div>
             </div>
         </section>
         <section class="panel sidebar">
@@ -1263,6 +2981,8 @@ def ssn_viewer_html(
                     </select>
                     <button id="export-svg" type="button" disabled>Export view SVG</button>
                     <button id="customize-colors" type="button" disabled>Customize colors…</button>
+                    <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .ssnv session file">Save session…</button>
+                    <button id="save-extraction" type="button" disabled title="Download a new .ssnv bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
                 </div>
                 <div class="note" id="selection-note">Load a bundle to begin exploring metadata.</div>
             </div>
@@ -1270,6 +2990,48 @@ def ssn_viewer_html(
         <section class="panel full-width">
             <h2>Node Metadata</h2>
             <div class="panel-body">
+                <div class="toolbar">
+                    <button id="metadata-panel-add" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-add-panel" data-edit-panel="add" disabled>Add column</button>
+                    <button id="metadata-panel-set" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-set-panel" data-edit-panel="set" disabled>Set column</button>
+                    <button id="metadata-panel-rename" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-rename-panel" data-edit-panel="rename" disabled>Rename column</button>
+                    <button id="metadata-panel-delete" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-delete-panel" data-edit-panel="delete" disabled>Delete column</button>
+                </div>
+                <div id="metadata-add-panel" class="metadata-edit-panel" hidden>
+                    <label for="metadata-new-column-name" class="metadata-edit-label">Name</label>
+                    <input id="metadata-new-column-name" type="text" placeholder="new column name" />
+                    <select id="metadata-new-column-type">
+                        <option value="text" selected>Text</option>
+                        <option value="number">Number</option>
+                    </select>
+                    <button id="metadata-add-column" type="button">Add</button>
+                    <span class="metadata-edit-label">or</span>
+                    <button id="metadata-add-cluster-column" type="button" title="Number every node by the cluster it belongs to at the current threshold, largest cluster first — the same column build_ssn.py --cluster writes. Defaults to the name SSN_cluster.">Fill with cluster numbers</button>
+                </div>
+                <div id="metadata-set-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-fill-column"></select>
+                    <span class="metadata-edit-label">=</span>
+                    <input id="metadata-fill-value" type="text" placeholder="value (blank clears)" />
+                    <label for="metadata-fill-target" class="metadata-edit-label">for</label>
+                    <select id="metadata-fill-target">
+                        <option value="selection" selected>Selected nodes</option>
+                        <option value="rows">Staged table rows</option>
+                        <option value="page">Rows on this page</option>
+                        <option value="all">All nodes</option>
+                    </select>
+                    <button id="metadata-fill-apply" type="button">Apply</button>
+                    <button id="metadata-paste-open" type="button">Paste column…</button>
+                </div>
+                <div id="metadata-rename-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-rename-column"></select>
+                    <span class="metadata-edit-label">&rarr;</span>
+                    <input id="metadata-rename-value" type="text" placeholder="new column name" />
+                    <button id="metadata-rename-apply" type="button">Rename</button>
+                </div>
+                <div id="metadata-delete-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-delete-column"></select>
+                    <button id="metadata-delete-column-apply" type="button">Delete</button>
+                    <span class="metadata-edit-label" id="metadata-delete-note"></span>
+                </div>
                 <div class="toolbar">
                     <button id="export-selected" disabled>Export table TSV</button>
                     <button id="metadata-select-nodes" type="button" disabled>Select nodes</button>
@@ -1281,6 +3043,7 @@ def ssn_viewer_html(
                         <option value="first">Nulls first</option>
                     </select>
                 </div>
+                <div class="note">Double-click any metadata cell to edit it. node_id is read-only.</div>
                 <div class="table-wrap">
                     <table id="metadata-table">
                         <colgroup></colgroup>
@@ -1309,6 +3072,25 @@ def ssn_viewer_html(
                 </div>
             </div>
         </section>
+    </div>
+</div>
+<div id="metadata-paste-overlay" class="cp-overlay" hidden>
+    <div class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="metadata-paste-title">
+        <div class="cp-head">
+            <h3 id="metadata-paste-title">Paste a column of values</h3>
+            <button id="metadata-paste-cancel" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <div class="control">
+                <label for="metadata-paste-column">Paste into column</label>
+                <select id="metadata-paste-column"></select>
+            </div>
+            <p class="note">One value per line, applied to the rows on this page in the order they are displayed — the inverse of a column's Copy button. This page shows <span id="metadata-paste-count">0</span> rows, and the paste must have exactly that many lines.</p>
+            <textarea id="metadata-paste-values" rows="10" class="metadata-paste-values" placeholder="one value per line"></textarea>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="metadata-paste-apply" type="button">Apply</button>
+        </div>
     </div>
 </div>
 <div id="color-picker-overlay" class="cp-overlay" hidden>
@@ -1370,6 +3152,7 @@ def ssn_viewer_html(
 <script>
     const state = {{
         bundle: null,
+        bundleVersionWarning: '',
         metadataColumns: [],
         metadataRows: [],
         metadataByNodeIndex: [],
@@ -1388,6 +3171,12 @@ def ssn_viewer_html(
         visibleClusters: [],
         selectedNodeIndices: new Set(),
         selectedMetadataNodeIndices: new Set(),
+        selectionPresets: new Map(),
+        presetPreviewSlot: null,
+        metadataEditCell: null,
+        nodeIndexById: null,
+        pendingRestoreViewTransform: null,
+        sessionMissingNodeIds: 0,
         metadataRowSelectionAnchor: null,
         metadataResize: null,
         visibleLayout: [],
@@ -1423,6 +3212,22 @@ def ssn_viewer_html(
     const DEFAULT_METADATA_PAGE_SIZE = 250;
     const EMBEDDED_BUNDLE_BASE64 = {json.dumps(embedded_bundle_base64)};
     const LAYOUT_WORKER_CODE = {layout_worker_code_json};
+    const BUNDLE_FORMAT = {bundle_format_js};
+    const BUNDLE_VERSION = {bundle_version_js};
+    const SUPPORTED_BUNDLE_VERSIONS = {supported_bundle_versions_js};
+    const DOMAINATOR_VERSION = {domainator_version_js};
+    const VIEWER_APP_NAME = {viewer_app_name_js};
+
+    // The shell viewer is built before any bundle exists, and the file picker can
+    // swap bundles at any time, so the heading and tab follow the loaded bundle.
+    function updateViewerTitle(networkName) {{
+        const name = (networkName || '').trim();
+        document.getElementById('viewer-title').textContent =
+            name === '' ? VIEWER_APP_NAME : VIEWER_APP_NAME + ': ' + name;
+        if (name !== '') {{
+            document.title = name;
+        }}
+    }}
 
     function setStatus(message) {{
         document.getElementById('bundle-status').textContent = message;
@@ -1511,10 +3316,18 @@ def ssn_viewer_html(
     }}
 
     function installBundle(bundle) {{
-        if (bundle.format !== 'domainator_ssn_viewer_bundle') {{
+        if (bundle.format !== BUNDLE_FORMAT) {{
             throw new Error('Unsupported bundle format: ' + bundle.format);
         }}
+        // A wrong `format` is fatal, but an unrecognized `version` is not: bundle
+        // revisions so far have only added sections, so loading and reporting beats
+        // refusing a file this viewer can very likely still render.
+        state.bundleVersionWarning = SUPPORTED_BUNDLE_VERSIONS.includes(bundle.version)
+            ? ''
+            : ' (bundle version ' + bundle.version + ' is not one this viewer knows about ('
+                + SUPPORTED_BUNDLE_VERSIONS.join(', ') + '); loading anyway, some features may misbehave)';
         state.bundle = bundle;
+        updateViewerTitle(bundle.name);
         state.metadataColumns = bundle.metadata.columns || [];
         state.metadataRows = bundle.metadata.rows || [];
         state.metadataByNodeIndex = state.metadataRows;
@@ -1526,7 +3339,10 @@ def ssn_viewer_html(
         state.metadataResize = null;
         state.selectedNodeIndices = new Set();
         state.selectedMetadataNodeIndices = new Set();
+        state.selectionPresets = new Map();
         state.metadataRowSelectionAnchor = null;
+        state.nodeIndexById = null;
+        state.pendingRestoreViewTransform = null;
         state.dotLayoutCache = new Map();
         state.layoutCache = new Map();
         state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
@@ -1550,6 +3366,8 @@ def ssn_viewer_html(
         document.getElementById('export-png-scale').disabled = false;
         document.getElementById('export-svg').disabled = false;
         document.getElementById('customize-colors').disabled = false;
+        document.getElementById('save-session').disabled = false;
+        state.presetPreviewSlot = null;
         if (colorPickerIsOpen()) {{
             openColorPicker();
         }}
@@ -1562,11 +3380,30 @@ def ssn_viewer_html(
         document.getElementById('metadata-null-order').disabled = false;
         document.getElementById('metadata-null-order').value = 'last';
         document.getElementById('metadata-rows-per-page').disabled = false;
+        document.getElementById('metadata-panel-add').disabled = false;
+        document.getElementById('metadata-panel-set').disabled = false;
+        document.getElementById('metadata-panel-rename').disabled = false;
+        document.getElementById('metadata-panel-delete').disabled = false;
+        closeMetadataEditPanels();
+        populateEditableColumnMenus();
         document.getElementById('metadata-prev-page').disabled = true;
         document.getElementById('metadata-next-page').disabled = true;
+        // Must run after the slider's `max` is set (a value above the old max
+        // would be clamped) and after populateMetadataControls has built the
+        // color-by/label-by options, but before the color cache is used.
+        let sessionNote = '';
+        if (bundle.app_state) {{
+            sessionNote = applySessionState(bundle.app_state);
+            rebuildNodeColorCache();
+            if (colorPickerIsOpen()) {{
+                openColorPicker();
+            }}
+        }}
         setStatus(
             'Loaded ' + (bundle.name || 'bundle') + ' with ' + bundle.graph.nodes.length.toLocaleString() + ' nodes.'
+            + state.bundleVersionWarning + sessionNote
         );
+        renderPresetSlots();
         updateThresholdUI();
         updateMetadataTable();
     }}
@@ -4304,10 +6141,10 @@ def ssn_viewer_html(
         return componentDotLayout(component, item);
     }}
 
-    function componentSelectionState(members) {{
+    function componentSelectionState(members, nodeSet = state.selectedNodeIndices) {{
         let selectedCount = 0;
         members.forEach(nodeIndex => {{
-            if (state.selectedNodeIndices.has(nodeIndex)) {{
+            if (nodeSet.has(nodeIndex)) {{
                 selectedCount += 1;
             }}
         }});
@@ -4318,7 +6155,7 @@ def ssn_viewer_html(
         }};
     }}
 
-    function renderClusterView(ctx = clusterContext, viewWidth = clusterCanvas.width, viewHeight = clusterCanvas.height) {{
+    function renderClusterView(ctx = clusterContext, viewWidth = clusterCanvas.width, viewHeight = clusterCanvas.height, options = {{}}) {{
         // Aliased so the body below can target any context (e.g. a scaled
         // offscreen canvas for high-resolution PNG export) without rewriting
         // every draw call. Defaults render to the on-screen canvas.
@@ -4336,6 +6173,11 @@ def ssn_viewer_html(
         }}
 
         const selectedNodeOutlines = [];
+        // Hovering a preset slot outlines that preset's nodes/clusters in gray.
+        // It is a transient hover cue, so exports opt out via options.preview.
+        const previewNodeSet = options.preview === false ? null : presetPreviewNodeSet();
+        const previewNodeOutlines = [];
+        const previewBoundsPaths = [];
         const TAU = Math.PI * 2;
         const drawScale = Math.max(state.viewTransform.scale, 1e-9);
 
@@ -4396,6 +6238,7 @@ def ssn_viewer_html(
             const component = state.bundle.graph.hierarchy.nodes[item.componentId];
             const members = componentMembers(item.componentId);
             const selectionState = componentSelectionState(members);
+            const previewState = previewNodeSet ? componentSelectionState(members, previewNodeSet) : null;
 
             if (item.shape === 'lattice') {{
                 // Lattice clusters are outlined with a staircase along the padding between cells.
@@ -4427,6 +6270,9 @@ def ssn_viewer_html(
                     clusterContext.stroke();
                 }}
             }} else {{
+                if (previewState && previewState.allSelected) {{
+                    previewBoundsPaths.push(item);
+                }}
                 const isRect = item.shape === 'rect';
                 const traceBounds = () => {{
                     clusterContext.beginPath();
@@ -4476,6 +6322,9 @@ def ssn_viewer_html(
                 if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {{
                     selectedNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius, faint: !showNodes}});
                 }}
+                if (previewNodeSet && previewNodeSet.has(dot.memberIndex)) {{
+                    previewNodeOutlines.push({{x: dot.x, y: dot.y, radius: dot.radius}});
+                }}
                 if (collectDotLabels && !dotLabelsOverflow &&
                     dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {{
                     if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
@@ -4510,6 +6359,34 @@ def ssn_viewer_html(
         }});
 
         clusterContext.restore();
+
+        // Drawn before the selection outlines and at a wider radius, so a node that
+        // is both previewed and selected shows a gray ring outside a black one.
+        if (previewNodeOutlines.length > 0 || previewBoundsPaths.length > 0) {{
+            clusterContext.save();
+            clusterContext.strokeStyle = '#9aa4ad';
+            clusterContext.lineWidth = 2;
+            previewBoundsPaths.forEach(item => {{
+                clusterContext.beginPath();
+                if (item.shape === 'rect') {{
+                    const topLeft = worldToScreenPoint(item.x0, item.y0);
+                    const bottomRight = worldToScreenPoint(item.x1, item.y1);
+                    clusterContext.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+                }} else {{
+                    const center = worldToScreenPoint(item.x, item.y);
+                    clusterContext.arc(center.x, center.y, (item.radius * state.viewTransform.scale) + 3, 0, TAU);
+                }}
+                clusterContext.stroke();
+            }});
+            previewNodeOutlines.forEach(outline => {{
+                const screenPoint = worldToScreenPoint(outline.x, outline.y);
+                const screenRadius = Math.max(4, (outline.radius * state.viewTransform.scale) + 3.4);
+                clusterContext.beginPath();
+                clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, TAU);
+                clusterContext.stroke();
+            }});
+            clusterContext.restore();
+        }}
 
         if (selectedNodeOutlines.length > 0) {{
             clusterContext.save();
@@ -4659,7 +6536,17 @@ def ssn_viewer_html(
         }}
         document.getElementById('stat-clusters').textContent = layout.length.toLocaleString();
         document.getElementById('stat-links').textContent = links.length.toLocaleString();
-        if (resetView) {{ fitClusterViewToLayout(); }}
+        if (state.pendingRestoreViewTransform) {{
+            // A session restored a pan/zoom; adopt it instead of auto-fitting,
+            // which would otherwise immediately discard it.
+            const restored = state.pendingRestoreViewTransform;
+            state.pendingRestoreViewTransform = null;
+            state.viewTransform.scale = restored.scale;
+            state.viewTransform.offsetX = restored.offsetX;
+            state.viewTransform.offsetY = restored.offsetY;
+        }} else if (resetView) {{
+            fitClusterViewToLayout();
+        }}
         renderClusterView();
     }}
 
@@ -4707,6 +6594,11 @@ def ssn_viewer_html(
         state.layoutComputing = false;
         applyComputedLayout(result.layout, visibleGraph, layoutAlgorithm, resetView);
     }}
+
+{session_state_js}
+{selection_presets_js}
+{table_editing_js}
+{extraction_js}
 
     function htmlEscape(value) {{
         return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -4763,6 +6655,9 @@ def ssn_viewer_html(
 
         tbody.addEventListener('click', event => {{
             if (event.target.closest('button, a, input, select, textarea')) {{ return; }}
+            // The second click of a double-click opens the cell editor; letting it
+            // through would toggle the row selection on the way in.
+            if (event.detail > 1) {{ return; }}
             if (!event.shiftKey && metadataTableHasActiveTextSelection()) {{ return; }}
             const row = event.target.closest('tr[data-node-index]');
             if (!row) {{ return; }}
@@ -4771,6 +6666,7 @@ def ssn_viewer_html(
 
         tbody.addEventListener('keydown', event => {{
             if (event.key !== 'Enter' && event.key !== ' ') {{ return; }}
+            if (event.target.closest('button, a, input, select, textarea')) {{ return; }}
             const row = event.target.closest('tr[data-node-index]');
             if (!row) {{ return; }}
             event.preventDefault();
@@ -4779,6 +6675,9 @@ def ssn_viewer_html(
     }}
 
     function updateMetadataTable() {{
+        // The table body is re-rendered wholesale, so any in-progress cell edit
+        // is destroyed along with its <input>.
+        state.metadataEditCell = null;
         const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
         const baseNodeIndices = metadataBaseNodeIndices();
         const filteredNodeIndices = filteredMetadataNodeIndices(baseNodeIndices);
@@ -4826,8 +6725,11 @@ def ssn_viewer_html(
                 for (const column of state.metadataColumns) {{
                     const value = metadataValue(nodeIndex, column.name);
                     const cellClass = metadataCellClass(column.name, value);
+                    const escapedName = htmlEscape(column.name);
                     const displayText = htmlEscape(formatMetadataDisplayValue(column.name, value));
-                    cellsHtml += '<td' + (cellClass ? ' class="' + cellClass + '"' : '') + ' title="' + displayText + '">' + displayText + '</td>';
+                    cellsHtml += '<td data-column-key="' + escapedName + '"'
+                        + ' class="metadata-cell-editable' + (cellClass ? ' ' + cellClass : '') + '"'
+                        + ' title="' + displayText + ' (double-click to edit)">' + displayText + '</td>';
                 }}
                 return '<tr' + rowClass + ' tabindex="0" aria-selected="' + ariaSelected + '" data-node-index="' + nodeIndex + '">' + cellsHtml + '</tr>';
             }}).join('');
@@ -4867,6 +6769,7 @@ def ssn_viewer_html(
         document.getElementById('export-selected').disabled = !state.bundle;
         document.getElementById('metadata-reset-sort').disabled = !state.bundle || !state.metadataSort.columnKey;
         document.getElementById('clear-selection').disabled = selected.length === 0;
+        document.getElementById('save-extraction').disabled = !state.bundle || selected.length === 0;
         applyMetadataTableRowHighlights();
     }}
 
@@ -4889,11 +6792,13 @@ def ssn_viewer_html(
         document.getElementById('metadata-deselect-rows').disabled = !state.bundle || metadataSelectionCount === 0;
     }}
 
-    function exportSelection() {{
-        const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
-        if (!state.bundle) {{
-            return;
-        }}
+    // Cluster numbers for the current threshold, keyed by node index: connected
+    // components ranked by size with the largest numbered 1. This mirrors
+    // build_ssn.py's --cluster (CLUSTER_COLUMN, rename_labels_by_frequency + 1),
+    // so a column made here lines up with what that tool writes. Equal-sized
+    // clusters are ordered by hierarchy position rather than by lowest member
+    // index, so their numbers can differ from build_ssn.py's on ties.
+    function clusterNumbersAtCurrentThreshold() {{
         const activeClusterIds = activeClustersAtThreshold(selectedThresholdValue());
         const componentAssignments = activeClusterAssignments(activeClusterIds);
         const rankedClusterIds = [...activeClusterIds].sort((leftId, rightId) => {{
@@ -4902,6 +6807,18 @@ def ssn_viewer_html(
             return rightNode.size - leftNode.size || leftNode.leaf_start - rightNode.leaf_start || leftId - rightId;
         }});
         const clusterByComponentId = new Map(rankedClusterIds.map((componentId, clusterIndex) => [componentId, clusterIndex + 1]));
+        return {{
+            clusterCount: activeClusterIds.length,
+            numberFor: nodeIndex => clusterByComponentId.get(componentAssignments[nodeIndex]) ?? null,
+        }};
+    }}
+
+    function exportSelection() {{
+        const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
+        if (!state.bundle) {{
+            return;
+        }}
+        const clusterNumbers = clusterNumbersAtCurrentThreshold();
         const metadataColumns = state.metadataColumns.filter(column => column.name !== 'SSN_cluster');
         const exportedNodeIndices = metadataDisplayNodeIndices(selected.length > 0
             ? selected
@@ -4911,7 +6828,7 @@ def ssn_viewer_html(
         exportedNodeIndices.forEach(nodeIndex => {{
             const row = [
                 nodeId(nodeIndex),
-                clusterByComponentId.get(componentAssignments[nodeIndex]) ?? '',
+                clusterNumbers.numberFor(nodeIndex) ?? '',
                 ...metadataColumns.map(column => {{
                     const value = metadataValue(nodeIndex, column.name);
                     return value === null || value === undefined ? '' : String(value);
@@ -4970,7 +6887,7 @@ def ssn_viewer_html(
             return;
         }}
         targetContext.scale(scaleFactor, scaleFactor);
-        renderClusterView(targetContext, clusterCanvas.width, clusterCanvas.height);
+        renderClusterView(targetContext, clusterCanvas.width, clusterCanvas.height, {{preview: false}});
         target.toBlob(blob => {{
             if (!blob) {{
                 // Browsers (notably Safari, ~16.7M px) refuse to encode an
@@ -6636,6 +8553,8 @@ def ssn_viewer_html(
     document.getElementById('export-png').addEventListener('click', exportClusterPNG);
     document.getElementById('export-svg').addEventListener('click', exportClusterSVG);
     document.getElementById('customize-colors').addEventListener('click', openColorPicker);
+    document.getElementById('save-session').addEventListener('click', saveSessionFile);
+    document.getElementById('save-extraction').addEventListener('click', saveExtractionFile);
     document.getElementById('color-picker-close').addEventListener('click', closeColorPicker);
     document.getElementById('color-picker-overlay').addEventListener('click', event => {{
         if (event.target === event.currentTarget) {{
@@ -6726,6 +8645,8 @@ def ssn_viewer_html(
 
     setupLayoutWorker();
     setupMetadataTableDelegation();
+    setupSelectionPresets();
+    setupMetadataEditing();
     populateColorPaletteMenu();
     warnIfUnsupported();
     updateComponentSortButton();

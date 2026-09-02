@@ -27,6 +27,7 @@ from domainator.ssn_hierarchy import (
     merge_impact_axis_labels,
     merge_event_table_rows,
     threshold_merge_event_rows,
+    threshold_slider_stops,
 )
 
 MST_KNN_MIN_K = 2
@@ -55,23 +56,14 @@ def _get_mst_knn_report_config(tree):
 
 
 def _slider_stop_rows(merge_event_rows, tree=None):
-    stops = [{
-        "edge_index": -1,
-        "threshold_index": -1,
-        "threshold_label": "∞",
-        "threshold_value": None,
-        "slider_position": 0,
-    }]
-    for merge_row in merge_event_rows:
-        stops.append({
-            "edge_index": int(merge_row["edge_index"]),
-            # Row in tree.edges_by_threshold / the MST_KNN counts for this cut. Both are
-            # keyed by distinct threshold, not by MST edge, so the lookup is separate.
-            "threshold_index": -1 if tree is None else tree.threshold_row_index(merge_row["threshold_value"]),
-            "threshold_label": merge_row["threshold_to"],
-            "threshold_value": merge_row["threshold_value"],
-            "slider_position": 0,
-        })
+    """The shared stop list (see ssn_hierarchy.threshold_slider_stops), laid out
+    along this report's slider track.
+
+    The stop list ends with a floor cut below the weakest MST edge. Without it the
+    slider stopped one merge short of the fully merged network, because every other
+    stop excludes its own tie group under the strictly-above ``--lb`` convention.
+    """
+    stops = [dict(stop, slider_position=0) for stop in threshold_slider_stops(merge_event_rows, tree=tree)]
 
     if len(stops) <= 1:
         return stops

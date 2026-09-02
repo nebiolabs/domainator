@@ -104,7 +104,7 @@ merge listed at threshold `T` becomes visible at the next lower threshold.
  "metadata_columns": [{"name": "category", "type": "str"}, {"name": "count", "type": "int"}],
  "defaults": {"color_by": null, "label_by": null}, "merge_impact_metric": "min_child"}
 
-// --mode thresholds  -> suggested cut-points (threshold_value null == ∞)
+// --mode thresholds  -> suggested cut-points, finest first (threshold_value null == ∞)
 {"thresholds": [{"threshold_value": 7.0, "threshold_label": "7.00",
                  "clusters": 2, "non_singleton_clusters": 1, "largest_cluster": 3}]}
 
@@ -164,6 +164,18 @@ ssn_navigator.py -i net.ssnv --mode cluster --threshold 150 --id 5   # members +
 The `metadata.tsv` columns (from `enum_report`) become the per-cluster
 distributions in `--mode cluster` output: string columns yield the top values
 with counts; numeric columns yield min/max/mean/quartiles.
+
+`--threshold` follows the viewer's slider: higher is finer. `--threshold inf` is the
+slider's ∞ end, where every node is its own cluster (reported as `"threshold": null`,
+the same spelling the bundle uses); omitting `--threshold` is the other end, one cluster
+per connected component.
+
+Add `--html net.html --embed_data` in step 3 for a self-contained browser viewer
+of the same network. Annotations made there (edited cells, new columns) are saved
+back into an ordinary `.ssnv` by its "Save session…" button, so a session file
+feeds straight back into step 4 and the new columns show up in the per-cluster
+distributions. See the `.ssnv` section of [file_formats.md](file_formats.md) for
+the schema.
 
 ## Recipe 3 — inspect a matrix's cluster structure
 

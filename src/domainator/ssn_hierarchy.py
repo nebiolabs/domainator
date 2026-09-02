@@ -328,6 +328,75 @@ def merge_event_table_rows(component_summary, max_items=25):
     return rows
 
 
+FLOOR_THRESHOLD_SPAN_FRACTION = 0.01
+
+
+def floor_threshold_value(lowest_merge_threshold: float, highest_merge_threshold: float = None) -> float:
+    """A cut strictly below the weakest merge, so every edge is kept.
+
+    Offset below the weakest merge by 1% of the merge-weight range, rather than
+    dropped to ``0``. A network whose scores run 350-650 would otherwise spend more
+    than half its slider track on an empty stretch below the data, and scores that
+    go negative are not cleared by ``0`` at all.
+
+    ``highest_merge_threshold`` is optional only so a caller with a single weight in
+    hand still gets a usable floor; pass both whenever the range is known.
+    """
+    lowest = float(lowest_merge_threshold)
+    highest = lowest if highest_merge_threshold is None else float(highest_merge_threshold)
+    span = highest - lowest
+    if span > 0:
+        return lowest - (FLOOR_THRESHOLD_SPAN_FRACTION * span)
+    # Every merge sits at one weight, so there is no range to take a fraction of.
+    step = abs(lowest) * FLOOR_THRESHOLD_SPAN_FRACTION
+    return lowest - (step if step > 0 else 1.0)
+
+
+def threshold_slider_stops(merge_event_rows, tree=None):
+    """Slider stops for a merge-event series: ∞, one per event, then a floor.
+
+    Shared by ``build_ssn_viewer`` and ``matrix_report`` so their sliders offer the
+    same cuts. The trailing floor stop is what makes the fully merged network
+    reachable at all: every other stop excludes its own tie group under the
+    strictly-above ``--lb`` convention, so the lowest event stop still splits the
+    weakest merge back apart. It is derived from the MST rather than from
+    ``merge_event_rows``, which ``max_merge_events`` may have capped.
+    """
+    stops = [{
+        "edge_index": -1,
+        "threshold_index": -1,
+        "threshold_label": "∞",
+        "threshold_value": None,
+    }]
+    for merge_row in merge_event_rows:
+        stops.append({
+            "edge_index": int(merge_row["edge_index"]),
+            # Row in the tree's threshold tables for this cut. Those are keyed by
+            # distinct threshold, not by MST edge, so the lookup is separate.
+            "threshold_index": -1 if tree is None else tree.threshold_row_index(merge_row["threshold_value"]),
+            "threshold_label": merge_row["threshold_to"],
+            "threshold_value": float(merge_row["threshold_value"]),
+        })
+
+    mst_edges = [] if tree is None else list(tree.mst_edges)
+    if len(mst_edges) > 0:
+        # mst_edges are weight-descending.
+        floor_value = floor_threshold_value(float(mst_edges[-1][2]), float(mst_edges[0][2]))
+        stops.append({
+            # Every MST edge scores strictly above this cut.
+            "edge_index": len(mst_edges) - 1,
+            # This stop stands for the complete-graph cut, so it reads its edge counts
+            # from that row of the threshold tables. Its own value sits just below the
+            # weakest merge rather than at 0 purely so the slider track stays usable,
+            # and no table row is keyed there. The counts are exact whenever no graph
+            # edge scores at or below the floor, which is the usual case.
+            "threshold_index": tree.threshold_row_index(0.0),
+            "threshold_label": format_threshold_value(floor_value),
+            "threshold_value": floor_value,
+        })
+    return stops
+
+
 def build_mst_component_hierarchy(tree):
     parent = np.arange(tree.n_nodes, dtype=int)
     hierarchy_nodes = []

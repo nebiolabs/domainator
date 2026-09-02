@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from domainator import build_ssn_viewer
-from domainator.data_matrix import DenseDataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, DenseDataMatrix, MaxTree
 
 
 def _read_bundle(path):
@@ -59,7 +59,9 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         bundle = _read_bundle(bundle_file)
 
         assert bundle["format"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_FORMAT
-        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION
+        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION == 4
+        # app_state is written only by the HTML viewer's "Save session" button.
+        assert "app_state" not in bundle
         assert bundle["graph"]["nodes"] == row_names
         assert len(bundle["graph"]["mst_edges"]) == 3
         assert len(bundle["graph"]["merge_event_series"]) == 3
@@ -72,9 +74,15 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         assert len(moving_sum["x"]) == len(moving_sum["y"]) > 0
         assert moving_sum["window"] > 0
         # A stop labelled T shows the `--lb T` cut, so edge_index is the last MST edge
-        # scoring strictly above T (T's own tie group is excluded).
-        assert [stop["edge_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, -1, 0, 1]
-        assert [stop["threshold_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, 0, 1, 2]
+        # scoring strictly above T (T's own tie group is excluded). The final stop is the
+        # floor that keeps every MST edge, so the fully merged network is reachable --
+        # without it the lowest stop still splits the weakest merge apart. It sits 1% of
+        # the weight range below the weakest edge (4.0 - 0.01 * (10.0 - 4.0)).
+        assert [stop["threshold_label"] for stop in bundle["graph"]["slider_stops"]] == [
+            "∞", "10.00", "7.00", "4.00", "3.94"
+        ]
+        assert [stop["edge_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, -1, 0, 1, 2]
+        assert [stop["threshold_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, 0, 1, 2, 3]
         assert bundle["graph"]["hierarchy"]["roots"] == [6]
         assert bundle["graph"]["hierarchy"]["leaf_order"] == [0, 1, 2, 3]
         assert bundle["graph"]["hierarchy"]["nodes"][6]["leaf_count"] == 4
@@ -209,7 +217,11 @@ def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
         bundle = _read_bundle(bundle_file)
 
         assert len(bundle["graph"]["merge_event_series"]) == 2
-        assert len(bundle["graph"]["slider_stops"]) == 3
+        # 2 capped merge events + the ∞ stop + the floor stop.
+        assert len(bundle["graph"]["slider_stops"]) == 4
+        assert bundle["graph"]["slider_stops"][-1]["threshold_value"] < min(
+            edge[2] for edge in bundle["graph"]["mst_edges"]
+        )
         assert bundle["graph"]["slider_stops"][0]["threshold_value"] is None
 
         # The moving sum must come from the UNFILTERED rows. The cap keeps only t=10.0 and
@@ -373,6 +385,52 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'regionPrincipalAxis' in html_content
         assert 'selectByProjection' in html_content
 
+        # Session save/load (bundle v4 app_state).
+        assert '<button id="save-session" type="button" disabled' in html_content
+        assert 'const VIEW_STATE_FIELDS = [' in html_content
+        assert 'function collectSessionState()' in html_content
+        assert 'function applySessionState(appState)' in html_content
+        assert 'function saveSessionFile()' in html_content
+        assert '<button id="save-extraction"' in html_content
+        assert 'function saveExtractionFile()' in html_content
+        assert 'function buildExtractionHierarchy(nodeCount, edges)' in html_content
+        assert 'function extractionMergeEventRows(nodeCount, edges, metric)' in html_content
+        assert 'function originalComponentByNode()' in html_content
+        assert 'const SUPPORTED_BUNDLE_VERSIONS = [3, 4];' in html_content
+        assert 'SUPPORTED_BUNDLE_VERSIONS.includes(bundle.version)' in html_content
+
+        # Selection presets: ten slots, keyboard-addressable, hover preview.
+        assert '<div id="preset-slots"' in html_content
+        for slot in range(10):
+            assert f'data-preset-slot="{slot}"' in html_content
+        assert 'function storeSelectionPreset(slot)' in html_content
+        assert "function recallSelectionPreset(slot, mode = 'replace')" in html_content
+        assert 'function presetPreviewNodeSet()' in html_content
+        assert 'function presetClickMode(event)' in html_content
+        assert '/^Digit([0-9])$/' in html_content
+
+        # Metadata editing.
+        assert 'function setMetadataValue(nodeIndex, columnName, rawText)' in html_content
+        assert 'function beginMetadataCellEdit(cell)' in html_content
+        assert 'function addMetadataColumn(name, columnType)' in html_content
+        assert 'function deleteMetadataColumn(columnName)' in html_content
+        assert 'function applyBulkFill()' in html_content
+        assert 'function applyPastedColumn()' in html_content
+        assert '<input id="metadata-new-column-name"' in html_content
+        assert '<select id="metadata-fill-target"' in html_content
+        assert '<option value="all">All nodes</option>' in html_content
+        assert '<div id="metadata-paste-overlay"' in html_content
+        # Editing controls live behind three collapsed disclosure panels.
+        for panel in ("add", "set", "rename", "delete"):
+            assert f'<button id="metadata-panel-{panel}"' in html_content
+            assert f'<div id="metadata-{panel}-panel" class="metadata-edit-panel" hidden>' in html_content
+        assert 'function toggleMetadataEditPanel(name)' in html_content
+        assert 'function renameMetadataColumn(oldName, newName)' in html_content
+        assert 'function renameColumnInMenus(oldName, newName)' in html_content
+        assert 'function addClusterColumn(name)' in html_content
+        assert 'function clusterNumbersAtCurrentThreshold()' in html_content
+        assert '<button id="metadata-add-cluster-column"' in html_content
+
 
 def test_build_ssn_viewer_writes_static_html_without_input():
     with tempfile.TemporaryDirectory() as output_dir:
@@ -386,6 +444,9 @@ def test_build_ssn_viewer_writes_static_html_without_input():
         html_content = open(html_file, "r", encoding="utf-8").read()
 
         assert '<title>Viewer Only</title>' in html_content
+        # The tab keeps the bare name; the heading spells out the app.
+        assert ('<h1 id="viewer-title">Domainator Similarity Network Viewer: Viewer Only</h1>'
+                in html_content)
         assert 'const EMBEDDED_BUNDLE_BASE64 = null;' in html_content
         assert 'No bundle loaded.' in html_content
 
@@ -476,3 +537,98 @@ def test_build_ssn_viewer_rejects_embed_without_viewer_html():
 def test_build_ssn_viewer_requires_viewer_html_without_input():
     with pytest.raises(SystemExit, match="--html is required"):
         build_ssn_viewer.main([])
+
+def test_load_bundle_accepts_every_supported_version():
+    """v4 adds only the ignorable app_state section, so v3 files still load."""
+    from domainator import ssn_bundle
+
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "matrix.hdf5")
+        matrix.write(input_file, output_type="dense")
+        bundle = build_ssn_viewer.build_ssn_viewer_bundle(
+            DataMatrix.from_file(input_file), name="versions"
+        )
+
+        assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4)
+
+        for version in ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
+            path = os.path.join(output_dir, f"v{version}.ssnv")
+            payload = dict(bundle, version=version)
+            if version >= 4:
+                # A saved session; the reader must ignore the extra section.
+                payload["app_state"] = {"state_version": 1, "view": {"color_by": None}}
+            build_ssn_viewer.write_ssn_viewer_bundle(path, payload)
+            assert ssn_bundle.load_bundle(path)["version"] == version
+
+        unsupported = os.path.join(output_dir, "v99.ssnv")
+        build_ssn_viewer.write_ssn_viewer_bundle(unsupported, dict(bundle, version=99))
+        with pytest.raises(ValueError, match="Unsupported SSN viewer bundle version 99"):
+            ssn_bundle.load_bundle(unsupported)
+
+
+def test_viewer_heading_names_the_network():
+    """The <h1> is "<app name>: <network name>", with no name for a bare shell."""
+    from domainator.ssn_viewer_html import VIEWER_APP_NAME, viewer_heading
+
+    assert viewer_heading("GH17") == f"{VIEWER_APP_NAME}: GH17"
+    assert viewer_heading("  GH17  ") == f"{VIEWER_APP_NAME}: GH17"
+    # Titles that name no particular network collapse to the app name alone,
+    # rather than "<app name>: Domainator SSN Viewer".
+    for generic in (None, "", "   ", "Domainator SSN Viewer", VIEWER_APP_NAME):
+        assert viewer_heading(generic) == VIEWER_APP_NAME
+
+
+def test_lowest_slider_stop_reaches_the_fully_merged_network():
+    """The lowest stop must keep every MST edge.
+
+    Each stop excludes its own tie group (the strictly-above `--lb` convention),
+    so without a floor stop below the weakest edge the slider could never show
+    the true connected components -- it stopped one merge short.
+    """
+    from domainator import ssn_bundle
+
+    # Two components: A-B-C joined at 10/6, and D-E joined at 8.
+    data = np.array([
+        [0, 10, 6, 0, 0],
+        [10, 0, 7, 0, 0],
+        [6, 7, 0, 0, 0],
+        [0, 0, 0, 0, 8],
+        [0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D", "E"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "matrix.hdf5")
+        matrix.write(input_file, output_type="dense")
+        bundle = build_ssn_viewer.build_ssn_viewer_bundle(
+            DataMatrix.from_file(input_file), name="floor"
+        )
+
+    hierarchy = bundle["graph"]["hierarchy"]
+    stops = bundle["graph"]["slider_stops"]
+    lowest = min(stop["threshold_value"] for stop in stops if stop["threshold_value"] is not None)
+    weakest_mst_edge = min(edge[2] for edge in bundle["graph"]["mst_edges"])
+
+    # Strictly below the weakest edge, so no merge is excluded at this cut, and
+    # only 1% of the weight range below it so the slider track is not mostly empty.
+    mst_weights = [edge[2] for edge in bundle["graph"]["mst_edges"]]
+    span = max(mst_weights) - min(mst_weights)
+    assert lowest < weakest_mst_edge
+    assert lowest == pytest.approx(weakest_mst_edge - 0.01 * span)
+    # At the floor stop every merge is applied, so the clusters are the components.
+    assert ssn_bundle.clusters_at_threshold(hierarchy, lowest) == hierarchy["roots"]
+    assert len(hierarchy["roots"]) == 2
+    # Before the fix the lowest stop was the weakest edge itself, which the
+    # strictly-above rule excludes; the viewer's cut there splits it back apart.
+    assert stops[-1]["threshold_value"] == lowest
+    assert stops[-2]["threshold_value"] == weakest_mst_edge

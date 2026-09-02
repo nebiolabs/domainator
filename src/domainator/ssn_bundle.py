@@ -6,6 +6,11 @@ helpers let non-browser callers (notably ``ssn_navigator.py``) reconstruct the
 clusters that are active at a chosen similarity threshold and summarize the
 metadata of their members, mirroring the logic of the JavaScript viewer's
 ``activeClustersAtThreshold`` / ``componentMembers`` functions.
+
+A v4 bundle may also carry a top-level ``app_state`` section, written by the HTML
+viewer's "Save session" button. It holds viewer UI state only and is ignored
+here; the rest of such a file is an ordinary bundle, so a saved session's
+``metadata`` simply reflects whatever was edited in the viewer.
 """
 
 import gzip
@@ -15,10 +20,19 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from domainator.build_ssn_viewer import (
-    SSN_VIEWER_BUNDLE_FORMAT,
-    SSN_VIEWER_BUNDLE_VERSION,
-)
+from domainator.ssn_hierarchy import floor_threshold_value
+
+
+SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
+# v3: per-event merge_size_counts/largest_merge/merge_count + graph.merge_moving_sum
+# v4: optional top-level "app_state" section written by the HTML viewer's "Save
+#     session" button (viewer UI state + selection presets). Purely additive:
+#     build_ssn_viewer.py never writes app_state, and a reader that ignores the
+#     section can treat a v4 file exactly like a v3 file.
+SSN_VIEWER_BUNDLE_VERSION = 4
+# Versions this build can read. Kept as a tuple rather than an equality check so
+# that additive revisions do not strand previously written bundles.
+SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4)
 
 
 def load_bundle(path: Union[str, PathLike]) -> dict:
@@ -35,26 +49,42 @@ def load_bundle(path: Union[str, PathLike]) -> dict:
             f"expected '{SSN_VIEWER_BUNDLE_FORMAT}')."
         )
     version = bundle.get("version")
-    if version != SSN_VIEWER_BUNDLE_VERSION:
+    if version not in SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
+        supported = ", ".join(str(v) for v in SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS)
         raise ValueError(
             f"Unsupported SSN viewer bundle version {version}; "
-            f"this build understands version {SSN_VIEWER_BUNDLE_VERSION}."
+            f"this build understands version(s) {supported}."
         )
     return bundle
+
+
+def coarsest_threshold(hierarchy: dict) -> float:
+    """The cut below which nothing splits: one cluster per connected component."""
+    merge_thresholds = [
+        node["threshold"] for node in hierarchy["nodes"] if node["kind"] == "cluster"
+    ]
+    if len(merge_thresholds) == 0:
+        return 0.0
+    return floor_threshold_value(min(merge_thresholds), max(merge_thresholds))
 
 
 def clusters_at_threshold(hierarchy: dict, threshold: Optional[float]) -> List[int]:
     """Return the component ids of the clusters active at ``threshold``.
 
     Python port of the viewer's ``activeClustersAtThreshold``: descend into a
-    cluster node only when it merged at a weaker (lower) threshold than the cut,
-    otherwise emit the whole component. ``threshold=None`` yields the coarsest
-    partition (one cluster per connected component). Higher thresholds yield
-    finer partitions (more splitting), matching similarity-score semantics.
+    cluster node when it merged at or below the cut, otherwise emit the whole
+    component. A merge at *exactly* the cut is split back apart, because
+    ``build_ssn --lb T`` keeps only edges scoring strictly above ``T`` -- the
+    comparison here has to be ``<=`` to match that and the viewer.
+    ``threshold=None`` is the bundle's "∞" slider stop (``threshold_value: null``)
+    and, like the viewer, means +infinity: every merge is cut, so every node is
+    its own cluster. Use :func:`floor_threshold_value` for the opposite end.
+    Higher thresholds yield finer partitions (more splitting), matching
+    similarity-score semantics.
     """
     nodes = hierarchy["nodes"]
-    # None (the "∞" slider stop) coerces to 0 to match the JS `< null` behavior.
-    cut = 0.0 if threshold is None else float(threshold)
+    # null is how slider_stops spells the ∞ stop; the viewer maps it to Infinity.
+    cut = float("inf") if threshold is None else float(threshold)
     active: List[int] = []
     stack = list(reversed(hierarchy["roots"]))
     while stack:
@@ -63,7 +93,7 @@ def clusters_at_threshold(hierarchy: dict, threshold: Optional[float]) -> List[i
         if component["kind"] == "leaf":
             active.append(component_id)
             continue
-        if component["threshold"] < cut:
+        if component["threshold"] <= cut:
             stack.append(component["right"])
             stack.append(component["left"])
             continue

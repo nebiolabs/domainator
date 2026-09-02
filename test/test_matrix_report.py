@@ -274,10 +274,15 @@ def test_matrix_report_includes_merge_event_outputs():
         assert moving_sum['window'] > 0
         assert payload['slider_stops'][0]['edge_index'] == -1
         # A stop labelled T shows the `--lb T` cut, so it excludes T's own tie group:
-        # edge_index is the last MST edge scoring strictly above T.
-        assert [stop['edge_index'] for stop in payload['slider_stops'][1:]] == [-1, 0, 1]
+        # edge_index is the last MST edge scoring strictly above T. The list ends with
+        # the `--lb 0` floor cut, which keeps every MST edge -- without it the slider
+        # stopped one merge short of the fully merged network.
+        assert [stop['threshold_label'] for stop in payload['slider_stops']] == [
+            '∞', '10.00', '7.00', '4.00', '3.94'
+        ]
+        assert [stop['edge_index'] for stop in payload['slider_stops'][1:]] == [-1, 0, 1, 2]
         # threshold_index points at the matching row of edges_by_thresh / mst_knn_counts
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2]
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3]
         assert [row[1] for row in payload['edges_by_thresh']] == [10.0, 7.0, 4.0, 0.0]
         assert 'Clusters and Edge Count vs Threshold' in html_content
         assert 'id="edges-by-threshold"' not in html_content
@@ -378,9 +383,16 @@ def test_matrix_report_max_merge_events_filters_html_payload():
 
         assert len(payload['merge_event_series']) == 2
         assert [row['edge_index'] for row in payload['merge_event_series']] == [2, 3]
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 2, 3]
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 3, 4]
-        assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 9500]
+        # --max_merge_events caps the plotted events, but the floor stop is a cut
+        # rather than an event, so it survives and the fully merged view stays reachable.
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 2, 3, 4]
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 3, 4, 5]
+        # The floor sits just below the weakest edge, so it no longer strands the
+        # other stops at the far left of the track.
+        assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 9154, 9500]
+        assert [stop['threshold_label'] for stop in payload['slider_stops']] == [
+            '∞', '7.00', '6.00', '5.96'
+        ]
         assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
 
@@ -411,9 +423,11 @@ def test_matrix_report_max_merge_events_zero_includes_all_html_events():
         payload = _embedded_report_payload(html_content)
 
         assert len(payload['merge_event_series']) == 5
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, -1, 0, 1, 2, 3]
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4]
-        assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 2750, 5000, 7250, 9500]
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, -1, 0, 1, 2, 3, 4]
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4, 5]
+        assert [stop['slider_position'] for stop in payload['slider_stops']] == [
+            0, 500, 2728, 4955, 7183, 9411, 9500
+        ]
         assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
 
@@ -508,8 +522,10 @@ def test_matrix_report_slider_stops_are_proportionally_spaced():
         payload = _embedded_report_payload(html_content)
         slider_stops = payload['slider_stops']
 
-        assert [stop['threshold_label'] for stop in slider_stops] == ['∞', '10.00', '5.00', '4.00', '1.00']
-        assert [stop['slider_position'] for stop in slider_stops] == [0, 500, 5500, 6500, 9500]
+        assert [stop['threshold_label'] for stop in slider_stops] == [
+            '∞', '10.00', '5.00', '4.00', '1.00', '0.91'
+        ]
+        assert [stop['slider_position'] for stop in slider_stops] == [0, 500, 5450, 6441, 9411, 9500]
 
 
 def test_matrix_report_profile_stages_emits_timings(capsys):
@@ -647,3 +663,84 @@ def test_mst_knn_counts_match_build_ssn_lb_mst_knn():
         for k in range(2, max_k + 1):
             expected = len(mst_knn_edge_index_dict(matrix, k, lower_bound=threshold))
             assert counts[row_idx, k - 2] == expected, f"lb={threshold} k={k}"
+
+
+def test_slider_reaches_the_fully_merged_network():
+    """The lowest cut must keep every MST edge.
+
+    Regression: each stop excludes its own tie group under the strictly-above
+    `--lb` convention, so the lowest event stop still split the weakest merge
+    apart. The slider stopped one merge short and the true connected components
+    were unreachable. A floor stop below the weakest edge closes the gap.
+    """
+    from domainator.ssn_bundle import clusters_at_threshold
+    from domainator.ssn_hierarchy import build_mst_component_hierarchy
+    from domainator.data_matrix import DataMatrix, MaxTree
+
+    # Two components: A-B-C and D-E.
+    data = np.array([
+        [0, 10, 6, 0, 0],
+        [10, 0, 7, 0, 0],
+        [6, 7, 0, 0, 0],
+        [0, 0, 0, 0, 8],
+        [0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E']
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+        DenseDataMatrix(data, row_names, row_names).write(input_file, output_type="dense")
+        matrix_report.main(["-i", input_file, "--html", out_html])
+        payload = _embedded_report_payload(open(out_html).read())
+        tree = MaxTree(DataMatrix.from_file(input_file))
+
+    hierarchy = build_mst_component_hierarchy(tree)
+    stops = payload['slider_stops']
+    finite = [stop['threshold_value'] for stop in stops if stop['threshold_value'] is not None]
+    weakest_mst_edge = min(float(edge[2]) for edge in tree.mst_edges)
+
+    # The floor stop sits strictly below the weakest edge, so no merge is cut there,
+    # and only 1% of the weight range below it so the track is not mostly empty.
+    mst_weights = [float(edge[2]) for edge in tree.mst_edges]
+    span = max(mst_weights) - min(mst_weights)
+    assert stops[-1]['threshold_value'] == min(finite)
+    assert min(finite) < weakest_mst_edge
+    assert min(finite) == pytest.approx(weakest_mst_edge - 0.01 * span)
+    assert clusters_at_threshold(hierarchy, min(finite)) == hierarchy['roots']
+    assert len(hierarchy['roots']) == 2
+
+    # The stop above it is the weakest edge itself, which that cut splits back apart.
+    assert sorted(finite)[1] == weakest_mst_edge
+    assert len(clusters_at_threshold(hierarchy, weakest_mst_edge)) > len(hierarchy['roots'])
+
+
+def test_slider_stops_match_the_ssn_viewer_bundle():
+    """matrix_report and build_ssn_viewer share one stop builder, so the two
+    tools must offer the same cuts for the same matrix."""
+    from domainator import build_ssn_viewer
+    from domainator.ssn_bundle import load_bundle
+
+    data = np.array([
+        [0, 10, 6, 0, 0],
+        [10, 0, 7, 0, 0],
+        [6, 7, 0, 4, 0],
+        [0, 0, 4, 0, 8],
+        [0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E']
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+        bundle_path = os.path.join(output_dir, "net.ssnv")
+        DenseDataMatrix(data, row_names, row_names).write(input_file, output_type="dense")
+        matrix_report.main(["-i", input_file, "--html", out_html])
+        build_ssn_viewer.main(["-i", input_file, "-o", bundle_path])
+        report_stops = _embedded_report_payload(open(out_html).read())['slider_stops']
+        bundle_stops = load_bundle(bundle_path)['graph']['slider_stops']
+
+    keys = ('edge_index', 'threshold_index', 'threshold_label', 'threshold_value')
+    assert [{k: stop[k] for k in keys} for stop in report_stops] == [
+        {k: stop[k] for k in keys} for stop in bundle_stops
+    ]

@@ -12,6 +12,7 @@ from domainator import build_ssn_viewer, ssn_navigator
 from domainator.data_matrix import DenseDataMatrix
 from domainator.ssn_bundle import (
     clusters_at_threshold,
+    coarsest_threshold,
     component_members,
     load_bundle,
     summarize_cluster_metadata,
@@ -117,10 +118,17 @@ def test_ssn_bundle_clusters_and_metadata(shared_datadir):
         bundle = load_bundle(_build_bundle(output_dir))
         hierarchy = bundle["graph"]["hierarchy"]
 
-        # At the coarsest cut (threshold None) everything is one component.
-        coarse = clusters_at_threshold(hierarchy, None)
+        # threshold None is the bundle's "∞" stop, the *finest* cut: like the
+        # viewer's slider at its ∞ end, every merge is cut and every node stands
+        # alone. coarsest_threshold() is the other end.
+        finest = clusters_at_threshold(hierarchy, None)
+        assert len(finest) == 4
+        assert all(hierarchy["nodes"][cid]["size"] == 1 for cid in finest)
+
+        coarse = clusters_at_threshold(hierarchy, coarsest_threshold(hierarchy))
         assert len(coarse) == 1
         assert sorted(component_members(hierarchy, coarse[0])) == [0, 1, 2, 3]
+        assert coarse == hierarchy["roots"]
 
         # At threshold 5, the 4-4 edge (weight 4) is cut: {A,B,C} and {D}.
         active = clusters_at_threshold(hierarchy, 5.0)
@@ -176,3 +184,103 @@ def test_ssn_navigator_rejects_bad_bundle(shared_datadir):
             json.dump({"format": "not_a_bundle"}, handle)
         with pytest.raises(ValueError):
             load_bundle(bad)
+
+
+def test_clusters_at_threshold_matches_build_ssn_clustering():
+    """The bundle reader must partition exactly as `build_ssn --lb T` does.
+
+    Regression: this used to compare `component["threshold"] < cut` where the
+    viewer and build_ssn both use `<=`. A threshold landing exactly on a merge
+    weight -- which every slider stop does, since the stops *are* the merge
+    weights -- left that merge joined instead of split, so ssn_navigator
+    reported one cluster fewer than the viewer showed at the same stop.
+    """
+    from domainator.build_ssn import cluster_labels_from_tree
+    from domainator.data_matrix import DataMatrix, MaxTree
+
+    data = np.array([
+        [0, 10, 6, 0, 0],
+        [10, 0, 7, 0, 0],
+        [6, 7, 0, 0, 0],
+        [0, 0, 0, 0, 8],
+        [0, 0, 0, 8, 0],
+    ], dtype=float)
+    names = ["A", "B", "C", "D", "E"]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        matrix_file = os.path.join(output_dir, "matrix.hdf5")
+        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        bundle_path = os.path.join(output_dir, "net.ssnv")
+        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        bundle = load_bundle(bundle_path)
+        tree = MaxTree(DataMatrix.from_file(matrix_file))
+
+    hierarchy = bundle["graph"]["hierarchy"]
+    finite_stops = [
+        stop["threshold_value"]
+        for stop in bundle["graph"]["slider_stops"]
+        if stop["threshold_value"] is not None
+    ]
+    assert len(finite_stops) >= 3
+
+    for threshold in finite_stops:
+        # Partition by cluster membership, so the two labellings can be compared
+        # without depending on how either numbers its clusters.
+        from_bundle = {
+            frozenset(component_members(hierarchy, cid))
+            for cid in clusters_at_threshold(hierarchy, threshold)
+        }
+        labels = cluster_labels_from_tree(tree, threshold)
+        from_build_ssn = {
+            frozenset(i for i, lab in enumerate(labels) if lab == want)
+            for want in set(labels)
+        }
+        assert from_bundle == from_build_ssn, f"threshold {threshold}"
+
+    # The floor stop keeps every edge, so it yields the true components.
+    assert clusters_at_threshold(hierarchy, min(finite_stops)) == hierarchy["roots"]
+    assert len(hierarchy["roots"]) == 2
+
+
+def test_navigator_threshold_ends_match_the_viewer_slider():
+    """`--threshold inf` is the slider's fine end; omitting it is the coarse end.
+
+    Regression: `inf` and an omitted `--threshold` both used to mean the coarsest
+    partition, the opposite of what the viewer's ∞ stop shows, which also left the
+    ∞ row of `--mode thresholds` out of order with the rows beneath it.
+    """
+    data = np.array([
+        [0, 10, 6, 0, 0],
+        [10, 0, 7, 0, 0],
+        [6, 7, 0, 0, 0],
+        [0, 0, 0, 0, 8],
+        [0, 0, 0, 8, 0],
+    ], dtype=float)
+    names = ["A", "B", "C", "D", "E"]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        matrix_file = os.path.join(output_dir, "matrix.hdf5")
+        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        bundle_path = os.path.join(output_dir, "net.ssnv")
+        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        bundle = load_bundle(bundle_path)
+
+    finest = ssn_navigator.ssn_navigator(bundle, "clusters", threshold="inf")
+    assert finest["clusters"] == 5                  # every node alone
+    # ∞ serializes as null, as it does in the bundle's own slider_stops, so the
+    # output stays strict JSON (json.dumps(inf) would emit `Infinity`).
+    assert finest["threshold"] is None
+    json.loads(
+        json.dumps(finest),
+        parse_constant=lambda constant: pytest.fail(f"non-strict JSON: {constant}"),
+    )
+
+    coarsest = ssn_navigator.ssn_navigator(bundle, "clusters")
+    assert coarsest["clusters"] == 2                # the two components
+    weakest = min(edge[2] for edge in bundle["graph"]["mst_edges"])
+    assert coarsest["threshold"] < weakest
+
+    # The threshold table runs monotonically from the ∞ stop down to the floor.
+    counts = [row["clusters"] for row in ssn_navigator.ssn_navigator(bundle, "thresholds")["thresholds"]]
+    assert counts == sorted(counts, reverse=True)
+    assert counts[0] == 5 and counts[-1] == 2

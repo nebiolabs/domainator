@@ -140,6 +140,120 @@ order in which equal-weight edges happened to be sorted.
 
 In the future, we may add a `DESCRIPTION` field to distinguish different kinds of data, like raw scores, normalized scores, etc. But so far it is up to the user to remember what the data represents. We may also add `ROW_SEQ_LENGTHS` and `COL_SEQ_LENGTHS` variables to allow for calculation of scores using the EFI score formula, which normalizes on length.
 
+## SSN viewer bundles (`.ssnv`)
+
+`build_ssn_viewer.py` turns a symmetric similarity matrix into an `.ssnv` bundle: a
+**gzip-compressed JSON document** read by the standalone HTML viewer
+(`--html`/`--embed_data`) and by `ssn_navigator.py`. Readers accept plain (uncompressed)
+JSON as well, detected by the gzip magic number. The bundle stores an MST-derived merge
+hierarchy rather than the matrix itself, so its size scales with the node count, not with
+O(n²) edges.
+
+Top-level keys:
+
+```python
+format: "domainator_ssn_viewer_bundle"  # a mismatch here is fatal for every reader
+version: int                            # see the compatibility rules below
+name: str                               # display name
+domainator_version: str                 # the build that wrote the file
+graph: dict                             # nodes, mst_edges, hierarchy, slider_stops, merge series
+metadata: dict                          # positional node metadata table (see below)
+defaults: dict                          # color_by, label_by, categorical_columns
+(v4, optional) app_state: dict          # viewer UI state -- see below
+```
+
+`graph.slider_stops` closes with a floor stop strictly below the weakest MST edge. Every
+other stop excludes its own tie group under the strictly-above rule, so without that last
+one the fully merged network (the true connected components) could not be reached: the
+lowest stop would still split the weakest merge apart. The floor sits **1% of the MST
+weight range** below the weakest edge rather than at `0`, so that a network scoring
+350–650 does not spend most of its slider track on empty space below the data, and so
+that negative scores are cleared too. It reports the `threshold_index` of the
+complete-graph row, since that is the cut it stands for.
+
+`graph.nodes` is the list of node ids, and its **position is the node index** used
+throughout the bundle: `metadata.rows[i]` describes `graph.nodes[i]`, and
+`graph.hierarchy.leaf_order` holds those same indices. `metadata` is a positional table
+rather than a per-row mapping:
+
+```python
+metadata: {
+  "columns": [{"name": str, "type": "str" | "int" | "float", (optional) "origin": str}, ...],
+  "rows":    [[value, value, ...], ...]   # one row per node, in graph.nodes order
+}
+```
+
+`origin: "viewer"` marks a column created in the HTML viewer rather than merged from a
+`--metadata` TSV; it is what lets the viewer offer to delete the column again. Readers
+that do not know the key can ignore it.
+
+### Versions and compatibility
+
+The version constants live in `ssn_bundle.py`
+(`SSN_VIEWER_BUNDLE_VERSION`, `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS`).
+
+| Version | Change |
+| --- | --- |
+| 3 | Per-event `merge_size_counts`/`largest_merge`/`merge_count` and `graph.merge_moving_sum`. |
+| 4 | Optional top-level `app_state`. Purely additive: `build_ssn_viewer.py` never writes it, and a reader that ignores the section can treat a v4 file exactly like a v3 file. |
+
+Bump `SSN_VIEWER_BUNDLE_VERSION` for any change to the schema, and add the old version to
+`SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written
+bundles keep loading. `ssn_bundle.load_bundle` refuses a version outside that tuple; the
+HTML viewer is deliberately more permissive and loads an unknown version with a warning,
+because refusing a file it can very likely still render is the worse failure.
+
+### `app_state` (saved sessions)
+
+The viewer's "Save session…" button writes the bundle back out with an `app_state`
+section carrying the UI state. **The rest of the file is an ordinary bundle**: metadata
+edited in the viewer is written into `metadata.rows`/`metadata.columns`, so
+`ssn_navigator.py` and any other reader see the annotations without understanding
+`app_state` at all.
+
+```python
+app_state: {
+  "state_version": int, "saved_by": str, "saved_at": str,   # ISO 8601
+  "view":      {...},   # layout, color_by/label_by, toggles, threshold_value, view_transform
+  "table":     {...},   # sort, filter, null_order, rows_per_page, column_widths
+  "colors":    {...},   # custom_palettes, categorical_columns
+  "selection": {"node_ids": [...], "presets": {"<slot 0-9>": {"node_ids": [...], "saved_at": str}}}
+}
+```
+
+The viewer can also write an **extraction**: a bundle over a chosen subset of nodes,
+rebuilt from the induced MST edges rather than re-derived from the source matrix.
+`ssn_viewer_html.py` ports `ssn_hierarchy.py`'s hierarchy and merge-series maths into
+JavaScript to do this, so the two must be changed together; the browser tests assert the
+port reproduces `build_ssn_viewer.py`'s output field-for-field when the whole network is
+selected.
+
+An extraction is only written when every original network component contributes a single
+MST-connected piece to the selection. The MST kept one path between any two nodes and
+discarded the rest, so a selection that omits the nodes along that path leaves the bundle
+with no evidence of how the surviving pieces relate — writing them out as separate
+components would assert an absence of similarity the file cannot support. Nodes in
+different components of the original network are exempt, since they were already
+unrelated. To extract an arbitrary subset, subset the source matrix instead
+(`build_ssn_viewer.py --subset`), which measures those relationships rather than
+inferring them. One field cannot be rebuilt this way and is written empty:
+`graph.edges_by_threshold` counts edges of the *full* graph, which a bundle never carried.
+
+Two rules make this section survive UI churn, and changes to it should preserve both:
+
+- **Every field is optional and independently skippable.** The viewer defines one registry
+  entry (`VIEW_STATE_FIELDS` in `ssn_viewer_html.py`) per persisted control and looks each
+  saved key up in it. A key the current build does not recognize, or one whose value it
+  cannot apply, is skipped and reported in the load status rather than aborting the load; a
+  key the file omits keeps its default. So a session written by a different version of the
+  viewer still opens.
+- **Selections are stored as node ids, never indices.** An index is a position in
+  `graph.nodes` and would silently mean a different sequence if the bundle were rebuilt or
+  subsetted. Ids that are not in the bundle are counted and reported on load. For the same
+  reason the threshold is stored as `threshold_value`, not as a slider position, which is
+  derived from `graph.slider_stops` and shifts whenever `--max_merge_events` changes.
+
+
 ## Tabular data matrix
 
 In addition to hdf5 formatted tabular data, Domainator also supports plain text dense matrices. 

@@ -5,8 +5,9 @@ viewer. Instead of rendering the whole network, it answers targeted questions
 about the sequence-similarity network at a chosen similarity threshold and
 returns compact JSON: which clusters exist, what a cluster contains, and how a
 cluster's metadata is distributed. Higher thresholds give finer clusters (more
-splitting); ``--threshold`` of the special "∞" stop (omit it, or pass ``inf``)
-gives the coarsest partition of one cluster per connected component.
+splitting), matching the viewer's slider: ``--threshold inf`` is the "∞" stop at
+its fine end, where every node is its own cluster, and omitting ``--threshold``
+uses the floor at the coarse end, one cluster per connected component.
 
 Modes:
   overview    network size, metadata columns, component count, defaults.
@@ -25,6 +26,7 @@ from jsonargparse import ActionConfigFile, ArgumentParser
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.ssn_bundle import (
     clusters_at_threshold,
+    coarsest_threshold,
     component_members,
     load_bundle,
     node_index_by_name,
@@ -72,16 +74,31 @@ def _threshold_summary(bundle):
     return stops
 
 
-def _resolve_threshold(threshold):
+def _resolve_threshold(threshold, hierarchy):
+    """Resolve ``--threshold`` to a numeric cut, following the viewer's slider.
+
+    ``inf``/``∞`` is the slider's ∞ stop -- every merge cut, every node its own
+    cluster. Omitting ``--threshold`` picks the other end instead, the floor
+    below every merge, since one cluster per connected component is the more
+    useful thing to see without being asked for a threshold.
+    """
     if threshold is None:
-        return None
+        return coarsest_threshold(hierarchy)
     if isinstance(threshold, str):
         if threshold.lower() in ("inf", "infinity", "∞"):
-            return None
+            return math.inf
         threshold = float(threshold)
-    if isinstance(threshold, float) and math.isinf(threshold):
-        return None
     return float(threshold)
+
+
+def _threshold_out(threshold):
+    """The threshold as it should appear in output JSON.
+
+    ``null`` for the ∞ cut, which is how the bundle's own slider_stops spell it,
+    and which keeps the output strict JSON -- ``json.dumps(inf)`` emits the
+    non-standard ``Infinity``.
+    """
+    return None if math.isinf(threshold) else threshold
 
 
 def _cluster_for_node(hierarchy, active_ids, node_index):
@@ -109,7 +126,7 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
     graph = bundle["graph"]
     hierarchy = graph["hierarchy"]
     node_names = graph["nodes"]
-    threshold = _resolve_threshold(threshold)
+    threshold = _resolve_threshold(threshold, hierarchy)
 
     if mode == "overview":
         return {
@@ -131,7 +148,7 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
         records = _cluster_records(hierarchy, active, min_size=min_size)
         singletons = sum(1 for r in records if r["size"] == 1)
         result = {
-            "threshold": threshold,
+            "threshold": _threshold_out(threshold),
             "clusters": len(records),
             "singletons": singletons,
             "shown": min(len(records), top_n),
@@ -161,7 +178,7 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
 
         member_indices = component_members(hierarchy, cluster_id)
         result = {
-            "threshold": threshold,
+            "threshold": _threshold_out(threshold),
             "cluster_id": cluster_id,
             "size": len(member_indices),
             "metadata_summary": summarize_cluster_metadata(
@@ -211,9 +228,9 @@ def main(argv):
                         help="Which navigation query to run.")
     parser.add_argument("--threshold", type=str, default=None,
                         help="Similarity threshold to cut the network at (higher = finer "
-                             "clusters). Omit or pass 'inf' for the coarsest partition "
-                             "(one cluster per connected component). Required for the "
-                             "'clusters' and 'cluster' modes.")
+                             "clusters), matching the viewer's slider. Pass 'inf' for the "
+                             "slider's fine end, where every node is its own cluster. Omit "
+                             "it for the coarse end: one cluster per connected component.")
     parser.add_argument("--id", type=int, default=None, dest="cluster_id",
                         help="Cluster id to describe (see --mode clusters). For --mode cluster.")
     parser.add_argument("--node", type=str, default=None,

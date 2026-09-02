@@ -22,6 +22,10 @@ from domainator.output_guardrails import (
     make_temporary_output_path,
     max_output_gb_to_bytes,
 )
+from domainator.ssn_bundle import (
+    SSN_VIEWER_BUNDLE_FORMAT,
+    SSN_VIEWER_BUNDLE_VERSION,
+)
 from domainator.ssn_hierarchy import (
     DEFAULT_MAX_MERGE_EVENTS,
     MERGE_IMPACT_CHOICES,
@@ -31,13 +35,10 @@ from domainator.ssn_hierarchy import (
     filter_merge_event_rows,
     merge_event_moving_sum,
     threshold_merge_event_rows,
+    threshold_slider_stops,
 )
 from domainator.ssn_viewer_html import write_ssn_viewer_html
 from domainator.utils import list_and_file_to_dict_keys
-
-
-SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
-SSN_VIEWER_BUNDLE_VERSION = 3  # v3: per-event merge_size_counts/largest_merge/merge_count + graph.merge_moving_sum
 
 
 def _infer_metadata_type(series: pd.Series) -> str:
@@ -104,23 +105,6 @@ def _json_ready(value):
     return value
 
 
-def _slider_stops(merge_event_rows, tree=None):
-    stops = [{
-        "edge_index": -1,
-        "threshold_index": -1,
-        "threshold_label": "∞",
-        "threshold_value": None,
-    }]
-    for merge_row in merge_event_rows:
-        stops.append({
-            "edge_index": int(merge_row["edge_index"]),
-            "threshold_index": -1 if tree is None else tree.threshold_row_index(merge_row["threshold_value"]),
-            "threshold_label": merge_row["threshold_to"],
-            "threshold_value": float(merge_row["threshold_value"]),
-        })
-    return stops
-
-
 def build_ssn_viewer_bundle(
     matrix: DataMatrix,
     metadata_files: List[Union[str, PathLike]] = None,
@@ -183,7 +167,7 @@ def build_ssn_viewer_bundle(
             "merge_impact_metric": merge_impact_metric,
             "merge_event_series": merge_event_series,
             "merge_moving_sum": merge_moving_sum,
-            "slider_stops": _slider_stops(merge_event_series, tree=tree),
+            "slider_stops": threshold_slider_stops(merge_event_series, tree=tree),
             "hierarchy": hierarchy,
         },
         "metadata": _metadata_payload(node_data),

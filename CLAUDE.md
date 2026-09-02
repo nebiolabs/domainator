@@ -50,7 +50,7 @@ To add a tool to the UI: generate a schema with `python scripts/server/generate_
 
 ## Versioning
 
-The version string lives in `src/domainator/__init__.py` (`__version__`) and **must be updated in `README.md` too**. Breaking changes to the matrix file format require bumping `_MATRIX_FILE_VERSION` in `data_matrix.py`.
+The version string lives in `src/domainator/__init__.py` (`__version__`) and **must be updated in `README.md` too**. Breaking changes to the matrix file format require bumping `_MATRIX_FILE_VERSION` in `data_matrix.py`. Changes to the `.ssnv` SSN viewer bundle schema require bumping `SSN_VIEWER_BUNDLE_VERSION` in `ssn_bundle.py`; if the change is additive, add the previous version to `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` so existing bundles keep loading (see the `.ssnv` section of `docs/file_formats.md`). Don't bump versions of anything without first confirming with the user.
 
 ## Docs map
 
