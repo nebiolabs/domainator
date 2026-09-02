@@ -10,6 +10,8 @@ warnings.filterwarnings("ignore", module='numpy')
 
 from jsonargparse import ArgumentParser, ActionConfigFile
 import heapq
+import json
+import shutil
 import sys
 import subprocess
 import tempfile
@@ -26,7 +28,7 @@ from domainator.utils import get_file_type, parse_seqfiles, make_pool, pyhmmer_d
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.hmmer_search import compare_hmmer
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from domainator.transform_matrix import MODES, _mst_knn_arg, _knn_arg, LOG10_2
 
 # Modes whose post-transform values are computable per edge (no global matrix maxes),
@@ -211,7 +213,193 @@ def _finish_query_progress(progress_bar, current_query_idx, total_queries):
             progress_bar.update(remaining)
     progress_bar.close()
 
-def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode, max_hsps=1, min_score: float = 0.0, query_order=None, progress: bool = False) -> Iterator[CmpResult]:
+# Substrings diamond writes when a run dies for a reason the caller can act on.
+# Matched case-insensitively against the captured stderr.
+_DIAMOND_DISK_PATTERNS = ("no space left on device", "error writing to file",
+                          "write error in", "disk full", "enospc")
+_DIAMOND_MEMORY_PATTERNS = ("std::bad_alloc", "failed to allocate", "out of memory",
+                            "cannot allocate memory", "bad_alloc")
+_DIAMOND_OPTION_PATTERNS = ("invalid option", "unknown option", "unrecognized option")
+_DIAMOND_INPUT_PATTERNS = ("error opening file", "no such file or directory",
+                           "invalid input file format", "empty database",
+                           "error detecting input file format", "seems to be empty",
+                           "invalid character", "unrecognized sequence type")
+
+_DISK_MITIGATIONS = (
+    "Lower the sensitivity: --algorithm diamond_s (16 seed shapes) or diamond_mids (8), "
+    "instead of diamond_us (64). This is usually the single largest reduction.",
+    "Shrink diamond's query blocks so less scratch is live at once, e.g. "
+    "--params '\"-b\":0.01, \"-c\":4'. Peak scratch scales roughly with -b.",
+    "Put the scratch on a larger filesystem: set TMPDIR, or "
+    "--params '\"--tmpdir\":\"/path/with/space\"'.",
+    "Consider fewer input sequences (for example dereplicating first); the seed-hit "
+    "volume grows quadratically with the size of a redundant input.",
+)
+_MEMORY_MITIGATIONS = (
+    "Shrink diamond's query blocks: --params '\"-b\":0.01, \"-c\":4'.",
+    "Lower the sensitivity: --algorithm diamond_s or diamond_mids.",
+    "Use fewer threads (--cpu N); diamond allocates per-thread buffers.",
+)
+
+
+def _collapse_stderr(text, max_lines=15):
+    """Collapse runs of identical lines (diamond repeats write errors once per thread)."""
+    collapsed = []
+    for line in (candidate.rstrip() for candidate in text.splitlines()):
+        if not line:
+            continue
+        if collapsed and collapsed[-1][0] == line:
+            collapsed[-1][1] += 1
+        else:
+            collapsed.append([line, 1])
+    rendered = [f"{line} (x{count})" if count > 1 else line for line, count in collapsed]
+    if len(rendered) > max_lines:
+        hidden = len(rendered) - max_lines
+        rendered = [f"... {hidden} earlier line(s) omitted ..."] + rendered[-max_lines:]
+    return "\n".join("    " + line for line in rendered)
+
+
+def _describe_free_space(path):
+    """Return a human-readable free-space note for the filesystem holding path."""
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return None
+    return f"{format_bytes(usage.free)} free of {format_bytes(usage.total)}"
+
+
+def build_diamond_failure_message(stage, returncode, stderr_text, input_fasta,
+                                  tmpdir=None, command=None, diamond_params=None):
+    """Explain a failed diamond run and suggest what the caller can change.
+
+    Recognizes the failure modes that are actionable from the seq_dist command line
+    (scratch disk exhaustion, memory exhaustion, a rejected --params flag, unreadable
+    input) and falls back to the raw stderr when the cause is not one of those.
+    """
+    haystack = stderr_text.lower()
+    lines = [f"diamond {stage} failed (exit code {returncode}) on: {input_fasta}"]
+
+    def _add_mitigations(mitigations):
+        lines.append("")
+        lines.append("  Suggested mitigations, roughly most effective first:")
+        for number, text in enumerate(mitigations, start=1):
+            lines.append(f"    {number}. {text}")
+
+    if any(pattern in haystack for pattern in _DIAMOND_DISK_PATTERNS):
+        lines.append("")
+        lines.append("  Cause: diamond ran out of disk space writing its seed-search scratch.")
+        if tmpdir is not None:
+            free = _describe_free_space(tmpdir)
+            lines.append(f"  Scratch directory: {tmpdir}" + (f" ({free})" if free else ""))
+            lines.append("  Note: diamond unlinks these files while holding them open, so they")
+            lines.append("        never appear in `du` or `ls` -- only free space reflects them.")
+        lines.append("  This happens before diamond emits any results, so --mst_knn/--knn")
+        lines.append("  streaming cannot reduce it: all seed hits for a query block are")
+        lines.append("  materialized before that block produces any output.")
+        _add_mitigations(_DISK_MITIGATIONS)
+    elif returncode in (-9, 137) or any(pattern in haystack for pattern in _DIAMOND_MEMORY_PATTERNS):
+        lines.append("")
+        if returncode in (-9, 137):
+            lines.append("  Cause: diamond was killed with SIGKILL, which usually means the")
+            lines.append("         out-of-memory killer stopped it. Check `dmesg` to confirm.")
+        else:
+            lines.append("  Cause: diamond could not allocate memory.")
+        _add_mitigations(_MEMORY_MITIGATIONS)
+    elif any(pattern in haystack for pattern in _DIAMOND_OPTION_PATTERNS):
+        lines.append("")
+        lines.append("  Cause: diamond rejected one of its command line options.")
+        if diamond_params:
+            rendered = ", ".join(f'"{flag}":{value!r}' for flag, value in diamond_params.items())
+            lines.append(f"  Options passed via --params: {rendered}")
+            lines.append("  Check these against `diamond blastp --help`; --params is forwarded as-is.")
+        else:
+            lines.append("  No --params were supplied, so this may be a diamond version mismatch.")
+    elif any(pattern in haystack for pattern in _DIAMOND_INPUT_PATTERNS):
+        lines.append("")
+        lines.append("  Cause: diamond could not read an input or database file.")
+        lines.append("  Check that the file is non-empty, readable, and valid protein FASTA.")
+
+    if command:
+        lines.append("")
+        lines.append("  Command: " + " ".join(command))
+    lines.append("")
+    lines.append("  diamond stderr:")
+    lines.append(_collapse_stderr(stderr_text) or "    (no stderr captured)")
+    return "\n".join(lines)
+
+
+# diamond options that seq_dist sets itself. Overriding these through --params would
+# either break parsing of the result stream or silently contradict a seq_dist option,
+# so they are rejected with a pointer to the option that does control them.
+RESERVED_DIAMOND_PARAMS = {
+    "-q": "-i/--input",
+    "--query": "-i/--input",
+    "-d": "-r/--reference",
+    "--db": "-r/--reference",
+    "-f": "the fixed tabular output format required to parse the result stream",
+    "--outfmt": "the fixed tabular output format required to parse the result stream",
+    "-p": "--cpu",
+    "--threads": "--cpu",
+    "-k": "-k",
+    "--max-target-seqs": "-k",
+    "--max-hsps": "seq_dist (fixed at 1)",
+    "--min-score": "--lb",
+    "--verbose": "seq_dist (required for progress reporting)",
+    "--fast": "--algorithm",
+    "--mid-sensitive": "--algorithm",
+    "--sensitive": "--algorithm",
+    "--more-sensitive": "--algorithm",
+    "--very-sensitive": "--algorithm",
+    "--ultra-sensitive": "--algorithm",
+}
+
+# diamond options seq_dist supplies a default for, but which --params may replace.
+def _default_overridable_diamond_params(tmpdir):
+    return OrderedDict((("--algo", "0"), ("--tmpdir", tmpdir)))
+
+
+def parse_diamond_params(params_str):
+    """Parse a --params string into an ordered dict of {flag: value}.
+
+    The string is a json dict body without the enclosing braces, matching the
+    --params syntax of deduplicate_genbank.py, for example: '"-c":4, "-b":0.4'.
+    A null value means the flag takes no argument, for example: '"--target-indexed":null'.
+    """
+    if not params_str:
+        return OrderedDict()
+    try:
+        parsed = json.loads("{" + params_str + "}", object_pairs_hook=OrderedDict)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Could not parse --params as a json dict: {exc}\n"
+            "Expected a json dict body without the outer braces, such as: "
+            "--params '\"-c\":4, \"-b\":0.4'"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("--params must be a json dict of diamond options, such as: --params '\"-c\":4'")
+    for flag in parsed:
+        if not flag.startswith("-"):
+            raise ValueError(
+                f"--params keys must be diamond option flags starting with '-', but got: {flag!r}"
+            )
+        if flag in RESERVED_DIAMOND_PARAMS:
+            raise ValueError(
+                f"--params may not set '{flag}', because seq_dist controls it via "
+                f"{RESERVED_DIAMOND_PARAMS[flag]}."
+            )
+    return parsed
+
+
+def add_params_to_args_list(arg_list, params):
+    """Append {flag: value} pairs to a command line. A null value emits a bare flag."""
+    for flag, value in params.items():
+        arg_list.append(flag)
+        if value is not None:
+            arg_list.append(str(value))
+
+
+def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode, max_hsps=1, min_score: float = 0.0, query_order=None, progress: bool = False,
+            diamond_params=None) -> Iterator[CmpResult]:
     """
         runs a search using diamond, returns a list of tuples of (inputid, referenceid, score)
     """
@@ -226,17 +414,26 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
                     }
 
     dbpath =  tmpdir+"/"+"db"
-    mkdb_result = subprocess.run(["diamond", "makedb", "--in", reference_fasta, "-d", dbpath], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            encoding='utf-8')
+    mkdb_command = ["diamond", "makedb", "--in", reference_fasta, "-d", dbpath]
+    try:
+        mkdb_result = subprocess.run(mkdb_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                encoding='utf-8')
+    except FileNotFoundError:
+        print("Could not run 'diamond'. It is not on PATH.\n"
+              "  Install it (conda install -c bioconda diamond) or activate the environment\n"
+              "  that provides it, then re-run.", file=sys.stderr)
+        exit(1)
 
     if mkdb_result.returncode != 0:
-        print(
-            f'Error in diamond makedb: {reference_fasta}\n{mkdb_result.stdout}\n{mkdb_result.stderr}', file=sys.stderr)
+        print(build_diamond_failure_message(
+            "makedb", mkdb_result.returncode,
+            (mkdb_result.stderr or "") + (mkdb_result.stdout or ""),
+            reference_fasta, tmpdir=tmpdir, command=mkdb_command), file=sys.stderr)
         exit(1)
 
     dmnd_command = [ "stdbuf", "-oL", "-eL",
         "diamond", "blastp", "-q", input_fasta, "-d", dbpath, "-p", str(threads),
-        "--outfmt", "6", "qseqid", "sseqid", "bitscore", "--algo", "0",
+        "--outfmt", "6", "qseqid", "sseqid", "bitscore",
         "--max-hsps", str(max_hsps), "--verbose"
     ]
     if max_target_seqs is not None and max_target_seqs > 0:
@@ -247,13 +444,27 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
         dmnd_command.extend(["--min-score", str(min_score)])
     dmnd_command.extend(mode_to_arg[mode])
 
-    dmnd_process = subprocess.Popen(
-        dmnd_command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding='utf-8',
-        bufsize=1,
-    )
+    # Defaults seq_dist supplies but --params may replace. --tmpdir defaults to the
+    # managed temporary directory so that diamond's (large, unlinked-while-open)
+    # search scratch lands next to the database instead of in the working directory.
+    overridable_params = _default_overridable_diamond_params(tmpdir)
+    if diamond_params:
+        overridable_params.update(diamond_params)
+    add_params_to_args_list(dmnd_command, overridable_params)
+
+    try:
+        dmnd_process = subprocess.Popen(
+            dmnd_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding='utf-8',
+            bufsize=1,
+        )
+    except FileNotFoundError as exc:
+        missing = "stdbuf" if "stdbuf" in str(exc) else "diamond"
+        print(f"Could not run '{missing}'. It is not on PATH.\n"
+              f"  Command: {' '.join(dmnd_command)}", file=sys.stderr)
+        exit(1)
 
     stderr_lines = list()
     stderr_thread = None
@@ -290,8 +501,9 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
             _finish_query_progress(query_progress, current_query_idx, len(query_order))
 
     if returncode != 0:
-        print(
-            f'Error in diamond search: {input_fasta}\n{"".join(stderr_lines)}', file=sys.stderr)
+        print(build_diamond_failure_message(
+            "blastp", returncode, "".join(stderr_lines), input_fasta,
+            tmpdir=tmpdir, command=dmnd_command, diamond_params=diamond_params), file=sys.stderr)
         exit(1)
 
 def make_seq_name_to_idx_dict(input_path):
@@ -436,7 +648,7 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst_knn=None, knn=None):
+def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst_knn=None, knn=None, diamond_params=None):
     """
 
     """
@@ -489,7 +701,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_seq_name_to_idx_dict(dmnd_ref) #name to index
             # call diamond
             
-            results_iter = diamond(dmnd_input, dmnd_ref, k, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress)
+            results_iter = diamond(dmnd_input, dmnd_ref, k, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params)
             score_progress = False
         
         elif algorithm == "hmmer":
@@ -662,6 +874,15 @@ def main(argv):
     parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices={"diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"},
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
 
+    parser.add_argument("--params", default=None,
+                        help='String of extra parameters to pass to diamond blastp, as a json dict body in single quotes. '
+                             'Example: \'"-c":4, "-b":0.4\'. Use a null value for flags that take no argument, such as \'"--target-indexed":null\'. '
+                             "Options that seq_dist sets itself (query, database, --outfmt, -p, --max-target-seqs, --max-hsps, --min-score, --verbose, and the sensitivity flags) "
+                             "are rejected; use the corresponding seq_dist option instead. "
+                             "seq_dist defaults --algo to 0 and --tmpdir to its own managed temporary directory; both can be replaced here. "
+                             "Useful for large all-vs-all runs, where diamond's seed-search scratch can exceed available disk: "
+                             "a smaller --block-size (-b) and/or more --index-chunks (-c) bound its peak scratch usage.")
+
     sparsify_group = parser.add_mutually_exclusive_group(required=False)
     sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
                         help="Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer >= 0, where 0 keeps only the maximum spanning tree), computed as a streaming operation to keep memory and output size small. Requires the reference to be the same file as the input (a square symmetric comparison) and --mode in {score, bool, efi_score}. Best paired with --sparse.")
@@ -719,7 +940,11 @@ def main(argv):
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst_knn=params.mst_knn, knn=params.knn)
+    diamond_params = parse_diamond_params(params.params)
+    if diamond_params and not params.algorithm.startswith("diamond"):
+        raise ValueError(f"--params only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
+
+    seq_dist(params.input, input_type, reference_path, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst_knn=params.mst_knn, knn=params.knn, diamond_params=diamond_params)
 
 def _entrypoint():
     main(sys.argv[1:])

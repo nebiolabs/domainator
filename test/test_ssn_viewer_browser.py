@@ -18,6 +18,7 @@ individual tests skip with a hint.
 """
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from domainator import build_ssn_viewer
@@ -54,7 +55,7 @@ def _build_embedded_viewer(out_dir):
     return html_file
 
 
-def _build_embedded_viewer_with_metadata(out_dir, color_by="family"):
+def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical=None):
     """Build a viewer carrying metadata so coloring can be exercised.
 
     The matrix is the same 6-node A-F graph as ``_build_embedded_viewer``; a
@@ -87,14 +88,17 @@ def _build_embedded_viewer_with_metadata(out_dir, color_by="family"):
         "F\tgamma\t9\n"
     )
 
-    build_ssn_viewer.main([
+    args = [
         "-i", str(input_file),
         "--html", str(html_file),
         "--embed_data",
         "--name", "Color Test Viewer",
         "--metadata", str(meta_file),
         "--color_by", color_by,
-    ])
+    ]
+    if categorical:
+        args += ["--categorical", *categorical]
+    build_ssn_viewer.main(args)
     return html_file
 
 
@@ -138,6 +142,16 @@ def viewer_html(tmp_path_factory):
 def meta_viewer_html(tmp_path_factory):
     return _build_embedded_viewer_with_metadata(
         tmp_path_factory.mktemp("ssn_viewer_meta")
+    )
+
+
+@pytest.fixture(scope="module")
+def numeric_categorical_viewer_html(tmp_path_factory):
+    """A viewer whose numeric color column was marked categorical at build time."""
+    return _build_embedded_viewer_with_metadata(
+        tmp_path_factory.mktemp("ssn_viewer_numcat"),
+        color_by="score",
+        categorical=["score"],
     )
 
 
@@ -190,6 +204,12 @@ def page(viewer_html):
 def meta_page(meta_viewer_html):
     """A loaded page for the metadata-bearing viewer (categorical default color)."""
     yield from _yield_loaded_page(meta_viewer_html)
+
+
+@pytest.fixture
+def numeric_categorical_page(numeric_categorical_viewer_html):
+    """A loaded page whose numeric column defaults to discrete coloring."""
+    yield from _yield_loaded_page(numeric_categorical_viewer_html)
 
 
 @pytest.fixture
@@ -289,6 +309,21 @@ def test_view_setting_toggles_do_not_throw(page):
 def _open_color_picker(page):
     page.click("#customize-colors")
     page.wait_for_selector("#color-picker-overlay:not([hidden])")
+
+
+def test_default_color_by_paints_on_load(meta_page):
+    """--color_by colors the nodes on load, before any color control is touched.
+
+    Regression: the node color cache used to be built before the "Color by" menu was
+    populated from bundle.defaults, so every node painted the fallback color until
+    something else triggered a rebuild.
+    """
+    page = meta_page
+    assert page.input_value("#color-by") == "family"
+    colors = page.evaluate("state.nodeColorCache.slice()")
+    assert len(set(colors)) == 3, colors
+    assert colors == page.evaluate("state.bundle.graph.nodes.map((_, i) => nodeColor(i))")
+    assert page.pageerrors == []
 
 
 def test_discrete_swatch_recolors(meta_page):
@@ -423,6 +458,162 @@ def test_load_color_table_recolors(meta_page, tmp_path):
     )
     after = _canvas_snapshot(page)
     assert after != before, "viewport did not update after loading a color table"
+    assert page.pageerrors == []
+
+
+def test_numeric_column_switches_to_categorical(meta_page):
+    """A numeric column can be recolored as discrete categories and switched back."""
+    page = meta_page
+    page.select_option("#color-by", "score")
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-continuous:not([hidden])")
+    page.wait_for_selector("#color-categorical-control:not([hidden])")
+    assert not page.is_checked("#color-as-categorical")
+
+    gradient_snapshot = _canvas_snapshot(page)
+    page.check("#color-as-categorical")
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.is_hidden("#color-picker-continuous")
+    # One swatch per distinct score (the fixture has 6 unique values).
+    assert page.locator("#color-picker-swatch-list input[type=color]").count() == 6
+    categorical_snapshot = _canvas_snapshot(page)
+    assert categorical_snapshot != gradient_snapshot, "discrete coloring did not repaint"
+
+    # Recolor one category, then flip back to the gradient: the gradient returns
+    # unchanged and the discrete palette survives a second flip.
+    swatch = page.locator("#color-picker-swatch-list input[type=color]").first
+    swatch.fill("#ff0000")
+    swatch.dispatch_event("input")
+    _wait_for_canvas_change(page, categorical_snapshot)
+    edited_snapshot = _canvas_snapshot(page)
+
+    page.uncheck("#color-as-categorical")
+    page.wait_for_selector("#color-picker-continuous:not([hidden])")
+    assert _canvas_snapshot(page) == gradient_snapshot
+
+    page.check("#color-as-categorical")
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.locator("#color-picker-swatch-list input[type=color]").first.input_value() == "#ff0000"
+    assert _canvas_snapshot(page) == edited_snapshot
+    assert page.pageerrors == []
+
+
+def test_bundle_default_categorical_column(numeric_categorical_page):
+    """--categorical in the bundle opens the numeric column in discrete mode."""
+    page = numeric_categorical_page
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.is_checked("#color-as-categorical")
+    assert page.locator("#color-picker-swatch-list input[type=color]").count() == 6
+    assert page.pageerrors == []
+
+
+def test_categorical_toggle_hidden_for_string_column(meta_page):
+    """The gradient/discrete switch only applies to numeric columns."""
+    page = meta_page
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.is_hidden("#color-categorical-control")
+    assert page.pageerrors == []
+
+
+def test_save_color_table_for_categorical_numeric(meta_page):
+    """A numeric column colored as categories can save/load a value->color TSV."""
+    page = meta_page
+    page.select_option("#color-by", "score")
+    _open_color_picker(page)
+    page.check("#color-as-categorical")
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    with page.expect_download() as download_info:
+        page.click("#save-color-table")
+    text = open(download_info.value.path(), encoding="utf-8").read()
+    keys = [line.split("\t")[0] for line in text.splitlines() if line.strip()]
+    assert "1" in keys and "9" in keys, keys
+    assert page.pageerrors == []
+
+
+def _saved_color_table(page):
+    """Click "Save color table" and return the downloaded value -> color mapping."""
+    with page.expect_download() as download_info:
+        page.click("#save-color-table")
+    text = open(download_info.value.path(), encoding="utf-8").read()
+    table = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        value, _, hexcode = line.rpartition("\t")
+        table[value] = hexcode
+    return table
+
+
+def test_named_palette_matches_get_palette(meta_page):
+    """The "Domainator distinct" palette assigns the colors build_ssn.py would."""
+    from domainator.utils import get_palette
+
+    page = meta_page
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    before = _canvas_snapshot(page)
+    page.select_option("#color-palette", "domainator")
+    _wait_for_canvas_change(page, before)
+
+    expected = get_palette(pd.Series(["alpha", "alpha", "beta", "beta", "gamma", "gamma"]))
+    saved = _saved_color_table(page)
+    assert {key: value.upper() for key, value in saved.items() if key != "\u2014"} == expected
+    assert page.pageerrors == []
+
+
+def test_named_palette_orders_numeric_values_numerically(meta_page):
+    """A numeric column colored as categories matches get_palette's sorted assignment."""
+    from domainator.utils import get_palette
+
+    page = meta_page
+    page.select_option("#color-by", "score")
+    _open_color_picker(page)
+    page.check("#color-as-categorical")
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    page.select_option("#color-palette", "domainator")
+    page.wait_for_function(
+        "() => document.getElementById('color-palette-note').textContent.includes('64 colors')"
+    )
+
+    expected = {str(key): color for key, color in get_palette(pd.Series([1, 2, 5, 8, 3, 9])).items()}
+    saved = _saved_color_table(page)
+    assert {key: value.upper() for key, value in saved.items() if key != "\u2014"} == expected
+    assert page.pageerrors == []
+
+
+def test_named_palette_cycles_and_reverts_to_default(many_cat_page):
+    """A short palette cycles across many values, and the default palette comes back."""
+    page = many_cat_page
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    # The per-node color cache is the layout-independent record of what is painted.
+    default_colors = page.evaluate("state.nodeColorCache.slice()")
+    before = _canvas_snapshot(page)
+
+    page.select_option("#color-palette", "okabe_ito")
+    _wait_for_canvas_change(page, before)
+    note = page.locator("#color-palette-note").inner_text()
+    assert "colors repeat" in note, note
+    saved = _saved_color_table(page)
+    # 120 values over an 8-color palette: 8 distinct colors, each reused.
+    assert len(saved) == 120
+    assert len(set(saved.values())) == 8
+    assert page.evaluate("state.nodeColorCache.slice()") != default_colors
+
+    # A hand edit stops the menu from claiming the column is still that palette.
+    swatch = page.locator("#color-picker-swatch-list input[type=color]").first
+    swatch.fill("#123456")
+    swatch.dispatch_event("input")
+    page.click("#color-picker-close")
+    _open_color_picker(page)
+    assert page.input_value("#color-palette") == ""
+
+    page.select_option("#color-palette", "__default__")
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.evaluate("Object.keys(state.customPalettes)") == []
+    assert page.evaluate("state.nodeColorCache.slice()") == default_colors
     assert page.pageerrors == []
 
 

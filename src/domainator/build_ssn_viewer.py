@@ -129,6 +129,7 @@ def build_ssn_viewer_bundle(
     max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS,
     color_by: str = None,
     label_by: str = None,
+    categorical_columns: List[str] = None,
     name: str = None,
 ):
     if merge_impact_metric not in MERGE_IMPACT_CHOICES:
@@ -151,6 +152,10 @@ def build_ssn_viewer_bundle(
         raise ValueError(f"Requested color_by column '{color_by}' was not found in the merged metadata.")
     if label_by is not None and label_by not in node_data.columns:
         raise ValueError(f"Requested label_by column '{label_by}' was not found in the merged metadata.")
+    categorical_columns = list(categorical_columns) if categorical_columns else []
+    for column_name in categorical_columns:
+        if column_name not in node_data.columns:
+            raise ValueError(f"Requested categorical column '{column_name}' was not found in the merged metadata.")
 
     tree = MaxTree(matrix)
     rows = list(matrix.rows)  # save label names before freeing matrix
@@ -185,6 +190,10 @@ def build_ssn_viewer_bundle(
         "defaults": {
             "color_by": color_by,
             "label_by": label_by,
+            # Numeric columns the viewer should color with discrete category colors
+            # instead of a gradient (e.g. integer cluster numbers). Toggleable in the
+            # viewer's color picker; this only sets the initial state.
+            "categorical_columns": categorical_columns,
         },
     }
     return _json_ready(bundle)
@@ -251,6 +260,8 @@ def main(argv):
                         help="Record a default metadata field for node coloring in the viewer bundle.")
     parser.add_argument("--label_by", type=str, default=None,
                         help="Record a default metadata field for node labels in the viewer bundle.")
+    parser.add_argument("--categorical", type=str, nargs="+", required=False, default=None,
+                        help="Numeric metadata columns (for example integer cluster numbers) that the viewer should color as discrete categories instead of a gradient. Can be toggled per column in the viewer's color picker.")
     parser.add_argument("--merge_impact_metric", choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric recorded for split events in the bundle.")
     parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
@@ -297,6 +308,7 @@ def main(argv):
             max_merge_events=params.max_merge_events,
             color_by=params.color_by,
             label_by=params.label_by,
+            categorical_columns=params.categorical,
             name=bundle_name,
         )
         # Serialize once; reuse bytes for both file output and HTML embedding.

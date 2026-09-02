@@ -78,13 +78,71 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         assert bundle["graph"]["hierarchy"]["roots"] == [6]
         assert bundle["graph"]["hierarchy"]["leaf_order"] == [0, 1, 2, 3]
         assert bundle["graph"]["hierarchy"]["nodes"][6]["leaf_count"] == 4
-        assert bundle["defaults"] == {"color_by": "category", "label_by": "category"}
+        assert bundle["defaults"] == {
+            "color_by": "category",
+            "label_by": "category",
+            "categorical_columns": [],
+        }
         assert bundle["metadata"]["columns"] == [
             {"name": "category", "type": "str"},
             {"name": "count", "type": "int"},
             {"name": "score", "type": "float"},
         ]
         assert bundle["metadata"]["rows"][0] == ["alpha", 1, 1.5]
+
+
+def test_build_ssn_viewer_records_categorical_columns():
+    """--categorical marks numeric columns for discrete coloring in the viewer."""
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        metadata_file = os.path.join(output_dir, "metadata.tsv")
+        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+
+        matrix.write(input_file, output_type="dense")
+        _write_metadata(metadata_file, row_names)
+
+        build_ssn_viewer.main([
+            "-i", input_file,
+            "-o", bundle_file,
+            "--metadata", metadata_file,
+            "--color_by", "count",
+            "--categorical", "count",
+        ])
+
+        bundle = _read_bundle(bundle_file)
+        assert bundle["defaults"]["categorical_columns"] == ["count"]
+        # The column keeps its numeric type; only the viewer's coloring changes.
+        assert {"name": "count", "type": "int"} in bundle["metadata"]["columns"]
+
+
+def test_build_ssn_viewer_rejects_unknown_categorical_column():
+    data = np.array([
+        [0, 10],
+        [10, 0],
+    ], dtype=float)
+    row_names = ["A", "B"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        matrix.write(input_file, output_type="dense")
+
+        with pytest.raises(ValueError, match="categorical column 'missing'"):
+            build_ssn_viewer.main([
+                "-i", input_file,
+                "-o", bundle_file,
+                "--categorical", "missing",
+            ])
 
 
 def test_build_ssn_viewer_cluster_counts_match_maxtree():

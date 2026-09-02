@@ -185,6 +185,11 @@ def apply_mst_knn_sparsification(matrix, k, lower_bound=0, include_mst=True):
 
     include_mst=True is ``--mst_knn k``; include_mst=False is a pure ``--knn k`` graph,
     which does not preserve the connected components of the input.
+
+    Kept edges are written as a strict max over the diagonal: both cells of a pair get
+    ``max(M[i, j], M[j, i])``, the same score the OR-symmetric kNN ranking and the maximum
+    spanning tree select on. The output is therefore symmetric, matching
+    :class:`~domainator.ssn_edges.StreamingMstKnnAccumulator`.
     """
     option = "--mst_knn" if include_mst else "--knn"
     if matrix.shape[0] != matrix.shape[1]:
@@ -203,19 +208,18 @@ def apply_mst_knn_sparsification(matrix, k, lower_bound=0, include_mst=True):
             if value != 0:
                 out[index, index] = value
         for source_idx, target_idx in edge_dict:
-            forward_value = matrix.data[source_idx, target_idx]
-            reverse_value = matrix.data[target_idx, source_idx]
-            if forward_value != 0:
-                out[source_idx, target_idx] = forward_value
-            if reverse_value != 0:
-                out[target_idx, source_idx] = reverse_value
+            value = max(matrix.data[source_idx, target_idx], matrix.data[target_idx, source_idx])
+            if value != 0:
+                out[source_idx, target_idx] = value
+                out[target_idx, source_idx] = value
         return scipy.sparse.csr_array(out)
 
     out = np.zeros_like(matrix.data)
     out[diagonal_indices, diagonal_indices] = matrix.data[diagonal_indices, diagonal_indices]
     for source_idx, target_idx in edge_dict:
-        out[source_idx, target_idx] = matrix.data[source_idx, target_idx]
-        out[target_idx, source_idx] = matrix.data[target_idx, source_idx]
+        value = max(matrix.data[source_idx, target_idx], matrix.data[target_idx, source_idx])
+        out[source_idx, target_idx] = value
+        out[target_idx, source_idx] = value
     return out
 
 def transform_matrix(array, mode, row_lengths=None, col_lengths=None):

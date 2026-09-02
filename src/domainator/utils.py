@@ -1865,6 +1865,65 @@ DISTINCT_COLORS = (
 OTHER_COLOR = "#BFBFBF"
 
 
+#: Named qualitative palettes offered for discrete coloring, in menu order. Each
+#: entry is {name, label, note, colors}. "domainator" is the palette get_palette
+#: uses, so applying it to a column reproduces the colors build_ssn.py,
+#: build_projection.py and plot_contigs.py write for that column; the rest are
+#: smaller, well-known qualitative palettes for networks with few groups.
+#: Consumed by the SSN viewer (ssn_viewer_html.py injects this into the page).
+NAMED_CATEGORICAL_PALETTES = (
+    {
+        "name": "domainator",
+        "label": "Domainator distinct (64)",
+        "note": "The palette get_palette() uses, so colors match build_ssn.py output.",
+        "colors": DISTINCT_COLORS,
+    },
+    {
+        "name": "tab10",
+        "label": "Tableau 10",
+        "note": "matplotlib's tab10; the first ten Domainator distinct colors.",
+        "colors": DISTINCT_COLORS[:10],
+    },
+    {
+        "name": "okabe_ito",
+        "label": "Okabe-Ito (8, colorblind safe)",
+        "note": "Eight hues chosen to stay distinguishable with common color vision deficiencies.",
+        "colors": (
+            "#E69F00", "#56B4E9", "#009E73", "#F0E442",
+            "#0072B2", "#D55E00", "#CC79A7", "#000000",
+        ),
+    },
+    {
+        "name": "brewer_dark2",
+        "label": "ColorBrewer Dark2 (8)",
+        "note": "Saturated qualitative set; good contrast against light backgrounds.",
+        "colors": (
+            "#1B9E77", "#D95F02", "#7570B3", "#E7298A",
+            "#66A61E", "#E6AB02", "#A6761D", "#666666",
+        ),
+    },
+    {
+        "name": "brewer_set2",
+        "label": "ColorBrewer Set2 (8, pastel)",
+        "note": "Muted qualitative set; keeps large filled clusters from overpowering labels.",
+        "colors": (
+            "#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3",
+            "#A6D854", "#FFD92F", "#E5C494", "#B3B3B3",
+        ),
+    },
+    {
+        "name": "brewer_paired",
+        "label": "ColorBrewer Paired (12)",
+        "note": "Light/dark pairs; useful when neighboring values are related.",
+        "colors": (
+            "#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C",
+            "#FB9A99", "#E31A1C", "#FDBF6F", "#FF7F00",
+            "#CAB2D6", "#6A3D9A", "#FFFF99", "#B15928",
+        ),
+    },
+)
+
+
 def _is_missing(value):
     """True for None and NaN-like scalars, without raising on odd types."""
     if value is None:

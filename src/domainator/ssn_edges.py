@@ -383,23 +383,26 @@ class StreamingMstKnnAccumulator:
       forest equals a single batch ``MaxTree`` over all edges (ties among equal-weight
       edges may resolve to a different but equally-valid forest).
 
-    * **kNN** — a per-node adjacency dict ``node -> {neighbor: [out_score, in_score]}``
-      where ``out_score`` is ``M[node, neighbor]`` and ``in_score`` is
-      ``M[neighbor, node]``; the symmetric ranking score is ``max(out_score, in_score)``,
-      matching :func:`build_symmetric_neighbor_rankings`. Each node's dict is trimmed to
+    * **kNN** — a per-node adjacency dict ``node -> {neighbor: symmetric_score}`` where
+      ``symmetric_score`` is the running ``max(M[node, neighbor], M[neighbor, node])``,
+      matching :func:`build_symmetric_neighbor_rankings`. Both directions of an edge update
+      the same slot, so an entry can never hold a stale one-directional maximum.
+      Each node's dict is trimmed to
       ``knn_soft_cap`` neighbors (by descending symmetric score) when it grows past
       ``2 * knn_soft_cap``. For symmetric input (e.g. ``compare_contigs``) this is exact;
       for slightly-asymmetric input (e.g. ``seq_dist`` diamond bit scores) it is exact as
       long as no node retains more than ``knn_soft_cap`` neighbors above its true top-k —
       effectively always, except for pathological high-degree hubs.
 
-    ``k = 0`` selects no kNN edges, so the result is just the maximum spanning forest.
+    ``k = 0`` selects no kNN edges, so the result is just the maximum spanning forest, and
+    the adjacency is then not maintained at all -- it would never be read back.
     ``include_mst=False`` drops the forest instead, leaving a pure kNN graph; the MST
     buffer is then never allocated, so only the bounded adjacency state is kept.
 
-    The stored ``[out_score, in_score]`` also lets :meth:`to_csr` reproduce the directional
-    asymmetry of the batch path for the kept edges. If trimming has dropped both directions
-    of a kept (MST-only) edge, the symmetric MST score is written to both cells as a fallback.
+    :meth:`to_csr` writes each kept edge as a strict max over the diagonal: both cells get
+    ``max(M[i, j], M[j, i])``, the score the edge was selected on. This matches
+    :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`, so the streaming and
+    batch paths agree on values as well as on which edges are kept.
     """
 
     def __init__(self, n_nodes: int, k: int, lower_bound: float = 0.0, include_equal: bool = False,
@@ -421,7 +424,12 @@ class StreamingMstKnnAccumulator:
 
         self._mst_edges: List[Tuple[int, int, float]] = []  # running maximum spanning forest
         self._mst_buffer: List[Tuple[int, int, float]] = []
-        self._adj: List[Dict[int, List[float]]] = [dict() for _ in range(n_nodes)]  # node -> {nbr: [out, in]}
+        # At k == 0 no kNN edges are selected, so the adjacency is pure overhead: two dict
+        # updates plus periodic trimming per edge, for state that is never read back.
+        self._mst_only = include_mst and k == 0
+        self._adj: List[Dict[int, float]] = (
+            [] if self._mst_only else [dict() for _ in range(n_nodes)]  # node -> {nbr: symmetric score}
+        )
         self._diagonal: Dict[int, float] = dict()
 
     def add_edge(self, i: int, j: int, score: float) -> None:
@@ -441,24 +449,23 @@ class StreamingMstKnnAccumulator:
             if len(self._mst_buffer) >= self.mst_buffer_cap:
                 self._flush_mst()
 
-        self._update_adj(i, j, score, direction=0)
-        self._update_adj(j, i, score, direction=1)
+        if not self._mst_only:
+            # Both directions feed the same symmetric slot, so the stored score is always
+            # max(M[i, j], M[j, i]) over everything seen so far for that pair.
+            self._update_adj(i, j, score)
+            self._update_adj(j, i, score)
 
-    def _update_adj(self, node: int, neighbor: int, score: float, direction: int) -> None:
+    def _update_adj(self, node: int, neighbor: int, score: float) -> None:
         row = self._adj[node]
-        entry = row.get(neighbor)
-        if entry is None:
-            entry = [0.0, 0.0]
-            row[neighbor] = entry
-        if score > entry[direction]:
-            entry[direction] = score
+        if score > row.get(neighbor, 0.0):
+            row[neighbor] = score
         if len(row) > 2 * self.knn_soft_cap:
             self._trim_adj(node)
 
     def _trim_adj(self, node: int) -> None:
         row = self._adj[node]
         # Keep the knn_soft_cap neighbors with the highest symmetric score.
-        ranked = sorted(row.items(), key=lambda item: (-max(item[1]), item[0]))
+        ranked = sorted(row.items(), key=lambda item: (-item[1], item[0]))
         self._adj[node] = dict(ranked[:self.knn_soft_cap])
 
     def _flush_mst(self) -> None:
@@ -509,42 +516,28 @@ class StreamingMstKnnAccumulator:
         for node, row in enumerate(self._adj):
             # Rank this node's neighbors exactly like symmetric_knn_edge_index_dict:
             # descending symmetric score, ties broken by target index.
-            ranked = sorted(((max(entry), neighbor) for neighbor, entry in row.items()),
+            ranked = sorted(((entry, neighbor) for neighbor, entry in row.items()),
                             key=lambda item: (-item[0], item[1]))
             selected = 0
             for score, neighbor in ranked:
                 if not _score_passes_lower_bound(score, self.lower_bound, include_equal=self.include_equal):
                     break
                 edge = (node, neighbor) if node < neighbor else (neighbor, node)
-                edge_dict[edge] = score
+                # Never lower a value the forest already established for the same pair.
+                if score > edge_dict.get(edge, 0.0):
+                    edge_dict[edge] = score
                 selected += 1
                 if selected >= self.k:
                     break
 
         return edge_dict
 
-    def _directional_values(self, i: int, j: int, fallback: float) -> Tuple[float, float]:
-        """Return ``(M[i, j], M[j, i])`` for a kept pair, falling back to ``fallback``."""
-        entry = self._adj[i].get(j)
-        if entry is not None:
-            forward, reverse = entry[0], entry[1]
-        else:
-            mirror = self._adj[j].get(i)
-            if mirror is not None:
-                forward, reverse = mirror[1], mirror[0]
-            else:
-                forward = reverse = 0.0
-        if forward == 0.0 and reverse == 0.0:
-            # Both directions trimmed (only possible for a pure MST edge): use its weight.
-            forward = reverse = fallback
-        return forward, reverse
-
     def to_csr(self, dtype=np.float64) -> scipy.sparse.csr_array:
         """Assemble the pruned graph as a sparse CSR matrix.
 
-        Off-diagonal kept edges are written in both directions (using the retained
-        directional values ``M[i, j]`` / ``M[j, i]`` where available); the diagonal is
-        populated from self-edges seen during streaming. Mirrors the sparse branch of
+        Each kept off-diagonal edge is written to both cells as the symmetric score it was
+        selected on, ``max(M[i, j], M[j, i])``; the diagonal is populated from self-edges
+        seen during streaming. Mirrors the sparse branch of
         :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`.
         """
         edge_dict = self.finalize()
@@ -553,11 +546,9 @@ class StreamingMstKnnAccumulator:
             if value != 0:
                 out[index, index] = value
         for (i, j), score in edge_dict.items():
-            forward, reverse = self._directional_values(i, j, score)
-            if forward != 0:
-                out[i, j] = forward
-            if reverse != 0:
-                out[j, i] = reverse
+            if score != 0:
+                out[i, j] = score
+                out[j, i] = score
         return scipy.sparse.csr_array(out)
 
 

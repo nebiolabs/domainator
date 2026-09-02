@@ -10,6 +10,7 @@ from domainator.ssn_hierarchy import (
     MERGE_IMPACT_MIN_CHILD,
     merge_impact_axis_labels,
 )
+from domainator.utils import NAMED_CATEGORICAL_PALETTES, OTHER_COLOR
 
 
 def _layout_worker_js() -> str:
@@ -488,6 +489,18 @@ def ssn_viewer_html(
         }
         for metric in MERGE_IMPACT_CHOICES
     })
+    # Shared with get_palette (build_ssn.py and friends) so "Domainator distinct"
+    # in the viewer means the same colors those tools write.
+    categorical_palettes_js = json.dumps([
+        {
+            "name": palette["name"],
+            "label": palette["label"],
+            "note": palette["note"],
+            "colors": list(palette["colors"]),
+        }
+        for palette in NAMED_CATEGORICAL_PALETTES
+    ])
+    other_color_js = json.dumps(OTHER_COLOR)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -619,6 +632,8 @@ def ssn_viewer_html(
         gap: 8px;
     }}
     .checkbox input {{ width: auto; }}
+    /* `display: flex` above would otherwise defeat the `hidden` attribute. */
+    .checkbox[hidden] {{ display: none; }}
     .toolbar {{
         display: flex;
         gap: 10px;
@@ -1304,7 +1319,17 @@ def ssn_viewer_html(
         </div>
         <div class="cp-body">
             <p class="note" id="color-picker-empty-note" hidden>Choose a column in “Color by” to customize its colors.</p>
+            <div class="control checkbox" id="color-categorical-control" hidden>
+                <input id="color-as-categorical" type="checkbox" />
+                <label for="color-as-categorical">Treat values as categories (discrete colors)</label>
+            </div>
+            <p class="note" id="color-categorical-note" hidden></p>
             <div id="color-picker-discrete" hidden>
+                <div class="control">
+                    <label for="color-palette">Color palette</label>
+                    <select id="color-palette"></select>
+                </div>
+                <p class="note" id="color-palette-note"></p>
                 <div class="cp-pager" id="color-picker-pager" hidden>
                     <button id="color-picker-prev" type="button">‹ Prev</button>
                     <span id="color-picker-page-status" class="cp-page-status"></span>
@@ -1352,6 +1377,9 @@ def ssn_viewer_html(
         metadataColumnIndexByName: new Map(),
         metadataColorInfoByName: new Map(),
         customPalettes: {{}},
+        // Names of numeric metadata columns the viewer should color as discrete
+        // categories instead of a gradient (e.g. integer cluster numbers).
+        categoricalColumns: new Set(),
         colorPickerPage: 0,
         metadataColumnWidths: new Map(),
         metadataSearchTextByNodeIndex: [],
@@ -1491,6 +1519,7 @@ def ssn_viewer_html(
         state.metadataRows = bundle.metadata.rows || [];
         state.metadataByNodeIndex = state.metadataRows;
         state.customPalettes = {{}};
+        state.categoricalColumns = new Set(bundle.defaults.categorical_columns || []);
         state.metadataSort = {{columnKey: null, direction: 'asc'}};
         state.metadataColumnWidths = new Map();
         state.metadataPage = 0;
@@ -1503,9 +1532,11 @@ def ssn_viewer_html(
         state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
         state.allNodeIndices = bundle.graph.nodes.map((_, i) => i);
         rebuildMetadataCaches();
-        rebuildNodeColorCache();
 
+        // Must precede rebuildNodeColorCache: the cache is keyed off the "Color by"
+        // selection, which populateMetadataControls sets from bundle.defaults.
         populateMetadataControls();
+        rebuildNodeColorCache();
         const slider = document.getElementById('threshold-slider');
         slider.max = String(state.sliderModel.maxPosition);
         slider.value = String(state.sliderModel.initialPosition);
@@ -1549,10 +1580,12 @@ def ssn_viewer_html(
             state.metadataColumnByName.set(column.name, column);
             state.metadataColumnIndexByName.set(column.name, columnIndex);
             if (column.type === 'int' || column.type === 'float') {{
-                state.metadataColorInfoByName.set(column.name, {{type: 'numeric', min: Infinity, max: -Infinity}});
+                // `baseType` is the column's intrinsic kind; `type` is how it is colored
+                // right now, which the categorical toggle can flip for numeric columns.
+                state.metadataColorInfoByName.set(column.name, {{type: 'numeric', baseType: 'numeric', min: Infinity, max: -Infinity}});
                 return;
             }}
-            state.metadataColorInfoByName.set(column.name, {{type: 'categorical'}});
+            state.metadataColorInfoByName.set(column.name, {{type: 'categorical', baseType: 'categorical'}});
         }});
 
         state.metadataByNodeIndex.forEach(row => {{
@@ -1576,14 +1609,16 @@ def ssn_viewer_html(
             }});
         }});
 
-        state.metadataColorInfoByName.forEach(info => {{
-            if (info.type !== 'numeric') {{
+        state.metadataColorInfoByName.forEach((info, columnName) => {{
+            if (info.baseType !== 'numeric') {{
                 return;
             }}
             if (!Number.isFinite(info.min) || !Number.isFinite(info.max)) {{
                 info.min = 0;
                 info.max = 0;
             }}
+            // min/max stay available so toggling back to the gradient is free.
+            info.type = state.categoricalColumns.has(columnName) ? 'categorical' : 'numeric';
         }});
 
         state.metadataSearchTextByNodeIndex = state.bundle.graph.nodes.map((nodeName, nodeIndex) => {{
@@ -1704,6 +1739,29 @@ def ssn_viewer_html(
             }}
         }});
         return nearestStop;
+    }}
+
+    // Static menu of named palettes plus the viewer's own hashed-hue default. The
+    // disabled first entry is what a hand-edited column shows.
+    function populateColorPaletteMenu() {{
+        const select = document.getElementById('color-palette');
+        select.innerHTML = '';
+        const customOption = document.createElement('option');
+        customOption.value = '';
+        customOption.textContent = 'Custom colors';
+        customOption.disabled = true;
+        select.appendChild(customOption);
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '__default__';
+        defaultOption.textContent = 'Viewer default (hashed hues)';
+        select.appendChild(defaultOption);
+        CATEGORICAL_PALETTES.forEach(scheme => {{
+            const option = document.createElement('option');
+            option.value = scheme.name;
+            option.textContent = scheme.label;
+            option.title = scheme.note;
+            select.appendChild(option);
+        }});
     }}
 
     function populateMetadataControls() {{
@@ -1988,6 +2046,64 @@ def ssn_viewer_html(
     // `palette` is an optional categorical custom palette ({{colors, nullColor}}). When
     // absent (or missing an entry) the function reproduces the default hash-based hue
     // exactly, so uncustomized views are byte-identical to before.
+    // Named qualitative palettes (from domainator.utils.NAMED_CATEGORICAL_PALETTES) and
+    // the neutral gray get_palette gives values with no color of their own.
+    const CATEGORICAL_PALETTES = {categorical_palettes_js};
+    const PALETTE_NO_VALUE_COLOR = {other_color_js};
+
+    function paletteSchemeByName(schemeName) {{
+        return CATEGORICAL_PALETTES.find(scheme => scheme.name === schemeName) || null;
+    }}
+
+    // Python's str comparison is by code point; localeCompare is not, and the assignment
+    // order has to match domainator.utils.sort_palette_values to reproduce its colors.
+    function comparePaletteText(left, right) {{
+        if (left < right) {{
+            return -1;
+        }}
+        return left > right ? 1 : 0;
+    }}
+
+    // Mirror of domainator.utils.sort_palette_values: numeric-looking keys sort
+    // numerically (ties broken by text), everything else sorts by text. Nulls never
+    // reach here -- distinctColumnValues counts them separately.
+    function sortPaletteKeys(keys) {{
+        const numeric = [];
+        const other = [];
+        keys.forEach(key => {{
+            const number = Number(key);
+            if (key.trim() !== '' && Number.isFinite(number)) {{
+                numeric.push({{number, key}});
+            }} else {{
+                other.push(key);
+            }}
+        }});
+        numeric.sort((a, b) => (a.number - b.number) || comparePaletteText(a.key, b.key));
+        other.sort(comparePaletteText);
+        return numeric.map(entry => entry.key).concat(other);
+    }}
+
+    // Fill a column's palette from a named scheme: colors are handed out in
+    // sort_palette_values order and cycle once the scheme runs out, exactly like
+    // get_palette. Values keep their assigned color afterwards, so individual swatches,
+    // the color-table TSV and the legend all stay editable/exportable.
+    function applyNamedPalette(columnName, schemeName) {{
+        const scheme = paletteSchemeByName(schemeName);
+        if (!scheme) {{
+            return null;
+        }}
+        const distinct = distinctColumnValues(columnName, Infinity);
+        const colors = {{}};
+        sortPaletteKeys(distinct.values.map(entry => entry.key)).forEach((key, index) => {{
+            colors[key] = scheme.colors[index % scheme.colors.length];
+        }});
+        const palette = ensureCategoricalPalette(columnName);
+        palette.colors = colors;
+        palette.nullColor = PALETTE_NO_VALUE_COLOR;
+        palette.scheme = scheme.name;
+        return {{scheme, assigned: distinct.values.length}};
+    }}
+
     function categoricalColor(value, palette) {{
         if (value === null || value === undefined || value === '') {{
             return (palette && palette.nullColor) || '#b3a89d';
@@ -2045,6 +2161,42 @@ def ssn_viewer_html(
         return state.metadataColorInfoByName.get(columnName) || null;
     }}
 
+    // True when `columnName` holds numbers, and so can be colored either as a gradient
+    // or as discrete categories.
+    function columnIsNumericType(columnName) {{
+        const info = colorInfo(columnName);
+        return !!info && info.baseType === 'numeric';
+    }}
+
+    function columnIsCategoricalNumeric(columnName) {{
+        return columnIsNumericType(columnName) && state.categoricalColumns.has(columnName);
+    }}
+
+    // Switch a numeric column between gradient and discrete coloring. No-op for columns
+    // that are not numeric (those are always categorical).
+    function setColumnCategorical(columnName, categorical) {{
+        const info = colorInfo(columnName);
+        if (!info || info.baseType !== 'numeric') {{
+            return;
+        }}
+        if (categorical) {{
+            state.categoricalColumns.add(columnName);
+        }} else {{
+            state.categoricalColumns.delete(columnName);
+        }}
+        info.type = categorical ? 'categorical' : 'numeric';
+    }}
+
+    // Custom palettes are stored per column AND per coloring mode, so flipping a numeric
+    // column to categorical and back does not discard the gradient the user set up.
+    function paletteKey(columnName) {{
+        return columnIsCategoricalNumeric(columnName) ? columnName + '\\u0000categorical' : columnName;
+    }}
+
+    function customPalette(columnName) {{
+        return state.customPalettes[paletteKey(columnName)] || null;
+    }}
+
     function nodeColor(nodeIndex) {{
         const columnName = currentColorField();
         const info = colorInfo(columnName);
@@ -2052,7 +2204,7 @@ def ssn_viewer_html(
         if (!info) {{
             return '#d88f3d';
         }}
-        const palette = state.customPalettes[columnName] || null;
+        const palette = customPalette(columnName);
         if (info.type === 'numeric') {{
             return numericColor(value, info.min, info.max, palette);
         }}
@@ -5201,7 +5353,7 @@ def ssn_viewer_html(
             }}
             loaded += 1;
         }});
-        state.customPalettes[columnName] = {{type: 'categorical', colors, nullColor}};
+        state.customPalettes[paletteKey(columnName)] = {{type: 'categorical', colors, nullColor}};
         rebuildNodeColorCache();
         renderClusterView();
         if (colorPickerIsOpen()) {{
@@ -5216,7 +5368,7 @@ def ssn_viewer_html(
         if (!columnName) {{
             return;
         }}
-        const palette = state.customPalettes[columnName] || null;
+        const palette = customPalette(columnName);
         const distinct = distinctColumnValues(columnName, Infinity);
         // Write the effective on-screen color for every distinct value (custom override
         // or the current default), so the file matches the view and round-trips on load.
@@ -5273,7 +5425,7 @@ def ssn_viewer_html(
 
         if (!info || info.type !== 'numeric') {{
             // Discrete legend.
-            const palette = (info && state.customPalettes[columnName]) || null;
+            const palette = (info && customPalette(columnName)) || null;
             // Enumerate every distinct value (no cap) so the saved legend is complete.
             const distinct = distinctColumnValues(columnName, Infinity);
             const labels = distinct.values.map(entry => ({{color: categoricalColor(entry.raw, palette), label: entry.label}}));
@@ -5301,7 +5453,7 @@ def ssn_viewer_html(
 
         // Continuous legend: sampled gradient bar with low/mid/high ticks. Custom
         // bounds (lb/ub) and mid value reshape the domain shown on the bar.
-        const palette = state.customPalettes[columnName] || null;
+        const palette = customPalette(columnName);
         const distinct = distinctColumnValues(columnName, 1);
         const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : info.min;
         const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : info.max;
@@ -5404,20 +5556,20 @@ def ssn_viewer_html(
     }}
 
     function ensureCategoricalPalette(columnName) {{
-        let palette = state.customPalettes[columnName];
+        let palette = state.customPalettes[paletteKey(columnName)];
         if (!palette || palette.type !== 'categorical') {{
             palette = {{type: 'categorical', colors: {{}}, nullColor: null}};
-            state.customPalettes[columnName] = palette;
+            state.customPalettes[paletteKey(columnName)] = palette;
         }}
         return palette;
     }}
 
     function ensureNumericPalette(columnName) {{
-        let palette = state.customPalettes[columnName];
+        let palette = state.customPalettes[paletteKey(columnName)];
         if (!palette || palette.type !== 'numeric') {{
             palette = {{type: 'numeric', low: null, mid: null, high: null, nullColor: null,
                 lowValue: null, midValue: null, highValue: null}};
-            state.customPalettes[columnName] = palette;
+            state.customPalettes[paletteKey(columnName)] = palette;
         }}
         return palette;
     }}
@@ -5425,10 +5577,11 @@ def ssn_viewer_html(
     const COLOR_PICKER_PAGE_SIZE = 100;
 
     function renderDiscretePicker(columnName) {{
-        const palette = state.customPalettes[columnName] || null;
+        const palette = customPalette(columnName);
         // Enumerate every distinct value and page through them, so columns with
         // thousands of categories stay editable (not just the first 200).
         const distinct = distinctColumnValues(columnName, Infinity);
+        updateColorPaletteControl(columnName, palette, distinct.values.length);
         const total = distinct.values.length;
         const pageCount = Math.max(1, Math.ceil(total / COLOR_PICKER_PAGE_SIZE));
         const page = Math.max(0, Math.min(state.colorPickerPage, pageCount - 1));
@@ -5458,7 +5611,11 @@ def ssn_viewer_html(
             const override = palette && palette.colors ? palette.colors[entry.key] : undefined;
             input.value = override || cssToHex(categoricalColor(entry.raw, palette));
             input.addEventListener('input', () => {{
-                ensureCategoricalPalette(columnName).colors[entry.key] = input.value;
+                const edited = ensureCategoricalPalette(columnName);
+                edited.colors[entry.key] = input.value;
+                // No longer exactly a named palette; the menu says "Custom colors" next
+                // time the picker renders.
+                edited.scheme = null;
                 rebuildNodeColorCache();
                 scheduleClusterRender();
             }});
@@ -5512,7 +5669,7 @@ def ssn_viewer_html(
     }}
 
     function renderContinuousPicker(columnName) {{
-        const palette = state.customPalettes[columnName] || null;
+        const palette = customPalette(columnName);
         const info = colorInfo(columnName);
         const min = info.min;
         const max = info.max;
@@ -5579,6 +5736,43 @@ def ssn_viewer_html(
         }};
     }}
 
+    // Show which palette a column is on (or "Custom colors" once swatches are edited by
+    // hand) and, for a named palette, how far its colors had to stretch.
+    function updateColorPaletteControl(columnName, palette, valueCount) {{
+        const select = document.getElementById('color-palette');
+        const note = document.getElementById('color-palette-note');
+        const scheme = palette && palette.scheme ? paletteSchemeByName(palette.scheme) : null;
+        const hasCustomColors = !!(palette && palette.colors && Object.keys(palette.colors).length > 0);
+        select.value = scheme ? scheme.name : (hasCustomColors ? '' : '__default__');
+        if (!scheme) {{
+            note.textContent = hasCustomColors
+                ? 'Colors were set by hand or loaded from a color table.'
+                : 'Colors are hashed from each value. Pick a palette to assign them in sorted value order instead.';
+            return;
+        }}
+        const cycles = valueCount > scheme.colors.length;
+        note.textContent = scheme.note + ' ' + scheme.colors.length.toLocaleString() + ' colors for ' +
+            valueCount.toLocaleString() + ' value' + (valueCount === 1 ? '' : 's') +
+            (cycles ? ', so colors repeat.' : '.');
+    }}
+
+    function changeColorPalette() {{
+        const columnName = currentColorField();
+        if (!columnName) {{
+            return;
+        }}
+        const schemeName = document.getElementById('color-palette').value;
+        if (schemeName === '__default__') {{
+            // Back to hashed hues: drop this column's stored colors entirely.
+            delete state.customPalettes[paletteKey(columnName)];
+        }} else if (!applyNamedPalette(columnName, schemeName)) {{
+            return;
+        }}
+        rebuildNodeColorCache();
+        renderClusterView();
+        renderDiscretePicker(columnName);
+    }}
+
     // Step the discrete swatch pager (no-op for numeric/empty columns).
     function changeColorPickerPage(delta) {{
         const columnName = currentColorField();
@@ -5605,6 +5799,7 @@ def ssn_viewer_html(
         const emptyNote = document.getElementById('color-picker-empty-note');
         document.getElementById('color-picker-title').textContent =
             columnName ? ('Customize colors: ' + columnName) : 'Customize colors';
+        updateCategoricalToggle(columnName);
         if (!columnName || !info) {{
             discretePanel.hidden = true;
             continuousPanel.hidden = true;
@@ -5626,10 +5821,45 @@ def ssn_viewer_html(
         overlay.hidden = false;
     }}
 
+    // The gradient/discrete switch is only meaningful for numeric columns, so it is
+    // shown (and its distinct-value hint filled in) only for those.
+    function updateCategoricalToggle(columnName) {{
+        const control = document.getElementById('color-categorical-control');
+        const toggle = document.getElementById('color-as-categorical');
+        const note = document.getElementById('color-categorical-note');
+        if (!columnName || !columnIsNumericType(columnName)) {{
+            control.hidden = true;
+            note.hidden = true;
+            toggle.checked = false;
+            return;
+        }}
+        control.hidden = false;
+        toggle.checked = columnIsCategoricalNumeric(columnName);
+        if (toggle.checked) {{
+            const total = distinctColumnValues(columnName, 0).total;
+            note.textContent = 'Coloring ' + total.toLocaleString() + ' distinct value' +
+                (total === 1 ? '' : 's') + ' as separate categories.';
+            note.hidden = false;
+        }} else {{
+            note.hidden = true;
+        }}
+    }}
+
+    function toggleColorCategorical() {{
+        const columnName = currentColorField();
+        if (!columnName || !columnIsNumericType(columnName)) {{
+            return;
+        }}
+        setColumnCategorical(columnName, document.getElementById('color-as-categorical').checked);
+        rebuildNodeColorCache();
+        renderClusterView();
+        openColorPicker();
+    }}
+
     function resetColorPicker() {{
         const columnName = currentColorField();
         if (columnName) {{
-            delete state.customPalettes[columnName];
+            delete state.customPalettes[paletteKey(columnName)];
             rebuildNodeColorCache();
             scheduleClusterRender();
             openColorPicker();
@@ -6417,6 +6647,8 @@ def ssn_viewer_html(
             closeColorPicker();
         }}
     }});
+    document.getElementById('color-palette').addEventListener('change', changeColorPalette);
+    document.getElementById('color-as-categorical').addEventListener('change', toggleColorCategorical);
     document.getElementById('color-picker-reset').addEventListener('click', resetColorPicker);
     document.getElementById('color-picker-prev').addEventListener('click', () => changeColorPickerPage(-1));
     document.getElementById('color-picker-next').addEventListener('click', () => changeColorPickerPage(1));
@@ -6494,6 +6726,7 @@ def ssn_viewer_html(
 
     setupLayoutWorker();
     setupMetadataTableDelegation();
+    populateColorPaletteMenu();
     warnIfUnsupported();
     updateComponentSortButton();
     drawSplitChart();

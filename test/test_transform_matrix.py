@@ -490,3 +490,127 @@ def test_transform_matrix_knn_and_mst_knn_are_mutually_exclusive():
         with pytest.raises(SystemExit):
             transform_matrix.main(["-i", input_file, "--dense", output_dir + "/out.hdf5",
                                    "--knn", "2", "--mst_knn", "2"])
+
+
+def _undirected_edges(array):
+    return {(min(i, j), max(i, j)) for i, j in zip(*np.nonzero(array)) if i != j}
+
+
+def test_streaming_mst_only_writes_max_direction_both_ways():
+    """At k == 0 the accumulator keeps no kNN adjacency, so each kept MST edge is written
+    with its max-direction weight in both cells. SSN workflows symmetrize with an
+    element-wise maximum, so this agrees with the batch path where it matters, while
+    dropping the per-direction detail the adjacency used to carry."""
+    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    # deliberately asymmetric off-diagonal: M[i, j] != M[j, i] for every pair
+    data = np.array([
+        [5.0, 9.0, 1.0, 0.0, 0.0],
+        [8.0, 5.0, 7.0, 3.0, 0.0],
+        [2.0, 6.0, 5.0, 0.0, 4.0],
+        [0.0, 3.5, 0.0, 5.0, 10.0],
+        [0.0, 0.0, 4.5, 9.5, 5.0],
+    ])
+    labels = ["a", "b", "c", "d", "e"]
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+
+    acc = StreamingMstKnnAccumulator(len(labels), 0, lower_bound=0)
+    _feed_matrix_entries(acc, data)
+    streamed = acc.to_csr().toarray()
+    batch = apply_mst_knn_sparsification(matrix, 0, lower_bound=0).toarray()
+
+    # same edges selected and same diagonal as the batch path
+    assert _undirected_edges(streamed) == _undirected_edges(batch)
+    np.testing.assert_array_equal(streamed.diagonal(), batch.diagonal())
+
+    # both paths are symmetric and now agree cell-for-cell
+    np.testing.assert_array_equal(streamed, streamed.T)
+    np.testing.assert_array_equal(batch, batch.T)
+    np.testing.assert_array_equal(streamed, batch)
+
+    # every kept edge carries the true max over the two directions
+    for i, j in _undirected_edges(streamed):
+        assert streamed[i, j] == max(data[i, j], data[j, i])
+
+    # the per-node adjacency is not even allocated at k == 0
+    assert acc._adj == []
+
+
+@pytest.mark.parametrize("order", ["forward", "reversed", "chunked"])
+def test_streaming_mst_only_is_order_independent(order):
+    """The k == 0 fast path must not depend on the order edges arrive in."""
+    from domainator.data_matrix import StreamingMstKnnAccumulator
+
+    data = np.array([
+        [5.0, 9.0, 1.0, 0.0, 0.0],
+        [8.0, 5.0, 7.0, 3.0, 0.0],
+        [2.0, 6.0, 5.0, 0.0, 4.0],
+        [0.0, 3.5, 0.0, 5.0, 10.0],
+        [0.0, 0.0, 4.5, 9.5, 5.0],
+    ])
+    reference = _feed_matrix_entries(StreamingMstKnnAccumulator(5, 0, lower_bound=0), data).to_csr().toarray()
+    shuffled = _feed_matrix_entries(
+        StreamingMstKnnAccumulator(5, 0, lower_bound=0, mst_buffer_cap=2), data, order=order
+    ).to_csr().toarray()
+    np.testing.assert_array_equal(reference, shuffled)
+
+
+@pytest.mark.parametrize("k", [1, 2, 3])
+def test_streaming_knn_is_max_over_diagonal(k):
+    """k >= 1 keeps the adjacency, and must still emit a strict max-over-diagonal matrix
+    whose values agree cell-for-cell with the non-streaming reference."""
+    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    data = np.array([
+        [5.0, 9.0, 1.0, 0.0, 0.0],
+        [8.0, 5.0, 7.0, 3.0, 0.0],
+        [2.0, 6.0, 5.0, 0.0, 4.0],
+        [0.0, 3.5, 0.0, 5.0, 10.0],
+        [0.0, 0.0, 4.5, 9.5, 5.0],
+    ])
+    labels = ["a", "b", "c", "d", "e"]
+    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+
+    acc = StreamingMstKnnAccumulator(len(labels), k, lower_bound=0)
+    _feed_matrix_entries(acc, data)
+    streamed = acc.to_csr().toarray()
+    batch = apply_mst_knn_sparsification(matrix, k, lower_bound=0).toarray()
+
+    # the adjacency is still maintained for k >= 1
+    assert acc._adj != []
+    # both paths are symmetric, and agree exactly
+    np.testing.assert_array_equal(streamed, streamed.T)
+    np.testing.assert_array_equal(batch, batch.T)
+    np.testing.assert_array_equal(streamed, batch)
+    # every kept edge carries the true max over the two directions
+    for i, j in _undirected_edges(streamed):
+        assert streamed[i, j] == max(data[i, j], data[j, i])
+
+
+@pytest.mark.parametrize("k", [0, 2])
+def test_batch_mst_knn_is_max_over_diagonal(k):
+    """Both branches of the non-streaming reference write max(M[i,j], M[j,i]) to both cells."""
+    from domainator.data_matrix import DenseDataMatrix, SparseDataMatrix
+    from domainator.transform_matrix import apply_mst_knn_sparsification
+
+    data = np.array([
+        [5.0, 9.0, 1.0, 0.0, 0.0],
+        [8.0, 5.0, 7.0, 3.0, 0.0],
+        [2.0, 6.0, 5.0, 0.0, 4.0],
+        [0.0, 3.5, 0.0, 5.0, 10.0],
+        [0.0, 0.0, 4.5, 9.5, 5.0],
+    ])
+    labels = ["a", "b", "c", "d", "e"]
+    sparse_out = apply_mst_knn_sparsification(
+        SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score"),
+        k, lower_bound=0).toarray()
+    dense_out = np.asarray(apply_mst_knn_sparsification(
+        DenseDataMatrix(data, labels, labels, None, None, "score"), k, lower_bound=0))
+
+    np.testing.assert_array_equal(sparse_out, dense_out)
+    for out in (sparse_out, dense_out):
+        np.testing.assert_array_equal(out, out.T)
+        for i, j in _undirected_edges(out):
+            assert out[i, j] == max(data[i, j], data[j, i])

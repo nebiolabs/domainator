@@ -560,3 +560,157 @@ def test_seq_dist_knn_rejects_invalid_use(shared_datadir):
             seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "norm_score", "--knn", "2"])
         with pytest.raises(ValueError):
             seq_dist.main(["-i", fasta, "-r", ref, "--sparse", out, "--mode", "score", "--knn", "2"])
+
+
+def test_parse_diamond_params_accepts_flags_and_values():
+    parsed = seq_dist.parse_diamond_params('"-c":4, "-b":0.4, "--target-indexed":null')
+    assert list(parsed.items()) == [("-c", 4), ("-b", 0.4), ("--target-indexed", None)]
+
+    argv = []
+    seq_dist.add_params_to_args_list(argv, parsed)
+    assert argv == ["-c", "4", "-b", "0.4", "--target-indexed"]
+
+    assert seq_dist.parse_diamond_params(None) == {}
+    assert seq_dist.parse_diamond_params("") == {}
+
+
+def test_parse_diamond_params_rejects_bad_input():
+    for reserved in ('"--outfmt":6', '"-p":4', '"--max-target-seqs":10', '"--ultra-sensitive":null'):
+        with pytest.raises(ValueError, match="may not set"):
+            seq_dist.parse_diamond_params(reserved)
+    with pytest.raises(ValueError, match="must be diamond option flags"):
+        seq_dist.parse_diamond_params('"c":4')
+    with pytest.raises(ValueError, match="Could not parse"):
+        seq_dist.parse_diamond_params("not json at all")
+
+
+def test_diamond_params_reach_the_command_line(shared_datadir):
+    """--params must be appended, and must replace (not duplicate) seq_dist's own defaults."""
+    import subprocess
+
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    captured = []
+    real_popen = subprocess.Popen
+
+    class _Stop(Exception):
+        pass
+
+    def fake_popen(cmd, *args, **kwargs):
+        if isinstance(cmd, list) and "blastp" in cmd:
+            captured.append(cmd)
+            raise _Stop()
+        return real_popen(cmd, *args, **kwargs)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.Popen = fake_popen
+        try:
+            for diamond_params in (None, {"--algo": 1}, {"--tmpdir": "/scratch/x"}, {"-b": 0.4, "-c": 4}):
+                try:
+                    list(seq_dist.diamond(fasta, fasta, None, 1, tmpdir, "us", diamond_params=diamond_params))
+                except _Stop:
+                    pass
+        finally:
+            subprocess.Popen = real_popen
+
+        default_cmd, algo_cmd, tmpdir_cmd, extra_cmd = captured
+
+        # seq_dist's defaults, and diamond's scratch kept inside the managed tmpdir
+        assert default_cmd[default_cmd.index("--algo") + 1] == "0"
+        assert default_cmd[default_cmd.index("--tmpdir") + 1] == tmpdir
+
+        # overrides replace the default rather than appending a second copy
+        assert algo_cmd.count("--algo") == 1
+        assert algo_cmd[algo_cmd.index("--algo") + 1] == "1"
+        assert tmpdir_cmd.count("--tmpdir") == 1
+        assert tmpdir_cmd[tmpdir_cmd.index("--tmpdir") + 1] == "/scratch/x"
+
+        # unrelated options are passed through
+        assert extra_cmd[extra_cmd.index("-b") + 1] == "0.4"
+        assert extra_cmd[extra_cmd.index("-c") + 1] == "4"
+
+
+def test_seq_dist_params_does_not_change_results(shared_datadir):
+    """Block/chunk tuning is a resource knob, so it must not alter the matrix."""
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        base = output_dir + "/base.hdf5"
+        tuned = output_dir + "/tuned.hdf5"
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", base, "--mode", "score", "--mst_knn", "2"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", tuned, "--mode", "score", "--mst_knn", "2",
+                       "--params", '"-c":4, "-b":0.4'])
+        base_data = DataMatrix.from_file(base).data.toarray()
+        tuned_data = DataMatrix.from_file(tuned).data.toarray()
+        assert np.allclose(base_data, tuned_data)
+
+
+def test_seq_dist_params_rejects_non_diamond_algorithm(shared_datadir):
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        with pytest.raises(ValueError, match="only applies to the diamond"):
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+                           "--algorithm", "hmmer", "--params", '"-c":4'])
+
+
+def test_diamond_failure_message_diagnoses_disk_exhaustion(tmp_path):
+    """The GT2 crash: diamond fills its scratch during the seed search."""
+    stderr = ("Searching alignments... No space left on device\n"
+              + "No space left on device\n" * 27
+              + "Error: Write error in HitBuffer\n")
+    message = seq_dist.build_diamond_failure_message(
+        "blastp", 1, stderr, "GT2.fasta", tmpdir=str(tmp_path),
+        command=["diamond", "blastp", "-q", "GT2.fasta"])
+    assert "ran out of disk space" in message
+    assert str(tmp_path) in message
+    # the mitigations a user can actually act on
+    assert "--algorithm diamond_s" in message
+    assert '"-b"' in message
+    assert "TMPDIR" in message
+    # it must not mislead the user into thinking streaming can help
+    assert "streaming cannot reduce it" in message
+    # 28 identical lines collapse to one
+    assert "No space left on device (x27)" in message
+    assert message.count("No space left on device") == 2
+
+
+def test_diamond_failure_message_diagnoses_memory_and_options():
+    killed = seq_dist.build_diamond_failure_message("blastp", -9, "some output\n", "in.fasta")
+    assert "SIGKILL" in killed and "out-of-memory" in killed
+    assert "--cpu" in killed
+
+    alloc = seq_dist.build_diamond_failure_message(
+        "blastp", 1, "Error: std::bad_alloc\n", "in.fasta")
+    assert "could not allocate memory" in alloc
+
+    bad_option = seq_dist.build_diamond_failure_message(
+        "blastp", 1, "Error: Invalid option: no-such-flag\n", "in.fasta",
+        diamond_params={"--no-such-flag": 1})
+    assert "rejected one of its command line options" in bad_option
+    assert "--no-such-flag" in bad_option
+
+    bad_input = seq_dist.build_diamond_failure_message(
+        "makedb", 1, "Error: Error detecting input file format. Input file seems to be empty.\n",
+        "empty.fasta")
+    assert "could not read an input or database file" in bad_input
+
+
+def test_diamond_failure_message_falls_back_to_stderr():
+    """An unrecognized failure must still surface diamond's own output."""
+    message = seq_dist.build_diamond_failure_message(
+        "blastp", 3, "Error: something entirely new\n", "in.fasta")
+    assert "something entirely new" in message
+    assert "exit code 3" in message
+    assert "Suggested mitigations" not in message  # no guess when the cause is unknown
+
+
+def test_seq_dist_reports_rejected_diamond_option(shared_datadir, capsys):
+    """End-to-end: a bad --params flag reaches diamond and is reported usefully."""
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        with pytest.raises(SystemExit):
+            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+                           "--params", '"--no-such-flag":1'])
+    captured = capsys.readouterr()
+    assert "rejected one of its command line options" in captured.err
+    assert "--no-such-flag" in captured.err
