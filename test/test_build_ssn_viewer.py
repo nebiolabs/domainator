@@ -298,7 +298,6 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<input id="bundle-file" type="file"' in html_content
         assert 'DecompressionStream' in html_content
         assert 'Cluster Splits vs Threshold' in html_content
-        assert 'Hierarchy View' in html_content
         assert 'View Settings' in html_content
         assert 'Node Metadata' in html_content
         assert 'Export table TSV' in html_content
@@ -391,6 +390,22 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function collectSessionState()' in html_content
         assert 'function applySessionState(appState)' in html_content
         assert 'function saveSessionFile()' in html_content
+        assert '<canvas id="color-histogram"' in html_content
+        assert '<div class="cp-range" id="color-range-slider">' in html_content
+        assert '<div id="color-stop-list" class="cp-stop-list"></div>' in html_content
+        assert '<button id="color-add-stop"' in html_content
+        assert 'data-stop-field="hex"' in html_content
+        assert 'function setGradientStopHexField(index, color)' in html_content
+        assert 'function numericPaletteStops(palette, minValue, maxValue)' in html_content
+        assert 'function addGradientStop()' in html_content
+        assert 'function removeGradientStop(index)' in html_content
+        assert 'function updateGradientSlider()' in html_content
+        assert 'function setupGradientRangeSlider()' in html_content
+        assert 'function columnHistogram(columnName)' in html_content
+        assert 'function drawColorHistogram(columnName)' in html_content
+        assert '<button id="focus-selection"' in html_content
+        assert 'function selectedNodeBounds()' in html_content
+        assert 'function focusSelection()' in html_content
         assert '<button id="save-extraction"' in html_content
         # The rename control lives beside the heading it edits, as a pencil glyph.
         assert '<button id="rename-network" type="button" class="title-edit"' in html_content

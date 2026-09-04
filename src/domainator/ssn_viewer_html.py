@@ -700,7 +700,10 @@ def _session_state_js() -> str:
             get: () => state.customPalettes,
             set: value => {
                 if (value === null || typeof value !== 'object') { throw new Error('not an object'); }
-                state.customPalettes = value;
+                // Sessions written before gradients became stop lists carry
+                // {low, mid, high}; rewrite them so nothing downstream has to
+                // know about that shape.
+                state.customPalettes = normalizeCustomPalettes(value);
             },
         },
         {
@@ -1691,6 +1694,522 @@ def _table_editing_js() -> str:
     }
 """
 
+
+def _gradient_stops_js() -> str:
+    """Editable gradient stops: two mandatory ends plus any number between.
+
+    Plain (non-f) string like `_layout_worker_js`; see `_session_state_js`.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Gradient stops
+    //
+    // A numeric palette is an ordered list of {value, color} stops: two
+    // mandatory ends plus any number of intermediates. Coloring interpolates
+    // between the bracketing pair and holds the end colors flat outside the
+    // ends, so two stops give a plain ramp and three reproduce the old
+    // low/mid/high midpoint exactly.
+    //
+    // `state.gradientStops` is the working list the dialog edits; committing it
+    // writes a sorted copy into the column's stored palette. The histogram, the
+    // gradient bar and the slider all read that one list, so they cannot drift
+    // apart, and every edit -- typing, dragging a knob, adding or removing a
+    // stop -- funnels through commitGradientStops().
+    // ---------------------------------------------------------------------
+
+    const MIN_GRADIENT_STOPS = 2;
+    // A cap, not a limitation of the model: past a dozen the rows stop fitting
+    // in the dialog and the knobs start overlapping on the track.
+    const MAX_GRADIENT_STOPS = 12;
+    const DEFAULT_NO_VALUE_COLOR = '#b3a89d';
+
+    function sortedGradientStops(stops) {
+        return stops.slice().sort((left, right) => left.value - right.value);
+    }
+
+    function copyGradientStops(stops) {
+        return stops.map(stop => ({value: stop.value, color: stop.color}));
+    }
+
+    // Read a stored palette as stops. Sessions written before stops existed
+    // carry {low, mid, high} with separate lowValue/midValue/highValue bounds;
+    // converting here means nothing downstream has to know about that shape.
+    function numericPaletteStops(palette, minValue, maxValue) {
+        if (!palette) {
+            return null;
+        }
+        if (Array.isArray(palette.stops) && palette.stops.length >= MIN_GRADIENT_STOPS) {
+            return sortedGradientStops(palette.stops
+                .filter(stop => stop && Number.isFinite(Number(stop.value)) && stop.color)
+                .map(stop => ({value: Number(stop.value), color: stop.color})));
+        }
+        if (!palette.low || !palette.high) {
+            return null;
+        }
+        const low = (palette.lowValue !== null && palette.lowValue !== undefined)
+            ? palette.lowValue : minValue;
+        const high = (palette.highValue !== null && palette.highValue !== undefined)
+            ? palette.highValue : maxValue;
+        const stops = [{value: low, color: palette.low}, {value: high, color: palette.high}];
+        if (palette.mid) {
+            const mid = (palette.midValue !== null && palette.midValue !== undefined)
+                ? palette.midValue : ((low + high) / 2);
+            stops.push({value: mid, color: palette.mid});
+        }
+        return sortedGradientStops(stops);
+    }
+
+    // Rewrite any legacy numeric palettes in place, so a session saved by an
+    // older viewer keeps its colors instead of silently reverting to defaults.
+    function normalizeCustomPalettes(palettes) {
+        Object.keys(palettes || {}).forEach(key => {
+            const palette = palettes[key];
+            if (!palette || palette.type !== 'numeric' || Array.isArray(palette.stops)) {
+                return;
+            }
+            const stops = numericPaletteStops(palette, 0, 1);
+            palettes[key] = {
+                type: 'numeric',
+                stops: stops || [],
+                nullColor: palette.nullColor || null,
+            };
+        });
+        return palettes;
+    }
+
+    function currentGradientStops() {
+        return Array.isArray(state.gradientStops) ? state.gradientStops : [];
+    }
+
+    // ---------------------------------------------------------------------
+    // The shared axis
+    //
+    // The histogram's binned extent, not the outermost stops: narrowing the
+    // ramp then moves the knobs inward instead of rescaling the chart under
+    // them.
+    // ---------------------------------------------------------------------
+    function gradientRangeDomain() {
+        const histogram = state.colorHistogram;
+        if (histogram && histogram.highEdge > histogram.lowEdge) {
+            return {low: histogram.lowEdge, high: histogram.highEdge};
+        }
+        const info = colorInfo(currentColorField());
+        if (info && Number.isFinite(info.min) && Number.isFinite(info.max) && info.max > info.min) {
+            return {low: info.min, high: info.max};
+        }
+        return null;
+    }
+
+    // Where a value sits on the axis, as a percentage. Deliberately unclamped:
+    // CSS gradient stops accept out-of-range percentages and extend the ramp
+    // past the box, which is exactly how a stop outside the data range should
+    // render. Knob placement clamps separately.
+    function gradientRangePercent(value, domain) {
+        return ((value - domain.low) / (domain.high - domain.low)) * 100;
+    }
+
+    function gradientValueAtPercent(percent, domain) {
+        return domain.low + ((percent / 100) * (domain.high - domain.low));
+    }
+
+    // Integer columns snap to whole numbers; float columns round to a fixed
+    // number of decimals chosen from the span, so dragging writes 3.42 rather
+    // than 3.4166666666666665 into the number input.
+    function roundGradientValue(value, domain) {
+        const histogram = state.colorHistogram;
+        if (histogram && histogram.integer) {
+            return Math.round(value);
+        }
+        const span = domain.high - domain.low;
+        const decimals = span > 0
+            ? Math.max(0, Math.min(6, 3 - Math.floor(Math.log10(span))))
+            : 2;
+        return Number(value.toFixed(decimals));
+    }
+
+    function gradientKnobStep(domain) {
+        const histogram = state.colorHistogram;
+        if (histogram && histogram.integer) {
+            return 1;
+        }
+        return (domain.high - domain.low) / 100;
+    }
+
+    // A stop is held between its neighbours so the ramp cannot fold over during
+    // a drag. Typing into the number inputs is left unconstrained -- values are
+    // re-sorted on commit instead, so a stop can be typed past its neighbour.
+    function clampGradientStopValue(index, value, domain) {
+        const stops = currentGradientStops();
+        let lowLimit = domain.low;
+        let highLimit = domain.high;
+        if (index > 0) {
+            lowLimit = Math.max(lowLimit, stops[index - 1].value);
+        }
+        if (index < stops.length - 1) {
+            highLimit = Math.min(highLimit, stops[index + 1].value);
+        }
+        if (highLimit < lowLimit) {
+            highLimit = lowLimit;
+        }
+        return Math.max(lowLimit, Math.min(highLimit, value));
+    }
+
+    // ---------------------------------------------------------------------
+    // Committing an edit
+    // ---------------------------------------------------------------------
+    function commitGradientStops() {
+        const columnName = currentColorField();
+        if (!columnName) {
+            return;
+        }
+        const stored = ensureNumericPalette(columnName);
+        // Stored sorted so numericColor -- which runs once per node -- can walk
+        // the stops without sorting them itself.
+        stored.stops = copyGradientStops(sortedGradientStops(currentGradientStops()));
+        stored.nullColor = document.getElementById('color-null').value;
+        updateGradientPreview();
+        drawColorHistogram(columnName);
+        rebuildNodeColorCache();
+        scheduleClusterRender();
+    }
+
+    function gradientStopRole(index, total) {
+        if (index === 0) {
+            return 'Min';
+        }
+        if (index === total - 1) {
+            return 'Max';
+        }
+        return 'Stop ' + (index + 1);
+    }
+
+    function renderGradientStopRows() {
+        const stops = currentGradientStops();
+        const list = document.getElementById('color-stop-list');
+        list.innerHTML = stops.map((stop, index) => {
+            const role = gradientStopRole(index, stops.length);
+            const removable = index > 0 && index < stops.length - 1;
+            return '<div class="cp-stop-row" data-stop-index="' + index + '">'
+                + '<span class="cp-stop-role">' + role + '</span>'
+                + '<input type="color" data-stop-field="color" value="' + stop.color
+                + '" aria-label="' + role + ' color" />'
+                + '<input type="text" class="cp-stop-hex" data-stop-field="hex"'
+                + ' value="' + normalizeColorHex(stop.color) + '" spellcheck="false"'
+                + ' autocapitalize="off" autocomplete="off"'
+                + ' aria-label="' + role + ' hex code" />'
+                + '<input type="number" step="any" data-stop-field="value" value="' + stop.value
+                + '" aria-label="' + role + ' value" />'
+                + (removable
+                    ? '<button type="button" class="cp-stop-remove" data-stop-remove'
+                        + ' aria-label="Remove ' + role + '" title="Remove this stop">×</button>'
+                    : '<span class="cp-stop-remove-gap"></span>')
+                + '</div>';
+        }).join('');
+        const addButton = document.getElementById('color-add-stop');
+        addButton.disabled = stops.length >= MAX_GRADIENT_STOPS;
+        addButton.title = addButton.disabled
+            ? ('At the limit of ' + MAX_GRADIENT_STOPS + ' stops.')
+            : 'Add a stop in the widest gap, in the color the ramp already has there';
+    }
+
+    function addGradientStop() {
+        const stops = currentGradientStops();
+        const domain = gradientRangeDomain();
+        if (stops.length < MIN_GRADIENT_STOPS || !domain) {
+            return;
+        }
+        if (stops.length >= MAX_GRADIENT_STOPS) {
+            setStatus('A gradient holds at most ' + MAX_GRADIENT_STOPS + ' stops.');
+            return;
+        }
+        // Split the widest gap: with no other information that is where an extra
+        // stop buys the most control.
+        let gapIndex = 1;
+        let widest = -Infinity;
+        for (let index = 1; index < stops.length; index++) {
+            const gap = stops[index].value - stops[index - 1].value;
+            if (gap > widest) {
+                widest = gap;
+                gapIndex = index;
+            }
+        }
+        const lower = stops[gapIndex - 1];
+        const upper = stops[gapIndex];
+        const midpoint = (lower.value + upper.value) / 2;
+        const rounded = roundGradientValue(midpoint, domain);
+        // Rounding an integer column would land the new stop on top of a
+        // neighbour when the gap is a single unit; keep the exact midpoint there.
+        const value = (rounded > lower.value && rounded < upper.value) ? rounded : midpoint;
+        stops.splice(gapIndex, 0, {
+            // Taking the color the ramp already has here means adding a stop
+            // changes nothing until it is moved: you shape a ramp, not reset it.
+            value,
+            color: lerpHexColor(lower.color, upper.color, 0.5),
+        });
+        renderGradientStopRows();
+        commitGradientStops();
+        setStatus('Added a gradient stop at ' + formatValue(value) + '.');
+    }
+
+    function removeGradientStop(index) {
+        const stops = currentGradientStops();
+        if (index <= 0 || index >= stops.length - 1) {
+            return;   // the two ends define the ramp and are not removable
+        }
+        const removed = stops.splice(index, 1)[0];
+        renderGradientStopRows();
+        commitGradientStops();
+        setStatus('Removed the gradient stop at ' + formatValue(removed.value) + '.');
+    }
+
+    // "Reset values to data range": refit the ramp onto the data while keeping
+    // the relative spacing of any stops the user has placed.
+    function resetGradientStopValues() {
+        const info = colorInfo(currentColorField());
+        const stops = currentGradientStops();
+        const domain = gradientRangeDomain();
+        if (!info || stops.length < MIN_GRADIENT_STOPS) {
+            return;
+        }
+        const first = stops[0].value;
+        const span = stops[stops.length - 1].value - first;
+        stops.forEach((stop, index) => {
+            // Even spacing is the only sensible reading when every stop
+            // currently sits on the same value.
+            const fraction = span > 0
+                ? (stop.value - first) / span
+                : index / (stops.length - 1);
+            const value = info.min + (fraction * (info.max - info.min));
+            stop.value = domain ? roundGradientValue(value, domain) : value;
+        });
+        renderGradientStopRows();
+        commitGradientStops();
+    }
+
+    function setGradientStopHexField(index, color) {
+        const field = document.querySelector(
+            '.cp-stop-row[data-stop-index="' + index + '"] [data-stop-field="hex"]');
+        if (field) {
+            field.value = normalizeColorHex(color) || color;
+        }
+    }
+
+    function setupGradientStopEditing() {
+        const list = document.getElementById('color-stop-list');
+        const stopIndexOf = target => {
+            const row = target.closest('[data-stop-index]');
+            return row ? Number(row.dataset.stopIndex) : -1;
+        };
+        list.addEventListener('input', event => {
+            const field = event.target.dataset ? event.target.dataset.stopField : null;
+            const index = stopIndexOf(event.target);
+            const stop = currentGradientStops()[index];
+            if (!field || !stop) {
+                return;
+            }
+            if (field === 'color') {
+                stop.color = event.target.value;
+                setGradientStopHexField(index, stop.color);
+            } else if (field === 'hex') {
+                const hex = normalizeColorHex(event.target.value);
+                if (hex === null) {
+                    return;   // mid-edit ("#", "#1a2"); the change handler has the say
+                }
+                // Stored lower case, which is the one form the color input and
+                // lerpHexColor both produce; the field itself shows the canonical
+                // upper-case spelling.
+                stop.color = hex.toLowerCase();
+                const swatch = document.querySelector(
+                    '.cp-stop-row[data-stop-index="' + index + '"] [data-stop-field="color"]');
+                if (swatch) { swatch.value = stop.color; }
+            } else {
+                const value = parseNumberOrNull(event.target.value);
+                if (value === null) {
+                    return;   // mid-edit ("", "-", "1e"); wait for something numeric
+                }
+                stop.value = value;
+            }
+            commitGradientStops();
+        });
+        // Leaving the hex field rewrites whatever was typed into the canonical
+        // spelling; text that is not a color at all reverts to the stop's colour
+        // rather than being silently dropped or left sitting there looking valid.
+        list.addEventListener('change', event => {
+            if (!event.target.dataset || event.target.dataset.stopField !== 'hex') {
+                return;
+            }
+            const index = stopIndexOf(event.target);
+            const stop = currentGradientStops()[index];
+            if (!stop) {
+                return;
+            }
+            const typed = event.target.value.trim();
+            // Clearing the field and tabbing away reads as cancelling the edit, so
+            // that reverts quietly; anything else that is not a color is worth saying.
+            if (typed !== '' && normalizeColorHex(typed) === null) {
+                setStatus('"' + typed + '" is not a hex color (expected #RGB or #RRGGBB).');
+            }
+            setGradientStopHexField(index, stop.color);
+        });
+        // Re-sorting mid-keystroke would yank the row out from under the cursor,
+        // so a stop typed past its neighbour is only reordered on commit.
+        list.addEventListener('change', event => {
+            if (!event.target.dataset || event.target.dataset.stopField !== 'value') {
+                return;
+            }
+            const stops = currentGradientStops();
+            const sorted = sortedGradientStops(stops);
+            if (sorted.some((stop, index) => stop !== stops[index])) {
+                state.gradientStops = sorted;
+                renderGradientStopRows();
+                commitGradientStops();
+            }
+        });
+        list.addEventListener('click', event => {
+            const button = event.target.closest('[data-stop-remove]');
+            if (button) {
+                removeGradientStop(stopIndexOf(button));
+            }
+        });
+        document.getElementById('color-add-stop').addEventListener('click', addGradientStop);
+    }
+
+    // ---------------------------------------------------------------------
+    // The slider: one knob per stop
+    // ---------------------------------------------------------------------
+    function updateGradientSlider() {
+        const slider = document.getElementById('color-range-slider');
+        const domain = gradientRangeDomain();
+        const stops = currentGradientStops();
+        if (!domain || stops.length < MIN_GRADIENT_STOPS) {
+            slider.hidden = true;
+            return;
+        }
+        slider.hidden = false;
+        let knobs = slider.querySelectorAll('.cp-range-knob');
+        if (knobs.length !== stops.length) {
+            // Rebuilt only when the count changes, so a drag is never
+            // interrupted by its own knob being replaced underneath it.
+            knobs.forEach(knob => knob.remove());
+            stops.forEach((stop, index) => {
+                const knob = document.createElement('div');
+                knob.className = 'cp-range-knob';
+                knob.dataset.stopIndex = String(index);
+                knob.setAttribute('role', 'slider');
+                knob.setAttribute('tabindex', '0');
+                slider.appendChild(knob);
+            });
+            knobs = slider.querySelectorAll('.cp-range-knob');
+        }
+        knobs.forEach((knob, index) => {
+            const stop = stops[index];
+            const role = gradientStopRole(index, stops.length);
+            const isEnd = index === 0 || index === stops.length - 1;
+            knob.classList.toggle('cp-range-knob-mid', !isEnd);
+            knob.style.left = Math.max(0, Math.min(100, gradientRangePercent(stop.value, domain))) + '%';
+            knob.style.background = stop.color;
+            knob.setAttribute('aria-label', role + ' value');
+            knob.setAttribute('aria-valuemin', String(domain.low));
+            knob.setAttribute('aria-valuemax', String(domain.high));
+            knob.setAttribute('aria-valuenow', String(stop.value));
+            knob.setAttribute('aria-valuetext', formatValue(stop.value));
+        });
+        // Shade the part of the axis the ramp actually spans.
+        const span = document.getElementById('color-range-span');
+        const lowPercent = Math.max(0, Math.min(100, gradientRangePercent(stops[0].value, domain)));
+        const highPercent = Math.max(0, Math.min(100,
+            gradientRangePercent(stops[stops.length - 1].value, domain)));
+        span.hidden = false;
+        span.style.left = Math.min(lowPercent, highPercent) + '%';
+        span.style.width = Math.abs(highPercent - lowPercent) + '%';
+    }
+
+    // Move a stop from the slider and push the result through the same commit
+    // path as typing, so there is one way for a gradient to change.
+    function setGradientStopFromSlider(index, rawValue, domain) {
+        const stop = currentGradientStops()[index];
+        if (!stop) {
+            return;
+        }
+        const value = roundGradientValue(clampGradientStopValue(index, rawValue, domain), domain);
+        if (value === stop.value) {
+            return;
+        }
+        stop.value = value;
+        const input = document.querySelector(
+            '.cp-stop-row[data-stop-index="' + index + '"] [data-stop-field="value"]');
+        if (input) {
+            input.value = value;
+        }
+        commitGradientStops();
+    }
+
+    function setupGradientRangeSlider() {
+        const slider = document.getElementById('color-range-slider');
+        slider.addEventListener('pointerdown', event => {
+            const knob = event.target.closest('.cp-range-knob');
+            const domain = gradientRangeDomain();
+            if (!knob || !domain) {
+                return;
+            }
+            const index = Number(knob.dataset.stopIndex);
+            event.preventDefault();
+            knob.focus();
+            // Pointer capture keeps the drag alive past the knob's 18px, and
+            // past the dialog edge, without a document-level move listener.
+            knob.setPointerCapture(event.pointerId);
+            const drag = moveEvent => {
+                const rect = slider.getBoundingClientRect();
+                if (rect.width <= 0) {
+                    return;
+                }
+                const percent = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+                setGradientStopFromSlider(index, gradientValueAtPercent(percent, domain), domain);
+            };
+            const stop = () => {
+                knob.removeEventListener('pointermove', drag);
+                knob.removeEventListener('pointerup', stop);
+                knob.removeEventListener('pointercancel', stop);
+            };
+            knob.addEventListener('pointermove', drag);
+            knob.addEventListener('pointerup', stop);
+            knob.addEventListener('pointercancel', stop);
+            drag(event);
+        });
+        slider.addEventListener('keydown', event => {
+            const knob = event.target.closest('.cp-range-knob');
+            const domain = gradientRangeDomain();
+            if (!knob || !domain) {
+                return;
+            }
+            const index = Number(knob.dataset.stopIndex);
+            const stop = currentGradientStops()[index];
+            if (!stop) {
+                return;
+            }
+            const step = gradientKnobStep(domain);
+            let next = null;
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') { next = stop.value - step; }
+            else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') { next = stop.value + step; }
+            else if (event.key === 'PageDown') { next = stop.value - (step * 10); }
+            else if (event.key === 'PageUp') { next = stop.value + (step * 10); }
+            else if (event.key === 'Home') { next = domain.low; }
+            else if (event.key === 'End') { next = domain.high; }
+            else if (event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault();
+                removeGradientStop(index);
+                return;
+            }
+            if (next === null) {
+                return;
+            }
+            event.preventDefault();
+            setGradientStopFromSlider(index, next, domain);
+        });
+    }
+"""
+
+
 def _extraction_js() -> str:
     """"Save extraction": a new bundle over just the selected nodes.
 
@@ -2201,6 +2720,7 @@ def ssn_viewer_html(
     selection_presets_js = _selection_presets_js()
     table_editing_js = _table_editing_js()
     extraction_js = _extraction_js()
+    gradient_stops_js = _gradient_stops_js()
     # Generated from the same helper matrix_report uses, keyed by metric so a bundle built
     # with --merge_impact_metric product gets titles that match what its numbers mean.
     split_axis_labels_js = json.dumps({
@@ -2522,30 +3042,176 @@ def ssn_viewer_html(
         min-height: 34px;
         cursor: pointer;
     }}
-    .cp-stop {{
+    /* The histogram, the gradient bar and the range slider are one stacked axis.
+       Side padding of half a knob leaves room for the end knobs to overhang, and
+       every child is `width: 100%` with a 1px border under `box-sizing: border-box`,
+       so all three content boxes line up to the pixel. */
+    .cp-ramp {{
+        padding: 0 9px;
+    }}
+    .cp-histogram {{
+        display: block;
+        width: 100%;
+        height: 90px;
+        border: 1px solid var(--line);
+        border-radius: 8px 8px 0 0;
+        border-bottom: none;
+        background: #fff;
+    }}
+    .cp-histogram-note {{
+        margin: 5px 0 12px;
+        font-size: 0.85rem;
+    }}
+    .cp-range {{
+        position: relative;
+        height: 22px;
+        /* Transparent border, purely to match the 1px borders above it so the
+           percentage positions inside resolve against the same content box. */
+        border: 1px solid transparent;
+        width: 100%;
+        margin-top: 2px;
+    }}
+    .cp-range[hidden] {{
+        display: none;
+    }}
+    .cp-range-track {{
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 9px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--line);
+    }}
+    .cp-range-span {{
+        position: absolute;
+        top: 9px;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(200, 85, 61, 0.55);
+    }}
+    .cp-range-knob {{
+        position: absolute;
+        top: 2px;
+        width: 18px;
+        height: 18px;
+        margin-left: -9px;
+        border: 1px solid var(--muted);
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+        cursor: ew-resize;
+        touch-action: none;
+    }}
+    .cp-range-knob:hover {{
+        border-color: var(--accent);
+    }}
+    .cp-range-knob:focus-visible {{
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }}
+    /* Intermediate stops read as secondary to the two that bound the ramp. */
+    .cp-range-knob-mid {{
+        width: 14px;
+        height: 14px;
+        margin-left: -7px;
+        top: 4px;
+    }}
+    .cp-stop-list {{
         display: flex;
-        gap: 12px;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 10px;
     }}
-    .cp-stop .control {{
-        flex: 1 1 0;
+    .cp-stop-row {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }}
-    .cp-reset-values {{
+    .cp-stop-role {{
+        flex: 0 0 74px;
+        color: var(--muted);
+        font-size: 0.9rem;
+    }}
+    .cp-stop-row input[type="color"] {{
+        flex: 0 0 46px;
+        width: 46px;
+    }}
+    .cp-stop-hex {{
+        flex: 0 0 104px;
+        width: 104px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.88rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 10px;
+        padding: 7px 8px;
+        color: var(--ink);
+    }}
+    .cp-stop-row input[type="number"] {{
+        flex: 1 1 auto;
+        min-width: 0;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 10px;
+        padding: 7px 9px;
+        font: inherit;
+        color: var(--ink);
+    }}
+    .cp-stop-remove, .cp-stop-remove-gap {{
+        flex: 0 0 30px;
+        width: 30px;
+        height: 30px;
+    }}
+    .cp-stop-remove {{
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-strong);
+        color: var(--muted);
+        font-size: 1.1rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+    }}
+    .cp-stop-remove:hover {{
+        border-color: var(--accent);
+        color: var(--accent);
+    }}
+    .cp-stop-actions {{
+        display: flex;
+        gap: 10px;
+    }}
+    .cp-stop-actions button {{
         width: auto;
         min-width: 0;
-        margin-top: 4px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel-strong);
+        padding: 8px 12px;
+        font: inherit;
+        color: var(--ink);
+        cursor: pointer;
+    }}
+    .cp-stop-actions button:hover:not(:disabled) {{
+        background: #fff;
+        border-color: var(--accent);
+    }}
+    .cp-stop-actions button:disabled {{
+        opacity: 0.45;
+        cursor: not-allowed;
     }}
     .cp-gradient {{
         height: 22px;
-        border-radius: 8px;
+        border-radius: 0 0 8px 8px;
         border: 1px solid var(--line);
-        margin-bottom: 6px;
     }}
     .cp-extent {{
         display: flex;
         justify-content: space-between;
         color: var(--muted);
         font-size: 0.85rem;
-        margin-bottom: 12px;
     }}
     .cp-foot {{
         margin-top: 14px;
@@ -3025,7 +3691,7 @@ def ssn_viewer_html(
             </div>
         </section>
         <section class="panel wide">
-            <h2>Hierarchy View</h2>
+            <!-- <h2>Hierarchy View</h2> -->
             <div class="panel-body">
                 <div class="network-summary">
                     <div id="preset-slots" class="preset-slots" role="group" aria-label="Selection presets">
@@ -3102,6 +3768,7 @@ def ssn_viewer_html(
                 <div class="toolbar">
                     <button id="sort-components-by-size" type="button" aria-pressed="true" disabled>Sort clusters by size: On</button>
                     <button id="focus-largest-cluster" type="button" disabled>Focus largest cluster</button>
+                    <button id="focus-selection" type="button" disabled title="Center the view on the selected nodes, zooming out only if they do not already fit">Focus selection</button>
                     <button id="reset-view" disabled>Reset view</button>
                     <button id="clear-selection" disabled>Clear selection</button>
                     <button id="export-png" type="button" disabled>Export view PNG</button>
@@ -3270,22 +3937,21 @@ def ssn_viewer_html(
                 <div id="color-picker-swatch-list" class="cp-swatches"></div>
             </div>
             <div id="color-picker-continuous" hidden>
-                <div class="cp-gradient" id="color-gradient-preview"></div>
-                <div class="cp-extent"><span id="color-min-label"></span><span id="color-max-label"></span></div>
-                <div class="cp-stop">
-                    <div class="control"><label for="color-low">Low color</label><input id="color-low" type="color" /></div>
-                    <div class="control"><label for="color-low-value">Low value</label><input id="color-low-value" type="number" step="any" /></div>
+                <div id="color-histogram-wrap" class="cp-ramp">
+                    <canvas id="color-histogram" class="cp-histogram" width="1040" height="180"></canvas>
+                    <div class="cp-gradient" id="color-gradient-preview"></div>
+                    <div class="cp-range" id="color-range-slider">
+                        <div class="cp-range-track"></div>
+                        <div class="cp-range-span" id="color-range-span"></div>
+                    </div>
+                    <div class="cp-extent"><span id="color-min-label"></span><span id="color-max-label"></span></div>
+                    <p class="note cp-histogram-note" id="color-histogram-note"></p>
                 </div>
-                <div class="control checkbox"><input id="color-mid-toggle" type="checkbox" /><label for="color-mid-toggle">Use midpoint color</label></div>
-                <div class="cp-stop">
-                    <div class="control"><label for="color-mid">Mid color</label><input id="color-mid" type="color" disabled /></div>
-                    <div class="control"><label for="color-mid-value">Mid value</label><input id="color-mid-value" type="number" step="any" /></div>
+                <div id="color-stop-list" class="cp-stop-list"></div>
+                <div class="cp-stop-actions">
+                    <button id="color-add-stop" type="button">Add stop</button>
+                    <button id="color-reset-values" type="button">Reset values to data range</button>
                 </div>
-                <div class="cp-stop">
-                    <div class="control"><label for="color-high">High color</label><input id="color-high" type="color" /></div>
-                    <div class="control"><label for="color-high-value">High value</label><input id="color-high-value" type="number" step="any" /></div>
-                </div>
-                <button id="color-reset-values" type="button" class="cp-reset-values">Reset values to data range</button>
             </div>
             <div class="control" id="color-null-control" hidden><label for="color-null">No-value color</label><input id="color-null" type="color" /></div>
         </div>
@@ -3314,6 +3980,11 @@ def ssn_viewer_html(
         // categories instead of a gradient (e.g. integer cluster numbers).
         categoricalColumns: new Set(),
         colorPickerPage: 0,
+        // Binned counts for the gradient dialog's histogram. Cached because binning walks
+        // every node, while recoloring the bars happens on every keystroke in the dialog.
+        colorHistogram: null,
+        // Working list of {{value, color}} gradient stops while the picker is open.
+        gradientStops: [],
         metadataColumnWidths: new Map(),
         metadataSearchTextByNodeIndex: [],
         metadataPage: 0,
@@ -4012,8 +4683,18 @@ def ssn_viewer_html(
 
     // Normalize a color string to '#RRGGBB' (uppercase), mirroring Python's
     // normalize_color_hex. Returns null for anything that isn't a 6-digit hex.
+    // Mirrors color_genbank.normalize_color_hex: an optional '#' and six hex digits,
+    // canonicalized to '#RRGGBB'. Loosened by one case for hand-typed input -- CSS-style
+    // three-digit shorthand, where each digit doubles. Returns null for anything else.
     function normalizeColorHex(text) {{
         const trimmed = String(text).trim().toUpperCase();
+        const short = /^#?([0-9A-F]{{3}})$/.exec(trimmed);
+        if (short) {{
+            const digits = short[1];
+            return '#' + digits.charAt(0) + digits.charAt(0)
+                + digits.charAt(1) + digits.charAt(1)
+                + digits.charAt(2) + digits.charAt(2);
+        }}
         const match = /^#?([0-9A-F]{{6}})$/.exec(trimmed);
         return match ? '#' + match[1] : null;
     }}
@@ -4110,37 +4791,41 @@ def ssn_viewer_html(
         return 'hsl(' + hue + ' 58% 54%)';
     }}
 
-    // `palette` is an optional numeric custom palette ({{low, mid, high, nullColor}}).
+    // `palette` is an optional numeric custom palette ({{stops, nullColor}}).
     // With low+high set, interpolate in RGB (low->mid->high split at 0.5 when mid is
     // present); otherwise fall back to the default cyan->orange hsl gradient.
     function numericColor(value, minValue, maxValue, palette) {{
         if (value === null || value === undefined || Number.isNaN(value)) {{
             return (palette && palette.nullColor) || '#b3a89d';
         }}
-        // Custom lower/upper bounds reshape the domain mapping (defaulting to the data
-        // min/max); they apply to both custom-color and default gradients.
-        const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : minValue;
-        const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : maxValue;
-        const fraction = ub <= lb ? 0.5 : (value - lb) / (ub - lb);
-        const clamped = Math.max(0, Math.min(1, fraction));
-        if (palette && palette.low && palette.high) {{
-            const hasMidValue = palette.midValue !== null && palette.midValue !== undefined;
-            // The midpoint bends the gradient whenever a mid VALUE is set, even with no
-            // explicit mid color: an off-centre midpoint just places the low/high average
-            // there, compressing one side and stretching the other.
-            if (palette.mid || hasMidValue) {{
-                const midColor = palette.mid || lerpHexColor(palette.low, palette.high, 0.5);
-                let midFraction = 0.5;
-                if (hasMidValue && ub > lb) {{
-                    midFraction = (palette.midValue - lb) / (ub - lb);
-                }}
-                midFraction = Math.max(1e-6, Math.min(1 - 1e-6, midFraction));
-                return clamped <= midFraction
-                    ? lerpHexColor(palette.low, midColor, clamped / midFraction)
-                    : lerpHexColor(midColor, palette.high, (clamped - midFraction) / (1 - midFraction));
+        // A custom palette is a list of {{value, color}} stops, kept sorted by whoever
+        // stored it. Interpolate between the pair that brackets the value and hold the
+        // end colors flat outside the ends -- so two stops are a plain ramp, three
+        // reproduce a low/mid/high midpoint, and more shape the ramp arbitrarily.
+        const stops = palette && palette.stops;
+        if (stops && stops.length >= 2) {{
+            if (value <= stops[0].value) {{
+                return stops[0].color;
             }}
-            return lerpHexColor(palette.low, palette.high, clamped);
+            const last = stops[stops.length - 1];
+            if (value >= last.value) {{
+                return last.color;
+            }}
+            for (let index = 1; index < stops.length; index++) {{
+                const upper = stops[index];
+                if (value <= upper.value) {{
+                    const lower = stops[index - 1];
+                    const span = upper.value - lower.value;
+                    return span > 0
+                        ? lerpHexColor(lower.color, upper.color, (value - lower.value) / span)
+                        : upper.color;
+                }}
+            }}
+            return last.color;
         }}
+        // No custom palette: the built-in hue ramp across the column's own range.
+        const fraction = maxValue <= minValue ? 0.5 : (value - minValue) / (maxValue - minValue);
+        const clamped = Math.max(0, Math.min(1, fraction));
         const hue = 200 - (160 * clamped);
         const light = 72 - (24 * clamped);
         return 'hsl(' + hue + ' 72% ' + light + '%)';
@@ -6158,6 +6843,10 @@ def ssn_viewer_html(
         return {{minX, minY, maxX, maxY}};
     }}
 
+    // Margin left between the fitted content and the canvas edge, shared by
+    // "Reset view" and "Focus selection" so both leave the same breathing room.
+    const VIEW_FIT_PADDING = 42;
+
     function fitClusterViewToLayout() {{
         const bounds = clusterLayoutBounds();
         if (!bounds) {{
@@ -6166,7 +6855,7 @@ def ssn_viewer_html(
             state.viewTransform.offsetY = 0;
             return;
         }}
-        const padding = 42;
+        const padding = VIEW_FIT_PADDING;
         const width = Math.max(1, bounds.maxX - bounds.minX);
         const height = Math.max(1, bounds.maxY - bounds.minY);
         const scale = Math.max(
@@ -6179,6 +6868,73 @@ def ssn_viewer_html(
         state.viewTransform.scale = scale;
         state.viewTransform.offsetX = padding + ((clusterCanvas.width - (padding * 2) - (width * scale)) / 2) - (bounds.minX * scale);
         state.viewTransform.offsetY = padding + ((clusterCanvas.height - (padding * 2) - (height * scale)) / 2) - (bounds.minY * scale);
+    }}
+
+    // World-space bounding box of the selected nodes, grown by each node's own radius so
+    // that "fits on screen" means the drawn dot fits, not merely its center. Selected nodes
+    // sitting in clusters the current view hides (minimum cluster size, threshold) have no
+    // position at all and are skipped; returns null when nothing selected is on screen.
+    function selectedNodeBounds() {{
+        if (!state.bundle || state.selectedNodeIndices.size === 0) {{
+            return null;
+        }}
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let count = 0;
+        state.visibleLayout.forEach(item => {{
+            const members = componentMembers(item.componentId);
+            // Skip the member layout entirely for clusters holding nothing selected.
+            if (!componentSelectionState(members).anySelected) {{
+                return;
+            }}
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            for (const dot of componentMemberLayout(component, item)) {{
+                if (!state.selectedNodeIndices.has(dot.memberIndex)) {{
+                    continue;
+                }}
+                minX = Math.min(minX, dot.x - dot.radius);
+                minY = Math.min(minY, dot.y - dot.radius);
+                maxX = Math.max(maxX, dot.x + dot.radius);
+                maxY = Math.max(maxY, dot.y + dot.radius);
+                count += 1;
+            }}
+        }});
+        return count === 0 ? null : {{minX, minY, maxX, maxY, count}};
+    }}
+
+    // Center the view on the selection, zooming out only when it does not already fit.
+    // Holding the zoom whenever it fits is deliberate: stepping between selection presets
+    // is the common case, and a zoom that changes on every step is disorienting.
+    // Centering uses the bounding box center rather than the centroid of the nodes --
+    // with a lopsided selection the centroid can leave outliers off screen even at a
+    // scale that fits, which would contradict the "all fit" guarantee.
+    function focusSelection() {{
+        const bounds = selectedNodeBounds();
+        if (!bounds) {{
+            return false;
+        }}
+        const padding = VIEW_FIT_PADDING;
+        const width = Math.max(1, bounds.maxX - bounds.minX);
+        const height = Math.max(1, bounds.maxY - bounds.minY);
+        const usableWidth = Math.max(1, clusterCanvas.width - (padding * 2));
+        const usableHeight = Math.max(1, clusterCanvas.height - (padding * 2));
+        const fitScale = Math.min(usableWidth / width, usableHeight / height);
+        if (fitScale < state.viewTransform.scale) {{
+            // Clamped like every other zoom; a selection wider than minScale allows stays
+            // partly off screen, which beats silently exceeding the zoom range.
+            state.viewTransform.scale = Math.max(
+                state.viewTransform.minScale,
+                Math.min(state.viewTransform.maxScale, fitScale),
+            );
+        }}
+        const scale = state.viewTransform.scale;
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+        state.viewTransform.offsetX = (clusterCanvas.width / 2) - (centerX * scale);
+        state.viewTransform.offsetY = (clusterCanvas.height / 2) - (centerY * scale);
+        return true;
     }}
 
     function drawBadge(ctx, text, x, y) {{
@@ -6751,6 +7507,7 @@ def ssn_viewer_html(
 {selection_presets_js}
 {table_editing_js}
 {extraction_js}
+{gradient_stops_js}
 
     function htmlEscape(value) {{
         return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -6921,6 +7678,7 @@ def ssn_viewer_html(
         document.getElementById('export-selected').disabled = !state.bundle;
         document.getElementById('metadata-reset-sort').disabled = !state.bundle || !state.metadataSort.columnKey;
         document.getElementById('clear-selection').disabled = selected.length === 0;
+        document.getElementById('focus-selection').disabled = selected.length === 0;
         document.getElementById('save-extraction').disabled = !state.bundle || selected.length === 0;
         applyMetadataTableRowHighlights();
     }}
@@ -7524,25 +8282,27 @@ def ssn_viewer_html(
         // bounds (lb/ub) and mid value reshape the domain shown on the bar.
         const palette = customPalette(columnName);
         const distinct = distinctColumnValues(columnName, 1);
-        const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : info.min;
-        const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : info.max;
-        const midV = (palette && palette.midValue !== null && palette.midValue !== undefined)
-            ? palette.midValue
-            : ((lb + ub) / 2);
+        const paletteStops = numericPaletteStops(palette, info.min, info.max) || [
+            {{value: info.min, color: cssToHex(numericColor(info.min, info.min, info.max))}},
+            {{value: info.max, color: cssToHex(numericColor(info.max, info.min, info.max))}},
+        ];
+        const lb = paletteStops[0].value;
+        const ub = paletteStops[paletteStops.length - 1].value;
         const barX = padding;
         const barY = titleSpace;
         const barWidth = 320;
         const barHeight = 30;
         const tickFontSize = 16;
-        const sampleCount = 16;
-        const stops = [];
-        for (let i = 0; i <= sampleCount; i++) {{
-            const fraction = i / sampleCount;
-            const value = lb + (fraction * (ub - lb));
-            const fill = svgColorParts(numericColor(value, info.min, info.max, palette));
-            stops.push('<stop offset="' + (fraction * 100) + '%" stop-color="' + fill.color +
-                '" stop-opacity="' + fill.opacity + '"/>');
-        }}
+        // One SVG stop per palette stop. The ramp is piecewise linear between them
+        // and SVG interpolates the same way, so this is exact -- sampling the ramp at
+        // a fixed number of points would round off the corners of a many-stop ramp.
+        const stops = paletteStops.map((stop, index) => {{
+            const fraction = ub > lb ? (stop.value - lb) / (ub - lb)
+                : (index / Math.max(1, paletteStops.length - 1));
+            const fill = svgColorParts(stop.color);
+            return '<stop offset="' + (fraction * 100) + '%" stop-color="' + fill.color +
+                '" stop-opacity="' + fill.opacity + '"/>';
+        }});
         const nullRow = distinct.nullCount > 0;
         const height = titleSpace + barHeight + tickFontSize + (padding * 2) + (nullRow ? itemFontSize * 2 : 0);
         const width = Math.max(barWidth + (padding * 2), (padding * 3) + ((title.length * titleFontSize) / 2));
@@ -7554,9 +8314,24 @@ def ssn_viewer_html(
         const tickY = barY + barHeight + tickFontSize;
         const tick = (x, text, anchor) => parts.push('<text x="' + x + '" y="' + tickY + '" font-size="' + tickFontSize +
             '" text-anchor="' + anchor + '">' + escapeXml(text) + '</text>');
-        tick(barX, formatValue(lb), 'start');
-        tick(barX + (barWidth / 2), formatValue(midV), 'middle');
-        tick(barX + barWidth, formatValue(ub), 'end');
+        // One tick per stop. Intermediates that would collide with the label before
+        // them are dropped, so a many-stop ramp still reads at any stop count; the two
+        // ends always draw, since they are what give the bar its scale.
+        let lastRight = -Infinity;
+        paletteStops.forEach((stop, index) => {{
+            const isEnd = index === 0 || index === paletteStops.length - 1;
+            const fraction = ub > lb ? (stop.value - lb) / (ub - lb) : 0.5;
+            const x = barX + (fraction * barWidth);
+            const text = formatValue(stop.value);
+            const textWidth = (text.length * tickFontSize) / 2;
+            const anchor = index === 0 ? 'start' : (isEnd ? 'end' : 'middle');
+            const left = anchor === 'start' ? x : (anchor === 'end' ? x - textWidth : x - (textWidth / 2));
+            if (!isEnd && left < lastRight + 4) {{
+                return;
+            }}
+            tick(x, text, anchor);
+            lastRight = left + textWidth;
+        }});
         if (nullRow) {{
             swatchRow((palette && palette.nullColor) || '#b3a89d', '\\u2014', tickY + padding, itemFontSize * 2, itemFontSize * 2);
         }}
@@ -7636,8 +8411,7 @@ def ssn_viewer_html(
     function ensureNumericPalette(columnName) {{
         let palette = state.customPalettes[paletteKey(columnName)];
         if (!palette || palette.type !== 'numeric') {{
-            palette = {{type: 'numeric', low: null, mid: null, high: null, nullColor: null,
-                lowValue: null, midValue: null, highValue: null}};
+            palette = {{type: 'numeric', stops: [], nullColor: null}};
             state.customPalettes[paletteKey(columnName)] = palette;
         }}
         return palette;
@@ -7718,23 +8492,159 @@ def ssn_viewer_html(
         return Number.isNaN(value) ? null : value;
     }}
 
+    // Bin a numeric column's values for the gradient dialog's histogram. Bins span the
+    // data range, not the low/high gradient bounds, so that values the ramp clamps stay
+    // visible -- seeing them pile up flat against one end is the point of the chart.
+    function columnHistogram(columnName) {{
+        const info = colorInfo(columnName);
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (!state.bundle || !info || info.baseType !== 'numeric' || columnIndex === undefined) {{
+            return null;
+        }}
+        const values = [];
+        let missing = 0;
+        for (let nodeIndex = 0; nodeIndex < state.bundle.graph.nodes.length; nodeIndex++) {{
+            const value = state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
+            if (typeof value === 'number' && Number.isFinite(value)) {{
+                values.push(value);
+            }} else {{
+                missing += 1;
+            }}
+        }}
+        if (values.length === 0) {{
+            return null;
+        }}
+        const column = state.metadataColumnByName.get(columnName);
+        const min = info.min;
+        const max = info.max;
+        const MAX_BINS = 48;
+        // Whether the column holds whole numbers, which decides both the binning
+        // below and whether the range slider snaps to integers.
+        const integer = !!(column && column.type === 'int'
+            && Number.isInteger(min) && Number.isInteger(max));
+        let binCount;
+        let lowEdge;
+        let highEdge;
+        if (max <= min) {{
+            // Every value identical: one bin, centered, rather than a zero-width domain.
+            binCount = 1;
+            lowEdge = min - 0.5;
+            highEdge = min + 0.5;
+        }} else if (integer && (max - min) + 1 <= MAX_BINS) {{
+            // One bin per integer. Spreading a handful of distinct integers over evenly
+            // divided bins leaves empty gaps and doubled-up bars that read as structure
+            // in the data when they are only an artifact of the binning.
+            //
+            // span + 1 bins across [min, max] separates every integer -- value min + k
+            // lands in bin floor(k + k/span), which is k for every k below span, and the
+            // top value clamps into the last bin. Widening the edges to min - 0.5 and
+            // max + 0.5 would separate them too, but it would push the axis half a bin
+            // past the data at both ends, so the default bounds would no longer sit at
+            // the ends of the bar the knobs ride on.
+            binCount = (max - min) + 1;
+            lowEdge = min;
+            highEdge = max;
+        }} else {{
+            binCount = Math.min(MAX_BINS, Math.max(8, Math.ceil(Math.sqrt(values.length))));
+            lowEdge = min;
+            highEdge = max;
+        }}
+        const span = highEdge - lowEdge;
+        const counts = new Array(binCount).fill(0);
+        values.forEach(value => {{
+            const slot = Math.floor(((value - lowEdge) / span) * binCount);
+            counts[Math.max(0, Math.min(binCount - 1, slot))] += 1;
+        }});
+        return {{counts, lowEdge, highEdge, binCount, integer, total: values.length, missing, min, max}};
+    }}
+
+    // Paint the cached bins, filling each bar with the color that bin's values currently
+    // receive. That makes the chart double as gradient feedback: a run of flat-colored
+    // bars at either end is the ramp clamping, and a pale stretch with no bars under it
+    // is ramp spent on a part of the range where there is no data.
+    function drawColorHistogram(columnName) {{
+        const wrap = document.getElementById('color-histogram-wrap');
+        const histogram = state.colorHistogram;
+        if (!histogram) {{
+            wrap.hidden = true;
+            return;
+        }}
+        wrap.hidden = false;
+        const canvas = document.getElementById('color-histogram');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const palette = customPalette(columnName);
+        // No side padding: the drawing surface *is* the shared axis, so bar x
+        // positions match the gradient bar and the slider knobs below.
+        const paddingX = 0;
+        const paddingTop = 8;
+        const baselineY = canvas.height - 7;
+        const plotWidth = canvas.width - (paddingX * 2);
+        const plotHeight = baselineY - paddingTop;
+        const slotWidth = plotWidth / histogram.binCount;
+        // Hairline gaps only while the bars are wide enough to keep one.
+        const gap = slotWidth > 8 ? Math.min(3, slotWidth * 0.16) : 0;
+        const maxCount = Math.max(...histogram.counts);
+        const binSpan = (histogram.highEdge - histogram.lowEdge) / histogram.binCount;
+
+        histogram.counts.forEach((count, binIndex) => {{
+            if (count === 0) {{
+                return;
+            }}
+            // A floor of 2px keeps rare bins from disappearing next to a dominant one.
+            const barHeight = Math.max(2, (count / maxCount) * plotHeight);
+            const center = histogram.lowEdge + ((binIndex + 0.5) * binSpan);
+            ctx.fillStyle = numericColor(center, histogram.min, histogram.max, palette);
+            ctx.fillRect(
+                paddingX + (binIndex * slotWidth) + (gap / 2),
+                baselineY - barHeight,
+                Math.max(1, slotWidth - gap),
+                barHeight,
+            );
+        }});
+
+        ctx.strokeStyle = '#d8dce2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(paddingX, baselineY + 1);
+        ctx.lineTo(canvas.width - paddingX, baselineY + 1);
+        ctx.stroke();
+
+        const parts = [
+            histogram.total.toLocaleString() + ' value' + (histogram.total === 1 ? '' : 's')
+                + ' in ' + histogram.binCount + ' bin' + (histogram.binCount === 1 ? '' : 's'),
+            'peak bin ' + maxCount.toLocaleString(),
+        ];
+        if (histogram.missing > 0) {{
+            parts.push(histogram.missing.toLocaleString() + ' with no value');
+        }}
+        document.getElementById('color-histogram-note').textContent = parts.join(' · ');
+    }}
+
     function updateGradientPreview() {{
         const preview = document.getElementById('color-gradient-preview');
-        const low = document.getElementById('color-low').value;
-        const high = document.getElementById('color-high').value;
-        const midEnabled = document.getElementById('color-mid-toggle').checked;
-        // Mirror numericColor: a mid stop is placed at the mid value's position within
-        // [lb, ub]; its color is the explicit mid color when enabled, else the low/high
-        // average. A centred average mid is visually identical to a plain 2-stop ramp.
-        const mid = midEnabled ? document.getElementById('color-mid').value : lerpHexColor(low, high, 0.5);
-        const lb = parseNumberOrNull(document.getElementById('color-low-value').value);
-        const ub = parseNumberOrNull(document.getElementById('color-high-value').value);
-        const midValue = parseNumberOrNull(document.getElementById('color-mid-value').value);
-        let midPercent = 50;
-        if (lb !== null && ub !== null && midValue !== null && ub > lb) {{
-            midPercent = Math.max(0, Math.min(100, ((midValue - lb) / (ub - lb)) * 100));
+        // Sorted for display only: a stop typed past its neighbour is not
+        // reordered until the field commits, and the bar should still read left
+        // to right in the meantime.
+        const stops = sortedGradientStops(currentGradientStops());
+        if (stops.length < MIN_GRADIENT_STOPS) {{
+            return;
         }}
-        preview.style.background = 'linear-gradient(90deg, ' + low + ' 0%, ' + mid + ' ' + midPercent + '%, ' + high + ' 100%)';
+        // The bar shares the histogram's axis (the column's data range) rather than
+        // spanning the outermost stops, so a stop sits above the values it colors.
+        // Percentages are deliberately left unclamped: CSS extends a gradient past
+        // 0%/100% and holds the end colors flat outside the stops, which is exactly
+        // how numericColor treats values beyond the ends.
+        const domain = gradientRangeDomain();
+        const parts = stops.map((stop, index) => {{
+            const percent = domain
+                ? gradientRangePercent(stop.value, domain)
+                : ((index / (stops.length - 1)) * 100);
+            return stop.color + ' ' + percent + '%';
+        }});
+        preview.style.background = 'linear-gradient(90deg, ' + parts.join(', ') + ')';
+        updateGradientSlider();
     }}
 
     function renderContinuousPicker(columnName) {{
@@ -7742,71 +8652,34 @@ def ssn_viewer_html(
         const info = colorInfo(columnName);
         const min = info.min;
         const max = info.max;
-        const lowInput = document.getElementById('color-low');
-        const midInput = document.getElementById('color-mid');
-        const highInput = document.getElementById('color-high');
         const nullInput = document.getElementById('color-null');
-        const midToggle = document.getElementById('color-mid-toggle');
-        const lowValueInput = document.getElementById('color-low-value');
-        const midValueInput = document.getElementById('color-mid-value');
-        const highValueInput = document.getElementById('color-high-value');
-        lowInput.value = (palette && palette.low) || cssToHex(numericColor(min, min, max));
-        highInput.value = (palette && palette.high) || cssToHex(numericColor(max, min, max));
-        midInput.value = (palette && palette.mid) || cssToHex(numericColor((min + max) / 2, min, max));
-        nullInput.value = (palette && palette.nullColor) || cssToHex('#b3a89d');
-        const lb = (palette && palette.lowValue !== null && palette.lowValue !== undefined) ? palette.lowValue : min;
-        const ub = (palette && palette.highValue !== null && palette.highValue !== undefined) ? palette.highValue : max;
-        const midV = (palette && palette.midValue !== null && palette.midValue !== undefined) ? palette.midValue : (min + max) / 2;
-        lowValueInput.value = lb;
-        highValueInput.value = ub;
-        midValueInput.value = midV;
-        midToggle.checked = !!(palette && palette.mid);
-        // Only the mid COLOR is gated by the toggle; the mid VALUE is always editable so
-        // it can shift the gradient even when the explicit mid color is off.
-        midInput.disabled = !midToggle.checked;
-        const refreshExtentLabels = () => {{
-            document.getElementById('color-min-label').textContent = formatValue(parseNumberOrNull(lowValueInput.value) ?? min);
-            document.getElementById('color-max-label').textContent = formatValue(parseNumberOrNull(highValueInput.value) ?? max);
-        }};
-        refreshExtentLabels();
+        nullInput.value = (palette && palette.nullColor) || cssToHex(DEFAULT_NO_VALUE_COLOR);
+        // Binning first: the axis every other part of the panel is drawn against
+        // comes from the histogram.
+        state.colorHistogram = columnHistogram(columnName);
+        // With no stored palette the ramp starts as the two ends of the built-in
+        // gradient, which is what the column already looks like on screen.
+        state.gradientStops = numericPaletteStops(palette, min, max) || [
+            {{value: min, color: cssToHex(numericColor(min, min, max))}},
+            {{value: max, color: cssToHex(numericColor(max, min, max))}},
+        ];
+        // The labels sit under the shared axis, so they report the data extent. The
+        // ramp's own ends are the Min/Max rows and the outermost knobs.
+        document.getElementById('color-min-label').textContent = formatValue(min);
+        document.getElementById('color-max-label').textContent = formatValue(max);
+        renderGradientStopRows();
         updateGradientPreview();
+        drawColorHistogram(columnName);
 
-        const apply = () => {{
-            const stored = ensureNumericPalette(columnName);
-            stored.low = lowInput.value;
-            stored.high = highInput.value;
-            stored.mid = midToggle.checked ? midInput.value : null;
-            stored.nullColor = nullInput.value;
-            stored.lowValue = parseNumberOrNull(lowValueInput.value);
-            stored.highValue = parseNumberOrNull(highValueInput.value);
-            stored.midValue = parseNumberOrNull(midValueInput.value);
-            refreshExtentLabels();
-            updateGradientPreview();
+        nullInput.oninput = () => {{
+            ensureNumericPalette(columnName).nullColor = nullInput.value;
             rebuildNodeColorCache();
             scheduleClusterRender();
+            drawColorHistogram(columnName);
         }};
-        lowInput.oninput = apply;
-        highInput.oninput = apply;
-        midInput.oninput = apply;
-        nullInput.oninput = apply;
-        lowValueInput.oninput = apply;
-        midValueInput.oninput = apply;
-        highValueInput.oninput = apply;
-        midToggle.onchange = () => {{
-            midInput.disabled = !midToggle.checked;
-            apply();
-        }};
-        // Reset only the low/mid/high VALUES to the data range (keeps chosen colors).
-        document.getElementById('color-reset-values').onclick = () => {{
-            lowValueInput.value = min;
-            highValueInput.value = max;
-            midValueInput.value = (min + max) / 2;
-            apply();
-        }};
+        document.getElementById('color-reset-values').onclick = resetGradientStopValues;
     }}
 
-    // Show which palette a column is on (or "Custom colors" once swatches are edited by
-    // hand) and, for a named palette, how far its colors had to stretch.
     function updateColorPaletteControl(columnName, palette, valueCount) {{
         const select = document.getElementById('color-palette');
         const note = document.getElementById('color-palette-note');
@@ -8778,6 +9651,13 @@ def ssn_viewer_html(
         state.viewTransform.offsetY = clusterCanvas.height / 2 - largestItem.y * state.viewTransform.scale;
         scheduleClusterRender();
     }});
+    document.getElementById('focus-selection').addEventListener('click', () => {{
+        if (!focusSelection()) {{
+            setStatus('No selected nodes are visible at the current threshold and minimum cluster size.');
+            return;
+        }}
+        scheduleClusterRender();
+    }});
     document.getElementById('reset-view').addEventListener('click', () => {{
         fitClusterViewToLayout();
         renderClusterView();
@@ -8801,6 +9681,8 @@ def ssn_viewer_html(
     setupSelectionPresets();
     setupMetadataEditing();
     setupNameDialog();
+    setupGradientRangeSlider();
+    setupGradientStopEditing();
     populateColorPaletteMenu();
     warnIfUnsupported();
     updateComponentSortButton();

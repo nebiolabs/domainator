@@ -714,3 +714,57 @@ def test_seq_dist_reports_rejected_diamond_option(shared_datadir, capsys):
     captured = capsys.readouterr()
     assert "rejected one of its command line options" in captured.err
     assert "--no-such-flag" in captured.err
+
+
+def test_diamond_preflight_warns_only_on_the_risky_configuration(tmp_path):
+    """The advisory must fire for a large untuned square diamond_us/vs search, and stay
+    quiet otherwise -- a warning on every run would train users to ignore it."""
+    risky = dict(mode="us", n_sequences=380522, total_letters=62880751, square=True)
+
+    message = seq_dist.build_diamond_preflight_warning(**risky, tmpdir=str(tmp_path))
+    assert message is not None
+    assert "380,522 sequences" in message
+    assert "single index chunk" in message
+    assert str(tmp_path) in message
+    assert '"-b":0.07, "-c":4' in message
+    # the two facts that cost the most time to discover
+    assert "du` and `ls` will not show it" in message
+    assert "cannot be predicted from input size" in message
+    # must be explicit that the resource knobs are result-neutral but sensitivity is not
+    assert "Neither changes the resulting matrix" in message
+    assert "does change which hits are found" in message
+
+    # already bounded by the caller
+    assert seq_dist.build_diamond_preflight_warning(
+        **risky, diamond_params={"-b": 0.07, "-c": 4}) is None
+    assert seq_dist.build_diamond_preflight_warning(
+        **risky, diamond_params={"--index-chunks": 4}) is None
+    # sensitivities where diamond already uses 4 index chunks
+    for mode in ("f", "d", "mids", "s", "mors"):
+        assert seq_dist.build_diamond_preflight_warning(
+            mode=mode, n_sequences=380522, total_letters=62880751, square=True) is None
+    # not an all-vs-all comparison
+    assert seq_dist.build_diamond_preflight_warning(
+        mode="us", n_sequences=380522, total_letters=62880751, square=False) is None
+    # below the size threshold
+    assert seq_dist.build_diamond_preflight_warning(
+        mode="us", n_sequences=1000, total_letters=165000, square=True) is None
+    # diamond_vs collapses the index too, so it warns as well
+    assert seq_dist.build_diamond_preflight_warning(
+        mode="vs", n_sequences=380522, total_letters=62880751, square=True) is not None
+
+
+def test_seq_dist_echoes_the_diamond_command(shared_datadir, capsys):
+    """The exact diamond command must reach stderr so a run is reproducible from a log."""
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+                       "--mst_knn", "2", "--params", '"-c":4'])
+    err = capsys.readouterr().err
+    assert "Running diamond:" in err
+    assert "diamond blastp" in err
+    assert "--ultra-sensitive" in err
+    assert "-c 4" in err          # including whatever came from --params
+    # a small run must not be nagged by the preflight advisory
+    assert "WARNING: large all-vs-all" not in err

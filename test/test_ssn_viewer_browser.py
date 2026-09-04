@@ -17,6 +17,8 @@ when the package is present but the browser binary has not been downloaded the
 individual tests skip with a hint.
 """
 
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -353,6 +355,29 @@ def _open_color_picker(page):
     page.wait_for_selector("#color-picker-overlay:not([hidden])")
 
 
+def _stop_field(page, index, field):
+    """Locator for one gradient stop row's color or value input."""
+    return page.locator(
+        f'.cp-stop-row[data-stop-index="{index}"] [data-stop-field="{field}"]')
+
+
+def _set_stop(page, index, field, value, commit=False):
+    """Type into a stop row the way a user would, firing input (and change)."""
+    node = _stop_field(page, index, field)
+    node.fill(value)
+    node.dispatch_event("input")
+    if commit:
+        node.dispatch_event("change")
+
+
+def _stop_values(page):
+    return page.evaluate("() => state.gradientStops.map(stop => stop.value)")
+
+
+def _stop_colors(page):
+    return page.evaluate("() => state.gradientStops.map(stop => stop.color)")
+
+
 def test_default_color_by_paints_on_load(meta_page):
     """--color_by colors the nodes on load, before any color control is touched.
 
@@ -388,11 +413,10 @@ def test_numeric_stops_recolor(meta_page):
     _open_color_picker(page)
     page.wait_for_selector("#color-picker-continuous:not([hidden])")
     before = _canvas_snapshot(page)
-    for input_id, value in (("#color-low", "#0000ff"), ("#color-high", "#ffff00")):
-        node = page.locator(input_id)
-        node.fill(value)
-        node.dispatch_event("input")
+    _set_stop(page, 0, "color", "#0000ff")
+    _set_stop(page, 1, "color", "#ffff00")
     _wait_for_canvas_change(page, before)
+    assert _stop_colors(page) == ["#0000ff", "#ffff00"]
     assert page.pageerrors == []
 
 
@@ -427,44 +451,91 @@ def test_numeric_bounds_recolor(meta_page):
     page.wait_for_selector("#color-picker-continuous:not([hidden])")
     before = _canvas_snapshot(page)
     # Tighten the upper bound so mid-range scores saturate differently.
-    node = page.locator("#color-high-value")
-    node.fill("4")
-    node.dispatch_event("input")
+    _set_stop(page, 1, "value", "4")
     _wait_for_canvas_change(page, before)
+    assert _stop_values(page) == [1, 4]
     assert page.pageerrors == []
 
 
-def test_midpoint_shift_without_mid_color(meta_page):
-    """Moving the mid value recolors even when 'Use midpoint color' is off."""
+def test_an_intermediate_stop_shifts_the_ramp(meta_page):
+    """Moving an added stop recolors the network."""
     page = meta_page
     page.select_option("#color-by", "score")
     _open_color_picker(page)
     page.wait_for_selector("#color-picker-continuous:not([hidden])")
-    # Mid color stays off; the mid-value input must remain editable.
-    assert not page.is_checked("#color-mid-toggle")
-    assert not page.is_disabled("#color-mid-value")
+    page.click("#color-add-stop")
     before = _canvas_snapshot(page)
-    node = page.locator("#color-mid-value")
-    node.fill("8")  # shove the midpoint toward the high end
-    node.dispatch_event("input")
+
+    _set_stop(page, 1, "value", "8", commit=True)  # shove it toward the high end
+
     _wait_for_canvas_change(page, before)
+    assert _stop_values(page) == [1, 8, 9]
+    assert page.pageerrors == []
+
+
+def test_two_stops_leave_a_straight_ramp(meta_page):
+    """With only the two ends, the ramp is a plain interpolation.
+
+    Regression: the gradient used to bend whenever a mid VALUE was stored, and
+    that value survived switching the midpoint off. Narrowing the high bound
+    below the stale value pinned the bend against the top of the range, so the
+    ramp only ever reached the low/high average before jumping to the high
+    color. There is now no state to go stale -- a removed stop is gone.
+    """
+    page = meta_page
+    page.select_option("#color-by", "score")
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-continuous:not([hidden])")
+    page.click("#color-add-stop")
+    page.click('.cp-stop-row[data-stop-index="1"] [data-stop-remove]')
+    assert len(_stop_values(page)) == 2
+
+    # Pull the top of the ramp below where the removed stop used to sit.
+    _set_stop(page, 1, "value", "3", commit=True)
+
+    high_color = page.evaluate("() => state.gradientStops[1].color")
+    assert page.evaluate(
+        """() => numericColor(9, state.colorHistogram.min, state.colorHistogram.max,
+                              customPalette('score'))""") == high_color
+    background = page.eval_on_selector(
+        "#color-gradient-preview", "e => getComputedStyle(e).backgroundImage")
+    assert background.count("rgb") == 2, background
     assert page.pageerrors == []
 
 
 def test_reset_values_button(meta_page):
-    """Reset values restores the low/high inputs to the data range."""
+    """Reset values refits the ramp onto the data range."""
     page = meta_page
     page.select_option("#color-by", "score")
     _open_color_picker(page)
     page.wait_for_selector("#color-picker-continuous:not([hidden])")
-    page.fill("#color-low-value", "2")
-    page.locator("#color-low-value").dispatch_event("input")
-    page.fill("#color-high-value", "4")
-    page.locator("#color-high-value").dispatch_event("input")
+    _set_stop(page, 0, "value", "2", commit=True)
+    _set_stop(page, 1, "value", "4", commit=True)
+
     page.click("#color-reset-values")
+
     # score column ranges 1..9 across nodes A-F.
-    assert page.input_value("#color-low-value") == "1"
-    assert page.input_value("#color-high-value") == "9"
+    assert _stop_values(page) == [1, 9]
+    assert page.input_value('.cp-stop-row[data-stop-index="0"] [data-stop-field="value"]') == "1"
+    assert page.pageerrors == []
+
+
+def test_reset_values_keeps_the_shape_of_a_tuned_ramp(meta_page):
+    """Refitting rescales intermediate stops instead of discarding them."""
+    page = meta_page
+    page.select_option("#color-by", "score")
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-continuous:not([hidden])")
+    page.click("#color-add-stop")
+    # Squeeze the whole ramp into 1..5 with the intermediate a quarter of the way in.
+    _set_stop(page, 1, "value", "2", commit=True)
+    _set_stop(page, 2, "value", "5", commit=True)
+    assert _stop_values(page) == [1, 2, 5]
+
+    page.click("#color-reset-values")
+
+    # 1..9 now, with the intermediate still a quarter of the way along.
+    assert _stop_values(page) == [1, 3, 9]
     assert page.pageerrors == []
 
 
@@ -2639,4 +2710,844 @@ def test_digit_shortcuts_are_inert_while_naming(meta_page):
     assert page.eval_on_selector("#name-value", "e => e.value") == "3"
     assert page.evaluate("() => state.selectedNodeIndices.size") == 0
     page.click("#name-cancel")
+    assert page.pageerrors == []
+
+
+def _selection_screen_box(page):
+    """Screen-space box of the selection, plus the scale and canvas size."""
+    return page.evaluate(
+        """() => {
+            const bounds = selectedNodeBounds();
+            if (!bounds) { return null; }
+            const view = state.viewTransform;
+            const canvas = document.getElementById('cluster-view');
+            return {
+                left: (bounds.minX * view.scale) + view.offsetX,
+                top: (bounds.minY * view.scale) + view.offsetY,
+                right: (bounds.maxX * view.scale) + view.offsetX,
+                bottom: (bounds.maxY * view.scale) + view.offsetY,
+                scale: view.scale,
+                width: canvas.width,
+                height: canvas.height,
+            };
+        }"""
+    )
+
+
+def test_focus_selection_disabled_without_a_selection(meta_page):
+    """The button is selection-driven, so it stays off until something is picked."""
+    page = meta_page
+    assert page.eval_on_selector("#focus-selection", "e => e.disabled") is True
+    _select_nodes(page, [0, 1, 2])
+    assert page.eval_on_selector("#focus-selection", "e => e.disabled") is False
+    page.click("#clear-selection")
+    assert page.eval_on_selector("#focus-selection", "e => e.disabled") is True
+    assert page.pageerrors == []
+
+
+def test_focus_selection_centers_without_changing_zoom_when_it_fits(meta_page):
+    """A selection that already fits is centered at the zoom the user set."""
+    page = meta_page
+    _select_nodes(page, [0, 1, 2])
+    before_scale = page.evaluate("() => state.viewTransform.scale")
+
+    page.click("#focus-selection")
+    box = _selection_screen_box(page)
+
+    assert box["scale"] == before_scale
+    assert abs(((box["left"] + box["right"]) / 2) - (box["width"] / 2)) < 0.5
+    assert abs(((box["top"] + box["bottom"]) / 2) - (box["height"] / 2)) < 0.5
+    assert page.pageerrors == []
+
+
+def test_focus_selection_zooms_out_until_everything_fits(meta_page):
+    """Zoomed far in on the whole network, focusing must pull back until it fits."""
+    page = meta_page
+    # A small canvas makes the fit-to-width/height calculation the binding
+    # constraint rather than viewTransform.maxScale, which is what we want to test.
+    page.evaluate(
+        """() => {
+            const canvas = document.getElementById('cluster-view');
+            canvas.width = 320;
+            canvas.height = 240;
+            state.viewTransform.scale = 30;
+        }"""
+    )
+    _select_nodes(page, list(range(60)))
+
+    page.click("#focus-selection")
+    box = _selection_screen_box(page)
+
+    assert box["scale"] < 30
+    assert box["left"] >= 0 and box["top"] >= 0
+    assert box["right"] <= box["width"] and box["bottom"] <= box["height"]
+    assert abs(((box["left"] + box["right"]) / 2) - (box["width"] / 2)) < 0.5
+    assert abs(((box["top"] + box["bottom"]) / 2) - (box["height"] / 2)) < 0.5
+    assert page.pageerrors == []
+
+
+def test_focus_selection_never_zooms_in(meta_page):
+    """Zoomed out, a tiny selection is centered but the view is not magnified."""
+    page = meta_page
+    page.evaluate("() => { state.viewTransform.scale = 0.5; }")
+    _select_nodes(page, [0])
+
+    page.click("#focus-selection")
+
+    assert page.evaluate("() => state.viewTransform.scale") == 0.5
+    assert page.pageerrors == []
+
+
+def test_focus_selection_reports_when_nothing_selected_is_visible(meta_page):
+    """Selected nodes in clusters the current view hides have no position."""
+    page = meta_page
+    _select_nodes(page, [0, 1])
+    page.evaluate("() => { state.visibleLayout = []; }")
+
+    page.click("#focus-selection")
+
+    status = page.eval_on_selector("#bundle-status", "e => e.textContent")
+    assert "No selected nodes are visible" in status
+    assert page.pageerrors == []
+
+
+def test_focus_selection_accounts_for_node_radius(meta_page):
+    """Bounds grow by each node's radius, so the drawn dot fits, not just its center."""
+    page = meta_page
+    _select_nodes(page, [0])
+    measured = page.evaluate(
+        """() => {
+            const bounds = selectedNodeBounds();
+            const item = state.visibleLayout.find(
+                entry => componentMembers(entry.componentId).includes(0));
+            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const dot = componentMemberLayout(component, item)
+                .find(entry => entry.memberIndex === 0);
+            return {span: bounds.maxX - bounds.minX, radius: dot.radius};
+        }"""
+    )
+    assert measured["radius"] > 0
+    assert abs(measured["span"] - (measured["radius"] * 2)) < 1e-6
+    assert page.pageerrors == []
+
+
+def _open_gradient_picker(page, column="score"):
+    """Open the color picker on a numeric column, in gradient (not discrete) mode."""
+    page.select_option("#color-by", column)
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-continuous:not([hidden])")
+
+
+def _histogram(page):
+    return page.evaluate("() => state.colorHistogram")
+
+
+def test_gradient_histogram_bins_integers_one_per_value(meta_page):
+    """An int column gets one bin per integer, not evenly divided bins.
+
+    The fixture's scores are 1, 2, 5, 8, 3, 9. Splitting that range into e.g. 8
+    even bins leaves empty gaps and doubled-up bars that read as structure in the
+    data when they are only an artifact of the binning.
+    """
+    page = meta_page
+    _open_gradient_picker(page)
+
+    histogram = _histogram(page)
+    assert histogram["binCount"] == 9
+    # The axis is exactly the data range, so the knobs below can reach both ends.
+    assert [histogram["lowEdge"], histogram["highEdge"]] == [1, 9]
+    #                  1  2  3  4  5  6  7  8  9
+    assert histogram["counts"] == [1, 1, 1, 0, 1, 0, 0, 1, 1]
+    assert histogram["total"] == 6
+    assert histogram["missing"] == 0
+    assert page.is_visible("#color-histogram-wrap")
+    assert page.eval_on_selector("#color-histogram-note", "e => e.textContent") == (
+        "6 values in 9 bins · peak bin 1"
+    )
+    assert page.pageerrors == []
+
+
+def test_gradient_histogram_paints_bars(meta_page):
+    """The canvas is actually drawn on, not left blank."""
+    page = meta_page
+    _open_gradient_picker(page)
+    snapshot = page.eval_on_selector("#color-histogram", "c => c.toDataURL()")
+    assert snapshot.startswith("data:image/png;base64,")
+    assert len(snapshot) > 2000
+    assert page.pageerrors == []
+
+
+def test_gradient_histogram_recolors_when_the_ramp_changes(meta_page):
+    """Bars carry the color their values get, so narrowing the ramp repaints them."""
+    page = meta_page
+    _open_gradient_picker(page)
+    before = page.eval_on_selector("#color-histogram", "c => c.toDataURL()")
+
+    _set_stop(page, 0, "value", "6")
+    page.wait_for_function(
+        "prev => document.getElementById('color-histogram').toDataURL() !== prev",
+        arg=before,
+    )
+    # Binning is over the data range, so clamped values stay on the chart -- that
+    # they now share one flat color is the point.
+    assert _histogram(page)["lowEdge"] == 1
+    assert page.pageerrors == []
+
+
+def test_gradient_histogram_counts_values_with_no_data(meta_page):
+    """Nodes with no value are excluded from the bins and reported separately."""
+    page = meta_page
+    page.evaluate(
+        """() => {
+            const columnIndex = state.metadataColumnIndexByName.get('score');
+            state.metadataByNodeIndex[0][columnIndex] = null;
+            state.metadataByNodeIndex[1][columnIndex] = null;
+            rebuildMetadataCaches();
+        }"""
+    )
+    _open_gradient_picker(page)
+
+    histogram = _histogram(page)
+    assert histogram["total"] == 4
+    assert histogram["missing"] == 2
+    assert sum(histogram["counts"]) == 4
+    assert "2 with no value" in page.eval_on_selector(
+        "#color-histogram-note", "e => e.textContent")
+    assert page.pageerrors == []
+
+
+def test_gradient_histogram_handles_one_repeated_value(meta_page):
+    """A zero-width range collapses to a single centered bin rather than dividing by zero."""
+    page = meta_page
+    page.evaluate(
+        """() => {
+            const columnIndex = state.metadataColumnIndexByName.get('score');
+            state.metadataByNodeIndex.forEach(row => { row[columnIndex] = 4; });
+            rebuildMetadataCaches();
+        }"""
+    )
+    _open_gradient_picker(page)
+
+    histogram = _histogram(page)
+    assert histogram["binCount"] == 1
+    assert histogram["counts"] == [6]
+    assert [histogram["lowEdge"], histogram["highEdge"]] == [3.5, 4.5]
+    assert page.pageerrors == []
+
+
+def test_gradient_histogram_bins_floats_across_the_data_range(meta_page):
+    """A float column falls back to even bins spanning exactly min..max."""
+    page = meta_page
+    page.evaluate(
+        """() => {
+            const columnIndex = state.metadataColumnIndexByName.get('score');
+            state.metadataColumnByName.get('score').type = 'float';
+            [0.5, 1.25, 2.75, 3.0, 4.5, 6.25].forEach((value, nodeIndex) => {
+                state.metadataByNodeIndex[nodeIndex][columnIndex] = value;
+            });
+            rebuildMetadataCaches();
+        }"""
+    )
+    _open_gradient_picker(page)
+
+    histogram = _histogram(page)
+    # sqrt(6) rounds up to 3, below the floor of 8 bins.
+    assert histogram["binCount"] == 8
+    assert [histogram["lowEdge"], histogram["highEdge"]] == [0.5, 6.25]
+    assert sum(histogram["counts"]) == 6
+    assert page.pageerrors == []
+
+
+def test_gradient_histogram_absent_for_a_categorical_column(meta_page):
+    """The chart belongs to the gradient panel, which discrete mode hides entirely."""
+    page = meta_page
+    page.select_option("#color-by", "family")
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+
+    assert page.is_hidden("#color-picker-continuous")
+    assert page.is_hidden("#color-histogram-wrap")
+    assert page.pageerrors == []
+
+
+def _knob_percent(page, index):
+    """A stop knob's left offset as a float percentage of the shared axis."""
+    left = page.eval_on_selector(
+        f'#color-range-slider .cp-range-knob[data-stop-index="{index}"]', "e => e.style.left")
+    return float(left.rstrip("%"))
+
+
+def _ramp_geometry(page):
+    """Content-box left edge and width of each layer of the ramp stack."""
+    return page.evaluate(
+        """() => ['color-histogram', 'color-gradient-preview', 'color-range-slider']
+            .map(id => {
+                const element = document.getElementById(id);
+                const rect = element.getBoundingClientRect();
+                const border = parseFloat(getComputedStyle(element).borderLeftWidth) || 0;
+                return [rect.left + border, rect.width - (border * 2)];
+            })"""
+    )
+
+
+def test_gradient_ramp_layers_share_one_axis(meta_page):
+    """Histogram, gradient bar and slider must line up, or the knobs lie."""
+    page = meta_page
+    _open_gradient_picker(page)
+    histogram, gradient, slider = _ramp_geometry(page)
+    assert abs(histogram[0] - gradient[0]) < 0.5
+    assert abs(histogram[0] - slider[0]) < 0.5
+    assert abs(histogram[1] - gradient[1]) < 0.5
+    assert abs(histogram[1] - slider[1]) < 0.5
+    assert page.pageerrors == []
+
+
+def test_gradient_bounds_start_at_the_ends_of_the_axis(meta_page):
+    """Untouched, the ramp spans the data, so the knobs sit at 0% and 100%."""
+    page = meta_page
+    _open_gradient_picker(page)
+    assert _knob_percent(page, 0) == 0
+    assert _knob_percent(page, 1) == 100
+    # The axis labels describe the data extent, not the ramp's own ends.
+    assert page.eval_on_selector("#color-min-label", "e => e.textContent") == "1"
+    assert page.eval_on_selector("#color-max-label", "e => e.textContent") == "9"
+    assert page.pageerrors == []
+
+
+def test_narrowing_the_ramp_moves_the_knobs_not_the_axis(meta_page):
+    """Bounds inside the data range pull the knobs in and leave the axis alone."""
+    page = meta_page
+    _open_gradient_picker(page)
+    _set_stop(page, 0, "value", "3")
+    _set_stop(page, 1, "value", "7")
+
+    domain = page.evaluate("() => gradientRangeDomain()")
+    assert [domain["low"], domain["high"]] == [1, 9]
+    # (3 - 1) / 8 and (7 - 1) / 8.
+    assert _knob_percent(page, 0) == pytest.approx(25, abs=0.02)
+    assert _knob_percent(page, 1) == pytest.approx(75, abs=0.02)
+    assert page.eval_on_selector("#color-min-label", "e => e.textContent") == "1"
+    assert page.eval_on_selector("#color-max-label", "e => e.textContent") == "9"
+    assert page.pageerrors == []
+
+
+def test_gradient_bar_holds_its_end_colors_outside_the_bounds(meta_page):
+    """The bar spans the data axis, so clamped stretches show as flat color.
+
+    The stops carry the bounds' real positions on that axis; CSS holds the first
+    and last colors flat outside them, which is what numericColor does to values
+    beyond the bounds.
+    """
+    page = meta_page
+    _open_gradient_picker(page)
+    _set_stop(page, 0, "value", "3")
+    _set_stop(page, 1, "value", "7")
+
+    background = page.eval_on_selector(
+        "#color-gradient-preview", "e => getComputedStyle(e).backgroundImage")
+    assert "25%" in background
+    assert "75%" in background
+    assert page.pageerrors == []
+
+
+def test_adding_and_removing_stops_tracks_the_knobs(meta_page):
+    """Rows and knobs are two views of one list, so they change together."""
+    page = meta_page
+    _open_gradient_picker(page)
+    assert page.locator(".cp-stop-row").count() == 2
+    assert page.locator("#color-range-slider .cp-range-knob").count() == 2
+    # The two ends define the ramp, so neither carries a remove button.
+    assert page.locator("[data-stop-remove]").count() == 0
+
+    page.click("#color-add-stop")
+
+    assert page.locator(".cp-stop-row").count() == 3
+    assert page.locator("#color-range-slider .cp-range-knob").count() == 3
+    assert page.locator("[data-stop-remove]").count() == 1
+    # Split into the widest gap, so the new stop lands mid-range.
+    assert _stop_values(page) == [1, 5, 9]
+    assert _knob_percent(page, 1) == pytest.approx(50, abs=0.02)
+    assert page.eval_on_selector_all(
+        ".cp-stop-role", "els => els.map(e => e.textContent)") == ["Min", "Stop 2", "Max"]
+
+    page.click('.cp-stop-row[data-stop-index="1"] [data-stop-remove]')
+
+    assert page.locator(".cp-stop-row").count() == 2
+    assert page.locator("#color-range-slider .cp-range-knob").count() == 2
+    assert _stop_values(page) == [1, 9]
+    assert page.pageerrors == []
+
+
+def test_a_new_stop_takes_the_color_the_ramp_already_has(meta_page):
+    """Adding a stop should shape the ramp you have, not restate it.
+
+    Sampled across the whole range, no value shifts by more than one step per
+    channel -- the residue of lerpHexColor rounding the new stop's color to 8
+    bits, not a change in the ramp. (The *first* add is exempt: it replaces the
+    built-in HSL sweep with an interpolation between its two ends.)
+    """
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")          # leaves the built-in ramp behind
+
+    sample = """() => {
+        const palette = customPalette('score');
+        const colors = [];
+        for (let value = 1; value <= 9; value += 0.1) {
+            colors.push(numericColor(value, 1, 9, palette));
+        }
+        return colors;
+    }"""
+    before = page.evaluate(sample)
+
+    page.click("#color-add-stop")
+
+    after = page.evaluate(sample)
+    assert len(after) == len(before)
+    for old_hex, new_hex in zip(before, after):
+        for channel in range(3):
+            old_value = int(old_hex[1 + (channel * 2):3 + (channel * 2)], 16)
+            new_value = int(new_hex[1 + (channel * 2):3 + (channel * 2)], 16)
+            assert abs(old_value - new_value) <= 1, (old_hex, new_hex)
+    # The added stop splits [1, 5] and takes that segment's midpoint color.
+    assert _stop_values(page) == [1, 3, 5, 9]
+    assert page.evaluate(
+        """() => lerpHexColor(state.gradientStops[0].color,
+                              state.gradientStops[2].color, 0.5)""") == _stop_colors(page)[1]
+    assert page.pageerrors == []
+
+
+def test_an_intermediate_stop_colors_its_own_value(meta_page):
+    """A stop's color is what its value gets, whatever the ends are."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+    _set_stop(page, 1, "color", "#ff0000")
+
+    assert page.evaluate(
+        """() => numericColor(5, state.colorHistogram.min, state.colorHistogram.max,
+                              customPalette('score'))""") == "#ff0000"
+    # ...and the ends are untouched by it.
+    assert page.evaluate(
+        """() => numericColor(1, state.colorHistogram.min, state.colorHistogram.max,
+                              customPalette('score'))""") == _stop_colors(page)[0]
+    assert page.pageerrors == []
+
+
+def test_the_two_end_stops_cannot_be_removed(meta_page):
+    """The ramp needs two ends, so only intermediates are removable."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+
+    removable = page.eval_on_selector_all(
+        ".cp-stop-row",
+        "els => els.map(row => row.querySelector('[data-stop-remove]') !== null)")
+    assert removable == [False, True, False]
+    # Nothing in the API removes one either.
+    page.evaluate("() => { removeGradientStop(0); removeGradientStop(2); }")
+    assert len(_stop_values(page)) == 3
+    assert page.pageerrors == []
+
+
+def test_stop_count_is_capped(meta_page):
+    """Add is refused past the cap rather than crowding the rows and track."""
+    page = meta_page
+    _open_gradient_picker(page)
+    cap = page.evaluate("() => MAX_GRADIENT_STOPS")
+    # Two stops already exist, so `cap - 2` adds reach the limit exactly.
+    for _ in range(cap - 2):
+        page.click("#color-add-stop")
+
+    assert len(_stop_values(page)) == cap
+    assert page.eval_on_selector("#color-add-stop", "e => e.disabled") is True
+    page.evaluate("() => addGradientStop()")
+    assert len(_stop_values(page)) == cap
+    assert "at most" in page.eval_on_selector("#bundle-status", "e => e.textContent")
+    assert page.pageerrors == []
+
+
+def test_typing_a_stop_past_its_neighbour_reorders_on_commit(meta_page):
+    """Re-sorting mid-keystroke would yank the row out from under the cursor."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+
+    _set_stop(page, 1, "value", "12")
+    assert _stop_values(page) == [1, 12, 9], "reordered while still typing"
+
+    _stop_field(page, 1, "value").dispatch_event("change")
+    assert _stop_values(page) == [1, 9, 12]
+    assert page.eval_on_selector_all(
+        ".cp-stop-role", "els => els.map(e => e.textContent)") == ["Min", "Stop 2", "Max"]
+    assert page.pageerrors == []
+
+
+def _drag_knob_to_fraction(page, index, fraction):
+    """Drag a stop's knob to a fraction of the way along the slider track."""
+    knob = page.query_selector(
+        f'#color-range-slider .cp-range-knob[data-stop-index="{index}"]')
+    track = page.query_selector("#color-range-slider").bounding_box()
+    box = knob.bounding_box()
+    middle = box["y"] + (box["height"] / 2)
+    page.mouse.move(box["x"] + (box["width"] / 2), middle)
+    page.mouse.down()
+    page.mouse.move(track["x"] + (track["width"] * fraction), middle, steps=8)
+    page.mouse.up()
+
+
+def test_dragging_a_knob_recolors_the_network(meta_page):
+    """A knob drag runs the same apply() path as typing in the number input."""
+    page = meta_page
+    _open_gradient_picker(page)
+    before = _canvas_snapshot(page)
+
+    _drag_knob_to_fraction(page, 0, 0.5)
+
+    _wait_for_canvas_change(page, before)
+    # An int column snaps to whole numbers: halfway along 1..9 is 5.
+    assert _stop_values(page)[0] == 5
+    assert page.input_value(
+        '.cp-stop-row[data-stop-index="0"] [data-stop-field="value"]') == "5"
+    assert page.evaluate(
+        "() => state.customPalettes[paletteKey('score')].stops[0].value") == 5
+    assert page.pageerrors == []
+
+
+def test_a_dragged_knob_cannot_cross_its_neighbour(meta_page):
+    """Low is held at high (and vice versa) so the ramp cannot invert."""
+    page = meta_page
+    _open_gradient_picker(page)
+    _set_stop(page, 1, "value", "6", commit=True)
+
+    _drag_knob_to_fraction(page, 0, 1.0)
+    assert _stop_values(page) == [6, 6]
+
+    _set_stop(page, 0, "value", "3", commit=True)
+    _drag_knob_to_fraction(page, 1, 0.0)
+    assert _stop_values(page) == [3, 3]
+    assert page.pageerrors == []
+
+
+def test_knobs_are_keyboard_operable(meta_page):
+    """Arrow keys step the bound; Home/End jump to the ends of the axis."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.eval_on_selector(
+        '#color-range-slider .cp-range-knob[data-stop-index="0"]', "e => e.focus()")
+
+    page.keyboard.press("ArrowRight")
+    assert _stop_values(page)[0] == 2
+    page.keyboard.press("ArrowLeft")
+    assert _stop_values(page)[0] == 1
+    page.keyboard.press("Home")
+    assert _stop_values(page)[0] == 1
+
+    page.eval_on_selector(
+        '#color-range-slider .cp-range-knob[data-stop-index="1"]', "e => e.focus()")
+    page.keyboard.press("End")
+    assert _stop_values(page)[1] == 9
+    assert page.evaluate(
+        "() => document.activeElement.dataset.stopIndex") == "1"
+    assert page.pageerrors == []
+
+
+def test_delete_key_removes_the_focused_intermediate_knob(meta_page):
+    """Delete on a knob drops that stop; on an end knob it does nothing."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+    page.eval_on_selector(
+        '#color-range-slider .cp-range-knob[data-stop-index="1"]', "e => e.focus()")
+
+    page.keyboard.press("Delete")
+    assert _stop_values(page) == [1, 9]
+
+    page.eval_on_selector(
+        '#color-range-slider .cp-range-knob[data-stop-index="0"]', "e => e.focus()")
+    page.keyboard.press("Delete")
+    assert _stop_values(page) == [1, 9]
+    assert page.pageerrors == []
+
+
+def test_reset_values_returns_the_knobs_to_the_axis_ends(meta_page):
+    """"Reset values to data range" puts the ramp back over the whole axis."""
+    page = meta_page
+    _open_gradient_picker(page)
+    _set_stop(page, 0, "value", "4", commit=True)
+    _set_stop(page, 1, "value", "6", commit=True)
+    assert _knob_percent(page, 0) > 0
+
+    page.click("#color-reset-values")
+
+    assert _knob_percent(page, 0) == 0
+    assert _knob_percent(page, 1) == 100
+    assert page.pageerrors == []
+
+
+def test_float_column_knobs_do_not_snap_to_integers(meta_page):
+    """Only int columns snap; a float column keeps fractional bounds."""
+    page = meta_page
+    page.evaluate(
+        """() => {
+            const columnIndex = state.metadataColumnIndexByName.get('score');
+            state.metadataColumnByName.get('score').type = 'float';
+            [0.0, 2.0, 4.0, 6.0, 8.0, 10.0].forEach((value, nodeIndex) => {
+                state.metadataByNodeIndex[nodeIndex][columnIndex] = value;
+            });
+            rebuildMetadataCaches();
+        }"""
+    )
+    _open_gradient_picker(page)
+    assert page.evaluate("() => state.colorHistogram.integer") is False
+
+    _drag_knob_to_fraction(page, 0, 0.25)
+
+    value = float(_stop_values(page)[0])
+    assert 2.0 < value < 3.0, value
+    assert page.pageerrors == []
+
+
+def test_a_pre_stops_session_keeps_its_colors(meta_page):
+    """Sessions saved before gradients were stop lists must still load.
+
+    They carry {low, mid, high} with separate lowValue/midValue/highValue
+    bounds; converting on read is what lets the rest of the viewer know only
+    about stops.
+    """
+    page = meta_page
+    converted = page.evaluate(
+        """() => {
+            const legacy = {'score': {type: 'numeric', low: '#000080', mid: '#00ff00',
+                                      high: '#ff0000', lowValue: 10, midValue: 40,
+                                      highValue: 80, nullColor: '#cccccc'}};
+            normalizeCustomPalettes(legacy);
+            const palette = legacy['score'];
+            return {
+                stops: palette.stops,
+                nullColor: palette.nullColor,
+                at_low: numericColor(10, 1, 99, palette),
+                at_mid: numericColor(40, 1, 99, palette),
+                at_high: numericColor(80, 1, 99, palette),
+                below: numericColor(5, 1, 99, palette),
+                above: numericColor(90, 1, 99, palette),
+            };
+        }"""
+    )
+    assert converted["stops"] == [
+        {"value": 10, "color": "#000080"},
+        {"value": 40, "color": "#00ff00"},
+        {"value": 80, "color": "#ff0000"},
+    ]
+    assert converted["nullColor"] == "#cccccc"
+    # Each old color still lands on the value it was bound to...
+    assert converted["at_low"] == "#000080"
+    assert converted["at_mid"] == "#00ff00"
+    assert converted["at_high"] == "#ff0000"
+    # ...and the old bounds still clamp.
+    assert converted["below"] == "#000080"
+    assert converted["above"] == "#ff0000"
+    assert page.pageerrors == []
+
+
+def test_a_two_color_pre_stops_session_converts_to_two_stops(meta_page):
+    """No midpoint color in the old shape means no third stop."""
+    page = meta_page
+    stops = page.evaluate(
+        """() => {
+            const legacy = {'score': {type: 'numeric', low: '#000000', mid: null,
+                                      high: '#ffffff', lowValue: null, midValue: 4,
+                                      highValue: null, nullColor: null}};
+            normalizeCustomPalettes(legacy);
+            return legacy['score'].stops;
+        }"""
+    )
+    # Null bounds fall back to the data range, and the stale mid VALUE that used
+    # to bend the ramp is dropped along with the absent mid color.
+    assert [stop["color"] for stop in stops] == ["#000000", "#ffffff"]
+    assert len(stops) == 2
+    assert page.pageerrors == []
+
+
+def test_gradient_stops_survive_a_session_round_trip(meta_page, tmp_path):
+    """A tuned multi-stop ramp reloads exactly."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+    page.click("#color-add-stop")
+    _set_stop(page, 1, "color", "#ff0000")
+    _set_stop(page, 2, "color", "#00ff00")
+    before = _stop_values(page)
+    colors = _stop_colors(page)
+    page.click("#color-picker-close")
+
+    saved = _save_session(page, tmp_path)
+    _load_bundle_file(page, saved)
+    _open_gradient_picker(page)
+
+    assert _stop_values(page) == before
+    assert _stop_colors(page) == colors
+    assert page.locator(".cp-stop-row").count() == 4
+    assert page.pageerrors == []
+
+
+def test_legend_gradient_carries_one_svg_stop_per_palette_stop(meta_page):
+    """The exported legend is the ramp exactly, not a sampled approximation."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+    _set_stop(page, 1, "color", "#ff0000")
+    _set_stop(page, 1, "value", "3", commit=True)
+
+    svg = page.evaluate("() => buildLegendSVG().svg")
+    offsets = re.findall(r'<stop offset="([\d.]+)%" stop-color="([^"]+)"', svg)
+    assert len(offsets) == 3
+    # Stop values 1, 3, 9 across a 1..9 bar put the middle stop a quarter along.
+    assert [round(float(offset), 4) for offset, _ in offsets] == [0.0, 25.0, 100.0]
+    assert offsets[1][1] == "#ff0000"
+    assert page.pageerrors == []
+
+
+def test_legend_ticks_drop_only_where_they_would_collide(meta_page):
+    """A crowded ramp still labels its ends, whatever it does in between."""
+    page = meta_page
+    _open_gradient_picker(page)
+    cap = page.evaluate("() => MAX_GRADIENT_STOPS")
+    for _ in range(cap - 2):
+        page.click("#color-add-stop")
+
+    svg = page.evaluate("() => buildLegendSVG().svg")
+    ticks = re.findall(r'text-anchor="(\w+)">([^<]*)</text>', svg)
+    assert ticks[0] == ("start", "1")
+    assert ticks[-1] == ("end", "9")
+    assert 2 <= len(ticks) <= cap
+    assert page.pageerrors == []
+
+
+def _hex_field(page, index):
+    return page.locator(
+        f'.cp-stop-row[data-stop-index="{index}"] [data-stop-field="hex"]')
+
+
+def _type_hex(page, index, text):
+    """Type into a stop's hex field and leave it, as a user would."""
+    node = _hex_field(page, index)
+    node.fill(text)
+    node.dispatch_event("input")
+    node.dispatch_event("change")
+
+
+def test_hex_field_shows_the_canonical_spelling(meta_page):
+    """Each stop carries a copy-pastable hex code beside its swatch."""
+    page = meta_page
+    _open_gradient_picker(page)
+    for index in range(2):
+        shown = _hex_field(page, index).input_value()
+        assert re.fullmatch(r"#[0-9A-F]{6}", shown), shown
+        # Same color as the swatch, just spelled canonically.
+        assert shown.lower() == _stop_colors(page)[index]
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("typed, expected", [
+    ("ff0000", "#FF0000"),          # bare six digits
+    ("#00ff00", "#00FF00"),         # lower case
+    ("  #0000FF  ", "#0000FF"),     # surrounding whitespace
+    ("abc", "#AABBCC"),             # three-digit shorthand, no hash
+    ("#F0F", "#FF00FF"),            # three-digit shorthand with hash
+])
+def test_hex_field_normalizes_on_leaving_the_field(meta_page, typed, expected):
+    """Input is taken loosely and rewritten canonically once the field is left."""
+    page = meta_page
+    _open_gradient_picker(page)
+
+    _type_hex(page, 0, typed)
+
+    assert _hex_field(page, 0).input_value() == expected
+    assert _stop_colors(page)[0] == expected.lower()
+    # The swatch is the same color by another name, so it follows.
+    assert page.input_value(
+        '.cp-stop-row[data-stop-index="0"] [data-stop-field="color"]') == expected.lower()
+    assert page.pageerrors == []
+
+
+def test_hex_field_recolors_the_network(meta_page):
+    """Typing a color is a gradient edit like any other."""
+    page = meta_page
+    _open_gradient_picker(page)
+    before = _canvas_snapshot(page)
+
+    _type_hex(page, 0, "#ff0000")
+
+    _wait_for_canvas_change(page, before)
+    assert page.evaluate(
+        "() => state.customPalettes[paletteKey('score')].stops[0].color") == "#ff0000"
+    assert page.pageerrors == []
+
+
+def test_hex_field_reverts_text_that_is_not_a_color(meta_page):
+    """A rejected entry restores the stop's color rather than being left standing."""
+    page = meta_page
+    _open_gradient_picker(page)
+    _type_hex(page, 0, "#123456")
+
+    _type_hex(page, 0, "aabbccdd")
+
+    assert _hex_field(page, 0).input_value() == "#123456"
+    assert _stop_colors(page)[0] == "#123456"
+    assert "not a hex color" in page.eval_on_selector("#bundle-status", "e => e.textContent")
+    assert page.pageerrors == []
+
+
+def test_clearing_the_hex_field_cancels_quietly(meta_page):
+    """Emptying the field and tabbing away reads as cancelling, not as an error."""
+    page = meta_page
+    _open_gradient_picker(page)
+    _type_hex(page, 0, "#123456")
+    page.evaluate("() => setStatus('unchanged')")
+
+    _type_hex(page, 0, "")
+
+    assert _hex_field(page, 0).input_value() == "#123456"
+    assert page.eval_on_selector("#bundle-status", "e => e.textContent") == "unchanged"
+    assert page.pageerrors == []
+
+
+def test_editing_the_swatch_updates_the_hex_field(meta_page):
+    """The swatch and the hex code are two views of one color."""
+    page = meta_page
+    _open_gradient_picker(page)
+
+    _set_stop(page, 1, "color", "#00ff7f")
+
+    assert _hex_field(page, 1).input_value() == "#00FF7F"
+    assert page.pageerrors == []
+
+
+def test_added_stops_get_a_hex_field_too(meta_page):
+    """Rows are generated, so a new stop is not a special case."""
+    page = meta_page
+    _open_gradient_picker(page)
+    page.click("#color-add-stop")
+
+    assert page.locator("[data-stop-field='hex']").count() == 3
+    assert _hex_field(page, 1).input_value().lower() == _stop_colors(page)[1]
+    assert page.pageerrors == []
+
+
+def test_color_table_load_accepts_shorthand_hex(meta_page, tmp_path):
+    """The looser parser is shared, so color tables take shorthand as well."""
+    page = meta_page
+    page.select_option("#color-by", "family")
+    table = tmp_path / "colors.tsv"
+    table.write_text("alpha\t#f00\nbeta\t0f0\ngamma\t#0000ff\n")
+
+    page.set_input_files("#color-table-file", str(table))
+    page.wait_for_function(
+        "() => document.getElementById('bundle-status').textContent.startsWith('Loaded 3')"
+    )
+
+    assert page.evaluate(
+        "() => state.customPalettes[paletteKey('family')].colors") == {
+            "alpha": "#FF0000", "beta": "#00FF00", "gamma": "#0000FF"}
     assert page.pageerrors == []

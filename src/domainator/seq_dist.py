@@ -213,6 +213,53 @@ def _finish_query_progress(progress_bar, current_query_idx, total_queries):
             progress_bar.update(remaining)
     progress_bar.close()
 
+# A large square all-vs-all search, at a sensitivity where diamond collapses its index
+# to a single chunk, is the configuration that exhausts scratch space. Warn about it,
+# but do not retune it: peak scratch is not predictable from the input size.
+PREFLIGHT_SEQUENCE_THRESHOLD = 50_000
+# Sensitivities where diamond auto-selects --index-chunks 1 (measured, diamond v2.2.5.185).
+SINGLE_INDEX_CHUNK_MODES = frozenset({"vs", "us"})
+# --params keys that mean the caller has already bounded diamond's scratch themselves.
+_SCRATCH_TUNING_FLAGS = frozenset({"-b", "--block-size", "-c", "--index-chunks"})
+
+
+def build_diamond_preflight_warning(mode, n_sequences, total_letters, square,
+                                    tmpdir=None, diamond_params=None):
+    """Return an advisory for a large all-vs-all diamond search, or None.
+
+    This only advises. It deliberately does not adjust diamond's options: peak scratch
+    demand depends on the redundancy of the input and on how much of the filesystem
+    other users take during the run, neither of which is knowable up front.
+    """
+    if not square or n_sequences < PREFLIGHT_SEQUENCE_THRESHOLD:
+        return None
+    if mode not in SINGLE_INDEX_CHUNK_MODES:
+        return None
+    if diamond_params and _SCRATCH_TUNING_FLAGS.intersection(diamond_params):
+        return None  # caller has already bounded it
+
+    lines = [
+        "WARNING: large all-vs-all diamond search; this can exhaust scratch space.",
+        f"  {n_sequences:,} sequences ({total_letters:,} aa) compared against themselves,",
+        f"  at --algorithm diamond_{mode}, where diamond uses a single index chunk.",
+    ]
+    if tmpdir is not None:
+        free = _describe_free_space(tmpdir)
+        lines.append(f"  Scratch directory: {tmpdir}" + (f" ({free})" if free else ""))
+        lines.append("  Set TMPDIR to place it on another filesystem. diamond unlinks this")
+        lines.append("  scratch while holding it open, so `du` and `ls` will not show it;")
+        lines.append("  only the filesystem's free space reflects it.")
+    lines.append("  Peak scratch can reach the terabyte range for a redundant input, and is")
+    lines.append("  not tuned automatically because it cannot be predicted from input size.")
+    lines.append("  To bound it, pass block/index-chunk options through --params, e.g.:")
+    lines.append("      --params '\"-b\":0.07, \"-c\":4'")
+    lines.append("  A smaller -b lowers peak scratch further; -c splits the reference index")
+    lines.append("  into that many passes. Neither changes the resulting matrix.")
+    lines.append("  Lowering --algorithm (diamond_s, diamond_mids) reduces the work most, but")
+    lines.append("  does change which hits are found.")
+    return "\n".join(lines)
+
+
 # Substrings diamond writes when a run dies for a reason the caller can act on.
 # Matched case-insensitively against the captured stderr.
 _DIAMOND_DISK_PATTERNS = ("no space left on device", "error writing to file",
@@ -451,6 +498,9 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
     if diamond_params:
         overridable_params.update(diamond_params)
     add_params_to_args_list(dmnd_command, overridable_params)
+
+    # Echo the exact command so a run can be reproduced or retuned straight from a log.
+    print("Running diamond:\n  " + " ".join(dmnd_command), file=sys.stderr, flush=True)
 
     try:
         dmnd_process = subprocess.Popen(
@@ -699,6 +749,14 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
                     dmnd_ref = tmpdir + "/ref.fasta"
                     convert_to_fasta(reference_path, dmnd_ref)
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_seq_name_to_idx_dict(dmnd_ref) #name to index
+            preflight = build_diamond_preflight_warning(
+                parts[1], len(query_name_to_idx), int(sum(query_idx_to_len)),
+                square=(input_path == reference_path),
+                tmpdir=tmpdir, diamond_params=diamond_params,
+            )
+            if preflight is not None:
+                print(preflight, file=sys.stderr, flush=True)
+
             # call diamond
             
             results_iter = diamond(dmnd_input, dmnd_ref, k, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params)
