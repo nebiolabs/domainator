@@ -43,7 +43,7 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
         matrix.write(input_file, output_type="dense")
         _write_metadata(metadata_file, row_names)
@@ -113,7 +113,7 @@ def test_build_ssn_viewer_records_categorical_columns():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
         matrix.write(input_file, output_type="dense")
         _write_metadata(metadata_file, row_names)
@@ -142,7 +142,7 @@ def test_build_ssn_viewer_rejects_unknown_categorical_column():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
         matrix.write(input_file, output_type="dense")
 
         with pytest.raises(ValueError, match="categorical column 'missing'"):
@@ -167,7 +167,7 @@ def test_build_ssn_viewer_cluster_counts_match_maxtree():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
         matrix.write(input_file, output_type="dense")
 
         build_ssn_viewer.main([
@@ -205,7 +205,7 @@ def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
         matrix.write(input_file, output_type="dense")
 
         build_ssn_viewer.main([
@@ -249,7 +249,7 @@ def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
         matrix.write(input_file, output_type="dense")
         _write_metadata(metadata_file, row_names)
@@ -282,7 +282,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
         html_file = os.path.join(output_dir, "viewer.html")
         matrix.write(input_file, output_type="dense")
 
@@ -528,7 +528,7 @@ def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied():
 
 def test_build_ssn_viewer_rejects_output_without_input():
     with tempfile.TemporaryDirectory() as output_dir:
-        bundle_file = os.path.join(output_dir, "test_bundle.ssnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
         with pytest.raises(SystemExit, match="-o/--output requires -i/--input"):
             build_ssn_viewer.main([
@@ -582,7 +582,7 @@ def test_load_bundle_accepts_every_supported_version():
         assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4)
 
         for version in ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
-            path = os.path.join(output_dir, f"v{version}.ssnv")
+            path = os.path.join(output_dir, f"v{version}.dsnv")
             payload = dict(bundle, version=version)
             if version >= 4:
                 # A saved session; the reader must ignore the extra section.
@@ -590,9 +590,9 @@ def test_load_bundle_accepts_every_supported_version():
             build_ssn_viewer.write_ssn_viewer_bundle(path, payload)
             assert ssn_bundle.load_bundle(path)["version"] == version
 
-        unsupported = os.path.join(output_dir, "v99.ssnv")
+        unsupported = os.path.join(output_dir, "v99.dsnv")
         build_ssn_viewer.write_ssn_viewer_bundle(unsupported, dict(bundle, version=99))
-        with pytest.raises(ValueError, match="Unsupported SSN viewer bundle version 99"):
+        with pytest.raises(ValueError, match="Unsupported Domainator Similarity Network Viewer bundle version 99"):
             ssn_bundle.load_bundle(unsupported)
 
 
@@ -603,7 +603,7 @@ def test_viewer_heading_names_the_network():
     assert viewer_heading("GH17") == f"{VIEWER_APP_NAME}: GH17"
     assert viewer_heading("  GH17  ") == f"{VIEWER_APP_NAME}: GH17"
     # Titles that name no particular network collapse to the app name alone,
-    # rather than "<app name>: Domainator SSN Viewer".
+    # rather than "<app name>: <app name>", including the pre-rename app name.
     for generic in (None, "", "   ", "Domainator SSN Viewer", VIEWER_APP_NAME):
         assert viewer_heading(generic) == VIEWER_APP_NAME
 

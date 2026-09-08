@@ -1,4 +1,4 @@
-"""Navigate a build_ssn_viewer ``.ssnv`` bundle and emit compact JSON summaries.
+"""Navigate a build_ssn_viewer ``.dsnv`` bundle and emit compact JSON summaries.
 
 This is a read-only, agent-friendly companion to the interactive HTML SSN
 viewer. Instead of rendering the whole network, it answers targeted questions
@@ -119,7 +119,7 @@ def _cluster_for_node(hierarchy, active_ids, node_index):
 
 def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
                   min_size=1, top_n=50, members=False):
-    """Answer a single navigation query against a loaded ``.ssnv`` bundle dict.
+    """Answer a single navigation query against a loaded ``.dsnv`` bundle dict.
 
     Returns a JSON-serializable dict. See the module docstring for modes.
     """
@@ -221,7 +221,7 @@ def main(argv):
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__,
                             formatter_class=RawAndDefaultsFormatter)
     parser.add_argument("-i", "--input", type=str, required=True,
-                        help="An SSN viewer bundle (.ssnv) produced by build_ssn_viewer.py.")
+                        help="A Domainator Similarity Network Viewer bundle (.dsnv) produced by build_ssn_viewer.py.")
     parser.add_argument("-o", "--output", type=str, default=None,
                         help="Write JSON to this file. Default: stdout.")
     parser.add_argument("--mode", type=str, default="overview", choices=MODES,

@@ -158,10 +158,10 @@ order in which equal-weight edges happened to be sorted.
 
 In the future, we may add a `DESCRIPTION` field to distinguish different kinds of data, like raw scores, normalized scores, etc. But so far it is up to the user to remember what the data represents. We may also add `ROW_SEQ_LENGTHS` and `COL_SEQ_LENGTHS` variables to allow for calculation of scores using the EFI score formula, which normalizes on length.
 
-## SSN viewer bundles (`.ssnv`)
+## Domainator Similarity Network Viewer bundles (`.dsnv`)
 
-`build_ssn_viewer.py` turns a symmetric similarity matrix into an `.ssnv` bundle: a
-**gzip-compressed JSON document** read by the standalone HTML viewer
+`build_ssn_viewer.py` turns a symmetric similarity matrix into a `.dsnv` bundle: a
+**gzip-compressed JSON document** read by the standalone HTML viewer page
 (`--html`/`--embed_data`) and by `ssn_navigator.py`. Readers accept plain (uncompressed)
 JSON as well, detected by the gzip magic number. The bundle stores an MST-derived merge
 hierarchy rather than the matrix itself, so its size scales with the node count, not with

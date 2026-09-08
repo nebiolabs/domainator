@@ -733,7 +733,7 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
-        bundle_path = os.path.join(output_dir, "net.ssnv")
+        bundle_path = os.path.join(output_dir, "net.dsnv")
         DenseDataMatrix(data, row_names, row_names).write(input_file, output_type="dense")
         matrix_report.main(["-i", input_file, "--html", out_html])
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_path])

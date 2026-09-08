@@ -1,4 +1,4 @@
-"""Browser-driven regression tests for the generated SSN viewer HTML.
+"""Browser-driven regression tests for the generated Domainator Similarity Network Viewer HTML.
 
 The other viewer tests (test_build_ssn_viewer.py) only assert that the
 generated HTML *string* contains the expected markup and function names. They
@@ -953,7 +953,7 @@ def test_treemap_click_in_node_gap_still_selects(page):
 # ---------------------------------------------------------------------------
 
 
-def _save_session(page, out_dir, filename="session.ssnv"):
+def _save_session(page, out_dir, filename="session.dsnv"):
     """Click "Save session…" and return the path the download was saved to."""
     with page.expect_download() as download_info:
         page.click("#save-session")
@@ -974,7 +974,7 @@ def _load_bundle_file(page, path):
 
 
 def _read_session_bundle(path):
-    """Decompress a saved .ssnv session and return the parsed JSON."""
+    """Decompress a saved .dsnv session and return the parsed JSON."""
     import gzip
     import json
 
@@ -1093,7 +1093,7 @@ def test_session_with_unknown_keys_loads_and_reports(meta_page, tmp_path):
     bundle["app_state"]["view"]["a_setting_from_the_future"] = 42
     bundle["app_state"]["view"]["color_by"] = "no_such_column"
     bundle["app_state"]["an_entire_unknown_section"] = {"x": 1}
-    edited = tmp_path / "edited.ssnv"
+    edited = tmp_path / "edited.dsnv"
     edited.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, edited)
@@ -1116,7 +1116,7 @@ def test_session_reports_node_ids_missing_from_bundle(meta_page, tmp_path):
     saved = _save_session(page, tmp_path)
     bundle = _read_session_bundle(saved)
     bundle["app_state"]["selection"]["node_ids"] = ["A", "C", "GONE_1", "GONE_2"]
-    edited = tmp_path / "missing.ssnv"
+    edited = tmp_path / "missing.dsnv"
     edited.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, edited)
@@ -1136,7 +1136,7 @@ def test_unknown_bundle_version_loads_with_a_warning(meta_page, tmp_path):
     saved = _save_session(page, tmp_path)
     bundle = _read_session_bundle(saved)
     bundle["version"] = 99
-    edited = tmp_path / "v99.ssnv"
+    edited = tmp_path / "v99.dsnv"
     edited.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, edited)
@@ -1287,7 +1287,7 @@ def test_presets_survive_a_session_round_trip(meta_page, tmp_path):
     _select_nodes(page, [1, 3])
     page.keyboard.press("Shift+Digit9")
 
-    saved = _save_session(page, tmp_path, "presets.ssnv")
+    saved = _save_session(page, tmp_path, "presets.dsnv")
     presets = _read_session_bundle(saved)["app_state"]["selection"]["presets"]
     assert presets["9"]["node_ids"] == ["B", "D"]
 
@@ -1549,7 +1549,7 @@ def test_edit_panels_open_one_at_a_time(meta_page):
 def test_loading_a_bundle_collapses_the_edit_panels(meta_page, tmp_path):
     page = meta_page
     page.click("#metadata-panel-add")
-    saved = _save_session(page, tmp_path, "panels.ssnv")
+    saved = _save_session(page, tmp_path, "panels.dsnv")
     _load_bundle_file(page, saved)
 
     assert page.eval_on_selector("#metadata-panel-add", "e => e.getAttribute('aria-expanded')") == "false"
@@ -1692,7 +1692,7 @@ def test_edits_and_added_columns_survive_a_session_round_trip(meta_page, tmp_pat
     _edit_cell(page, 0, "annotation", "kept")
     _edit_cell(page, 1, "family", "edited")
 
-    saved = _save_session(page, tmp_path, "edits.ssnv")
+    saved = _save_session(page, tmp_path, "edits.dsnv")
     bundle = _read_session_bundle(saved)
     # The saved file is an ordinary bundle: the edits live in `metadata`, so
     # Python readers see them without knowing anything about app_state.
@@ -1724,7 +1724,7 @@ def test_edited_bundle_is_readable_by_the_python_reader(meta_page, tmp_path):
     page.fill("#metadata-fill-value", "group_one")
     page.click("#metadata-fill-apply")
 
-    bundle = load_bundle(_save_session(page, tmp_path, "annotated.ssnv"))
+    bundle = load_bundle(_save_session(page, tmp_path, "annotated.dsnv"))
     summaries = summarize_cluster_metadata([0, 1, 2], bundle["metadata"])
     label_summary = next(s for s in summaries if s["name"] == "cluster_label")
     assert label_summary["count"] == 3
@@ -1778,7 +1778,7 @@ def test_session_round_trips_custom_colors(meta_page, tmp_path):
     page.evaluate("() => setColumnCategorical('score', true)")
     assert page.evaluate("() => state.nodeColorCache[0]") == "#112233"
 
-    saved = _save_session(page, tmp_path, "colors.ssnv")
+    saved = _save_session(page, tmp_path, "colors.dsnv")
     colors = _read_session_bundle(saved)["app_state"]["colors"]
     assert colors["custom_palettes"]["family"] == {"colors": {"alpha": "#112233"}}
     assert colors["categorical_columns"] == ["score"]
@@ -1894,10 +1894,10 @@ def test_heading_follows_a_newly_loaded_bundle(meta_page, tmp_path):
     import json
 
     page = meta_page
-    saved = _save_session(page, tmp_path, "renamed.ssnv")
+    saved = _save_session(page, tmp_path, "renamed.dsnv")
     bundle = _read_session_bundle(saved)
     bundle["name"] = "Some Other Network"
-    renamed = tmp_path / "renamed_bundle.ssnv"
+    renamed = tmp_path / "renamed_bundle.dsnv"
     renamed.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, renamed)
@@ -2000,7 +2000,7 @@ def test_renamed_columns_survive_a_session_round_trip(meta_page, tmp_path):
     page = meta_page
     _rename_column(page, "family", "clan")
 
-    saved = _save_session(page, tmp_path, "renamed_col.ssnv")
+    saved = _save_session(page, tmp_path, "renamed_col.dsnv")
     bundle = _read_session_bundle(saved)
     assert [c["name"] for c in bundle["metadata"]["columns"]] == ["clan", "score"]
     assert bundle["metadata"]["rows"][0] == ["alpha", 1]
@@ -2199,7 +2199,7 @@ def test_cluster_column_agrees_with_the_tsv_export(meta_page, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _save_extraction(page, out_dir, filename="extraction.ssnv", name=None):
+def _save_extraction(page, out_dir, filename="extraction.dsnv", name=None):
     """Click "Save extraction…", name it in the dialog, and save the download."""
     page.click("#save-extraction")
     page.wait_for_selector("#name-overlay:not([hidden])")
@@ -2276,7 +2276,7 @@ def test_extraction_writes_a_loadable_subset(meta_page, tmp_path):
 
     page = meta_page
     _select_nodes(page, [0, 1, 2])          # A-B-C, connected in the MST
-    saved = _save_extraction(page, tmp_path, "abc.ssnv")
+    saved = _save_extraction(page, tmp_path, "abc.dsnv")
 
     bundle = load_bundle(saved)             # valid for the Python readers too
     assert bundle["graph"]["nodes"] == ["A", "B", "C"]
@@ -2298,7 +2298,7 @@ def test_extraction_reindexes_mst_edges(meta_page, tmp_path):
     """Edge endpoints are renumbered into the extraction's own node list."""
     page = meta_page
     _select_nodes(page, [3, 4, 5])          # D-E-F
-    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "def.ssnv"))
+    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "def.dsnv"))
 
     assert bundle["graph"]["nodes"] == ["D", "E", "F"]
     for source, target, score in bundle["graph"]["mst_edges"]:
@@ -2317,7 +2317,7 @@ def test_extraction_carries_session_state_for_surviving_nodes_only(meta_page, tm
     page.select_option("#color-by", "score")
 
     _select_nodes(page, [3, 4, 5])
-    app_state = _read_session_bundle(_save_extraction(page, tmp_path, "state.ssnv"))["app_state"]
+    app_state = _read_session_bundle(_save_extraction(page, tmp_path, "state.dsnv"))["app_state"]
 
     assert app_state["view"]["color_by"] == "score"
     assert app_state["selection"]["node_ids"] == ["D", "E", "F"]
@@ -2332,7 +2332,7 @@ def test_extraction_loads_without_reporting_missing_node_ids(meta_page, tmp_path
     page = meta_page
     _select_nodes(page, [0, 1, 2])
     page.keyboard.press("Shift+Digit4")
-    saved = _save_extraction(page, tmp_path, "clean.ssnv")
+    saved = _save_extraction(page, tmp_path, "clean.dsnv")
 
     _load_bundle_file(page, saved)
     status = page.eval_on_selector("#bundle-status", "e => e.textContent")
@@ -2360,7 +2360,7 @@ def test_extraction_of_everything_matches_python_on_a_tied_network(many_cat_page
     original = page.evaluate("() => state.bundle.graph")
     _select_nodes(page, list(range(120)))
 
-    extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all120.ssnv"))["graph"]
+    extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all120.dsnv"))["graph"]
 
     assert extracted["hierarchy"] == original["hierarchy"]
     assert extracted["mst_edges"] == original["mst_edges"]
@@ -2378,7 +2378,7 @@ def test_extraction_of_a_contiguous_run_is_connected(many_cat_page, tmp_path):
     """A contiguous stretch of the path is MST-connected; a gapped one is not."""
     page = many_cat_page
     _select_nodes(page, list(range(10, 30)))
-    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "run.ssnv"))
+    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "run.dsnv"))
     assert len(bundle["graph"]["nodes"]) == 20
     assert len(bundle["graph"]["mst_edges"]) == 19
     assert len(bundle["graph"]["hierarchy"]["roots"]) == 1
@@ -2402,7 +2402,7 @@ def test_extraction_of_everything_matches_python_on_distinct_weights(dense_page,
     assert len(original["merge_event_series"]) > 40      # many distinct thresholds
     _select_nodes(page, list(range(60)))
 
-    extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all60.ssnv"))["graph"]
+    extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all60.dsnv"))["graph"]
 
     assert extracted["hierarchy"] == original["hierarchy"]
     assert extracted["cluster_count_by_threshold"] == original["cluster_count_by_threshold"]
@@ -2436,7 +2436,7 @@ def test_extraction_allows_separate_network_components(dense_page, tmp_path):
     assert roots == 3          # the fixture is three unconnected blocks
 
     _select_nodes(page, list(range(60)))
-    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "multi.ssnv"))
+    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "multi.dsnv"))
     assert len(bundle["graph"]["hierarchy"]["roots"]) == 3
     assert len(bundle["graph"]["nodes"]) == 60
     assert page.pageerrors == []
@@ -2493,7 +2493,7 @@ def test_extraction_slider_keeps_the_floor_stop(meta_page, tmp_path):
     at their own fully merged view too."""
     page = meta_page
     _select_nodes(page, [0, 1, 2])
-    saved = _save_extraction(page, tmp_path, "floor.ssnv")
+    saved = _save_extraction(page, tmp_path, "floor.dsnv")
 
     graph = _read_session_bundle(saved)["graph"]
     stops = graph["slider_stops"]
@@ -2531,7 +2531,7 @@ def test_session_restores_categorical_colouring_of_a_numeric_column(meta_page, t
     assert page.evaluate("() => colorInfo('score').type") == "categorical"
     categorical_colors = page.evaluate("() => state.nodeColorCache.slice()")
 
-    saved = _save_session(page, tmp_path, "categorical.ssnv")
+    saved = _save_session(page, tmp_path, "categorical.dsnv")
     _load_bundle_file(page, saved)
 
     assert page.evaluate("() => state.categoricalColumns.has('score')") is True
@@ -2559,7 +2559,7 @@ def test_session_restores_gradient_colouring_when_the_flag_was_cleared(numeric_c
     )
     gradient_colors = page.evaluate("() => state.nodeColorCache.slice()")
 
-    saved = _save_session(page, tmp_path, "gradient.ssnv")
+    saved = _save_session(page, tmp_path, "gradient.dsnv")
     _load_bundle_file(page, saved)
 
     assert page.evaluate("() => state.categoricalColumns.has('score')") is False
@@ -2614,8 +2614,8 @@ def test_rename_is_carried_into_saved_files(meta_page, tmp_path):
     with page.expect_download() as download_info:
         page.click("#save-session")
     download = download_info.value
-    assert download.suggested_filename == "renamed_net_session.ssnv"
-    saved = tmp_path / "renamed.ssnv"
+    assert download.suggested_filename == "renamed_net_session.dsnv"
+    saved = tmp_path / "renamed.dsnv"
     download.save_as(str(saved))
     assert _read_session_bundle(saved)["name"] == "renamed net"
 
@@ -2653,8 +2653,8 @@ def test_extraction_is_named_through_the_dialog(meta_page, tmp_path):
     with page.expect_download() as download_info:
         page.click("#name-apply")
     download = download_info.value
-    assert download.suggested_filename == "clade_A.ssnv"
-    saved = tmp_path / "cladeA.ssnv"
+    assert download.suggested_filename == "clade_A.dsnv"
+    saved = tmp_path / "cladeA.dsnv"
     download.save_as(str(saved))
 
     bundle = _read_session_bundle(saved)

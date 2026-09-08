@@ -2,7 +2,7 @@
   "id": "ssn_navigator",
   "display_name": "SSN Navigator",
   "category": "Summary reports",
-  "description": "Navigate a build_ssn_viewer .ssnv bundle and emit compact JSON summaries of clusters and their metadata at a chosen similarity threshold.",
+  "description": "Navigate a build_ssn_viewer .dsnv bundle and emit compact JSON summaries of clusters and their metadata at a chosen similarity threshold.",
   "runner": "module",
   "priority": 1,
   "entry_point": "domainator.ssn_navigator",
@@ -10,7 +10,7 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "An SSN viewer bundle (.ssnv) produced by build_ssn_viewer.py.",
+      "help": "A Domainator Similarity Network Viewer bundle (.dsnv) produced by build_ssn_viewer.py.",
       "type": "file",
       "required": true,
       "flags": [
@@ -18,7 +18,7 @@
         "--input"
       ],
       "file_types": [
-        "ssnv",
+        "dsnv",
         "gz",
         "json"
       ]

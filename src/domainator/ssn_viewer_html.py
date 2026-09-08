@@ -1,4 +1,4 @@
-"""Static HTML shell for the standalone SSN viewer."""
+"""Static HTML shell for the standalone Domainator Similarity Network Viewer."""
 
 import base64
 import json
@@ -21,7 +21,8 @@ from domainator.utils import NAMED_CATEGORICAL_PALETTES, OTHER_COLOR
 
 VIEWER_APP_NAME = "Domainator Similarity Network Viewer"
 # Titles that name no particular network, so the heading shows the app name alone
-# rather than "<app name>: Domainator SSN Viewer".
+# rather than "<app name>: <app name>". The old app name is kept here so bundles
+# written before the rename still get the bare heading.
 _GENERIC_TITLES = frozenset({"", VIEWER_APP_NAME, "Domainator SSN Viewer"})
 
 
@@ -885,7 +886,7 @@ def _session_state_js() -> str:
             if (browserSupportsBundleSaving()) {
                 const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
                 blob = await new Response(stream).blob();
-                extension = '.ssnv';
+                extension = '.dsnv';
             } else {
                 // decodeBundleFile falls back to plain JSON, so this still round-trips.
                 blob = new Blob([bytes], {type: 'application/json'});
@@ -2699,7 +2700,7 @@ def _extraction_js() -> str:
 """
 
 def ssn_viewer_html(
-    title: str = "Domainator SSN Viewer",
+    title: str = VIEWER_APP_NAME,
     embedded_bundle_json: bytes | None = None,
 ) -> str:
     def escape_html(text):
@@ -3648,7 +3649,7 @@ def ssn_viewer_html(
             <button id="rename-network" type="button" class="title-edit" disabled aria-label="Rename this network" title="Rename this network. The name appears in the heading and the browser tab, is stored in the bundle, and names every file saved from here. You can also double-click the heading.">&#9998;</button>
         </div>
         <div class="loader">
-            <input id="bundle-file" type="file" accept=".ssnv,.gz,.json,.ssnview" />
+            <input id="bundle-file" type="file" accept=".dsnv,.ssnv,.gz,.json,.ssnview" />
             <div id="bundle-status" class="status">No bundle loaded.</div>
             <div id="browser-warning" class="status"></div>
         </div>
@@ -3780,8 +3781,8 @@ def ssn_viewer_html(
                     </select>
                     <button id="export-svg" type="button" disabled>Export view SVG</button>
                     <button id="customize-colors" type="button" disabled>Customize colors…</button>
-                    <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .ssnv session file">Save session…</button>
-                    <button id="save-extraction" type="button" disabled title="Download a new .ssnv bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
+                    <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .dsnv session file">Save session…</button>
+                    <button id="save-extraction" type="button" disabled title="Download a new .dsnv bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
                 </div>
                 <div class="note" id="selection-note">Load a bundle to begin exploring metadata.</div>
             </div>
@@ -9697,7 +9698,7 @@ def ssn_viewer_html(
 
 def write_ssn_viewer_html(
     out_path: str,
-    title: str = "Domainator SSN Viewer",
+    title: str = VIEWER_APP_NAME,
     embedded_bundle_json: bytes | None = None,
 ) -> None:
     temp_path = make_temporary_output_path(out_path)

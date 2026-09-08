@@ -45,8 +45,8 @@ def merge_impact_axis_labels(metric: str) -> dict:
 
     Under ``min_child`` an impact is a count of nodes; under ``product`` it is a product of
     two component sizes, which is not a node count and must not be labelled as one. Both
-    the Plotly chart in matrix_report and the canvas chart in the SSN viewer read these so
-    the two cannot drift apart.
+    the Plotly chart in matrix_report and the canvas chart in the Domainator Similarity
+    Network Viewer read these so the two cannot drift apart.
     """
     if metric == MERGE_IMPACT_PRODUCT:
         return {

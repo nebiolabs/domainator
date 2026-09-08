@@ -1,8 +1,9 @@
 """Direct tests for the merge-event data layer that the split charts render.
 
-`matrix_report` and the SSN viewer both draw stems at `largest_merge` with one bead per
-distinct merge size, and a moving-sum line over `merge_impact`. These tests pin the
-relationships between those quantities, which the charts rely on but cannot check.
+`matrix_report` and the Domainator Similarity Network Viewer both draw stems at
+`largest_merge` with one bead per distinct merge size, and a moving-sum line over
+`merge_impact`. These tests pin the relationships between those quantities, which
+the charts rely on but cannot check.
 """
 import numpy as np
 import pytest

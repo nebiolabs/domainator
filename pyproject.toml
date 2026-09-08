@@ -92,7 +92,7 @@ core = [
 ]
 test = ["pytest >=7.4.2",
         "pytest-datadir~=1.4.1"]
-# Browser-driven regression tests for the SSN viewer HTML. Not part of `test`
+# Browser-driven regression tests for the Domainator Similarity Network Viewer HTML. Not part of `test`
 # because Playwright also needs a one-time browser download:
 #   pip install -e ".[test,browser]" && playwright install chromium
 # The tests in test/test_ssn_viewer_browser.py skip automatically when the

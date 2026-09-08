@@ -1,4 +1,4 @@
-"""Build a compact MST-based bundle for the standalone SSN viewer."""
+"""Build a compact MST-based bundle for the standalone Domainator Similarity Network Viewer (DSNV)."""
 
 import gzip
 import json
@@ -37,7 +37,7 @@ from domainator.ssn_hierarchy import (
     threshold_merge_event_rows,
     threshold_slider_stops,
 )
-from domainator.ssn_viewer_html import write_ssn_viewer_html
+from domainator.ssn_viewer_html import VIEWER_APP_NAME, write_ssn_viewer_html
 from domainator.utils import list_and_file_to_dict_keys
 
 
@@ -123,7 +123,7 @@ def build_ssn_viewer_bundle(
 
     matrix = subset_matrix_by_labels(matrix, subset_labels)
     if not matrix.symmetric_labels:
-        raise ValueError("Input does not have symmetric axis labels. Can only build an SSN viewer bundle from a symmetric matrix.")
+        raise ValueError("Input does not have symmetric axis labels. Can only build a Domainator Similarity Network Viewer bundle from a symmetric matrix.")
 
     node_data = pd.DataFrame(index=matrix.rows)
     if metadata_files is not None:
@@ -197,7 +197,7 @@ def _write_compressed_ssn_viewer_bundle(
     enforce_output_limit(
         projected_bytes=len(compressed_bytes),
         max_output_bytes=max_output_bytes,
-        output_description=f"SSN viewer bundle output '{out_path}'",
+        output_description=f"Domainator Similarity Network Viewer bundle output '{out_path}'",
         mitigation_options=["--subset", "--subset_file"],
         extra_guidance="This bundle stores only MST-derived hierarchy data; subset the network before export if it is still too large.",
     )
@@ -225,9 +225,9 @@ def main(argv):
     parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
     parser.add_argument("-i", "--input", type=str, required=False,
-                        help="Symmetric similarity matrix to convert into an SSN viewer bundle. Format can be tab-separated text or Domainator hdf5.")
+                        help="Symmetric similarity matrix to convert into a Domainator Similarity Network Viewer bundle. Format can be tab-separated text or Domainator hdf5.")
     parser.add_argument("-o", "--output", type=str, required=False,
-                        help="Path to write the gzip-compressed JSON SSN viewer bundle.")
+                        help="Path to write the gzip-compressed JSON Domainator Similarity Network Viewer bundle.")
     parser.add_argument("--html", type=str, default=None,
                         help="Optional path to write a standalone static HTML viewer shell that loads local bundle files.")
     parser.add_argument("--embed_data", action="store_true",
@@ -263,7 +263,7 @@ def main(argv):
         if params.html is None:
             raise SystemExit("When -i/--input is omitted, --html is required.")
 
-        bundle_name = params.name if params.name is not None else "Domainator SSN Viewer"
+        bundle_name = params.name if params.name is not None else VIEWER_APP_NAME
         write_ssn_viewer_html(params.html, title=bundle_name)
         return
 
@@ -281,7 +281,7 @@ def main(argv):
     elif params.html is not None:
         bundle_name = Path(params.html).stem
     else:
-        bundle_name = "Domainator SSN Viewer"
+        bundle_name = VIEWER_APP_NAME
 
     try:
         bundle = build_ssn_viewer_bundle(

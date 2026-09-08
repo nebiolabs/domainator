@@ -6,7 +6,7 @@ Copy-paste recipes for AI agents (or scripted pipelines) that need
 CLI conventions, read [AGENTS.md](../AGENTS.md) first.
 
 The guiding idea: Domainator's HTML reports and binary artifacts (HDF5
-matrices, XGMML, the `.ssnv` SSN bundle) are meant for humans and browsers.
+matrices, XGMML, the `.dsnv` SSN bundle) are meant for humans and browsers.
 For an agent, reach for the `--json` output modes and `ssn_navigator.py`, which
 return compact, structured slices instead of whole-artifact dumps.
 
@@ -152,13 +152,13 @@ seq_dist.py -i proteins.gb -r proteins.gb --dense dist.hdf5
 enum_report.py -i proteins.gb --by contig --architecture --taxname superkingdom -o meta.tsv
 
 # 3. compact SSN bundle
-build_ssn_viewer.py -i dist.hdf5 -o net.ssnv --metadata meta.tsv
+build_ssn_viewer.py -i dist.hdf5 -o net.dsnv --metadata meta.tsv
 
 # 4. navigate without rendering
-ssn_navigator.py -i net.ssnv --mode overview
-ssn_navigator.py -i net.ssnv --mode thresholds                 # pick a cut-point
-ssn_navigator.py -i net.ssnv --mode clusters --threshold 150   # clusters + sizes
-ssn_navigator.py -i net.ssnv --mode cluster --threshold 150 --id 5   # members + metadata distribution
+ssn_navigator.py -i net.dsnv --mode overview
+ssn_navigator.py -i net.dsnv --mode thresholds                 # pick a cut-point
+ssn_navigator.py -i net.dsnv --mode clusters --threshold 150   # clusters + sizes
+ssn_navigator.py -i net.dsnv --mode cluster --threshold 150 --id 5   # members + metadata distribution
 ```
 
 The `metadata.tsv` columns (from `enum_report`) become the per-cluster
@@ -172,9 +172,9 @@ per connected component.
 
 Add `--html net.html --embed_data` in step 3 for a self-contained browser viewer
 of the same network. Annotations made there (edited cells, new columns) are saved
-back into an ordinary `.ssnv` by its "Save session…" button, so a session file
+back into an ordinary `.dsnv` by its "Save session…" button, so a session file
 feeds straight back into step 4 and the new columns show up in the per-cluster
-distributions. See the `.ssnv` section of [file_formats.md](file_formats.md) for
+distributions. See the `.dsnv` section of [file_formats.md](file_formats.md) for
 the schema.
 
 ## Recipe 3 — inspect a matrix's cluster structure

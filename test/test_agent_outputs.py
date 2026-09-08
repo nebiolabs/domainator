@@ -108,7 +108,7 @@ def _build_bundle(output_dir):
         {"category": ["alpha", "alpha", "beta", "gamma"], "count": [1, 2, 3, 4]},
         index=names,
     ).to_csv(meta, sep="\t")
-    bundle_path = os.path.join(output_dir, "net.ssnv")
+    bundle_path = os.path.join(output_dir, "net.dsnv")
     build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path, "--metadata", meta])
     return bundle_path
 
@@ -179,7 +179,7 @@ def test_ssn_navigator_modes(shared_datadir):
 
 def test_ssn_navigator_rejects_bad_bundle(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        bad = os.path.join(output_dir, "bad.ssnv")
+        bad = os.path.join(output_dir, "bad.dsnv")
         with open(bad, "w") as handle:
             json.dump({"format": "not_a_bundle"}, handle)
         with pytest.raises(ValueError):
@@ -210,7 +210,7 @@ def test_clusters_at_threshold_matches_build_ssn_clustering():
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
-        bundle_path = os.path.join(output_dir, "net.ssnv")
+        bundle_path = os.path.join(output_dir, "net.dsnv")
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
         tree = MaxTree(DataMatrix.from_file(matrix_file))
@@ -261,7 +261,7 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
-        bundle_path = os.path.join(output_dir, "net.ssnv")
+        bundle_path = os.path.join(output_dir, "net.dsnv")
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
 

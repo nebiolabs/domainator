@@ -36,17 +36,18 @@ Prefer these over the HTML reports, which are large and meant for humans:
 
 ## Navigating a sequence-similarity network without rendering it
 
-`build_ssn_viewer.py` produces a compact `.ssnv` bundle (gzip JSON) that the HTML
-viewer renders for humans. `ssn_navigator.py` reads the same bundle and answers
-targeted questions as compact JSON — no rendering, no whole-network dump:
+`build_ssn_viewer.py` produces a compact `.dsnv` bundle (gzip JSON) that the
+Domainator Similarity Network Viewer renders for humans. `ssn_navigator.py` reads
+the same bundle and answers targeted questions as compact JSON — no rendering, no
+whole-network dump:
 
 ```bash
-ssn_navigator.py -i net.ssnv --mode overview                       # size + metadata columns
-ssn_navigator.py -i net.ssnv --mode thresholds                     # suggested similarity cut-points
-ssn_navigator.py -i net.ssnv --mode clusters --threshold 50        # clusters (+sizes) at a threshold
-ssn_navigator.py -i net.ssnv --mode cluster --threshold 50 --id 5  # one cluster: members + metadata distributions
-ssn_navigator.py -i net.ssnv --mode cluster --threshold 50 --node ABC123   # the cluster a node falls in
-ssn_navigator.py -i net.ssnv --mode node --node ABC123             # a node's metadata + membership across thresholds
+ssn_navigator.py -i net.dsnv --mode overview                       # size + metadata columns
+ssn_navigator.py -i net.dsnv --mode thresholds                     # suggested similarity cut-points
+ssn_navigator.py -i net.dsnv --mode clusters --threshold 50        # clusters (+sizes) at a threshold
+ssn_navigator.py -i net.dsnv --mode cluster --threshold 50 --id 5  # one cluster: members + metadata distributions
+ssn_navigator.py -i net.dsnv --mode cluster --threshold 50 --node ABC123   # the cluster a node falls in
+ssn_navigator.py -i net.dsnv --mode node --node ABC123             # a node's metadata + membership across thresholds
 ```
 
 Higher `--threshold` = finer clusters (more splitting). Omit `--threshold` (or

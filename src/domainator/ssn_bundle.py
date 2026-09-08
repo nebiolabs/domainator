@@ -1,4 +1,4 @@
-"""Read-only helpers for navigating a build_ssn_viewer ``.ssnv`` bundle.
+"""Read-only helpers for navigating a build_ssn_viewer ``.dsnv`` bundle.
 
 The bundle is a gzip-compressed JSON document (see ``build_ssn_viewer.py``) that
 stores an agglomerative MST merge tree plus a positional metadata table. These
@@ -36,7 +36,7 @@ SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4)
 
 
 def load_bundle(path: Union[str, PathLike]) -> dict:
-    """Load and validate a ``.ssnv`` bundle (gzip JSON, or plain JSON as a fallback)."""
+    """Load and validate a ``.dsnv`` bundle (gzip JSON, or plain JSON as a fallback)."""
     with open(path, "rb") as handle:
         raw = handle.read()
     if raw[:2] == b"\x1f\x8b":  # gzip magic number
@@ -45,14 +45,14 @@ def load_bundle(path: Union[str, PathLike]) -> dict:
     fmt = bundle.get("format")
     if fmt != SSN_VIEWER_BUNDLE_FORMAT:
         raise ValueError(
-            f"'{path}' is not an SSN viewer bundle (format='{fmt}', "
+            f"'{path}' is not a Domainator Similarity Network Viewer bundle (format='{fmt}', "
             f"expected '{SSN_VIEWER_BUNDLE_FORMAT}')."
         )
     version = bundle.get("version")
     if version not in SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
         supported = ", ".join(str(v) for v in SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS)
         raise ValueError(
-            f"Unsupported SSN viewer bundle version {version}; "
+            f"Unsupported Domainator Similarity Network Viewer bundle version {version}; "
             f"this build understands version(s) {supported}."
         )
     return bundle
