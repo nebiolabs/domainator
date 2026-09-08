@@ -31,7 +31,7 @@
         "-r",
         "--reference"
       ],
-            "file_types": [
+      "file_types": [
         "hmm"
       ]
     },
@@ -49,9 +49,8 @@
     {
       "name": "Score Cutoff",
       "parameter": "score_cutoff",
-      "help": "Report alignments with scores greater than or equal to this.",
+      "help": "Report alignments with scores greater than or equal to this. Default: 10 for amino acid profiles, and the equivalent point on the nucleotide score scale for DNA and RNA profiles (about 4.63). A value supplied here is used as-is, without rescaling.",
       "type": "number",
-      "default": 10.0,
       "flags": [
         "--score_cutoff"
       ]

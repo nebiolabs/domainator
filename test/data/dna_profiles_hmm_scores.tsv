@@ -1,0 +1,36 @@
+query	reference	score
+dna_prof_1	dna_prof_1	52.72
+1         ccgcctggactacttccttgtaatagtcgaaacgggcaggggaacccggatgtgtgtccgatcatcagtgta        72
+          |++|||||||||+|+||||+||+||+++||+||||||||+|||||+||+|||||||+||++|||++||||||          
+1         ccgcctggactacttccttgtaatagtcgaaacgggcaggggaacccggatgtgtgtccgatcatcagtgta        72
+
+
+
+dna_prof_1	dna_prof_2	37.91
+1         ccgcctggactacttccttgtaatagtcgaaacgggcaggggaacccggatgtgtgtccgatcatcagtgta        72
+          +++||+||||||+++||=|-||+|||+--|||=||||++|||-|||||||||+||||-++--||-+|+||+|          
+1         ccgcctggactacttccgtataatagtataaaggggcagggggacccggatgtgtgtgcggccagcagtgta        72
+
+
+
+dna_prof_2	dna_prof_2	51.96
+1         ccgcctggactacttccgtataatagtataaaggggcagggggacccggatgtgtgtgcggccagcagtgta        72
+          ++++|+|||+||+++||||||+||||||+||||||||++||++|+|||||+|+||||+++||+||+++||+|          
+1         ccgcctggactacttccgtataatagtataaaggggcagggggacccggatgtgtgtgcggccagcagtgta        72
+
+
+
+dna_prof_2	dna_prof_1	37.91
+1         ccgcctggactacttccgtataatagtataaaggggcagggggacccggatgtgtgtgcggccagcagtgta        72
+          +++||+||||||+++||=|-||+|||+--|||=||||++|||-|||||||||+||||-++--||-+|+||+|          
+1         ccgcctggactacttccttgtaatagtcgaaacgggcaggggaacccggatgtgtgtccgatcatcagtgta        72
+
+
+
+dna_prof_3	dna_prof_3	52.06
+1         ccaagaagctgcaactagttccagtgcttgccttacgcccaatcgaccccccaattacctatcttagatata        72
+          |||||+|++|||+|++|||++++|+|++||.|++|.||+||||+|||+||||+|||+|||+|+|+|||+||+          
+1         ccaagaagctgcaactagttccagtgcttgccttacgcccaatcgaccccccaattacctatcttagatata        72
+
+
+

@@ -1,10 +1,12 @@
 """Writes record-wise information from hmm files into tab-separated or html tables
 
+Amino acid, DNA, and RNA profiles are all supported; use --alphabet to report which
+alphabet each profile uses.
 """
 
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, read_hmms, pyhmmer_decode
+from domainator.utils import list_and_file_to_dict_keys, pyhmmer_decode, alphabet_name, iter_hmms_with_alphabet
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from pathlib import Path
 from typing import List, Tuple, Union, Iterable, Dict
@@ -31,7 +33,8 @@ def read_hmms_to_iterators(hmm_files:Iterable[Union[str,os.PathLike, IOBase]]) -
             name = file
         name = os.path.basename(Path(name).stem)
 
-        out.append((name, pyhmmer.plan7.HMMFile(file)))
+        _alphabet, profiles = iter_hmms_with_alphabet(file, role="input")
+        out.append((name, profiles))
 
     return out
 
@@ -71,6 +74,7 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
                 "desc": {"columns": ["desc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.description is None else pyhmmer_decode(rec.description)},
                 "length": {"columns": ["length"], "column_types": ["int"], "function": lambda source,rec: rec.M},
                 "consensus": {"columns": ["consensus"], "column_types": ["str"], "function": lambda source,rec: "" if rec.consensus is None else rec.consensus},
+                "alphabet": {"columns": ["alphabet"], "column_types": ["str"], "function": lambda source,rec: alphabet_name(rec.alphabet)},
                 }
     DYNAMIC_ANALYSES = {"append": append_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
     
@@ -157,6 +161,9 @@ def main(argv):
     
     parser.add_argument('--consensus', action='append_const', dest=COLS_ARG_NAME, const="consensus",
                         help="return the consensus residue line of the profile, if set..")
+
+    parser.add_argument('--alphabet', action='append_const', dest=COLS_ARG_NAME, const="alphabet",
+                        help="report the alphabet of the profile (amino, DNA, or RNA).")
     
     parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
                         help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
@@ -167,7 +174,7 @@ def main(argv):
    
     ### Figure out what input and output files ####
     if params.input is None:
-        inputs = [sys.stdin]
+        inputs = [sys.stdin.buffer] # pyhmmer needs a binary stream
     else:
         inputs = params.input
     

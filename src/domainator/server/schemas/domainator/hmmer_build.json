@@ -69,5 +69,24 @@
       ]
     }
   ],
-  "advanced_parameters": []
+  "advanced_parameters": [
+    {
+      "name": "Window Length",
+      "parameter": "window_length",
+      "help": "Max expected hit length (the MAXL field of the profile), used by nhmmer for windowed E-values. DNA/RNA profiles only. If not supplied, hmmer picks one. Takes precedence over Window Beta, so only one of the two may be given.",
+      "type": "integer",
+      "flags": [
+        "--window_length"
+      ]
+    },
+    {
+      "name": "Window Beta",
+      "parameter": "window_beta",
+      "help": "Tail mass from which to derive the window length. DNA/RNA profiles only. Only one of Window Length and Window Beta may be given.",
+      "type": "number",
+      "flags": [
+        "--window_beta"
+      ]
+    }
+  ]
 }

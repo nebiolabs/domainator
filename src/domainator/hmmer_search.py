@@ -13,6 +13,10 @@ and
 
 Söding, Johannes. “Protein Homology Detection by HMM–HMM Comparison.” Bioinformatics 21, no. 7 (April 1, 2005): 951–60. https://doi.org/10.1093/bioinformatics/bti125.
 
+Amino acid, DNA, and RNA profiles are all supported, but the -i and -r sides must use
+the same alphabet (DNA and RNA count as different alphabets). Profile-profile scores are
+on the scale of whichever alphabet is in use, so the default --score_cutoff differs
+between amino acid and nucleotide profiles.
 """
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='numpy') # suppress "UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero."
@@ -24,15 +28,19 @@ import os
 import numpy as np
 import pyhmmer
 from typing import List, Iterable, TextIO, Tuple, Union, Dict, Optional, BinaryIO
-import os
-from pathlib import Path
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.utils import make_pool, pyhmmer_decode
+from domainator.utils import make_pool, pyhmmer_decode, read_hmms, alphabet_name, alphabet_score_scale, common_hmm_alphabet, iter_hmms_with_alphabet
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 from numba import jit
 import numba as nb
 import psutil
+
+
+def _input_display_name(input_file) -> str:
+    if isinstance(input_file, (str, os.PathLike)):
+        return os.fspath(input_file)
+    return getattr(input_file, "name", repr(input_file))
 
 
 def _estimate_hmm_profile_size_bytes(profile: pyhmmer.plan7.HMM) -> int:
@@ -41,29 +49,45 @@ def _estimate_hmm_profile_size_bytes(profile: pyhmmer.plan7.HMM) -> int:
     return len(buffer.getvalue())
 
 
-def read_hmms(hmm_files:Iterable[Union[str,os.PathLike]]) -> Dict[str, Dict[str,pyhmmer.plan7.HMM]]:
-    """
-        hmm_files: a list of paths to .hmm files
+DEFAULT_SCORE_CUTOFF_AMINO = 10.0
+"""Default --score_cutoff for amino acid profiles."""
 
-        returns:
-            a dict of dicts of pyhmmer HMM objects
-                db_name: hmm_name: HMM
 
+def default_score_cutoff(alphabet) -> float:
+    """Alphabet-appropriate default for --score_cutoff.
+
+    Profile-profile scores are sums of natural-log-odds column scores, and the
+    per-column ceiling depends on the alphabet: about log(4)=1.39 for DNA and RNA
+    against about log(20)=3.0 for amino acids. A threshold tuned on proteins is
+    therefore roughly twice as strict on nucleotides, where it silently returns an
+    empty result that looks the same as "no homologs found". Scaling the default
+    keeps it at the same relative position on each alphabet's score scale.
+
+    Only the default is scaled: a --score_cutoff the user supplied explicitly is
+    always taken literally.
     """
-    out = dict()
-    for file in hmm_files:
-        name = os.path.basename(Path(file).stem)
-        
-        hmmer_models = dict() 
-        for model in pyhmmer.plan7.HMMFile(file):
-            model_name = pyhmmer_decode(model.name)
-            if model_name in hmmer_models:
-                warnings.warn(f"multiple hmms with the same name ({model_name}) in file: {file}, only one will be used.")
-            hmmer_models[model_name] = model
-        if name in out:
-            raise RuntimeError(f"Multiple hmm files with the same name, please combine the hmms into a single file, or rename one of the files. This is important to avoid searching the same domains twice, and for naming the source databases.")
-        out[name] = hmmer_models
-    return out
+    if alphabet is None:
+        return DEFAULT_SCORE_CUTOFF_AMINO
+    return DEFAULT_SCORE_CUTOFF_AMINO * alphabet_score_scale(alphabet)
+
+
+def check_alphabets_match(input_alphabet, reference_alphabet, input_name, tool_name) -> None:
+    """Raise if the -i and -r sides of a profile-profile comparison disagree.
+
+    Called in the parent process, before any worker pool is created, so that a
+    mismatch reads as one clear line instead of a multiprocessing traceback.
+    """
+    if input_alphabet is None or reference_alphabet is None:
+        return
+    if input_alphabet == reference_alphabet:
+        return
+    raise ValueError(
+        f"Input (-i) profiles in '{input_name}' are {alphabet_name(input_alphabet)}, but the "
+        f"reference (-r) profiles are {alphabet_name(reference_alphabet)}. {tool_name} aligns "
+        f"profiles column by column, so both sides must use the same alphabet. Rebuild one side "
+        f"with hmmer_build.py --alphabet, or use domainate.py / domain_search.py to search "
+        f"nucleotide profiles against sequences."
+    )
 
 
 #from Algorithm2 pseudocode in:
@@ -133,15 +157,21 @@ def max6(sMM: float, sMI: float, sIM: float, sDG: float, sGD: float, global_mode
     
 @jit(nb.float32(nb.float32[:], nb.float32[:], nb.float32[:]),cache=True, nopython=True)
 def Saa(q:np.array, r:np.array, background:np.array) -> float: #TODO: test
-    """calculate similarity scores for two amino acid distributions
+    """calculate a similarity score for two residue distributions
+
+    Alphabet agnostic: the numba signature leaves the dimension open, so the
+    arrays are length alphabet.K, which is 20 for amino acids and 4 for DNA and RNA.
 
     Args:
-        q (np.array): array size 20, amino acid probabilities
-        r (np.array): array size 20, amino acid probabilities
-        background (np.array): array size 20, amino acid background probabilities
+        q (np.array): array size K, query residue probabilities
+        r (np.array): array size K, reference residue probabilities
+        background (np.array): array size K, background residue probabilities
 
     Returns:
-        float: score
+        float: natural-log-odds score for the column pair. Bounded above by
+            log(1/min(background)), which is about log(4)=1.39 for a nucleotide
+            alphabet against about 3 for amino acids, so scores from different
+            alphabets are not comparable. See utils.alphabet_score_scale.
     """
 
     return np.log(np.sum(np.divide(np.multiply(q, r), background)))
@@ -248,8 +278,12 @@ def compare_hmmer(qhmm:pyhmmer.plan7.HMM, rhmm:pyhmmer.plan7.HMM) -> Tuple[float
         Tuple[float, np.array, Tuple[int,int,int]]: score, backtrace, max_index (query_idx, ref_idx, layer)
     """
     if qhmm.alphabet != rhmm.alphabet:
-        raise ValueError(f"Error, cannot compare hmms with different alphabets: {qhmm.alphabet}, {rhmm.alphabet}.")
-    # alphabet_K = qhmm.alphabet.K
+        raise ValueError(
+            f"Error, cannot compare hmms with different alphabets: query "
+            f"'{pyhmmer_decode(qhmm.name)}' is {alphabet_name(qhmm.alphabet)}, but reference "
+            f"'{pyhmmer_decode(rhmm.name)}' is {alphabet_name(rhmm.alphabet)}. Note that DNA "
+            f"and RNA are distinct alphabets."
+        )
     background = np.asarray(pyhmmer.plan7.Background(qhmm.alphabet).residue_frequencies) #TODO: could just store this as a constant
 
     # raw probabilities
@@ -281,8 +315,7 @@ def compare_hmmer(qhmm:pyhmmer.plan7.HMM, rhmm:pyhmmer.plan7.HMM) -> Tuple[float
 
 def traceback(qhmm,rhmm,backtrace,trace_start,match_scores):
     POSITION_PADDING = 10
-    
-    #alphabet_symbols = qhmm.alphabet.symbols # ACDEFGHIKLMNPQRSTVWY-BJZOUX*~
+
     qcons = qhmm.consensus
     rcons = rhmm.consensus
     qend = trace_start[0] # int 
@@ -302,13 +335,24 @@ def traceback(qhmm,rhmm,backtrace,trace_start,match_scores):
     # SDG = 3
     # SGD = 4
 
-    # hhsearch style alignment output symbols TODO: are these cutoffs calibrated the same way with hmmer3, or do I need to adjust them somehow?
+    # hhsearch style alignment output symbols
     # https://github.com/soedinglab/hh-suite/wiki#hmm-hmm-pairwise-alignments
     # = : column score below -1.5
     # - : column score between -1.5 and -0.5
     # . : column score between -0.5 and +0.5
     # + : column score between +0.5 and +1.5
     # | : column score above   +1.5
+    # The published cutoffs above are on the amino acid score scale. Saa scores are
+    # natural-log odds against the alphabet background, and a nucleotide column tops
+    # out near log(4)=1.39, so on DNA and RNA profiles '|' would be unreachable and
+    # the whole midline would collapse into '.' and '+'. Rescaling keeps each symbol
+    # at the same relative position on the alphabet's own scale. The scale is exactly
+    # 1.0 for amino acids, so protein output is unchanged.
+    score_scale = alphabet_score_scale(qhmm.alphabet) # compare_hmmer already checked that rhmm matches
+    very_bad_cutoff = -1.5 * score_scale
+    bad_cutoff = -0.5 * score_scale
+    neutral_cutoff = 0.5 * score_scale
+    good_cutoff = 1.5 * score_scale
 
 
     while True:
@@ -325,13 +369,13 @@ def traceback(qhmm,rhmm,backtrace,trace_start,match_scores):
             rstart = ptr[1]
 
             score = match_scores[qpos+1,rpos+1]
-            if score < -1.5:
+            if score < very_bad_cutoff:
                 midline.append("=")
-            elif score < -0.5:
+            elif score < bad_cutoff:
                 midline.append("-")
-            elif score < 0.5:
+            elif score < neutral_cutoff:
                 midline.append(".")
-            elif score < 1.5:
+            elif score < good_cutoff:
                 midline.append("+")
             else:
                 midline.append("|")
@@ -413,16 +457,28 @@ class _hmmer_search_worker():
         return best_result
 
 
-def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer_handle:BinaryIO, score_cutoff:float, max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output"):
+def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer_handle:BinaryIO, score_cutoff:Optional[float], max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output"):
     references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
+    reference_alphabet = common_hmm_alphabet(reference_files, role="reference")
+
+    if score_cutoff is None:
+        score_cutoff = default_score_cutoff(reference_alphabet)
+        alphabet_label = alphabet_name(reference_alphabet) if reference_alphabet is not None else "amino"
+        print(f"Using --score_cutoff {score_cutoff:g} (the default for {alphabet_label} profiles).", file=sys.stderr)
 
     worker = _hmmer_search_worker(references, score_cutoff)
 
     
     def run_comparison():
         for input_file in input_files:
+            # Read the first profile up front so that an alphabet mismatch is reported
+            # here, in the parent process, rather than as a traceback out of a pool worker.
+            input_alphabet, input_profiles = iter_hmms_with_alphabet(input_file, role="input")
+            if input_alphabet is None:
+                continue
+            check_alphabets_match(input_alphabet, reference_alphabet, _input_display_name(input_file), "hmmer_search.py")
             with make_pool(processes=cpu) as pool:
-                for hit in pool.imap(worker, pyhmmer.plan7.HMMFile(input_file), chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
+                for hit in pool.imap(worker, input_profiles, chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                     if hit is not None:
                         yield hit
 
@@ -471,8 +527,12 @@ def main(argv):
     parser.add_argument('-o', '--output', type=str, required=False, default=None,
                         help=".hmm file to write hit profiles to. Default: stdout")
 
-    parser.add_argument('--score_cutoff', type=float, default = 10.0,
-                        help="Report alignments with scores greater than or equal to this.") #TODO: what is a reasonable cutoff? 10-15?
+    parser.add_argument('--score_cutoff', type=float, default = None,
+                        help=f"Report alignments with scores greater than or equal to this. "
+                             f"Default: {DEFAULT_SCORE_CUTOFF_AMINO:g} for amino acid profiles, and the "
+                             f"equivalent point on the nucleotide score scale for DNA and RNA profiles "
+                             f"(about {default_score_cutoff(pyhmmer.easel.Alphabet.dna()):.2f}). A value supplied here is "
+                             f"used as-is, without rescaling.")
 
     parser.add_argument('--max_hits', type=int, default=None,
                         help="The maximum number of hmms returned by the search. Prioritized by bitscore of best scoring profile. Default: return all hits passing the score cutoff.")
@@ -501,7 +561,7 @@ def main(argv):
         out = open(temp_output_path, "wb")
     
     if params.input is None:
-        input_files = [sys.stdin]
+        input_files = [sys.stdin.buffer] # pyhmmer needs a binary stream
     else:
         input_files = params.input
 

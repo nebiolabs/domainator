@@ -15,7 +15,7 @@ return compact, structured slices instead of whole-artifact dumps.
 | Tool | Flag | Shape |
 | ---- | ---- | ----- |
 | `enum_report.py` | `--json -` | NDJSON, one object per contig/CDS/domain |
-| `hmmer_report.py` | `--json -` | NDJSON, one object per HMM profile |
+| `hmmer_report.py` | `--json -` | NDJSON, one object per HMM profile (add `--alphabet` for amino/DNA/RNA) |
 | `summary_report.py` | `--json -` | one JSON object (contig stats, domain frequency + co-occurrence, taxonomy) |
 | `matrix_report.py` | `--json -` | one JSON object (edge stats, connected components, split-event series) |
 | `ssn_navigator.py` | (always JSON) | targeted cluster / node / threshold queries |

@@ -81,6 +81,24 @@ If no taxid is noted in either place, the Taxid will be assigned [32644](https:/
     record.name = id
 ```
 
+## HMMER profiles (`.hmm`)
+
+Domainator reads and writes plain HMMER3 profile files, so the format is HMMER's own; the
+profile alphabet is the `ALPH` line, which is `amino`, `DNA`, or `RNA`. Domainator supports
+all three.
+
+One constraint is worth stating explicitly, because Domainator enforces it: **an `.hmm` file
+may only contain profiles of a single alphabet.** HMMER locks a profile file to the alphabet
+of its first profile, so concatenating profiles of different alphabets produces a file that
+cannot be read past the first one. The `hmmer_*` programs reject mixed-alphabet inputs rather
+than writing such a file, and `hmmer_select.py --alphabet` splits a mixed set of files into
+per-alphabet outputs. DNA and RNA count as different alphabets.
+
+`hmmer_build.py` writes the `MAXL` line (the nhmmer search window) for nucleotide profiles;
+`--window_length` and `--window_beta` control it. Profiles written by HMMER and by Domainator
+both carry `DATE` and `COM` lines recording when and how they were built, so two profiles
+built from the same alignment are not byte-identical.
+
 ## Protein structures
 
 The `structure_*` tools read protein structure files: `.pdb`, `.pdb1`, `.ent`, `.cif`,

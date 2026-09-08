@@ -37,7 +37,7 @@
     {
       "name": "Score Cutoff",
       "parameter": "score_cutoff",
-      "help": "Report alignments with scores greater than or equal to this.",
+      "help": "Report alignments with scores greater than or equal to this. Scores are on the score scale of the input alphabet: DNA and RNA scores run at roughly half the amino acid scale, so a threshold tuned on proteins is about twice as strict on nucleotide profiles.",
       "type": "number",
       "default": 0,
       "flags": [

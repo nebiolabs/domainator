@@ -20,7 +20,7 @@ from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, read_infernal_cms, get_file_type, read_pyhmmer_fastas, read_pyhmmer_peptide_fastas, filter_by_taxonomy, pyhmmer_decode
+from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, read_infernal_cms, get_file_type, read_pyhmmer_fastas, read_pyhmmer_peptide_fastas, filter_by_taxonomy, pyhmmer_decode, is_nucleic_acid_alphabet, peek_hmm_alphabet
 import pyhmmer
 import pyinfernal
 from domainator import __version__, RawAndDefaultsFormatter
@@ -43,22 +43,21 @@ MAX_PROTEIN_SIZE = 100_000
 NUCLEIC_ACID_REFERENCE_GROUPS = {"nhmmer", "infernal"}
 
 
-def _is_nucleic_acid_alphabet(alphabet) -> bool:
-    return alphabet.is_dna() or alphabet.is_rna()
+_is_nucleic_acid_alphabet = is_nucleic_acid_alphabet
 
 
 def _fasta_is_nucleic_acid(file_name: str) -> bool:
     with pyhmmer.easel.SequenceFile(file_name, digital=True) as seq_file:
         for seq in seq_file:
-            return _is_nucleic_acid_alphabet(seq.alphabet)
+            return is_nucleic_acid_alphabet(seq.alphabet)
     return False
 
 
 def _hmm_is_nucleic_acid(file_name: str) -> bool:
-    with pyhmmer.plan7.HMMFile(file_name) as hmm_file:
-        for hmm in hmm_file:
-            return _is_nucleic_acid_alphabet(hmm.alphabet)
-    return False
+    alphabet = peek_hmm_alphabet(file_name)
+    if alphabet is None:
+        return False
+    return is_nucleic_acid_alphabet(alphabet)
 
 
 def has_nucleic_acid_references(reference_groups) -> bool:

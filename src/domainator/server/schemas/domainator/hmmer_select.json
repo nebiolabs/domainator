@@ -79,6 +79,20 @@
       ]
     },
     {
+      "name": "Alphabet",
+      "parameter": "alphabet",
+      "help": "Only read input files whose profiles use this alphabet, skipping the rest. Unlike the text criteria this narrows the selection rather than adding to it, and it can be used on its own to split a mixed set of input files by alphabet. Because an hmm file can only hold one alphabet, this selects whole files.",
+      "type": "string",
+      "choices": [
+        "amino",
+        "dna",
+        "rna"
+      ],
+      "flags": [
+        "--alphabet"
+      ]
+    },
+    {
       "name": "Case Sensitive",
       "parameter": "case_sensitive",
       "help": "If set, then the search is case sensitive. Otherwise it is case insensitive.",

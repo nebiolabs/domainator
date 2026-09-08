@@ -130,6 +130,36 @@ color_table_to_legend.py -i clusters_colors.tsv --svg cluster_legend.svg
 
 Same as above, except use `compare_contigs.py` instead of `seq_dist.py`, this will compare contigs based on Jaccard index and/or adjacency index of their annotated domain contents.
 
+## Building and comparing nucleotide profiles
+
+The `hmmer_*` programs work on DNA and RNA profiles as well as amino acid ones. Because
+HMMER locks an `.hmm` file to the alphabet of its first profile, every profile in one file
+must share an alphabet.
+
+```bash
+# Build a DNA profile from a nucleotide alignment. The alphabet is inferred when it can be,
+# but pass --alphabet to be sure: an alignment of only A/C/G/T is also valid protein.
+# --window_length sets the profile's MAXL field, which nhmmer uses to window long targets.
+hmmer_build.py -i dna_alignment.afa --alphabet dna --name my_dna_profile --window_length 500 -o my_dna_profile.hmm
+
+# Confirm what you got. --alphabet reports amino, DNA, or RNA.
+hmmer_report.py -i my_dna_profile.hmm --alphabet --length --consensus -o dna_profile_metadata.tsv
+
+# Compare nucleotide profiles to each other. Scores are on the nucleotide scale, which runs
+# at roughly half the amino acid scale, so protein-tuned thresholds are about twice as
+# strict here. hmmer_search.py scales its default --score_cutoff for you.
+hmmer_compare.py -i my_dna_profiles.hmm -r my_dna_profiles.hmm -o dna_scores.tsv --alignments
+hmmer_search.py -i my_dna_profiles.hmm -r reference_dna_profiles.hmm -o dna_hits.hmm
+
+# Split a mixed set of profile files by alphabet.
+hmmer_select.py -i *.hmm --alphabet dna -o dna_only.hmm
+hmmer_select.py -i *.hmm --alphabet amino -o amino_only.hmm
+```
+
+A nucleotide `.hmm` built this way can be used directly as a `domainate.py` or
+`domain_search.py` reference, where it is searched against whole nucleotide contigs with
+nhmmer rather than against individual CDSs.
+
 ## Making a profile tree or profile similarity network
 ```bash
 # write some metadata to a tab-separated file

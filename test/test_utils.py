@@ -6,7 +6,9 @@ import io
 import pytest
 from array import array
 import re
+import math
 import pandas as pd
+from pyhmmer import easel
 
 
 def test_location_covers():
@@ -299,3 +301,104 @@ class TestBooleanEvaluatorSanitizeIdentifier:
         
         # All sanitized names should be unique
         assert len(set(sanitized)) == len(patterns)
+
+
+# --- hmm alphabet helpers -------------------------------------------------
+
+def test_alphabet_score_scale_amino_is_exactly_one():
+    # Every committed protein fixture (e.g. pDONR_201_hmm_scores.tsv, which
+    # test_hmmer_compare_1 byte-compares) depends on the amino scale being an
+    # exact no-op, so assert exactly rather than approximately.
+    assert utils.alphabet_score_scale(easel.Alphabet.amino()) == 1.0
+
+
+def test_alphabet_score_scale_nucleotide():
+    expected = math.log(4) / math.log(20)
+    assert utils.alphabet_score_scale(easel.Alphabet.dna()) == pytest.approx(expected)
+    assert utils.alphabet_score_scale(easel.Alphabet.rna()) == pytest.approx(expected)
+
+
+def test_alphabet_name():
+    assert utils.alphabet_name(easel.Alphabet.amino()) == "amino"
+    assert utils.alphabet_name(easel.Alphabet.dna()) == "DNA"
+    assert utils.alphabet_name(easel.Alphabet.rna()) == "RNA"
+
+
+def test_is_nucleic_acid_alphabet():
+    assert not utils.is_nucleic_acid_alphabet(easel.Alphabet.amino())
+    assert utils.is_nucleic_acid_alphabet(easel.Alphabet.dna())
+    assert utils.is_nucleic_acid_alphabet(easel.Alphabet.rna())
+
+
+def test_get_alphabet():
+    assert utils.get_alphabet(None) is None
+    assert utils.get_alphabet("DNA") == easel.Alphabet.dna()
+    assert utils.get_alphabet("rna") == easel.Alphabet.rna()
+    assert utils.get_alphabet("amino") == easel.Alphabet.amino()
+    with pytest.raises(ValueError, match="Unknown alphabet"):
+        utils.get_alphabet("protein")
+
+
+def test_pyhmmer_alphabet_is_unhashable():
+    # The alphabet helpers must compare alphabets pairwise rather than putting them
+    # in a set or dict, or using them as an lru_cache key.
+    with pytest.raises(TypeError):
+        hash(easel.Alphabet.dna())
+
+
+def test_peek_hmm_alphabet(shared_datadir):
+    assert utils.peek_hmm_alphabet(shared_datadir / "CcdB.hmm").is_amino()
+    assert utils.peek_hmm_alphabet(shared_datadir / "dna_profiles.hmm").is_dna()
+    assert utils.peek_hmm_alphabet(shared_datadir / "rna_profiles.hmm").is_rna()
+
+
+def test_peek_hmm_alphabet_rejects_streams(shared_datadir):
+    with open(shared_datadir / "CcdB.hmm", "rb") as handle:
+        with pytest.raises(TypeError, match="file paths"):
+            utils.peek_hmm_alphabet(handle)
+
+
+def test_common_hmm_alphabet(shared_datadir):
+    alphabet = utils.common_hmm_alphabet([shared_datadir / "CcdB.hmm", shared_datadir / "pdonr_hmms.hmm"])
+    assert alphabet.is_amino()
+
+
+def test_common_hmm_alphabet_raises_on_disagreement(shared_datadir):
+    with pytest.raises(ValueError, match="Mismatched alphabets among the reference hmm files"):
+        utils.common_hmm_alphabet(
+            [shared_datadir / "CcdB.hmm", shared_datadir / "dna_profiles.hmm"],
+            role="reference",
+        )
+
+
+def test_iter_hmms_with_alphabet_yields_every_profile(shared_datadir):
+    # The first profile is read eagerly to learn the alphabet, then chained back on,
+    # so guard against it being dropped or duplicated.
+    alphabet, profiles = utils.iter_hmms_with_alphabet(shared_datadir / "pdonr_hmms.hmm")
+    assert alphabet.is_amino()
+    names = [utils.pyhmmer_decode(hmm.name) for hmm in profiles]
+    assert len(names) == len(set(names)) == 7
+
+
+def test_iter_hmms_with_alphabet_empty_file(tmp_path):
+    # pyhmmer refuses to open a completely empty hmm file; the helper does not mask that.
+    empty = tmp_path / "empty.hmm"
+    empty.write_bytes(b"")
+    with pytest.raises(EOFError):
+        utils.iter_hmms_with_alphabet(empty)
+
+
+def test_iter_hmms_reports_mixed_alphabet_file(shared_datadir, tmp_path):
+    # pyhmmer locks an HMMFile to the alphabet of its first profile and then raises a
+    # bare "Expected DNA alphabet"; the wrapped error must name the file.
+    mixed = tmp_path / "mixed.hmm"
+    mixed.write_bytes(
+        (shared_datadir / "dna_profiles_1.hmm").read_bytes()
+        + (shared_datadir / "CcdB.hmm").read_bytes()
+    )
+    with pytest.raises(ValueError, match="more than one alphabet"):
+        list(utils.iter_hmms(mixed))
+
+    _alphabet, profiles = utils.iter_hmms_with_alphabet(mixed)
+    with pytest.raises(ValueError, match="mixed.hmm"):
+        list(profiles)

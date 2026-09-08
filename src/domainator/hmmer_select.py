@@ -4,6 +4,12 @@ Search through an hmm file to find profiles with names or descriptions matching 
 
 All specifications are treated as "OR" with relation to each other. So any profile that matches any of the specifications will be returned.
 
+Amino acid, DNA, and RNA profiles are all supported. Because HMMER locks an hmm file to
+the alphabet of its first profile, every profile written to one output file must share a
+single alphabet, so all --input files must agree. --alphabet restricts the search to input
+files of one alphabet, which is how a mixed set of files can be split into per-alphabet
+outputs. Unlike the text criteria, --alphabet is a restriction rather than another "OR"
+term: it narrows whatever the text criteria matched.
 """
 #subset an hmm file based on name, description or other properties. use pyhmmer.
 from jsonargparse import ArgumentParser, ActionConfigFile
@@ -11,10 +17,10 @@ import pyhmmer
 import re
 import sys
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.utils import pyhmmer_decode
+from domainator.utils import pyhmmer_decode, ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet
 from typing import Optional, List
 
-def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exact:Optional[List[str]]=None, query_contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False):
+def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exact:Optional[List[str]]=None, query_contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False, match_all=False):
     """
         hmm_path: path to an hmmer file
         query_regex: regular expression to try to find in the hmmer profiles
@@ -25,6 +31,9 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
         search_description: If True then search in the DESC field of the hmm profiles
         search_accession: If True then search in the ACC field of the hmm profiles
         case_sensitive: If True then the search is case sensitive
+        match_all: If True then every profile is selected regardless of the text criteria.
+            Used by the CLI's --alphabet, which selects whole input files rather than
+            individual profiles within a file.
     """
 
     # match_types = 0
@@ -85,7 +94,7 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
                 model_accession = model_accession.lower()
 
 
-            found = False
+            found = match_all
             if query_regex is not None:
                 for regex in regexes:
                     if (search_name and regex.search(model_name)):
@@ -145,6 +154,12 @@ def main(argv):
     parser.add_argument("--case_sensitive", default=False, required=False, action="store_true",
                         help="If set, then the search is case sensitive. Otherwise it is case insensitive.")
 
+    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices=set(ALPHABET_NAMES),
+                        help="Only read input files whose profiles use this alphabet, skipping the rest. "
+                             "Unlike the text criteria this narrows the selection rather than adding to it, "
+                             "and it can be used on its own to split a mixed set of input files by alphabet. "
+                             "Because an hmm file can only hold one alphabet, this selects whole files.")
+
     parser.add_argument("--config", action=ActionConfigFile)
 
     params = parser.parse_args(argv)
@@ -175,22 +190,57 @@ def main(argv):
     else:
         input_files = params.input
 
+    requested_alphabet = get_alphabet(params.alphabet)
+    no_text_criteria = params.regex is None and params.exact is None and params.contains is None
+    # --alphabet on its own selects whole files, so there is nothing for the text
+    # criteria to match. With no criteria at all, keep the historical behavior of
+    # selecting nothing.
+    match_all = no_text_criteria and requested_alphabet is not None
+
     if params.output is None:
         output_handle = sys.stdout.buffer
     else:
         output_handle = open(params.output, "wb")
 
+    # Every profile written to one output file must share an alphabet, otherwise the
+    # output cannot be read back past its first profile.
+    selected_alphabet = requested_alphabet
+    selected_source = "--alphabet" if requested_alphabet is not None else None
 
     found_count = 0
-    for input_file in input_files:
-        with pyhmmer.plan7.HMMFile(input_file) as hmm_iterator:
-            for found_profile in hmmer_select(query_regex=params.regex, query_exact=params.exact, query_contains=params.contains, hmm_iterator=hmm_iterator, search_name=search_name, search_description=search_description, search_accession=search_accession, case_sensitive=params.case_sensitive):
+    skipped_files = 0
+    try:
+        for input_file in input_files:
+            source = input_file if isinstance(input_file, str) else getattr(input_file, "name", repr(input_file))
+            file_alphabet, hmm_iterator = iter_hmms_with_alphabet(input_file, role="input")
+            if file_alphabet is None: # no profiles in this file
+                continue
+            if requested_alphabet is not None and file_alphabet != requested_alphabet:
+                print(f"Skipping '{source}': its profiles are {alphabet_name(file_alphabet)}, not the requested {alphabet_name(requested_alphabet)}.", file=sys.stderr)
+                skipped_files += 1
+                continue
+            if selected_alphabet is None:
+                selected_alphabet = file_alphabet
+                selected_source = source
+            elif file_alphabet != selected_alphabet:
+                raise ValueError(
+                    f"The input hmm files use different alphabets: '{selected_source}' is "
+                    f"{alphabet_name(selected_alphabet)}, but '{source}' is {alphabet_name(file_alphabet)}. "
+                    f"HMMER locks an hmm file to the alphabet of its first profile, so writing both "
+                    f"into one output file would produce a file that cannot be read past its first "
+                    f"profile. Pass --alphabet to keep only one alphabet, or run hmmer_select.py "
+                    f"once per alphabet."
+                )
+            for found_profile in hmmer_select(query_regex=params.regex, query_exact=params.exact, query_contains=params.contains, hmm_iterator=hmm_iterator, search_name=search_name, search_description=search_description, search_accession=search_accession, case_sensitive=params.case_sensitive, match_all=match_all):
                 found_profile.write(output_handle)
                 found_count += 1
+    finally:
+        if params.output is not None:
+            output_handle.close()
 
-    print(f"Found {found_count} matching profiles.", file=sys.stderr)        
-    if params.output is not None:
-        output_handle.close()
+    print(f"Found {found_count} matching profiles.", file=sys.stderr)
+    if skipped_files:
+        print(f"Skipped {skipped_files} input file(s) whose alphabet did not match --alphabet.", file=sys.stderr)
 
 def _entrypoint():
     main(sys.argv[1:])

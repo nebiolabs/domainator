@@ -9,16 +9,17 @@ and
 
 Söding, Johannes. "Protein Homology Detection by HMM–HMM Comparison." Bioinformatics 21, no. 7 (April 1, 2005): 951–60. https://doi.org/10.1093/bioinformatics/bti125.
 
+Amino acid, DNA, and RNA profiles are all supported, but the -i and -r sides must use
+the same alphabet (DNA and RNA count as different alphabets).
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 import os
-import pyhmmer
 from typing import Iterable, TextIO
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit
-from domainator.utils import make_pool, pyhmmer_decode
+from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit, check_alphabets_match
+from domainator.utils import make_pool, pyhmmer_decode, common_hmm_alphabet, iter_hmms_with_alphabet
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 
 
@@ -58,6 +59,9 @@ class _hmmer_compare_worker():
 
 def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_handle:TextIO, score_cutoff:float, alignments:bool, k:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
     references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
+    reference_alphabet = common_hmm_alphabet(reference_files, role="reference")
+    query_alphabet = common_hmm_alphabet(query_files, role="input")
+    check_alphabets_match(query_alphabet, reference_alphabet, ", ".join(str(f) for f in query_files), "hmmer_compare.py")
 
     worker = _hmmer_compare_worker(references, alignments, k, score_cutoff)
 
@@ -75,8 +79,9 @@ def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_
     
     for file in query_files:
         # file_name = os.path.basename(Path(file).stem)
+        _file_alphabet, query_profiles = iter_hmms_with_alphabet(file, role="input")
         with make_pool(processes=cpu) as pool:
-            for hits in pool.imap(worker, pyhmmer.plan7.HMMFile(file), chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
+            for hits in pool.imap(worker, query_profiles, chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                 for hit in hits:
                     rendered_hit = _format_hmmer_compare_hit(hit, alignments, sep=sep)
                     hit_bytes = len(rendered_hit.encode("utf-8"))
@@ -98,7 +103,10 @@ def main(argv):
                         help="Reference files. One or more hmm text files with one or more hmmer3 profiles.")
 
     parser.add_argument('--score_cutoff', type=float, default = 0,
-                        help="Report alignments with scores greater than or equal to this.") #TODO: what is a reasonable cutoff?
+                        help="Report alignments with scores greater than or equal to this. Scores are on "
+                             "the score scale of the input alphabet: DNA and RNA scores run at roughly "
+                             "half the amino acid scale, so a threshold tuned on proteins is about twice "
+                             "as strict on nucleotide profiles.")
 
     parser.add_argument('-k', type=int, required=False, default=None,
                         help="Include at most this many of the top hits for each query. Default: Include all hits.")
