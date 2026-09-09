@@ -38,7 +38,7 @@ When adding a tool, register its `_entrypoint` in `pyproject.toml` and mirror th
 
 - **Vendored BioPython fork** at `src/domainator/Bio/`. Domainator's `SeqRecord` is *not* interchangeable with upstream BioPython. **Always read/write sequence files via `domainator.utils.parse_seqfiles` and `domainator.utils.write_genbank`** to preserve Domainator-specific qualifiers.
 - **GenBank as the universal carrier.** Annotations are stored as features with `feature.type == "Domainator"` (constant `DOMAIN_FEATURE_NAME` in `__init__.py`; best-hit features use `DOMAIN_SEARCH_BEST_HIT_NAME`). Changing these constants breaks file compatibility across Domainator versions.
-- **Matrices.** `data_matrix.DataMatrix` (HDF5-backed dense) and `SparseDataMatrix` (SciPy sparse) carry row/column labels + metadata and underpin `compare_contigs`, `seq_dist`, `build_projection`, `transform_matrix`, and reporting. The on-disk format is versioned via `_MATRIX_FILE_VERSION` in `data_matrix.py`.
+- **Matrices.** `data_matrix.DataMatrix` (HDF5-backed dense) and `SparseDataMatrix` (SciPy sparse) carry row/column labels + metadata and underpin `compare_contigs`, `seq_dist`, `kmer_dist`, `structure_dist`, `build_projection`, `transform_matrix`, and reporting. The on-disk format is versioned via `_MATRIX_FILE_VERSION` in `data_matrix.py`.
 - **External binaries** (HMMER, CD-HIT, DIAMOND, Foldseek, etc.) are optional. Tools that use them check availability and raise descriptive errors; tests that need them should skip gracefully when the binary is absent.
 - **Output guardrails.** Tools with potentially large output accept `--max_output_gb` (default 25 GB; `0` disables) to fail early — see `output_guardrails.py`.
 

@@ -61,7 +61,7 @@ pass `inf`) for one cluster per connected component. `--top_n` bounds list sizes
   `extract_*`, `trim_contigs`, `color_genbank`, `clean_sequences`, `sort_contigs`.
 - **reports** — TSV/HTML/JSON summaries: `summary_report`, `enum_report`,
   `hmmer_report`, `matrix_report`, `ssn_navigator`.
-- **comparison** — score/distance matrices: `seq_dist`, `kmer_dist`,
+- **comparison** — score/distance matrices: `seq_dist`, `kmer_dist`, `structure_dist`,
   `compare_contigs`, `hmmer_compare`, `transform_matrix`.
 - **plotting** — XGMML/SVG/HTML/trees: `build_ssn`, `build_ssn_viewer`,
   `build_projection`, `build_tree`, `plot_contigs`, `color_table_to_legend`.

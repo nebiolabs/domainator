@@ -6,13 +6,16 @@ structures or searching a large structure database with a few reference structur
 produce ordinary Domainator genbank files, so the rest of the suite — `extract_domains.py`,
 `plot_contigs.py`, `enum_report.py`, `summary_report.py`, `color_genbank.py`,
 `build_ssn.py`, `seq_dist.py`, `select_by_contig.py` — works on the results unchanged.
+`structure_dist.py` is the exception: it writes a data matrix rather than genbank, feeding
+`build_ssn.py`, `build_tree.py` and `build_projection.py` the way `seq_dist.py` does.
 
-There are three tools, mirroring the sequence-based ones:
+There are four tools, mirroring the sequence-based ones:
 
 |  | sequence input | structure input |
 | ---- | ---- | ---- |
 | **annotate** (all records, `Domainator` features) | `domainate.py` | `structure_domainate.py` |
 | **search** (hit records, `Domain_Search` features) | `domain_search.py` | `structure_search.py` |
+| **compare** (pairwise score/distance matrix) | `seq_dist.py` | `structure_dist.py` |
 | **convert** | — | `structure_to_genbank.py` |
 
 ## Requirements
@@ -69,7 +72,7 @@ what actually identifies the build.
 
 ## Accepted inputs
 
-Both `-i` and `-r` accept, in any of the three tools:
+Both `-i` and `-r` accept, in any of the four tools:
 
 * individual structure files — `.pdb`, `.cif`, `.mmcif`, `.ent`, `.bcif`, optionally gzipped,
 * a directory, searched recursively for structure files,
@@ -132,6 +135,45 @@ Two knobs matter at scale:
   applies to the whole search, not per reference, and makes the output sorted best-first and
   written after the search completes.
 
+## Comparing structures to each other
+
+`structure_dist.py` is the structure-input counterpart of `seq_dist.py`: an all-vs-all
+structural alignment whose output is a data matrix rather than annotations.
+
+```bash
+structure_dist.py -i my_structures/ --mode tmscore --alignment_type 1 --dense tm.hdf5
+build_tree.py -i tm.hdf5 --newick tree.nwk
+```
+
+Omitting `-r` compares the input against itself, which is the usual case; supplying it
+gives a rectangular matrix of inputs against references. Every input chain is a row whether
+or not it aligned to anything, and the row and column labels are exactly the record ids
+`structure_to_genbank.py` writes for the same structures, so a matrix and a genbank of the
+same inputs line up.
+
+Two things differ from the other structure tools:
+
+* **The alignment direction is reversed.** Here the input is the query and the reference is
+  the target, so rows are inputs and `--evalue` is computed against the reference set —
+  the same meaning it has in `seq_dist.py`, where diamond runs with the input as `-q`.
+* **The whole input database is read**, since a structure with no hits still needs its row.
+  `structure_search.py` avoids that, and remains the right tool for finding a handful of
+  matches in a very large database.
+
+`--mode` chooses what the cells hold. The score-based modes behave exactly as they do in
+`seq_dist.py`, and the structural modes — `tmscore`, `lddt`, `fident` — put a similarity
+already bounded in [0, 1] in the cell, so their `_dist` forms are simply `1 - value` and
+need none of the `min(row_max, col_max)` normalization `score_dist` does. Because an absent
+pair in a distance matrix means "maximally distant" rather than zero, the `_dist` modes are
+dense-only.
+
+foldseek scores each direction of a pair separately, so the raw matrix is slightly
+asymmetric. `--symmetrize` reconciles the two directions, and the choice matters when a
+pair was found in only one direction, because the missing direction is a stored zero rather
+than a missing value: `max` keeps such a pair (the convention `build_ssn.py` and
+`--mst_knn` use), `min` deletes it, making it a mutual-hit filter, and `mean` halves it.
+`--mst_knn` and `--knn` prune the matrix as it is built and are always max-symmetric.
+
 ## Reusing a database
 
 Building a structure database is the expensive part of a run, so it can be persisted and
@@ -161,12 +203,14 @@ structure_to_genbank.py -i my_structures/ -o chains.gb
 
 domainate.py -i chains.gb -r pfam.hmm -o annotated.gb        # annotate with HMM profiles
 domain_search.py -i chains.gb -r query.hmm -o hits.gb        # search them by sequence
-seq_dist.py -i chains.gb -r chains.gb --sparse distances.hdf5
+seq_dist.py -i chains.gb -r chains.gb --sparse distances.hdf5   # by sequence, not fold
 deduplicate_genbank.py -i chains.gb -o nonredundant.gb
 ```
 
-All three structure tools write to stdout when `-o` is omitted or given as `-`, so they can
-be piped into any tool that reads genbank from stdin:
+The three genbank-producing structure tools write to stdout when `-o` is omitted or given
+as `-`, so they can be piped into any tool that reads genbank from stdin
+(`structure_dist.py` has no stdout mode: it writes matrix files through `--dense`,
+`--dense_text` and `--sparse`):
 
 ```bash
 structure_to_genbank.py -i my_structures/ -o - | color_genbank.py --color_domains -o colored.gb
@@ -174,6 +218,10 @@ structure_to_genbank.py -i my_structures/ -o - | color_genbank.py --color_domain
 
 Note that `domainate.py` and `domain_search.py` read from files rather than stdin, so write
 an intermediate file for those (as above).
+
+The `seq_dist.py` line above compares the amino acid sequences foldseek extracted from the
+structures, not the structures themselves, so it will miss remote homologs that share a
+fold but little sequence. Use `structure_dist.py` when you want the fold compared.
 
 `--store_3di` additionally records each chain's 3Di structural-alphabet string in a
 `/threedi` qualifier, which is useful for rebuilding a foldseek database from a genbank file.
@@ -190,6 +238,7 @@ cannot do is an error, not a silent no-op.
 | ---- | ---- | ---- |
 | `--alignment_type` | `0`/`1`/`2`, default `2` | not supported (no such concept) |
 | `--metrics` | `tmscore`, `lddt`, `rmsd`, `prob` | none |
+| `--mode` (`structure_dist.py`) | every mode | score-based modes plus `fident`/`fident_dist`; `tmscore`, `lddt` and `efi_score` rejected |
 | `--store_3di` | supported | not supported |
 | database | a set of files sharing a prefix | one `.bcb` file |
 | minimum chain length | none | 32 residues; shorter chains are dropped |

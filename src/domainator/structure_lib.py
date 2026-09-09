@@ -1230,16 +1230,23 @@ class PreparedDatabases(NamedTuple):
 
 @contextlib.contextmanager
 def prepared_databases(aligner: StructureAligner, input_values: Sequence[str],
-                       reference_values: Sequence[str], tmp_dir: Optional[str] = None,
+                       reference_values: Optional[Sequence[str]] = None,
+                       tmp_dir: Optional[str] = None,
                        keep_db: Optional[str] = None):
     """Resolve -i and -r into databases, building any that are not prebuilt.
 
     Yields a PreparedDatabases. Databases built here live in a temporary directory that
     is removed on exit, unless keep_db names a prefix for the input database, in which
     case that one is left in place for reuse.
+
+    reference_values of None means "compare the input against itself": the input database
+    is reused as the reference rather than built a second time from the same files, which
+    matters because building it is the expensive part of a run.
     """
     input_kind, input_resolved = resolve_structure_inputs(input_values)
-    reference_kind, reference_resolved = resolve_structure_inputs(reference_values)
+    self_comparison = reference_values is None
+    if not self_comparison:
+        reference_kind, reference_resolved = resolve_structure_inputs(reference_values)
 
     if input_kind == "db" and keep_db is not None:
         raise RuntimeError(
@@ -1255,35 +1262,44 @@ def prepared_databases(aligner: StructureAligner, input_values: Sequence[str],
             prefix = keep_db if keep_db is not None else os.path.join(work_dir, "inputdb")
             input_db = aligner.build_db(input_resolved, prefix)
 
-        if reference_kind == "db":
+        if self_comparison:
+            reference_db = input_db
+        elif reference_kind == "db":
             reference_db = StructureDB(prefix=reference_resolved[0])
             aligner.validate_database(reference_db)
         else:
             reference_db = aligner.build_db(reference_resolved, os.path.join(work_dir, "refdb"))
 
+        resolved_input_label = input_label(input_values, input_kind, input_resolved)
         yield PreparedDatabases(
             input_db=input_db,
             reference_db=reference_db,
             work_dir=work_dir,
-            input_label=input_label(input_values, input_kind, input_resolved),
-            reference_label=input_label(reference_values, reference_kind, reference_resolved),
+            input_label=resolved_input_label,
+            reference_label=(resolved_input_label if self_comparison else
+                             input_label(reference_values, reference_kind, reference_resolved)),
         )
 
 
-def warn_on_saturation(hit_counts: Dict[str, int], max_seqs: Optional[int]) -> None:
-    """Warn when a reference returned exactly --max_seqs hits, i.e. was likely truncated.
+def warn_on_saturation(hit_counts: Dict[str, int], max_seqs: Optional[int],
+                       subject: str = "reference") -> None:
+    """Warn when a query returned exactly --max_seqs hits, i.e. was likely truncated.
 
     Silent truncation reads as "this reference has few homologs" when it may have many, so
     it must never pass unreported.
+
+    subject names what the counted keys are. It is "reference" for the tools that align
+    references as the query, and "input record" for structure_dist, which runs the search
+    the other way round.
     """
     if max_seqs is None:
         return
     saturated = sorted(name for name, count in hit_counts.items() if count >= max_seqs)
     if saturated:
         warnings.warn(
-            f"--max_seqs ({max_seqs}) was reached by {len(saturated)} reference(s): "
+            f"--max_seqs ({max_seqs}) was reached by {len(saturated)} {subject}(s): "
             f"{', '.join(saturated[:5])}{' ...' if len(saturated) > 5 else ''}. "
-            "Results for those references are truncated; raise --max_seqs for full coverage.",
+            f"Results for those {subject}s are truncated; raise --max_seqs for full coverage.",
             RuntimeWarning,
         )
 

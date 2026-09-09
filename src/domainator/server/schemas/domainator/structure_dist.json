@@ -1,0 +1,317 @@
+{
+  "id": "structure_dist",
+  "display_name": "Structure Dist",
+  "category": "Comparisons",
+  "description": "Calculates similarity or distance matrices between protein structures.\n\nThe structure-input counterpart of seq_dist.py. Typically only -i is supplied, giving an\nall-vs-all matrix of the input structures; a separate -r produces a rectangular matrix of\ninput structures against reference structures.\n\nEvery chain of every input is a row, whether or not it had a hit, so the row and column\nlabels are exactly the record ids that structure_to_genbank.py writes for the same\nstructures, and the matrix feeds build_ssn.py, build_tree.py or build_ssn_viewer.py\ndirectly. That does mean the input database is read end to end, unlike structure_search.py.\n\nAlignment direction is the opposite of structure_search.py and structure_domainate.py: the\ninput is the QUERY and the reference is the TARGET, so rows are inputs and columns are\nreferences, and --evalue is computed against the reference set. This matches seq_dist.py,\nwhere diamond is run with the input as -q and the reference as -d.\n\n--mode selects what goes in the cells. The score-based modes (score, bool, norm_score,\nrow_norm_score, score_dist, efi_score, efi_score_dist) are computed from the aligner's\nalignment score and behave exactly as they do in seq_dist.py. The structural modes put a\nsimilarity that is already bounded in [0, 1] in the cell -- tmscore, lddt, fident -- and\ntheir *_dist forms are simply 1 - that value, needing none of the min(row_max, col_max)\nnormalization that score_dist does. tmscore and lddt require --algorithm foldseek and\nC-alpha coordinates in both databases; fident works with either backend.\n\nNote that with --algorithm reseek there is no bit score: structure_lib records -log10(p)\nin its place. That is monotonic in significance, so score, bool and the normalized modes\nremain meaningful, but the values are not comparable to foldseek's and efi_score, which\nassumes a bit score in its 2^(-score) term, is rejected.",
+  "runner": "module",
+  "entry_point": "domainator.structure_dist",
+  "priority": 1,
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "structures to compare: pdb/cif files (optionally gzipped), a directory searched recursively, a glob, or the prefix of a prebuilt aligner database.",
+      "type": "file",
+      "required": true,
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "pdb",
+        "cif",
+        "mmcif",
+        "ent",
+        "gz"
+      ]
+    },
+    {
+      "name": "Reference",
+      "parameter": "reference",
+      "help": "structures to compare the input against. If not supplied, the input is compared against itself, giving a square all-vs-all matrix.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-r",
+        "--reference"
+      ],
+      "file_types": [
+        "pdb",
+        "cif",
+        "mmcif",
+        "ent",
+        "gz"
+      ]
+    },
+    {
+      "name": "Sparse matrix",
+      "parameter": "sparse",
+      "help": "Write a sparse matrix hdf5 file to this path. Not available for the *_dist modes.",
+      "type": "output",
+      "flags": [
+        "--sparse"
+      ]
+    },
+    {
+      "name": "Dense matrix",
+      "parameter": "dense",
+      "help": "Write a dense matrix hdf5 file to this path.",
+      "type": "output",
+      "flags": [
+        "--dense"
+      ]
+    },
+    {
+      "name": "Mode",
+      "parameter": "mode",
+      "help": "what kind of values should be in the matrix. Score-based modes come from the aligner's alignment score, exactly as in seq_dist. The structural modes (tmscore, lddt, fident) are already in [0,1], so their _dist forms are 1 - value. tmscore and lddt require the foldseek backend and C-alpha coordinates.",
+      "type": "string",
+      "default": "score",
+      "choices": [
+        "bool",
+        "efi_score",
+        "efi_score_dist",
+        "fident",
+        "fident_dist",
+        "lddt",
+        "lddt_dist",
+        "norm_score",
+        "row_norm_score",
+        "score",
+        "score_dist",
+        "tmscore",
+        "tmscore_dist"
+      ],
+      "flags": [
+        "--mode"
+      ]
+    },
+    {
+      "name": "Algorithm",
+      "parameter": "algorithm",
+      "help": "structural alignment backend to use.",
+      "type": "string",
+      "default": "foldseek",
+      "choices": [
+        "foldseek",
+        "reseek"
+      ],
+      "flags": [
+        "--algorithm"
+      ]
+    },
+    {
+      "name": "Symmetrize",
+      "parameter": "symmetrize",
+      "help": "reconcile the two directions of each pair before the mode transform. Requires a square self-comparison. max keeps a one-directional pair, min deletes it, mean halves it.",
+      "type": "string",
+      "default": "none",
+      "choices": [
+        "none",
+        "min",
+        "max",
+        "mean"
+      ],
+      "flags": [
+        "--symmetrize"
+      ]
+    },
+    {
+      "name": "E-value",
+      "parameter": "evalue",
+      "help": "only pairs with an E-value strictly below this become non-zero cells. E-values are computed against the reference set.",
+      "type": "number",
+      "default": 0.001,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Lower bound",
+      "parameter": "lb",
+      "help": "Round any values lower than or equal to this down to zero, before the mode transform.",
+      "type": "number",
+      "default": 0,
+      "flags": [
+        "--lb"
+      ]
+    },
+    {
+      "name": "Max entries per row",
+      "parameter": "k",
+      "help": "Include at most this many non-zero entries in the matrix for each input structure.",
+      "type": "integer",
+      "flags": [
+        "-k"
+      ]
+    },
+    {
+      "name": "Alignment type",
+      "parameter": "alignment_type",
+      "help": "foldseek only: 0 = 3Di only, 1 = TM-align, 2 = 3Di+AA (the default when unset). Type 1 requires C-alpha coordinates in both databases.",
+      "type": "integer",
+      "choices": [
+        0,
+        1,
+        2
+      ],
+      "flags": [
+        "--alignment_type"
+      ]
+    },
+    {
+      "name": "CPU threads",
+      "parameter": "cpu",
+      "help": "number of threads to give the backend. 0 lets the backend use all available cores.",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Dense text matrix",
+      "parameter": "dense_text",
+      "help": "Write a dense matrix tsv file to this path.",
+      "type": "output",
+      "flags": [
+        "--dense_text"
+      ]
+    },
+    {
+      "name": "MST + kNN pruning",
+      "parameter": "mst_knn",
+      "help": "Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. Requires a square self-comparison. Always max-symmetric.",
+      "type": "integer",
+      "flags": [
+        "--mst_knn"
+      ]
+    },
+    {
+      "name": "kNN pruning",
+      "parameter": "knn",
+      "help": "Prune the output to OR-symmetric k-nearest-neighbor edges only. Same requirements as MST + kNN.",
+      "type": "integer",
+      "flags": [
+        "--knn"
+      ]
+    },
+    {
+      "name": "Max hits per structure",
+      "parameter": "max_seqs",
+      "help": "maximum number of hits the aligner keeps per input structure. Defaults to the reference count, so that no row is truncated.",
+      "type": "integer",
+      "flags": [
+        "--max_seqs"
+      ]
+    },
+    {
+      "name": "Device",
+      "parameter": "device",
+      "help": "'cpu' for a CPU-only search, or a CUDA device string ('cuda', 'cuda:0') for a GPU-accelerated foldseek search.",
+      "type": "string",
+      "default": "cpu",
+      "flags": [
+        "--device"
+      ]
+    },
+    {
+      "name": "Keep database",
+      "parameter": "keep_db",
+      "help": "also write the database built from the input structures, using this path as its prefix.",
+      "type": "string",
+      "flags": [
+        "--keep_db"
+      ]
+    },
+    {
+      "name": "Hits TSV",
+      "parameter": "hits_tsv",
+      "help": "write the aligner's own hit table here, for cross-checking against a hand-run search.",
+      "type": "output",
+      "flags": [
+        "--hits_tsv"
+      ]
+    },
+    {
+      "name": "Temporary directory",
+      "parameter": "tmp_dir",
+      "help": "parent directory for temporary databases and alignment files.",
+      "type": "string",
+      "flags": [
+        "--tmp_dir"
+      ]
+    },
+    {
+      "name": "foldseek path",
+      "parameter": "foldseek_path",
+      "help": "path to the foldseek executable. If not supplied, foldseek is looked up on PATH.",
+      "type": "string",
+      "flags": [
+        "--foldseek_path"
+      ]
+    },
+    {
+      "name": "reseek path",
+      "parameter": "reseek_path",
+      "help": "path to the reseek executable. If not supplied, reseek is looked up on PATH.",
+      "type": "string",
+      "flags": [
+        "--reseek_path"
+      ]
+    },
+    {
+      "name": "Extra aligner arguments",
+      "parameter": "aligner_arg",
+      "help": "extra arguments appended verbatim to the backend's search command line.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--aligner_arg"
+      ]
+    },
+    {
+      "name": "reseek stats level",
+      "parameter": "reseek_stats",
+      "help": "reseek only: SCOP level that reseek's p-value model is calibrated against.",
+      "type": "string",
+      "default": "superfamily",
+      "choices": [
+        "family",
+        "superfamily",
+        "fold"
+      ],
+      "flags": [
+        "--reseek_stats"
+      ]
+    },
+    {
+      "name": "reseek sensitivity",
+      "parameter": "reseek_sensitivity",
+      "help": "reseek only: search sensitivity.",
+      "type": "string",
+      "default": "sensitive",
+      "choices": [
+        "fast",
+        "sensitive"
+      ],
+      "flags": [
+        "--reseek_sensitivity"
+      ]
+    },
+    {
+      "name": "Max output GB",
+      "parameter": "max_output_gb",
+      "help": "Fail if a projected output file would exceed this many GB. Set to 0 to disable the guardrail.",
+      "type": "number",
+      "default": 25.0,
+      "flags": [
+        "--max_output_gb"
+      ]
+    }
+  ]
+}
