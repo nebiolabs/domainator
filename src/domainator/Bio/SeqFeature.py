@@ -2272,23 +2272,23 @@ class CompoundLocation(Location):
 
         Read only, returns an integer
         """
-        if self.strand == -1:
+        if self.parts[0].strand == -1:
             return int(self.parts[0].end)
         else:
-            return int(self.parts[0].start) + 1    
+            return int(self.parts[0].start) + 1
 
     @property
     def stranded_end_human_readable(self):
         """End location of the last segment in human readable format. (off by one from stranded_end for reverse strand)
 
-        int(location.parts[0].start) + 1 if strand is -1, otherwise int(location.parts[0].end).
+        int(location.parts[-1].start) + 1 if strand is -1, otherwise int(location.parts[-1].end).
 
         Read only, returns an integer
         """
-        if self.strand == -1:
-            return int(self.parts[0].start) + 1
+        if self.parts[-1].strand == -1:
+            return int(self.parts[-1].start) + 1
         else:
-            return int(self.parts[0].end)
+            return int(self.parts[-1].end)
 
     def spans_origin(self) -> int:
         """Returns the number of locations that span the origin of the sequence.
