@@ -677,6 +677,15 @@ def test_build_ssn_viewer_writes_static_html_shell():
         # Stops crowd onto shared slider positions, so the stop that was chosen is
         # remembered rather than re-derived from the position it sits at.
         assert 'function nextDistinctStopIndex(stops, index, delta)' in html_content
+        # And a drag has to be able to land on every stop, which the plain
+        # value-linear scale could not do where stops crowd: positions reserve one
+        # slot per stop and spend the rest through a warp of the threshold axis,
+        # weighted toward whatever stretch the split chart is zoomed into.
+        assert 'function sliderValueWarp(lowValue, highValue)' in html_content
+        assert 'function positionSliderStops(finiteStops)' in html_content
+        assert 'function repositionSliderStops()' in html_content
+        assert 'const SLIDER_MAX_FINITE_POSITION = 920;' in html_content
+        assert 'const SLIDER_INFINITY_POSITION = 1000;' in html_content
         assert 'if (state.selectedStop && state.selectedStop.sliderPosition === sliderPosition)' in html_content
 
         # The split chart zooms and pans over its threshold axis.

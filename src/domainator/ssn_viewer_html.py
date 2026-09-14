@@ -805,6 +805,9 @@ def _session_state_js() -> str:
         // Controls whose appearance is derived from the values just restored.
         updateComponentSortButton();
         updateCollapseLongPathsControl();
+        // The threshold is restored before the chart window its slider position is
+        // warped by, so the thumb is placed under the old map and has to be re-placed.
+        repositionSliderStops();
 
         const notes = [];
         if (skipped.length > 0) {
@@ -3098,6 +3101,10 @@ def _split_chart_hover_js() -> str:
             const clampedMin = Math.min(Math.max(min, dataMin), dataMax - span);
             state.splitChartZoom = {min: clampedMin, max: clampedMin + span};
         }
+        // The slider's positions are warped by this window, so it moves with it: zooming
+        // the chart into a band magnifies that band on the track below. See
+        // positionSliderStops.
+        repositionSliderStops();
         drawSplitChart();
     }
 
@@ -3105,6 +3112,7 @@ def _split_chart_hover_js() -> str:
         if (!state.splitChartZoom) { return; }
         state.splitChartZoom = null;
         hideSplitChartTip();
+        repositionSliderStops();
         drawSplitChart();
     }
 
@@ -6797,6 +6805,119 @@ def ssn_viewer_html(
         refreshColumnChartIfOpen();
     }}
 
+    // ---- Slider positions ----
+    //
+    // Positions are a warp of the threshold axis rather than a straight scale of it,
+    // because two things pull on them at once:
+    //
+    //   * Every stop should be reachable by dragging, and 1001 integer positions have
+    //     to carry every stop there is. On a network whose merges bunch into a narrow
+    //     band of scores, 401 stops once landed on 103 positions -- eleven sharing one
+    //     -- which left 74% of them impossible to select by dragging at all.
+    //   * The track should still read like the chart above it, so that dragging toward
+    //     a spike on the chart moves toward that spike.
+    //
+    // Separating crowded stops has to borrow track from somewhere, so the two cannot
+    // both hold exactly. What holds instead, in two steps:
+    //
+    //   1. Every stop is given one position of its own, which is what makes it
+    //      draggable, and
+    //   2. the track left over is spent saying where the stops are -- proportionally to
+    //      threshold, except that the stretch the chart is zoomed into carries the
+    //      chart's own magnification times the track density of the rest, so zooming
+    //      the chart magnifies that stretch of the slider too.
+    //
+    // Where stops are spread out, step 1 costs almost nothing and the result is the
+    // plain proportional map this started as. Where they crowd, step 1 is the whole
+    // budget and they come out evenly spaced -- which is the most a thousand positions
+    // can say about a thousand stops.
+
+    // Finite stops share 0..920; the infinity stop sits alone at 1000, far enough above
+    // them to read as the separate thing it is.
+    const SLIDER_MAX_FINITE_POSITION = 920;
+    const SLIDER_INFINITY_POSITION = 1000;
+
+    // Threshold -> fraction of the finite track. Piecewise linear: one density inside
+    // the chart's window and another outside it, integrated along the axis, so the map
+    // stays monotone and stays proportional *within* each region.
+    function sliderValueWarp(lowValue, highValue) {{
+        const span = highValue - lowValue;
+        if (!(span > 0)) {{
+            return () => 0;
+        }}
+        const proportional = value => (value - lowValue) / span;
+        const zoom = state.splitChartZoom;
+        if (!zoom) {{
+            return proportional;
+        }}
+        const windowLow = Math.min(Math.max(zoom.min, lowValue), highValue);
+        const windowHigh = Math.max(Math.min(zoom.max, highValue), lowValue);
+        const windowSpan = windowHigh - windowLow;
+        if (!(windowSpan > 0)) {{
+            return proportional;
+        }}
+        // The chart's own magnification. Because the outside keeps its own width, the
+        // window's share of the track tends to half however far the zoom goes, rather
+        // than swallowing the track and stranding everything else on one position.
+        const weight = span / windowSpan;
+        const total = (span - windowSpan) + (weight * windowSpan);
+        return value => {{
+            const below = Math.min(Math.max(value, lowValue), windowLow) - lowValue;
+            const inside = Math.min(Math.max(value, windowLow), windowHigh) - windowLow;
+            const above = Math.min(Math.max(value, windowHigh), highValue) - windowHigh;
+            return (below + (weight * inside) + above) / total;
+        }};
+    }}
+
+    // Assigns `sliderPosition` in place, so a stop object held elsewhere -- notably
+    // state.selectedStop -- keeps pointing at the same stop across a remap.
+    //
+    // Every stop is given a slot of its own first, and only the track left over after
+    // that is spent on saying where the stops are, through the warp. That ordering is
+    // what makes the two pulls compatible: the reserved slot is what makes a stop
+    // draggable, and the surplus is what keeps the sparse stretches proportional and
+    // hands the chart's window its extra room. Positions come out strictly increasing
+    // by construction -- consecutive stops differ by at least the one slot, and rounding
+    // a non-decreasing sequence cannot close a gap of one -- so no separation pass is
+    // needed, and none of the cascading that a pass has to do when a crowd overflows
+    // the end of the track can undo the warp.
+    function positionSliderStops(finiteStops) {{
+        if (finiteStops.length === 0) {{
+            return;
+        }}
+        const lastIndex = finiteStops.length - 1;
+        const lowValue = finiteStops[0].threshold_value;
+        const highValue = finiteStops[lastIndex].threshold_value;
+        const surplus = SLIDER_MAX_FINITE_POSITION - lastIndex;
+        if (surplus < 0 || !(highValue - lowValue > 0)) {{
+            // More stops than the track has positions -- only reachable by raising
+            // --max_merge_events past ~900 -- or every stop at one threshold. Neither
+            // leaves anything to be proportional to, so fall back to rank.
+            finiteStops.forEach((stop, stopIndex) => {{
+                stop.sliderPosition = Math.round(
+                    (stopIndex / Math.max(1, lastIndex)) * SLIDER_MAX_FINITE_POSITION);
+            }});
+            return;
+        }}
+        const warp = sliderValueWarp(lowValue, highValue);
+        finiteStops.forEach((stop, stopIndex) => {{
+            stop.sliderPosition = stopIndex + Math.round(surplus * warp(stop.threshold_value));
+        }});
+    }}
+
+    // The warp is a function of the chart's window, so the stops have to be laid out
+    // again whenever that window moves -- and the thumb put back on the threshold it
+    // was already on, which is a different position under the new map.
+    function repositionSliderStops() {{
+        if (!state.sliderModel || state.sliderModel.stops.length === 0) {{
+            return;
+        }}
+        const stop = currentSliderStop();
+        positionSliderStops(state.sliderModel.stops.filter(entry => entry.threshold_value !== null));
+        snapSliderToStop(stop);
+        updateThresholdStepButtons();
+    }}
+
     function buildSliderModel(sourceStops) {{
         const stops = (sourceStops || []).map(stop => ({{...stop}}));
         if (stops.length === 0) {{
@@ -6818,43 +6939,34 @@ def ssn_viewer_html(
             }};
         }}
 
-        const minThreshold = finiteStops[0].threshold_value;
-        const maxThreshold = finiteStops[finiteStops.length - 1].threshold_value;
-        const finiteSpan = maxThreshold - minThreshold;
-        const positionedStops = finiteStops.map((stop, stopIndex) => {{
-            let sliderPosition = 0;
-            if (finiteStops.length === 1) {{
-                sliderPosition = 0;
-            }} else if (finiteSpan <= 0) {{
-                sliderPosition = Math.round((stopIndex / (finiteStops.length - 1)) * 920);
-            }} else {{
-                sliderPosition = Math.round(((stop.threshold_value - minThreshold) / finiteSpan) * 920);
-            }}
-            return {{...stop, sliderPosition}};
-        }});
-        positionedStops.push({{...infinityStop, sliderPosition: 1000}});
+        const positionedStops = finiteStops.map(stop => ({{...stop}}));
+        positionSliderStops(positionedStops);
+        positionedStops.push({{...infinityStop, sliderPosition: SLIDER_INFINITY_POSITION}});
 
         return {{
             stops: positionedStops,
-            maxPosition: 1000,
+            maxPosition: SLIDER_INFINITY_POSITION,
             initialPosition: 0,
             minLabel: finiteStops[0].threshold_label,
             maxLabel: '∞',
         }};
     }}
 
-    // The slider's position is the source of truth, but a coarse one: 1001 integer
-    // positions have to carry every stop, and stops crowd. On a network whose merges
-    // bunch into a narrow band of scores, 401 stops can land on 103 positions, eleven
-    // of them sharing one. Resolving by position alone then always hands back the first
-    // stop at that position -- so snapping to any of the other ten and asking again
-    // returns a different stop than the one just chosen, which is what made the step
-    // arrows look stuck partway up the axis.
+    // The slider's position is the source of truth, but not a sufficient one, so a stop
+    // chosen deliberately is remembered and honored while the slider still sits where
+    // that choice put it. Two reasons it has to be:
     //
-    // So a stop chosen deliberately is remembered, and honored while the slider still
-    // sits where that choice put it. Dragging the slider moves it off that position and
-    // the nearest-position search below takes over again, which is right: a drag picks
-    // a position, not a stop.
+    //   * positionSliderStops re-lays-out the track whenever the chart's window moves,
+    //     and the stop the thumb is on has to survive being given a new position; and
+    //   * with more stops than the track has positions -- only reachable by raising
+    //     --max_merge_events past ~900 -- stops share positions again, and resolving by
+    //     position alone always hands back the first stop at that position. Snapping to
+    //     any of the others and asking again would then return a different stop than the
+    //     one just chosen, which is what made the step arrows look stuck partway up the
+    //     axis before the track was warped.
+    //
+    // Dragging the slider moves it off that position and the nearest-position search
+    // below takes over again, which is right: a drag picks a position, not a stop.
     function currentSliderStop() {{
         if (!state.sliderModel || state.sliderModel.stops.length === 0) {{
             return null;

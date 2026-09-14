@@ -5026,8 +5026,11 @@ def test_clicking_a_split_event_jumps_to_its_threshold(page):
 
     _click_split_chart(page, entry["x"], entry["beads"][0]["y"])
     page.wait_for_function("v => selectedThresholdValue() === v", arg=target)
-    assert page.evaluate(
-        "v => document.getElementById('threshold-input').value === String(v)", target)
+    # Waited for rather than asserted: the click snaps the slider immediately but
+    # repaints the readouts on the next animation frame, so asserting here would be
+    # asserting against whichever of the two won the race.
+    page.wait_for_function(
+        "v => document.getElementById('threshold-input').value === String(v)", arg=target)
     assert page.pageerrors == []
 
 
@@ -5954,25 +5957,154 @@ def _threshold_under(page, client_x):
     )
 
 
-def test_crowded_stops_share_slider_positions(crowded_page):
-    """The premise of the stepping tests: more stops than the slider has room for.
+def test_crowded_stops_each_get_their_own_slider_position(crowded_page):
+    """The premise of the stepping tests, and the thing the warped map answers.
 
-    Without this the walk below would pass on a network where every stop has a
-    position of its own, which is exactly the case the bug did not appear in.
+    These stops crowd: scaled straight onto the track by value, most of them land
+    on a position some other stop already has, and only the first stop at each
+    position can ever be selected by dragging. The map reserves a position per stop
+    and spends what is left over on saying where they are, so the crowding stays
+    visible in the spacing without costing anyone their own slot.
     """
     page = crowded_page
-    counts = page.evaluate("""() => {
-        const byPosition = new Map();
-        state.sliderModel.stops.forEach(stop => byPosition.set(
-            stop.sliderPosition, (byPosition.get(stop.sliderPosition) || 0) + 1));
+    measured = page.evaluate("""() => {
+        const stops = state.sliderModel.stops;
+        const finite = stops.filter(stop => stop.threshold_value !== null);
+        const low = finite[0].threshold_value;
+        const high = finite[finite.length - 1].threshold_value;
+        // What a straight value-linear scale would have done.
+        const naive = finite.map(stop => Math.round(
+            ((stop.threshold_value - low) / (high - low)) * 920));
+        // What a drag can actually select: every position the slider can take,
+        // resolved the way a drag resolves it -- by position, with no remembered stop.
+        const slider = document.getElementById('threshold-slider');
+        const keep = slider.value;
+        const reachable = new Set();
+        for (let position = 0; position <= state.sliderModel.maxPosition; position++) {
+            slider.value = String(position);
+            state.selectedStop = null;
+            reachable.add(stops.indexOf(currentSliderStop()));
+        }
+        slider.value = keep;
         return {
-            stops: state.sliderModel.stops.length,
-            positions: byPosition.size,
-            worst: Math.max(...byPosition.values()),
+            stops: stops.length,
+            naivePositions: new Set(naive).size,
+            actualPositions: new Set(stops.map(stop => stop.sliderPosition)).size,
+            monotone: finite.every((stop, index) =>
+                index === 0 || stop.sliderPosition > finite[index - 1].sliderPosition),
+            ends: [finite[0].sliderPosition, finite[finite.length - 1].sliderPosition],
+            infinityAt: stops[stops.length - 1].sliderPosition,
+            reachableByDragging: reachable.size,
         };
     }""")
-    assert counts["positions"] < counts["stops"]
-    assert counts["worst"] > 1
+    # The crowding is real: a straight scale would lose most of these stops.
+    assert measured["naivePositions"] < measured["stops"] / 2
+    # And none of them are lost.
+    assert measured["actualPositions"] == measured["stops"]
+    assert measured["reachableByDragging"] == measured["stops"]
+    # Still ordered by threshold, and still spanning the whole track.
+    assert measured["monotone"]
+    assert measured["ends"] == [0, 920]
+    assert measured["infinityAt"] == 1000
+    assert page.pageerrors == []
+
+
+def test_slider_positions_track_threshold_where_there_is_room(dense_page):
+    """Uncrowded stops keep the plain proportional placement they always had.
+
+    The map only borrows track where stops would otherwise collide, so on a network
+    whose merges are spread out it should be indistinguishable from a straight scale
+    -- which is what keeps the track reading like the chart above it.
+    """
+    page = dense_page
+    drift = page.evaluate("""() => {
+        const finite = state.sliderModel.stops.filter(s => s.threshold_value !== null);
+        const low = finite[0].threshold_value;
+        const high = finite[finite.length - 1].threshold_value;
+        return finite.map(stop => Math.abs(stop.sliderPosition - Math.round(
+            ((stop.threshold_value - low) / (high - low)) * 920)));
+    }""")
+    # Within 5% of the track of where a straight value-linear scale would put them.
+    assert max(drift) < 46
+    assert page.pageerrors == []
+
+
+def test_slider_positions_degrade_gracefully_past_the_track(page):
+    """The two branches no real bundle here reaches, driven directly.
+
+    More stops than the track has positions (only with ``--max_merge_events`` raised
+    past ~900) and every stop at one threshold both have to stay ordered and inside
+    the track; what they cannot keep is a position each, which is the one thing a
+    thousand positions cannot give a thousand stops.
+    """
+    overflowing = page.evaluate("""() => {
+        const stops = Array.from({length: 1000}, (_, index) => ({threshold_value: 0.5 + (index * 1e-4)}));
+        positionSliderStops(stops);
+        const positions = stops.map(stop => stop.sliderPosition);
+        return {
+            nonDecreasing: positions.every((p, i) => i === 0 || p >= positions[i - 1]),
+            withinTrack: Math.min(...positions) >= 0 && Math.max(...positions) <= 920,
+            ends: [positions[0], positions[positions.length - 1]],
+        };
+    }""")
+    assert overflowing["nonDecreasing"]
+    assert overflowing["withinTrack"]
+    assert overflowing["ends"] == [0, 920]
+
+    flat = page.evaluate("""() => {
+        const stops = Array.from({length: 5}, () => ({threshold_value: 7.0}));
+        positionSliderStops(stops);
+        return stops.map(stop => stop.sliderPosition);
+    }""")
+    # Nothing to be proportional to, so they spread by rank instead.
+    assert flat == [0, 230, 460, 690, 920]
+    assert page.pageerrors == []
+
+
+def test_zooming_the_chart_magnifies_that_band_of_the_slider(crowded_page):
+    """The track is warped by the chart's window, which is what pays for the room."""
+    page = crowded_page
+
+    def band_track():
+        return page.evaluate("""() => {
+            const finite = state.sliderModel.stops.filter(s => s.threshold_value !== null);
+            const window = state.splitChartZoom;
+            const band = window
+                ? finite.filter(s => s.threshold_value >= window.min && s.threshold_value <= window.max)
+                : finite;
+            return {
+                count: band.length,
+                track: band[band.length - 1].sliderPosition - band[0].sliderPosition,
+                distinct: new Set(finite.map(s => s.sliderPosition)).size,
+                total: finite.length,
+            };
+        }""")
+
+    threshold_before = page.evaluate("() => selectedThresholdValue()")
+    x, y = _split_chart_fraction_point(page, fraction=0.85)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -1500)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    zoomed_window = page.evaluate("() => state.splitChartZoom")
+
+    # Measure the same stops before and after, by pinning the comparison to the
+    # window the zoom settled on rather than to a band chosen in advance.
+    zoomed = band_track()
+    page.click("#split-chart-reset-zoom")
+    page.wait_for_function("() => state.splitChartZoom === null")
+    flat = page.evaluate("""window => {
+        const finite = state.sliderModel.stops.filter(s => s.threshold_value !== null);
+        const band = finite.filter(s => s.threshold_value >= window.min && s.threshold_value <= window.max);
+        return {count: band.length,
+                track: band[band.length - 1].sliderPosition - band[0].sliderPosition};
+    }""", zoomed_window)
+
+    assert zoomed["count"] == flat["count"]
+    assert zoomed["track"] > flat["track"]
+    # Zooming buys the band room; it never costs another stop its own position.
+    assert zoomed["distinct"] == zoomed["total"]
+    # And the threshold does not move just because the map under it did.
+    assert page.evaluate("() => selectedThresholdValue()") == threshold_before
     assert page.pageerrors == []
 
 

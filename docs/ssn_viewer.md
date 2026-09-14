@@ -123,11 +123,12 @@ unreadable column; zooming in is how you read the band and click a particular ev
 Shift-scroll (or a trackpad's horizontal scroll) pans without changing the zoom. The line
 beside the buttons says which stretch of the axis is showing while you are in it.
 
-Zooming changes only what the chart draws. The slider still reaches every stop, and the
-dashed **Current threshold** line simply disappears while the threshold sits outside the
-window rather than being pinned to an edge, where it would claim to be somewhere it is not.
-Both chart exports follow the zoom, so a figure can be of one interesting band rather than
-of the whole axis. The window is saved with a session.
+Zooming does not change the clustering, only what the chart draws — and how the slider
+below it is laid out (see below). The dashed **Current threshold** line simply disappears
+while the threshold sits outside the window rather than being pinned to an edge, where it
+would claim to be somewhere it is not. Both chart exports follow the zoom, so a figure can
+be of one interesting band rather than of the whole axis. The window is saved with a
+session.
 
 **The stems are a capped selection, and the caption under the chart says so** — for
 example *"515 of 161,763 merge events plotted — the strongest 500 by impact, plus 15 so
@@ -142,14 +143,31 @@ slider has nowhere else meaningful to go. The lowest stop sits just below the we
 edge, which is the fully merged network (the true connected components); the highest stop
 is `∞`, where every node is alone.
 
+**The track is warped, not scaled.** A slider has about a thousand positions to offer and a
+network can have five hundred stops, most of them bunched into a narrow band of scores — so
+scaling stops onto the track by value alone would land a dozen of them on one position and
+leave only the first of each dozen selectable. Instead every stop is given a position of its
+own, and the track left over after that is spent saying where the stops are. Two consequences
+worth knowing:
+
+- **Every stop can be reached by dragging**, up to about 900 of them (raise
+  `--max_merge_events` past that and the crowding returns — nothing can put a thousand stops
+  on a thousand positions and still leave them apart on screen).
+- **Zooming the chart magnifies the matching stretch of the track.** The zoomed band carries
+  more track per unit of threshold than the rest, so the stops you are looking at spread out
+  under the thumb. The threshold does not move when this happens; only the map under it does,
+  so the thumb will visibly shift when you zoom.
+
+Where stops are spread out to begin with, none of this is visible: the track is the plain
+proportional scale it looks like.
+
 **Jump to threshold** moves the slider by value:
 
 - Type a number and press Enter. It snaps to the nearest stop, so any number is legal.
-- **←** and **→** step to the previous and next stop. Every press lands on a threshold
-  the view has not just been at, even where dozens of stops crowd into one position on the
-  slider track. This is the way to walk a cluster's breakup one event at a time, and it
-  keeps your current pan and zoom so you can watch one region rather than being re-fitted
-  on every step.
+- **←** and **→** step to the previous and next stop. Every press lands on a threshold the
+  view has not just been at. This is the way to walk a cluster's breakup one event at a
+  time, and it keeps your current pan and zoom so you can watch one region rather than being
+  re-fitted on every step.
 - **↑** and **↓** in the field do the same as **→** and **←**. (The field is a plain text
   box rather than a number input on purpose: a spinner's fixed step of 1.0 is meaningless
   on an axis whose splits can be 0.001 apart or 30 apart.)
