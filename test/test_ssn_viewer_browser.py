@@ -5553,11 +5553,15 @@ def spindle_page(spindle_viewer_html):
     yield from _yield_loaded_page(spindle_viewer_html)
 
 
-def _spindle_state(page, layout="tree", min_cluster_size=2):
+def _spindle_state(page, layout="tree", min_cluster_size=2, expected_visible=9):
     """Put the spindle viewer at the 3.5 stop with leaf pruning on.
 
     ``tree`` is chosen because it draws edges and is computed synchronously, so
     ``state.splitLinks`` is populated without waiting on the layout worker.
+
+    ``expected_visible`` is how many clusters are left standing once every setting
+    here has landed: the five blobs plus the four pass-through singletons that leaf
+    pruning keeps (s0, s1, s2, h), with the dangling tail (t0, t1) pruned away.
     """
     page.select_option("#layout-algorithm", layout)
     page.evaluate(
@@ -5568,8 +5572,18 @@ def _spindle_state(page, layout="tree", min_cluster_size=2):
     )
     page.fill("#min-cluster-size", str(min_cluster_size))
     page.check("#leaf-pruning-only")
-    page.wait_for_function("() => selectedThresholdValue() === 3.5")
-    page.wait_for_function("() => !state.layoutComputing")
+    # Wait on the outcome, not on layoutComputing: the re-render that the fill and
+    # the check schedule is one animation frame away, and layoutComputing is false
+    # both before it starts and after it finishes, so waiting on it alone can return
+    # while the page still shows the pre-pruning state. No state on the way here has
+    # this count -- at the 3.5 stop it is 11 clusters before the fill (minimum size 1,
+    # everything visible) and 5 after it but before the check (pruning off, so only
+    # the blobs clear the minimum) -- so this settles only once both have been applied.
+    page.wait_for_function(
+        "expected => selectedThresholdValue() === 3.5 && !state.layoutComputing"
+        " && state.visibleClusters.length === expected",
+        arg=expected_visible,
+    )
 
 
 def _visible_sizes(page):
