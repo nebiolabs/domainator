@@ -116,6 +116,19 @@ cursor. Clicking a lollipop jumps straight to its threshold; clicking anywhere e
 to the nearest stop. Either way your pan and zoom are kept, so you can click along the
 chart and watch one region break up.
 
+**Scroll to zoom, drag to pan, double-click to reset** — or use the **Reset zoom**
+button beside the export buttons, which lights up only while the chart is zoomed. On a
+network whose merges crowd into a narrow band of scores, the whole axis draws them as one
+unreadable column; zooming in is how you read the band and click a particular event in it.
+Shift-scroll (or a trackpad's horizontal scroll) pans without changing the zoom. The line
+beside the buttons says which stretch of the axis is showing while you are in it.
+
+Zooming changes only what the chart draws. The slider still reaches every stop, and the
+dashed **Current threshold** line simply disappears while the threshold sits outside the
+window rather than being pinned to an edge, where it would claim to be somewhere it is not.
+Both chart exports follow the zoom, so a figure can be of one interesting band rather than
+of the whole axis. The window is saved with a session.
+
 **The stems are a capped selection, and the caption under the chart says so** — for
 example *"515 of 161,763 merge events plotted — the strongest 500 by impact, plus 15 so
 that every 5% of the axis with an event to show has one."* The axis and the moving-sum
@@ -132,9 +145,11 @@ is `∞`, where every node is alone.
 **Jump to threshold** moves the slider by value:
 
 - Type a number and press Enter. It snaps to the nearest stop, so any number is legal.
-- **←** and **→** step to the previous and next stop. This is the way to walk a cluster's
-  breakup one event at a time, and it keeps your current pan and zoom so you can watch one
-  region rather than being re-fitted on every step.
+- **←** and **→** step to the previous and next stop. Every press lands on a threshold
+  the view has not just been at, even where dozens of stops crowd into one position on the
+  slider track. This is the way to walk a cluster's breakup one event at a time, and it
+  keeps your current pan and zoom so you can watch one region rather than being re-fitted
+  on every step.
 - **↑** and **↓** in the field do the same as **→** and **←**. (The field is a plain text
   box rather than a number input on purpose: a spinner's fixed step of 1.0 is meaningless
   on an axis whose splits can be 0.001 apart or 30 apart.)
@@ -399,7 +414,7 @@ opens a dialog. A dropdown in the dialog switches kinds without reopening the me
 
 | Kind | Offered for |
 | --- | --- |
-| **Frequency table** — every distinct value, its count, its share, and a colored square | any column |
+| **Frequency table** — every distinct value, its count, its two shares, and a colored square | any column |
 | **Bar chart** | any column |
 | **Pie chart** | any column |
 | **Summary statistics** — rows, how many have a value, how many do not, distinct values, most common; plus min / quartiles / median / max / mean / SD for numeric columns | any column |
@@ -415,6 +430,14 @@ not numbers.
 selected nodes (or all nodes), search filter applied, all pages. The scope and the row
 count are written into the chart's own subtitle, so an exported file says what it counted.
 Charts refresh live as the selection, the filter, the palette, or a cell value changes.
+
+**The frequency table measures each value twice.** `Percent` is its share of the rows
+being charted — a third of this selection is `beta`. `% of all` is the other direction: the
+share of *that value's own* network-wide population these rows caught — and those betas are
+half of every beta in the network. `All nodes` beside it is that population, so the second
+denominator is never a mystery. With nothing selected and no filter the two columns say the
+same thing, because the scope is then the whole network. Both go into the TSV, for the bar
+and pie charts too.
 
 **Colors are the column's own.** A frequency table gets a swatch column; bars and slices
 are filled from the column's palette — including a palette you have never looked at,
@@ -436,7 +459,7 @@ points.
 | --- | --- |
 | **Export view PNG** + scale | The cluster canvas as a raster image, at 1×–8× screen resolution |
 | **Export view SVG** | The cluster canvas as vector art, for a figure |
-| **Export chart PNG / SVG** | The split-event chart itself, under the split chart |
+| **Export chart PNG / SVG** | The split-event chart itself, at its current zoom, under the split chart |
 | **Export table TSV** | The displayed rows, plus a cluster number per node at the current threshold |
 | A column header's **Copy** | One column's displayed values, to the clipboard |
 | **Export legend SVG / PNG** | A standalone legend for the color column |
@@ -510,6 +533,10 @@ of the full graph, which a bundle never carried.
 | `Enter` | Chart glyph menu | Open the highlighted kind |
 | Hover | Split chart | Readout for the merge or the moving-sum line under the pointer |
 | Click | Split chart | Jump to that lollipop's threshold, or to the nearest stop |
+| Scroll | Split chart | Zoom the threshold axis about the pointer |
+| `Shift`+scroll | Split chart | Pan the threshold axis |
+| Drag | Split chart | Pan the threshold axis (does not set the threshold) |
+| Double-click | Split chart | Show the whole threshold range again (its clicks do not move the threshold) |
 
 The digit shortcuts do not fire while a text field has focus or a dialog is open. The
 canvas gestures in [Selecting nodes](#selecting-nodes) are the other half of this table.

@@ -645,6 +645,14 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function exportColumnChartSVG()' in html_content
         assert 'function columnChartTSV()' in html_content
         assert 'function setupColumnCharts()' in html_content
+        # Alongside each value's share of the charted rows, its share of that
+        # value's own network-wide population -- the question a selection raises.
+        assert 'function columnGlobalCounts(columnName)' in html_content
+        assert ('<th class="cc-num">All nodes</th><th class="cc-num">% of all</th>'
+                in html_content)
+        assert "{key: 'globalPercent', label: '% of all', align: 'right'}" in html_content
+        assert ("['value', 'count', 'percent', 'count_all_nodes', 'percent_of_all', 'color']"
+                in html_content)
 
         # Select by value: a metadata query that edits the node selection.
         assert '<select id="metadata-select-column"' in html_content
@@ -665,6 +673,31 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<input id="threshold-input" type="text"' in html_content
         assert 'function stepThreshold(delta)' in html_content
         assert 'function updateThresholdStepButtons()' in html_content
+        # An arrow press has to land on a threshold the view has not just been at.
+        # Stops crowd onto shared slider positions, so the stop that was chosen is
+        # remembered rather than re-derived from the position it sits at.
+        assert 'function nextDistinctStopIndex(stops, index, delta)' in html_content
+        assert 'if (state.selectedStop && state.selectedStop.sliderPosition === sliderPosition)' in html_content
+
+        # The split chart zooms and pans over its threshold axis.
+        assert '<button id="split-chart-reset-zoom"' in html_content
+        assert '<span id="split-chart-zoom-hint"' in html_content
+        assert 'function splitChartVisibleWindow(dataMin, dataMax)' in html_content
+        assert 'function setSplitChartWindow(min, max, dataMin, dataMax)' in html_content
+        assert 'function zoomSplitChartAt(canvasX, factor)' in html_content
+        assert 'function panSplitChartByPixels(dx)' in html_content
+        assert 'function handleSplitChartWheel(event)' in html_content
+        assert 'function resetSplitChartZoom()' in html_content
+        assert 'function updateSplitChartZoomControls()' in html_content
+        assert 'function splitChartWindowLabel(value, span)' in html_content
+        assert 'function handleSplitChartDoubleClick()' in html_content
+        # The page must not scroll out from under the zoom gesture.
+        assert "splitCanvas.addEventListener('wheel', handleSplitChartWheel, {passive: false})" in html_content
+        # A zoomed window means marks outside it, so both painters clip the plot box.
+        assert '<clipPath id="split-plot-clip">' in html_content
+        assert 'clip-path="url(#split-plot-clip)"' in html_content
+        # Saved with the session, like the canvas's own pan and zoom.
+        assert "key: 'split_chart_zoom'," in html_content
 
         # Categorical columns default to get_palette's own colors, so the
         # palette menu carries only real named palettes.

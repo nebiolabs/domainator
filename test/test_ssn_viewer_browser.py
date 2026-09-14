@@ -3799,9 +3799,9 @@ def test_frequency_table_counts_and_inherits_colors(meta_page):
     _open_column_chart(page, "family", "frequency")
 
     assert _column_chart_rows(page) == [
-        ["", "alpha", "2", "33.3%"],
-        ["", "beta", "2", "33.3%"],
-        ["", "gamma", "2", "33.3%"],
+        ["", "alpha", "2", "33.3%", "2", "100.0%"],
+        ["", "beta", "2", "33.3%", "2", "100.0%"],
+        ["", "gamma", "2", "33.3%", "2", "100.0%"],
     ]
     expected = page.evaluate(
         "() => ['alpha', 'beta', 'gamma'].map("
@@ -3837,11 +3837,51 @@ def test_column_chart_follows_the_selection(meta_page):
     page.evaluate("() => { state.selectedNodeIndices = new Set([0, 1, 2]); updateMetadataTable(); }")
 
     assert _column_chart_rows(page) == [
-        ["", "alpha", "2", "66.7%"],
-        ["", "beta", "1", "33.3%"],
+        ["", "alpha", "2", "66.7%", "2", "100.0%"],
+        ["", "beta", "1", "33.3%", "2", "50.0%"],
     ]
     assert page.text_content("#column-chart-note").startswith("3 of 6 nodes")
     assert "selection" in page.text_content("#column-chart-note")
+    assert page.pageerrors == []
+
+
+def test_frequency_table_reports_each_value_global_share(meta_page):
+    """The second percentage answers "how much of this value did I catch?".
+
+    A/B are alpha and C/D are beta, so selecting A, B and C makes the two
+    denominators differ: beta is a third of the selection but half of the betas
+    in the network, and only the global column can say the second.
+    """
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+    page.evaluate("() => { state.selectedNodeIndices = new Set([0, 1, 2]); updateMetadataTable(); }")
+
+    assert _column_chart_rows(page) == [
+        ["", "alpha", "2", "66.7%", "2", "100.0%"],
+        ["", "beta", "1", "33.3%", "2", "50.0%"],
+    ]
+    assert "% of all" in page.text_content("#column-chart-note")
+    assert page.evaluate("() => columnChartTSV()").splitlines()[:3] == [
+        "value\tcount\tpercent\tcount_all_nodes\tpercent_of_all\tcolor",
+        "alpha\t2\t66.6667\t2\t100.0000\t#1f77b4",
+        "beta\t1\t33.3333\t2\t50.0000\t#ff7f0e",
+    ]
+    # The charted kinds share the row model, so their TSVs carry it too, and the
+    # gloss stays out of a chart that does not draw the column.
+    _set_column_chart_kind(page, "bar")
+    assert page.evaluate("() => columnChartTSV()").splitlines()[1].endswith("2\t100.0000\t#1f77b4")
+    assert "% of all" not in page.text_content("#column-chart-note")
+    assert page.pageerrors == []
+
+
+def test_frequency_table_global_share_is_whole_when_nothing_is_selected(meta_page):
+    """With the whole bundle in scope every value is entirely in scope."""
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+
+    assert [row[-1] for row in _column_chart_rows(page)] == ["100.0%"] * 3
+    # Nothing to gloss when both denominators are the same number.
+    assert "% of all" not in page.text_content("#column-chart-note")
     assert page.pageerrors == []
 
 
@@ -3853,7 +3893,7 @@ def test_column_chart_honours_the_table_filter(meta_page):
     # The filter is debounced, so wait for the re-render to reach the chart.
     page.wait_for_function("() => state.columnChartArtifact.notes[0].startsWith('2 of 6')")
 
-    assert _column_chart_rows(page) == [["", "alpha", "2", "100.0%"]]
+    assert _column_chart_rows(page) == [["", "alpha", "2", "100.0%", "2", "100.0%"]]
     assert 'filter "alpha"' in page.text_content("#column-chart-note")
     assert page.evaluate("() => columnChartNodeIndices().length") == 2
     assert page.pageerrors == []
@@ -3863,7 +3903,13 @@ def test_pie_chart_single_value_draws_a_circle(meta_page):
     """An arc whose start and end angles are equal draws nothing at all."""
     page = meta_page
     page.fill("#metadata-filter", "alpha")
-    page.wait_for_function("() => columnChartNodeIndices().length === 2")
+    # The filter is debounced, and the re-render it eventually runs rebuilds the
+    # header -- closing an open chart menu with it. Waiting only for the scope to
+    # narrow would open the menu inside that window and have it shut mid-click.
+    page.wait_for_function(
+        "() => state.pendingMetadataFilterTimer === null"
+        " && document.querySelectorAll('#metadata-table tbody tr[data-node-index]').length === 2"
+    )
     _open_column_chart(page, "family", "pie")
 
     svg = _column_chart_svg(page)
@@ -4045,7 +4091,8 @@ def test_column_chart_exports_svg_png_and_tsv(meta_page, tmp_path):
     assert tsv_download.suggested_filename == "Color_Test_Viewer_family_frequency.tsv"
     tsv_path = tmp_path / "chart.tsv"
     tsv_download.save_as(str(tsv_path))
-    assert tsv_path.read_text().splitlines()[0] == "value\tcount\tpercent\tcolor"
+    assert tsv_path.read_text().splitlines()[0] == (
+        "value\tcount\tpercent\tcount_all_nodes\tpercent_of_all\tcolor")
 
     with page.expect_download() as download_info:
         page.click("#column-chart-export-png")
@@ -4071,10 +4118,10 @@ def test_column_chart_tracks_a_metadata_edit(meta_page):
     )
 
     assert _column_chart_rows(page) == [
-        ["", "beta", "2", "33.3%"],
-        ["", "gamma", "2", "33.3%"],
-        ["", "alpha", "1", "16.7%"],
-        ["", "delta", "1", "16.7%"],
+        ["", "beta", "2", "33.3%", "2", "100.0%"],
+        ["", "gamma", "2", "33.3%", "2", "100.0%"],
+        ["", "alpha", "1", "16.7%", "1", "100.0%"],
+        ["", "delta", "1", "16.7%", "1", "100.0%"],
     ]
     assert page.pageerrors == []
 
@@ -4153,7 +4200,7 @@ def test_an_all_null_column_charts_as_one_no_value_entry(meta_page):
     page.evaluate("() => addMetadataColumn('empty', 'number')")
     _open_column_chart(page, "empty", "frequency")
 
-    assert _column_chart_rows(page) == [["", "—", "6", "100.0%"]]
+    assert _column_chart_rows(page) == [["", "—", "6", "100.0%", "6", "100.0%"]]
     assert "6 with no value" in page.text_content("#column-chart-note")
     # The no-value color is categoricalColor's own fallback, so an empty cell
     # is the same color in the chart as its node is on the canvas.
@@ -5605,7 +5652,14 @@ def test_collapse_long_paths_does_nothing_while_leaf_pruning_is_off(spindle_page
     page = spindle_page
     _spindle_state(page)
     page.uncheck("#leaf-pruning-only")
-    page.wait_for_function("() => !state.layoutComputing")
+    # Waiting on the outcome, not on layoutComputing: the re-render the uncheck
+    # schedules is one animation frame away, and layoutComputing is false both
+    # before it starts and after it finishes. Once the plain minimum-size rule is
+    # in force no cluster below it is left standing, which is the state to compare.
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleClusters.every("
+        "  id => state.bundle.graph.hierarchy.nodes[id].size >= 2)"
+    )
     before = {"sizes": _visible_sizes(page), "links": _link_summary(page)}
 
     # The control is disabled, so drive it the way a restored session would.
@@ -5820,4 +5874,411 @@ def test_collapse_long_paths_is_stable_across_layouts_and_thresholds(spindle_pag
                             && laidOut.has(link.right.componentId));
                     }"""
                 )
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Crowded thresholds: stepping between stops, and zooming the split chart
+# ---------------------------------------------------------------------------
+
+
+def _build_embedded_viewer_crowded(out_dir, blob_count=10, blob_size=20):
+    """A network whose merges crowd into a narrow band of scores.
+
+    Ten 20-node blobs, internally scored 0.90-0.99, chained to each other by
+    single links scored 0.80-0.89. Every score is distinct, so every merge gets
+    its own slider stop -- but they are packed into a fifth of the axis, so many
+    stops round to the same integer slider position. That collision is what made
+    the threshold arrows appear to stick, and it is also what makes this network
+    worth zooming into: at full extent its lollipops pile into one column.
+    """
+    rng = np.random.default_rng(11)
+    node_count = blob_count * blob_size
+    data = np.zeros((node_count, node_count), dtype=float)
+    for blob in range(blob_count):
+        low, high = blob * blob_size, (blob + 1) * blob_size
+        block = rng.uniform(0.90, 0.99, size=(blob_size, blob_size))
+        block = np.triu(block, 1)
+        data[low:high, low:high] = block + block.T
+    for blob in range(blob_count - 1):
+        left, right = (blob * blob_size) + 3, ((blob + 1) * blob_size) + 7
+        data[left, right] = data[right, left] = rng.uniform(0.80, 0.89)
+
+    names = [f"n{i:03d}" for i in range(node_count)]
+    input_file = out_dir / "crowded.hdf5"
+    html_file = out_dir / "viewer_crowded.html"
+    DenseDataMatrix(data, names, names).write(str(input_file), output_type="dense")
+    build_ssn_viewer.main([
+        "-i", str(input_file),
+        "--html", str(html_file),
+        "--embed_data",
+        "--name", "Crowded Test Viewer",
+    ])
+    return html_file
+
+
+@pytest.fixture(scope="module")
+def crowded_viewer_html(tmp_path_factory):
+    return _build_embedded_viewer_crowded(
+        tmp_path_factory.mktemp("ssn_viewer_crowded")
+    )
+
+
+@pytest.fixture
+def crowded_page(crowded_viewer_html):
+    yield from _yield_loaded_page(crowded_viewer_html)
+
+
+def _split_window(page):
+    """The x window the last paint used, as the hover geometry recorded it."""
+    return page.evaluate("""() => ({
+        min: state.splitChartHit.minThreshold,
+        span: state.splitChartHit.thresholdSpan,
+        marks: state.splitChartHit.events.length,
+    })""")
+
+
+def _split_chart_fraction_point(page, fraction=0.5):
+    """Client coordinates of a point `fraction` of the way across the chart."""
+    box = page.locator("#split-chart").bounding_box()
+    return box["x"] + (box["width"] * fraction), box["y"] + (box["height"] * 0.4)
+
+
+def _threshold_under(page, client_x):
+    return page.evaluate(
+        """clientX => {
+            const rect = splitCanvas.getBoundingClientRect();
+            return splitChartThresholdAt((clientX - rect.left) * (splitCanvas.width / rect.width));
+        }""",
+        client_x,
+    )
+
+
+def test_crowded_stops_share_slider_positions(crowded_page):
+    """The premise of the stepping tests: more stops than the slider has room for.
+
+    Without this the walk below would pass on a network where every stop has a
+    position of its own, which is exactly the case the bug did not appear in.
+    """
+    page = crowded_page
+    counts = page.evaluate("""() => {
+        const byPosition = new Map();
+        state.sliderModel.stops.forEach(stop => byPosition.set(
+            stop.sliderPosition, (byPosition.get(stop.sliderPosition) || 0) + 1));
+        return {
+            stops: state.sliderModel.stops.length,
+            positions: byPosition.size,
+            worst: Math.max(...byPosition.values()),
+        };
+    }""")
+    assert counts["positions"] < counts["stops"]
+    assert counts["worst"] > 1
+    assert page.pageerrors == []
+
+
+def test_threshold_arrows_land_on_a_new_threshold_every_press(crowded_page):
+    """→ walks every stop to ∞, and ← walks back, without ever standing still.
+
+    Resolving the current stop from the slider's position alone returns the first
+    stop sharing that position, so pressing → from any of the others put the
+    slider back where it already was. The walk below is the regression.
+    """
+    page = crowded_page
+    walk = page.evaluate("""() => {
+        const stops = state.sliderModel.stops;
+        snapSliderToStop(stops[0]);
+        const climbed = [];
+        for (let press = 0; press < stops.length + 5; press++) {
+            const before = selectedThresholdValue();
+            stepThreshold(1);
+            const after = selectedThresholdValue();
+            if (after === before) { break; }
+            climbed.push(after);
+        }
+        const descended = [];
+        for (let press = 0; press < stops.length + 5; press++) {
+            const before = selectedThresholdValue();
+            stepThreshold(-1);
+            const after = selectedThresholdValue();
+            if (after === before) { break; }
+            descended.push(after);
+        }
+        return {
+            stops: stops.length,
+            climbed: climbed.length,
+            descended: descended.length,
+            strictlyRising: climbed.every((value, i) => i === 0 || value > climbed[i - 1]),
+            endedAtInfinity: !Number.isFinite(climbed[climbed.length - 1]),
+            endedAtFloor: descended[descended.length - 1] === stops[0].threshold_value,
+        };
+    }""")
+    assert walk["climbed"] == walk["stops"] - 1
+    assert walk["descended"] == walk["stops"] - 1
+    assert walk["strictlyRising"]
+    assert walk["endedAtInfinity"]
+    assert walk["endedAtFloor"]
+    assert page.pageerrors == []
+
+
+def test_threshold_arrows_grey_out_only_at_the_ends(crowded_page):
+    """An arrow is enabled exactly when pressing it would move the threshold."""
+    page = crowded_page
+    ends = page.evaluate("""() => {
+        const stops = state.sliderModel.stops;
+        const read = () => ({
+            down: document.getElementById('threshold-step-down').disabled,
+            up: document.getElementById('threshold-step-up').disabled,
+        });
+        snapSliderToStop(stops[0]);
+        updateThresholdStepButtons();
+        const bottom = read();
+        snapSliderToStop(stops[Math.floor(stops.length / 2)]);
+        updateThresholdStepButtons();
+        const middle = read();
+        snapSliderToStop(stops[stops.length - 1]);
+        updateThresholdStepButtons();
+        return {bottom, middle, top: read()};
+    }""")
+    assert ends["bottom"] == {"down": True, "up": False}
+    assert ends["middle"] == {"down": False, "up": False}
+    assert ends["top"] == {"down": False, "up": True}
+    assert page.pageerrors == []
+
+
+def test_split_chart_wheel_zooms_about_the_pointer(crowded_page):
+    """Scrolling narrows the window and leaves the threshold under the cursor put."""
+    page = crowded_page
+    assert page.is_disabled("#split-chart-reset-zoom")
+    assert page.text_content("#split-chart-zoom-hint") == "Scroll to zoom · drag to pan"
+
+    x, y = _split_chart_fraction_point(page, fraction=0.6)
+    page.mouse.move(x, y)
+    before = _split_window(page)
+    anchor_before = _threshold_under(page, x)
+
+    page.mouse.wheel(0, -600)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    after = _split_window(page)
+    anchor_after = _threshold_under(page, x)
+
+    assert after["span"] < before["span"] / 1.5
+    # The lens moves, not the chart: a tenth of a percent of the window's width is
+    # the pointer's own rounding into canvas pixels.
+    assert abs(anchor_after - anchor_before) < after["span"] * 0.01
+    assert not page.is_disabled("#split-chart-reset-zoom")
+    # The readout names the window, at enough precision for its two ends to differ --
+    # a fixed two decimals would print a tight window as "0.87 - 0.87".
+    hint = page.text_content("#split-chart-zoom-hint")
+    assert "double-click to reset" in hint
+    low, high = (float(part) for part in hint.split("Showing ")[1].split(" ·")[0].split(" – "))
+    assert low < high
+    assert low == pytest.approx(after["min"], abs=after["span"] / 50)
+    assert high == pytest.approx(after["min"] + after["span"], abs=after["span"] / 50)
+    assert page.pageerrors == []
+
+
+def test_split_chart_zoom_stops_at_the_whole_series(crowded_page):
+    """Scrolling out past the ends leaves no window at all, rather than a wider one."""
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -600)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    full_span = page.evaluate("""() => {
+        const hit = state.splitChartHit;
+        return hit.dataMax - hit.dataMin;
+    }""")
+
+    page.mouse.wheel(0, 4000)
+    page.wait_for_function("() => state.splitChartZoom === null")
+    assert _split_window(page)["span"] == pytest.approx(full_span)
+    assert page.is_disabled("#split-chart-reset-zoom")
+    assert page.pageerrors == []
+
+
+def test_split_chart_drag_pans_without_setting_the_threshold(crowded_page):
+    """Dragging slides the window; the release is a pan, not a click-to-jump."""
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -600)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    before = _split_window(page)
+    threshold_before = page.evaluate("() => selectedThresholdValue()")
+
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x - 150, y, steps=8)
+    page.mouse.up()
+    after = _split_window(page)
+
+    # Dragging left moves the window to higher thresholds, and only moves it.
+    assert after["min"] > before["min"]
+    assert after["span"] == pytest.approx(before["span"])
+    assert page.evaluate("() => selectedThresholdValue()") == threshold_before
+    assert page.pageerrors == []
+
+
+def test_split_chart_click_still_jumps_after_a_drag(crowded_page):
+    """The click suppression lasts for the drag's own release, not beyond it."""
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page)
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x - 120, y, steps=6)
+    page.mouse.up()
+    threshold_after_drag = page.evaluate("() => selectedThresholdValue()")
+
+    page.mouse.click(x, y)
+    page.wait_for_function(
+        "before => selectedThresholdValue() !== before", arg=threshold_after_drag
+    )
+    assert page.pageerrors == []
+
+
+def test_split_chart_zoom_drops_the_marks_outside_the_window(crowded_page):
+    """Hit-testing must not offer an event the chart is not drawing."""
+    page = crowded_page
+    before = _split_window(page)
+    x, y = _split_chart_fraction_point(page)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -900)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    after = _split_window(page)
+
+    assert after["marks"] < before["marks"]
+    assert page.evaluate("""() => {
+        const hit = state.splitChartHit;
+        const slack = hit.thresholdSpan * 0.02;
+        return hit.events.every(entry =>
+            entry.event.threshold_value >= hit.minThreshold - slack &&
+            entry.event.threshold_value <= hit.minThreshold + hit.thresholdSpan + slack);
+    }""")
+    assert page.pageerrors == []
+
+
+def test_split_chart_double_click_and_button_reset_the_zoom(crowded_page):
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page)
+    for reset in ("dblclick", "button"):
+        page.mouse.move(x, y)
+        page.mouse.wheel(0, -600)
+        page.wait_for_function("() => Boolean(state.splitChartZoom)")
+        if reset == "dblclick":
+            page.mouse.dblclick(x, y)
+        else:
+            page.click("#split-chart-reset-zoom")
+        page.wait_for_function("() => state.splitChartZoom === null")
+        assert page.is_disabled("#split-chart-reset-zoom")
+        assert page.text_content("#split-chart-zoom-hint") == "Scroll to zoom · drag to pan"
+    assert page.pageerrors == []
+
+
+def test_split_chart_double_click_leaves_the_threshold_alone(crowded_page):
+    """Its two clicks jump the threshold; the reset gesture has to undo them.
+
+    A click cannot know a second one is coming, so the alternative would be making
+    every single click wait out the double-click interval.
+    """
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page, fraction=0.3)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -600)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    before = page.evaluate("() => selectedThresholdValue()")
+
+    page.mouse.dblclick(x, y)
+    page.wait_for_function("() => state.splitChartZoom === null")
+    assert page.evaluate("() => selectedThresholdValue()") == before
+
+    # A single click on the same spot does move it, which is the whole point of
+    # having to undo it above.
+    page.mouse.click(x, y)
+    page.wait_for_function("before => selectedThresholdValue() !== before", arg=before)
+    assert page.pageerrors == []
+
+
+def test_split_chart_threshold_marker_leaves_the_window(crowded_page):
+    """A marker pinned to the edge would claim the threshold is there."""
+    page = crowded_page
+    markers = page.evaluate("""() => {
+        const hit = state.splitChartHit;
+        const span = hit.dataMax - hit.dataMin;
+        const layout = () => splitChartLayout(splitCanvas.width, splitCanvas.height).markerX;
+        const results = {};
+        snapSliderToStop(state.sliderModel.stops[state.sliderModel.stops.length - 1]);
+        results.infinityFullRange = layout();
+        // The floor stop sits below every plotted event, so its marker belongs at the
+        // left edge of the plot box rather than outside it.
+        snapSliderToStop(state.sliderModel.stops[0]);
+        results.floorFullRange = layout();
+        results.plotLeft = hit.plotLeft;
+        snapSliderToStop(state.sliderModel.stops[state.sliderModel.stops.length - 1]);
+        state.splitChartZoom = {min: hit.dataMin, max: hit.dataMin + (span * 0.05)};
+        results.infinityZoomedAway = layout();
+        snapSliderToStop(nearestStopForThreshold(hit.dataMin + (span * 0.02)));
+        results.insideWindow = layout();
+        state.splitChartZoom = {min: hit.dataMax - (span * 0.05), max: hit.dataMax};
+        results.outsideWindow = layout();
+        state.splitChartZoom = null;
+        drawSplitChart();
+        return results;
+    }""")
+    assert markers["infinityFullRange"] is not None
+    assert markers["floorFullRange"] == pytest.approx(markers["plotLeft"])
+    assert markers["infinityZoomedAway"] is None
+    assert markers["insideWindow"] is not None
+    assert markers["outsideWindow"] is None
+    assert page.pageerrors == []
+
+
+def test_split_chart_export_follows_the_zoom(crowded_page):
+    """The export is the chart in front of you, clipped the same way."""
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -900)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+
+    model = page.evaluate("""() => {
+        const layout = splitChartLayout(splitCanvas.width, splitCanvas.height);
+        return {
+            stems: layout.marks.length,
+            beads: layout.marks.reduce((sum, mark) => sum + mark.beads.length, 0),
+            firstTick: layout.xTicks[0].label,
+        };
+    }""")
+    svg = page.evaluate("() => buildSplitChartSVG()")
+    assert svg.count("<circle") == model["beads"]
+    assert svg.count("<path d=\"M") >= model["stems"]
+    assert model["firstTick"] in svg
+    # One clip path, applied to each group of data marks: stems, beads, the line.
+    assert svg.count('<clipPath id="split-plot-clip">') == 1
+    assert svg.count('clip-path="url(#split-plot-clip)"') == 3
+    assert page.pageerrors == []
+
+
+def test_split_chart_zoom_round_trips_through_a_session(crowded_page):
+    """Saved like the canvas's own pan and zoom, and clamped on the way back in."""
+    page = crowded_page
+    x, y = _split_chart_fraction_point(page)
+    page.mouse.move(x, y)
+    page.mouse.wheel(0, -600)
+    page.wait_for_function("() => Boolean(state.splitChartZoom)")
+    saved = page.evaluate("() => collectSessionState().view.split_chart_zoom")
+    assert saved["max"] > saved["min"]
+
+    page.click("#split-chart-reset-zoom")
+    assert page.evaluate("() => collectSessionState().view.split_chart_zoom") is None
+
+    note = page.evaluate("value => applySessionState({view: {split_chart_zoom: value}})", saved)
+    assert note == ""
+    assert page.evaluate("() => state.splitChartZoom") == pytest.approx(saved)
+
+    # A window wider than this bundle's own range is re-fitted, not obeyed.
+    page.evaluate("() => applySessionState({view: {split_chart_zoom: {min: -50, max: 50}}})")
+    page.evaluate("() => drawSplitChart()")
+    assert _split_window(page)["span"] == pytest.approx(
+        page.evaluate("() => state.splitChartHit.dataMax - state.splitChartHit.dataMin")
+    )
     assert page.pageerrors == []

@@ -661,6 +661,28 @@ def _session_state_js() -> str:
                 };
             },
         },
+        {
+            // The split chart's x window, saved for the same reason the canvas
+            // transform above is: reopening a session onto the whole axis would throw
+            // away the part of it the session was about. Stored in threshold units, so
+            // it survives a rebuild with another --max_merge_events; splitChartLayout
+            // clamps it into whatever range the bundle actually has.
+            section: 'view',
+            key: 'split_chart_zoom',
+            get: () => state.splitChartZoom
+                ? {min: state.splitChartZoom.min, max: state.splitChartZoom.max}
+                : null,
+            set: value => {
+                if (value === null || value === undefined) {
+                    state.splitChartZoom = null;
+                    return;
+                }
+                if (!Number.isFinite(value.min) || !Number.isFinite(value.max) || !(value.max > value.min)) {
+                    throw new Error('malformed split chart zoom');
+                }
+                state.splitChartZoom = {min: Number(value.min), max: Number(value.max)};
+            },
+        },
         domValueField('table', 'filter', 'metadata-filter'),
         domValueField('table', 'null_order', 'metadata-null-order'),
         domValueField('table', 'rows_per_page', 'metadata-rows-per-page'),
@@ -3023,6 +3045,184 @@ def _split_chart_hover_js() -> str:
 
     function recordSplitChartGeometry(geometry) {
         state.splitChartHit = geometry;
+        // The only two on-screen paint paths call this, so the zoom controls are
+        // refreshed exactly when the window they describe can have changed.
+        updateSplitChartZoomControls();
+    }
+
+    // ---------------------------------------------------------------------
+    // Split chart zoom + pan
+    //
+    // The window is threshold state, not pixels: state.splitChartZoom is {min, max}
+    // in threshold units, or null for "the whole series". Pixels would be wrong the
+    // moment the chart is exported at another size, and a scale factor would drift
+    // as the range it was taken against changed under it.
+    //
+    // Nothing here computes geometry of its own either. Every gesture reads the
+    // window the paint pass recorded and hands a new one back through
+    // setSplitChartWindow, so a gesture cannot act on a chart other than the one
+    // the user is looking at.
+    // ---------------------------------------------------------------------
+
+    // 500x separates two adjacent lollipops even on a 160,000-event axis, and stops
+    // the window shrinking to a width where the arithmetic stops resolving.
+    const SPLIT_CHART_MAX_ZOOM = 500;
+    // Canvas pixels of travel before a press counts as a pan rather than a click,
+    // like the cluster canvas's own drag slop.
+    const SPLIT_CHART_DRAG_SLOP = 3;
+
+    // Read by splitChartLayout on every paint. Clamping on read rather than on write
+    // is what keeps a stale window harmless: load another bundle, or restore a session
+    // saved against a different --max_merge_events, and the window is re-fitted to the
+    // range that actually exists instead of framing empty axis.
+    function splitChartVisibleWindow(dataMin, dataMax) {
+        const dataSpan = dataMax - dataMin;
+        const zoom = state.splitChartZoom;
+        if (!zoom || !(dataSpan > 0)) {
+            return {min: dataMin, max: dataMax, zoomed: false};
+        }
+        const span = Math.min(dataSpan, Math.max(dataSpan / SPLIT_CHART_MAX_ZOOM, zoom.max - zoom.min));
+        const min = Math.min(Math.max(zoom.min, dataMin), dataMax - span);
+        return {min, max: min + span, zoomed: span < dataSpan};
+    }
+
+    // The one writer of the window, so "zoomed all the way out is not a window at
+    // all" is decided once -- and the Reset button, which reads state.splitChartZoom,
+    // greys itself out the moment a zoom-out gesture reaches the full range.
+    function setSplitChartWindow(min, max, dataMin, dataMax) {
+        const dataSpan = dataMax - dataMin;
+        if (!(dataSpan > 0) || (max - min) >= dataSpan) {
+            state.splitChartZoom = null;
+        } else {
+            const span = Math.max(dataSpan / SPLIT_CHART_MAX_ZOOM, max - min);
+            const clampedMin = Math.min(Math.max(min, dataMin), dataMax - span);
+            state.splitChartZoom = {min: clampedMin, max: clampedMin + span};
+        }
+        drawSplitChart();
+    }
+
+    function resetSplitChartZoom() {
+        if (!state.splitChartZoom) { return; }
+        state.splitChartZoom = null;
+        hideSplitChartTip();
+        drawSplitChart();
+    }
+
+    function updateSplitChartZoomControls() {
+        const hit = state.splitChartHit;
+        const zoomed = Boolean(state.splitChartZoom) && Boolean(hit);
+        const button = document.getElementById('split-chart-reset-zoom');
+        if (button) { button.disabled = !zoomed; }
+        const hint = document.getElementById('split-chart-zoom-hint');
+        if (!hint) { return; }
+        // The hint doubles as the window's readout: before a gesture it teaches the
+        // gestures, and after one it answers the question a zoomed axis raises, which
+        // is what part of the range is still on screen.
+        hint.textContent = zoomed
+            ? 'Showing ' + splitChartWindowLabel(hit.minThreshold, hit.thresholdSpan) + ' – ' +
+                splitChartWindowLabel(hit.minThreshold + hit.thresholdSpan, hit.thresholdSpan) +
+                ' · double-click to reset'
+            : 'Scroll to zoom · drag to pan';
+    }
+
+    // Roughly two significant digits of the window's own width, so the two ends read
+    // as different numbers however far in the zoom has gone. formatValue's fixed two
+    // decimals would print a tight window as "0.87 – 0.87", which is the same lie the
+    // axis ticks used to tell before decimalsForTickStep.
+    function splitChartWindowLabel(value, span) {
+        const decimals = span > 0
+            ? Math.min(8, Math.max(2, Math.ceil(-Math.log10(span / 100))))
+            : 2;
+        return value.toLocaleString(undefined, {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        });
+    }
+
+    // Zooms about `canvasX`, so the threshold under the pointer stays under the
+    // pointer: the gesture reads as moving a lens over the axis rather than as
+    // re-centering it somewhere the user did not ask for.
+    function zoomSplitChartAt(canvasX, factor) {
+        const hit = state.splitChartHit;
+        if (!hit || !Number.isFinite(hit.dataMin)) { return; }
+        const anchor = splitChartThresholdAt(canvasX);
+        if (anchor === null || !(factor > 0)) { return; }
+        const span = hit.thresholdSpan / factor;
+        const fraction = (anchor - hit.minThreshold) / hit.thresholdSpan;
+        setSplitChartWindow(anchor - (fraction * span), anchor + ((1 - fraction) * span),
+            hit.dataMin, hit.dataMax);
+    }
+
+    // `dx` is pointer travel in canvas pixels: the window moves against it, so the
+    // marks follow the pointer.
+    function panSplitChartByPixels(dx) {
+        const hit = state.splitChartHit;
+        if (!hit || hit.plotWidth <= 0 || !Number.isFinite(hit.dataMin)) { return; }
+        // Nothing to pan when the whole series is already showing.
+        if (!state.splitChartZoom) { return; }
+        const delta = -(dx / hit.plotWidth) * hit.thresholdSpan;
+        setSplitChartWindow(hit.minThreshold + delta, hit.minThreshold + hit.thresholdSpan + delta,
+            hit.dataMin, hit.dataMax);
+    }
+
+    function handleSplitChartWheel(event) {
+        if (!state.bundle || !state.splitChartHit) { return; }
+        event.preventDefault();
+        hideSplitChartTip();
+        // Shift-wheel, and a trackpad's horizontal wheel, scroll the window; a plain
+        // wheel zooms it, with the cluster canvas's own rate so the two feel alike.
+        const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+        if (event.shiftKey || horizontal) {
+            panSplitChartByPixels(-(horizontal ? event.deltaX : event.deltaY));
+            return;
+        }
+        const point = splitCanvasCoordinatesFromEvent(event);
+        zoomSplitChartAt(point.x, Math.exp(-event.deltaY * 0.0012));
+    }
+
+    function handleSplitChartPointerDown(event) {
+        if (!state.bundle || event.button !== 0 || !state.splitChartHit) { return; }
+        state.splitChartDrag = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            lastX: event.clientX,
+            moved: false,
+        };
+        // Captured so a fast drag that leaves the canvas keeps panning, and so the
+        // matching pointerup arrives here however far the pointer has travelled.
+        if (splitCanvas.setPointerCapture) { splitCanvas.setPointerCapture(event.pointerId); }
+    }
+
+    function endSplitChartDrag(event) {
+        const drag = state.splitChartDrag;
+        if (!drag || drag.pointerId !== event.pointerId) { return; }
+        state.splitChartDrag = null;
+        splitCanvas.style.cursor = '';
+        if (splitCanvas.releasePointerCapture && splitCanvas.hasPointerCapture(event.pointerId)) {
+            splitCanvas.releasePointerCapture(event.pointerId);
+        }
+        // A drag is not a click. Without this, letting go after panning would also
+        // jump the threshold to wherever the pointer happened to land.
+        state.splitChartSuppressClick = drag.moved;
+    }
+
+    // A click sets the threshold and a double-click resets the zoom, so the two clicks
+    // inside a double-click have already moved the threshold by the time this fires --
+    // a click cannot know a second one is coming. Making every click wait out the
+    // double-click interval would make the primary gesture feel broken, so the jump is
+    // undone here instead: what the user asked for was the reset, and nothing else.
+    function handleSplitChartDoubleClick() {
+        if (state.stopBeforeSplitChartClick) {
+            snapSliderToStop(state.stopBeforeSplitChartClick);
+            scheduleThresholdUI(false);
+        }
+        resetSplitChartZoom();
+    }
+
+    function handleSplitChartPointerCancel(event) {
+        endSplitChartDrag(event);
+        state.splitChartSuppressClick = false;
+        hideSplitChartTip();
     }
 
     function splitChartTipElement() {
@@ -3193,6 +3393,22 @@ def _split_chart_hover_js() -> str:
 
     function handleSplitChartPointerMove(event) {
         if (!state.bundle) { hideSplitChartTip(); return; }
+        const drag = state.splitChartDrag;
+        if (drag && drag.pointerId === event.pointerId) {
+            // Client pixels scaled into canvas space, the same conversion
+            // splitCanvasCoordinatesFromEvent makes, because the canvas is laid out at
+            // width:100% over a fixed backing store.
+            const rect = splitCanvas.getBoundingClientRect();
+            const dx = (event.clientX - drag.lastX) * (splitCanvas.width / rect.width);
+            drag.lastX = event.clientX;
+            if (Math.abs(event.clientX - drag.startX) > SPLIT_CHART_DRAG_SLOP) { drag.moved = true; }
+            if (drag.moved) {
+                hideSplitChartTip();
+                splitCanvas.style.cursor = 'grabbing';
+                panSplitChartByPixels(dx);
+            }
+            return;
+        }
         const point = splitCanvasCoordinatesFromEvent(event);
         const hit = splitChartHitAt(point.x, point.y);
         if (!hit) { hideSplitChartTip(); return; }
@@ -3202,6 +3418,16 @@ def _split_chart_hover_js() -> str:
 
     function handleSplitChartClick(event) {
         if (!state.bundle) { return; }
+        if (state.splitChartSuppressClick) {
+            state.splitChartSuppressClick = false;
+            return;
+        }
+        // Recorded before the jump, and only on the opening click of a gesture, so a
+        // double-click can undo the jumps its own clicks made. See
+        // handleSplitChartDoubleClick.
+        if (event.detail <= 1) {
+            state.stopBeforeSplitChartClick = currentSliderStop();
+        }
         const point = splitCanvasCoordinatesFromEvent(event);
         const hit = splitChartHitAt(point.x, point.y);
         if (!hit) { return; }
@@ -3217,8 +3443,16 @@ def _split_chart_hover_js() -> str:
     function setupSplitChartHover() {
         splitCanvas.addEventListener('pointermove', handleSplitChartPointerMove);
         splitCanvas.addEventListener('pointerleave', hideSplitChartTip);
-        splitCanvas.addEventListener('pointercancel', hideSplitChartTip);
+        splitCanvas.addEventListener('pointercancel', handleSplitChartPointerCancel);
         splitCanvas.addEventListener('click', handleSplitChartClick);
+        // passive:false because the wheel gesture is the zoom, so the page must not
+        // scroll out from under it.
+        splitCanvas.addEventListener('wheel', handleSplitChartWheel, {passive: false});
+        splitCanvas.addEventListener('pointerdown', handleSplitChartPointerDown);
+        splitCanvas.addEventListener('pointerup', endSplitChartDrag);
+        splitCanvas.addEventListener('dblclick', handleSplitChartDoubleClick);
+        document.getElementById('split-chart-reset-zoom')
+            .addEventListener('click', resetSplitChartZoom);
         // The readout is positioned from client coordinates, so it is stale the
         // moment the page moves under it.
         window.addEventListener('scroll', hideSplitChartTip, true);
@@ -3321,6 +3555,33 @@ def _column_charts_js() -> str:
 
     // ---- Data model ----
 
+    // Counts for the same column over every node in the bundle, not just the
+    // scoped rows. A chart's own percentages read one way -- "a third of this
+    // selection is alpha" -- and a selection immediately raises the other -- "and
+    // that is a twelfth of every alpha in the network". Only these counts can
+    // answer the second question, because the scope cannot see what it excluded.
+    //
+    // Recomputed per chart rather than cached: metadata is editable, and one pass
+    // over a column costs what the scope's own pass beside it already costs.
+    function columnGlobalCounts(columnName) {
+        const counts = {byKey: new Map(), nullCount: 0, total: 0};
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (columnIndex === undefined || !state.bundle) {
+            return counts;
+        }
+        counts.total = state.bundle.graph.nodes.length;
+        for (let nodeIndex = 0; nodeIndex < counts.total; nodeIndex++) {
+            const raw = state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
+            if (isMissingMetadataValue(raw)) {
+                counts.nullCount += 1;
+                continue;
+            }
+            const key = String(raw);
+            counts.byKey.set(key, (counts.byKey.get(key) || 0) + 1);
+        }
+        return counts;
+    }
+
     // Scoped analogue of distinctColumnValues (which walks every node): same
     // String(raw) keying, same formatValue labels, and the same count-desc then
     // key-asc ordering, so a chart's category order matches the color picker's
@@ -3343,6 +3604,7 @@ def _column_charts_js() -> str:
             distinctTotal: 0,
             rowCount: nodeIndices.length,
             truncated: false,
+            globalTotal: 0,
         };
         const columnIndex = state.metadataColumnIndexByName.get(columnName);
         if (columnIndex === undefined) {
@@ -3364,6 +3626,8 @@ def _column_charts_js() -> str:
             }
         });
         model.distinctTotal = byKey.size;
+        const globals = columnGlobalCounts(columnName);
+        model.globalTotal = globals.total;
         const sorted = Array.from(byKey.values()).sort(
             (a, b) => (b.count - a.count) || a.key.localeCompare(b.key)
         );
@@ -3371,6 +3635,7 @@ def _column_charts_js() -> str:
         const tail = Number.isFinite(topN) ? sorted.slice(topN) : [];
         model.entries = kept.map(entry => Object.assign({}, entry, {
             color: categoricalColor(entry.raw, palette),
+            globalCount: globals.byKey.get(entry.key) || 0,
             isNull: false,
             isOther: false,
         }));
@@ -3386,6 +3651,10 @@ def _column_charts_js() -> str:
                 label: 'Other (' + tail.length.toLocaleString() + ' values)',
                 raw: null,
                 count: model.otherCount,
+                // The rollup's own global count is the sum over the values rolled
+                // up, not every value outside the top N: "Other" is defined by what
+                // this scope saw, and a value absent from the scope is not in it.
+                globalCount: tail.reduce((sum, entry) => sum + (globals.byKey.get(entry.key) || 0), 0),
                 // The same neutral gray utils.get_palette gives values with no
                 // color of their own, so a rolled-up slice reads as "not a
                 // value" rather than as a category with that hue.
@@ -3400,6 +3669,7 @@ def _column_charts_js() -> str:
                 label: '—',
                 raw: null,
                 count: model.nullCount,
+                globalCount: globals.nullCount,
                 // categoricalColor's own null fallback, so an empty cell is the
                 // same color in the chart as its node is on the canvas. Note
                 // this is a different gray from the "Other" rollup above.
@@ -3595,16 +3865,26 @@ def _column_charts_js() -> str:
         return rows;
     }
 
-    // {color, label, count, percent} rows shared by the HTML preview, the SVG
-    // export and the TSV, so all three show the same numbers.
+    // {color, label, count, percent, globalCount, globalPercent} rows shared by
+    // the HTML preview, the SVG export and the TSV, so all three show the same
+    // numbers. The two percentages have different denominators on purpose:
+    // `percent` is the value's share of the charted rows, `globalPercent` is the
+    // share of that value's own network-wide population which those rows caught.
+    // With nothing selected and no filter the scope is the whole bundle, so every
+    // globalPercent is 100% -- which is the honest reading, not a bug.
     function frequencyTableRows(model) {
         const denominator = model.rowCount > 0 ? model.rowCount : 1;
-        return model.entries.map(entry => ({
-            color: entry.color,
-            label: entry.label,
-            count: entry.count,
-            percent: (entry.count / denominator) * 100,
-        }));
+        return model.entries.map(entry => {
+            const globalCount = entry.globalCount || 0;
+            return {
+                color: entry.color,
+                label: entry.label,
+                count: entry.count,
+                percent: (entry.count / denominator) * 100,
+                globalCount,
+                globalPercent: globalCount > 0 ? (entry.count / globalCount) * 100 : 0,
+            };
+        });
     }
 
     // ---- SVG scaffolding ----
@@ -4080,10 +4360,16 @@ def _column_charts_js() -> str:
             cssToHex(row.color) + '"></span></td>' +
             '<td>' + htmlEscape(row.label) + '</td>' +
             '<td class="cc-num">' + htmlEscape(row.count.toLocaleString()) + '</td>' +
-            '<td class="cc-num">' + htmlEscape(row.percent.toFixed(1) + '%') + '</td></tr>'
+            '<td class="cc-num">' + htmlEscape(row.percent.toFixed(1) + '%') + '</td>' +
+            '<td class="cc-num">' + htmlEscape(row.globalCount.toLocaleString()) + '</td>' +
+            '<td class="cc-num">' + htmlEscape(row.globalPercent.toFixed(1) + '%') + '</td></tr>'
         ).join('');
+        // "Percent" is read against the charted rows; "% of all" against that
+        // value's whole population, whose size is the column beside it so the
+        // denominator is never a mystery.
         return '<table class="cc-freq-table"><thead><tr><th class="cc-swatch-cell"></th>' +
             '<th>Value</th><th class="cc-num">Count</th><th class="cc-num">Percent</th>' +
+            '<th class="cc-num">All nodes</th><th class="cc-num">% of all</th>' +
             '</tr></thead><tbody>' + body + '</tbody></table>';
     }
 
@@ -4212,9 +4498,13 @@ def _column_charts_js() -> str:
             notes.push(model.nullCount.toLocaleString() + ' with no value (shown as —)');
         }
         const rows = frequencyTableRows(model);
-        const tsv = chartTSV(['value', 'count', 'percent', 'color'], rows.map(row => [
-            row.label, row.count, row.percent.toFixed(4), cssToHex(row.color),
-        ]));
+        const tsv = chartTSV(
+            ['value', 'count', 'percent', 'count_all_nodes', 'percent_of_all', 'color'],
+            rows.map(row => [
+                row.label, row.count, row.percent.toFixed(4),
+                row.globalCount, row.globalPercent.toFixed(4), cssToHex(row.color),
+            ])
+        );
         if (kind === 'bar') {
             return Object.assign({kind, columnName, html: null, notes, empty: false},
                 buildBarChartSVG(model, meta), {tsv});
@@ -4225,6 +4515,14 @@ def _column_charts_js() -> str:
         }
         // Frequency table. The preview caps its row count (it goes through
         // innerHTML); the TSV above always carries every value.
+        //
+        // The table is the one kind that shows both denominators, so it is the one
+        // that has to say what the second is. Only worth spelling out once the scope
+        // is narrower than the bundle: when it is not, every "% of all" reads 100%.
+        if (model.rowCount < model.globalTotal) {
+            notes.push('“% of all” counts each value against its own network-wide total, ' +
+                'not against these ' + model.rowCount.toLocaleString() + ' rows');
+        }
         const previewRows = rows.slice(0, COLUMN_CHART_TABLE_MAX_ROWS);
         if (rows.length > previewRows.length) {
             notes.push('Showing the first ' + COLUMN_CHART_TABLE_MAX_ROWS.toLocaleString() +
@@ -4236,12 +4534,16 @@ def _column_charts_js() -> str:
                 label: row.label,
                 count: row.count.toLocaleString(),
                 percent: row.percent.toFixed(1) + '%',
+                globalCount: row.globalCount.toLocaleString(),
+                globalPercent: row.globalPercent.toFixed(1) + '%',
             })),
             [
                 {key: 'color', label: '', swatch: true},
                 {key: 'label', label: 'Value'},
                 {key: 'count', label: 'Count', align: 'right'},
                 {key: 'percent', label: 'Percent', align: 'right'},
+                {key: 'globalCount', label: 'All nodes', align: 'right'},
+                {key: 'globalPercent', label: '% of all', align: 'right'},
             ],
             meta
         );
@@ -5256,6 +5558,11 @@ def ssn_viewer_html(
         font-size: 0.92rem;
         line-height: 1.4;
     }}
+    /* Lives in a flex toolbar rather than under one, so it drops .note's leading gap. */
+    .split-zoom-hint {{
+        margin-top: 0;
+        align-self: center;
+    }}
     .table-wrap {{
         max-height: 680px;
         overflow: auto;
@@ -5770,8 +6077,12 @@ def ssn_viewer_html(
                 </div>
                 <div class="note" id="split-event-count"></div>
                 <div class="toolbar">
+                    <button id="split-chart-reset-zoom" type="button" disabled title="Show the whole threshold range again (or double-click the chart)">Reset zoom</button>
                     <button id="export-split-png" type="button" disabled title="Download this chart as a PNG at the resolution chosen in View Settings">Export chart PNG</button>
                     <button id="export-split-svg" type="button" disabled title="Download this chart as an editable SVG">Export chart SVG</button>
+                    <!-- Teaches the gestures before one is used, and reads out the window
+                         after one is; see updateSplitChartZoomControls. -->
+                    <span id="split-chart-zoom-hint" class="note split-zoom-hint">Scroll to zoom · drag to pan</span>
                 </div>
                 <div class="slider-stack">
                     <div class="slider-track-wrap">
@@ -6123,6 +6434,15 @@ def ssn_viewer_html(
         colorPickerPage: 0,
         // Where drawSplitChart() last painted each mark, for hover hit-testing.
         splitChartHit: null,
+        // The stop the slider was last moved to deliberately; see currentSliderStop().
+        selectedStop: null,
+        // The stop in effect before the current split-chart click gesture began.
+        stopBeforeSplitChartClick: null,
+        // {{min, max}} in threshold units while the split chart is zoomed, else null.
+        splitChartZoom: null,
+        // {{pointerId, startX, lastX, moved}} while the split chart is being panned.
+        splitChartDrag: null,
+        splitChartSuppressClick: false,
         // {{columnName, anchor}} while a column header's chart menu is open.
         columnChartMenu: null,
         // {{columnName, kind}} while the chart dialog is open, and the built
@@ -6317,6 +6637,12 @@ def ssn_viewer_html(
         state.dotLayoutCache = new Map();
         state.layoutCache = new Map();
         state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
+        // Point into the model just replaced, so they cannot outlive it.
+        state.selectedStop = null;
+        state.stopBeforeSplitChartClick = null;
+        // A window onto the previous bundle's threshold range means nothing here; a
+        // session restore sets its own afterwards.
+        state.splitChartZoom = null;
         state.allNodeIndices = bundle.graph.nodes.map((_, i) => i);
         rebuildMetadataCaches();
 
@@ -6517,11 +6843,26 @@ def ssn_viewer_html(
         }};
     }}
 
+    // The slider's position is the source of truth, but a coarse one: 1001 integer
+    // positions have to carry every stop, and stops crowd. On a network whose merges
+    // bunch into a narrow band of scores, 401 stops can land on 103 positions, eleven
+    // of them sharing one. Resolving by position alone then always hands back the first
+    // stop at that position -- so snapping to any of the other ten and asking again
+    // returns a different stop than the one just chosen, which is what made the step
+    // arrows look stuck partway up the axis.
+    //
+    // So a stop chosen deliberately is remembered, and honored while the slider still
+    // sits where that choice put it. Dragging the slider moves it off that position and
+    // the nearest-position search below takes over again, which is right: a drag picks
+    // a position, not a stop.
     function currentSliderStop() {{
         if (!state.sliderModel || state.sliderModel.stops.length === 0) {{
             return null;
         }}
         const sliderPosition = Number(document.getElementById('threshold-slider').value);
+        if (state.selectedStop && state.selectedStop.sliderPosition === sliderPosition) {{
+            return state.selectedStop;
+        }}
         let nearestStop = state.sliderModel.stops[0];
         let nearestDistance = Math.abs(sliderPosition - nearestStop.sliderPosition);
         for (const stop of state.sliderModel.stops) {{
@@ -6539,6 +6880,7 @@ def ssn_viewer_html(
             return;
         }}
         document.getElementById('threshold-slider').value = String(stop.sliderPosition);
+        state.selectedStop = stop;
     }}
 
     function nearestStopForThreshold(targetValue) {{
@@ -9036,8 +9378,15 @@ def ssn_viewer_html(
         // The moving sum is computed in Python over the UNFILTERED event rows, so its x range
         // can extend past the capped merge_event_series; plot over the union of the two.
         const thresholdValues = events.map(event => event.threshold_value).concat(movingSumX);
-        const minThreshold = Math.min(...thresholdValues);
-        const maxThreshold = Math.max(...thresholdValues);
+        const dataMin = Math.min(...thresholdValues);
+        const dataMax = Math.max(...thresholdValues);
+        // The slice of the series the chart is showing: all of it unless it has been
+        // zoomed. Every scale, tick, mark and marker below is derived from this window,
+        // so it is the single place the zoom can be got wrong -- and the single place
+        // it is clamped back into the data.
+        const view = splitChartVisibleWindow(dataMin, dataMax);
+        const minThreshold = view.min;
+        const maxThreshold = view.max;
         const thresholdSpan = Math.max(1e-9, maxThreshold - minThreshold || 1);
         const maxMovingSum = Math.max(...movingSumY, 1);
 
@@ -9045,7 +9394,14 @@ def ssn_viewer_html(
         const yFor = value => margin.top + height - (value / maxImpact) * height;
         const y2For = value => margin.top + height - (value / maxMovingSum) * height;
 
-        const marks = events.map(event => ({{
+        // Marks outside the window are dropped rather than drawn and clipped. The
+        // painters clip the plot box anyway, so this is about the hover: "the nearest
+        // event" must not be allowed to mean one the chart is not showing.
+        const markSlack = (thresholdSpan * SPLIT_CHART_BEAD_DRAW_RADIUS) / Math.max(1, width);
+        const marks = events.filter(event =>
+            event.threshold_value >= minThreshold - markSlack &&
+            event.threshold_value <= maxThreshold + markSlack
+        ).map(event => ({{
             event,
             x: xFor(event.threshold_value),
             stemY: yFor(event.largest_merge),
@@ -9070,6 +9426,13 @@ def ssn_viewer_html(
         }}
 
         const stop = currentSliderStop();
+        // Clamped into the plotted range first. The infinity stop sits above every score
+        // in the series and the floor stop below every one, so both belong at an end of
+        // the axis rather than off it -- the floor stop's marker used to be drawn outside
+        // the plot box, to the left of the y-axis. Clamping first also means a zoomed
+        // window drops them like any other out-of-window threshold.
+        const markerValue = stop === null ? null : Math.min(Math.max(
+            stop.threshold_value === null ? dataMax : stop.threshold_value, dataMin), dataMax);
 
         return Object.assign(frame, {{
             message: null,
@@ -9077,6 +9440,10 @@ def ssn_viewer_html(
             minThreshold,
             maxThreshold,
             thresholdSpan,
+            // The full extent of the series, which the zoom gestures clamp against.
+            dataMin,
+            dataMax,
+            zoomed: view.zoomed,
             maxImpact,
             maxMovingSum,
             xFor,
@@ -9096,7 +9463,11 @@ def ssn_viewer_html(
                 .map(tick => Object.assign({{y: y2For(tick.value)}}, tick)),
             marks,
             movingSum: {{window: movingSum.window || 0, x: movingSumX, y: movingSumY, points: movingSumPoints}},
-            markerX: stop ? (stop.threshold_value === null ? margin.left + width : xFor(stop.threshold_value)) : null,
+            // Dropped once the window no longer contains it: a marker pinned to the
+            // edge of a zoomed axis would claim the threshold is sitting there.
+            markerX: markerValue === null || markerValue < minThreshold || markerValue > maxThreshold
+                ? null
+                : xFor(markerValue),
         }});
     }}
 
@@ -9201,6 +9572,14 @@ def ssn_viewer_html(
             context.fillText(tick.label, rightAxisX + SPLIT_CHART_TICK_LENGTH + 4, tick.y);
         }});
 
+        // Clipped to the plot box for as long as the data marks are being painted: a bead
+        // is 4px wide, so one sitting against the edge of a zoomed window would otherwise
+        // spill over the axis and into the tick labels.
+        context.save();
+        context.beginPath();
+        context.rect(margin.left, margin.top, width, height);
+        context.clip();
+
         // Stem to the largest single split, then one bead per distinct merge size. Beads are
         // drawn unoutlined: on a stem carrying several close beads the outlines would merge
         // into a band that erases the stem. Bead and stem differ by shade, not by outline.
@@ -9232,6 +9611,7 @@ def ssn_viewer_html(
             }});
             context.stroke();
         }}
+        context.restore();
 
         // The dashed line and its dot mark where the slider is sitting right now. That is
         // UI state, not something the chart measures, so neither export draws it --
@@ -9261,6 +9641,11 @@ def ssn_viewer_html(
                 plotHeight: height,
                 minThreshold: layout.minThreshold,
                 thresholdSpan: layout.thresholdSpan,
+                // The gestures zoom and pan against the window the paint pass used and
+                // the extent it was clamped into, so they cannot disagree with the
+                // chart in front of the user.
+                dataMin: layout.dataMin,
+                dataMax: layout.dataMax,
                 events: layout.marks.map(mark => ({{event: mark.event, x: mark.x, beads: mark.beads}})),
                 movingSumWindow: layout.movingSum.window,
                 movingSumX: layout.movingSum.x,
@@ -9305,6 +9690,10 @@ def ssn_viewer_html(
             parts.push('</svg>');
             return parts.join('\\n');
         }}
+
+        // The same clip the canvas painter applies while drawing the data marks.
+        parts.push('<defs><clipPath id="split-plot-clip"><rect x="' + margin.left + '" y="' + margin.top +
+            '" width="' + width + '" height="' + height + '"/></clipPath></defs>');
 
         // Ticks. Values, positions and label text all come from the layout, so the export
         // cannot round or place them differently from the canvas.
@@ -9351,8 +9740,8 @@ def ssn_viewer_html(
         // Stems, then beads, in the canvas's own order so overlaps stack the same way.
         const stems = layout.marks.map(mark =>
             '<path d="M' + fmt(mark.x) + ' ' + (margin.top + height) + ' V' + fmt(mark.stemY) + '"/>');
-        parts.push('<g fill="none" stroke="' + SPLIT_CHART_COLORS.stem + '" stroke-width="1.5">' +
-            stems.join('') + '</g>');
+        parts.push('<g clip-path="url(#split-plot-clip)" fill="none" stroke="' + SPLIT_CHART_COLORS.stem +
+            '" stroke-width="1.5">' + stems.join('') + '</g>');
         const beads = [];
         layout.marks.forEach(mark => {{
             mark.beads.forEach(bead => {{
@@ -9360,14 +9749,15 @@ def ssn_viewer_html(
                     SPLIT_CHART_BEAD_DRAW_RADIUS + '"/>');
             }});
         }});
-        parts.push('<g fill="' + SPLIT_CHART_COLORS.bead + '">' + beads.join('') + '</g>');
+        parts.push('<g clip-path="url(#split-plot-clip)" fill="' + SPLIT_CHART_COLORS.bead + '">' +
+            beads.join('') + '</g>');
 
         if (layout.movingSum.points.length > 0) {{
             const d = layout.movingSum.points
                 .map((point, index) => (index === 0 ? 'M' : ' L') + fmt(point.x) + ' ' + fmt(point.y))
                 .join('');
-            parts.push('<path d="' + d + '" fill="none" stroke="' + SPLIT_CHART_COLORS.movingSum +
-                '" stroke-width="1.75"/>');
+            parts.push('<path d="' + d + '" clip-path="url(#split-plot-clip)" fill="none" stroke="' +
+                SPLIT_CHART_COLORS.movingSum + '" stroke-width="1.75"/>');
         }}
 
         // No threshold marker: this builder is only ever an export, and the dashed line
@@ -12018,11 +12408,31 @@ def ssn_viewer_html(
         updateThresholdUI();
     }}
 
+    // The next stop in `delta`'s direction that actually names a different threshold,
+    // or -1 when there is none. What an arrow press promises is a threshold the view
+    // has not just been at; two stops naming one threshold describe the same cut, so
+    // landing on the second would move the slider and change nothing on screen. The
+    // event rows the stops are built from are grouped by exact threshold today, so this
+    // skips nothing -- it is here because the promise belongs to the arrows rather than
+    // to an invariant held one module away in ssn_hierarchy.
+    //
+    // (The arrows' own stuck-looking behaviour came from somewhere else: many stops
+    // share one slider position. See currentSliderStop.)
+    function nextDistinctStopIndex(stops, index, delta) {{
+        const current = stops[index].threshold_value;
+        for (let probe = index + delta; probe >= 0 && probe < stops.length; probe += delta) {{
+            if (stops[probe].threshold_value !== current) {{
+                return probe;
+            }}
+        }}
+        return -1;
+    }}
+
     // Walk the slider's stop list. Those stops are the only thresholds the view can
     // actually take -- every one is an edge weight at which the graph splits -- so
-    // stepping by one stop is the only step size that always lands somewhere new.
-    // `delta` is +1 toward higher thresholds (rightward on the split plot, ending at
-    // the infinity stop) and -1 toward lower ones.
+    // stepping to the next distinct one is the only step size that always lands
+    // somewhere new. `delta` is +1 toward higher thresholds (rightward on the split
+    // plot, ending at the infinity stop) and -1 toward lower ones.
     function stepThreshold(delta) {{
         if (!state.bundle || !state.sliderModel) {{
             return;
@@ -12033,8 +12443,8 @@ def ssn_viewer_html(
         }}
         // currentSliderStop() returns an element of `stops`, so identity search is safe.
         const index = stops.indexOf(currentSliderStop());
-        const target = index < 0 ? 0 : Math.max(0, Math.min(stops.length - 1, index + delta));
-        if (target === index) {{
+        const target = index < 0 ? 0 : nextDistinctStopIndex(stops, index, delta);
+        if (target < 0) {{
             return;
         }}
         snapSliderToStop(stops[target]);
@@ -12044,11 +12454,15 @@ def ssn_viewer_html(
     }}
 
     // The ends of the stop list are dead ends, so say so rather than no-op silently.
+    // Asked the same question stepThreshold answers, so an arrow is enabled exactly
+    // when pressing it would move the threshold somewhere new.
     function updateThresholdStepButtons() {{
         const stops = state.sliderModel ? state.sliderModel.stops : [];
         const index = state.bundle && stops.length > 0 ? stops.indexOf(currentSliderStop()) : -1;
-        document.getElementById('threshold-step-down').disabled = index <= 0;
-        document.getElementById('threshold-step-up').disabled = index < 0 || index >= stops.length - 1;
+        document.getElementById('threshold-step-down').disabled =
+            index < 0 || nextDistinctStopIndex(stops, index, -1) < 0;
+        document.getElementById('threshold-step-up').disabled =
+            index < 0 || nextDistinctStopIndex(stops, index, 1) < 0;
     }}
 
     function toggleSelectionForComponent(componentId) {{
