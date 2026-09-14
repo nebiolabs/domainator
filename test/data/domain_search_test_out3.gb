@@ -1,4 +1,4 @@
-LOCUS       pDONR201_2_3678:1265rc  2675 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_2_3677:1266rc  2675 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_2.
 ACCESSION   pDONR201_2
 VERSION     pDONR201_2
@@ -175,7 +175,7 @@ ORIGIN
      2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnn
 //
-LOCUS       pDONR201_1_3678:1265rc  2675 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_1_3677:1266rc  2675 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_1.
 ACCESSION   pDONR201_1
 VERSION     pDONR201_1
@@ -352,7 +352,7 @@ ORIGIN
      2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnn
 //
-LOCUS       pDONR201_3_3678:1265rc  2675 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_3_3677:1266rc  2675 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_3.
 ACCESSION   pDONR201_3
 VERSION     pDONR201_3
@@ -529,7 +529,7 @@ ORIGIN
      2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnn
 //
-LOCUS       pDONR201_4_3678:1265rc  2675 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_4_3677:1266rc  2675 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_4.
 ACCESSION   pDONR201_4
 VERSION     pDONR201_4
@@ -706,7 +706,7 @@ ORIGIN
      2581 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2641 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnn
 //
-LOCUS       pDONR201_3_1392:1rc     2675 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_3_1391:2rc     2675 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_3.
 ACCESSION   pDONR201_3
 VERSION     pDONR201_3

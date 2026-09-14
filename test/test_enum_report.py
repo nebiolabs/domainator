@@ -626,7 +626,7 @@ def test_enum_report_filename_contig_1(shared_datadir):
             assert lines[1][1] == str(shared_datadir / "206.gb")
             assert lines[1][2] == ""
             
-            assert lines[2][0] == "pDONR201_1265:958rc"
+            assert lines[2][0] == "pDONR201_1264:959rc"
             assert lines[2][1] == str(shared_datadir / "ccdb.gb")
             assert lines[2][2] == "CcdB"
 
@@ -689,7 +689,7 @@ def test_enum_report_filename_domain_1(shared_datadir):
             assert lines[0] == ["contig", "cds", "domain", "filename", "domains"]
             
             # Check first file record
-            assert lines[1][0] == "pDONR201_1265:958rc"
+            assert lines[1][0] == "pDONR201_1264:959rc"
             assert lines[1][1] == "1264_-1_959"
             assert lines[1][2] == "CcdB"
             assert lines[1][3] == str(shared_datadir / "ccdb.gb")

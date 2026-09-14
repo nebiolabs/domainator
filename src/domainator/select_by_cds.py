@@ -227,7 +227,7 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
     elif (end == 0) and start == len(contig) and strand == -1: #reverse strand whole contig
         pass
     else:
-        record.id = record.id + f"_{start+1}:{end}"
+        record.id = record.id + f"_{slice_location.stranded_start_human_readable}:{slice_location.stranded_end_human_readable}"
 
     # slice_from_location will flip the strand if the domain is on the reverse strand, so we need to flip it back if we want to keep the direction.
     if not normalize_direction and strand == -1: 
