@@ -29,10 +29,14 @@ SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
 #     session" button (viewer UI state + selection presets). Purely additive:
 #     build_ssn_viewer.py never writes app_state, and a reader that ignores the
 #     section can treat a v4 file exactly like a v3 file.
-SSN_VIEWER_BUNDLE_VERSION = 4
+# v5: graph.merge_event_total and graph.max_merge_events, so a reader can say how
+#     many of the network's split events the capped graph.merge_event_series is
+#     showing. Purely additive: a reader that ignores both keys treats a v5 file
+#     exactly like a v4 file.
+SSN_VIEWER_BUNDLE_VERSION = 5
 # Versions this build can read. Kept as a tuple rather than an equality check so
 # that additive revisions do not strand previously written bundles.
-SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4)
+SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4, 5)
 
 
 def load_bundle(path: Union[str, PathLike]) -> dict:

@@ -262,6 +262,121 @@ def dense_page(dense_viewer_html):
     yield from _yield_loaded_page(dense_viewer_html)
 
 
+def _build_embedded_viewer_capped(out_dir, node_count=60, max_merge_events=5):
+    """The same dense network, built with a cap small enough to drop most events.
+
+    Every other fixture sits under the default cap of 500, so nothing in the suite
+    would otherwise exercise a filtered split chart -- which is the state every large
+    network is in.
+    """
+    rng = np.random.default_rng(0)
+    data = np.zeros((node_count, node_count), dtype=float)
+    for start, end in [(0, 22), (22, 40), (40, node_count)]:
+        for i in range(start, end):
+            for j in range(i + 1, end):
+                data[i, j] = data[j, i] = rng.uniform(4, 12)
+    row_names = [f"seq_{i:03d}" for i in range(node_count)]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    input_file = out_dir / "matrix.hdf5"
+    html_file = out_dir / "viewer_capped.html"
+    matrix.write(str(input_file), output_type="dense")
+    build_ssn_viewer.main([
+        "-i", str(input_file),
+        "--html", str(html_file),
+        "--embed_data",
+        "--name", "Capped Test Viewer",
+        "--max_merge_events", str(max_merge_events),
+    ])
+    return html_file
+
+
+@pytest.fixture(scope="module")
+def capped_viewer_html(tmp_path_factory):
+    return _build_embedded_viewer_capped(tmp_path_factory.mktemp("ssn_viewer_capped"))
+
+
+@pytest.fixture
+def capped_page(capped_viewer_html):
+    """A loaded page whose split chart shows only a capped slice of its events."""
+    yield from _yield_loaded_page(capped_viewer_html)
+
+
+def _build_embedded_viewer_two_bead(out_dir):
+    """A network where one threshold carries merges of two different sizes.
+
+    At t=11 two pairs form (a 1-node merge each); at t=10 those two pairs join
+    (a 2-node merge) while A-B forms (a 1-node merge). So the t=10 event draws two
+    beads on one stem, which is what the hover's bead-picking has to resolve.
+    """
+    names = ["A", "B", "E", "F", "G", "H"]
+    index = {name: position for position, name in enumerate(names)}
+    data = np.zeros((6, 6), dtype=float)
+    for left, right, weight in [("E", "F", 11.0), ("G", "H", 11.0),
+                                ("F", "G", 10.0), ("A", "B", 10.0)]:
+        data[index[left], index[right]] = weight
+        data[index[right], index[left]] = weight
+    matrix = DenseDataMatrix(data, names, names)
+
+    input_file = out_dir / "matrix.hdf5"
+    html_file = out_dir / "viewer_two_bead.html"
+    matrix.write(str(input_file), output_type="dense")
+    build_ssn_viewer.main([
+        "-i", str(input_file), "--html", str(html_file), "--embed_data",
+        "--name", "Two Bead Viewer",
+    ])
+    return html_file
+
+
+@pytest.fixture(scope="module")
+def two_bead_viewer_html(tmp_path_factory):
+    return _build_embedded_viewer_two_bead(tmp_path_factory.mktemp("ssn_viewer_two_bead"))
+
+
+@pytest.fixture
+def two_bead_page(two_bead_viewer_html):
+    """A loaded page with two beads stacked on one split event."""
+    yield from _yield_loaded_page(two_bead_viewer_html)
+
+
+def _build_embedded_viewer_product_metric(out_dir):
+    """The dense network under --merge_impact_metric product.
+
+    A product impact is not a count of nodes, so the hover readout must not call it
+    one -- the distinction merge_impact_axis_labels exists to keep.
+    """
+    rng = np.random.default_rng(0)
+    node_count = 40
+    data = np.zeros((node_count, node_count), dtype=float)
+    for start, end in [(0, 15), (15, 28), (28, node_count)]:
+        for i in range(start, end):
+            for j in range(i + 1, end):
+                data[i, j] = data[j, i] = rng.uniform(4, 12)
+    names = [f"seq_{i:03d}" for i in range(node_count)]
+    matrix = DenseDataMatrix(data, names, names)
+
+    input_file = out_dir / "matrix.hdf5"
+    html_file = out_dir / "viewer_product.html"
+    matrix.write(str(input_file), output_type="dense")
+    build_ssn_viewer.main([
+        "-i", str(input_file), "--html", str(html_file), "--embed_data",
+        "--name", "Product Metric Viewer", "--merge_impact_metric", "product",
+    ])
+    return html_file
+
+
+@pytest.fixture(scope="module")
+def product_metric_viewer_html(tmp_path_factory):
+    return _build_embedded_viewer_product_metric(
+        tmp_path_factory.mktemp("ssn_viewer_product"))
+
+
+@pytest.fixture
+def product_metric_page(product_metric_viewer_html):
+    """A loaded page whose merge impacts are size products, not node counts."""
+    yield from _yield_loaded_page(product_metric_viewer_html)
+
+
 def _canvas_snapshot(page):
     """Return the cluster canvas pixels as a PNG data URL."""
     return page.eval_on_selector("#cluster-view", "c => c.toDataURL()")
@@ -341,9 +456,16 @@ def test_view_setting_toggles_do_not_throw(page):
         "show-edge-scores",
         "render-cluster-bounds",
         "render-nodes",
+        "reduce-elongation",
+        "leaf-pruning-only",
     ):
         page.click(f"#{checkbox_id}")
         page.click(f"#{checkbox_id}")
+    # "Collapse long paths" is only clickable while leaf pruning is on.
+    page.check("#leaf-pruning-only")
+    page.click("#collapse-long-paths")
+    page.click("#collapse-long-paths")
+    page.uncheck("#leaf-pruning-only")
     assert page.pageerrors == []
 
 
@@ -660,17 +782,29 @@ def _saved_color_table(page):
 
 
 def test_named_palette_matches_get_palette(meta_page):
-    """The "Domainator distinct" palette assigns the colors build_ssn.py would."""
+    """The "Domainator distinct" palette assigns the colors build_ssn.py would.
+
+    It is also the viewer's default, so an untouched column already carries those
+    colors and picking it from the menu only writes them down -- which is why this
+    checks the color table before and after, and not the canvas (it cannot change).
+    """
     from domainator.utils import get_palette
 
     page = meta_page
     _open_color_picker(page)
     page.wait_for_selector("#color-picker-discrete:not([hidden])")
-    before = _canvas_snapshot(page)
-    page.select_option("#color-palette", "domainator")
-    _wait_for_canvas_change(page, before)
 
     expected = get_palette(pd.Series(["alpha", "alpha", "beta", "beta", "gamma", "gamma"]))
+    assert page.evaluate("() => Object.keys(state.customPalettes)") == []
+    default_table = _saved_color_table(page)
+    assert {key: value.upper() for key, value in default_table.items()
+            if key != "\u2014"} == expected
+    assert page.input_value("#color-palette") == "domainator"
+
+    page.select_option("#color-palette", "domainator")
+    page.wait_for_function(
+        "() => !!(state.customPalettes.family && state.customPalettes.family.scheme)"
+    )
     saved = _saved_color_table(page)
     assert {key: value.upper() for key, value in saved.items() if key != "\u2014"} == expected
     assert page.pageerrors == []
@@ -697,7 +831,12 @@ def test_named_palette_orders_numeric_values_numerically(meta_page):
 
 
 def test_named_palette_cycles_and_reverts_to_default(many_cat_page):
-    """A short palette cycles across many values, and the default palette comes back."""
+    """A short palette cycles across many values, and the default palette comes back.
+
+    The menu carries no pseudo-entry for the default any more, so "Reset to
+    defaults" is the only way back -- and what it comes back to is
+    DEFAULT_CATEGORICAL_PALETTE, not a hash of each value.
+    """
     page = many_cat_page
     _open_color_picker(page)
     page.wait_for_selector("#color-picker-discrete:not([hidden])")
@@ -723,7 +862,12 @@ def test_named_palette_cycles_and_reverts_to_default(many_cat_page):
     _open_color_picker(page)
     assert page.input_value("#color-palette") == ""
 
-    page.select_option("#color-palette", "__default__")
+    assert page.evaluate(
+        "() => Array.from(document.getElementById('color-palette').options)"
+        ".map(option => option.value)"
+    ) == ["", "domainator", "tab10", "okabe_ito", "brewer_dark2", "brewer_set2", "brewer_paired"]
+
+    page.click("#color-picker-reset")
     page.wait_for_selector("#color-picker-discrete:not([hidden])")
     assert page.evaluate("Object.keys(state.customPalettes)") == []
     assert page.evaluate("state.nodeColorCache.slice()") == default_colors
@@ -984,7 +1128,7 @@ def _read_session_bundle(path):
     return json.loads(raw.decode("utf-8"))
 
 
-def test_saved_session_is_a_valid_v4_bundle(meta_page, tmp_path):
+def test_saved_session_is_a_valid_current_bundle(meta_page, tmp_path):
     """Saving produces a bundle Python readers accept, carrying an app_state."""
     from domainator.ssn_bundle import (
         SSN_VIEWER_BUNDLE_VERSION,
@@ -995,7 +1139,7 @@ def test_saved_session_is_a_valid_v4_bundle(meta_page, tmp_path):
     saved = _save_session(page, tmp_path)
 
     bundle = load_bundle(saved)  # would raise on a bad format/version
-    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 4
+    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 5
     assert bundle["graph"]["nodes"] == ["A", "B", "C", "D", "E", "F"]
 
     app_state = bundle["app_state"]
@@ -1394,12 +1538,19 @@ def test_blanking_a_cell_clears_it_to_null(meta_page):
 
 
 def test_editing_a_cell_updates_node_colors(meta_page):
-    """An edit must invalidate the color cache, not just the table."""
+    """An edit must invalidate the color cache, not just the table.
+
+    The default palette hands out colors in sorted value order, so introducing
+    "a_brand_new_family" -- which sorts first -- shifts every other family along
+    by one. Node 0 keeps the first color precisely because it is the renamed one;
+    node 1, still "alpha", is the node whose color has to move.
+    """
     page = meta_page
     before = page.evaluate("() => state.nodeColorCache.slice()")
     _edit_cell(page, 0, "family", "a_brand_new_family")
     after = page.evaluate("() => state.nodeColorCache.slice()")
-    assert after[0] != before[0]
+    assert after != before
+    assert after[1] != before[1]
     assert page.pageerrors == []
 
 
@@ -3550,4 +3701,2123 @@ def test_color_table_load_accepts_shorthand_hex(meta_page, tmp_path):
     assert page.evaluate(
         "() => state.customPalettes[paletteKey('family')].colors") == {
             "alpha": "#FF0000", "beta": "#00FF00", "gamma": "#0000FF"}
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Per-column charts and frequency tables
+# ---------------------------------------------------------------------------
+
+
+def _open_column_chart_menu(page, column):
+    """Click a column header's chart glyph and wait for its menu."""
+    page.click(f'.metadata-chart-button[data-chart-column="{column}"]')
+    page.wait_for_selector("#column-chart-menu:not([hidden])")
+
+
+def _column_chart_menu_kinds(page):
+    return page.eval_on_selector_all(
+        "#column-chart-menu button", "els => els.map(e => e.dataset.chartKind)"
+    )
+
+
+def _open_column_chart(page, column, kind):
+    """Open the chart dialog for one column/kind through the header menu."""
+    _open_column_chart_menu(page, column)
+    page.click(f'#column-chart-menu button[data-chart-kind="{kind}"]')
+    page.wait_for_selector("#column-chart-overlay:not([hidden])")
+    page.wait_for_function(
+        "kind => state.columnChartArtifact && state.columnChartArtifact.kind === kind",
+        arg=kind,
+    )
+
+
+def _set_column_chart_kind(page, kind):
+    page.select_option("#column-chart-kind", kind)
+    page.wait_for_function(
+        "kind => state.columnChartArtifact && state.columnChartArtifact.kind === kind",
+        arg=kind,
+    )
+
+
+def _column_chart_svg(page):
+    return page.inner_html("#column-chart-preview")
+
+
+def _column_chart_rows(page):
+    """The rendered frequency/summary table as a list of row cell lists."""
+    return page.eval_on_selector_all(
+        "#column-chart-preview tbody tr",
+        "rows => rows.map(r => Array.from(r.cells).map(c => c.textContent))",
+    )
+
+
+def test_column_chart_menu_adapts_to_column_type(meta_page):
+    """A text column offers no histogram; a numeric one offers every kind."""
+    page = meta_page
+    _open_column_chart_menu(page, "family")
+    assert _column_chart_menu_kinds(page) == ["frequency", "bar", "pie", "summary"]
+
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#column-chart-menu", state="hidden")
+    assert page.get_attribute(
+        '.metadata-chart-button[data-chart-column="family"]', "aria-expanded"
+    ) == "false"
+
+    _open_column_chart_menu(page, "score")
+    assert _column_chart_menu_kinds(page) == [
+        "frequency", "bar", "pie", "histogram", "box", "ecdf", "summary",
+    ]
+    assert page.pageerrors == []
+
+
+def test_node_id_header_has_no_chart_button(meta_page):
+    """node_id is unique by construction, so every chart of it is degenerate."""
+    page = meta_page
+    assert page.locator(".metadata-chart-button").count() == 2
+    assert page.locator(
+        "#metadata-table thead th:nth-child(1) .metadata-chart-button"
+    ).count() == 0
+    assert page.pageerrors == []
+
+
+def test_chart_glyph_click_does_not_sort(meta_page):
+    """The glyph sits inside the header cell; clicking it must not sort."""
+    page = meta_page
+    _open_column_chart_menu(page, "family")
+
+    assert page.evaluate("() => state.metadataSort.columnKey") is None
+    assert page.eval_on_selector(
+        "#metadata-table thead th:nth-child(2)", "e => e.getAttribute('aria-sort')"
+    ) == "none"
+    assert page.pageerrors == []
+
+
+def test_frequency_table_counts_and_inherits_colors(meta_page):
+    """Counts come from the scoped rows; swatches from the column's palette."""
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+
+    assert _column_chart_rows(page) == [
+        ["", "alpha", "2", "33.3%"],
+        ["", "beta", "2", "33.3%"],
+        ["", "gamma", "2", "33.3%"],
+    ]
+    expected = page.evaluate(
+        "() => ['alpha', 'beta', 'gamma'].map("
+        "  value => cssToHex(categoricalColor(value, customPalette('family'))))"
+    )
+    swatches = page.eval_on_selector_all(
+        ".cc-swatch", "els => els.map(e => cssToHex(e.style.background))"
+    )
+    assert swatches == expected
+    assert page.pageerrors == []
+
+
+def test_frequency_table_inherits_a_custom_palette(meta_page):
+    """A palette edit reaches an open chart, not just the network canvas."""
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+    page.evaluate("""() => {
+        ensureCategoricalPalette('family').colors = {alpha: '#112233'};
+        rebuildNodeColorCache();
+    }""")
+
+    assert page.eval_on_selector(
+        ".cc-swatch", "e => cssToHex(e.style.background)"
+    ) == "#112233"
+    assert "#112233" in page.evaluate("() => columnChartTSV()")
+    assert page.pageerrors == []
+
+
+def test_column_chart_follows_the_selection(meta_page):
+    """Charts summarize the rows the table shows, i.e. the selection."""
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+    page.evaluate("() => { state.selectedNodeIndices = new Set([0, 1, 2]); updateMetadataTable(); }")
+
+    assert _column_chart_rows(page) == [
+        ["", "alpha", "2", "66.7%"],
+        ["", "beta", "1", "33.3%"],
+    ]
+    assert page.text_content("#column-chart-note").startswith("3 of 6 nodes")
+    assert "selection" in page.text_content("#column-chart-note")
+    assert page.pageerrors == []
+
+
+def test_column_chart_honours_the_table_filter(meta_page):
+    """The same row set the header's Copy button exports, filter included."""
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+    page.fill("#metadata-filter", "alpha")
+    # The filter is debounced, so wait for the re-render to reach the chart.
+    page.wait_for_function("() => state.columnChartArtifact.notes[0].startsWith('2 of 6')")
+
+    assert _column_chart_rows(page) == [["", "alpha", "2", "100.0%"]]
+    assert 'filter "alpha"' in page.text_content("#column-chart-note")
+    assert page.evaluate("() => columnChartNodeIndices().length") == 2
+    assert page.pageerrors == []
+
+
+def test_pie_chart_single_value_draws_a_circle(meta_page):
+    """An arc whose start and end angles are equal draws nothing at all."""
+    page = meta_page
+    page.fill("#metadata-filter", "alpha")
+    page.wait_for_function("() => columnChartNodeIndices().length === 2")
+    _open_column_chart(page, "family", "pie")
+
+    svg = _column_chart_svg(page)
+    assert "<circle" in svg
+    assert "<path" not in svg
+    assert "NaN" not in svg
+    assert page.pageerrors == []
+
+
+def test_bar_chart_draws_one_bar_per_value(meta_page):
+    page = meta_page
+    _open_column_chart(page, "family", "bar")
+
+    # One bar rect per value, plus the SVG's own white background rect.
+    assert page.eval_on_selector_all("#column-chart-preview rect", "els => els.length") == 4
+    assert page.pageerrors == []
+
+
+def test_histogram_bins_scoped_integers_one_per_value(meta_page):
+    """score is 1,2,3,5,8,9: nine bins, one per integer, three of them empty."""
+    page = meta_page
+    _open_column_chart(page, "score", "histogram")
+
+    histogram = page.evaluate(
+        "() => scopedColumnHistogram('score', columnChartNodeIndices())"
+    )
+    assert histogram["binCount"] == 9
+    assert histogram["counts"] == [1, 1, 1, 0, 1, 0, 0, 1, 1]
+    assert histogram["total"] == 6
+    # Empty bins draw nothing, so six bars plus the background rect.
+    assert page.eval_on_selector_all("#column-chart-preview rect", "els => els.length") == 7
+    # One bin per integer means the bins are values, not edges.
+    assert page.evaluate("() => columnChartTSV()").splitlines()[:3] == [
+        "value\tcount", "1\t1", "2\t1",
+    ]
+    assert page.pageerrors == []
+
+
+def test_histogram_bars_take_the_column_gradient(meta_page):
+    """Bars are colored the way the nodes are, so the chart doubles as ramp
+    feedback -- which means the whole-column range, not the scoped one."""
+    page = meta_page
+    _open_column_chart(page, "score", "histogram")
+    before = _column_chart_svg(page)
+
+    page.evaluate("""() => {
+        ensureNumericPalette('score').stops = [
+            {value: 1, color: '#000000'}, {value: 9, color: '#FFFFFF'}];
+        rebuildNodeColorCache();
+    }""")
+
+    after = _column_chart_svg(page)
+    assert after != before
+    # Every bar now sits on a black-to-white ramp, so every fill is a gray.
+    # They are bin-*center* colors, so none is pure black or pure white.
+    bar_fills = re.findall(r'<rect [^>]*fill="(#[0-9a-f]{6})"', after)
+    assert len(bar_fills) == 6
+    assert all(fill[1:3] == fill[3:5] == fill[5:7] for fill in bar_fills)
+    assert bar_fills == sorted(bar_fills)
+    assert page.pageerrors == []
+
+
+def test_summary_statistics_match_the_five_number_summary(meta_page):
+    """score is 1,2,3,5,8,9; quartiles interpolate like numpy's default."""
+    page = meta_page
+    _open_column_chart(page, "score", "summary")
+
+    summary = page.evaluate(
+        "() => numericSummary(columnNumericValues('score', columnChartNodeIndices()).values)"
+    )
+    assert summary["min"] == 1
+    assert summary["q1"] == 2.25
+    assert summary["median"] == 4
+    assert summary["q3"] == 7.25
+    assert summary["max"] == 9
+    assert summary["outliers"] == []
+
+    rows = dict(row[:2] for row in _column_chart_rows(page))
+    assert rows["Rows"] == "6"
+    assert rows["Distinct values"] == "6"
+    assert rows["Median"] == "4"
+    assert rows["1st quartile"] == "2.25"
+    assert page.pageerrors == []
+
+
+def test_box_plot_whiskers_stop_at_the_data(meta_page):
+    """No outliers in this column, so the whiskers reach min and max."""
+    page = meta_page
+    _open_column_chart(page, "score", "box")
+
+    assert page.evaluate("() => columnChartTSV()").splitlines() == [
+        "statistic\tvalue",
+        "count\t6",
+        "minimum\t1",
+        "low_whisker\t1",
+        "q1\t2.25",
+        "median\t4",
+        "q3\t7.25",
+        "high_whisker\t9",
+        "maximum\t9",
+        "iqr\t5",
+        "outliers\t",
+    ]
+    # No outlier dots to draw when nothing falls outside the fences.
+    assert page.eval_on_selector_all("#column-chart-preview circle", "els => els.length") == 0
+    assert page.pageerrors == []
+
+
+def test_ecdf_rises_monotonically_to_one(meta_page):
+    page = meta_page
+    _open_column_chart(page, "score", "ecdf")
+
+    tsv = page.evaluate("() => columnChartTSV()").splitlines()[1:]
+    fractions = [float(line.split("\t")[1]) for line in tsv]
+    assert fractions == sorted(fractions)
+    assert fractions[-1] == pytest.approx(1.0)
+
+    # The curve is one path whose y coordinates never increase (y grows downward).
+    path = re.search(r'<path d="([^"]+)"', _column_chart_svg(page)).group(1)
+    ys = [float(value) for value in re.findall(r"[ML] [\d.]+ ([\d.]+)", path)]
+    assert ys == sorted(ys, reverse=True)
+    assert page.pageerrors == []
+
+
+def test_many_categories_roll_into_other(many_cat_page):
+    """120 families: the pie caps its slices, the table lists them all."""
+    page = many_cat_page
+    _open_column_chart(page, "family", "pie")
+
+    # Twelve most common plus one "Other" slice.
+    assert page.eval_on_selector_all("#column-chart-preview path", "els => els.length") == 13
+    assert "108 more rolled into" in page.text_content("#column-chart-note")
+    # The rollup takes get_palette's neutral gray, not a category hue.
+    assert 'fill="#bfbfbf"' in _column_chart_svg(page)
+
+    _set_column_chart_kind(page, "frequency")
+    assert len(_column_chart_rows(page)) == 120
+    assert "rolled into" not in page.text_content("#column-chart-note")
+    assert page.pageerrors == []
+
+
+def test_numeric_categorical_column_uses_its_discrete_palette(numeric_categorical_page):
+    """A numeric column colored as categories still charts as numbers, but its
+    category colors come from the paletteKey-suffixed discrete palette."""
+    page = numeric_categorical_page
+    _open_column_chart_menu(page, "score")
+    assert "histogram" in _column_chart_menu_kinds(page)
+
+    page.click('#column-chart-menu button[data-chart-kind="pie"]')
+    page.wait_for_selector("#column-chart-overlay:not([hidden])")
+    page.evaluate("""() => {
+        ensureCategoricalPalette('score').colors = {'5': '#445566'};
+        rebuildNodeColorCache();
+    }""")
+
+    assert page.evaluate("() => paletteKey('score')") == "score\u0000categorical"
+    assert 'fill="#445566"' in _column_chart_svg(page)
+    assert page.pageerrors == []
+
+
+def test_column_chart_exports_svg_png_and_tsv(meta_page, tmp_path):
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+
+    with page.expect_download() as download_info:
+        page.click("#column-chart-export-svg")
+    svg_download = download_info.value
+    assert svg_download.suggested_filename == "Color_Test_Viewer_family_frequency.svg"
+    svg_path = tmp_path / "chart.svg"
+    svg_download.save_as(str(svg_path))
+    # The XML prolog is added only on export: the same string is assigned to
+    # innerHTML for the preview, which refuses a processing instruction.
+    assert svg_path.read_text().startswith("<?xml version=")
+    assert "<?xml" not in _column_chart_svg(page)
+
+    with page.expect_download() as download_info:
+        page.click("#column-chart-download-tsv")
+    tsv_download = download_info.value
+    assert tsv_download.suggested_filename == "Color_Test_Viewer_family_frequency.tsv"
+    tsv_path = tmp_path / "chart.tsv"
+    tsv_download.save_as(str(tsv_path))
+    assert tsv_path.read_text().splitlines()[0] == "value\tcount\tpercent\tcolor"
+
+    with page.expect_download() as download_info:
+        page.click("#column-chart-export-png")
+    png_download = download_info.value
+    assert png_download.suggested_filename.endswith(".png")
+    png_path = tmp_path / "chart.png"
+    png_download.save_as(str(png_path))
+    assert png_path.read_bytes().startswith(b"\x89PNG")
+    assert page.pageerrors == []
+
+
+def test_column_chart_tracks_a_metadata_edit(meta_page):
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+    # The dialog is modal, so drive the edit through the same functions the
+    # cell editor calls rather than clicking the table underneath it.
+    page.evaluate("""() => {
+        setMetadataValue(0, 'family', 'delta');
+        refreshAfterMetadataEdit();
+    }""")
+    page.wait_for_function(
+        "() => state.columnChartArtifact.notes.some(n => n.includes('4 distinct'))"
+    )
+
+    assert _column_chart_rows(page) == [
+        ["", "beta", "2", "33.3%"],
+        ["", "gamma", "2", "33.3%"],
+        ["", "alpha", "1", "16.7%"],
+        ["", "delta", "1", "16.7%"],
+    ]
+    assert page.pageerrors == []
+
+
+def test_column_chart_closes_when_its_column_is_deleted(meta_page):
+    """A column can be deleted from under an open dialog."""
+    page = meta_page
+    _add_column(page, "notes")
+    _open_column_chart(page, "notes", "frequency")
+
+    page.evaluate("() => deleteMetadataColumn('notes')")
+    page.wait_for_selector("#column-chart-overlay", state="hidden")
+
+    assert page.evaluate("() => state.columnChart") is None
+    assert page.pageerrors == []
+
+
+def test_chart_dialog_closes_on_escape_and_on_the_backdrop(meta_page):
+    """The two dismissals every other overlay in the viewer supports."""
+    page = meta_page
+    _open_column_chart(page, "family", "frequency")
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#column-chart-overlay", state="hidden")
+    assert page.evaluate("() => state.columnChart") is None
+    assert page.evaluate("() => state.columnChartArtifact") is None
+
+    _open_column_chart(page, "family", "frequency")
+    # Click the overlay itself, outside the dialog, at the very top of the page.
+    page.mouse.click(4, 4)
+    page.wait_for_selector("#column-chart-overlay", state="hidden")
+    assert page.pageerrors == []
+
+
+def test_a_second_click_on_the_glyph_closes_the_menu(meta_page):
+    page = meta_page
+    _open_column_chart_menu(page, "family")
+
+    page.click('.metadata-chart-button[data-chart-column="family"]')
+    page.wait_for_selector("#column-chart-menu", state="hidden")
+    assert page.evaluate("() => state.columnChartMenu") is None
+    assert page.pageerrors == []
+
+
+def test_clicking_another_glyph_reopens_the_menu_for_that_column(meta_page):
+    page = meta_page
+    _open_column_chart_menu(page, "family")
+
+    page.click('.metadata-chart-button[data-chart-column="score"]')
+    page.wait_for_function("() => state.columnChartMenu?.columnName === 'score'")
+    assert "histogram" in _column_chart_menu_kinds(page)
+    assert page.get_attribute(
+        '.metadata-chart-button[data-chart-column="family"]', "aria-expanded"
+    ) == "false"
+    assert page.pageerrors == []
+
+
+def test_chart_says_why_when_there_is_nothing_to_draw(meta_page):
+    """A filter that matches nothing must explain itself, not draw a blank box."""
+    page = meta_page
+    _open_column_chart(page, "score", "histogram")
+    page.fill("#metadata-filter", "zzzzz")
+    page.wait_for_function("() => state.columnChartArtifact.empty")
+
+    assert page.eval_on_selector("#column-chart-preview", "e => e.textContent") == (
+        "No numeric values in these rows."
+    )
+    assert page.eval_on_selector_all("#column-chart-preview svg", "els => els.length") == 0
+    for button in ("copy-tsv", "download-tsv", "export-svg", "export-png"):
+        assert page.is_disabled(f"#column-chart-{button}")
+    assert page.pageerrors == []
+
+
+def test_an_all_null_column_charts_as_one_no_value_entry(meta_page):
+    """A column nobody has filled in yet is a legitimate thing to chart."""
+    page = meta_page
+    page.evaluate("() => addMetadataColumn('empty', 'number')")
+    _open_column_chart(page, "empty", "frequency")
+
+    assert _column_chart_rows(page) == [["", "—", "6", "100.0%"]]
+    assert "6 with no value" in page.text_content("#column-chart-note")
+    # The no-value color is categoricalColor's own fallback, so an empty cell
+    # is the same color in the chart as its node is on the canvas.
+    assert page.eval_on_selector(
+        ".cc-swatch", "e => cssToHex(e.style.background)"
+    ) == page.evaluate("() => cssToHex(categoricalColor(null, customPalette('empty')))")
+
+    # ...but the numeric kinds have nothing to bin.
+    _set_column_chart_kind(page, "histogram")
+    assert page.evaluate("() => state.columnChartArtifact.empty") is True
+    assert page.pageerrors == []
+
+
+def test_a_single_repeated_value_does_not_break_the_numeric_charts(meta_page):
+    """A zero-width numeric domain would divide by zero in every axis."""
+    page = meta_page
+    page.evaluate("""() => {
+        addMetadataColumn('flat', 'number');
+        for (let i = 0; i < 6; i++) { setMetadataValue(i, 'flat', '7'); }
+        refreshAfterMetadataEdit({columnsChanged: true});
+    }""")
+
+    for kind in ("histogram", "box", "ecdf", "summary"):
+        _open_column_chart(page, "flat", kind)
+        svg = _column_chart_svg(page)
+        assert "NaN" not in svg
+        assert "Infinity" not in svg
+        assert page.evaluate("() => state.columnChartArtifact.empty") is False
+        page.keyboard.press("Escape")
+        page.wait_for_selector("#column-chart-overlay", state="hidden")
+
+    assert page.evaluate(
+        "() => scopedColumnHistogram('flat', columnChartNodeIndices()).binCount"
+    ) == 1
+    assert page.pageerrors == []
+
+
+def test_chart_menu_is_keyboard_operable(meta_page):
+    """Opening focuses the first item; the arrows and Home/End walk the rest."""
+    page = meta_page
+    _open_column_chart_menu(page, "score")
+
+    focused = "() => document.activeElement.dataset.chartKind"
+    assert page.evaluate(focused) == "frequency"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate(focused) == "bar"
+    page.keyboard.press("ArrowUp")
+    assert page.evaluate(focused) == "frequency"
+    # The arrows wrap, so ArrowUp from the first item lands on the last.
+    page.keyboard.press("ArrowUp")
+    assert page.evaluate(focused) == "summary"
+    page.keyboard.press("Home")
+    assert page.evaluate(focused) == "frequency"
+    page.keyboard.press("End")
+    assert page.evaluate(focused) == "summary"
+
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#column-chart-overlay:not([hidden])")
+    assert page.evaluate("() => state.columnChart.kind") == "summary"
+    assert page.pageerrors == []
+
+
+def test_closing_the_chart_returns_focus_to_its_glyph(meta_page):
+    page = meta_page
+    _open_column_chart(page, "score", "histogram")
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#column-chart-overlay", state="hidden")
+
+    assert page.evaluate(
+        "() => document.activeElement.dataset.chartColumn"
+    ) == "score"
+    assert page.pageerrors == []
+
+
+def test_preset_digits_do_not_fire_while_a_chart_is_open(meta_page):
+    """A digit shortcut would change the selection out from under the chart."""
+    page = meta_page
+    page.evaluate("() => { state.selectedNodeIndices = new Set([0, 1]); updateMetadataTable(); }")
+    page.keyboard.press("Shift+Digit1")
+    page.evaluate("() => { state.selectedNodeIndices = new Set(); updateMetadataTable(); }")
+    _open_column_chart(page, "family", "frequency")
+
+    page.keyboard.press("Digit1")
+    assert page.evaluate("() => state.selectedNodeIndices.size") == 0
+
+    # ...and it works again once the dialog is closed.
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#column-chart-overlay", state="hidden")
+    page.keyboard.press("Digit1")
+    assert page.evaluate("() => state.selectedNodeIndices.size") == 2
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# "Jump to threshold" arrows
+# ---------------------------------------------------------------------------
+
+
+def _finite_stop_values(page):
+    return page.evaluate(
+        "() => state.sliderModel.stops.filter(stop => stop.threshold_value !== null)"
+        ".map(stop => stop.threshold_value)"
+    )
+
+
+def _snap_to_stop(page, stop_index):
+    page.evaluate(
+        "i => { const stops = state.sliderModel.stops;"
+        " snapSliderToStop(stops[i < 0 ? stops.length + i : i]); updateThresholdUI(false); }",
+        stop_index,
+    )
+
+
+def _wait_for_threshold_field(page, value):
+    page.wait_for_function(
+        "v => document.getElementById('threshold-input').value === String(v)", arg=value
+    )
+
+
+def test_threshold_arrows_step_between_split_stops(meta_page):
+    """The arrows walk the slider's stop list, not a fixed numeric step.
+
+    A number input's spinner stepped by 1.0, which on a distance axis is either a
+    no-op or a leap over several splits depending on the metric.
+    """
+    page = meta_page
+    finite = _finite_stop_values(page)
+    assert len(finite) >= 3
+    # The premise: consecutive splits are not one unit apart, so a constant step
+    # could not land on them.
+    assert finite[1] - finite[0] != 1
+
+    _snap_to_stop(page, 0)
+    _wait_for_threshold_field(page, finite[0])
+    assert page.is_disabled("#threshold-step-down")
+    assert page.is_enabled("#threshold-step-up")
+
+    page.click("#threshold-step-up")
+    _wait_for_threshold_field(page, finite[1])
+    assert page.evaluate("() => selectedThresholdValue()") == finite[1]
+
+    page.click("#threshold-step-up")
+    _wait_for_threshold_field(page, finite[2])
+
+    page.click("#threshold-step-down")
+    _wait_for_threshold_field(page, finite[1])
+    assert page.evaluate("() => selectedThresholdValue()") == finite[1]
+    assert page.pageerrors == []
+
+
+def test_threshold_arrow_keys_step_stops_too(meta_page):
+    """ArrowUp/ArrowDown in the jump field are the keyboard form of the buttons."""
+    page = meta_page
+    finite = _finite_stop_values(page)
+    _snap_to_stop(page, 0)
+    _wait_for_threshold_field(page, finite[0])
+
+    page.click("#threshold-input")
+    page.keyboard.press("ArrowUp")
+    _wait_for_threshold_field(page, finite[1])
+    page.keyboard.press("ArrowDown")
+    _wait_for_threshold_field(page, finite[0])
+    assert page.pageerrors == []
+
+
+def test_threshold_arrows_stop_at_the_ends_of_the_stop_list(meta_page):
+    """The last stop is the infinity stop; there is nothing past either end."""
+    page = meta_page
+    _snap_to_stop(page, -1)
+    page.wait_for_selector("#threshold-step-up[disabled]")
+    assert page.is_enabled("#threshold-step-down")
+    assert page.evaluate("() => selectedThresholdValue() === Infinity") is True
+    # Calling past the end is a no-op rather than an error or a wrap-around.
+    assert page.evaluate(
+        "() => { stepThreshold(1); return selectedThresholdValue() === Infinity; }") is True
+
+    _snap_to_stop(page, 0)
+    page.wait_for_selector("#threshold-step-down[disabled]")
+    lowest = page.evaluate("() => selectedThresholdValue()")
+    assert page.evaluate(
+        "() => { stepThreshold(-1); return selectedThresholdValue(); }") == lowest
+    assert page.pageerrors == []
+
+
+def test_typing_a_threshold_still_snaps_to_the_nearest_stop(meta_page):
+    """The field is type="text" now, so its own parsing has to keep working."""
+    page = meta_page
+    finite = _finite_stop_values(page)
+    page.fill("#threshold-input", str(finite[-1] + 100))
+    page.press("#threshold-input", "Enter")
+    _wait_for_threshold_field(page, finite[-1])
+    assert page.evaluate("() => selectedThresholdValue()") == finite[-1]
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Select by value
+# ---------------------------------------------------------------------------
+
+
+def _selection(page):
+    return page.evaluate("() => Array.from(state.selectedNodeIndices).sort((a, b) => a - b)")
+
+
+def _select_by_value(page, column, op, value, second=None, action="add"):
+    """Fill in the Select-by-value panel and click one of its three buttons."""
+    _open_edit_panel(page, "select")
+    page.select_option("#metadata-select-column", column)
+    page.select_option("#metadata-select-op", op)
+    page.fill("#metadata-select-value", value)
+    if second is not None:
+        page.fill("#metadata-select-value2", second)
+    page.click(f"#metadata-select-{action}")
+
+
+def test_select_by_value_contains_searches_the_whole_network(meta_page):
+    page = meta_page
+    _select_by_value(page, "family", "contains", "alph")
+    assert _selection(page) == [0, 1]
+    assert "Matched 2 of 6 nodes in the network" in page.text_content("#metadata-select-note")
+    assert page.pageerrors == []
+
+
+def test_select_by_value_exact_is_case_insensitive(meta_page):
+    page = meta_page
+    _select_by_value(page, "family", "exact", "BETA")
+    assert _selection(page) == [2, 3]
+    # ...and it is exact: a prefix of a real value matches nothing.
+    page.evaluate("() => { state.selectedNodeIndices = new Set(); updateMetadataTable(); }")
+    _select_by_value(page, "family", "exact", "bet")
+    assert _selection(page) == []
+    assert page.pageerrors == []
+
+
+def test_select_by_value_exact_matches_a_number_however_it_is_typed(meta_page):
+    """Node C's score is 5; "5.0" is the same number and has to match it."""
+    page = meta_page
+    for typed in ("5", "5.0", "05"):
+        page.evaluate("() => { state.selectedNodeIndices = new Set(); updateMetadataTable(); }")
+        _select_by_value(page, "score", "exact", typed)
+        assert _selection(page) == [2], typed
+    assert page.pageerrors == []
+
+
+def test_select_by_value_compares_numeric_columns_as_numbers(meta_page):
+    """The scores are 1, 2, 5, 8, 3, 9: "less than 10" is all of them.
+
+    Text order would put "10" between "1" and "2" and match only score 1, so this
+    is the case that distinguishes numeric from lexicographic comparison.
+    """
+    page = meta_page
+    _select_by_value(page, "score", "lt", "10")
+    assert _selection(page) == [0, 1, 2, 3, 4, 5]
+
+    page.evaluate("() => { state.selectedNodeIndices = new Set(); updateMetadataTable(); }")
+    _select_by_value(page, "score", "gt", "5")
+    assert _selection(page) == [3, 5]
+    assert page.pageerrors == []
+
+
+def test_select_by_value_between_is_inclusive_and_order_tolerant(meta_page):
+    page = meta_page
+    _select_by_value(page, "score", "between", "2", second="5")
+    assert _selection(page) == [1, 2, 4]
+
+    # The same query with the bounds typed the wrong way round.
+    page.evaluate("() => { state.selectedNodeIndices = new Set(); updateMetadataTable(); }")
+    _select_by_value(page, "score", "between", "5", second="2")
+    assert _selection(page) == [1, 2, 4]
+    assert page.pageerrors == []
+
+
+def test_select_by_value_between_asks_for_both_bounds(meta_page):
+    page = meta_page
+    _select_by_value(page, "score", "between", "2")
+    assert _selection(page) == []
+    assert page.text_content("#metadata-select-note") == (
+        "Type both bounds, or pick another comparison."
+    )
+    # The second field only appears for a two-operand comparison.
+    assert page.is_visible("#metadata-select-value2")
+    page.select_option("#metadata-select-op", "contains")
+    assert page.is_hidden("#metadata-select-value2")
+    assert page.pageerrors == []
+
+
+def test_select_by_value_regex_and_its_error_path(meta_page):
+    page = meta_page
+    _select_by_value(page, "family", "regex", "^g")
+    assert _selection(page) == [4, 5]
+
+    # A malformed pattern reports itself and leaves the selection alone.
+    _select_by_value(page, "family", "regex", "[")
+    assert _selection(page) == [4, 5]
+    assert page.text_content("#metadata-select-note").startswith(
+        "Not a valid regular expression"
+    )
+    assert page.pageerrors == []
+
+
+def test_select_by_value_can_query_node_id(meta_page):
+    """node_id is offered alongside the metadata columns."""
+    page = meta_page
+    _select_by_value(page, "__node_id__", "exact", "c")
+    assert _selection(page) == [2]
+    assert page.pageerrors == []
+
+
+def test_select_by_value_remove_and_subset_never_grow_the_selection(meta_page):
+    page = meta_page
+    _select_nodes(page, [0, 1, 2, 3])
+
+    # F (index 5) matches "score greater than 4" but is not selected, so neither
+    # narrowing action may pull it in.
+    _select_by_value(page, "score", "gt", "4", action="subset")
+    assert _selection(page) == [2, 3]
+    assert "in the selection" in page.text_content("#metadata-select-note")
+
+    _select_nodes(page, [0, 1, 2, 3])
+    _select_by_value(page, "family", "contains", "beta", action="remove")
+    assert _selection(page) == [0, 1]
+    assert page.pageerrors == []
+
+
+def test_select_by_value_narrowing_needs_a_selection(meta_page):
+    page = meta_page
+    _open_edit_panel(page, "select")
+    assert page.is_enabled("#metadata-select-add")
+    assert page.is_disabled("#metadata-select-remove")
+    assert page.is_disabled("#metadata-select-subset")
+
+    _select_nodes(page, [0, 1])
+    assert page.is_enabled("#metadata-select-remove")
+    assert page.is_enabled("#metadata-select-subset")
+    assert page.pageerrors == []
+
+
+def test_select_by_value_ignores_blank_cells(meta_page):
+    """An empty cell is an absence, so no comparison may match it."""
+    page = meta_page
+    _add_column(page, "empty")
+    _select_by_value(page, "empty", "contains", "a")
+    assert _selection(page) == []
+    assert "Matched 0 of 6 nodes" in page.text_content("#metadata-select-note")
+
+    # ...including an ordering comparison, which would otherwise treat null as 0.
+    _select_by_value(page, "empty", "lt", "1000")
+    assert _selection(page) == []
+    assert page.pageerrors == []
+
+
+def test_select_by_value_enter_adds_to_the_selection(meta_page):
+    page = meta_page
+    _open_edit_panel(page, "select")
+    page.select_option("#metadata-select-column", "family")
+    page.select_option("#metadata-select-op", "contains")
+    page.fill("#metadata-select-value", "gamma")
+    page.press("#metadata-select-value", "Enter")
+    assert _selection(page) == [4, 5]
+    assert page.pageerrors == []
+
+
+def test_select_by_value_menu_follows_a_column_rename(meta_page):
+    page = meta_page
+    _open_edit_panel(page, "select")
+    page.select_option("#metadata-select-column", "family")
+
+    _open_edit_panel(page, "rename")
+    page.select_option("#metadata-rename-column", "family")
+    page.fill("#metadata-rename-value", "clan")
+    page.click("#metadata-rename-apply")
+
+    _open_edit_panel(page, "select")
+    assert page.input_value("#metadata-select-column") == "clan"
+    _select_by_value(page, "clan", "contains", "alpha")
+    assert _selection(page) == [0, 1]
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Default categorical palette
+# ---------------------------------------------------------------------------
+
+
+def test_an_untouched_column_is_already_on_the_default_palette(meta_page):
+    """No stored palette, yet every value has a get_palette color."""
+    from domainator.utils import NAMED_CATEGORICAL_PALETTES
+
+    page = meta_page
+    distinct_colors = next(
+        palette["colors"] for palette in NAMED_CATEGORICAL_PALETTES
+        if palette["name"] == "domainator"
+    )
+    assert page.evaluate("() => Object.keys(state.customPalettes)") == []
+    # alpha, beta, gamma in sorted value order take the first three colors.
+    assert page.evaluate("() => state.nodeColorCache.slice()") == [
+        distinct_colors[0], distinct_colors[0],
+        distinct_colors[1], distinct_colors[1],
+        distinct_colors[2], distinct_colors[2],
+    ]
+    assert page.pageerrors == []
+
+
+def test_a_hand_edited_swatch_keeps_the_defaults_of_the_other_values(meta_page):
+    """Storing one swatch must not shadow the default palette for the rest.
+
+    The stored palette is what customPalette() returns once it exists, so it has
+    to be seeded with the default assignment rather than start empty.
+    """
+    page = meta_page
+    before = page.evaluate("() => state.nodeColorCache.slice()")
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+
+    swatch = page.locator("#color-picker-swatch-list input[type=color]").first
+    swatch.fill("#123456")
+    swatch.dispatch_event("input")
+    page.wait_for_function("() => state.nodeColorCache[0] === '#123456'")
+
+    after = page.evaluate("() => state.nodeColorCache.slice()")
+    assert after[0] == after[1] == "#123456"
+    assert after[2:] == before[2:]
+    assert page.pageerrors == []
+
+
+def test_reset_to_defaults_returns_a_column_to_the_default_palette(meta_page):
+    page = meta_page
+    before = page.evaluate("() => state.nodeColorCache.slice()")
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    page.select_option("#color-palette", "okabe_ito")
+    page.wait_for_function("() => state.customPalettes.family !== undefined")
+    assert page.evaluate("() => state.nodeColorCache.slice()") != before
+
+    page.click("#color-picker-reset")
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.evaluate("() => Object.keys(state.customPalettes)") == []
+    assert page.evaluate("() => state.nodeColorCache.slice()") == before
+    assert page.input_value("#color-palette") == "domainator"
+    assert page.pageerrors == []
+
+
+def test_default_palette_cache_is_rebuilt_after_a_metadata_edit(meta_page):
+    """The default assignment depends on the whole value set, so it must not stick."""
+    page = meta_page
+    # Already populated by the first paint: every node's color goes through it.
+    assert page.evaluate("() => state.defaultPalettes.size") == 1
+    alpha_before = page.evaluate("() => customPalette('family').colors.alpha")
+
+    page.evaluate(
+        "() => { setMetadataValue(0, 'family', 'aardvark'); refreshAfterMetadataEdit(); }")
+
+    colors = page.evaluate("() => customPalette('family').colors")
+    assert set(colors) == {"aardvark", "alpha", "beta", "gamma"}
+    # Colors are handed out in sorted value order, and aardvark sorts first, so it
+    # takes the color alpha had and pushes every other family along by one. A stale
+    # cache would have left alpha where it was and given aardvark nothing at all.
+    assert colors["aardvark"] == alpha_before
+    assert colors["alpha"] != alpha_before
+    assert page.evaluate("() => nodeColor(0)") == colors["aardvark"]
+    assert page.evaluate("() => nodeColor(1)") == colors["alpha"]
+    assert page.pageerrors == []
+
+
+def test_no_hidden_element_is_actually_rendered(meta_page):
+    """A `display` rule on a class overrides the `hidden` attribute silently.
+
+    The viewer hides most of its panels with `hidden` and styles them with
+    `display: flex`, which wins -- so every such rule needs a `[hidden]` guard,
+    and forgetting one leaves a dead control on screen with nothing to say. This
+    sweeps the whole page instead of trusting each rule to be remembered.
+    """
+    page = meta_page
+    visible_but_hidden = "() => Array.from(document.querySelectorAll('[hidden]'))" \
+        ".filter(el => getComputedStyle(el).display !== 'none')" \
+        ".map(el => el.id || el.className)"
+    assert page.evaluate(visible_but_hidden) == []
+
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.evaluate(visible_but_hidden) == []
+    page.click("#color-picker-close")
+
+    for panel in ("add", "set", "rename", "delete", "select"):
+        _open_edit_panel(page, panel)
+        assert page.evaluate(visible_but_hidden) == [], panel
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# "N merge events plotted": the split chart is a capped selection
+# ---------------------------------------------------------------------------
+
+
+def _split_event_caption(page):
+    return page.text_content("#split-event-count")
+
+
+def test_split_event_caption_says_the_whole_series_is_drawn(page):
+    """Small networks are under the cap, and the caption has to say so plainly."""
+    graph = page.evaluate("() => state.bundle.graph")
+    assert len(graph["merge_event_series"]) == graph["merge_event_total"]
+    assert _split_event_caption(page) == (
+        f"All {graph['merge_event_total']:,} merge events plotted."
+    )
+    assert "Every split event" in page.get_attribute("#split-event-count", "title")
+    assert page.pageerrors == []
+
+
+def test_split_event_caption_reports_a_capped_series(capped_page):
+    """The number that makes a blank stretch of axis readable as "filtered"."""
+    page = capped_page
+    graph = page.evaluate("() => state.bundle.graph")
+    plotted = len(graph["merge_event_series"])
+    total = graph["merge_event_total"]
+    cap = graph["max_merge_events"]
+    assert cap == 5
+    assert plotted < total
+    # The back-fill: between the cap and the cap plus one per 5% band.
+    assert cap <= plotted <= cap + 20
+
+    caption = _split_event_caption(page)
+    assert caption.startswith(f"{plotted:,} of {total:,} merge events plotted")
+    assert f"the strongest {cap:,} by impact" in caption
+    assert f"plus {plotted - cap:,}" in caption
+    assert "every 5% of the axis" in caption
+    assert "--max_merge_events" in page.get_attribute("#split-event-count", "title")
+    assert page.pageerrors == []
+
+
+def test_capped_series_still_reaches_the_bottom_of_the_axis(capped_page):
+    """What the back-fill is for: ranking by impact alone strands the left end."""
+    page = capped_page
+    weakest_edge = page.evaluate(
+        "() => Math.min(...state.bundle.graph.mst_edges.map(e => e[2]))")
+    strongest_edge = page.evaluate(
+        "() => Math.max(...state.bundle.graph.mst_edges.map(e => e[2]))")
+    weakest_plotted = page.evaluate(
+        "() => Math.min(...state.bundle.graph.merge_event_series.map(e => e.threshold_value))")
+    span = strongest_edge - weakest_edge
+    assert (weakest_plotted - weakest_edge) < 0.1 * span
+
+    # And the slider gets stops across the whole track rather than only the right end.
+    positions = page.evaluate(
+        "() => state.sliderModel.stops.map(stop => stop.sliderPosition)")
+    assert min(p for p in positions if p > 0) < 200
+    assert page.pageerrors == []
+
+
+def test_split_event_caption_falls_back_without_the_v5_counts(page):
+    """A v3/v4 bundle carries no total, so the caption must not invent one."""
+    page.evaluate("""() => {
+        delete state.bundle.graph.merge_event_total;
+        delete state.bundle.graph.max_merge_events;
+        updateSplitEventCount();
+    }""")
+    plotted = page.evaluate("() => state.bundle.graph.merge_event_series.length")
+    assert _split_event_caption(page) == f"{plotted:,} merge events plotted."
+    assert page.pageerrors == []
+
+
+def test_js_merge_event_filter_matches_python_including_the_backfill(page):
+    """The JS port is what viewer-built extractions use; it must not drift.
+
+    Both implementations are handed the same rows -- big events crowded into the
+    top of the axis, tiny ones spread below -- which is the distribution that makes
+    the cap and the back-fill disagree.
+    """
+    from domainator.ssn_hierarchy import MERGE_EVENT_DENSITY_BINS, filter_merge_event_rows
+
+    rows = []
+    for index in range(200):
+        rows.append({"edge_index": index, "threshold_value": 0.95 + (0.05 * index / 200),
+                     "merge_impact": 100.0 + index, "delta_largest": 0.0,
+                     "delta_avg_non_singleton": 0.0})
+    for index in range(200, 300):
+        rows.append({"edge_index": index, "threshold_value": 0.95 * (index - 200) / 100.0,
+                     "merge_impact": 1.0, "delta_largest": 0.0,
+                     "delta_avg_non_singleton": 0.0})
+
+    for cap in (1, 5, 25, 200):
+        got = page.evaluate(
+            "([rows, cap]) => filterExtractionMergeEventRows(rows, cap)"
+            ".map(row => row.edge_index)",
+            [rows, cap],
+        )
+        want = [row["edge_index"] for row in filter_merge_event_rows(rows, max_merge_events=cap)]
+        assert got == want, cap
+        assert cap <= len(got) <= cap + MERGE_EVENT_DENSITY_BINS
+
+    # The knob itself ports too.
+    assert page.evaluate(
+        "rows => filterExtractionMergeEventRows(rows, 5, 0).length", rows) == 5
+    assert page.pageerrors == []
+
+
+def test_extraction_carries_the_v5_event_counts(meta_page, tmp_path):
+    """An extraction is a bundle, so it has to describe its own series too."""
+    page = meta_page
+    _select_nodes(page, list(range(6)))
+    graph = _read_session_bundle(_save_extraction(page, tmp_path))["graph"]
+    original = page.evaluate("() => state.bundle.graph")
+
+    assert graph["merge_event_total"] == original["merge_event_total"]
+    assert graph["merge_event_total"] == len(graph["merge_event_series"])
+    assert graph["max_merge_events"] == 500
+    assert page.pageerrors == []
+
+
+def test_resaving_an_older_bundle_keeps_the_counts_optional(meta_page, tmp_path):
+    """A session saved from a v3/v4 bundle is stamped v5 without the v5 keys.
+
+    "Save session" re-serializes whatever graph was loaded, and the viewer cannot
+    invent a total it was never told. Both keys are therefore optional in a v5 file,
+    and every reader -- including the caption -- has to cope.
+    """
+    from domainator.ssn_bundle import SSN_VIEWER_BUNDLE_VERSION, load_bundle
+
+    page = meta_page
+    page.evaluate("""() => {
+        delete state.bundle.graph.merge_event_total;
+        delete state.bundle.graph.max_merge_events;
+    }""")
+    bundle = load_bundle(_save_session(page, tmp_path, "older.dsnv"))
+
+    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 5
+    assert "merge_event_total" not in bundle["graph"]
+    assert "max_merge_events" not in bundle["graph"]
+
+    _load_bundle_file(page, tmp_path / "older.dsnv")
+    plotted = page.evaluate("() => state.bundle.graph.merge_event_series.length")
+    assert page.text_content("#split-event-count") == f"{plotted:,} merge events plotted."
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Split chart hover readout and click-to-jump
+# ---------------------------------------------------------------------------
+
+
+def _split_chart_scale(page):
+    rect = page.eval_on_selector(
+        "#split-chart",
+        "c => { const r = c.getBoundingClientRect();"
+        " return {left: r.left, top: r.top, width: r.width}; }",
+    )
+    return rect, rect["width"] / 1100
+
+
+def _split_chart_point(page, x, y):
+    """Client coordinates for a point given in split-canvas coordinates."""
+    rect, scale = _split_chart_scale(page)
+    return rect["left"] + (x * scale), rect["top"] + (y * scale)
+
+
+def _hover_split_chart(page, x, y):
+    page.mouse.move(*_split_chart_point(page, x, y))
+
+
+def _click_split_chart(page, x, y):
+    page.mouse.click(*_split_chart_point(page, x, y))
+
+
+def _split_tip_lines(page):
+    return page.eval_on_selector_all(
+        "#split-chart-tip > div", "els => els.map(el => el.textContent)")
+
+
+def _split_hit_events(page):
+    return page.evaluate("() => state.splitChartHit.events")
+
+
+def test_split_chart_records_the_geometry_it_painted(page):
+    """Hit-testing reads what the draw recorded, so the two cannot disagree."""
+    hit = page.evaluate("() => state.splitChartHit")
+    events = page.evaluate("() => state.bundle.graph.merge_event_series")
+
+    assert len(hit["events"]) == len(events)
+    for entry, event in zip(hit["events"], events):
+        assert entry["event"]["edge_index"] == event["edge_index"]
+        # One bead per distinct merge size, exactly as the chart draws.
+        assert len(entry["beads"]) == len(event["merge_size_counts"])
+        assert hit["plotLeft"] <= entry["x"] <= hit["plotLeft"] + hit["plotWidth"]
+        for bead in entry["beads"]:
+            assert hit["plotTop"] - 1 <= bead["y"] <= hit["plotTop"] + hit["plotHeight"] + 1
+    assert page.pageerrors == []
+
+
+def test_hovering_a_split_event_reports_the_same_numbers_as_the_report(page):
+    """The readout carries matrix_report's hovertemplate fields."""
+    entry = max(_split_hit_events(page), key=lambda e: e["event"]["largest_merge"])
+    bead = entry["beads"][0]
+    _hover_split_chart(page, entry["x"], bead["y"])
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+
+    lines = _split_tip_lines(page)
+    event = entry["event"]
+    assert lines[0].startswith(f"Threshold {event['threshold_to']}")
+    assert lines[1] == (
+        f"{bead['count']:,} split{'' if bead['count'] == 1 else 's'} of "
+        f"{bead['size']:,} node{'' if bead['size'] == 1 else 's'}"
+    )
+    assert lines[2] == (
+        f"{event['merge_count']:,} split{'' if event['merge_count'] == 1 else 's'} here, "
+        f"{int(event['merge_impact']):,} node"
+        f"{'' if event['merge_impact'] == 1 else 's'} total"
+    )
+    # The moving-sum label is metric-aware, so it comes from the same helper
+    # matrix_report's hovertemplate reads.
+    assert lines[3].startswith("Nodes displaced within \u00b1")
+    assert lines[-1] == "Click to jump here"
+    assert page.eval_on_selector("#split-chart", "c => c.style.cursor") == "pointer"
+    assert page.pageerrors == []
+
+
+def test_hovering_picks_the_bead_nearest_the_cursor(two_bead_page):
+    """One stem, two merge sizes: the readout has to name the one under the pointer."""
+    page = two_bead_page
+    entry = next(e for e in _split_hit_events(page) if len(e["beads"]) == 2)
+    beads = sorted(entry["beads"], key=lambda b: b["size"])
+    assert [b["size"] for b in beads] == [1, 2]
+
+    for bead in beads:
+        _hover_split_chart(page, entry["x"], bead["y"])
+        page.wait_for_selector("#split-chart-tip:not([hidden])")
+        assert _split_tip_lines(page)[1] == (
+            f"1 split of {bead['size']} node{'' if bead['size'] == 1 else 's'}")
+    assert page.pageerrors == []
+
+
+def test_hovering_between_beads_falls_back_to_the_largest_split(two_bead_page):
+    """Away from every bead the stem still means something: its own height."""
+    page = two_bead_page
+    entry = next(e for e in _split_hit_events(page) if len(e["beads"]) == 2)
+    first, second = (bead["y"] for bead in entry["beads"])
+    # Halfway between them, which on this network is ~58px from each -- well past
+    # the bead radius, so the fallback is genuinely what is being exercised.
+    assert abs(first - second) > 40
+    _hover_split_chart(page, entry["x"], (first + second) / 2)
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+
+    largest = int(entry["event"]["largest_merge"])
+    assert _split_tip_lines(page)[1] == f"Largest single split: {largest} nodes"
+    assert page.pageerrors == []
+
+
+def test_hovering_the_moving_sum_line_reads_the_window(page):
+    """Off every event, the readout is the moving sum at that threshold."""
+    hit = page.evaluate("() => state.splitChartHit")
+    xs = sorted(entry["x"] for entry in hit["events"])
+    # The middle of the widest gap between events is as far from a stem as it gets.
+    gap_x, widest = xs[0], 0.0
+    for left, right in zip(xs, xs[1:]):
+        if right - left > widest:
+            widest, gap_x = right - left, (left + right) / 2
+    assert widest > 40, "fixture has no gap wide enough to land between events"
+
+    _hover_split_chart(page, gap_x, hit["plotTop"] + (hit["plotHeight"] / 2))
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+    lines = _split_tip_lines(page)
+    assert lines[0].startswith("Threshold ")
+    assert lines[1].startswith("Nodes displaced within \u00b1")
+    assert lines[-1] == "Click to jump to the nearest split"
+
+    # The value is the step function's, read at the cursor's threshold.
+    threshold = page.evaluate("x => splitChartThresholdAt(x)", gap_x)
+    expected = page.evaluate("t => splitChartMovingSumAt(t)", threshold)
+    assert f"{int(expected):,}" in lines[1]
+    assert page.pageerrors == []
+
+
+def test_moving_sum_lookup_matches_a_linear_scan(page):
+    """The binary search has to agree with the step function actually drawn.
+
+    Checked against a scan rather than against itself, at sample points and at the
+    exact sample thresholds where the step jumps.
+    """
+    xs = page.evaluate("() => state.bundle.graph.merge_moving_sum.x")
+    ys = page.evaluate("() => state.bundle.graph.merge_moving_sum.y")
+    assert len(xs) > 100
+
+    probes = [xs[0], xs[1], xs[len(xs) // 2], xs[-1]]
+    for left, right in zip(xs, xs[1:]):
+        probes.append((left + right) / 2)
+        if len(probes) > 40:
+            break
+    for threshold in probes:
+        expected = ys[max(i for i, x in enumerate(xs) if x <= threshold)]
+        assert page.evaluate("t => splitChartMovingSumAt(t)", threshold) == expected, threshold
+
+    # Below the first sample there is no line to read.
+    assert page.evaluate("t => splitChartMovingSumAt(t)", xs[0] - 1) is None
+    assert page.pageerrors == []
+
+
+def test_hover_readout_hides_when_the_pointer_leaves(page):
+    entry = _split_hit_events(page)[0]
+    _hover_split_chart(page, entry["x"], entry["beads"][0]["y"])
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+
+    page.mouse.move(5, 5)
+    page.wait_for_selector("#split-chart-tip", state="hidden")
+    assert page.eval_on_selector("#split-chart", "c => c.style.cursor") == ""
+    assert page.pageerrors == []
+
+
+def test_hover_is_inert_outside_the_plot_area(page):
+    """The axes, the titles and the margins are not data."""
+    hit = page.evaluate("() => state.splitChartHit")
+    for x, y in [(4, 4), (hit["plotLeft"] - 30, hit["plotTop"] + 10),
+                 (hit["plotLeft"] + 10, hit["plotTop"] + hit["plotHeight"] + 40)]:
+        _hover_split_chart(page, x, y)
+        assert page.eval_on_selector("#split-chart-tip", "e => e.hidden") is True, (x, y)
+    assert page.pageerrors == []
+
+
+def test_clicking_a_split_event_jumps_to_its_threshold(page):
+    """Every plotted event is also a slider stop, so the landing is exact."""
+    entry = max(_split_hit_events(page), key=lambda e: e["event"]["largest_merge"])
+    target = entry["event"]["threshold_value"]
+    page.evaluate("() => { snapSliderToStop(state.sliderModel.stops[0]); updateThresholdUI(false); }")
+    assert page.evaluate("() => selectedThresholdValue()") != target
+
+    _click_split_chart(page, entry["x"], entry["beads"][0]["y"])
+    page.wait_for_function("v => selectedThresholdValue() === v", arg=target)
+    assert page.evaluate(
+        "v => document.getElementById('threshold-input').value === String(v)", target)
+    assert page.pageerrors == []
+
+
+def test_clicking_the_moving_sum_line_jumps_to_the_nearest_stop(page):
+    """A click out on the line has no event of its own, so it snaps."""
+    hit = page.evaluate("() => state.splitChartHit")
+    xs = sorted(entry["x"] for entry in hit["events"])
+    gap_x, widest = xs[0], 0.0
+    for left, right in zip(xs, xs[1:]):
+        if right - left > widest:
+            widest, gap_x = right - left, (left + right) / 2
+
+    threshold = page.evaluate("x => splitChartThresholdAt(x)", gap_x)
+    expected = page.evaluate("t => nearestStopForThreshold(t).threshold_value", threshold)
+    _click_split_chart(page, gap_x, hit["plotTop"] + (hit["plotHeight"] / 2))
+    page.wait_for_function("v => selectedThresholdValue() === v", arg=expected)
+    assert page.pageerrors == []
+
+
+def test_clicking_the_split_chart_keeps_the_pan_and_zoom(page):
+    """Stepping along the chart to watch one region break up is the point."""
+    page.evaluate("() => { state.viewTransform.scale = 2.5;"
+                  " state.viewTransform.offsetX = 40; state.viewTransform.offsetY = -25; }")
+    entry = max(_split_hit_events(page), key=lambda e: e["event"]["largest_merge"])
+    _click_split_chart(page, entry["x"], entry["beads"][0]["y"])
+    page.wait_for_function("v => selectedThresholdValue() === v",
+                           arg=entry["event"]["threshold_value"])
+
+    assert page.evaluate("() => state.viewTransform.scale") == 2.5
+    assert page.evaluate("() => state.viewTransform.offsetX") == 40
+    assert page.evaluate("() => state.viewTransform.offsetY") == -25
+    assert page.pageerrors == []
+
+
+def test_hover_readout_does_not_call_a_product_impact_a_node_count(product_metric_page):
+    """min_child impacts are nodes; product impacts are not, and must not say so."""
+    page = product_metric_page
+    assert page.evaluate("() => state.bundle.graph.merge_impact_metric") == "product"
+    entry = max(_split_hit_events(page), key=lambda e: e["event"]["largest_merge"])
+    _hover_split_chart(page, entry["x"], entry["beads"][0]["y"])
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+
+    lines = _split_tip_lines(page)
+    assert "node" not in " ".join(lines)
+    assert lines[1].startswith("1 split of ") or " splits of " in lines[1]
+    # The axis title makes the same distinction.
+    assert page.evaluate("() => splitAxisLabels().largest") == (
+        "Largest single split (size product)")
+    assert page.pageerrors == []
+
+
+def test_split_chart_hover_survives_a_threshold_change(page):
+    """Every redraw re-records the geometry; a stale record would mis-hit."""
+    before = page.evaluate("() => state.splitChartHit.events.map(e => e.x)")
+    page.click("#threshold-step-up")
+    page.wait_for_function("n => state.splitChartHit.events.length === n", arg=len(before))
+    # The marks do not move with the threshold, only the dashed cursor line does.
+    assert page.evaluate("() => state.splitChartHit.events.map(e => e.x)") == before
+
+    entry = _split_hit_events(page)[0]
+    _hover_split_chart(page, entry["x"], entry["beads"][0]["y"])
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+    assert _split_tip_lines(page)[0].startswith("Threshold ")
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Split chart axis ticks and chart export
+# ---------------------------------------------------------------------------
+
+
+def _x_tick_model(page):
+    return page.evaluate(
+        """() => splitChartLayout(splitCanvas.width, splitCanvas.height).xTicks
+            .map(tick => ({value: tick.value, label: tick.label, x: tick.x}))"""
+    )
+
+
+def test_split_chart_tick_labels_name_the_value_they_sit_at(dense_page):
+    """The reported bug: ticks were placed at fixed fractions of the domain, so one sat
+    at 0.8736 and printed "0.87" through formatValue's two decimals -- which then looked
+    misaligned beside a lollipop whose own readout also said 0.87. Every tick label must
+    parse back to the exact value the tick is drawn at."""
+    page = dense_page
+    ticks = _x_tick_model(page)
+    assert len(ticks) >= 3
+    for tick in ticks:
+        assert float(tick["label"].replace(",", "")) == pytest.approx(tick["value"], abs=1e-12), tick
+
+    # Round numbers, not arbitrary fractions of the domain: the step between
+    # consecutive ticks is constant and the values are multiples of it.
+    steps = [
+        round(right["value"] - left["value"], 12)
+        for left, right in zip(ticks, ticks[1:])
+    ]
+    assert len(set(steps)) == 1, steps
+    step = steps[0]
+    for tick in ticks:
+        assert abs(tick["value"] / step - round(tick["value"] / step)) < 1e-6, tick
+
+    # And the axis mapping is honored, so label, value and pixel all agree.
+    domain = page.evaluate(
+        """() => {
+            const layout = splitChartLayout(splitCanvas.width, splitCanvas.height);
+            return {lo: layout.minThreshold, span: layout.thresholdSpan,
+                    left: layout.margin.left, width: layout.width};
+        }"""
+    )
+    for tick in ticks:
+        expected = domain["left"] + ((tick["value"] - domain["lo"]) / domain["span"]) * domain["width"]
+        assert tick["x"] == pytest.approx(expected, abs=1e-9)
+    assert page.pageerrors == []
+
+
+def test_split_chart_tick_labels_stay_distinct_on_a_narrow_axis(page):
+    """An extraction can span a few thousandths, where two decimals print every tick
+    identically. The label precision follows the tick step instead."""
+    labels = page.evaluate(
+        "() => splitAxisTicks(0.86612, 0.87104, 8).map(tick => tick.label)"
+    )
+    assert len(labels) == len(set(labels)), labels
+    assert all(len(label.split(".")[1]) == 3 for label in labels), labels
+
+    # A wide axis does not pay for that precision with trailing zeros.
+    wide = page.evaluate("() => splitAxisTicks(0.4992, 0.9983, 8).map(tick => tick.label)")
+    assert wide == ["0.5", "0.6", "0.7", "0.8", "0.9"]
+    assert page.pageerrors == []
+
+
+def test_split_chart_count_axes_use_whole_numbers(dense_page):
+    """Both vertical axes count nodes, so a tick at 2.5 names nothing. Large counts keep
+    the thousands separators the rest of the UI uses."""
+    page = dense_page
+    ticks = page.evaluate(
+        """() => {
+            const layout = splitChartLayout(splitCanvas.width, splitCanvas.height);
+            return {y: layout.yTicks.map(t => t.label), y2: layout.y2Ticks.map(t => t.label)};
+        }"""
+    )
+    for label in ticks["y"] + ticks["y2"]:
+        assert "." not in label, label
+        assert float(label.replace(",", "")).is_integer()
+
+    assert page.evaluate(
+        "() => splitAxisTicks(0, 3, 6, {integer: true}).map(tick => tick.label)"
+    ) == ["0", "1", "2", "3"]
+    assert page.evaluate(
+        "() => splitAxisTicks(0, 55328, 6, {integer: true}).map(tick => tick.label)"
+    ) == ["0", "10,000", "20,000", "30,000", "40,000", "50,000"]
+    assert page.pageerrors == []
+
+
+def test_split_chart_svg_draws_what_the_canvas_drew(dense_page):
+    """The export shares splitChartLayout with the canvas painter and the hit-test, so it
+    has one mark per mark and one tick label per tick."""
+    page = dense_page
+    svg = page.evaluate("() => buildSplitChartSVG()")
+    model = page.evaluate(
+        """() => {
+            const layout = splitChartLayout(splitCanvas.width, splitCanvas.height);
+            return {
+                marks: layout.marks.length,
+                beads: layout.marks.reduce((sum, mark) => sum + mark.beads.length, 0),
+                tickLabels: layout.xTicks.concat(layout.yTicks, layout.y2Ticks).map(t => t.label),
+                titles: [layout.titles.x, layout.titles.y, layout.titles.y2],
+                hasMarker: layout.markerX !== null,
+                movingSumPoints: layout.movingSum.points.length,
+            };
+        }"""
+    )
+    assert svg.startswith("<svg xmlns=")
+    # One stem path per event, plus the axis frame, the right axis, the tick groups'
+    # paths and the moving-sum trace.
+    assert svg.count('<path d="M') >= model["marks"]
+    # Exactly one bead circle per bead: the only other circle the chart has is the
+    # threshold marker's dot, which an export leaves out.
+    assert svg.count("<circle") == model["beads"]
+    for label in model["tickLabels"]:
+        assert ">" + label + "<" in svg, label
+    for title in model["titles"]:
+        assert title in svg
+    assert page.pageerrors == []
+
+
+def test_split_chart_exports_leave_out_the_threshold_cursor(dense_page):
+    """The dashed line and orange dot say where the slider is, not anything the chart
+    measures, so a figure taken from it should not carry them.
+
+    The PNG path is checked by rendering the export twice at two different thresholds:
+    the marks do not move with the threshold, so if the cursor were drawn the two images
+    would differ, and if it is not they are byte-identical.
+    """
+    page = dense_page
+    page.wait_for_function("() => splitChartLayout(1100, 320).markerX !== null")
+    svg = page.evaluate("() => buildSplitChartSVG()")
+    assert "stroke-dasharray" not in svg
+    assert "#e29b4b" not in svg   # SPLIT_CHART_COLORS.markerDot
+
+    # ... while the on-screen chart still draws it.
+    assert page.evaluate(
+        """() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = splitCanvas.width;
+            canvas.height = splitCanvas.height;
+            const context = canvas.getContext('2d');
+            drawSplitChart(context, splitCanvas.width, splitCanvas.height);
+            const onScreen = canvas.toDataURL();
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            drawSplitChart(context, splitCanvas.width, splitCanvas.height, {onScreen: false});
+            return onScreen !== canvas.toDataURL();
+        }"""
+    ), "the live chart must still draw the threshold cursor"
+
+    def exported_at(stop_index):
+        return page.evaluate(
+            """index => {
+                snapSliderToStop(state.sliderModel.stops[index]);
+                const canvas = document.createElement('canvas');
+                canvas.width = splitCanvas.width;
+                canvas.height = splitCanvas.height;
+                drawSplitChart(canvas.getContext('2d'), splitCanvas.width, splitCanvas.height,
+                    {onScreen: false});
+                return canvas.toDataURL();
+            }""",
+            stop_index,
+        )
+
+    stop_count = page.evaluate("() => state.sliderModel.stops.length")
+    first = exported_at(0)
+    later = exported_at(stop_count // 2)
+    assert first == later
+    assert page.pageerrors == []
+
+
+def test_split_chart_svg_export_is_well_formed_xml(dense_page, tmp_path):
+    """Downloaded, then parsed: a malformed attribute or an unescaped label would make the
+    file unopenable, which no assertion on the string would necessarily catch."""
+    import xml.etree.ElementTree as ElementTree
+
+    page = dense_page
+    with page.expect_download() as download_info:
+        page.click("#export-split-svg")
+    download = download_info.value
+    assert download.suggested_filename.endswith("_split_events.svg")
+    target = tmp_path / download.suggested_filename
+    download.save_as(target)
+
+    root = ElementTree.parse(target).getroot()
+    assert root.tag == "{http://www.w3.org/2000/svg}svg"
+    assert root.get("width") == "1100"
+    assert root.get("height") == "320"
+    assert page.pageerrors == []
+
+
+def test_split_chart_png_export_follows_the_resolution_selector(dense_page, tmp_path):
+    """The PNG is re-rasterized at the chosen density rather than upscaled, so its pixel
+    dimensions are the canvas's times the scale. Read out of the file's IHDR."""
+    page = dense_page
+
+    def exported_png(scale):
+        page.select_option("#export-png-scale", scale)
+        with page.expect_download() as download_info:
+            page.click("#export-split-png")
+        download = download_info.value
+        target = tmp_path / (scale + "_" + download.suggested_filename)
+        download.save_as(target)
+        header = target.read_bytes()[:24]
+        assert header[:8] == b"\x89PNG\r\n\x1a\n"
+        return download.suggested_filename, (
+            int.from_bytes(header[16:20], "big"),
+            int.from_bytes(header[20:24], "big"),
+        )
+
+    name1, size1 = exported_png("1")
+    name4, size4 = exported_png("4")
+    assert name1.endswith("_split_events.png")
+    assert name4.endswith("_split_events@4x.png")
+    assert size1 == (1100, 320)
+    assert size4 == (4400, 1280)
+    assert page.pageerrors == []
+
+
+def test_split_chart_export_leaves_the_hover_geometry_alone(dense_page):
+    """The export paints into an offscreen canvas, and only the on-screen pass may record
+    the hit-test geometry -- otherwise an export at 4x would leave the hover reading a
+    chart nobody is looking at."""
+    page = dense_page
+    page.wait_for_function("() => state.splitChartHit !== null")
+    before = page.evaluate("() => JSON.stringify(state.splitChartHit)")
+    with page.expect_download() as download_info:
+        page.click("#export-split-png")
+    download_info.value  # settle the download before reading state back
+    assert page.evaluate("() => JSON.stringify(state.splitChartHit)") == before
+
+    entry = _split_hit_events(page)[0]
+    _hover_split_chart(page, entry["x"], entry["beads"][0]["y"])
+    page.wait_for_selector("#split-chart-tip:not([hidden])")
+    assert _split_tip_lines(page)[0].startswith("Threshold ")
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# Label level-of-detail: gated on the mark's size, not on the zoom
+# ---------------------------------------------------------------------------
+
+
+def test_cluster_label_shows_whenever_the_bubble_has_room_for_it(page):
+    """A big cluster keeps its label at any zoom, which a scale gate got wrong.
+
+    A 160k-node bubble is thousands of world units across, so the whole layout only
+    fits at a small zoom -- and the old `scale >= 0.11` rule then hid a label with
+    hundreds of pixels of room. What matters is the bubble's size on screen.
+    """
+    shown = page.evaluate("""() => {
+        const out = [];
+        for (const scale of [0.02, 0.05, 0.11, 0.5]) {
+            state.viewTransform.scale = scale;
+            out.push({
+                scale,
+                bigWidth: Math.round(itemScreenExtent({radius: 3000}).width),
+                big: clusterCountLabelFits('161,764', {radius: 3000}),
+                small: clusterCountLabelFits('12', {radius: 40}),
+            });
+        }
+        return out;
+    }""")
+    for row in shown:
+        # The 3000-unit bubble is 120px wide even at scale 0.02, so it is labelled
+        # at every zoom; the 40-unit one only once it is wide enough for "12".
+        assert row["big"] is True, row
+        assert row["bigWidth"] >= 100, row
+    assert [row["small"] for row in shown] == [False, False, False, True], shown
+    assert page.pageerrors == []
+
+
+def test_cluster_label_is_dropped_when_the_text_does_not_fit(page):
+    """Per-mark, so a crowded layout still drops the labels with no room."""
+    verdicts = page.evaluate("""() => {
+        state.viewTransform.scale = 1;
+        return {
+            roomy: clusterCountLabelFits('8', {radius: 30}),
+            tooNarrow: clusterCountLabelFits('161,764', {radius: 12}),
+            tooShort: clusterCountLabelFits('8', {radius: 3}),
+        };
+    }""")
+    assert verdicts == {"roomy": True, "tooNarrow": False, "tooShort": False}
+    assert page.pageerrors == []
+
+
+def test_a_box_shaped_cluster_is_measured_by_its_width_not_its_diagonal(page):
+    """`radius` is a half-diagonal for lattice/rect items and overstates the room.
+
+    A tall, narrow treemap cluster has a long diagonal and almost no width, so the
+    diagonal would let a label spill straight out of the box.
+    """
+    result = page.evaluate("""() => {
+        state.viewTransform.scale = 1;
+        const tall = {shape: 'lattice', x0: 0, x1: 18, y0: 0, y1: 400,
+                      radius: Math.hypot(9, 200)};
+        const wide = {shape: 'lattice', x0: 0, x1: 400, y0: 0, y1: 18,
+                      radius: Math.hypot(200, 9)};
+        return {
+            tallExtent: itemScreenExtent(tall),
+            tallLabel: clusterCountLabelFits('1,234', tall),
+            wideLabel: clusterCountLabelFits('1,234', wide),
+            diagonalWouldSay: Math.round(tall.radius * 2),
+        };
+    }""")
+    assert result["tallExtent"] == {"width": 18, "height": 400}
+    assert result["diagonalWouldSay"] > 300      # the trap being avoided
+    assert result["tallLabel"] is False
+    assert result["wideLabel"] is True
+    assert page.pageerrors == []
+
+
+def test_edge_score_label_is_gated_on_the_link_length(page):
+    """The badge is drawn across the link's midpoint, so the link must be longer."""
+    verdicts = page.evaluate("""() => ({
+        long: edgeScoreLabelFits('9.87', 200),
+        exact: edgeScoreLabelFits('9.87', 40),
+        short: edgeScoreLabelFits('9.87', 20),
+        longTextNeedsMoreRoom: edgeScoreLabelFits('123456.78', 40),
+    })""")
+    assert verdicts["long"] is True
+    assert verdicts["short"] is False
+    # A wider number needs a wider badge, so the same link no longer qualifies.
+    assert verdicts["longTextNeedsMoreRoom"] is False
+    assert page.pageerrors == []
+
+
+def test_labels_are_drawn_at_low_zoom_when_the_marks_are_large(page):
+    """End to end on the canvas: zoom out hard, keep the bubbles big, count the SVG.
+
+    buildClusterViewSVG mirrors renderClusterView, so its <text> elements are a
+    readable proxy for what the canvas just painted.
+    """
+    page.check("#show-node-counts")
+    # Centre the view as well as zooming it, so the off-screen cull is held constant
+    # and the fit rule is the only thing under test.
+    before = page.evaluate("""() => {
+        state.viewTransform.scale = 0.04;
+        state.viewTransform.offsetX = document.getElementById('cluster-view').width / 2;
+        state.viewTransform.offsetY = document.getElementById('cluster-view').height / 2;
+        renderClusterView();
+        return (buildClusterViewSVG().match(/<text/g) || []).length;
+    }""")
+    # At that zoom this fixture's bubbles are a few pixels wide, so none is labelled...
+    assert before == 0
+
+    after = page.evaluate("""() => {
+        // Same zoom, bubbles 100x bigger in world units: now they have room.
+        state.visibleLayout.forEach(item => { item.radius *= 100; });
+        renderClusterView();
+        return (buildClusterViewSVG().match(/<text/g) || []).length;
+    }""")
+    assert after == page.evaluate("() => state.visibleLayout.length")
+    assert page.pageerrors == []
+
+
+def test_dot_labels_are_dropped_for_sub_pixel_dots(page):
+    """A label beside an invisible dot points at nothing."""
+    page.select_option("#label-by", "__node_id__")
+    labelled = page.evaluate("""() => {
+        const counts = {};
+        for (const scale of [0.01, 1]) {
+            state.viewTransform.scale = scale;
+            state.viewTransform.offsetX = 400;
+            state.viewTransform.offsetY = 300;
+            renderClusterView();
+            counts[scale] = (buildClusterViewSVG().match(/<text/g) || []).length;
+        }
+        return counts;
+    }""")
+    assert labelled["0.01"] == 0
+    assert labelled["1"] > 0
+    assert page.pageerrors == []
+
+
+# ---------------------------------------------------------------------------
+# "Collapse long paths": contracting chains of pass-through clusters
+# ---------------------------------------------------------------------------
+
+
+def _build_embedded_viewer_spindles(out_dir):
+    """A network built to exercise path collapsing, with three shapes on purpose.
+
+    Five 6-node blobs (internal weight 10, so they hold together at any threshold
+    below that) plus:
+
+    * ``b1 -- s0 -- s1 -- s2 -- b2``: a chain of three singletons whose four links
+      are 3.0 / 3.5 / 2.5 / 3.2, so the chain's weakest link is **2.5**. This is
+      the spindle the option exists to contract.
+    * ``b1 -- t0 -- t1``: a dangling tail, which leaf pruning removes on its own.
+    * ``h``: a singleton joined to ``b3``, ``b4`` and ``b5``. It is below any
+      interesting minimum size but has three links, so it is a branch point rather
+      than a pass-through and must survive.
+
+    Every link outside the blobs is <= 3.5, so at the 3.5 stop the blobs are whole
+    and every small cluster is a singleton.
+    """
+    names = []
+
+    def blob(prefix, size=6):
+        ids = [f"{prefix}{i}" for i in range(size)]
+        names.extend(ids)
+        return ids
+
+    b1 = blob("b1_")
+    names.extend(["s0", "s1", "s2"])
+    b2 = blob("b2_")
+    b3 = blob("b3_")
+    names.append("h")
+    b4 = blob("b4_")
+    b5 = blob("b5_")
+    names.extend(["t0", "t1"])
+
+    index = {name: position for position, name in enumerate(names)}
+    data = np.zeros((len(names), len(names)), dtype=float)
+
+    def link(left, right, weight):
+        data[index[left], index[right]] = weight
+        data[index[right], index[left]] = weight
+
+    for group in (b1, b2, b3, b4, b5):
+        for position, left in enumerate(group):
+            for right in group[position + 1:]:
+                link(left, right, 10.0)
+
+    link("b1_0", "s0", 3.0)
+    link("s0", "s1", 3.5)
+    link("s1", "s2", 2.5)
+    link("s2", "b2_0", 3.2)
+    link("b1_1", "t0", 3.05)
+    link("t0", "t1", 2.9)
+    link("h", "b3_0", 3.1)
+    link("h", "b4_0", 3.3)
+    link("h", "b5_0", 3.4)
+
+    input_file = out_dir / "spindles.hdf5"
+    html_file = out_dir / "viewer_spindles.html"
+    DenseDataMatrix(data, names, names).write(str(input_file), output_type="dense")
+    build_ssn_viewer.main([
+        "-i", str(input_file),
+        "--html", str(html_file),
+        "--embed_data",
+        "--name", "Spindle Test Viewer",
+    ])
+    return html_file
+
+
+@pytest.fixture(scope="module")
+def spindle_viewer_html(tmp_path_factory):
+    return _build_embedded_viewer_spindles(
+        tmp_path_factory.mktemp("ssn_viewer_spindles")
+    )
+
+
+@pytest.fixture
+def spindle_page(spindle_viewer_html):
+    yield from _yield_loaded_page(spindle_viewer_html)
+
+
+def _spindle_state(page, layout="tree", min_cluster_size=2):
+    """Put the spindle viewer at the 3.5 stop with leaf pruning on.
+
+    ``tree`` is chosen because it draws edges and is computed synchronously, so
+    ``state.splitLinks`` is populated without waiting on the layout worker.
+    """
+    page.select_option("#layout-algorithm", layout)
+    page.evaluate(
+        """() => {
+            snapSliderToStop(nearestStopForThreshold(3.5));
+            scheduleThresholdUI(true);
+        }"""
+    )
+    page.fill("#min-cluster-size", str(min_cluster_size))
+    page.check("#leaf-pruning-only")
+    page.wait_for_function("() => selectedThresholdValue() === 3.5")
+    page.wait_for_function("() => !state.layoutComputing")
+
+
+def _visible_sizes(page):
+    return page.evaluate(
+        """() => state.visibleClusters
+            .map(id => state.bundle.graph.hierarchy.nodes[id].size)
+            .sort((left, right) => left - right)"""
+    )
+
+
+def _link_summary(page):
+    return page.evaluate(
+        """() => state.splitLinks
+            .map(link => ({weight: link.threshold, collapsed: link.collapsed}))
+            .sort((left, right) => left.weight - right.weight)"""
+    )
+
+
+def test_collapse_long_paths_is_a_sub_option_of_leaf_pruning(spindle_page):
+    """The checkbox is only available while leaf pruning is on: with leaf pruning off
+    every below-minimum cluster is dropped outright, so no chain is left to contract."""
+    page = spindle_page
+    assert page.is_disabled("#collapse-long-paths")
+    page.check("#leaf-pruning-only")
+    assert page.is_enabled("#collapse-long-paths")
+    page.uncheck("#leaf-pruning-only")
+    assert page.is_disabled("#collapse-long-paths")
+    assert page.pageerrors == []
+
+
+def test_collapse_long_paths_contracts_a_chain_into_one_edge(spindle_page):
+    """The headline behavior: three pass-through singletons and their four links become
+    one link carrying the chain's weakest weight."""
+    page = spindle_page
+    _spindle_state(page)
+
+    # Leaf pruning alone keeps the whole spindle: five blobs, the three chain
+    # singletons and the branch point, joined by seven links.
+    assert _visible_sizes(page) == [1, 1, 1, 1, 6, 6, 6, 6, 6]
+    assert [link["weight"] for link in _link_summary(page)] == [2.5, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5]
+    assert all(link["collapsed"] == 0 for link in _link_summary(page))
+
+    page.check("#collapse-long-paths")
+    page.wait_for_function("() => state.visibleClusters.length === 6")
+
+    # The chain is gone; the branch point (size 1, three links) is not.
+    assert _visible_sizes(page) == [1, 6, 6, 6, 6, 6]
+    links = _link_summary(page)
+    assert [link["weight"] for link in links] == [2.5, 3.1, 3.3, 3.4]
+    # The one collapsed link stands for all three contracted clusters and carries the
+    # chain's minimum weight (2.5), not the weight of either end of the chain.
+    collapsed = [link for link in links if link["collapsed"]]
+    assert collapsed == [{"weight": 2.5, "collapsed": 3}]
+    assert page.pageerrors == []
+
+
+def test_collapse_long_paths_counts_contracted_clusters_as_hidden(spindle_page):
+    """A contracted cluster is not drawn, so it is hidden like any other below-minimum
+    cluster -- and the summary says how many paths went away."""
+    page = spindle_page
+    _spindle_state(page)
+
+    # The dangling tail (t0, t1) is pruned by leaf pruning whether or not paths collapse.
+    assert page.locator("#stat-hidden-nodes").inner_text() == "2"
+    assert (
+        page.locator("#hidden-summary").inner_text()
+        == "2 nodes hidden by minimum cluster size"
+    )
+
+    page.check("#collapse-long-paths")
+    page.wait_for_function("() => state.visibleClusters.length === 6")
+    assert page.locator("#stat-hidden-nodes").inner_text() == "5"
+    assert (
+        page.locator("#hidden-summary").inner_text()
+        == "5 nodes hidden by minimum cluster size, 1 path collapsed"
+    )
+    assert page.pageerrors == []
+
+
+def test_collapse_long_paths_does_nothing_while_leaf_pruning_is_off(spindle_page):
+    """Checked but inert: with leaf pruning off the plain minimum-size rule applies, so
+    the result must be identical either way."""
+    page = spindle_page
+    _spindle_state(page)
+    page.uncheck("#leaf-pruning-only")
+    page.wait_for_function("() => !state.layoutComputing")
+    before = {"sizes": _visible_sizes(page), "links": _link_summary(page)}
+
+    # The control is disabled, so drive it the way a restored session would.
+    page.evaluate(
+        """() => {
+            const input = document.getElementById('collapse-long-paths');
+            input.checked = true;
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+        }"""
+    )
+    page.wait_for_function("() => !state.layoutComputing")
+
+    assert {"sizes": _visible_sizes(page), "links": _link_summary(page)} == before
+    assert page.locator("#hidden-summary").inner_text() == "6 nodes hidden by minimum cluster size"
+    assert page.pageerrors == []
+
+
+def test_collapsed_edge_weight_is_the_path_minimum(spindle_page):
+    """Checked against the uncollapsed graph rather than against a hand-written number:
+    for every collapsed link, a plain BFS over the pre-collapse links must find a path
+    whose interior is all pass-through clusters and whose minimum weight is the link's."""
+    page = spindle_page
+    _spindle_state(page)
+
+    problems = page.evaluate(
+        """() => {
+            const nodes = state.bundle.graph.hierarchy.nodes;
+            const active = activeClustersAtThreshold(selectedThresholdValue());
+            const minSize = Number(document.getElementById('min-cluster-size').value);
+            const pruned = mstLinksForActiveClusters(active, minSize, true, false);
+            const collapsed = mstLinksForActiveClusters(active, minSize, true, true);
+
+            const visible = new Set(pruned.visibleIds);
+            const adjacency = new Map();
+            pruned.links.forEach(link => {
+                if (!adjacency.has(link.sourceId)) { adjacency.set(link.sourceId, []); }
+                if (!adjacency.has(link.targetId)) { adjacency.set(link.targetId, []); }
+                adjacency.get(link.sourceId).push({other: link.targetId, weight: link.weight});
+                adjacency.get(link.targetId).push({other: link.sourceId, weight: link.weight});
+            });
+            const passThrough = id => visible.has(id)
+                && (adjacency.get(id) || []).length === 2
+                && nodes[id].size < minSize;
+
+            const problems = [];
+            const collapsedLinks = collapsed.links.filter(link => link.collapsed);
+            if (collapsedLinks.length === 0) { problems.push('nothing collapsed'); }
+            collapsedLinks.forEach(link => {
+                const previous = new Map([[link.sourceId, null]]);
+                const queue = [link.sourceId];
+                for (let i = 0; i < queue.length; i++) {
+                    (adjacency.get(queue[i]) || []).forEach(edge => {
+                        if (previous.has(edge.other)) { return; }
+                        previous.set(edge.other, {from: queue[i], weight: edge.weight});
+                        queue.push(edge.other);
+                    });
+                }
+                if (!previous.has(link.targetId)) {
+                    problems.push('no pre-collapse path for ' + link.sourceId + '-' + link.targetId);
+                    return;
+                }
+                const interior = [];
+                let current = link.targetId;
+                let minWeight = Infinity;
+                while (previous.get(current)) {
+                    const step = previous.get(current);
+                    minWeight = Math.min(minWeight, step.weight);
+                    if (current !== link.targetId) { interior.push(current); }
+                    current = step.from;
+                }
+                if (Math.abs(minWeight - link.weight) > 1e-12) {
+                    problems.push('weight ' + link.weight + ' is not the path minimum ' + minWeight);
+                }
+                if (interior.length !== link.collapsed) {
+                    problems.push('collapsed ' + link.collapsed + ' but interior is ' + interior.length);
+                }
+                if (!interior.every(passThrough)) { problems.push('interior is not all pass-through'); }
+                if (passThrough(link.sourceId) || passThrough(link.targetId)) {
+                    problems.push('an endpoint is itself pass-through');
+                }
+            });
+            return problems;
+        }"""
+    )
+    assert problems == []
+    assert page.pageerrors == []
+
+
+def test_collapse_long_paths_preserves_which_clusters_are_connected(spindle_page):
+    """Contracting a path must not change the relationships it stands for: two surviving
+    clusters are connected after the collapse exactly when they were before."""
+    page = spindle_page
+    _spindle_state(page)
+
+    changed = page.evaluate(
+        """() => {
+            const active = activeClustersAtThreshold(selectedThresholdValue());
+            const minSize = Number(document.getElementById('min-cluster-size').value);
+            const pruned = mstLinksForActiveClusters(active, minSize, true, false);
+            const collapsed = mstLinksForActiveClusters(active, minSize, true, true);
+
+            const componentOf = (ids, links) => {
+                const adjacency = new Map(ids.map(id => [id, []]));
+                links.forEach(link => {
+                    adjacency.get(link.sourceId)?.push(link.targetId);
+                    adjacency.get(link.targetId)?.push(link.sourceId);
+                });
+                const label = new Map();
+                let next = 0;
+                ids.forEach(id => {
+                    if (label.has(id)) { return; }
+                    const queue = [id];
+                    label.set(id, next);
+                    for (let i = 0; i < queue.length; i++) {
+                        (adjacency.get(queue[i]) || []).forEach(other => {
+                            if (label.has(other)) { return; }
+                            label.set(other, next);
+                            queue.push(other);
+                        });
+                    }
+                    next += 1;
+                });
+                return label;
+            };
+
+            const before = componentOf(pruned.visibleIds, pruned.links);
+            const after = componentOf(collapsed.visibleIds, collapsed.links);
+            const survivors = collapsed.visibleIds;
+            const changed = [];
+            for (let i = 0; i < survivors.length; i++) {
+                for (let j = i + 1; j < survivors.length; j++) {
+                    const sameBefore = before.get(survivors[i]) === before.get(survivors[j]);
+                    const sameAfter = after.get(survivors[i]) === after.get(survivors[j]);
+                    if (sameBefore !== sameAfter) { changed.push([survivors[i], survivors[j]]); }
+                }
+            }
+            return changed;
+        }"""
+    )
+    assert changed == []
+    assert page.pageerrors == []
+
+
+def test_collapsed_edges_export_dashed(spindle_page):
+    """A collapsed path is the weakest link of a contracted chain, not a measured edge
+    between the two clusters it joins, so it is drawn dashed -- in the export too."""
+    page = spindle_page
+    _spindle_state(page)
+    solid_only = page.evaluate("() => buildClusterViewSVG()")
+    assert 'stroke-dasharray' not in solid_only
+
+    page.check("#collapse-long-paths")
+    page.wait_for_function("() => state.visibleClusters.length === 6")
+    svg = page.evaluate("() => buildClusterViewSVG()")
+
+    # One dashed group holding exactly the collapsed links, and the surviving real
+    # edges still in an undashed group of their own.
+    assert svg.count('stroke-dasharray="6 4"') == 1
+    dashed_group = svg.split('stroke-dasharray="6 4">')[1].split("</g>")[0]
+    assert dashed_group.count("<path") == 1
+    assert page.evaluate("() => state.splitLinks.filter(link => link.collapsed).length") == 1
+    assert page.pageerrors == []
+
+
+def test_collapse_long_paths_round_trips_through_a_session(spindle_page):
+    """The toggle is part of the saved view state, and restoring it also re-derives
+    whether the control is available."""
+    page = spindle_page
+    _spindle_state(page)
+    page.check("#collapse-long-paths")
+    page.wait_for_function("() => state.visibleClusters.length === 6")
+
+    saved = page.evaluate("() => collectSessionState()")
+    assert saved["view"]["collapse_long_paths"] is True
+    assert saved["view"]["leaf_pruning_only"] is True
+
+    # A session saved with leaf pruning off keeps the sub-option's value but must
+    # restore it as unavailable.
+    note = page.evaluate(
+        """() => applySessionState({
+            view: {leaf_pruning_only: false, collapse_long_paths: true},
+        })"""
+    )
+    assert note == ""
+    assert page.evaluate("() => document.getElementById('collapse-long-paths').checked") is True
+    assert page.is_disabled("#collapse-long-paths")
+    assert page.pageerrors == []
+
+
+def test_collapse_long_paths_is_stable_across_layouts_and_thresholds(spindle_page):
+    """Every threshold stop x minimum size x layout, with the toggle on: no JS errors and
+    no link pointing at a cluster that is not laid out."""
+    page = spindle_page
+    page.check("#leaf-pruning-only")
+    page.check("#collapse-long-paths")
+    for layout in ("tree", "packed", "treemap"):
+        page.select_option("#layout-algorithm", layout)
+        for stop_index in range(len(page.evaluate("() => state.sliderModel.stops"))):
+            page.evaluate(
+                "index => { snapSliderToStop(state.sliderModel.stops[index]);"
+                " scheduleThresholdUI(false); }",
+                stop_index,
+            )
+            for size in (1, 2, 4, 8, 40):
+                page.fill("#min-cluster-size", str(size))
+                page.wait_for_function("() => !state.layoutComputing")
+                assert page.evaluate(
+                    """() => {
+                        const laidOut = new Set(state.visibleLayout.map(item => item.componentId));
+                        return state.splitLinks.every(link => Number.isFinite(link.threshold)
+                            && laidOut.has(link.left.componentId)
+                            && laidOut.has(link.right.componentId));
+                    }"""
+                )
     assert page.pageerrors == []

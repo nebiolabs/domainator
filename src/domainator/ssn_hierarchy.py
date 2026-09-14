@@ -15,6 +15,11 @@ MERGE_IMPACT_PRODUCT = "product"
 MERGE_IMPACT_MIN_CHILD = "min_child"
 MERGE_IMPACT_CHOICES = (MERGE_IMPACT_PRODUCT, MERGE_IMPACT_MIN_CHILD)
 DEFAULT_MAX_MERGE_EVENTS = 500
+# How many equal bands the plotted threshold axis is cut into when back-filling the
+# capped event series. 20 bands = 5% of the axis each, so the filtered series can
+# exceed max_merge_events by at most 20 rows -- and every 5% of the axis that has an
+# event to show gets one. See filter_merge_event_rows.
+MERGE_EVENT_DENSITY_BINS = 20
 
 # Width of the centred moving-sum window, as a fraction of the plotted threshold range,
 # and how many points to sample it at. The moving sum answers "how much of the graph is
@@ -41,24 +46,33 @@ def format_merge_impact_metric(metric: str) -> str:
 
 
 def merge_impact_axis_labels(metric: str) -> dict:
-    """Axis titles for the split chart, which depend on what merge_impact measures.
+    """Axis titles and prose for the split chart, per what merge_impact measures.
 
     Under ``min_child`` an impact is a count of nodes; under ``product`` it is a product of
     two component sizes, which is not a node count and must not be labelled as one. Both
     the Plotly chart in matrix_report and the canvas chart in the Domainator Similarity
     Network Viewer read these so the two cannot drift apart.
+
+    ``impact_amount`` is a one-placeholder template for naming an impact *value* in a
+    sentence -- a bare ``{}`` rather than Plotly's or JavaScript's interpolation syntax,
+    since both charts' hover readouts fill it in their own way. ``moving_sum_hover``
+    introduces the moving-sum readout, which measures the same quantity.
     """
     if metric == MERGE_IMPACT_PRODUCT:
         return {
             "largest": "Largest single split (size product)",
             "moving_sum": f"Moving sum of split impact ({MOVING_SUM_WINDOW_PERCENT}% window)",
             "moving_sum_short": f"Moving sum ({MOVING_SUM_WINDOW_PERCENT}% window)",
+            "impact_amount": "impact {}",
+            "moving_sum_hover": "Split impact within",
         }
     if metric == MERGE_IMPACT_MIN_CHILD:
         return {
             "largest": "Largest single split (nodes)",
             "moving_sum": f"Moving sum of split size ({MOVING_SUM_WINDOW_PERCENT}% window)",
             "moving_sum_short": f"Moving sum ({MOVING_SUM_WINDOW_PERCENT}% window)",
+            "impact_amount": "{} nodes",
+            "moving_sum_hover": "Nodes displaced within",
         }
     raise ValueError(f"Unsupported merge impact metric: {metric}")
 
@@ -298,19 +312,84 @@ def summarize_merge_events(component_summary, max_items=5):
     return ranked_rows[:max_items]
 
 
-def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
+def merge_event_rank_key(row):
+    """Strongest first. Shared by the cap and the density back-fill so both agree.
+
+    Ported to JavaScript in `ssn_viewer_html.py` (`compareExtractionMergeEventRank`)
+    for viewer-built extractions; the two must stay in step or an extraction's plot
+    will not match the plot it was extracted from.
+    """
+    return (
+        -row["merge_impact"],
+        -row["delta_largest"],
+        -row["delta_avg_non_singleton"],
+        row["edge_index"],
+    )
+
+
+def merge_event_density_bin(threshold_value, lo, hi, density_bins):
+    """Which band of the plotted axis a threshold falls in, or -1 if the axis is a point.
+
+    `hi` itself lands in the last band rather than one past the end.
+    """
+    if density_bins < 1 or not math.isfinite(lo) or not math.isfinite(hi) or hi <= lo:
+        return -1
+    position = int(((float(threshold_value) - lo) / (hi - lo)) * density_bins)
+    return max(0, min(density_bins - 1, position))
+
+
+def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENTS,
+                            density_bins=MERGE_EVENT_DENSITY_BINS):
+    """The strongest `max_merge_events` events, plus enough to keep the axis covered.
+
+    Ranking by impact alone leaves long stretches of the threshold axis with nothing
+    plotted on them. On a connected MST-kNN graph the weak tail of MST edges is
+    individual outliers being attached to the giant component, one or two nodes at a
+    time; their impact is the smallest there is, so the cap drops every one of them --
+    while the chart's x-axis and the threshold slider still span the real threshold
+    range, because the moving sum and the floor stop are both derived from the
+    *unfiltered* data. The result is a plot whose left half is blank and a slider whose
+    left half has no stops on it.
+
+    So after the top-N pass the axis is cut into `density_bins` equal bands and the
+    strongest event in each otherwise-empty band is added back. That bounds the output
+    at `max_merge_events + density_bins` rows, guarantees no band is silently empty
+    while it still has an event to offer, and leaves the top-N rows themselves
+    untouched -- a back-filled row is an addition, never a replacement.
+
+    `max_merge_events=0` means no cap, and no back-fill either: nothing was dropped.
+    """
     if max_merge_events is None:
         max_merge_events = DEFAULT_MAX_MERGE_EVENTS
     if max_merge_events < 0:
         raise ValueError("max_merge_events must be >= 0")
+    if density_bins < 0:
+        raise ValueError("density_bins must be >= 0")
     if max_merge_events == 0 or len(event_rows) <= max_merge_events:
         return list(event_rows)
 
-    ranked_rows = sorted(
-        event_rows,
-        key=lambda row: (-row["merge_impact"], -row["delta_largest"], -row["delta_avg_non_singleton"], row["edge_index"]),
-    )
+    ranked_rows = sorted(event_rows, key=merge_event_rank_key)
     filtered_rows = ranked_rows[:max_merge_events]
+
+    # The band edges come from the whole series, because that is what the axis spans.
+    thresholds = [value for value in (float(row["threshold_value"]) for row in event_rows)
+                  if math.isfinite(value)]
+    if thresholds and density_bins > 0:
+        lo = min(thresholds)
+        hi = max(thresholds)
+        covered = {
+            merge_event_density_bin(row["threshold_value"], lo, hi, density_bins)
+            for row in filtered_rows
+        }
+        # ranked_rows is strongest-first, so the first row seen in an empty band is
+        # the strongest one available to represent it.
+        for row in ranked_rows[max_merge_events:]:
+            bin_index = merge_event_density_bin(row["threshold_value"], lo, hi, density_bins)
+            if bin_index < 0 or bin_index in covered:
+                continue
+            covered.add(bin_index)
+            filtered_rows.append(row)
+
     filtered_rows.sort(key=lambda row: row["edge_index"])
     return filtered_rows
 

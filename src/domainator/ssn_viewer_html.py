@@ -610,6 +610,7 @@ def _session_state_js() -> str:
         domCheckboxField('view', 'render_nodes', 'render-nodes'),
         domCheckboxField('view', 'reduce_elongation', 'reduce-elongation'),
         domCheckboxField('view', 'leaf_pruning_only', 'leaf-pruning-only'),
+        domCheckboxField('view', 'collapse_long_paths', 'collapse-long-paths'),
         {
             section: 'view',
             key: 'sort_components_by_size',
@@ -781,6 +782,7 @@ def _session_state_js() -> str:
 
         // Controls whose appearance is derived from the values just restored.
         updateComponentSortButton();
+        updateCollapseLongPathsControl();
 
         const notes = [];
         if (skipped.length > 0) {
@@ -1034,7 +1036,8 @@ def _selection_presets_js() -> str:
         if (!state.bundle) { return; }
         if (event.ctrlKey || event.metaKey || event.altKey) { return; }
         if (keyboardTargetIsTextEntry(event.target)) { return; }
-        if (colorPickerIsOpen() || metadataPasteDialogIsOpen() || nameDialogIsOpen()) { return; }
+        if (colorPickerIsOpen() || metadataPasteDialogIsOpen() || nameDialogIsOpen()
+            || columnChartIsOpen()) { return; }
         const match = /^Digit([0-9])$/.exec(event.code || '');
         if (!match) { return; }
         const slot = Number(match[1]);
@@ -1302,6 +1305,7 @@ def _table_editing_js() -> str:
         'metadata-paste-column',
         'metadata-rename-column',
         'metadata-delete-column',
+        'metadata-select-column',
     ];
 
     // Retarget every menu currently pointing at `oldName`. Rewriting the option
@@ -1560,6 +1564,9 @@ def _table_editing_js() -> str:
         document.getElementById('metadata-paste-open').disabled = editable.length === 0;
         document.getElementById('metadata-rename-apply').disabled = editable.length === 0;
         updateDeleteColumnNote();
+        populateMetadataSelectMenus();
+        updateMetadataSelectOperands();
+        updateMetadataSelectNote();
     }
 
     function updateDeleteColumnNote() {
@@ -1574,9 +1581,225 @@ def _table_editing_js() -> str:
         }
     }
 
+
+    // ---------------------------------------------------------------------
+    // Select by value
+    //
+    // A column/comparison/value query that edits the node selection. Almost
+    // everything downstream -- the per-column charts, "Set column", Export table
+    // TSV, Save extraction -- is driven by state.selectedNodeIndices, and until
+    // now the only way to build that set was to find the nodes on the canvas by
+    // eye or to sort the table and tick rows.
+    //
+    // Two conventions, both surfaced in the panel's own note:
+    //   * Text comparisons run against the *stored* value, not the table's
+    //     formatted rendering of it, so a thousands separator never has to be
+    //     typed to match the cell that displays as "1,234".
+    //   * Ordering comparisons go through compareMetadataValues(), the very
+    //     comparator the table's column sort uses -- so "greater than" means what
+    //     sorting that column already showed, on text columns as well as numeric
+    //     ones. Cells with no value never match anything.
+    // ---------------------------------------------------------------------
+
+    // node_id is offered alongside the metadata columns: it is the one field every
+    // node has, and an accession prefix is a common way into a network.
+    const METADATA_SELECT_NODE_ID = '__node_id__';
+
+    // `operands` drives which value fields the panel shows, so how many bounds a
+    // comparison takes is stated once instead of re-derived at each use.
+    const METADATA_SELECT_OPS = [
+        {id: 'contains', label: 'contains', operands: 1},
+        {id: 'exact', label: 'is exactly', operands: 1},
+        {id: 'gt', label: 'greater than', operands: 1},
+        {id: 'lt', label: 'less than', operands: 1},
+        {id: 'between', label: 'between', operands: 2},
+        {id: 'regex', label: 'matches regex', operands: 1},
+    ];
+
+    function metadataSelectOp(opId) {
+        return METADATA_SELECT_OPS.find(op => op.id === opId) || METADATA_SELECT_OPS[0];
+    }
+
+    function metadataSelectFieldLabel(field) {
+        return field === METADATA_SELECT_NODE_ID ? 'node_id' : field;
+    }
+
+    function metadataSelectFieldValue(nodeIndex, field) {
+        return field === METADATA_SELECT_NODE_ID
+            ? nodeId(nodeIndex)
+            : metadataValue(nodeIndex, field);
+    }
+
+    // Returns {test} on success, or {error} carrying a message for the panel note.
+    // `test` takes the stored value and its String() form, since the substring and
+    // regex comparisons want text while the ordering ones want the value itself.
+    function metadataSelectMatcher(opId, firstText, secondText) {
+        const first = String(firstText ?? '').trim();
+        const second = String(secondText ?? '').trim();
+        if (first === '') {
+            return {error: 'Type a value to compare against.'};
+        }
+        if (opId === 'regex') {
+            let pattern;
+            try {
+                // Case-insensitive, and unanchored, so it reads like the search box
+                // rather than like a fullmatch.
+                pattern = new RegExp(first, 'i');
+            } catch (error) {
+                return {error: 'Not a valid regular expression: ' + error.message};
+            }
+            return {test: (raw, text) => pattern.test(text)};
+        }
+        if (opId === 'contains') {
+            const needle = first.toLowerCase();
+            return {test: (raw, text) => text.toLowerCase().includes(needle)};
+        }
+        if (opId === 'exact') {
+            const wanted = first.toLowerCase();
+            // Numeric equality as well as text, so "5.0" and "5" both match a float
+            // column's 5 and the match does not depend on how the number was typed.
+            const wantedNumber = Number(first);
+            const numeric = Number.isFinite(wantedNumber);
+            return {test: (raw, text) => text.toLowerCase() === wanted
+                || (numeric && typeof raw === 'number' && raw === wantedNumber)};
+        }
+        if (opId === 'gt') {
+            return {test: raw => compareMetadataValues(raw, first) > 0};
+        }
+        if (opId === 'lt') {
+            return {test: raw => compareMetadataValues(raw, first) < 0};
+        }
+        if (opId === 'between') {
+            if (second === '') {
+                return {error: 'Type both bounds, or pick another comparison.'};
+            }
+            // Inclusive at both ends, and tolerant of bounds typed the wrong way
+            // round -- ordering them by the same comparator that will test them.
+            const reversed = compareMetadataValues(first, second) > 0;
+            const low = reversed ? second : first;
+            const high = reversed ? first : second;
+            return {test: raw => compareMetadataValues(raw, low) >= 0
+                && compareMetadataValues(raw, high) <= 0};
+        }
+        return {error: 'Unknown comparison.'};
+    }
+
+    function metadataSelectMatches(nodeIndices, field, matcher) {
+        return nodeIndices.filter(nodeIndex => {
+            const raw = metadataSelectFieldValue(nodeIndex, field);
+            // A blank cell is an absence, not a value: it matches no comparison,
+            // including "contains ''" (which the matcher rejects outright anyway).
+            if (isMissingMetadataValue(raw)) {
+                return false;
+            }
+            return matcher.test(raw, String(raw));
+        });
+    }
+
+    function setMetadataSelectNote(text) {
+        document.getElementById('metadata-select-note').textContent = text;
+    }
+
+    // Says how the chosen column will be compared, which is the one thing about
+    // this panel that is not visible from its controls.
+    function updateMetadataSelectNote() {
+        const field = document.getElementById('metadata-select-column').value;
+        if (!field) {
+            setMetadataSelectNote('');
+            return;
+        }
+        const columnType = field === METADATA_SELECT_NODE_ID ? 'string' : metadataColumnType(field);
+        const kind = (columnType === 'int' || columnType === 'float') ? 'numbers' : 'text';
+        setMetadataSelectNote('Compares ' + metadataSelectFieldLabel(field) + ' as ' + kind +
+            '; blank cells never match.');
+    }
+
+    function updateMetadataSelectOperands() {
+        const op = metadataSelectOp(document.getElementById('metadata-select-op').value);
+        const twoOperands = op.operands === 2;
+        document.getElementById('metadata-select-and').hidden = !twoOperands;
+        document.getElementById('metadata-select-value2').hidden = !twoOperands;
+        document.getElementById('metadata-select-value').placeholder = twoOperands ? 'lower bound' : 'value';
+    }
+
+    function populateMetadataSelectMenus() {
+        const opSelect = document.getElementById('metadata-select-op');
+        if (opSelect.options.length === 0) {
+            METADATA_SELECT_OPS.forEach(op => {
+                const option = document.createElement('option');
+                option.value = op.id;
+                option.textContent = op.label;
+                opSelect.appendChild(option);
+            });
+        }
+        const select = document.getElementById('metadata-select-column');
+        const previous = select.value;
+        select.innerHTML = '';
+        const nodeIdOption = document.createElement('option');
+        nodeIdOption.value = METADATA_SELECT_NODE_ID;
+        nodeIdOption.textContent = 'node_id';
+        select.appendChild(nodeIdOption);
+        state.metadataColumns.forEach(column => {
+            const option = document.createElement('option');
+            option.value = column.name;
+            option.textContent = column.name;
+            select.appendChild(option);
+        });
+        const available = Array.from(select.options).map(option => option.value);
+        select.value = available.includes(previous) ? previous : METADATA_SELECT_NODE_ID;
+    }
+
+    // `mode` is 'add' (search the whole network and union the matches in),
+    // 'remove' (search the current selection and drop the matches) or 'subset'
+    // (search the current selection and keep only the matches). Only 'add' can
+    // grow the selection; that asymmetry is what makes the three buttons compose
+    // into an intersection of queries.
+    function applyMetadataSelectByValue(mode) {
+        if (!state.bundle) {
+            return false;
+        }
+        const field = document.getElementById('metadata-select-column').value;
+        const opId = document.getElementById('metadata-select-op').value;
+        const matcher = metadataSelectMatcher(
+            opId,
+            document.getElementById('metadata-select-value').value,
+            document.getElementById('metadata-select-value2').value,
+        );
+        if (matcher.error) {
+            setMetadataSelectNote(matcher.error);
+            return false;
+        }
+        const scope = mode === 'add'
+            ? state.allNodeIndices
+            : Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
+        const matches = metadataSelectMatches(scope, field, matcher);
+        const before = state.selectedNodeIndices.size;
+        if (mode === 'add') {
+            matches.forEach(nodeIndex => state.selectedNodeIndices.add(nodeIndex));
+        } else if (mode === 'remove') {
+            matches.forEach(nodeIndex => state.selectedNodeIndices.delete(nodeIndex));
+        } else {
+            state.selectedNodeIndices = new Set(matches);
+        }
+        const verb = {add: 'Matched', remove: 'Removed', subset: 'Kept'}[mode];
+        const scopeLabel = mode === 'add' ? 'the network' : 'the selection';
+        setMetadataSelectNote(verb + ' ' + matches.length.toLocaleString() + ' of ' +
+            scope.length.toLocaleString() + ' node' + (scope.length === 1 ? '' : 's') +
+            ' in ' + scopeLabel + '.');
+        setStatus(metadataSelectFieldLabel(field) + ' ' + metadataSelectOp(opId).label +
+            ': ' + verb.toLowerCase() + ' ' + matches.length.toLocaleString() + ' node' +
+            (matches.length === 1 ? '' : 's') + '; ' +
+            state.selectedNodeIndices.size.toLocaleString() + ' now selected (was ' +
+            before.toLocaleString() + ').');
+        resetMetadataPage();
+        renderClusterView();
+        updateMetadataTable();
+        return true;
+    }
+
     // One panel at a time: showing every editing control at once made the panel
     // busy, and these are occasional actions rather than per-row ones.
-    const METADATA_EDIT_PANELS = ['add', 'set', 'rename', 'delete'];
+    const METADATA_EDIT_PANELS = ['add', 'set', 'rename', 'delete', 'select'];
 
     function toggleMetadataEditPanel(name) {
         const wasOpen = document.getElementById('metadata-panel-' + name)
@@ -1594,6 +1817,7 @@ def _table_editing_js() -> str:
             set: 'metadata-fill-value',
             rename: 'metadata-rename-value',
             delete: 'metadata-delete-column',
+            select: 'metadata-select-value',
         }[name];
         document.getElementById(focusTarget).focus();
     }
@@ -1636,6 +1860,26 @@ def _table_editing_js() -> str:
         });
         document.getElementById('metadata-delete-column')
             .addEventListener('change', updateDeleteColumnNote);
+        document.getElementById('metadata-select-column')
+            .addEventListener('change', updateMetadataSelectNote);
+        document.getElementById('metadata-select-op').addEventListener('change', () => {
+            updateMetadataSelectOperands();
+            updateMetadataSelectNote();
+        });
+        ['add', 'remove', 'subset'].forEach(mode => {
+            document.getElementById('metadata-select-' + mode)
+                .addEventListener('click', () => applyMetadataSelectByValue(mode));
+        });
+        ['metadata-select-value', 'metadata-select-value2'].forEach(inputId => {
+            document.getElementById(inputId).addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    // Enter runs the widening action; the two narrowing ones are
+                    // destructive enough to be worth an explicit click.
+                    applyMetadataSelectByValue('add');
+                }
+            });
+        });
         document.getElementById('metadata-rename-apply').addEventListener('click', applyColumnRename);
         document.getElementById('metadata-rename-value').addEventListener('keydown', event => {
             if (event.key === 'Enter') {
@@ -2244,6 +2488,7 @@ def _extraction_js() -> str:
     const MOVING_SUM_WINDOW_FRACTION = 0.05;
     const MOVING_SUM_GRID_POINTS = 800;
     const DEFAULT_MAX_MERGE_EVENTS = 500;
+    const MERGE_EVENT_DENSITY_BINS = 20;
 
     function makeUnionFind(size) {
         const parent = new Int32Array(size);
@@ -2469,17 +2714,60 @@ def _extraction_js() -> str:
         return rows;
     }
 
-    // Port of ssn_hierarchy.filter_merge_event_rows.
-    function filterExtractionMergeEventRows(rows, maxMergeEvents = DEFAULT_MAX_MERGE_EVENTS) {
+    // Port of ssn_hierarchy.merge_event_rank_key: strongest first.
+    function compareExtractionMergeEventRank(left, right) {
+        return right.merge_impact - left.merge_impact ||
+            right.delta_largest - left.delta_largest ||
+            right.delta_avg_non_singleton - left.delta_avg_non_singleton ||
+            left.edge_index - right.edge_index;
+    }
+
+    // Port of ssn_hierarchy.merge_event_density_bin.
+    function extractionMergeEventDensityBin(thresholdValue, lo, hi, densityBins) {
+        if (densityBins < 1 || !Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
+            return -1;
+        }
+        const position = Math.floor(((Number(thresholdValue) - lo) / (hi - lo)) * densityBins);
+        return Math.max(0, Math.min(densityBins - 1, position));
+    }
+
+    // Port of ssn_hierarchy.filter_merge_event_rows: the strongest maxMergeEvents
+    // events, plus the strongest event in each otherwise-empty band of the axis.
+    // See that function for why the back-fill exists.
+    function filterExtractionMergeEventRows(rows, maxMergeEvents = DEFAULT_MAX_MERGE_EVENTS,
+                                            densityBins = MERGE_EVENT_DENSITY_BINS) {
         if (maxMergeEvents === 0 || rows.length <= maxMergeEvents) { return rows.slice(); }
-        return rows.slice()
-            .sort((left, right) =>
-                right.merge_impact - left.merge_impact ||
-                right.delta_largest - left.delta_largest ||
-                right.delta_avg_non_singleton - left.delta_avg_non_singleton ||
-                left.edge_index - right.edge_index)
-            .slice(0, maxMergeEvents)
-            .sort((left, right) => left.edge_index - right.edge_index);
+        const ranked = rows.slice().sort(compareExtractionMergeEventRank);
+        const filtered = ranked.slice(0, maxMergeEvents);
+
+        // Band edges come from the whole series, because that is what the axis spans.
+        // Scanned rather than spread through Math.min: `rows` is the UNFILTERED series,
+        // which on a large extraction runs to six figures and would overflow the
+        // argument list.
+        let lo = Infinity;
+        let hi = -Infinity;
+        let finiteCount = 0;
+        for (const row of rows) {
+            const value = Number(row.threshold_value);
+            if (!Number.isFinite(value)) { continue; }
+            finiteCount += 1;
+            if (value < lo) { lo = value; }
+            if (value > hi) { hi = value; }
+        }
+        if (finiteCount > 0 && densityBins > 0) {
+            const covered = new Set(filtered.map(row =>
+                extractionMergeEventDensityBin(row.threshold_value, lo, hi, densityBins)));
+            // `ranked` is strongest-first, so the first row seen in an empty band is
+            // the strongest one available to represent it.
+            for (let index = maxMergeEvents; index < ranked.length; index++) {
+                const row = ranked[index];
+                const bin = extractionMergeEventDensityBin(row.threshold_value, lo, hi, densityBins);
+                if (bin < 0 || covered.has(bin)) { continue; }
+                covered.add(bin);
+                filtered.push(row);
+            }
+        }
+        return filtered.sort((left, right) => left.edge_index - right.edge_index);
     }
 
     // Port of ssn_hierarchy.merge_event_moving_sum. Runs over the UNFILTERED rows:
@@ -2649,6 +2937,11 @@ def _extraction_js() -> str:
                     edges_by_threshold: [],
                     merge_impact_metric: metric,
                     merge_event_series: filteredRows,
+                    // v5 fields: the uncapped event count and the cap, so the viewer can
+                    // report how much of the series it is showing. The extraction applies
+                    // the same default cap build_ssn_viewer.py does.
+                    merge_event_total: eventRows.length,
+                    max_merge_events: DEFAULT_MAX_MERGE_EVENTS,
                     // From the unfiltered rows -- see extractionMovingSum.
                     merge_moving_sum: extractionMovingSum(eventRows),
                     slider_stops: extractionSliderStops(filteredRows, clusterCounts.rowIndexByThreshold, induced.edges),
@@ -2699,6 +2992,1625 @@ def _extraction_js() -> str:
     }
 """
 
+
+def _split_chart_hover_js() -> str:
+    """Hover readout and click-to-jump for the split chart.
+
+    Plain (non-f) string like `_layout_worker_js`; see `_session_state_js`.
+    The readout carries the same quantities matrix_report's Plotly hovertemplates
+    do, so the canvas chart and the Plotly one tell the same story.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Split chart hover + click
+    //
+    // The chart is a canvas, so there are no DOM nodes to attach handlers to and
+    // no hit-testing for free. Rather than recomputing where each mark landed --
+    // the divergence buildClusterViewSVG warns about -- drawSplitChart() records
+    // its own geometry as it paints, and everything here reads that record. A
+    // mark the hover can find is therefore a mark that was actually drawn.
+    //
+    // Clicking jumps the threshold to the event under the cursor, or to the stop
+    // nearest the cursor when the pointer is out on the moving-sum line. That is
+    // the same action the arrow buttons take, so it keeps the current pan/zoom.
+    // ---------------------------------------------------------------------
+
+    // Canvas pixels. The event radius is generous because a stem is 1.5px wide and
+    // the beads are 4px: asking for pixel accuracy on a 1100px-wide chart holding
+    // hundreds of events would make the readout unusable.
+    const SPLIT_CHART_HOVER_RADIUS = 14;
+    const SPLIT_CHART_BEAD_RADIUS = 10;
+
+    function recordSplitChartGeometry(geometry) {
+        state.splitChartHit = geometry;
+    }
+
+    function splitChartTipElement() {
+        return document.getElementById('split-chart-tip');
+    }
+
+    function hideSplitChartTip() {
+        const tip = splitChartTipElement();
+        if (tip) { tip.hidden = true; }
+        splitCanvas.style.cursor = '';
+    }
+
+    function splitCanvasCoordinatesFromEvent(event) {
+        // The canvas is laid out at width:100% over a fixed backing store, so client
+        // coordinates have to be scaled into canvas space.
+        const rect = splitCanvas.getBoundingClientRect();
+        return {
+            x: (event.clientX - rect.left) * (splitCanvas.width / rect.width),
+            y: (event.clientY - rect.top) * (splitCanvas.height / rect.height),
+        };
+    }
+
+    function splitChartThresholdAt(x) {
+        const hit = state.splitChartHit;
+        if (!hit || hit.plotWidth <= 0) { return null; }
+        const fraction = (x - hit.plotLeft) / hit.plotWidth;
+        return hit.minThreshold + (fraction * hit.thresholdSpan);
+    }
+
+    // The trace is drawn as a step function, holding each sample's value until the
+    // next sample's x. So the value at `threshold` is the last sample at or before it.
+    function splitChartMovingSumAt(threshold) {
+        const hit = state.splitChartHit;
+        if (!hit || !hit.movingSumX || hit.movingSumX.length === 0 || threshold === null) {
+            return null;
+        }
+        const xs = hit.movingSumX;
+        if (threshold < xs[0]) { return null; }
+        let low = 0;
+        let high = xs.length - 1;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (xs[middle] <= threshold) { low = middle; } else { high = middle - 1; }
+        }
+        return hit.movingSumY[low];
+    }
+
+    // {kind: 'event', entry, bead} for a split event, {kind: 'movingSum', threshold,
+    // value} out on the line, or null when the pointer is outside the plot area.
+    function splitChartHitAt(x, y) {
+        const hit = state.splitChartHit;
+        if (!hit) { return null; }
+        const slack = 4;
+        if (x < hit.plotLeft - slack || x > hit.plotLeft + hit.plotWidth + slack) { return null; }
+        if (y < hit.plotTop - slack || y > hit.plotTop + hit.plotHeight + slack) { return null; }
+
+        let nearest = null;
+        let nearestDistance = Infinity;
+        for (const entry of hit.events) {
+            const distance = Math.abs(entry.x - x);
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = entry;
+            }
+        }
+        if (nearest && nearestDistance <= SPLIT_CHART_HOVER_RADIUS) {
+            let bead = null;
+            let beadDistance = Infinity;
+            for (const candidate of nearest.beads) {
+                const distance = Math.abs(candidate.y - y);
+                if (distance < beadDistance) {
+                    beadDistance = distance;
+                    bead = candidate;
+                }
+            }
+            return {
+                kind: 'event',
+                entry: nearest,
+                bead: beadDistance <= SPLIT_CHART_BEAD_RADIUS ? bead : null,
+            };
+        }
+        const threshold = splitChartThresholdAt(x);
+        const value = splitChartMovingSumAt(threshold);
+        if (threshold === null || value === null) { return null; }
+        return {kind: 'movingSum', threshold, value};
+    }
+
+    // A min_child impact is a count of nodes; a product impact is not, and must not
+    // be labelled as one. The phrasing comes from merge_impact_axis_labels, which
+    // matrix_report's hovertemplates read too, so the two charts word it alike.
+    function splitImpactAmount(value) {
+        const amount = Number(value);
+        const phrase = (splitAxisLabels().impactAmount || '{} nodes')
+            .replace('{}', amount.toLocaleString());
+        // "1 nodes" reads badly, and only the trailing-noun form can be singularized.
+        return amount === 1 && phrase.endsWith(' nodes') ? phrase.slice(0, -1) : phrase;
+    }
+
+    function splitChartMovingSumLine(threshold) {
+        const hit = state.splitChartHit;
+        const value = splitChartMovingSumAt(threshold);
+        if (value === null) { return null; }
+        const halfWindow = (hit.movingSumWindow || 0) / 2;
+        const label = splitAxisLabels().movingSumHover || 'Moving sum within';
+        return label + ' \u00b1' + formatValue(halfWindow) + ': ' + Number(value).toLocaleString();
+    }
+
+    function splitChartTipLines(hit) {
+        if (hit.kind === 'movingSum') {
+            const lines = ['Threshold ' + formatValue(hit.threshold)];
+            const sum = splitChartMovingSumLine(hit.threshold);
+            if (sum) { lines.push(sum); }
+            lines.push('Click to jump to the nearest split');
+            return lines;
+        }
+
+        const event = hit.entry.event;
+        const lines = [];
+        // threshold_from is the cut just above this one, so the pair reads as the
+        // interval the merge happened in -- as matrix_report's hover does.
+        lines.push(event.threshold_from && event.threshold_from !== event.threshold_to
+            ? 'Threshold ' + event.threshold_to + ' (from ' + event.threshold_from + ')'
+            : 'Threshold ' + formatValue(event.threshold_value));
+        if (hit.bead) {
+            lines.push(hit.bead.count.toLocaleString() + ' split' +
+                (hit.bead.count === 1 ? '' : 's') + ' of ' + splitImpactAmount(hit.bead.size));
+        } else {
+            lines.push('Largest single split: ' + splitImpactAmount(event.largest_merge));
+        }
+        lines.push(event.merge_count.toLocaleString() + ' split' +
+            (event.merge_count === 1 ? '' : 's') + ' here, ' +
+            splitImpactAmount(event.merge_impact) + ' total');
+        const sum = splitChartMovingSumLine(event.threshold_value);
+        if (sum) { lines.push(sum); }
+        lines.push('Click to jump here');
+        return lines;
+    }
+
+    function showSplitChartTip(hit, event) {
+        const tip = splitChartTipElement();
+        if (!tip) { return; }
+        tip.textContent = '';
+        const lines = splitChartTipLines(hit);
+        lines.forEach((text, index) => {
+            const row = document.createElement('div');
+            // The last line is the affordance, not data, so it is set apart.
+            row.className = index === lines.length - 1 ? 'split-tip-hint' : 'split-tip-row';
+            row.textContent = text;
+            tip.appendChild(row);
+        });
+        tip.hidden = false;
+
+        // Fixed positioning, flipped away from the viewport edges, like the column
+        // chart menu. pointer-events:none keeps it from ever stealing the click.
+        const offset = 14;
+        const rect = tip.getBoundingClientRect();
+        let left = event.clientX + offset;
+        let top = event.clientY + offset;
+        if (left + rect.width > window.innerWidth - 8) {
+            left = Math.max(8, event.clientX - offset - rect.width);
+        }
+        if (top + rect.height > window.innerHeight - 8) {
+            top = Math.max(8, event.clientY - offset - rect.height);
+        }
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+    }
+
+    function handleSplitChartPointerMove(event) {
+        if (!state.bundle) { hideSplitChartTip(); return; }
+        const point = splitCanvasCoordinatesFromEvent(event);
+        const hit = splitChartHitAt(point.x, point.y);
+        if (!hit) { hideSplitChartTip(); return; }
+        splitCanvas.style.cursor = 'pointer';
+        showSplitChartTip(hit, event);
+    }
+
+    function handleSplitChartClick(event) {
+        if (!state.bundle) { return; }
+        const point = splitCanvasCoordinatesFromEvent(event);
+        const hit = splitChartHitAt(point.x, point.y);
+        if (!hit) { return; }
+        const threshold = hit.kind === 'event' ? hit.entry.event.threshold_value : hit.threshold;
+        const stop = nearestStopForThreshold(threshold);
+        if (!stop) { return; }
+        snapSliderToStop(stop);
+        // Keep the user's pan/zoom, as the threshold arrows do: clicking along the
+        // chart to watch one region break up is the point.
+        scheduleThresholdUI(false);
+    }
+
+    function setupSplitChartHover() {
+        splitCanvas.addEventListener('pointermove', handleSplitChartPointerMove);
+        splitCanvas.addEventListener('pointerleave', hideSplitChartTip);
+        splitCanvas.addEventListener('pointercancel', hideSplitChartTip);
+        splitCanvas.addEventListener('click', handleSplitChartClick);
+        // The readout is positioned from client coordinates, so it is stale the
+        // moment the page moves under it.
+        window.addEventListener('scroll', hideSplitChartTip, true);
+        window.addEventListener('resize', hideSplitChartTip);
+    }
+"""
+
+
+def _column_charts_js() -> str:
+    """Per-column charts and frequency tables from the metadata table's headers.
+
+    Plain (non-f) string like `_layout_worker_js`; see `_session_state_js`.
+    """
+    return r"""
+    // ---------------------------------------------------------------------
+    // Per-column charts and tables
+    //
+    // Each metadata column header carries a chart glyph that opens a menu of
+    // chart kinds appropriate to that column, and picking one opens a dialog.
+    //
+    // Two invariants hold the feature together:
+    //
+    // 1. Every chart summarizes exactly the rows the header's own Copy button
+    //    copies (columnChartNodeIndices), so a chart and a copied column can
+    //    never disagree about what "these nodes" means.
+    // 2. Every chart is one SVG string, consumed by three sinks: innerHTML for
+    //    the preview, a Blob for the SVG export, and Image->canvas->toBlob for
+    //    the PNG export. A canvas preview would need a second renderer for the
+    //    SVG export, which is exactly the drift buildClusterViewSVG warns
+    //    about. Charts are tens to hundreds of marks, so SVG DOM cost is
+    //    irrelevant here (unlike renderClusterView's thousands of nodes) and
+    //    axis labels come out as real selectable text.
+    //
+    // Colors are inherited from the column's own palette via customPalette(),
+    // which routes through paletteKey() -- so a numeric column flipped to
+    // discrete coloring gets its categorical palette, and a column that has
+    // never been the color-by column still gets the same colors it would get if
+    // it were (DEFAULT_CATEGORICAL_PALETTE, when nothing has been customized).
+    // ---------------------------------------------------------------------
+
+    const COLUMN_CHART_PIE_MAX_SLICES = 12;
+    const COLUMN_CHART_BAR_MAX_BARS = 24;
+    // The frequency table is a table, so it can afford many more rows than a
+    // chart can afford marks -- but not unbounded ones, since it goes through
+    // innerHTML. The TSV export always carries every value.
+    const COLUMN_CHART_TABLE_MAX_ROWS = 500;
+    // An ECDF over a large selection would emit one step per value. Sampling
+    // caps the path at a size an SVG editor can still open; the curve is
+    // visually identical because adjacent steps land on the same pixel.
+    const COLUMN_CHART_ECDF_MAX_POINTS = 2000;
+
+    // Single source of truth for the menu, the dialog's kind <select>, and for
+    // validating a kind carried over when the dialog reopens on another column.
+    const COLUMN_CHART_KINDS = [
+        {id: 'frequency', label: 'Frequency table', numericOnly: false},
+        {id: 'bar', label: 'Bar chart', numericOnly: false},
+        {id: 'pie', label: 'Pie chart', numericOnly: false},
+        {id: 'histogram', label: 'Histogram', numericOnly: true},
+        {id: 'box', label: 'Box plot', numericOnly: true},
+        {id: 'ecdf', label: 'Cumulative distribution', numericOnly: true},
+        {id: 'summary', label: 'Summary statistics', numericOnly: false},
+    ];
+
+    // Histogram/box/ECDF are offered for any int/float column even while it is
+    // colored as discrete categories: that toggle is a coloring choice, not a
+    // claim that the numbers are not numbers.
+    function columnChartKindsFor(columnName) {
+        const numeric = columnIsNumericType(columnName);
+        return COLUMN_CHART_KINDS.filter(kind => numeric || !kind.numericOnly);
+    }
+
+    function columnChartKindLabel(kindId) {
+        const kind = COLUMN_CHART_KINDS.find(entry => entry.id === kindId);
+        return kind ? kind.label : 'Chart';
+    }
+
+    // ---- Scope ----
+
+    // The rows every chart summarizes: the table's current rows after the
+    // search filter, across all pages. Identical to what copyMetadataColumn
+    // exports, and metadataBaseNodeIndices already encodes "the selection, or
+    // every node when nothing is selected". Pagination is a rendering artifact,
+    // so charting only the visible page would be a trap.
+    function columnChartNodeIndices() {
+        return metadataDisplayNodeIndices(metadataBaseNodeIndices());
+    }
+
+    // Baked into every chart's subtitle so an exported SVG/PNG says what it
+    // counted, not just how many.
+    function columnChartScopeLabel(rowCount) {
+        const total = state.bundle ? state.bundle.graph.nodes.length : 0;
+        const parts = [rowCount.toLocaleString() + ' of ' + total.toLocaleString() + ' nodes'];
+        parts.push(state.selectedNodeIndices.size > 0 ? 'selection' : 'all nodes');
+        const filterText = metadataFilterText();
+        if (filterText) {
+            parts.push('filter "' + filterText + '"');
+        }
+        return parts.join(' · ');
+    }
+
+    // ---- Data model ----
+
+    // Scoped analogue of distinctColumnValues (which walks every node): same
+    // String(raw) keying, same formatValue labels, and the same count-desc then
+    // key-asc ordering, so a chart's category order matches the color picker's
+    // swatch order and the legend's rows.
+    //
+    // options.topN caps the entry count and rolls the tail into one "Other"
+    // entry (the pie and bar charts cap; the frequency table lists everything).
+    // options.includeNull appends a trailing no-value entry, which every chart
+    // wants and only the summary table, which counts nulls in its own row,
+    // turns off.
+    function columnValueDistribution(columnName, nodeIndices, options = {}) {
+        const topN = options.topN === undefined ? Infinity : options.topN;
+        const includeNull = options.includeNull !== false;
+        const palette = customPalette(columnName);
+        const model = {
+            entries: [],
+            nullCount: 0,
+            otherCount: 0,
+            otherDistinct: 0,
+            distinctTotal: 0,
+            rowCount: nodeIndices.length,
+            truncated: false,
+        };
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (columnIndex === undefined) {
+            return model;
+        }
+        const byKey = new Map();
+        nodeIndices.forEach(nodeIndex => {
+            const raw = state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
+            if (isMissingMetadataValue(raw)) {
+                model.nullCount += 1;
+                return;
+            }
+            const key = String(raw);
+            const existing = byKey.get(key);
+            if (existing) {
+                existing.count += 1;
+            } else {
+                byKey.set(key, {key, label: formatValue(raw), raw, count: 1});
+            }
+        });
+        model.distinctTotal = byKey.size;
+        const sorted = Array.from(byKey.values()).sort(
+            (a, b) => (b.count - a.count) || a.key.localeCompare(b.key)
+        );
+        const kept = Number.isFinite(topN) ? sorted.slice(0, topN) : sorted;
+        const tail = Number.isFinite(topN) ? sorted.slice(topN) : [];
+        model.entries = kept.map(entry => Object.assign({}, entry, {
+            color: categoricalColor(entry.raw, palette),
+            isNull: false,
+            isOther: false,
+        }));
+        if (tail.length > 0) {
+            model.otherDistinct = tail.length;
+            model.otherCount = tail.reduce((sum, entry) => sum + entry.count, 0);
+            model.truncated = true;
+            // The two synthetic entries below get NUL-prefixed keys so they can
+            // never collide with a real value's String(raw), the same trick
+            // paletteKey uses to keep a column's two palettes apart.
+            model.entries.push({
+                key: '\u0000other',
+                label: 'Other (' + tail.length.toLocaleString() + ' values)',
+                raw: null,
+                count: model.otherCount,
+                // The same neutral gray utils.get_palette gives values with no
+                // color of their own, so a rolled-up slice reads as "not a
+                // value" rather than as a category with that hue.
+                color: PALETTE_NO_VALUE_COLOR,
+                isNull: false,
+                isOther: true,
+            });
+        }
+        if (includeNull && model.nullCount > 0) {
+            model.entries.push({
+                key: '\u0000null',
+                label: '—',
+                raw: null,
+                count: model.nullCount,
+                // categoricalColor's own null fallback, so an empty cell is the
+                // same color in the chart as its node is on the canvas. Note
+                // this is a different gray from the "Other" rollup above.
+                color: (palette && palette.nullColor) || '#b3a89d',
+                isNull: true,
+                isOther: false,
+            });
+        }
+        return model;
+    }
+
+    function columnNumericValues(columnName, nodeIndices) {
+        const result = {values: [], missing: 0};
+        const columnIndex = state.metadataColumnIndexByName.get(columnName);
+        if (columnIndex === undefined) {
+            return result;
+        }
+        nodeIndices.forEach(nodeIndex => {
+            const value = state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                result.values.push(value);
+            } else {
+                result.missing += 1;
+            }
+        });
+        result.values.sort((left, right) => left - right);
+        return result;
+    }
+
+    // Same shape as columnHistogram, and the same binning rules, but over the
+    // scoped rows with the scoped min/max. The two are deliberately separate:
+    // columnHistogram bins the *whole column* because the gradient dialog's
+    // slider knobs ride that axis, so narrowing it to a selection would move
+    // the knobs out from under the user.
+    //
+    // colorMin/colorMax carry the whole-column range through anyway, so bars
+    // are colored the way the nodes are colored (see buildHistogramSVG).
+    function scopedColumnHistogram(columnName, nodeIndices) {
+        const info = colorInfo(columnName);
+        if (!state.bundle || !info || info.baseType !== 'numeric') {
+            return null;
+        }
+        const numeric = columnNumericValues(columnName, nodeIndices);
+        const values = numeric.values;
+        if (values.length === 0) {
+            return null;
+        }
+        const column = state.metadataColumnByName.get(columnName);
+        const min = values[0];
+        const max = values[values.length - 1];
+        const MAX_BINS = 48;
+        const integer = !!(column && column.type === 'int'
+            && Number.isInteger(min) && Number.isInteger(max));
+        let binCount;
+        let lowEdge;
+        let highEdge;
+        if (max <= min) {
+            binCount = 1;
+            lowEdge = min - 0.5;
+            highEdge = min + 0.5;
+        } else if (integer && (max - min) + 1 <= MAX_BINS) {
+            // One bin per integer: evenly dividing a handful of distinct
+            // integers leaves empty gaps and doubled-up bars that read as
+            // structure when they are an artifact of the binning.
+            binCount = (max - min) + 1;
+            lowEdge = min;
+            highEdge = max;
+        } else {
+            binCount = Math.min(MAX_BINS, Math.max(8, Math.ceil(Math.sqrt(values.length))));
+            lowEdge = min;
+            highEdge = max;
+        }
+        const span = highEdge - lowEdge;
+        const counts = new Array(binCount).fill(0);
+        values.forEach(value => {
+            const slot = Math.floor(((value - lowEdge) / span) * binCount);
+            counts[Math.max(0, Math.min(binCount - 1, slot))] += 1;
+        });
+        return {
+            counts, lowEdge, highEdge, binCount, integer,
+            total: values.length, missing: numeric.missing, min, max,
+            colorMin: info.min, colorMax: info.max,
+        };
+    }
+
+    // Quantiles by linear interpolation between order statistics (numpy's
+    // default, and R's type 7), so the numbers match what a user would get
+    // running the exported TSV through pandas. `values` must be sorted.
+    function quantileOf(values, fraction) {
+        if (values.length === 0) {
+            return NaN;
+        }
+        if (values.length === 1) {
+            return values[0];
+        }
+        const position = (values.length - 1) * fraction;
+        const lower = Math.floor(position);
+        const upper = Math.ceil(position);
+        if (lower === upper) {
+            return values[lower];
+        }
+        return values[lower] + ((values[upper] - values[lower]) * (position - lower));
+    }
+
+    // Five-number summary plus mean/SD and Tukey 1.5*IQR whiskers, shared by
+    // the box plot and the summary table so the two can never disagree.
+    // `values` must be sorted ascending.
+    function numericSummary(values) {
+        if (values.length === 0) {
+            return null;
+        }
+        const count = values.length;
+        const min = values[0];
+        const max = values[count - 1];
+        const q1 = quantileOf(values, 0.25);
+        const median = quantileOf(values, 0.5);
+        const q3 = quantileOf(values, 0.75);
+        const iqr = q3 - q1;
+        const mean = values.reduce((sum, value) => sum + value, 0) / count;
+        // Sample standard deviation (n-1), undefined for a single value.
+        const variance = count > 1
+            ? values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (count - 1)
+            : 0;
+        const stdev = count > 1 ? Math.sqrt(variance) : NaN;
+        const lowFence = q1 - (1.5 * iqr);
+        const highFence = q3 + (1.5 * iqr);
+        // Whiskers reach the most extreme value still inside the fences, never
+        // past the data -- so a distribution with no outliers draws whiskers at
+        // min and max. Seeded crossed so the first value inside wins; at least
+        // one always is, since q1 <= median <= q3 sits inside both fences.
+        let lowWhisker = max;
+        let highWhisker = min;
+        const outliers = [];
+        values.forEach(value => {
+            if (value < lowFence || value > highFence) {
+                outliers.push(value);
+                return;
+            }
+            lowWhisker = Math.min(lowWhisker, value);
+            highWhisker = Math.max(highWhisker, value);
+        });
+        return {
+            count, min, q1, median, q3, max, iqr, mean, stdev,
+            lowWhisker, highWhisker, outliers,
+        };
+    }
+
+    // Mirrors formatMetadataDisplayValue's float branch, but is never routed
+    // through a column's declared type: the quartiles, mean and SD of an int
+    // column are not integers, and the int formatter would truncate a first
+    // quartile of 2.25 to "2".
+    function formatStatNumber(value) {
+        if (!Number.isFinite(value)) {
+            return '—';
+        }
+        if (Number.isInteger(value)) {
+            return value.toLocaleString();
+        }
+        const magnitude = Math.abs(value);
+        if (magnitude >= 10000 || magnitude < 0.001) {
+            return value.toExponential(3);
+        }
+        return new Intl.NumberFormat(undefined, {maximumFractionDigits: 4}).format(value);
+    }
+
+    // [label, text] rows for the summary table.
+    function columnSummaryRows(columnName, nodeIndices) {
+        const model = columnValueDistribution(columnName, nodeIndices, {includeNull: false});
+        const rows = [
+            ['Rows', model.rowCount.toLocaleString()],
+            ['With a value', (model.rowCount - model.nullCount).toLocaleString()],
+            ['No value', model.nullCount.toLocaleString()],
+            ['Distinct values', model.distinctTotal.toLocaleString()],
+        ];
+        if (model.entries.length > 0) {
+            const top = model.entries[0];
+            rows.push(['Most common', top.label + ' (' + top.count.toLocaleString() + ')']);
+        }
+        if (!columnIsNumericType(columnName)) {
+            return rows;
+        }
+        const summary = numericSummary(columnNumericValues(columnName, nodeIndices).values);
+        if (!summary) {
+            return rows;
+        }
+        rows.push(['Minimum', formatStatNumber(summary.min)]);
+        rows.push(['1st quartile', formatStatNumber(summary.q1)]);
+        rows.push(['Median', formatStatNumber(summary.median)]);
+        rows.push(['3rd quartile', formatStatNumber(summary.q3)]);
+        rows.push(['Maximum', formatStatNumber(summary.max)]);
+        rows.push(['Mean', formatStatNumber(summary.mean)]);
+        rows.push(['Std. deviation', formatStatNumber(summary.stdev)]);
+        return rows;
+    }
+
+    // {color, label, count, percent} rows shared by the HTML preview, the SVG
+    // export and the TSV, so all three show the same numbers.
+    function frequencyTableRows(model) {
+        const denominator = model.rowCount > 0 ? model.rowCount : 1;
+        return model.entries.map(entry => ({
+            color: entry.color,
+            label: entry.label,
+            count: entry.count,
+            percent: (entry.count / denominator) * 100,
+        }));
+    }
+
+    // ---- SVG scaffolding ----
+
+    const CHART_TITLE_FONT = 18;
+    const CHART_SUBTITLE_FONT = 12;
+    const CHART_LABEL_FONT = 13;
+    const CHART_PAD = 14;
+    // Tall enough to clear the title and subtitle baselines with room to spare:
+    // the histogram and ECDF label their topmost gridline, which sits here.
+    const CHART_HEAD = 64;
+
+    // The same width approximation buildLegendSVG uses. Measuring text properly
+    // would mean laying it out in the DOM first, which the export path (a
+    // detached string) cannot do.
+    function estimateTextWidth(text, fontSize) {
+        return (String(text).length * fontSize) / 2;
+    }
+
+    function truncateChartLabel(text, maxChars) {
+        const value = String(text);
+        return value.length <= maxChars ? value : (value.slice(0, Math.max(1, maxChars - 1)) + '…');
+    }
+
+    // Emit one color as an SVG-editor-safe fill attribute pair. svgColorParts
+    // normalizes through the canvas parser (the default schemes emit hsl(),
+    // which Illustrator and Inkscape choke on) and splits any alpha out into
+    // its own attribute.
+    function chartSvgFill(color) {
+        const parts = svgColorParts(color);
+        return 'fill="' + parts.color + '" fill-opacity="' + parts.opacity + '"';
+    }
+
+    // Deliberately no <?xml ...?> prolog: the same string is assigned to
+    // innerHTML for the preview, which refuses a processing instruction. The
+    // export path prepends it (see exportColumnChartSVG).
+    function chartSvgOpen(parts, width, height, title, subtitle) {
+        parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
+            '" viewBox="0 0 ' + width + ' ' + height + '">');
+        parts.push('<g font-family="Arial, sans-serif">');
+        parts.push('<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="white"/>');
+        parts.push('<text x="' + CHART_PAD + '" y="' + (CHART_PAD + CHART_TITLE_FONT - 4) +
+            '" font-size="' + CHART_TITLE_FONT + '" font-weight="bold">' + escapeXml(title) + '</text>');
+        parts.push('<text x="' + CHART_PAD + '" y="' + (CHART_PAD + CHART_TITLE_FONT + CHART_SUBTITLE_FONT + 2) +
+            '" font-size="' + CHART_SUBTITLE_FONT + '" fill="#5c6a70">' + escapeXml(subtitle) + '</text>');
+    }
+
+    function chartSvgClose(parts) {
+        parts.push('</g>');
+        parts.push('</svg>');
+        return parts.join('\n');
+    }
+
+    // "Nice" 1/2/2.5/5 tick values spanning [min, max]. Used by the histogram,
+    // box plot and ECDF, all of which need a readable numeric axis rather than
+    // the legend's fixed end ticks.
+    function chartAxisTicks(min, max, targetCount) {
+        if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+            return [min];
+        }
+        const rawStep = (max - min) / Math.max(1, targetCount);
+        const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+        const normalized = rawStep / magnitude;
+        // 2.5 is on the ladder because a bare 1/2/5/10 rounds a raw step of
+        // 2.2 all the way up to 5, leaving a wide axis with two ticks on it.
+        const step = magnitude * (normalized <= 1 ? 1
+            : (normalized <= 2 ? 2 : (normalized <= 2.5 ? 2.5 : (normalized <= 5 ? 5 : 10))));
+        const ticks = [];
+        const first = Math.ceil(min / step) * step;
+        for (let value = first; value <= max + (step / 1000); value += step) {
+            // Re-round to kill the float drift that accumulates over the loop.
+            ticks.push(Number((Math.round(value / step) * step).toPrecision(12)));
+        }
+        if (ticks.length === 0) {
+            return [min, max];
+        }
+        return ticks;
+    }
+
+    // SVG arc path for a pie slice. Angles are in radians, measured clockwise
+    // from twelve o'clock so slices read in the order the legend lists them.
+    function describeArcPath(cx, cy, radius, startAngle, endAngle) {
+        const point = angle => {
+            const x = cx + (radius * Math.sin(angle));
+            const y = cy - (radius * Math.cos(angle));
+            return x.toFixed(2) + ' ' + y.toFixed(2);
+        };
+        const largeArc = (endAngle - startAngle) > Math.PI ? 1 : 0;
+        return 'M ' + cx.toFixed(2) + ' ' + cy.toFixed(2) +
+            ' L ' + point(startAngle) +
+            ' A ' + radius + ' ' + radius + ' 0 ' + largeArc + ' 1 ' + point(endAngle) + ' Z';
+    }
+
+    // ---- Chart builders ----
+    // Each returns {svg, width, height}.
+
+    function buildBarChartSVG(model, meta) {
+        const rows = frequencyTableRows(model);
+        const barHeight = 22;
+        const barGap = 6;
+        const labelChars = 28;
+        const labelWidth = Math.min(
+            260,
+            Math.max(90, rows.reduce(
+                (widest, row) => Math.max(widest, estimateTextWidth(truncateChartLabel(row.label, labelChars), CHART_LABEL_FONT)),
+                0
+            ) + 8)
+        );
+        const countWidth = 96;
+        const plotWidth = 420;
+        const width = CHART_PAD + labelWidth + plotWidth + countWidth + CHART_PAD;
+        const height = CHART_HEAD + (rows.length * (barHeight + barGap)) + CHART_PAD;
+        const parts = [];
+        chartSvgOpen(parts, width, height, meta.title, meta.subtitle);
+        const maxCount = rows.reduce((most, row) => Math.max(most, row.count), 0) || 1;
+        const barX = CHART_PAD + labelWidth;
+        rows.forEach((row, index) => {
+            const y = CHART_HEAD + (index * (barHeight + barGap));
+            parts.push('<text x="' + (barX - 8) + '" y="' + (y + (barHeight / 2)) +
+                '" font-size="' + CHART_LABEL_FONT + '" text-anchor="end" dominant-baseline="central">' +
+                escapeXml(truncateChartLabel(row.label, labelChars)) + '</text>');
+            // A floor of 1px keeps a count of 1 visible next to a dominant bar.
+            const barWidth = Math.max(1, (row.count / maxCount) * plotWidth);
+            parts.push('<rect x="' + barX + '" y="' + y + '" width="' + barWidth.toFixed(2) +
+                '" height="' + barHeight + '" ' + chartSvgFill(row.color) +
+                ' stroke="#1e2a2f" stroke-width="0.75"/>');
+            parts.push('<text x="' + (barX + barWidth + 8) + '" y="' + (y + (barHeight / 2)) +
+                '" font-size="' + CHART_LABEL_FONT + '" fill="#5c6a70" dominant-baseline="central">' +
+                escapeXml(row.count.toLocaleString() + ' (' + row.percent.toFixed(1) + '%)') + '</text>');
+        });
+        return {svg: chartSvgClose(parts), width, height};
+    }
+
+    function buildPieChartSVG(model, meta) {
+        const rows = frequencyTableRows(model);
+        const radius = 130;
+        const diameter = radius * 2;
+        const swatch = 14;
+        const legendRowHeight = 22;
+        const labelChars = 30;
+        const legendWidth = Math.max(140, rows.reduce(
+            (widest, row) => Math.max(widest, estimateTextWidth(
+                truncateChartLabel(row.label, labelChars) + '  ' + row.count.toLocaleString() + ' (' + row.percent.toFixed(1) + '%)',
+                CHART_LABEL_FONT
+            )),
+            0
+        ) + swatch + 16);
+        const width = CHART_PAD + diameter + 24 + legendWidth + CHART_PAD;
+        const height = Math.max(
+            CHART_HEAD + diameter + CHART_PAD,
+            CHART_HEAD + (rows.length * legendRowHeight) + CHART_PAD
+        );
+        const parts = [];
+        chartSvgOpen(parts, width, height, meta.title, meta.subtitle);
+        const cx = CHART_PAD + radius;
+        const cy = CHART_HEAD + radius;
+        const total = rows.reduce((sum, row) => sum + row.count, 0);
+        if (total > 0) {
+            if (rows.length === 1) {
+                // A single 100% slice: an arc whose start and end angles are
+                // equal draws nothing, so the whole circle has to be a circle.
+                parts.push('<circle cx="' + cx + '" cy="' + cy + '" r="' + radius + '" ' +
+                    chartSvgFill(rows[0].color) + ' stroke="#1e2a2f" stroke-width="0.75"/>');
+            } else {
+                let angle = 0;
+                rows.forEach(row => {
+                    const sweep = (row.count / total) * Math.PI * 2;
+                    parts.push('<path d="' + describeArcPath(cx, cy, radius, angle, angle + sweep) + '" ' +
+                        chartSvgFill(row.color) + ' stroke="#1e2a2f" stroke-width="0.75"/>');
+                    angle += sweep;
+                });
+            }
+        }
+        const legendX = CHART_PAD + diameter + 24;
+        rows.forEach((row, index) => {
+            const y = CHART_HEAD + (index * legendRowHeight);
+            parts.push('<rect x="' + legendX + '" y="' + (y + ((legendRowHeight - swatch) / 2)) +
+                '" width="' + swatch + '" height="' + swatch + '" ' + chartSvgFill(row.color) +
+                ' stroke="#1e2a2f" stroke-width="0.75"/>');
+            parts.push('<text x="' + (legendX + swatch + 8) + '" y="' + (y + (legendRowHeight / 2)) +
+                '" font-size="' + CHART_LABEL_FONT + '" dominant-baseline="central">' +
+                escapeXml(truncateChartLabel(row.label, labelChars) + '  ' +
+                    row.count.toLocaleString() + ' (' + row.percent.toFixed(1) + '%)') + '</text>');
+        });
+        return {svg: chartSvgClose(parts), width, height};
+    }
+
+    // Bars are filled with the color their bin's values receive on the network
+    // canvas -- so this doubles as a check on the column's gradient. The color
+    // domain is the whole column (colorMin/colorMax), not the scoped range,
+    // because that is what nodeColor uses.
+    function buildHistogramSVG(histogram, meta) {
+        const palette = customPalette(meta.columnName);
+        const plotWidth = 620;
+        const plotHeight = 240;
+        const axisSpace = 44;
+        const yLabelWidth = 56;
+        const width = CHART_PAD + yLabelWidth + plotWidth + CHART_PAD;
+        const height = CHART_HEAD + plotHeight + axisSpace;
+        const parts = [];
+        chartSvgOpen(parts, width, height, meta.title, meta.subtitle);
+        const plotX = CHART_PAD + yLabelWidth;
+        const baselineY = CHART_HEAD + plotHeight;
+        const maxCount = Math.max(...histogram.counts) || 1;
+        const slotWidth = plotWidth / histogram.binCount;
+        const gap = slotWidth > 8 ? Math.min(3, slotWidth * 0.16) : 0;
+        const binSpan = (histogram.highEdge - histogram.lowEdge) / histogram.binCount;
+
+        // Y axis: zero and the peak count are the two numbers that give the
+        // bars their scale.
+        [0, maxCount].forEach(count => {
+            const y = baselineY - ((count / maxCount) * plotHeight);
+            parts.push('<line x1="' + plotX + '" y1="' + y.toFixed(2) + '" x2="' + (plotX + plotWidth) +
+                '" y2="' + y.toFixed(2) + '" stroke="#d8dce2" stroke-width="1"/>');
+            parts.push('<text x="' + (plotX - 8) + '" y="' + y.toFixed(2) +
+                '" font-size="' + CHART_LABEL_FONT + '" fill="#5c6a70" text-anchor="end" dominant-baseline="central">' +
+                escapeXml(count.toLocaleString()) + '</text>');
+        });
+
+        histogram.counts.forEach((count, binIndex) => {
+            if (count === 0) {
+                return;
+            }
+            // A floor of 2px keeps rare bins from vanishing beside a dominant one.
+            const barHeight = Math.max(2, (count / maxCount) * plotHeight);
+            const center = histogram.lowEdge + ((binIndex + 0.5) * binSpan);
+            const color = numericColor(center, histogram.colorMin, histogram.colorMax, palette);
+            parts.push('<rect x="' + (plotX + (binIndex * slotWidth) + (gap / 2)).toFixed(2) +
+                '" y="' + (baselineY - barHeight).toFixed(2) +
+                '" width="' + Math.max(1, slotWidth - gap).toFixed(2) +
+                '" height="' + barHeight.toFixed(2) + '" ' + chartSvgFill(color) + '/>');
+        });
+
+        parts.push('<line x1="' + plotX + '" y1="' + baselineY + '" x2="' + (plotX + plotWidth) +
+            '" y2="' + baselineY + '" stroke="#1e2a2f" stroke-width="1.25"/>');
+
+        // X ticks, dropping any that would collide with the label before it --
+        // the same pruning buildLegendSVG does on its gradient ticks.
+        const tickFont = 12;
+        let lastRight = -Infinity;
+        chartAxisTicks(histogram.lowEdge, histogram.highEdge, 6).forEach(value => {
+            const fraction = (value - histogram.lowEdge) / (histogram.highEdge - histogram.lowEdge);
+            const x = plotX + (fraction * plotWidth);
+            const text = formatValue(value);
+            const textWidth = estimateTextWidth(text, tickFont);
+            if (x - (textWidth / 2) < lastRight + 6) {
+                return;
+            }
+            parts.push('<line x1="' + x.toFixed(2) + '" y1="' + baselineY + '" x2="' + x.toFixed(2) +
+                '" y2="' + (baselineY + 5) + '" stroke="#1e2a2f" stroke-width="1"/>');
+            parts.push('<text x="' + x.toFixed(2) + '" y="' + (baselineY + 5 + tickFont + 2) +
+                '" font-size="' + tickFont + '" text-anchor="middle">' + escapeXml(text) + '</text>');
+            lastRight = x + (textWidth / 2);
+        });
+        parts.push('<text x="' + (plotX + (plotWidth / 2)) + '" y="' + (height - 4) +
+            '" font-size="' + tickFont + '" fill="#5c6a70" text-anchor="middle">' +
+            escapeXml(meta.columnName) + '</text>');
+        return {svg: chartSvgClose(parts), width, height};
+    }
+
+    function buildBoxPlotSVG(summary, meta) {
+        const palette = customPalette(meta.columnName);
+        const info = colorInfo(meta.columnName);
+        const colorMin = info ? info.min : summary.min;
+        const colorMax = info ? info.max : summary.max;
+        const plotWidth = 620;
+        const boxHeight = 74;
+        const axisSpace = 44;
+        const width = CHART_PAD + plotWidth + CHART_PAD;
+        const height = CHART_HEAD + boxHeight + axisSpace;
+        const parts = [];
+        chartSvgOpen(parts, width, height, meta.title, meta.subtitle);
+        const plotX = CHART_PAD;
+        // Pad the domain so a whisker or outlier at the extreme is not clipped
+        // by the plot edge.
+        const dataLow = Math.min(summary.lowWhisker, summary.min);
+        const dataHigh = Math.max(summary.highWhisker, summary.max);
+        const domainSpan = dataHigh - dataLow;
+        const pad = domainSpan > 0 ? domainSpan * 0.04 : 0.5;
+        const low = dataLow - pad;
+        const high = dataHigh + pad;
+        const xOf = value => plotX + (((value - low) / (high - low)) * plotWidth);
+        const midY = CHART_HEAD + (boxHeight / 2);
+
+        parts.push('<line x1="' + xOf(summary.lowWhisker).toFixed(2) + '" y1="' + midY +
+            '" x2="' + xOf(summary.highWhisker).toFixed(2) + '" y2="' + midY +
+            '" stroke="#1e2a2f" stroke-width="1.25"/>');
+        [summary.lowWhisker, summary.highWhisker].forEach(value => {
+            parts.push('<line x1="' + xOf(value).toFixed(2) + '" y1="' + (midY - 14) +
+                '" x2="' + xOf(value).toFixed(2) + '" y2="' + (midY + 14) +
+                '" stroke="#1e2a2f" stroke-width="1.25"/>');
+        });
+        const boxLeft = xOf(summary.q1);
+        const boxRight = xOf(summary.q3);
+        parts.push('<rect x="' + boxLeft.toFixed(2) + '" y="' + (midY - 26) +
+            '" width="' + Math.max(1, boxRight - boxLeft).toFixed(2) + '" height="52" ' +
+            chartSvgFill(numericColor(summary.median, colorMin, colorMax, palette)) +
+            ' stroke="#1e2a2f" stroke-width="1.25"/>');
+        parts.push('<line x1="' + xOf(summary.median).toFixed(2) + '" y1="' + (midY - 26) +
+            '" x2="' + xOf(summary.median).toFixed(2) + '" y2="' + (midY + 26) +
+            '" stroke="#1e2a2f" stroke-width="2.5"/>');
+        summary.outliers.forEach(value => {
+            parts.push('<circle cx="' + xOf(value).toFixed(2) + '" cy="' + midY + '" r="3.5" ' +
+                chartSvgFill(numericColor(value, colorMin, colorMax, palette)) +
+                ' stroke="#1e2a2f" stroke-width="0.75"/>');
+        });
+
+        const baselineY = CHART_HEAD + boxHeight;
+        parts.push('<line x1="' + plotX + '" y1="' + baselineY + '" x2="' + (plotX + plotWidth) +
+            '" y2="' + baselineY + '" stroke="#1e2a2f" stroke-width="1.25"/>');
+        const tickFont = 12;
+        let lastRight = -Infinity;
+        chartAxisTicks(low, high, 6).forEach(value => {
+            const x = xOf(value);
+            const text = formatValue(value);
+            const textWidth = estimateTextWidth(text, tickFont);
+            if (x - (textWidth / 2) < lastRight + 6) {
+                return;
+            }
+            parts.push('<line x1="' + x.toFixed(2) + '" y1="' + baselineY + '" x2="' + x.toFixed(2) +
+                '" y2="' + (baselineY + 5) + '" stroke="#1e2a2f" stroke-width="1"/>');
+            parts.push('<text x="' + x.toFixed(2) + '" y="' + (baselineY + 5 + tickFont + 2) +
+                '" font-size="' + tickFont + '" text-anchor="middle">' + escapeXml(text) + '</text>');
+            lastRight = x + (textWidth / 2);
+        });
+        parts.push('<text x="' + (plotX + (plotWidth / 2)) + '" y="' + (height - 4) +
+            '" font-size="' + tickFont + '" fill="#5c6a70" text-anchor="middle">' +
+            escapeXml(meta.columnName) + '</text>');
+        return {svg: chartSvgClose(parts), width, height};
+    }
+
+    // Empirical cumulative distribution: the fraction of values at or below
+    // each x. The right chart for picking a cutoff, since you can read the
+    // proportion kept straight off the curve.
+    function buildEcdfSVG(values, meta) {
+        const plotWidth = 620;
+        const plotHeight = 240;
+        const axisSpace = 44;
+        const yLabelWidth = 56;
+        const width = CHART_PAD + yLabelWidth + plotWidth + CHART_PAD;
+        const height = CHART_HEAD + plotHeight + axisSpace;
+        const parts = [];
+        chartSvgOpen(parts, width, height, meta.title, meta.subtitle);
+        const plotX = CHART_PAD + yLabelWidth;
+        const baselineY = CHART_HEAD + plotHeight;
+        const low = values[0];
+        const high = values[values.length - 1];
+        const xOf = value => (high > low
+            ? plotX + (((value - low) / (high - low)) * plotWidth)
+            : plotX + (plotWidth / 2));
+        const yOf = fraction => baselineY - (fraction * plotHeight);
+
+        [0, 0.25, 0.5, 0.75, 1].forEach(fraction => {
+            const y = yOf(fraction);
+            parts.push('<line x1="' + plotX + '" y1="' + y.toFixed(2) + '" x2="' + (plotX + plotWidth) +
+                '" y2="' + y.toFixed(2) + '" stroke="#d8dce2" stroke-width="1"/>');
+            parts.push('<text x="' + (plotX - 8) + '" y="' + y.toFixed(2) +
+                '" font-size="' + CHART_LABEL_FONT + '" fill="#5c6a70" text-anchor="end" dominant-baseline="central">' +
+                escapeXml((fraction * 100).toFixed(0) + '%') + '</text>');
+        });
+
+        // Sample when there are more values than the cap: adjacent steps would
+        // land on the same pixel anyway, and the full list would emit a path an
+        // SVG editor struggles to open.
+        const stride = Math.max(1, Math.ceil(values.length / COLUMN_CHART_ECDF_MAX_POINTS));
+        const path = ['M ' + xOf(low).toFixed(2) + ' ' + yOf(0).toFixed(2)];
+        for (let index = 0; index < values.length; index += stride) {
+            const fraction = (index + 1) / values.length;
+            path.push('L ' + xOf(values[index]).toFixed(2) + ' ' + yOf(fraction - (1 / values.length)).toFixed(2));
+            path.push('L ' + xOf(values[index]).toFixed(2) + ' ' + yOf(fraction).toFixed(2));
+        }
+        // Always land on the last value at 100%, whatever the stride skipped.
+        path.push('L ' + xOf(high).toFixed(2) + ' ' + yOf(1).toFixed(2));
+        parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#c8553d" stroke-width="2"/>');
+
+        parts.push('<line x1="' + plotX + '" y1="' + baselineY + '" x2="' + (plotX + plotWidth) +
+            '" y2="' + baselineY + '" stroke="#1e2a2f" stroke-width="1.25"/>');
+        const tickFont = 12;
+        let lastRight = -Infinity;
+        chartAxisTicks(low, high, 6).forEach(value => {
+            const x = xOf(value);
+            const text = formatValue(value);
+            const textWidth = estimateTextWidth(text, tickFont);
+            if (x - (textWidth / 2) < lastRight + 6) {
+                return;
+            }
+            parts.push('<line x1="' + x.toFixed(2) + '" y1="' + baselineY + '" x2="' + x.toFixed(2) +
+                '" y2="' + (baselineY + 5) + '" stroke="#1e2a2f" stroke-width="1"/>');
+            parts.push('<text x="' + x.toFixed(2) + '" y="' + (baselineY + 5 + tickFont + 2) +
+                '" font-size="' + tickFont + '" text-anchor="middle">' + escapeXml(text) + '</text>');
+            lastRight = x + (textWidth / 2);
+        });
+        parts.push('<text x="' + (plotX + (plotWidth / 2)) + '" y="' + (height - 4) +
+            '" font-size="' + tickFont + '" fill="#5c6a70" text-anchor="middle">' +
+            escapeXml(meta.columnName) + '</text>');
+        return {svg: chartSvgClose(parts), width, height};
+    }
+
+    // Table renderer shared by the frequency and summary exports. `columns` is
+    // [{key, label, align, swatch}]; a swatch column draws each row's color
+    // instead of text.
+    function buildTableSVG(rows, columns, meta) {
+        const rowHeight = 24;
+        const cellPad = 10;
+        const swatchSize = 14;
+        const widths = columns.map(column => {
+            if (column.swatch) {
+                return swatchSize + (cellPad * 2);
+            }
+            const widest = rows.reduce(
+                (most, row) => Math.max(most, estimateTextWidth(row[column.key], CHART_LABEL_FONT)),
+                estimateTextWidth(column.label, CHART_LABEL_FONT)
+            );
+            return Math.min(320, widest + (cellPad * 2));
+        });
+        const width = CHART_PAD + widths.reduce((sum, value) => sum + value, 0) + CHART_PAD;
+        const height = CHART_HEAD + ((rows.length + 1) * rowHeight) + CHART_PAD;
+        const parts = [];
+        chartSvgOpen(parts, width, height, meta.title, meta.subtitle);
+        const offsets = [];
+        let cursor = CHART_PAD;
+        widths.forEach(value => {
+            offsets.push(cursor);
+            cursor += value;
+        });
+        const cellText = (text, x, y, align, weight) => {
+            const anchor = align === 'right' ? 'end' : 'start';
+            const textX = align === 'right' ? (x - cellPad) : (x + cellPad);
+            parts.push('<text x="' + textX + '" y="' + y + '" font-size="' + CHART_LABEL_FONT +
+                '" text-anchor="' + anchor + '" dominant-baseline="central"' +
+                (weight ? ' font-weight="' + weight + '"' : '') + '>' + escapeXml(text) + '</text>');
+        };
+        columns.forEach((column, columnIndex) => {
+            if (!column.label) {
+                // The swatch column has no heading, so emit no text node at all.
+                return;
+            }
+            const x = column.align === 'right' ? offsets[columnIndex] + widths[columnIndex] : offsets[columnIndex];
+            cellText(column.label, x, CHART_HEAD + (rowHeight / 2), column.align, 'bold');
+        });
+        parts.push('<line x1="' + CHART_PAD + '" y1="' + (CHART_HEAD + rowHeight) +
+            '" x2="' + (width - CHART_PAD) + '" y2="' + (CHART_HEAD + rowHeight) +
+            '" stroke="#1e2a2f" stroke-width="1.25"/>');
+        rows.forEach((row, rowIndex) => {
+            const y = CHART_HEAD + ((rowIndex + 1.5) * rowHeight);
+            columns.forEach((column, columnIndex) => {
+                if (column.swatch) {
+                    parts.push('<rect x="' + (offsets[columnIndex] + cellPad) + '" y="' + (y - (swatchSize / 2)) +
+                        '" width="' + swatchSize + '" height="' + swatchSize + '" ' + chartSvgFill(row.color) +
+                        ' stroke="#1e2a2f" stroke-width="0.75"/>');
+                    return;
+                }
+                const x = column.align === 'right' ? offsets[columnIndex] + widths[columnIndex] : offsets[columnIndex];
+                cellText(row[column.key], x, y, column.align, null);
+            });
+            parts.push('<line x1="' + CHART_PAD + '" y1="' + (y + (rowHeight / 2)) +
+                '" x2="' + (width - CHART_PAD) + '" y2="' + (y + (rowHeight / 2)) +
+                '" stroke="#d8dce2" stroke-width="0.75"/>');
+        });
+        return {svg: chartSvgClose(parts), width, height};
+    }
+
+    // ---- HTML table previews ----
+    // The two table kinds preview as real HTML rather than as their export SVG
+    // so the numbers can be selected and copied out of the dialog.
+
+    function frequencyTableHTML(rows) {
+        // cssToHex, not just htmlEscape: this color lands inside a style
+        // attribute, and a hex literal cannot carry extra CSS declarations with
+        // it however the palette it came from was populated.
+        const body = rows.map(row =>
+            '<tr><td class="cc-swatch-cell"><span class="cc-swatch" style="background:' +
+            cssToHex(row.color) + '"></span></td>' +
+            '<td>' + htmlEscape(row.label) + '</td>' +
+            '<td class="cc-num">' + htmlEscape(row.count.toLocaleString()) + '</td>' +
+            '<td class="cc-num">' + htmlEscape(row.percent.toFixed(1) + '%') + '</td></tr>'
+        ).join('');
+        return '<table class="cc-freq-table"><thead><tr><th class="cc-swatch-cell"></th>' +
+            '<th>Value</th><th class="cc-num">Count</th><th class="cc-num">Percent</th>' +
+            '</tr></thead><tbody>' + body + '</tbody></table>';
+    }
+
+    function summaryTableHTML(rows) {
+        const body = rows.map(row =>
+            '<tr><td>' + htmlEscape(row[0]) + '</td>' +
+            '<td class="cc-num">' + htmlEscape(row[1]) + '</td></tr>'
+        ).join('');
+        return '<table class="cc-freq-table"><thead><tr><th>Statistic</th>' +
+            '<th class="cc-num">Value</th></tr></thead><tbody>' + body + '</tbody></table>';
+    }
+
+    function chartTSV(header, rows) {
+        return [header.join('\t')].concat(rows.map(row => row.join('\t'))).join('\n') + '\n';
+    }
+
+    // ---- The one dispatcher ----
+
+    // Returns {kind, columnName, svg, width, height, html, tsv, notes, empty}.
+    // `html` is what the preview shows when set, otherwise `svg` is; `svg` is
+    // always present so every kind can be exported as an image.
+    function buildColumnChartArtifact(columnName, kind, nodeIndices) {
+        const subtitle = columnChartScopeLabel(nodeIndices.length);
+        const meta = {
+            columnName,
+            title: columnName + ' — ' + columnChartKindLabel(kind).toLowerCase(),
+            subtitle,
+        };
+        const notes = [subtitle];
+        const empty = {kind, columnName, svg: null, html: null, tsv: '', notes, empty: true};
+
+        if (kind === 'histogram' || kind === 'box' || kind === 'ecdf') {
+            const numeric = columnNumericValues(columnName, nodeIndices);
+            if (numeric.values.length === 0) {
+                notes.push('No numeric values in these rows.');
+                return empty;
+            }
+            if (numeric.missing > 0) {
+                notes.push(numeric.missing.toLocaleString() + ' with no value (not plotted)');
+            }
+            if (kind === 'histogram') {
+                const histogram = scopedColumnHistogram(columnName, nodeIndices);
+                if (!histogram) {
+                    return empty;
+                }
+                notes.push(histogram.total.toLocaleString() +
+                    ' value' + (histogram.total === 1 ? '' : 's') +
+                    ' in ' + histogram.binCount + ' bin' + (histogram.binCount === 1 ? '' : 's'));
+                const built = buildHistogramSVG(histogram, meta);
+                // One bin per integer means the bins *are* values, and the
+                // edges the binning uses to separate them (min + k*span/bins)
+                // are an implementation detail nobody wants in a TSV.
+                const perInteger = histogram.integer
+                    && histogram.binCount === (histogram.max - histogram.min) + 1;
+                const binSpan = (histogram.highEdge - histogram.lowEdge) / histogram.binCount;
+                const tsv = perInteger
+                    ? chartTSV(['value', 'count'], histogram.counts.map((count, index) => [
+                        histogram.min + index, count,
+                    ]))
+                    : chartTSV(['bin_low', 'bin_high', 'count'], histogram.counts.map((count, index) => [
+                        histogram.lowEdge + (index * binSpan),
+                        histogram.lowEdge + ((index + 1) * binSpan),
+                        count,
+                    ]));
+                return Object.assign({kind, columnName, html: null, notes, empty: false}, built, {tsv});
+            }
+            if (kind === 'box') {
+                const summary = numericSummary(numeric.values);
+                const built = buildBoxPlotSVG(summary, meta);
+                if (summary.outliers.length > 0) {
+                    notes.push(summary.outliers.length.toLocaleString() +
+                        ' outlier' + (summary.outliers.length === 1 ? '' : 's') + ' beyond 1.5×IQR');
+                }
+                return Object.assign({kind, columnName, html: null, notes, empty: false}, built, {
+                    tsv: chartTSV(['statistic', 'value'], [
+                        ['count', summary.count],
+                        ['minimum', summary.min],
+                        ['low_whisker', summary.lowWhisker],
+                        ['q1', summary.q1],
+                        ['median', summary.median],
+                        ['q3', summary.q3],
+                        ['high_whisker', summary.highWhisker],
+                        ['maximum', summary.max],
+                        ['iqr', summary.iqr],
+                        ['outliers', summary.outliers.join(';')],
+                    ]),
+                });
+            }
+            const built = buildEcdfSVG(numeric.values, meta);
+            return Object.assign({kind, columnName, html: null, notes, empty: false}, built, {
+                tsv: chartTSV(['value', 'cumulative_fraction'], numeric.values.map((value, index) => [
+                    value,
+                    (index + 1) / numeric.values.length,
+                ])),
+            });
+        }
+
+        if (kind === 'summary') {
+            const rows = columnSummaryRows(columnName, nodeIndices);
+            const built = buildTableSVG(
+                rows.map(row => ({statistic: row[0], value: row[1]})),
+                [{key: 'statistic', label: 'Statistic'}, {key: 'value', label: 'Value', align: 'right'}],
+                meta
+            );
+            return Object.assign({kind, columnName, notes, empty: false}, built, {
+                html: summaryTableHTML(rows),
+                tsv: chartTSV(['statistic', 'value'], rows),
+            });
+        }
+
+        const topN = kind === 'pie'
+            ? COLUMN_CHART_PIE_MAX_SLICES
+            : (kind === 'bar' ? COLUMN_CHART_BAR_MAX_BARS : Infinity);
+        const model = columnValueDistribution(columnName, nodeIndices, {topN});
+        if (model.entries.length === 0) {
+            notes.push('No values in these rows.');
+            return empty;
+        }
+        notes.push(model.distinctTotal.toLocaleString() + ' distinct value' +
+            (model.distinctTotal === 1 ? '' : 's'));
+        if (model.truncated) {
+            notes.push('Showing the ' + topN + ' most common; ' + model.otherDistinct.toLocaleString() +
+                ' more rolled into “Other”');
+        }
+        if (model.nullCount > 0) {
+            notes.push(model.nullCount.toLocaleString() + ' with no value (shown as —)');
+        }
+        const rows = frequencyTableRows(model);
+        const tsv = chartTSV(['value', 'count', 'percent', 'color'], rows.map(row => [
+            row.label, row.count, row.percent.toFixed(4), cssToHex(row.color),
+        ]));
+        if (kind === 'bar') {
+            return Object.assign({kind, columnName, html: null, notes, empty: false},
+                buildBarChartSVG(model, meta), {tsv});
+        }
+        if (kind === 'pie') {
+            return Object.assign({kind, columnName, html: null, notes, empty: false},
+                buildPieChartSVG(model, meta), {tsv});
+        }
+        // Frequency table. The preview caps its row count (it goes through
+        // innerHTML); the TSV above always carries every value.
+        const previewRows = rows.slice(0, COLUMN_CHART_TABLE_MAX_ROWS);
+        if (rows.length > previewRows.length) {
+            notes.push('Showing the first ' + COLUMN_CHART_TABLE_MAX_ROWS.toLocaleString() +
+                ' rows; the TSV has all ' + rows.length.toLocaleString() + '.');
+        }
+        const built = buildTableSVG(
+            previewRows.map(row => ({
+                color: row.color,
+                label: row.label,
+                count: row.count.toLocaleString(),
+                percent: row.percent.toFixed(1) + '%',
+            })),
+            [
+                {key: 'color', label: '', swatch: true},
+                {key: 'label', label: 'Value'},
+                {key: 'count', label: 'Count', align: 'right'},
+                {key: 'percent', label: 'Percent', align: 'right'},
+            ],
+            meta
+        );
+        return Object.assign({kind, columnName, notes, empty: false}, built, {
+            html: frequencyTableHTML(previewRows),
+            tsv,
+        });
+    }
+
+    // ---- Anchored menu ----
+
+    function columnChartMenuElement() {
+        return document.getElementById('column-chart-menu');
+    }
+
+    function columnChartMenuIsOpen() {
+        const menu = columnChartMenuElement();
+        return Boolean(menu) && !menu.hidden;
+    }
+
+    function closeColumnChartMenu() {
+        const menu = columnChartMenuElement();
+        if (!menu || menu.hidden) {
+            return;
+        }
+        menu.hidden = true;
+        menu.innerHTML = '';
+        const anchor = state.columnChartMenu && state.columnChartMenu.anchor;
+        if (anchor && anchor.isConnected) {
+            anchor.setAttribute('aria-expanded', 'false');
+        }
+        state.columnChartMenu = null;
+    }
+
+    function openColumnChartMenu(columnName, anchorButton) {
+        const menu = columnChartMenuElement();
+        if (!menu || !state.bundle) {
+            return;
+        }
+        const wasOpenFor = state.columnChartMenu && state.columnChartMenu.columnName;
+        closeColumnChartMenu();
+        if (wasOpenFor === columnName) {
+            // A second click on the same glyph closes the menu.
+            return;
+        }
+        menu.innerHTML = columnChartKindsFor(columnName).map(kind =>
+            '<button type="button" role="menuitem" data-chart-kind="' + htmlEscape(kind.id) + '">' +
+            htmlEscape(kind.label) + '</button>'
+        ).join('');
+        menu.hidden = false;
+        anchorButton.setAttribute('aria-expanded', 'true');
+        // Positioned after unhiding so offsetWidth/Height are real, and flipped
+        // rather than clipped when the header sits near a viewport edge.
+        const anchorRect = anchorButton.getBoundingClientRect();
+        const menuWidth = menu.offsetWidth;
+        const menuHeight = menu.offsetHeight;
+        let left = anchorRect.left;
+        if (left + menuWidth > window.innerWidth - 8) {
+            left = Math.max(8, anchorRect.right - menuWidth);
+        }
+        let top = anchorRect.bottom + 4;
+        if (top + menuHeight > window.innerHeight - 8) {
+            top = Math.max(8, anchorRect.top - menuHeight - 4);
+        }
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        // anchorLeft/anchorTop record where the anchor sat when we positioned
+        // against it, so a later scroll or resize can tell "the anchor moved"
+        // from "an event arrived".
+        state.columnChartMenu = {
+            columnName,
+            anchor: anchorButton,
+            anchorLeft: anchorRect.left,
+            anchorTop: anchorRect.top,
+        };
+        const first = menu.querySelector('button');
+        if (first) {
+            // preventScroll matters: the menu is already positioned inside the
+            // viewport, and letting focus() scroll an ancestor to "reveal" it
+            // would fire the scroll listener below and close the menu again.
+            first.focus({preventScroll: true});
+        }
+    }
+
+    // The menu is anchored in viewport coordinates, so it is only stale once its
+    // anchor has actually moved. Closing on the scroll event itself is not
+    // enough of a test: focusing the glyph can start a scroll whose event
+    // arrives *after* the menu opens, and that would close it immediately.
+    function closeColumnChartMenuIfAnchorMoved() {
+        const open = state.columnChartMenu;
+        if (!columnChartMenuIsOpen() || !open) {
+            return;
+        }
+        if (!open.anchor || !open.anchor.isConnected) {
+            closeColumnChartMenu();
+            return;
+        }
+        const rect = open.anchor.getBoundingClientRect();
+        if (Math.abs(rect.left - open.anchorLeft) > 1 || Math.abs(rect.top - open.anchorTop) > 1) {
+            closeColumnChartMenu();
+        }
+    }
+
+    function moveColumnChartMenuFocus(delta) {
+        const menu = columnChartMenuElement();
+        if (!menu || menu.hidden) {
+            return;
+        }
+        const items = Array.from(menu.querySelectorAll('button'));
+        if (items.length === 0) {
+            return;
+        }
+        const current = items.indexOf(document.activeElement);
+        let next;
+        if (delta === 'first') {
+            next = 0;
+        } else if (delta === 'last') {
+            next = items.length - 1;
+        } else {
+            next = ((current < 0 ? 0 : current) + delta + items.length) % items.length;
+        }
+        // preventScroll for the same reason openColumnChartMenu uses it: a
+        // scroll here would move the anchor and close the menu mid-navigation.
+        items[next].focus({preventScroll: true});
+    }
+
+    // ---- Dialog ----
+
+    function columnChartIsOpen() {
+        const overlay = document.getElementById('column-chart-overlay');
+        return Boolean(overlay) && !overlay.hidden;
+    }
+
+    // `returnFocusTo` is the header glyph the dialog was opened from, so
+    // closing hands focus back where it started. It may have been detached in
+    // the meantime -- updateMetadataTable rebuilds the whole header row.
+    function openColumnChart(columnName, kind, returnFocusTo) {
+        if (!state.bundle) {
+            return;
+        }
+        const kinds = columnChartKindsFor(columnName);
+        const resolved = kinds.some(entry => entry.id === kind) ? kind : kinds[0].id;
+        state.columnChart = {columnName, kind: resolved, returnFocusTo: returnFocusTo || null};
+        const select = document.getElementById('column-chart-kind');
+        select.innerHTML = kinds.map(entry =>
+            '<option value="' + htmlEscape(entry.id) + '"' +
+            (entry.id === resolved ? ' selected' : '') + '>' + htmlEscape(entry.label) + '</option>'
+        ).join('');
+        document.getElementById('column-chart-overlay').hidden = false;
+        renderColumnChart();
+        document.getElementById('column-chart-close').focus();
+    }
+
+    function closeColumnChart() {
+        const overlay = document.getElementById('column-chart-overlay');
+        if (!overlay || overlay.hidden) {
+            return;
+        }
+        overlay.hidden = true;
+        document.getElementById('column-chart-preview').innerHTML = '';
+        const returnFocusTo = state.columnChart && state.columnChart.returnFocusTo;
+        state.columnChart = null;
+        state.columnChartArtifact = null;
+        if (returnFocusTo && returnFocusTo.isConnected) {
+            returnFocusTo.focus({preventScroll: true});
+        }
+    }
+
+    function renderColumnChart() {
+        if (!state.columnChart || !state.bundle) {
+            return;
+        }
+        const {columnName, kind} = state.columnChart;
+        // A column can be renamed or deleted from under an open dialog.
+        if (!state.metadataColumnIndexByName.has(columnName)) {
+            closeColumnChart();
+            return;
+        }
+        const artifact = buildColumnChartArtifact(columnName, kind, columnChartNodeIndices());
+        state.columnChartArtifact = artifact;
+        document.getElementById('column-chart-title').textContent =
+            columnName + ' — ' + columnChartKindLabel(kind);
+        const preview = document.getElementById('column-chart-preview');
+        // notes[0] is always the scope line; anything after it on an empty
+        // artifact is the reason there is nothing to draw, and belongs in the
+        // preview box rather than leaving it blank.
+        preview.innerHTML = artifact.html || artifact.svg
+            || ('<p class="note">' + htmlEscape(artifact.notes.slice(1).join(' ')) + '</p>');
+        const notes = artifact.notes.slice();
+        if (!artifact.empty) {
+            notes.push('PNG export uses the resolution set in the view toolbar.');
+        }
+        document.getElementById('column-chart-note').textContent = notes.join(' · ');
+        ['column-chart-copy-tsv', 'column-chart-download-tsv',
+            'column-chart-export-svg', 'column-chart-export-png'].forEach(id => {
+            document.getElementById(id).disabled = artifact.empty;
+        });
+    }
+
+    function refreshColumnChartIfOpen() {
+        if (columnChartIsOpen()) {
+            renderColumnChart();
+        }
+    }
+
+    // ---- Exports ----
+
+    function columnChartFileBase() {
+        const artifact = state.columnChartArtifact;
+        if (!artifact) {
+            return exportBaseName();
+        }
+        return exportBaseName() + '_' + artifact.columnName.replace(/\s+/g, '_') + '_' + artifact.kind;
+    }
+
+    function exportColumnChartSVG() {
+        const artifact = state.columnChartArtifact;
+        if (!artifact || !artifact.svg) {
+            return;
+        }
+        // The prolog is added only here: chartSvgOpen leaves it out so the same
+        // string can be assigned to innerHTML for the preview.
+        const svg = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + artifact.svg;
+        const href = URL.createObjectURL(new Blob([svg], {type: 'image/svg+xml'}));
+        triggerDownload(href, columnChartFileBase() + '.svg', true);
+    }
+
+    function exportColumnChartPNG() {
+        const artifact = state.columnChartArtifact;
+        if (!artifact || !artifact.svg) {
+            return;
+        }
+        const scaleFactor = selectedPngScale();
+        const svgUrl = URL.createObjectURL(new Blob([artifact.svg], {type: 'image/svg+xml'}));
+        const image = new Image();
+        image.onload = () => {
+            const target = document.createElement('canvas');
+            target.width = Math.max(1, Math.round(artifact.width * scaleFactor));
+            target.height = Math.max(1, Math.round(artifact.height * scaleFactor));
+            const targetContext = target.getContext('2d');
+            if (!targetContext) {
+                URL.revokeObjectURL(svgUrl);
+                window.alert('Could not export the chart PNG at ' + scaleFactor + '×; try a lower resolution.');
+                return;
+            }
+            targetContext.drawImage(image, 0, 0, target.width, target.height);
+            target.toBlob(blob => {
+                URL.revokeObjectURL(svgUrl);
+                if (!blob) {
+                    window.alert('The chart is too large to export as a ' + scaleFactor + '× PNG.');
+                    return;
+                }
+                const href = URL.createObjectURL(blob);
+                const suffix = scaleFactor > 1 ? '@' + scaleFactor + 'x.png' : '.png';
+                triggerDownload(href, columnChartFileBase() + suffix, true);
+            }, 'image/png');
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(svgUrl);
+            window.alert('Could not rasterize the chart for PNG export.');
+        };
+        image.src = svgUrl;
+    }
+
+    function columnChartTSV() {
+        return state.columnChartArtifact ? state.columnChartArtifact.tsv : '';
+    }
+
+    async function copyColumnChartTSV() {
+        const tsv = columnChartTSV();
+        if (!tsv) {
+            return;
+        }
+        try {
+            await writeTextToClipboard(tsv);
+            setStatus('Copied the ' + columnChartKindLabel(state.columnChartArtifact.kind).toLowerCase() +
+                ' for "' + state.columnChartArtifact.columnName + '".');
+        } catch (error) {
+            console.error(error);
+            setStatus('Failed to copy the chart data: ' + error.message);
+        }
+    }
+
+    function downloadColumnChartTSV() {
+        const tsv = columnChartTSV();
+        if (!tsv) {
+            return;
+        }
+        const href = URL.createObjectURL(new Blob([tsv], {type: 'text/tab-separated-values'}));
+        triggerDownload(href, columnChartFileBase() + '.tsv', true);
+    }
+
+    // ---- Wiring ----
+
+    function setupColumnCharts() {
+        const menu = columnChartMenuElement();
+        const overlay = document.getElementById('column-chart-overlay');
+
+        menu.addEventListener('click', event => {
+            const item = event.target.closest('[data-chart-kind]');
+            if (!item || !state.columnChartMenu) {
+                return;
+            }
+            const {columnName, anchor} = state.columnChartMenu;
+            closeColumnChartMenu();
+            openColumnChart(columnName, item.dataset.chartKind, anchor);
+        });
+
+        document.addEventListener('pointerdown', event => {
+            if (!columnChartMenuIsOpen()) {
+                return;
+            }
+            if (event.target.closest('#column-chart-menu') || event.target.closest('[data-chart-column]')) {
+                return;
+            }
+            closeColumnChartMenu();
+        });
+        // The scroll listener has to capture: the metadata table scrolls inside
+        // .table-wrap, whose scroll events never reach window by bubbling.
+        window.addEventListener('resize', closeColumnChartMenuIfAnchorMoved);
+        window.addEventListener('scroll', closeColumnChartMenuIfAnchorMoved, true);
+
+        document.addEventListener('keydown', event => {
+            if (columnChartMenuIsOpen()) {
+                if (event.key === 'Escape') {
+                    const anchor = state.columnChartMenu && state.columnChartMenu.anchor;
+                    event.preventDefault();
+                    closeColumnChartMenu();
+                    if (anchor && anchor.isConnected) {
+                        anchor.focus({preventScroll: true});
+                    }
+                    return;
+                }
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp'
+                    || event.key === 'Home' || event.key === 'End') {
+                    event.preventDefault();
+                    moveColumnChartMenuFocus(
+                        event.key === 'ArrowDown' ? 1
+                            : (event.key === 'ArrowUp' ? -1 : (event.key === 'Home' ? 'first' : 'last'))
+                    );
+                }
+                return;
+            }
+            if (event.key === 'Escape' && columnChartIsOpen()) {
+                event.preventDefault();
+                closeColumnChart();
+            }
+        });
+
+        overlay.addEventListener('click', event => {
+            if (event.target === event.currentTarget) {
+                closeColumnChart();
+            }
+        });
+        document.getElementById('column-chart-close').addEventListener('click', closeColumnChart);
+        document.getElementById('column-chart-kind').addEventListener('change', event => {
+            if (state.columnChart) {
+                state.columnChart.kind = event.target.value;
+                renderColumnChart();
+            }
+        });
+        document.getElementById('column-chart-copy-tsv').addEventListener('click', copyColumnChartTSV);
+        document.getElementById('column-chart-download-tsv').addEventListener('click', downloadColumnChartTSV);
+        document.getElementById('column-chart-export-svg').addEventListener('click', exportColumnChartSVG);
+        document.getElementById('column-chart-export-png').addEventListener('click', exportColumnChartPNG);
+    }
+"""
+
+
 def ssn_viewer_html(
     title: str = VIEWER_APP_NAME,
     embedded_bundle_json: bytes | None = None,
@@ -2722,12 +4634,18 @@ def ssn_viewer_html(
     table_editing_js = _table_editing_js()
     extraction_js = _extraction_js()
     gradient_stops_js = _gradient_stops_js()
+    column_charts_js = _column_charts_js()
+    split_chart_hover_js = _split_chart_hover_js()
     # Generated from the same helper matrix_report uses, keyed by metric so a bundle built
     # with --merge_impact_metric product gets titles that match what its numbers mean.
     split_axis_labels_js = json.dumps({
         metric: {
             "largest": merge_impact_axis_labels(metric)["largest"],
             "movingSum": merge_impact_axis_labels(metric)["moving_sum_short"],
+            # One-placeholder templates for the hover readout, so it names an impact
+            # the same way matrix_report's hovertemplates do.
+            "impactAmount": merge_impact_axis_labels(metric)["impact_amount"],
+            "movingSumHover": merge_impact_axis_labels(metric)["moving_sum_hover"],
         }
         for metric in MERGE_IMPACT_CHOICES
     })
@@ -2905,6 +4823,11 @@ def ssn_viewer_html(
     .checkbox input {{ width: auto; }}
     /* `display: flex` above would otherwise defeat the `hidden` attribute. */
     .checkbox[hidden] {{ display: none; }}
+    /* A sub-option: indented under the toggle that governs it. */
+    .checkbox.sub-option {{ margin-left: 22px; }}
+    /* :disabled dims the box but not the <label> beside it, which is the part
+       that has to look unavailable. */
+    .checkbox.sub-option input:disabled + label {{ opacity: 0.5; }}
     .toolbar {{
         display: flex;
         gap: 10px;
@@ -2991,6 +4914,11 @@ def ssn_viewer_html(
         justify-content: space-between;
         gap: 10px;
         margin-bottom: 10px;
+    }}
+    /* As with .checkbox: `display: flex` would otherwise defeat the `hidden`
+       attribute, leaving a dead pager above every column of under 100 values. */
+    .cp-pager[hidden] {{
+        display: none;
     }}
     .cp-pager button {{
         width: auto;
@@ -3281,6 +5209,35 @@ def ssn_viewer_html(
     .stat span {{
         font-size: 1.35rem;
     }}
+    /* Follows the pointer over the split chart, so it is positioned from client
+       coordinates rather than parented to the (overflow:hidden) canvas wrapper.
+       pointer-events:none keeps it from ever swallowing the click it advertises. */
+    .split-tip {{
+        position: fixed;
+        z-index: 900;
+        pointer-events: none;
+        max-width: 320px;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel-strong);
+        box-shadow: 0 10px 26px rgba(30, 42, 47, 0.18);
+        color: var(--ink);
+        font-size: 0.85rem;
+        line-height: 1.45;
+    }}
+    .split-tip[hidden] {{
+        display: none;
+    }}
+    .split-tip-row {{
+        white-space: nowrap;
+    }}
+    .split-tip-hint {{
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }}
     .canvas-wrap {{
         border-radius: 16px;
         overflow: hidden;
@@ -3453,6 +5410,112 @@ def ssn_viewer_html(
         color: var(--muted);
         font-style: italic;
     }}
+    .metadata-chart-button {{
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(216, 220, 226, 0.9);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--muted);
+        padding: 4px 6px;
+        cursor: pointer;
+        transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+    }}
+    .metadata-chart-button:hover,
+    .metadata-chart-button[aria-expanded="true"] {{
+        color: #7b2f22;
+        border-color: rgba(200, 85, 61, 0.4);
+        background: rgba(200, 85, 61, 0.10);
+    }}
+    .metadata-chart-glyph {{
+        display: block;
+        width: 11px;
+        height: 11px;
+        fill: currentColor;
+    }}
+    /* Anchored in viewport coordinates by openColumnChartMenu. Above the
+       sticky thead (z-index 1) and the modal overlays (1000). */
+    .cc-menu {{
+        position: fixed;
+        z-index: 1100;
+        min-width: 210px;
+        padding: 6px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+    }}
+    .cc-menu[hidden] {{ display: none; }}
+    .cc-menu button {{
+        display: block;
+        width: 100%;
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 0.9rem;
+        text-align: left;
+        cursor: pointer;
+    }}
+    .cc-menu button:hover,
+    .cc-menu button:focus-visible {{
+        background: rgba(200, 85, 61, 0.10);
+        color: #7b2f22;
+        outline: none;
+    }}
+    .cc-dialog {{
+        width: min(900px, 94vw);
+    }}
+    .cc-preview {{
+        overflow: auto;
+        max-height: 52vh;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+    }}
+    .cc-preview svg {{
+        max-width: 100%;
+        height: auto;
+    }}
+    .cc-freq-table {{
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: auto;
+        font-size: 0.9rem;
+    }}
+    .cc-freq-table th,
+    .cc-freq-table td {{
+        padding: 5px 8px;
+        border-bottom: 1px solid rgba(216, 220, 226, 0.65);
+        text-align: left;
+        white-space: nowrap;
+    }}
+    .cc-freq-table tbody tr:hover {{
+        background: rgba(92, 106, 112, 0.06);
+    }}
+    .cc-freq-table tbody tr {{
+        cursor: default;
+    }}
+    .cc-freq-table .cc-num {{
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }}
+    .cc-swatch-cell {{
+        width: 34px;
+    }}
+    .cc-swatch {{
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 1px solid rgba(0, 0, 0, 0.25);
+        border-radius: 3px;
+        vertical-align: middle;
+    }}
     .metadata-empty-row td {{
         color: var(--muted);
         font-style: italic;
@@ -3516,6 +5579,24 @@ def ssn_viewer_html(
         padding: 6px 9px;
         font: inherit;
         color: var(--ink);
+    }}
+    .threshold-jump .threshold-step {{
+        width: 32px;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 8px;
+        padding: 5px 0;
+        font: inherit;
+        line-height: 1.2;
+        color: var(--ink);
+        cursor: pointer;
+    }}
+    .threshold-jump .threshold-step:hover:not(:disabled) {{
+        background: #fff;
+    }}
+    .threshold-jump .threshold-step:disabled {{
+        opacity: 0.45;
+        cursor: not-allowed;
     }}
     .legend-line::before,
     .legend-sum::before,
@@ -3667,6 +5748,9 @@ def ssn_viewer_html(
                     </div>
                 </div>
                 <div class="canvas-wrap"><canvas id="split-chart" width="1100" height="320"></canvas></div>
+                <!-- aria-hidden: a pointer affordance duplicating data the chart's own
+                     caption, the metadata table and the TSV exports already carry. -->
+                <div id="split-chart-tip" class="split-tip" aria-hidden="true" hidden></div>
                 <div class="split-legend">
                     <div class="split-legend-items">
                         <span class="legend-line">Largest single split</span>
@@ -3674,9 +5758,20 @@ def ssn_viewer_html(
                         <span class="legend-dot legend-threshold-readout">Current threshold <span id="threshold-label" class="legend-threshold-value">∞</span></span>
                     </div>
                     <div class="threshold-jump">
+                        <button id="threshold-step-down" type="button" class="threshold-step" title="Previous split threshold (lower)" aria-label="Previous split threshold" disabled>&larr;</button>
+                        <button id="threshold-step-up" type="button" class="threshold-step" title="Next split threshold (higher)" aria-label="Next split threshold" disabled>&rarr;</button>
                         <label for="threshold-input">Jump to threshold</label>
-                        <input id="threshold-input" type="number" step="any" inputmode="decimal" placeholder="Nearest split" disabled />
+                        <!-- Deliberately type="text": a number input's spinner steps by a
+                             fixed amount, which is meaningless on an axis whose splits can
+                             be 0.001 or 30 apart. The buttons above and the arrow keys step
+                             stop to stop instead. -->
+                        <input id="threshold-input" type="text" inputmode="decimal" placeholder="Nearest split" disabled />
                     </div>
+                </div>
+                <div class="note" id="split-event-count"></div>
+                <div class="toolbar">
+                    <button id="export-split-png" type="button" disabled title="Download this chart as a PNG at the resolution chosen in View Settings">Export chart PNG</button>
+                    <button id="export-split-svg" type="button" disabled title="Download this chart as an editable SVG">Export chart SVG</button>
                 </div>
                 <div class="slider-stack">
                     <div class="slider-track-wrap">
@@ -3765,6 +5860,10 @@ def ssn_viewer_html(
                         <input id="leaf-pruning-only" type="checkbox" />
                         <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
                     </div>
+                    <div class="control checkbox sub-option" title="Contract a chain of small clusters that only passes through into a single dashed edge carrying the chain's weakest link">
+                        <input id="collapse-long-paths" type="checkbox" disabled />
+                        <label for="collapse-long-paths">Collapse long paths</label>
+                    </div>
                 </div>
                 <div class="toolbar">
                     <button id="sort-components-by-size" type="button" aria-pressed="true" disabled>Sort clusters by size: On</button>
@@ -3795,6 +5894,7 @@ def ssn_viewer_html(
                     <button id="metadata-panel-set" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-set-panel" data-edit-panel="set" disabled>Set column</button>
                     <button id="metadata-panel-rename" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-rename-panel" data-edit-panel="rename" disabled>Rename column</button>
                     <button id="metadata-panel-delete" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-delete-panel" data-edit-panel="delete" disabled>Delete column</button>
+                    <button id="metadata-panel-select" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-select-panel" data-edit-panel="select" disabled>Select by value</button>
                 </div>
                 <div id="metadata-add-panel" class="metadata-edit-panel" hidden>
                     <label for="metadata-new-column-name" class="metadata-edit-label">Name</label>
@@ -3831,6 +5931,19 @@ def ssn_viewer_html(
                     <select id="metadata-delete-column"></select>
                     <button id="metadata-delete-column-apply" type="button">Delete</button>
                     <span class="metadata-edit-label" id="metadata-delete-note"></span>
+                </div>
+                <div id="metadata-select-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-select-column" aria-label="Column to compare"></select>
+                    <select id="metadata-select-op" aria-label="Comparison"></select>
+                    <input id="metadata-select-value" type="text" placeholder="value" aria-label="Value to compare against" />
+                    <span class="metadata-edit-label" id="metadata-select-and" hidden>and</span>
+                    <input id="metadata-select-value2" type="text" placeholder="upper bound" aria-label="Upper bound" hidden />
+                    <button id="metadata-select-add" type="button" title="Search every node in the network and add the matches to the selection.">Add to selection</button>
+                    <button id="metadata-select-remove" type="button" title="Search the selected nodes and drop the matches from the selection." disabled>Remove from selection</button>
+                    <button id="metadata-select-subset" type="button" title="Search the selected nodes and keep only the matches." disabled>Subset selection</button>
+                    <!-- The note is the only channel for "that regex is malformed", so it
+                         announces itself rather than waiting to be read. -->
+                    <span class="metadata-edit-label" id="metadata-select-note" role="status"></span>
                 </div>
                 <div class="toolbar">
                     <button id="export-selected" disabled>Export table TSV</button>
@@ -3966,6 +6079,29 @@ def ssn_viewer_html(
         </div>
     </div>
 </div>
+<div id="column-chart-menu" class="cc-menu" role="menu" aria-label="Charts and tables for this column" hidden></div>
+<div id="column-chart-overlay" class="cp-overlay" hidden>
+    <div id="column-chart-dialog" class="cp-dialog cc-dialog" role="dialog" aria-modal="true" aria-labelledby="column-chart-title">
+        <div class="cp-head">
+            <h3 id="column-chart-title">Column chart</h3>
+            <button id="column-chart-close" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <div class="toolbar cc-controls">
+                <label for="column-chart-kind">Chart</label>
+                <select id="column-chart-kind"></select>
+            </div>
+            <div id="column-chart-preview" class="cc-preview"></div>
+            <p class="note" id="column-chart-note"></p>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="column-chart-copy-tsv" type="button">Copy TSV</button>
+            <button id="column-chart-download-tsv" type="button">Download TSV</button>
+            <button id="column-chart-export-svg" type="button">Export SVG</button>
+            <button id="column-chart-export-png" type="button">Export PNG</button>
+        </div>
+    </div>
+</div>
 <script>
     const state = {{
         bundle: null,
@@ -3977,10 +6113,22 @@ def ssn_viewer_html(
         metadataColumnIndexByName: new Map(),
         metadataColorInfoByName: new Map(),
         customPalettes: {{}},
+        // Derived cache of defaultCategoricalPalette() results, keyed like
+        // customPalettes. Not user data, so it is never saved into a session;
+        // rebuildMetadataCaches() drops it.
+        defaultPalettes: new Map(),
         // Names of numeric metadata columns the viewer should color as discrete
         // categories instead of a gradient (e.g. integer cluster numbers).
         categoricalColumns: new Set(),
         colorPickerPage: 0,
+        // Where drawSplitChart() last painted each mark, for hover hit-testing.
+        splitChartHit: null,
+        // {{columnName, anchor}} while a column header's chart menu is open.
+        columnChartMenu: null,
+        // {{columnName, kind}} while the chart dialog is open, and the built
+        // artifact the four export buttons hand out (so they never rebuild it).
+        columnChart: null,
+        columnChartArtifact: null,
         // Binned counts for the gradient dialog's histogram. Cached because binning walks
         // every node, while recoloring the bars happens on every keystroke in the dialog.
         colorHistogram: null,
@@ -4188,6 +6336,8 @@ def ssn_viewer_html(
         document.getElementById('export-png').disabled = false;
         document.getElementById('export-png-scale').disabled = false;
         document.getElementById('export-svg').disabled = false;
+        document.getElementById('export-split-png').disabled = false;
+        document.getElementById('export-split-svg').disabled = false;
         document.getElementById('customize-colors').disabled = false;
         document.getElementById('save-session').disabled = false;
         document.getElementById('rename-network').disabled = false;
@@ -4196,6 +6346,7 @@ def ssn_viewer_html(
             openColorPicker();
         }}
         document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
+        updateThresholdStepButtons();
         document.getElementById('metadata-select-nodes').disabled = true;
         document.getElementById('metadata-deselect-rows').disabled = true;
         document.getElementById('metadata-reset-sort').disabled = true;
@@ -4206,6 +6357,7 @@ def ssn_viewer_html(
         document.getElementById('metadata-rows-per-page').disabled = false;
         document.getElementById('metadata-panel-add').disabled = false;
         document.getElementById('metadata-panel-set').disabled = false;
+        document.getElementById('metadata-panel-select').disabled = false;
         document.getElementById('metadata-panel-rename').disabled = false;
         document.getElementById('metadata-panel-delete').disabled = false;
         closeMetadataEditPanels();
@@ -4228,11 +6380,15 @@ def ssn_viewer_html(
             + state.bundleVersionWarning + sessionNote
         );
         renderPresetSlots();
+        updateSplitEventCount();
         updateThresholdUI();
         updateMetadataTable();
     }}
 
     function rebuildMetadataCaches() {{
+        // Which default color a value gets depends on the whole sorted set of
+        // values in its column, so any change to the metadata invalidates it.
+        state.defaultPalettes = new Map();
         state.metadataColumnByName = new Map();
         state.metadataColumnIndexByName = new Map();
         state.metadataColorInfoByName = new Map();
@@ -4310,6 +6466,9 @@ def ssn_viewer_html(
             cache[i] = nodeColor(i);
         }}
         state.nodeColorCache = cache;
+        // A palette edit that recolors the nodes should recolor an open chart
+        // of the same column too.
+        refreshColumnChartIfOpen();
     }}
 
     function buildSliderModel(sourceStops) {{
@@ -4402,8 +6561,9 @@ def ssn_viewer_html(
         return nearestStop;
     }}
 
-    // Static menu of named palettes plus the viewer's own hashed-hue default. The
-    // disabled first entry is what a hand-edited column shows.
+    // Static menu of the named palettes. The disabled first entry is what a
+    // hand-edited column shows; "Reset to defaults" is the way back to
+    // DEFAULT_CATEGORICAL_PALETTE, so the menu carries no pseudo-entry for it.
     function populateColorPaletteMenu() {{
         const select = document.getElementById('color-palette');
         select.innerHTML = '';
@@ -4412,10 +6572,6 @@ def ssn_viewer_html(
         customOption.textContent = 'Custom colors';
         customOption.disabled = true;
         select.appendChild(customOption);
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '__default__';
-        defaultOption.textContent = 'Viewer default (hashed hues)';
-        select.appendChild(defaultOption);
         CATEGORICAL_PALETTES.forEach(scheme => {{
             const option = document.createElement('option');
             option.value = scheme.name;
@@ -4500,6 +6656,17 @@ def ssn_viewer_html(
 
     function leafPruningOnlyEnabled() {{
         return document.getElementById('leaf-pruning-only').checked;
+    }}
+
+    function collapseLongPathsEnabled() {{
+        return document.getElementById('collapse-long-paths').checked;
+    }}
+
+    function updateCollapseLongPathsControl() {{
+        // Sub-option of leaf pruning, and only meaningful there: with leaf pruning off
+        // every below-minimum cluster is dropped outright, so no pass-through chain is
+        // left to contract.
+        document.getElementById('collapse-long-paths').disabled = !leafPruningOnlyEnabled();
     }}
 
     function currentLayoutAlgorithm() {{
@@ -4714,9 +6881,6 @@ def ssn_viewer_html(
         return '#' + toHex(channel(0)) + toHex(channel(1)) + toHex(channel(2));
     }}
 
-    // `palette` is an optional categorical custom palette ({{colors, nullColor}}). When
-    // absent (or missing an entry) the function reproduces the default hash-based hue
-    // exactly, so uncustomized views are byte-identical to before.
     // Named qualitative palettes (from domainator.utils.NAMED_CATEGORICAL_PALETTES) and
     // the neutral gray get_palette gives values with no color of their own.
     const CATEGORICAL_PALETTES = {categorical_palettes_js};
@@ -4775,6 +6939,50 @@ def ssn_viewer_html(
         return {{scheme, assigned: distinct.values.length}};
     }}
 
+    // The palette a column has before anyone customizes it. Values used to be
+    // colored by a hue hashed from their text -- stable, but arbitrary, and free to
+    // put two adjacent categories on nearly the same color. They now get
+    // get_palette()'s own 64 distinct colors in sort_palette_values order, so an
+    // untouched viewer agrees with what build_ssn.py would have drawn.
+    const DEFAULT_CATEGORICAL_PALETTE = 'domainator';
+
+    // Derived, not user data: never written into a session, and never reported as
+    // "custom colors" by the picker. Keyed like state.customPalettes (by
+    // paletteKey, so a numeric column flipped to discrete gets its own entry) and
+    // dropped by rebuildMetadataCaches(), since the assignment depends on the whole
+    // set of values in the column.
+    function defaultCategoricalPalette(columnName) {{
+        const key = paletteKey(columnName);
+        const cached = state.defaultPalettes.get(key);
+        if (cached) {{
+            return cached;
+        }}
+        const scheme = paletteSchemeByName(DEFAULT_CATEGORICAL_PALETTE);
+        const colors = {{}};
+        if (scheme) {{
+            sortPaletteKeys(distinctColumnValues(columnName, Infinity).values.map(entry => entry.key))
+                .forEach((valueKey, index) => {{
+                    colors[valueKey] = scheme.colors[index % scheme.colors.length];
+                }});
+        }}
+        // nullColor is deliberately left unset: what color an empty cell gets is a
+        // separate choice from the categorical assignment, and categoricalColor's
+        // own fallback is already the color the rest of the viewer uses for one.
+        const palette = {{
+            type: 'categorical',
+            colors,
+            nullColor: null,
+            scheme: scheme ? scheme.name : null,
+        }};
+        state.defaultPalettes.set(key, palette);
+        return palette;
+    }}
+
+    // `palette` is a categorical palette ({{colors, nullColor}}) -- normally the
+    // column's own, from customPalette(), which now always supplies one for a
+    // discrete column. The hue hashed from the value's text is the last resort for
+    // a value the palette says nothing about: one typed in after a color table was
+    // loaded, say, or after the palette was hand-edited.
     function categoricalColor(value, palette) {{
         if (value === null || value === undefined || value === '') {{
             return (palette && palette.nullColor) || '#b3a89d';
@@ -4869,7 +7077,15 @@ def ssn_viewer_html(
     }}
 
     function customPalette(columnName) {{
-        return state.customPalettes[paletteKey(columnName)] || null;
+        const stored = state.customPalettes[paletteKey(columnName)];
+        if (stored) {{
+            return stored;
+        }}
+        // A discrete column with nothing stored is not uncolored -- it is on the
+        // default named palette. Only gradient columns fall through to null, where
+        // numericColor's own built-in ramp takes over.
+        const info = colorInfo(columnName);
+        return info && info.type === 'categorical' ? defaultCategoricalPalette(columnName) : null;
     }}
 
     function nodeColor(nodeIndex) {{
@@ -4906,7 +7122,101 @@ def ssn_viewer_html(
         return assignments;
     }}
 
-    function mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnly) {{
+    // Contract chains of pass-through clusters into a single edge.
+    //
+    // Leaf pruning has already dropped every below-minimum cluster that merely hangs
+    // off the graph, so the small clusters still standing are the ones that bridge. A
+    // run of them joined end to end is a spindle: it takes up most of the canvas and
+    // says nothing except "these two big clusters are related, weakly". Replacing the
+    // run with a single edge carrying the run's *weakest* link keeps exactly that
+    // statement -- the weakest link is all a path can support, the same
+    // min-over-the-path rule the threshold slider itself applies -- and hides the
+    // spindle, which is what lets the relationships between the big clusters read.
+    //
+    // The cluster graph is a contraction of the MST and therefore a forest, and that is
+    // what makes this safe: a chain cannot close on itself, contracting a degree-2
+    // cluster can neither create a parallel edge nor change any surviving cluster's
+    // degree (so no new leaves appear and one pass is enough). The guards below say
+    // what happens if a hand-built bundle breaks that assumption.
+    //
+    // `visibleSet` is narrowed in place: a contracted cluster is no longer drawn, so it
+    // counts as hidden by the minimum cluster size like any other.
+    function collapseLongPathLinks(links, visibleSet, minClusterSize) {{
+        const hierarchyNodes = state.bundle.graph.hierarchy.nodes;
+        const adjacency = new Map();
+        links.forEach(link => {{
+            if (!visibleSet.has(link.sourceId) || !visibleSet.has(link.targetId)) {{ return; }}
+            if (!adjacency.has(link.sourceId)) {{ adjacency.set(link.sourceId, []); }}
+            if (!adjacency.has(link.targetId)) {{ adjacency.set(link.targetId, []); }}
+            adjacency.get(link.sourceId).push({{other: link.targetId, weight: link.weight}});
+            adjacency.get(link.targetId).push({{other: link.sourceId, weight: link.weight}});
+        }});
+
+        const isPassThrough = componentId => visibleSet.has(componentId)
+            && (adjacency.get(componentId) || []).length === 2
+            && hierarchyNodes[componentId].size < minClusterSize;
+
+        // Walked in ascending cluster id so the result does not depend on link order.
+        const starts = Array.from(adjacency.keys()).filter(isPassThrough).sort((leftId, rightId) => leftId - rightId);
+        const consumed = new Set();
+        const collapsedLinks = new Map();
+        let collapsedPaths = 0;
+
+        starts.forEach(startId => {{
+            if (consumed.has(startId)) {{ return; }}
+            consumed.add(startId);
+            const chain = [startId];
+            const ends = [];
+            let weakest = Infinity;
+            // Two steps out of a degree-2 cluster: walk each way to the first cluster
+            // that is not itself pass-through.
+            (adjacency.get(startId) || []).forEach(step => {{
+                let previousId = startId;
+                let currentId = step.other;
+                weakest = Math.min(weakest, step.weight);
+                while (isPassThrough(currentId) && !consumed.has(currentId)) {{
+                    consumed.add(currentId);
+                    chain.push(currentId);
+                    const next = (adjacency.get(currentId) || []).find(edge => edge.other !== previousId);
+                    if (!next) {{ break; }}
+                    weakest = Math.min(weakest, next.weight);
+                    previousId = currentId;
+                    currentId = next.other;
+                }}
+                ends.push(isPassThrough(currentId) ? null : currentId);
+            }});
+
+            chain.forEach(componentId => visibleSet.delete(componentId));
+            const leftEnd = ends[0];
+            const rightEnd = ends[1];
+            if (leftEnd === null || rightEnd === null || leftEnd === rightEnd) {{
+                // Only reachable if the forest assumption above does not hold. The chain
+                // is gone either way; drawing a self-loop or a dangling edge is worse
+                // than drawing nothing.
+                return;
+            }}
+            collapsedPaths += 1;
+            const sourceId = Math.min(leftEnd, rightEnd);
+            const targetId = Math.max(leftEnd, rightEnd);
+            const key = sourceId + ':' + targetId;
+            const existing = collapsedLinks.get(key);
+            if (existing) {{
+                existing.weight = Math.min(existing.weight, weakest);
+                existing.collapsed += chain.length;
+                return;
+            }}
+            collapsedLinks.set(key, {{sourceId, targetId, weight: weakest, collapsed: chain.length}});
+        }});
+
+        const kept = links.filter(link => visibleSet.has(link.sourceId) && visibleSet.has(link.targetId));
+        return {{
+            links: kept.concat(Array.from(collapsedLinks.values())),
+            collapsedPaths,
+            collapsedClusters: consumed.size,
+        }};
+    }}
+
+    function mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnly, collapseLongPaths) {{
         const assignments = activeClusterAssignments(activeClusterIds);
         const linkMap = new Map();
 
@@ -4929,6 +7239,8 @@ def ssn_viewer_html(
                 visibleIds: [...activeClusterIds],
                 links: Array.from(linkMap.values()),
                 hiddenNodes: 0,
+                collapsedPaths: 0,
+                collapsedClusters: 0,
             }};
         }}
 
@@ -4946,6 +7258,8 @@ def ssn_viewer_html(
                 visibleIds,
                 links: allLinks.filter(link => visibleSet.has(link.sourceId) && visibleSet.has(link.targetId)),
                 hiddenNodes,
+                collapsedPaths: 0,
+                collapsedClusters: 0,
             }};
         }}
 
@@ -4988,6 +7302,12 @@ def ssn_viewer_html(
             }});
         }}
 
+        // Runs after pruning and narrows visibleSet further, so visibleIds and
+        // hiddenNodes below already account for the contracted clusters.
+        const collapse = collapseLongPaths
+            ? collapseLongPathLinks(allLinks, visibleSet, minClusterSize)
+            : null;
+
         const visibleIds = activeClusterIds.filter(componentId => visibleSet.has(componentId));
         const hiddenNodes = activeClusterIds.reduce((sum, componentId) => {{
             if (visibleSet.has(componentId)) {{
@@ -4998,8 +7318,12 @@ def ssn_viewer_html(
 
         return {{
             visibleIds,
-            links: allLinks.filter(link => visibleSet.has(link.sourceId) && visibleSet.has(link.targetId)),
+            links: collapse
+                ? collapse.links
+                : allLinks.filter(link => visibleSet.has(link.sourceId) && visibleSet.has(link.targetId)),
             hiddenNodes,
+            collapsedPaths: collapse ? collapse.collapsedPaths : 0,
+            collapsedClusters: collapse ? collapse.collapsedClusters : 0,
         }};
     }}
 
@@ -6606,59 +8930,100 @@ def ssn_viewer_html(
         return labels[metric] || labels['{MERGE_IMPACT_MIN_CHILD}'];
     }}
 
-    function drawSplitChart() {{
-        splitContext.clearRect(0, 0, splitCanvas.width, splitCanvas.height);
-        splitContext.fillStyle = '#ffffff';
-        splitContext.fillRect(0, 0, splitCanvas.width, splitCanvas.height);
+    // ---- Split chart ----
+    //
+    // One model, three consumers. splitChartLayout() computes the axis box, the scales,
+    // every tick value and every mark's position; drawSplitChart() paints it to a canvas,
+    // buildSplitChartSVG() emits the same thing as SVG, and the hover handlers hit-test
+    // against the positions the paint pass recorded. buildClusterViewSVG's header warns
+    // about what happens when two renderers each compute their own geometry -- this is
+    // that warning taken seriously, so the exported chart cannot drift from the drawn one.
+
+    const SPLIT_CHART_COLORS = {{
+        axis: 'rgba(92,106,112,0.35)',
+        tick: 'rgba(92,106,112,0.4)',
+        text: '#5c6a70',
+        stem: '#dd9687',
+        bead: '#c8553d',
+        movingSum: '#2f6f8f',
+        marker: '#1e2a2f',
+        markerDot: '#e29b4b',
+    }};
+    const SPLIT_CHART_TITLE_FONT = 12;
+    const SPLIT_CHART_TICK_FONT = 11;
+    const SPLIT_CHART_MESSAGE_FONT = 18;
+    const SPLIT_CHART_TICK_LENGTH = 6;
+    const SPLIT_CHART_BEAD_DRAW_RADIUS = 4;
+
+    // Decimals needed to print `step` exactly, so a tick label names the value the tick
+    // sits at. Without this the axis lies by rounding: a tick at 0.8736 printed as "0.87"
+    // reads as misplaced next to a lollipop whose own readout also says 0.87.
+    function decimalsForTickStep(step) {{
+        const magnitude = Math.abs(step);
+        if (!Number.isFinite(magnitude) || magnitude === 0) {{ return 2; }}
+        for (let decimals = 0; decimals <= 8; decimals++) {{
+            if (Math.abs(Number(magnitude.toFixed(decimals)) - magnitude) <= magnitude * 1e-9) {{
+                return decimals;
+            }}
+        }}
+        return 8;
+    }}
+
+    // Tick values on round numbers, with the precision their step requires. Ticks used to
+    // sit at fixed fractions of the domain, which put them at arbitrary values that
+    // formatValue then rounded to two decimals -- both halves of the misalignment.
+    // `options.integer` marks an axis of counts, where a tick at 2.5 nodes names nothing.
+    function splitAxisTicks(min, max, targetCount, options = {{}}) {{
+        let values = chartAxisTicks(min, max, targetCount)
+            .filter(value => value >= min - 1e-12 && value <= max + 1e-12);
+        if (options.integer && (max - min) < targetCount) {{
+            // Too narrow for a nice fractional step to mean anything: one tick per integer.
+            values = [];
+            for (let value = Math.ceil(min); value <= Math.floor(max); value++) {{
+                values.push(value);
+            }}
+        }}
+        if (values.length === 0) {{ values = [min]; }}
+        const step = values.length > 1 ? values[1] - values[0] : (Math.abs(values[0]) || 1);
+        const decimals = decimalsForTickStep(step);
+        return values.map(value => ({{
+            value,
+            // toLocaleString rather than toFixed so a 50,000-node axis keeps its
+            // separators, the way formatValue renders integers elsewhere.
+            label: value.toLocaleString(undefined, {{
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+            }}),
+        }}));
+    }}
+
+    function splitChartLayout(viewWidth, viewHeight) {{
+        const margin = {{top: 26, right: 80, bottom: 62, left: 76}};
+        const width = viewWidth - margin.left - margin.right;
+        const height = viewHeight - margin.top - margin.bottom;
+        const axisLabels = splitAxisLabels();
+        const frame = {{
+            viewWidth,
+            viewHeight,
+            margin,
+            width,
+            height,
+            titles: {{x: 'Threshold', y: axisLabels.largest, y2: axisLabels.movingSum}},
+        }};
 
         if (!state.bundle) {{
-            splitContext.fillStyle = '#5c6a70';
-            splitContext.font = '18px Georgia';
-            splitContext.fillText('Load a bundle to render split events.', 30, 50);
-            return;
+            return Object.assign(frame, {{
+                message: 'Load a bundle to render split events.',
+                axes: false,
+            }});
         }}
 
         const events = state.bundle.graph.merge_event_series;
-        const margin = {{top: 26, right: 80, bottom: 62, left: 76}};
-        const movingSumColor = '#2f6f8f';
-        const width = splitCanvas.width - margin.left - margin.right;
-        const height = splitCanvas.height - margin.top - margin.bottom;
-
-        splitContext.strokeStyle = 'rgba(92,106,112,0.35)';
-        splitContext.lineWidth = 1;
-        splitContext.beginPath();
-        splitContext.moveTo(margin.left, margin.top + height);
-        splitContext.lineTo(margin.left + width, margin.top + height);
-        splitContext.moveTo(margin.left, margin.top);
-        splitContext.lineTo(margin.left, margin.top + height);
-        splitContext.stroke();
-
-        splitContext.fillStyle = '#5c6a70';
-        splitContext.font = '12px Georgia';
-        splitContext.textAlign = 'center';
-        splitContext.textBaseline = 'alphabetic';
-        splitContext.fillText('Threshold', margin.left + (width / 2), splitCanvas.height - 14);
-        splitContext.save();
-        splitContext.translate(20, margin.top + (height / 2));
-        splitContext.rotate(-Math.PI / 2);
-        splitContext.textAlign = 'center';
-        splitContext.textBaseline = 'alphabetic';
-        splitContext.fillText(splitAxisLabels().largest, 0, 0);
-        splitContext.restore();
-        splitContext.save();
-        splitContext.translate(splitCanvas.width - 18, margin.top + (height / 2));
-        splitContext.rotate(-Math.PI / 2);
-        splitContext.textAlign = 'center';
-        splitContext.textBaseline = 'alphabetic';
-        splitContext.fillStyle = movingSumColor;
-        splitContext.fillText(splitAxisLabels().movingSum, 0, 0);
-        splitContext.restore();
-
         if (events.length === 0) {{
-            splitContext.fillStyle = '#5c6a70';
-            splitContext.font = '18px Georgia';
-            splitContext.fillText('No split events in this bundle.', 30, 50);
-            return;
+            return Object.assign(frame, {{
+                message: 'No split events in this bundle.',
+                axes: true,
+            }});
         }}
 
         // Stems show the LARGEST single merge at each threshold, not the tie group's sum:
@@ -6674,126 +9039,379 @@ def ssn_viewer_html(
         const minThreshold = Math.min(...thresholdValues);
         const maxThreshold = Math.max(...thresholdValues);
         const thresholdSpan = Math.max(1e-9, maxThreshold - minThreshold || 1);
-        const tickLength = 6;
+        const maxMovingSum = Math.max(...movingSumY, 1);
 
         const xFor = value => margin.left + ((value - minThreshold) / thresholdSpan) * width;
         const yFor = value => margin.top + height - (value / maxImpact) * height;
-
-        const maxMovingSum = Math.max(...movingSumY, 1);
         const y2For = value => margin.top + height - (value / maxMovingSum) * height;
 
-        splitContext.fillStyle = '#5c6a70';
-        splitContext.font = '11px Georgia';
-        splitContext.textBaseline = 'top';
-        splitContext.textAlign = 'center';
-        const xTickCount = Math.min(6, Math.max(2, events.length > 1 ? 5 : 2));
-        for (let tickIndex = 0; tickIndex < xTickCount; tickIndex++) {{
-            const fraction = xTickCount === 1 ? 0 : tickIndex / (xTickCount - 1);
-            const thresholdValue = minThreshold + (thresholdSpan * fraction);
-            const x = xFor(thresholdValue);
-            splitContext.strokeStyle = 'rgba(92,106,112,0.4)';
-            splitContext.lineWidth = 1;
-            splitContext.beginPath();
-            splitContext.moveTo(x, margin.top + height);
-            splitContext.lineTo(x, margin.top + height + tickLength);
-            splitContext.stroke();
-            splitContext.fillText(formatValue(thresholdValue), x, margin.top + height + tickLength + 4);
+        const marks = events.map(event => ({{
+            event,
+            x: xFor(event.threshold_value),
+            stemY: yFor(event.largest_merge),
+            // JSON object keys are always strings, so this Number() is required.
+            beads: Object.keys(event.merge_size_counts || {{}}).map(size => ({{
+                size: Number(size),
+                count: event.merge_size_counts[size],
+                y: yFor(Number(size)),
+            }})),
+        }}));
+
+        // The trace is a step function -- a moving sum over discrete events genuinely is
+        // one, and smoothing misrepresents where the events sit -- so the vertices are
+        // built once here and both painters stroke the same polyline.
+        const movingSumPoints = [];
+        for (let index = 0; index < movingSumX.length; index++) {{
+            const x = xFor(movingSumX[index]);
+            if (index > 0) {{
+                movingSumPoints.push({{x, y: y2For(movingSumY[index - 1])}});
+            }}
+            movingSumPoints.push({{x, y: y2For(movingSumY[index])}});
         }}
 
-        splitContext.textAlign = 'right';
-        splitContext.textBaseline = 'middle';
-        const yTickCount = 5;
-        for (let tickIndex = 0; tickIndex < yTickCount; tickIndex++) {{
-            const fraction = tickIndex / (yTickCount - 1);
-            const impactValue = maxImpact * fraction;
-            const y = yFor(impactValue);
-            splitContext.strokeStyle = 'rgba(92,106,112,0.4)';
-            splitContext.lineWidth = 1;
-            splitContext.beginPath();
-            splitContext.moveTo(margin.left - tickLength, y);
-            splitContext.lineTo(margin.left, y);
-            splitContext.stroke();
-            splitContext.fillText(formatValue(impactValue), margin.left - tickLength - 6, y);
+        const stop = currentSliderStop();
+
+        return Object.assign(frame, {{
+            message: null,
+            axes: true,
+            minThreshold,
+            maxThreshold,
+            thresholdSpan,
+            maxImpact,
+            maxMovingSum,
+            xFor,
+            yFor,
+            y2For,
+            // 8 rather than 6: chartAxisTicks' 1/2/2.5/5/10 ladder rounds a raw step that
+            // lands just above a power of ten all the way up to the next rung (0.1005
+            // becomes 0.2), halving the tick count on exactly the axes -- similarity scores
+            // spanning a little over half a decade -- this chart usually draws.
+            xTicks: splitAxisTicks(minThreshold, maxThreshold, 8)
+                .map(tick => Object.assign({{x: xFor(tick.value)}}, tick)),
+            // Both vertical axes count nodes (or, under --merge_impact_metric product, a
+            // product of counts); either way a fractional tick is not a quantity.
+            yTicks: splitAxisTicks(0, maxImpact, 6, {{integer: true}})
+                .map(tick => Object.assign({{y: yFor(tick.value)}}, tick)),
+            y2Ticks: splitAxisTicks(0, maxMovingSum, 6, {{integer: true}})
+                .map(tick => Object.assign({{y: y2For(tick.value)}}, tick)),
+            marks,
+            movingSum: {{window: movingSum.window || 0, x: movingSumX, y: movingSumY, points: movingSumPoints}},
+            markerX: stop ? (stop.threshold_value === null ? margin.left + width : xFor(stop.threshold_value)) : null,
+        }});
+    }}
+
+    function drawSplitChart(ctx = splitContext, viewWidth = splitCanvas.width,
+                            viewHeight = splitCanvas.height, options = {{}}) {{
+        // Aliased so the body can paint into any context -- e.g. a scaled offscreen canvas
+        // for the high-resolution PNG export -- without rewriting every draw call.
+        const context = ctx;
+        const onScreen = options.onScreen !== false;
+        context.clearRect(0, 0, viewWidth, viewHeight);
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, viewWidth, viewHeight);
+
+        const layout = splitChartLayout(viewWidth, viewHeight);
+        const margin = layout.margin;
+        const width = layout.width;
+        const height = layout.height;
+
+        if (layout.axes) {{
+            context.strokeStyle = SPLIT_CHART_COLORS.axis;
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(margin.left, margin.top + height);
+            context.lineTo(margin.left + width, margin.top + height);
+            context.moveTo(margin.left, margin.top);
+            context.lineTo(margin.left, margin.top + height);
+            context.stroke();
+
+            context.fillStyle = SPLIT_CHART_COLORS.text;
+            context.font = SPLIT_CHART_TITLE_FONT + 'px Georgia';
+            context.textAlign = 'center';
+            context.textBaseline = 'alphabetic';
+            context.fillText(layout.titles.x, margin.left + (width / 2), viewHeight - 14);
+            context.save();
+            context.translate(20, margin.top + (height / 2));
+            context.rotate(-Math.PI / 2);
+            context.fillText(layout.titles.y, 0, 0);
+            context.restore();
+            context.save();
+            context.translate(viewWidth - 18, margin.top + (height / 2));
+            context.rotate(-Math.PI / 2);
+            context.fillStyle = SPLIT_CHART_COLORS.movingSum;
+            context.fillText(layout.titles.y2, 0, 0);
+            context.restore();
         }}
+
+        if (layout.message) {{
+            if (onScreen) {{
+                recordSplitChartGeometry(null);
+                hideSplitChartTip();
+            }}
+            context.fillStyle = SPLIT_CHART_COLORS.text;
+            context.font = SPLIT_CHART_MESSAGE_FONT + 'px Georgia';
+            // Set explicitly: the context is reused across calls, so inheriting whatever
+            // alignment the last paint left behind once centered this message on x=30 and
+            // ran half of it off the left edge.
+            context.textAlign = 'left';
+            context.textBaseline = 'alphabetic';
+            context.fillText(layout.message, 30, 50);
+            return;
+        }}
+
+        context.fillStyle = SPLIT_CHART_COLORS.text;
+        context.font = SPLIT_CHART_TICK_FONT + 'px Georgia';
+        context.textBaseline = 'top';
+        context.textAlign = 'center';
+        context.strokeStyle = SPLIT_CHART_COLORS.tick;
+        context.lineWidth = 1;
+        layout.xTicks.forEach(tick => {{
+            context.beginPath();
+            context.moveTo(tick.x, margin.top + height);
+            context.lineTo(tick.x, margin.top + height + SPLIT_CHART_TICK_LENGTH);
+            context.stroke();
+            context.fillText(tick.label, tick.x, margin.top + height + SPLIT_CHART_TICK_LENGTH + 4);
+        }});
+
+        context.textAlign = 'right';
+        context.textBaseline = 'middle';
+        layout.yTicks.forEach(tick => {{
+            context.beginPath();
+            context.moveTo(margin.left - SPLIT_CHART_TICK_LENGTH, tick.y);
+            context.lineTo(margin.left, tick.y);
+            context.stroke();
+            context.fillText(tick.label, margin.left - SPLIT_CHART_TICK_LENGTH - 6, tick.y);
+        }});
 
         // Right axis (moving sum scale).
         const rightAxisX = margin.left + width;
-        splitContext.strokeStyle = 'rgba(92,106,112,0.35)';
-        splitContext.lineWidth = 1;
-        splitContext.beginPath();
-        splitContext.moveTo(rightAxisX, margin.top);
-        splitContext.lineTo(rightAxisX, margin.top + height);
-        splitContext.stroke();
-        splitContext.fillStyle = movingSumColor;
-        splitContext.textAlign = 'left';
-        splitContext.textBaseline = 'middle';
-        for (let tickIndex = 0; tickIndex < yTickCount; tickIndex++) {{
-            const fraction = tickIndex / (yTickCount - 1);
-            const sumValue = maxMovingSum * fraction;
-            const y = y2For(sumValue);
-            splitContext.strokeStyle = movingSumColor;
-            splitContext.lineWidth = 1;
-            splitContext.beginPath();
-            splitContext.moveTo(rightAxisX, y);
-            splitContext.lineTo(rightAxisX + tickLength, y);
-            splitContext.stroke();
-            splitContext.fillText(formatValue(sumValue), rightAxisX + tickLength + 4, y);
-        }}
+        context.strokeStyle = SPLIT_CHART_COLORS.axis;
+        context.beginPath();
+        context.moveTo(rightAxisX, margin.top);
+        context.lineTo(rightAxisX, margin.top + height);
+        context.stroke();
+        context.fillStyle = SPLIT_CHART_COLORS.movingSum;
+        context.strokeStyle = SPLIT_CHART_COLORS.movingSum;
+        context.textAlign = 'left';
+        layout.y2Ticks.forEach(tick => {{
+            context.beginPath();
+            context.moveTo(rightAxisX, tick.y);
+            context.lineTo(rightAxisX + SPLIT_CHART_TICK_LENGTH, tick.y);
+            context.stroke();
+            context.fillText(tick.label, rightAxisX + SPLIT_CHART_TICK_LENGTH + 4, tick.y);
+        }});
 
         // Stem to the largest single split, then one bead per distinct merge size. Beads are
         // drawn unoutlined: on a stem carrying several close beads the outlines would merge
         // into a band that erases the stem. Bead and stem differ by shade, not by outline.
-        events.forEach(event => {{
-            const x = xFor(event.threshold_value);
-            splitContext.strokeStyle = '#dd9687';
-            splitContext.lineWidth = 1.5;
-            splitContext.beginPath();
-            splitContext.moveTo(x, margin.top + height);
-            splitContext.lineTo(x, yFor(event.largest_merge));
-            splitContext.stroke();
-            splitContext.fillStyle = '#c8553d';
-            Object.keys(event.merge_size_counts || {{}}).forEach(size => {{
-                // JSON object keys are always strings, so this Number() is required.
-                splitContext.beginPath();
-                splitContext.arc(x, yFor(Number(size)), 4, 0, Math.PI * 2);
-                splitContext.fill();
+        layout.marks.forEach(mark => {{
+            context.strokeStyle = SPLIT_CHART_COLORS.stem;
+            context.lineWidth = 1.5;
+            context.beginPath();
+            context.moveTo(mark.x, margin.top + height);
+            context.lineTo(mark.x, mark.stemY);
+            context.stroke();
+            context.fillStyle = SPLIT_CHART_COLORS.bead;
+            mark.beads.forEach(bead => {{
+                context.beginPath();
+                context.arc(mark.x, bead.y, SPLIT_CHART_BEAD_DRAW_RADIUS, 0, Math.PI * 2);
+                context.fill();
             }});
         }});
 
-        // Moving-sum trace (right axis scale), drawn as a step function -- a moving sum over
-        // discrete events genuinely is one, and smoothing misrepresents where the events sit.
-        if (movingSumX.length > 0) {{
-            splitContext.strokeStyle = movingSumColor;
-            splitContext.lineWidth = 1.75;
-            splitContext.beginPath();
-            for (let index = 0; index < movingSumX.length; index++) {{
-                const x = xFor(movingSumX[index]);
-                const y = y2For(movingSumY[index]);
+        if (layout.movingSum.points.length > 0) {{
+            context.strokeStyle = SPLIT_CHART_COLORS.movingSum;
+            context.lineWidth = 1.75;
+            context.beginPath();
+            layout.movingSum.points.forEach((point, index) => {{
                 if (index === 0) {{
-                    splitContext.moveTo(x, y);
+                    context.moveTo(point.x, point.y);
                 }} else {{
-                    splitContext.lineTo(x, y2For(movingSumY[index - 1]));
-                    splitContext.lineTo(x, y);
+                    context.lineTo(point.x, point.y);
                 }}
-            }}
-            splitContext.stroke();
+            }});
+            context.stroke();
         }}
 
-        const stop = currentSliderStop();
-        if (stop) {{
-            const x = stop.threshold_value === null ? margin.left + width : xFor(stop.threshold_value);
-            splitContext.strokeStyle = '#1e2a2f';
-            splitContext.setLineDash([6, 6]);
-            splitContext.beginPath();
-            splitContext.moveTo(x, margin.top);
-            splitContext.lineTo(x, margin.top + height);
-            splitContext.stroke();
-            splitContext.setLineDash([]);
-            splitContext.fillStyle = '#e29b4b';
-            splitContext.beginPath();
-            splitContext.arc(x, margin.top + height + 10, 5, 0, Math.PI * 2);
-            splitContext.fill();
+        // The dashed line and its dot mark where the slider is sitting right now. That is
+        // UI state, not something the chart measures, so neither export draws it --
+        // buildSplitChartSVG omits it for the same reason.
+        if (onScreen && layout.markerX !== null) {{
+            context.strokeStyle = SPLIT_CHART_COLORS.marker;
+            context.lineWidth = 1;
+            context.setLineDash([6, 6]);
+            context.beginPath();
+            context.moveTo(layout.markerX, margin.top);
+            context.lineTo(layout.markerX, margin.top + height);
+            context.stroke();
+            context.setLineDash([]);
+            context.fillStyle = SPLIT_CHART_COLORS.markerDot;
+            context.beginPath();
+            context.arc(layout.markerX, margin.top + height + 10, 5, 0, Math.PI * 2);
+            context.fill();
         }}
+
+        // Recorded from the layout the paint pass just used, so a mark the hover finds is a
+        // mark that was actually drawn. See setupSplitChartHover / splitChartHitAt.
+        if (onScreen) {{
+            recordSplitChartGeometry({{
+                plotLeft: margin.left,
+                plotTop: margin.top,
+                plotWidth: width,
+                plotHeight: height,
+                minThreshold: layout.minThreshold,
+                thresholdSpan: layout.thresholdSpan,
+                events: layout.marks.map(mark => ({{event: mark.event, x: mark.x, beads: mark.beads}})),
+                movingSumWindow: layout.movingSum.window,
+                movingSumX: layout.movingSum.x,
+                movingSumY: layout.movingSum.y,
+            }});
+        }}
+    }}
+
+    function buildSplitChartSVG() {{
+        const viewWidth = splitCanvas.width;
+        const viewHeight = splitCanvas.height;
+        const fmt = value => Math.round(value * 100) / 100;
+        const layout = splitChartLayout(viewWidth, viewHeight);
+        const margin = layout.margin;
+        const width = layout.width;
+        const height = layout.height;
+        const parts = [];
+        parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + viewWidth + '" height="' + viewHeight +
+            '" viewBox="0 0 ' + viewWidth + ' ' + viewHeight + '" font-family="Georgia, serif">');
+        parts.push('<rect x="0" y="0" width="' + viewWidth + '" height="' + viewHeight + '" fill="#ffffff"/>');
+
+        const rotatedTitle = (text, x, y, color) =>
+            '<text transform="translate(' + fmt(x) + ' ' + fmt(y) + ') rotate(-90)" text-anchor="middle"' +
+            ' font-size="' + SPLIT_CHART_TITLE_FONT + '" fill="' + color + '">' + escapeXml(text) + '</text>';
+
+        if (layout.axes) {{
+            const axis = svgColorParts(SPLIT_CHART_COLORS.axis);
+            parts.push('<path d="M' + margin.left + ' ' + margin.top + ' L' + margin.left + ' ' +
+                (margin.top + height) + ' L' + (margin.left + width) + ' ' + (margin.top + height) +
+                '" fill="none" stroke="' + axis.color + '" stroke-opacity="' + axis.opacity + '" stroke-width="1"/>');
+            parts.push('<text x="' + fmt(margin.left + (width / 2)) + '" y="' + (viewHeight - 14) +
+                '" text-anchor="middle" font-size="' + SPLIT_CHART_TITLE_FONT + '" fill="' +
+                SPLIT_CHART_COLORS.text + '">' + escapeXml(layout.titles.x) + '</text>');
+            parts.push(rotatedTitle(layout.titles.y, 20, margin.top + (height / 2), SPLIT_CHART_COLORS.text));
+            parts.push(rotatedTitle(layout.titles.y2, viewWidth - 18, margin.top + (height / 2),
+                SPLIT_CHART_COLORS.movingSum));
+        }}
+
+        if (layout.message) {{
+            parts.push('<text x="30" y="50" font-size="' + SPLIT_CHART_MESSAGE_FONT + '" fill="' +
+                SPLIT_CHART_COLORS.text + '">' + escapeXml(layout.message) + '</text>');
+            parts.push('</svg>');
+            return parts.join('\\n');
+        }}
+
+        // Ticks. Values, positions and label text all come from the layout, so the export
+        // cannot round or place them differently from the canvas.
+        const tickColor = svgColorParts(SPLIT_CHART_COLORS.tick);
+        const tickMarks = [];
+        const tickLabels = [];
+        layout.xTicks.forEach(tick => {{
+            tickMarks.push('<path d="M' + fmt(tick.x) + ' ' + (margin.top + height) + ' V' +
+                (margin.top + height + SPLIT_CHART_TICK_LENGTH) + '"/>');
+            tickLabels.push('<text x="' + fmt(tick.x) + '" y="' +
+                (margin.top + height + SPLIT_CHART_TICK_LENGTH + 4) + '" text-anchor="middle"' +
+                ' dominant-baseline="hanging">' + escapeXml(tick.label) + '</text>');
+        }});
+        layout.yTicks.forEach(tick => {{
+            tickMarks.push('<path d="M' + (margin.left - SPLIT_CHART_TICK_LENGTH) + ' ' + fmt(tick.y) +
+                ' H' + margin.left + '"/>');
+            tickLabels.push('<text x="' + (margin.left - SPLIT_CHART_TICK_LENGTH - 6) + '" y="' + fmt(tick.y) +
+                '" text-anchor="end" dominant-baseline="central">' + escapeXml(tick.label) + '</text>');
+        }});
+        parts.push('<g fill="none" stroke="' + tickColor.color + '" stroke-opacity="' + tickColor.opacity +
+            '" stroke-width="1">' + tickMarks.join('') + '</g>');
+        parts.push('<g font-size="' + SPLIT_CHART_TICK_FONT + '" fill="' + SPLIT_CHART_COLORS.text + '">' +
+            tickLabels.join('') + '</g>');
+
+        // Right axis (moving sum scale).
+        const rightAxisX = margin.left + width;
+        const axisColor = svgColorParts(SPLIT_CHART_COLORS.axis);
+        parts.push('<path d="M' + rightAxisX + ' ' + margin.top + ' V' + (margin.top + height) +
+            '" fill="none" stroke="' + axisColor.color + '" stroke-opacity="' + axisColor.opacity +
+            '" stroke-width="1"/>');
+        const rightTickMarks = [];
+        const rightTickLabels = [];
+        layout.y2Ticks.forEach(tick => {{
+            rightTickMarks.push('<path d="M' + rightAxisX + ' ' + fmt(tick.y) + ' H' +
+                (rightAxisX + SPLIT_CHART_TICK_LENGTH) + '"/>');
+            rightTickLabels.push('<text x="' + (rightAxisX + SPLIT_CHART_TICK_LENGTH + 4) + '" y="' +
+                fmt(tick.y) + '" dominant-baseline="central">' + escapeXml(tick.label) + '</text>');
+        }});
+        parts.push('<g fill="none" stroke="' + SPLIT_CHART_COLORS.movingSum + '" stroke-width="1">' +
+            rightTickMarks.join('') + '</g>');
+        parts.push('<g font-size="' + SPLIT_CHART_TICK_FONT + '" fill="' + SPLIT_CHART_COLORS.movingSum + '">' +
+            rightTickLabels.join('') + '</g>');
+
+        // Stems, then beads, in the canvas's own order so overlaps stack the same way.
+        const stems = layout.marks.map(mark =>
+            '<path d="M' + fmt(mark.x) + ' ' + (margin.top + height) + ' V' + fmt(mark.stemY) + '"/>');
+        parts.push('<g fill="none" stroke="' + SPLIT_CHART_COLORS.stem + '" stroke-width="1.5">' +
+            stems.join('') + '</g>');
+        const beads = [];
+        layout.marks.forEach(mark => {{
+            mark.beads.forEach(bead => {{
+                beads.push('<circle cx="' + fmt(mark.x) + '" cy="' + fmt(bead.y) + '" r="' +
+                    SPLIT_CHART_BEAD_DRAW_RADIUS + '"/>');
+            }});
+        }});
+        parts.push('<g fill="' + SPLIT_CHART_COLORS.bead + '">' + beads.join('') + '</g>');
+
+        if (layout.movingSum.points.length > 0) {{
+            const d = layout.movingSum.points
+                .map((point, index) => (index === 0 ? 'M' : ' L') + fmt(point.x) + ' ' + fmt(point.y))
+                .join('');
+            parts.push('<path d="' + d + '" fill="none" stroke="' + SPLIT_CHART_COLORS.movingSum +
+                '" stroke-width="1.75"/>');
+        }}
+
+        // No threshold marker: this builder is only ever an export, and the dashed line
+        // and orange dot say where the slider is, which is not a property of the data.
+        // See the matching `onScreen` guard in drawSplitChart.
+
+        parts.push('</svg>');
+        return parts.join('\\n');
+    }}
+
+    function exportSplitChartSVG() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        const blob = new Blob([buildSplitChartSVG()], {{type: 'image/svg+xml'}});
+        triggerDownload(URL.createObjectURL(blob), exportBaseName() + '_split_events.svg', true);
+    }}
+
+    function exportSplitChartPNG() {{
+        if (!state.bundle) {{
+            return;
+        }}
+        // Re-rasterized at the chosen density rather than snapshotted and upscaled, and
+        // offscreen so the hover geometry the on-screen chart recorded is left alone.
+        const scaleFactor = selectedPngScale();
+        const target = document.createElement('canvas');
+        target.width = Math.round(splitCanvas.width * scaleFactor);
+        target.height = Math.round(splitCanvas.height * scaleFactor);
+        const targetContext = target.getContext('2d');
+        if (!targetContext) {{
+            window.alert('Could not export PNG at ' + scaleFactor + '×; try a lower resolution.');
+            return;
+        }}
+        targetContext.scale(scaleFactor, scaleFactor);
+        drawSplitChart(targetContext, splitCanvas.width, splitCanvas.height, {{onScreen: false}});
+        target.toBlob(blob => {{
+            if (!blob) {{
+                window.alert('The chart is too large to export as a ' + scaleFactor + '× PNG (' +
+                    target.width + '×' + target.height + ' px). Try a lower resolution.');
+                return;
+            }}
+            const suffix = scaleFactor > 1 ? '_split_events@' + scaleFactor + 'x.png' : '_split_events.png';
+            triggerDownload(URL.createObjectURL(blob), exportBaseName() + suffix, true);
+        }}, 'image/png');
     }}
 
     function worldToScreenPoint(x, y) {{
@@ -6999,6 +9617,58 @@ def ssn_viewer_html(
         ].filter(segment => Math.hypot(segment.endX - segment.startX, segment.endY - segment.startY) > 1e-6);
     }}
 
+    // ---- Label level-of-detail ----
+    //
+    // A label is worth drawing when it fits the mark it labels, which is a property
+    // of that mark's size *on screen*. These used to be one global zoom threshold
+    // each, which had it backwards: a network of two enormous clusters fits the
+    // viewport at a small zoom, so the labels were suppressed while every bubble had
+    // hundreds of pixels of room going spare. Keying off the mark makes the rule
+    // scale itself, and applying it per mark means a crowded layout still drops only
+    // the labels that genuinely do not fit.
+    //
+    // Shared by renderClusterView and buildClusterViewSVG, which have to agree about
+    // which labels exist, and using estimateTextWidth rather than the canvas
+    // measurer for the same reason -- the SVG path has no canvas to measure with.
+    const CLUSTER_COUNT_LABEL_FONT = 12;
+    // Dash pattern for a collapsed path, in screen pixels. Shared by renderClusterView
+    // and buildClusterViewSVG so the export draws the dashes the screen drew.
+    const LINK_DASH_ON = 6;
+    const LINK_DASH_OFF = 4;
+    const EDGE_SCORE_LABEL_FONT = 11;
+    // drawBadge pads the text by 12px; the extra 8 keeps the badge off the link's
+    // endpoints, where it would sit on top of the cluster bubbles it joins.
+    const EDGE_SCORE_BADGE_PADDING = 12;
+    const EDGE_SCORE_LINK_MARGIN = 8;
+    // Below this a dot is not a mark any more, just a tinted pixel, and labelling it
+    // points at nothing the user can see.
+    const MIN_LABELED_DOT_SCREEN_RADIUS = 1.5;
+
+    // On-screen extent of a layout item's footprint. Lattice and rect items are boxes,
+    // so their own width is the room available -- `radius` is a half-diagonal there and
+    // would overstate it for a tall, narrow cluster.
+    function itemScreenExtent(item) {{
+        const scale = state.viewTransform.scale;
+        if (item.shape === 'lattice' || item.shape === 'rect') {{
+            return {{width: (item.x1 - item.x0) * scale, height: (item.y1 - item.y0) * scale}};
+        }}
+        const diameter = item.radius * 2 * scale;
+        return {{width: diameter, height: diameter}};
+    }}
+
+    function clusterCountLabelFits(text, item) {{
+        const extent = itemScreenExtent(item);
+        if (extent.height < CLUSTER_COUNT_LABEL_FONT + 4) {{
+            return false;
+        }}
+        return estimateTextWidth(text, CLUSTER_COUNT_LABEL_FONT) + 6 <= extent.width;
+    }}
+
+    function edgeScoreLabelFits(text, linkScreenLength) {{
+        const badgeWidth = estimateTextWidth(text, EDGE_SCORE_LABEL_FONT) + EDGE_SCORE_BADGE_PADDING;
+        return linkScreenLength >= badgeWidth + (EDGE_SCORE_LINK_MARGIN * 2);
+    }}
+
     function componentDotGeometry(component, item) {{
         const sampleCount = componentDotCount(component.size);
         const dotRadius = componentDotRadius(component.size, item.radius);
@@ -7103,6 +9773,12 @@ def ssn_viewer_html(
         state.splitLinks.forEach(link => {{
             clusterContext.strokeStyle = 'rgba(92, 106, 112, 0.42)';
             clusterContext.lineWidth = 1.6 / drawScale;
+            // A collapsed path is not an MST edge between these two clusters -- it is the
+            // weakest link along a chain that was contracted away -- so it is dashed
+            // rather than drawn as if it were a measured similarity between them.
+            clusterContext.setLineDash(link.collapsed
+                ? [LINK_DASH_ON / drawScale, LINK_DASH_OFF / drawScale]
+                : []);
             clusterContext.beginPath();
             const segments = renderedLinkSegments(link);
             segments.forEach((segment, index) => {{
@@ -7115,6 +9791,7 @@ def ssn_viewer_html(
             }});
             clusterContext.stroke();
         }});
+        clusterContext.setLineDash([]);
 
         // Collect dots batched by color for batch drawing (#3). Circular member dots and
         // square treemap members are batched separately so each can use its own draw call.
@@ -7133,7 +9810,9 @@ def ssn_viewer_html(
         // (so labels appear progressively as you zoom in). Overlap is acceptable.
         const dotLabelField = currentLabelField();
         const MAX_LABELED_DOTS = 250;
-        const collectDotLabels = dotLabelField !== '' && showNodes && state.viewTransform.scale >= 0.11;
+        // Whether a dot is drawn large enough to be worth pointing at is decided per
+        // dot below; MAX_LABELED_DOTS is what keeps a crowded view readable.
+        const collectDotLabels = dotLabelField !== '' && showNodes;
         const dotLabelCandidates = [];
         let dotLabelsOverflow = false;
 
@@ -7236,7 +9915,9 @@ def ssn_viewer_html(
                 }}
                 if (collectDotLabels && !dotLabelsOverflow &&
                     dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {{
-                    if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
+                    if (dot.radius * state.viewTransform.scale < MIN_LABELED_DOT_SCREEN_RADIUS) {{
+                        // Sub-pixel dot: a label beside it would point at nothing visible.
+                    }} else if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
                         dotLabelsOverflow = true;
                     }} else {{
                         dotLabelCandidates.push({{x: dot.x, y: dot.y, r: dot.radius, memberIndex: dot.memberIndex}});
@@ -7318,23 +9999,25 @@ def ssn_viewer_html(
             clusterContext.restore();
         }}
 
-        if (showEdgeScoresEnabled() && state.viewTransform.scale >= 0.16) {{
+        if (showEdgeScoresEnabled()) {{
             state.splitLinks.forEach(link => {{
                 const left = worldToScreenPoint(link.left.x, link.left.y);
                 const right = worldToScreenPoint(link.right.x, link.right.y);
                 const dx = right.x - left.x;
                 const dy = right.y - left.y;
-                if (Math.hypot(dx, dy) < 46) {{
+                const text = formatValue(link.threshold);
+                if (!edgeScoreLabelFits(text, Math.hypot(dx, dy))) {{
                     return;
                 }}
-                drawBadge(clusterContext, formatValue(link.threshold), left.x + (dx / 2), left.y + (dy / 2) - 8);
+                drawBadge(clusterContext, text, left.x + (dx / 2), left.y + (dy / 2) - 8);
             }});
         }}
 
-        // Node-count labels: one per cluster bubble, centered inside.
-        if (showNodeCountsEnabled() && state.viewTransform.scale >= 0.11) {{
+        // Node-count labels: one per cluster bubble, centered inside, wherever the
+        // bubble is big enough on screen to hold the text.
+        if (showNodeCountsEnabled()) {{
             clusterContext.fillStyle = '#5c6a70';
-            clusterContext.font = '600 12px Georgia';
+            clusterContext.font = '600 ' + CLUSTER_COUNT_LABEL_FONT + 'px Georgia';
             clusterContext.textAlign = 'center';
             clusterContext.textBaseline = 'middle';
             state.visibleLayout.forEach(item => {{
@@ -7345,7 +10028,11 @@ def ssn_viewer_html(
                     return;
                 }}
                 const component = state.bundle.graph.hierarchy.nodes[item.componentId];
-                clusterContext.fillText(component.size.toLocaleString(), screenPoint.x, screenPoint.y + 4);
+                const text = component.size.toLocaleString();
+                if (!clusterCountLabelFits(text, item)) {{
+                    return;
+                }}
+                clusterContext.fillText(text, screenPoint.x, screenPoint.y + 4);
             }});
         }}
 
@@ -7422,7 +10109,7 @@ def ssn_viewer_html(
                     const left = layoutById.get(link.sourceId);
                     const right = layoutById.get(link.targetId);
                     if (!left || !right) {{ return null; }}
-                    return {{left, right, threshold: link.weight}};
+                    return {{left, right, threshold: link.weight, collapsed: link.collapsed || 0}};
                 }})
                 .filter(Boolean);
         state.visibleLayout = layout;
@@ -7477,17 +10164,25 @@ def ssn_viewer_html(
         // filters nodes by minimum cluster size as usual.
         const latticeMode = layoutAlgorithm === 'treemap';
         const visibleGraph = latticeMode
-            ? {{visibleIds: activeClusterIds, links: [], hiddenNodes: 0}}
-            : mstLinksForActiveClusters(activeClusterIds, minClusterSize, leafPruningOnlyEnabled());
+            ? {{visibleIds: activeClusterIds, links: [], hiddenNodes: 0, collapsedPaths: 0, collapsedClusters: 0}}
+            : mstLinksForActiveClusters(activeClusterIds, minClusterSize,
+                leafPruningOnlyEnabled(), collapseLongPathsEnabled());
 
         state.activeClusters = activeClusterIds;
         state.visibleClusters = visibleGraph.visibleIds;
 
         const hidden = visibleGraph.hiddenNodes;
         const shown = state.bundle.graph.nodes.length - hidden;
+        // Contracted paths are part of the hidden count, but they are hidden for a second
+        // reason and are worth naming: the dashed edges they leave behind are the only
+        // places the drawing shows a path weight rather than one MST edge.
+        const collapsedPaths = visibleGraph.collapsedPaths || 0;
+        const collapsedNote = collapsedPaths > 0
+            ? ', ' + collapsedPaths.toLocaleString() + ' path' + (collapsedPaths === 1 ? '' : 's') + ' collapsed'
+            : '';
         document.getElementById('hidden-summary').textContent = latticeMode
             ? 'All nodes shown; minimum cluster size hides only small-cluster outlines'
-            : (hidden.toLocaleString() + ' nodes hidden by minimum cluster size');
+            : (hidden.toLocaleString() + ' nodes hidden by minimum cluster size' + collapsedNote);
         document.getElementById('stat-shown-nodes').textContent = shown.toLocaleString();
         document.getElementById('stat-hidden-nodes').textContent = hidden.toLocaleString();
 
@@ -7509,6 +10204,8 @@ def ssn_viewer_html(
 {table_editing_js}
 {extraction_js}
 {gradient_stops_js}
+{column_charts_js}
+{split_chart_hover_js}
 
     function htmlEscape(value) {{
         return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -7546,6 +10243,15 @@ def ssn_viewer_html(
         const tbody = document.querySelector('#metadata-table tbody');
 
         thead.addEventListener('click', event => {{
+            // Checked before the sort button: the chart glyph must never be
+            // given a data-column-key, or clicking it would also sort.
+            const chartBtn = event.target.closest('[data-chart-column]');
+            if (chartBtn) {{
+                event.preventDefault();
+                event.stopPropagation();
+                openColumnChartMenu(chartBtn.dataset.chartColumn, chartBtn);
+                return;
+            }}
             const sortBtn = event.target.closest('[data-column-key]');
             if (sortBtn) {{ toggleMetadataSort(sortBtn.dataset.columnKey); return; }}
             const copyBtn = event.target.closest('[data-copy-column]');
@@ -7586,8 +10292,10 @@ def ssn_viewer_html(
 
     function updateMetadataTable() {{
         // The table body is re-rendered wholesale, so any in-progress cell edit
-        // is destroyed along with its <input>.
+        // is destroyed along with its <input>. The header goes the same way, so
+        // an open chart menu would be left anchored to a detached button.
         state.metadataEditCell = null;
+        closeColumnChartMenu();
         const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
         const baseNodeIndices = metadataBaseNodeIndices();
         const filteredNodeIndices = filteredMetadataNodeIndices(baseNodeIndices);
@@ -7612,6 +10320,17 @@ def ssn_viewer_html(
                 + '<div class="metadata-header-cell">'
                 + '<button type="button" class="metadata-sort-button" data-column-key="' + escapedLabel + '" title="Sort by ' + escapedLabel + '">'
                 + '<span>' + escapedLabel + '</span><span class="metadata-sort-indicator">' + indicator + '</span></button>'
+                // No chart glyph on node_id: it is the graph key, unique by
+                // construction, so every chart of it is degenerate (N rows of
+                // count 1, N equal slices). A disabled button would only invite
+                // a "why?" with no answer.
+                + (label === 'node_id' ? ''
+                    : '<button type="button" class="metadata-chart-button" data-chart-column="' + escapedLabel
+                        + '" aria-haspopup="menu" aria-expanded="false" title="Charts and tables for ' + escapedLabel + '">'
+                        + '<svg class="metadata-chart-glyph" viewBox="0 0 12 12" aria-hidden="true" focusable="false">'
+                        + '<rect x="1" y="6" width="2.6" height="5"></rect>'
+                        + '<rect x="4.7" y="3" width="2.6" height="8"></rect>'
+                        + '<rect x="8.4" y="1" width="2.6" height="10"></rect></svg></button>')
                 + '<button type="button" class="metadata-copy-button" data-copy-column="' + escapedLabel + '" title="Copy the currently displayed values from ' + escapedLabel + '">Copy</button>'
                 + '</div>'
                 + '<div class="metadata-resize-handle" role="separator" aria-orientation="vertical" title="Drag to resize column" data-resize-column="' + escapedLabel + '"></div>'
@@ -7682,6 +10401,9 @@ def ssn_viewer_html(
         document.getElementById('focus-selection').disabled = selected.length === 0;
         document.getElementById('save-extraction').disabled = !state.bundle || selected.length === 0;
         applyMetadataTableRowHighlights();
+        // Charts summarize the rows this function just resolved, so a changed
+        // selection, filter or edit has to reach an open chart.
+        refreshColumnChartIfOpen();
     }}
 
     function applyMetadataTableRowHighlights() {{
@@ -7701,6 +10423,11 @@ def ssn_viewer_html(
         document.getElementById('selection-note').textContent = metadataSelectionDescription + state.metadataBaseNoteText;
         document.getElementById('metadata-select-nodes').disabled = !state.bundle || metadataSelectionCount === 0;
         document.getElementById('metadata-deselect-rows').disabled = !state.bundle || metadataSelectionCount === 0;
+        // "Add to selection" searches the whole network, so it works from a standing
+        // start; the two narrowing actions have nothing to narrow without a selection.
+        document.getElementById('metadata-select-add').disabled = !state.bundle;
+        document.getElementById('metadata-select-remove').disabled = !state.bundle || state.selectedNodeIndices.size === 0;
+        document.getElementById('metadata-select-subset').disabled = !state.bundle || state.selectedNodeIndices.size === 0;
     }}
 
     // Cluster numbers for the current threshold, keyed by node index: connected
@@ -7881,9 +10608,11 @@ def ssn_viewer_html(
         const worldMinY = (0 - state.viewTransform.offsetY) / drawScale;
         const worldMaxY = (height - state.viewTransform.offsetY) / drawScale;
 
-        // Split links (edges).
+        // Split links (edges). Collapsed paths go in their own dashed group, matching
+        // renderClusterView.
         const linkColor = svgColorParts('rgba(92, 106, 112, 0.42)');
         const linkPaths = [];
+        const collapsedLinkPaths = [];
         state.splitLinks.forEach(link => {{
             const segments = renderedLinkSegments(link);
             if (segments.length === 0) {{
@@ -7900,12 +10629,18 @@ def ssn_viewer_html(
                 }}
                 d += ' L' + fmt(end.x) + ' ' + fmt(end.y);
             }});
-            linkPaths.push('<path d="' + d + '"/>');
+            (link.collapsed ? collapsedLinkPaths : linkPaths).push('<path d="' + d + '"/>');
         }});
         if (linkPaths.length > 0) {{
             parts.push('<g fill="none" stroke="' + linkColor.color + '" stroke-opacity="' + linkColor.opacity +
                 '" stroke-width="1.6">');
             parts.push(linkPaths.join(''));
+            parts.push('</g>');
+        }}
+        if (collapsedLinkPaths.length > 0) {{
+            parts.push('<g fill="none" stroke="' + linkColor.color + '" stroke-opacity="' + linkColor.opacity +
+                '" stroke-width="1.6" stroke-dasharray="' + LINK_DASH_ON + ' ' + LINK_DASH_OFF + '">');
+            parts.push(collapsedLinkPaths.join(''));
             parts.push('</g>');
         }}
 
@@ -7915,7 +10650,9 @@ def ssn_viewer_html(
         const lattice = state.latticeGlobal;
         const dotLabelField = currentLabelField();
         const MAX_LABELED_DOTS = 250;
-        const collectDotLabels = dotLabelField !== '' && showNodes && state.viewTransform.scale >= 0.11;
+        // Whether a dot is drawn large enough to be worth pointing at is decided per
+        // dot below; MAX_LABELED_DOTS is what keeps a crowded view readable.
+        const collectDotLabels = dotLabelField !== '' && showNodes;
         const dotLabelCandidates = [];
         let dotLabelsOverflow = false;
 
@@ -8016,7 +10753,9 @@ def ssn_viewer_html(
                 }}
                 if (collectDotLabels && !dotLabelsOverflow &&
                     dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {{
-                    if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
+                    if (dot.radius * state.viewTransform.scale < MIN_LABELED_DOT_SCREEN_RADIUS) {{
+                        // Sub-pixel dot: a label beside it would point at nothing visible.
+                    }} else if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {{
                         dotLabelsOverflow = true;
                     }} else {{
                         dotLabelCandidates.push({{x: dot.x, y: dot.y, memberIndex: dot.memberIndex}});
@@ -8057,23 +10796,26 @@ def ssn_viewer_html(
             parts.push(outlineParts.join(''));
         }}
 
-        // Edge score badges.
-        if (showEdgeScoresEnabled() && state.viewTransform.scale >= 0.16) {{
+        // Edge score badges. The fit test is edgeScoreLabelFits, shared with
+        // renderClusterView so the export shows the labels the screen showed.
+        if (showEdgeScoresEnabled()) {{
             clusterContext.save();
-            clusterContext.font = '11px Georgia';
+            clusterContext.font = EDGE_SCORE_LABEL_FONT + 'px Georgia';
             state.splitLinks.forEach(link => {{
                 const left = worldToScreenPoint(link.left.x, link.left.y);
                 const right = worldToScreenPoint(link.right.x, link.right.y);
                 const dx = right.x - left.x;
                 const dy = right.y - left.y;
-                if (Math.hypot(dx, dy) < 46) {{
+                const text = formatValue(link.threshold);
+                if (!edgeScoreLabelFits(text, Math.hypot(dx, dy))) {{
                     return;
                 }}
-                const text = formatValue(link.threshold);
                 const x = left.x + (dx / 2);
                 const y = left.y + (dy / 2) - 8;
+                // Measured here rather than estimated: the badge is being drawn, and
+                // the rectangle has to actually enclose the glyphs.
                 const textWidth = clusterContext.measureText(text).width;
-                const badgeWidth = textWidth + 12;
+                const badgeWidth = textWidth + EDGE_SCORE_BADGE_PADDING;
                 const badgeHeight = 18;
                 parts.push('<rect x="' + fmt(x - (badgeWidth / 2)) + '" y="' + fmt(y - (badgeHeight / 2)) +
                     '" width="' + fmt(badgeWidth) + '" height="' + badgeHeight + '" rx="8" ry="8"' +
@@ -8084,8 +10826,8 @@ def ssn_viewer_html(
             clusterContext.restore();
         }}
 
-        // Node-count labels (one per bubble).
-        if (showNodeCountsEnabled() && state.viewTransform.scale >= 0.11) {{
+        // Node-count labels (one per bubble), under the same fit test as the canvas.
+        if (showNodeCountsEnabled()) {{
             state.visibleLayout.forEach(item => {{
                 const screenPoint = worldToScreenPoint(item.x, item.y);
                 const screenRadius = item.radius * state.viewTransform.scale;
@@ -8094,8 +10836,13 @@ def ssn_viewer_html(
                     return;
                 }}
                 const component = state.bundle.graph.hierarchy.nodes[item.componentId];
-                parts.push('<text x="' + fmt(screenPoint.x) + '" y="' + fmt(screenPoint.y + 4) + '" font-size="12" font-weight="600"' +
-                    ' fill="#5c6a70" text-anchor="middle" dominant-baseline="central">' + escapeXml(component.size.toLocaleString()) + '</text>');
+                const text = component.size.toLocaleString();
+                if (!clusterCountLabelFits(text, item)) {{
+                    return;
+                }}
+                parts.push('<text x="' + fmt(screenPoint.x) + '" y="' + fmt(screenPoint.y + 4) + '" font-size="' +
+                    CLUSTER_COUNT_LABEL_FONT + '" font-weight="600"' +
+                    ' fill="#5c6a70" text-anchor="middle" dominant-baseline="central">' + escapeXml(text) + '</text>');
             }});
         }}
 
@@ -8403,7 +11150,16 @@ def ssn_viewer_html(
     function ensureCategoricalPalette(columnName) {{
         let palette = state.customPalettes[paletteKey(columnName)];
         if (!palette || palette.type !== 'categorical') {{
-            palette = {{type: 'categorical', colors: {{}}, nullColor: null}};
+            // Seeded from the default assignment. Without that, storing one
+            // hand-picked swatch would shadow the default palette and drop every
+            // other value in the column back to an unassigned color.
+            const base = defaultCategoricalPalette(columnName);
+            palette = {{
+                type: 'categorical',
+                colors: {{...base.colors}},
+                nullColor: base.nullColor,
+                scheme: base.scheme,
+            }};
             state.customPalettes[paletteKey(columnName)] = palette;
         }}
         return palette;
@@ -8686,11 +11442,13 @@ def ssn_viewer_html(
         const note = document.getElementById('color-palette-note');
         const scheme = palette && palette.scheme ? paletteSchemeByName(palette.scheme) : null;
         const hasCustomColors = !!(palette && palette.colors && Object.keys(palette.colors).length > 0);
-        select.value = scheme ? scheme.name : (hasCustomColors ? '' : '__default__');
+        select.value = scheme ? scheme.name : '';
         if (!scheme) {{
-            note.textContent = hasCustomColors
+            const fallback = paletteSchemeByName(DEFAULT_CATEGORICAL_PALETTE);
+            note.textContent = (hasCustomColors
                 ? 'Colors were set by hand or loaded from a color table.'
-                : 'Colors are hashed from each value. Pick a palette to assign them in sorted value order instead.';
+                : 'No palette assigned.') +
+                (fallback ? ' Reset to defaults returns this column to ' + fallback.label + '.' : '');
             return;
         }}
         const cycles = valueCount > scheme.colors.length;
@@ -8704,11 +11462,9 @@ def ssn_viewer_html(
         if (!columnName) {{
             return;
         }}
-        const schemeName = document.getElementById('color-palette').value;
-        if (schemeName === '__default__') {{
-            // Back to hashed hues: drop this column's stored colors entirely.
-            delete state.customPalettes[paletteKey(columnName)];
-        }} else if (!applyNamedPalette(columnName, schemeName)) {{
+        // Every entry in the menu is a named palette now, so there is no
+        // pseudo-scheme to special-case; "Reset to defaults" handles going back.
+        if (!applyNamedPalette(columnName, document.getElementById('color-palette').value)) {{
             return;
         }}
         rebuildNodeColorCache();
@@ -8819,8 +11575,54 @@ def ssn_viewer_html(
         }}
         document.getElementById('threshold-label').textContent = stop.threshold_label;
         document.getElementById('threshold-input').value = stop.threshold_value === null ? '' : String(stop.threshold_value);
+        updateThresholdStepButtons();
         drawSplitChart();
         drawClusterView(resetView);
+    }}
+
+    // How much of the network's split-event series the chart is actually showing.
+    // Without this the blank stretches of a large network's axis are unreadable: the
+    // axis and the moving sum span every merge, but the stems are a capped selection,
+    // so "nothing plotted here" and "nothing happens here" look identical.
+    //
+    // graph.merge_event_total and graph.max_merge_events arrived in bundle v5. A v3/v4
+    // bundle carries neither, so the label falls back to the plotted count alone
+    // rather than inventing a denominator.
+    function updateSplitEventCount() {{
+        const note = document.getElementById('split-event-count');
+        if (!state.bundle) {{
+            note.textContent = '';
+            note.removeAttribute('title');
+            return;
+        }}
+        const graph = state.bundle.graph;
+        const plotted = (graph.merge_event_series || []).length;
+        const total = Number.isFinite(graph.merge_event_total) ? graph.merge_event_total : null;
+        const cap = Number.isFinite(graph.max_merge_events) ? graph.max_merge_events : null;
+        const bandPercent = 100 / MERGE_EVENT_DENSITY_BINS;
+        const plural = count => (count === 1 ? '' : 's');
+
+        if (total === null) {{
+            note.textContent = plotted.toLocaleString() + ' merge event' + plural(plotted) + ' plotted.';
+        }} else if (plotted >= total) {{
+            note.textContent = 'All ' + total.toLocaleString() + ' merge event' + plural(total) + ' plotted.';
+        }} else {{
+            const backfilled = cap === null ? 0 : Math.max(0, plotted - cap);
+            note.textContent = plotted.toLocaleString() + ' of ' + total.toLocaleString() +
+                ' merge events plotted' +
+                (backfilled > 0
+                    ? ' \u2014 the strongest ' + cap.toLocaleString() + ' by impact, plus ' +
+                      backfilled.toLocaleString() + ' so that every ' + bandPercent + '% of the axis'
+                      + ' with an event to show has one.'
+                    : ' \u2014 the strongest by impact.');
+        }}
+        note.title = total === null || plotted >= total
+            ? 'Every split event in this network is drawn.'
+            : 'The split chart draws a capped selection of the network\u2019s ' +
+              total.toLocaleString() + ' split events, set by build_ssn_viewer.py ' +
+              '--max_merge_events (0 plots them all). The axis and the moving-sum line ' +
+              'always span every event, so a stretch with no stems is a stretch whose ' +
+              'events were too small to make the cut, not necessarily a quiet one.';
     }}
 
     function scheduleThresholdUI(resetView = true) {{
@@ -9216,6 +12018,39 @@ def ssn_viewer_html(
         updateThresholdUI();
     }}
 
+    // Walk the slider's stop list. Those stops are the only thresholds the view can
+    // actually take -- every one is an edge weight at which the graph splits -- so
+    // stepping by one stop is the only step size that always lands somewhere new.
+    // `delta` is +1 toward higher thresholds (rightward on the split plot, ending at
+    // the infinity stop) and -1 toward lower ones.
+    function stepThreshold(delta) {{
+        if (!state.bundle || !state.sliderModel) {{
+            return;
+        }}
+        const stops = state.sliderModel.stops;
+        if (stops.length === 0) {{
+            return;
+        }}
+        // currentSliderStop() returns an element of `stops`, so identity search is safe.
+        const index = stops.indexOf(currentSliderStop());
+        const target = index < 0 ? 0 : Math.max(0, Math.min(stops.length - 1, index + delta));
+        if (target === index) {{
+            return;
+        }}
+        snapSliderToStop(stops[target]);
+        // Keep the user's pan/zoom, like releasing the slider does; stepping through
+        // stops to watch one cluster break up is the point of these buttons.
+        scheduleThresholdUI(false);
+    }}
+
+    // The ends of the stop list are dead ends, so say so rather than no-op silently.
+    function updateThresholdStepButtons() {{
+        const stops = state.sliderModel ? state.sliderModel.stops : [];
+        const index = state.bundle && stops.length > 0 ? stops.indexOf(currentSliderStop()) : -1;
+        document.getElementById('threshold-step-down').disabled = index <= 0;
+        document.getElementById('threshold-step-up').disabled = index < 0 || index >= stops.length - 1;
+    }}
+
     function toggleSelectionForComponent(componentId) {{
         const members = componentMembers(componentId);
         const allSelected = members.every(nodeIndex => state.selectedNodeIndices.has(nodeIndex));
@@ -9528,12 +12363,22 @@ def ssn_viewer_html(
     }});
     document.getElementById('threshold-input').addEventListener('change', jumpToThresholdValue);
     document.getElementById('threshold-input').addEventListener('keydown', event => {{
+        // Up/Down step stops -- the behaviour a number input's spinner would have had
+        // if its step were the distance to the next split. Left/Right are left alone
+        // so they still move the caret inside the field.
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {{
+            event.preventDefault();
+            stepThreshold(event.key === 'ArrowUp' ? 1 : -1);
+            return;
+        }}
         if (event.key !== 'Enter') {{
             return;
         }}
         event.preventDefault();
         jumpToThresholdValue();
     }});
+    document.getElementById('threshold-step-down').addEventListener('click', () => stepThreshold(-1));
+    document.getElementById('threshold-step-up').addEventListener('click', () => stepThreshold(1));
     document.getElementById('min-cluster-size').addEventListener('input', () => {{
         scheduleThresholdUI(true);
     }});
@@ -9547,6 +12392,10 @@ def ssn_viewer_html(
     document.getElementById('render-cluster-bounds').addEventListener('change', () => renderClusterView());
     document.getElementById('render-nodes').addEventListener('change', () => renderClusterView());
     document.getElementById('leaf-pruning-only').addEventListener('change', () => {{
+        updateCollapseLongPathsControl();
+        scheduleThresholdUI(true);
+    }});
+    document.getElementById('collapse-long-paths').addEventListener('change', () => {{
         scheduleThresholdUI(true);
     }});
     document.getElementById('color-by').addEventListener('change', () => {{
@@ -9577,6 +12426,8 @@ def ssn_viewer_html(
     }});
     document.getElementById('export-selected').addEventListener('click', exportSelection);
     document.getElementById('export-png').addEventListener('click', exportClusterPNG);
+    document.getElementById('export-split-png').addEventListener('click', exportSplitChartPNG);
+    document.getElementById('export-split-svg').addEventListener('click', exportSplitChartSVG);
     document.getElementById('export-svg').addEventListener('click', exportClusterSVG);
     document.getElementById('customize-colors').addEventListener('click', openColorPicker);
     document.getElementById('save-session').addEventListener('click', saveSessionFile);
@@ -9681,6 +12532,8 @@ def ssn_viewer_html(
     setupMetadataTableDelegation();
     setupSelectionPresets();
     setupMetadataEditing();
+    setupColumnCharts();
+    setupSplitChartHover();
     setupNameDialog();
     setupGradientRangeSlider();
     setupGradientStopEditing();

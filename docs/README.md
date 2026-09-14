@@ -1,6 +1,7 @@
 # Documentation
 - [Home](../README.md)
 - [File Formats](file_formats.md)
+- [Similarity Network Viewer (DSNV)](ssn_viewer.md)
 - [Examples](examples.md)
 - [Agent-driven workflows](agent_workflows.md)
 - [Developing Domainator](developing_domainator.md)

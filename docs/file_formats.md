@@ -165,7 +165,8 @@ In the future, we may add a `DESCRIPTION` field to distinguish different kinds o
 (`--html`/`--embed_data`) and by `ssn_navigator.py`. Readers accept plain (uncompressed)
 JSON as well, detected by the gzip magic number. The bundle stores an MST-derived merge
 hierarchy rather than the matrix itself, so its size scales with the node count, not with
-O(n²) edges.
+O(n²) edges. For how to *use* the viewer, see [ssn_viewer.md](ssn_viewer.md); this section
+is the on-disk contract.
 
 Top-level keys:
 
@@ -179,6 +180,18 @@ metadata: dict                          # positional node metadata table (see be
 defaults: dict                          # color_by, label_by, categorical_columns
 (v4, optional) app_state: dict          # viewer UI state -- see below
 ```
+
+`graph.merge_event_series` is a **capped selection**, not the whole series.
+`graph.merge_event_total` is how many split events the network actually has and
+`graph.max_merge_events` is the cap that was applied (`0` means none), so a reader can say
+how much of the series it is showing. The selection is the strongest events by
+`merge_impact`, plus — because ranking by impact alone can strand every kept event at one
+end of the axis — the strongest event in each otherwise-empty 5% band of the threshold
+range. So the series holds between `max_merge_events` and `max_merge_events + 20` rows.
+`graph.merge_moving_sum` and the floor stop are both derived from the *uncapped* rows, so
+the chart's axis and the slider's track always span every event whatever the cap is;
+without the two counts, a stretch of axis with nothing plotted on it is indistinguishable
+from a stretch where nothing happens.
 
 `graph.slider_stops` closes with a floor stop strictly below the weakest MST edge. Every
 other stop excludes its own tie group under the strictly-above rule, so without that last
@@ -214,6 +227,7 @@ The version constants live in `ssn_bundle.py`
 | --- | --- |
 | 3 | Per-event `merge_size_counts`/`largest_merge`/`merge_count` and `graph.merge_moving_sum`. |
 | 4 | Optional top-level `app_state`. Purely additive: `build_ssn_viewer.py` never writes it, and a reader that ignores the section can treat a v4 file exactly like a v3 file. |
+| 5 | `graph.merge_event_total` and `graph.max_merge_events`. Purely additive, and **both keys are optional** — a reader that ignores them treats a v5 file exactly like a v4 file, and a writer that does not know them may omit them. (The viewer's "Save session" re-stamps the current version onto whatever bundle was loaded, so a session saved from a v3/v4 file is a v5 file without them.) |
 
 Bump `SSN_VIEWER_BUNDLE_VERSION` for any change to the schema, and add the old version to
 `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written

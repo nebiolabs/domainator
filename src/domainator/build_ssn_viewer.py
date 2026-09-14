@@ -166,6 +166,12 @@ def build_ssn_viewer_bundle(
             "edges_by_threshold": tree.edges_by_threshold,
             "merge_impact_metric": merge_impact_metric,
             "merge_event_series": merge_event_series,
+            # How many split events the network has, and the cap that was applied, so
+            # the viewer can say "515 of 161,763 plotted" rather than leaving the user
+            # to wonder whether the blank stretches of the axis are real. The series is
+            # capped; these two are not.
+            "merge_event_total": len(merge_event_rows),
+            "max_merge_events": int(max_merge_events),
             "merge_moving_sum": merge_moving_sum,
             "slider_stops": threshold_slider_stops(merge_event_series, tree=tree),
             "hierarchy": hierarchy,
@@ -249,7 +255,7 @@ def main(argv):
     parser.add_argument("--merge_impact_metric", choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric recorded for split events in the bundle.")
     parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
-                        help="Maximum number of strongest merge events to embed in the viewer bundle threshold slider and split plot. Use 0 to include all merge events.")
+                        help="Maximum number of strongest merge events to embed in the viewer bundle threshold slider and split plot. A few more may be added on top: after the strongest are taken, the strongest event in each otherwise-empty 5%% band of the threshold axis is added back, so the plot never leaves a stretch of its own axis blank. Use 0 to include all merge events.")
     add_max_output_gb_argument(parser)
     parser.add_argument("--config", action=ActionConfigFile)
 

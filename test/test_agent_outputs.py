@@ -284,3 +284,44 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
     counts = [row["clusters"] for row in ssn_navigator.ssn_navigator(bundle, "thresholds")["thresholds"]]
     assert counts == sorted(counts, reverse=True)
     assert counts[0] == 5 and counts[-1] == 2
+
+
+def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
+    """The slider stops are a capped selection; an agent picking a cut-point from
+    them has to be able to tell that something was left out."""
+    from domainator.ssn_hierarchy import MERGE_EVENT_DENSITY_BINS
+
+    rng = np.random.default_rng(0)
+    node_count = 60
+    data = np.zeros((node_count, node_count), dtype=float)
+    for start, end in [(0, 22), (22, 40), (40, node_count)]:
+        for i in range(start, end):
+            for j in range(i + 1, end):
+                data[i, j] = data[j, i] = rng.uniform(4, 12)
+    names = [f"n{i:02d}" for i in range(node_count)]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        matrix_file = os.path.join(output_dir, "matrix.hdf5")
+        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        bundle_path = os.path.join(output_dir, "net.dsnv")
+        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path,
+                               "--max_merge_events", "5"])
+        bundle = load_bundle(bundle_path)
+
+    for mode in ("overview", "thresholds"):
+        result = ssn_navigator.ssn_navigator(bundle, mode)
+        assert result["max_merge_events"] == 5
+        assert 5 <= result["merge_events"] <= 5 + MERGE_EVENT_DENSITY_BINS
+        assert result["merge_events"] < result["merge_event_total"]
+
+    # ...and the stops are one per plotted event, plus the infinity and floor cuts.
+    stops = ssn_navigator.ssn_navigator(bundle, "thresholds")["thresholds"]
+    assert len(stops) == ssn_navigator.ssn_navigator(bundle, "overview")["merge_events"] + 2
+
+    # A pre-v5 bundle recorded no total, so the two optional keys are simply absent.
+    older = dict(bundle, graph={key: value for key, value in bundle["graph"].items()
+                                if key not in ("merge_event_total", "max_merge_events")})
+    result = ssn_navigator.ssn_navigator(older, "overview")
+    assert "merge_events" in result
+    assert "merge_event_total" not in result
+    assert "max_merge_events" not in result

@@ -65,7 +65,7 @@
     {
       "name": "Max Merge Events",
       "parameter": "max_merge_events",
-      "help": "Maximum number of strongest merge events to embed in the interactive HTML threshold slider and split plot. Use 0 to include all merge events.",
+      "help": "Maximum number of strongest merge events to embed in the interactive HTML threshold slider and split plot. A few more may be added on top: after the strongest are taken, the strongest event in each otherwise-empty 5% band of the threshold axis is added back, so the plot never leaves a stretch of its own axis blank. Use 0 to include all merge events.",
       "type": "integer",
       "min": 0,
       "default": 500,

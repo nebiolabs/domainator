@@ -56,6 +56,23 @@ def _cluster_records(hierarchy, active_ids, min_size=1):
     return records
 
 
+def _merge_event_coverage(graph):
+    """How much of the network's split-event series this bundle carries.
+
+    ``graph.merge_event_series`` is capped by ``build_ssn_viewer.py
+    --max_merge_events``, and the slider stops are derived from it, so a caller
+    that treats either as the complete set of interesting thresholds is wrong on
+    any large network. Returns nothing for a pre-v5 bundle, which did not record
+    the uncapped total.
+    """
+    coverage = {"merge_events": len(graph.get("merge_event_series", []))}
+    total = graph.get("merge_event_total")
+    if total is not None:
+        coverage["merge_event_total"] = total
+        coverage["max_merge_events"] = graph.get("max_merge_events")
+    return coverage
+
+
 def _threshold_summary(bundle):
     hierarchy = bundle["graph"]["hierarchy"]
     stops = []
@@ -138,10 +155,15 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
             "metadata_columns": bundle["metadata"].get("columns", []),
             "defaults": bundle.get("defaults", {}),
             "merge_impact_metric": graph.get("merge_impact_metric"),
+            **_merge_event_coverage(graph),
         }
 
     if mode == "thresholds":
-        return {"thresholds": _threshold_summary(bundle)}
+        # The stops are one per plotted merge event, so they inherit the cap. Say so:
+        # picking a cut-point from a silently truncated list is the failure this
+        # guards against. Both keys arrived in bundle v5 and are omitted when the
+        # bundle predates them.
+        return {"thresholds": _threshold_summary(bundle), **_merge_event_coverage(graph)}
 
     if mode == "clusters":
         active = clusters_at_threshold(hierarchy, threshold)

@@ -165,6 +165,14 @@ The `metadata.tsv` columns (from `enum_report`) become the per-cluster
 distributions in `--mode cluster` output: string columns yield the top values
 with counts; numeric columns yield min/max/mean/quartiles.
 
+`--mode thresholds` lists the cuts the bundle carries, and reports `merge_events` /
+`merge_event_total` alongside them: those cuts are one per *plotted* split event, which
+`build_ssn_viewer.py --max_merge_events` caps (default 500, plus up to 20 more so no 5%
+band of the threshold range is left unrepresented). On a large network that is a small
+sample of the real event list, so treat the stops as good candidate cut-points rather
+than as every threshold at which anything happens; rebuild with a higher cap, or `0`, to
+see them all.
+
 `--threshold` follows the viewer's slider: higher is finer. `--threshold inf` is the
 slider's ∞ end, where every node is its own cluster (reported as `"threshold": null`,
 the same spelling the bundle uses); omitting `--threshold` is the other end, one cluster
@@ -174,8 +182,12 @@ Add `--html net.html --embed_data` in step 3 for a self-contained browser viewer
 of the same network. Annotations made there (edited cells, new columns) are saved
 back into an ordinary `.dsnv` by its "Save session…" button, so a session file
 feeds straight back into step 4 and the new columns show up in the per-cluster
-distributions. See the `.dsnv` section of [file_formats.md](file_formats.md) for
-the schema.
+distributions. The chart glyph in each metadata column header is the interactive
+counterpart of those distributions -- a frequency table, bar or pie chart,
+histogram, box plot, cumulative distribution or summary statistics over the rows
+the table is currently showing, exportable as SVG, PNG or TSV.
+[ssn_viewer.md](ssn_viewer.md) is the guide to the viewer; the `.dsnv` section of
+[file_formats.md](file_formats.md) has the schema.
 
 ## Recipe 3 — inspect a matrix's cluster structure
 

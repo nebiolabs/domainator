@@ -457,7 +457,7 @@ class StreamingMstKnnAccumulator:
 
     def _update_adj(self, node: int, neighbor: int, score: float) -> None:
         row = self._adj[node]
-        if score > row.get(neighbor, 0.0):
+        if score > row.get(neighbor, -np.inf):
             row[neighbor] = score
         if len(row) > 2 * self.knn_soft_cap:
             self._trim_adj(node)
@@ -524,7 +524,7 @@ class StreamingMstKnnAccumulator:
                     break
                 edge = (node, neighbor) if node < neighbor else (neighbor, node)
                 # Never lower a value the forest already established for the same pair.
-                if score > edge_dict.get(edge, 0.0):
+                if score > edge_dict.get(edge, -np.inf):
                     edge_dict[edge] = score
                 selected += 1
                 if selected >= self.k:

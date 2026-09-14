@@ -59,7 +59,7 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         bundle = _read_bundle(bundle_file)
 
         assert bundle["format"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_FORMAT
-        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION == 4
+        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION == 5
         # app_state is written only by the HTML viewer's "Save session" button.
         assert "app_state" not in bundle
         assert bundle["graph"]["nodes"] == row_names
@@ -216,24 +216,99 @@ def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
 
         bundle = _read_bundle(bundle_file)
 
-        assert len(bundle["graph"]["merge_event_series"]) == 2
-        # 2 capped merge events + the ∞ stop + the floor stop.
-        assert len(bundle["graph"]["slider_stops"]) == 4
+        # This network has four merge events spread over four different bands of the
+        # axis, so the density back-fill restores every one the cap dropped -- the cap
+        # and the back-fill are exercised against each other in test_ssn_hierarchy.py,
+        # where the band layout can be controlled directly.
+        assert bundle["graph"]["merge_event_total"] == 4
+        assert bundle["graph"]["max_merge_events"] == 2
+        assert len(bundle["graph"]["merge_event_series"]) == 4
+        # 4 merge events + the ∞ stop + the floor stop.
+        assert len(bundle["graph"]["slider_stops"]) == 6
         assert bundle["graph"]["slider_stops"][-1]["threshold_value"] < min(
             edge[2] for edge in bundle["graph"]["mst_edges"]
         )
         assert bundle["graph"]["slider_stops"][0]["threshold_value"] is None
 
-        # The moving sum must come from the UNFILTERED rows. The cap keeps only t=10.0 and
-        # t=5.0, so a sum taken over the filtered series would span [5.0, 10.0] and never
-        # see the dropped events at all.
+        # The moving sum must come from the UNFILTERED rows, whatever the cap kept.
         kept = {event["threshold_value"] for event in bundle["graph"]["merge_event_series"]}
-        assert kept == {10.0, 5.0}
+        assert kept == {10.0, 5.0, 4.0, 1.0}
         moving_sum = bundle["graph"]["merge_moving_sum"]
         assert min(moving_sum["x"]) == pytest.approx(1.0)
         assert max(moving_sum["x"]) == pytest.approx(10.0)
         # The window at the bottom of the range still counts the dropped t=1.0 merge.
         assert moving_sum["y"][0] >= 1
+
+
+def test_build_ssn_viewer_caps_merge_events_on_a_network_large_enough_to_bite():
+    """The cap only shows on a network with more events than bands to spread them over.
+
+    Three blocks of tightly connected nodes give ~60 merge events with a wide range of
+    impacts, so a cap of 5 genuinely drops most of them and the back-fill adds at most
+    one per 5% band.
+    """
+    from domainator.ssn_hierarchy import MERGE_EVENT_DENSITY_BINS
+
+    rng = np.random.default_rng(0)
+    node_count = 60
+    data = np.zeros((node_count, node_count), dtype=float)
+    for start, end in [(0, 22), (22, 40), (40, node_count)]:
+        for i in range(start, end):
+            for j in range(i + 1, end):
+                data[i, j] = data[j, i] = rng.uniform(4, 12)
+    row_names = [f"n{i:02d}" for i in range(node_count)]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "matrix.hdf5")
+        bundle_file = os.path.join(output_dir, "bundle.dsnv")
+        matrix.write(input_file, output_type="dense")
+        build_ssn_viewer.main([
+            "-i", input_file, "-o", bundle_file, "--max_merge_events", "5",
+        ])
+        graph = _read_bundle(bundle_file)["graph"]
+
+        total = graph["merge_event_total"]
+        plotted = len(graph["merge_event_series"])
+        assert graph["max_merge_events"] == 5
+        assert total > 5 + MERGE_EVENT_DENSITY_BINS  # otherwise the cap proves nothing
+        assert 5 <= plotted <= 5 + MERGE_EVENT_DENSITY_BINS
+        assert plotted < total
+
+        # The back-fill's purpose: the weakest plotted event reaches the bottom of the
+        # axis rather than stopping wherever the strongest events happen to end.
+        all_thresholds = [edge[2] for edge in graph["mst_edges"]]
+        plotted_thresholds = [row["threshold_value"] for row in graph["merge_event_series"]]
+        axis_span = max(all_thresholds) - min(all_thresholds)
+        assert (min(plotted_thresholds) - min(all_thresholds)) < 0.1 * axis_span
+
+        # Every stop but ∞ and the floor is a plotted event.
+        assert len(graph["slider_stops"]) == plotted + 2
+
+
+def test_build_ssn_viewer_uncapped_series_reports_itself_as_complete():
+    """--max_merge_events 0 keeps everything, and the counts have to say so."""
+    data = np.array([
+        [0, 10, 0, 0, 0],
+        [10, 0, 5, 0, 0],
+        [0, 5, 0, 4, 0],
+        [0, 0, 4, 0, 1],
+        [0, 0, 0, 1, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D", "E"]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "matrix.hdf5")
+        bundle_file = os.path.join(output_dir, "bundle.dsnv")
+        matrix.write(input_file, output_type="dense")
+        build_ssn_viewer.main([
+            "-i", input_file, "-o", bundle_file, "--max_merge_events", "0",
+        ])
+        graph = _read_bundle(bundle_file)["graph"]
+
+        assert graph["max_merge_events"] == 0
+        assert graph["merge_event_total"] == len(graph["merge_event_series"]) == 4
 
 
 def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
@@ -305,8 +380,14 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'threshold-max-label' in html_content
         assert 'threshold-input' in html_content
         assert 'Jump to threshold' in html_content
-        assert 'Largest single split' in html_content
-        assert 'Split impact' not in html_content
+        # Both metrics' axis titles ship, keyed by metric (see splitAxisLabels).
+        from domainator.ssn_hierarchy import MERGE_IMPACT_CHOICES, merge_impact_axis_labels
+        for metric in MERGE_IMPACT_CHOICES:
+            assert merge_impact_axis_labels(metric)['largest'] in html_content
+        # The y-axis was once titled bare "Split impact" and must not be again. The
+        # product metric's hover label "Split impact within" is a different string,
+        # and is meant to be there, so it is carved out rather than banned.
+        assert 'Split impact' not in html_content.replace('Split impact within', '')
         assert 'Threshold' in html_content
         assert 'componentMembers' in html_content
         assert 'mstLinksForActiveClusters' in html_content
@@ -366,6 +447,26 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'show-edge-scores' in html_content
         assert 'Show edge score labels' in html_content
         assert '<input id="leaf-pruning-only" type="checkbox" />' in html_content
+
+        # "Collapse long paths": the sub-option of leaf pruning that contracts a chain of
+        # pass-through clusters into one dashed edge carrying the chain's weakest link.
+        # It starts disabled because leaf pruning starts off.
+        assert '<input id="collapse-long-paths" type="checkbox" disabled />' in html_content
+        assert 'Collapse long paths' in html_content
+        assert '.checkbox.sub-option {' in html_content
+        assert 'function collapseLongPathsEnabled()' in html_content
+        assert 'function updateCollapseLongPathsControl()' in html_content
+        assert 'function collapseLongPathLinks(' in html_content
+        assert (
+            "domCheckboxField('view', 'collapse_long_paths', 'collapse-long-paths')"
+            in html_content
+        )
+        assert "' path' + (collapsedPaths === 1 ? '' : 's') + ' collapsed'" in html_content
+        # The dash pattern is shared by the canvas and the SVG export, so a collapsed
+        # path looks the same in a figure as it did on screen.
+        assert 'const LINK_DASH_ON = 6;' in html_content
+        assert "clusterContext.setLineDash(link.collapsed" in html_content
+        assert '''stroke-dasharray="' + LINK_DASH_ON''' in html_content
         assert '<button id="sort-components-by-size" type="button" aria-pressed="true" disabled>' in html_content
         assert 'initialPosition: 0' in html_content
         assert 'reset-view' in html_content
@@ -417,7 +518,66 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function buildExtractionHierarchy(nodeCount, edges)' in html_content
         assert 'function extractionMergeEventRows(nodeCount, edges, metric)' in html_content
         assert 'function originalComponentByNode()' in html_content
-        assert 'const SUPPORTED_BUNDLE_VERSIONS = [3, 4];' in html_content
+        assert 'const SUPPORTED_BUNDLE_VERSIONS = [3, 4, 5];' in html_content
+
+        # The split chart draws a capped selection of the split events, so it has to
+        # say how much of the series that is.
+        assert '<div class="note" id="split-event-count">' in html_content
+        assert 'function updateSplitEventCount()' in html_content
+        assert 'merge events plotted' in html_content
+        assert 'const MERGE_EVENT_DENSITY_BINS = 20;' in html_content
+        assert 'function extractionMergeEventDensityBin(thresholdValue, lo, hi, densityBins)' in html_content
+        assert 'function compareExtractionMergeEventRank(left, right)' in html_content
+
+        # One geometry model behind the canvas painter, the SVG export and the
+        # hit-test, so the three cannot place a mark or a tick differently.
+        assert 'function splitChartLayout(viewWidth, viewHeight)' in html_content
+        assert 'const SPLIT_CHART_COLORS = {' in html_content
+        # Tick values on round numbers, printed to the precision their step needs:
+        # a tick placed at 0.8736 and labelled "0.87" reads as misaligned beside a
+        # lollipop whose own readout says 0.87.
+        assert 'function splitAxisTicks(min, max, targetCount, options = {})' in html_content
+        assert 'function decimalsForTickStep(step)' in html_content
+
+        # Split-event chart export (PNG re-rasterized at the shared resolution
+        # selector; SVG straight from the shared layout).
+        assert '<button id="export-split-png" type="button" disabled' in html_content
+        assert '<button id="export-split-svg" type="button" disabled' in html_content
+        assert 'function buildSplitChartSVG()' in html_content
+        # The threshold cursor is UI state, so the exports leave it out: the canvas
+        # painter draws it only on screen, and the SVG builder never does.
+        assert 'if (onScreen && layout.markerX !== null)' in html_content
+        assert 'No threshold marker: this builder is only ever an export' in html_content
+        assert 'function exportSplitChartSVG()' in html_content
+        assert 'function exportSplitChartPNG()' in html_content
+        assert "_split_events.svg'" in html_content
+        assert "'_split_events@' + scaleFactor + 'x.png'" in html_content
+
+        # Split-chart hover readout and click-to-jump. The geometry is recorded by
+        # the draw itself, so a hit-test can never disagree with what was painted.
+        assert '<div id="split-chart-tip" class="split-tip"' in html_content
+        assert 'function recordSplitChartGeometry(geometry)' in html_content
+        assert 'function splitChartHitAt(x, y)' in html_content
+        assert 'function splitChartMovingSumAt(threshold)' in html_content
+        assert 'function splitChartThresholdAt(x)' in html_content
+        assert 'function splitChartTipLines(hit)' in html_content
+        assert 'function splitImpactAmount(value)' in html_content
+        assert 'function handleSplitChartClick(event)' in html_content
+        assert 'function setupSplitChartHover()' in html_content
+        assert 'Click to jump here' in html_content
+        assert 'Click to jump to the nearest split' in html_content
+
+        # Label level-of-detail is gated on each mark's on-screen size, not on a
+        # single zoom threshold, and the canvas and SVG renderers share the rules.
+        assert 'function itemScreenExtent(item)' in html_content
+        assert 'function clusterCountLabelFits(text, item)' in html_content
+        assert 'function edgeScoreLabelFits(text, linkScreenLength)' in html_content
+        assert 'const MIN_LABELED_DOT_SCREEN_RADIUS' in html_content
+        assert 'state.viewTransform.scale >= 0.11' not in html_content
+        assert 'state.viewTransform.scale >= 0.16' not in html_content
+        # A product merge impact is not a node count, in either chart's wording.
+        assert 'Nodes displaced within' in html_content
+        assert 'Split impact within' in html_content
         assert 'SUPPORTED_BUNDLE_VERSIONS.includes(bundle.version)' in html_content
 
         # Selection presets: ten slots, keyboard-addressable, hover preview.
@@ -441,8 +601,8 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '<select id="metadata-fill-target"' in html_content
         assert '<option value="all">All nodes</option>' in html_content
         assert '<div id="metadata-paste-overlay"' in html_content
-        # Editing controls live behind three collapsed disclosure panels.
-        for panel in ("add", "set", "rename", "delete"):
+        # Editing controls live behind collapsed disclosure panels.
+        for panel in ("add", "set", "rename", "delete", "select"):
             assert f'<button id="metadata-panel-{panel}"' in html_content
             assert f'<div id="metadata-{panel}-panel" class="metadata-edit-panel" hidden>' in html_content
         assert 'function toggleMetadataEditPanel(name)' in html_content
@@ -451,6 +611,72 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function addClusterColumn(name)' in html_content
         assert 'function clusterNumbersAtCurrentThreshold()' in html_content
         assert '<button id="metadata-add-cluster-column"' in html_content
+
+        # Per-column charts and frequency tables: a glyph in each column
+        # header opens a menu of chart kinds, and picking one opens a dialog.
+        assert 'metadata-chart-button' in html_content
+        assert 'data-chart-column=' in html_content
+        assert 'metadata-chart-glyph' in html_content
+        assert '<div id="column-chart-menu"' in html_content
+        assert '<div id="column-chart-overlay"' in html_content
+        assert '<div id="column-chart-preview"' in html_content
+        assert '<select id="column-chart-kind"' in html_content
+        assert '<button id="column-chart-copy-tsv"' in html_content
+        assert '<button id="column-chart-download-tsv"' in html_content
+        assert '<button id="column-chart-export-svg"' in html_content
+        assert '<button id="column-chart-export-png"' in html_content
+        assert 'function columnChartKindsFor(columnName)' in html_content
+        assert 'function columnChartNodeIndices()' in html_content
+        assert 'function columnValueDistribution(columnName, nodeIndices, options = {})' in html_content
+        assert 'function columnNumericValues(columnName, nodeIndices)' in html_content
+        assert 'function scopedColumnHistogram(columnName, nodeIndices)' in html_content
+        assert 'function numericSummary(values)' in html_content
+        assert 'function columnSummaryRows(columnName, nodeIndices)' in html_content
+        assert 'function frequencyTableRows(model)' in html_content
+        assert 'function buildBarChartSVG(model, meta)' in html_content
+        assert 'function buildPieChartSVG(model, meta)' in html_content
+        assert 'function buildHistogramSVG(histogram, meta)' in html_content
+        assert 'function buildBoxPlotSVG(summary, meta)' in html_content
+        assert 'function buildEcdfSVG(values, meta)' in html_content
+        assert 'function buildTableSVG(rows, columns, meta)' in html_content
+        assert 'function buildColumnChartArtifact(columnName, kind, nodeIndices)' in html_content
+        assert 'function openColumnChartMenu(columnName, anchorButton)' in html_content
+        assert 'function renderColumnChart()' in html_content
+        assert 'function exportColumnChartSVG()' in html_content
+        assert 'function columnChartTSV()' in html_content
+        assert 'function setupColumnCharts()' in html_content
+
+        # Select by value: a metadata query that edits the node selection.
+        assert '<select id="metadata-select-column"' in html_content
+        assert '<select id="metadata-select-op"' in html_content
+        assert '<input id="metadata-select-value"' in html_content
+        assert '<input id="metadata-select-value2"' in html_content
+        for action in ("add", "remove", "subset"):
+            assert f'<button id="metadata-select-{action}"' in html_content
+        assert 'function metadataSelectMatcher(opId, firstText, secondText)' in html_content
+        assert 'function metadataSelectMatches(nodeIndices, field, matcher)' in html_content
+        assert 'function applyMetadataSelectByValue(mode)' in html_content
+        assert 'const METADATA_SELECT_OPS' in html_content
+
+        # "Jump to threshold" steps between split-plot stops, so the field is a
+        # plain text input (a number input's spinner would step by a constant).
+        assert '<button id="threshold-step-down"' in html_content
+        assert '<button id="threshold-step-up"' in html_content
+        assert '<input id="threshold-input" type="text"' in html_content
+        assert 'function stepThreshold(delta)' in html_content
+        assert 'function updateThresholdStepButtons()' in html_content
+
+        # Categorical columns default to get_palette's own colors, so the
+        # palette menu carries only real named palettes.
+        assert "const DEFAULT_CATEGORICAL_PALETTE = 'domainator'" in html_content
+        assert 'function defaultCategoricalPalette(columnName)' in html_content
+        assert '__default__' not in html_content
+        assert 'hashed hues' not in html_content
+
+        # The page body is one big f-string, so a JS/CSS brace that was not
+        # doubled -- or a doubled brace that leaked out of one of the plain
+        # (non-f) string JS modules -- shows up as a literal '{{' here.
+        assert '{{' not in html_content
 
 
 def test_build_ssn_viewer_writes_static_html_without_input():
@@ -560,7 +786,11 @@ def test_build_ssn_viewer_requires_viewer_html_without_input():
         build_ssn_viewer.main([])
 
 def test_load_bundle_accepts_every_supported_version():
-    """v4 adds only the ignorable app_state section, so v3 files still load."""
+    """Each revision is additive, so previously written bundles still load.
+
+    v4 adds the ignorable app_state section; v5 adds graph.merge_event_total and
+    graph.max_merge_events, which a reader that does not know them can skip.
+    """
     from domainator import ssn_bundle
 
     data = np.array([
@@ -579,11 +809,16 @@ def test_load_bundle_accepts_every_supported_version():
             DataMatrix.from_file(input_file), name="versions"
         )
 
-        assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4)
+        assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4, 5)
 
         for version in ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
             path = os.path.join(output_dir, f"v{version}.dsnv")
             payload = dict(bundle, version=version)
+            if version < 5:
+                # Older writers did not record how many events the series was
+                # selected from; loading must not depend on those keys.
+                payload["graph"] = {key: value for key, value in bundle["graph"].items()
+                                    if key not in ("merge_event_total", "max_merge_events")}
             if version >= 4:
                 # A saved session; the reader must ignore the extra section.
                 payload["app_state"] = {"state_version": 1, "view": {"color_by": None}}

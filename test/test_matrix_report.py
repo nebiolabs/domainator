@@ -381,19 +381,69 @@ def test_matrix_report_max_merge_events_filters_html_payload():
         html_content = open(out_html).read()
         payload = _embedded_report_payload(html_content)
 
-        assert len(payload['merge_event_series']) == 2
-        assert [row['edge_index'] for row in payload['merge_event_series']] == [2, 3]
+        # The payload says what the series was selected from, so the chart can caption
+        # itself rather than leaving a filtered stretch of axis looking like a quiet one.
+        assert payload['merge_event_total'] == 5
+        assert payload['max_merge_events'] == 2
+        # This network's five events sit in five different bands of the axis, so the
+        # density back-fill restores every one the cap dropped. The cap and the
+        # back-fill are pitted against each other in test_ssn_hierarchy.py, where the
+        # band layout can be set directly, and below on a network big enough to crowd
+        # several events into one band.
+        assert [row['edge_index'] for row in payload['merge_event_series']] == [-1, 0, 1, 2, 3]
         # --max_merge_events caps the plotted events, but the floor stop is a cut
         # rather than an event, so it survives and the fully merged view stays reachable.
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, 2, 3, 4]
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 3, 4, 5]
+        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, -1, 0, 1, 2, 3, 4]
+        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4, 5]
         # The floor sits just below the weakest edge, so it no longer strands the
         # other stops at the far left of the track.
-        assert [stop['slider_position'] for stop in payload['slider_stops']] == [0, 500, 9154, 9500]
+        assert [stop['slider_position'] for stop in payload['slider_stops']] == [
+            0, 500, 2728, 4955, 7183, 9411, 9500
+        ]
         assert [stop['threshold_label'] for stop in payload['slider_stops']] == [
-            '∞', '7.00', '6.00', '5.96'
+            '∞', '10.00', '9.00', '8.00', '7.00', '6.00', '5.96'
         ]
         assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
+
+
+
+
+def test_matrix_report_caps_merge_events_on_a_network_large_enough_to_bite():
+    """A cap only shows when a band has more than one event competing for it."""
+    from domainator.ssn_hierarchy import MERGE_EVENT_DENSITY_BINS
+
+    rng = np.random.default_rng(0)
+    node_count = 60
+    data = np.zeros((node_count, node_count), dtype=float)
+    for start, end in [(0, 22), (22, 40), (40, node_count)]:
+        for i in range(start, end):
+            for j in range(i + 1, end):
+                data[i, j] = data[j, i] = rng.uniform(4, 12)
+    row_names = [f"n{i:02d}" for i in range(node_count)]
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "matrix_report_test.html")
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main([
+            "-i", input_file, "--html", out_html, "--max_merge_events", "5",
+        ])
+        html_content = open(out_html).read()
+        payload = _embedded_report_payload(html_content)
+
+        total = payload['merge_event_total']
+        plotted = len(payload['merge_event_series'])
+        assert payload['max_merge_events'] == 5
+        assert total > 5 + MERGE_EVENT_DENSITY_BINS  # otherwise the cap proves nothing
+        assert 5 <= plotted <= 5 + MERGE_EVENT_DENSITY_BINS
+        assert plotted < total
+
+        # The chart captions itself with those two numbers.
+        assert 'id="split-event-count"' in html_content
+        assert 'merge events plotted' in html_content
+        assert 'MERGE_EVENT_TOTAL = reportData.merge_event_total;' in html_content
+        assert 'MAX_MERGE_EVENTS = reportData.max_merge_events;' in html_content
 
 
 def test_matrix_report_max_merge_events_zero_includes_all_html_events():
@@ -744,3 +794,88 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
     assert [{k: stop[k] for k in keys} for stop in report_stops] == [
         {k: stop[k] for k in keys} for stop in bundle_stops
     ]
+
+
+def test_matrix_report_hover_labels_follow_the_merge_impact_metric():
+    """The split chart's hovertemplates used to hardcode "node(s)".
+
+    Under --merge_impact_metric product a merge impact is a product of two component
+    sizes, so calling it a node count is simply wrong. The strings come from
+    merge_impact_axis_labels, which the Domainator Similarity Network Viewer's own
+    hover readout reads too, so the two charts word it the same way.
+    """
+    data = np.array([
+        [0, 10, 0, 0, 0, 0],
+        [10, 0, 7, 0, 0, 0],
+        [0, 7, 0, 9, 0, 0],
+        [0, 0, 9, 0, 6, 0],
+        [0, 0, 0, 6, 0, 8],
+        [0, 0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    expected = {
+        'min_child': ('split(s) of %{y} nodes', '%{customdata[2]} nodes total',
+                      'Nodes displaced within'),
+        'product': ('split(s) of impact %{y}', 'impact %{customdata[2]} total',
+                    'Split impact within'),
+    }
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        matrix.write(input_file, output_type="dense")
+        for metric, (bead, total, moving_sum) in expected.items():
+            out_html = os.path.join(output_dir, f"report_{metric}.html")
+            matrix_report.main([
+                "-i", input_file, "--html", out_html,
+                "--merge_impact_metric", metric,
+            ])
+            html_content = open(out_html).read()
+            assert bead in html_content, metric
+            assert total in html_content, metric
+            assert moving_sum in html_content, metric
+            # The wording of the other metric must not leak in.
+            for other_metric, other in expected.items():
+                if other_metric == metric:
+                    continue
+                for phrase in other:
+                    assert phrase not in html_content, (metric, phrase)
+
+
+def test_matrix_report_split_chart_offers_png_and_svg_download():
+    """The split-event chart carries its own two download buttons.
+
+    Two, not Plotly's stock camera: that button exports whichever single format the
+    config names. They are wired only on this chart -- every other chart in the report
+    keeps `displayModeBar: false`, so the report does not sprout zoom/pan/lasso
+    toolbars everywhere.
+    """
+    data = np.array([
+        [0, 10, 0, 0, 0, 0],
+        [10, 0, 7, 0, 0, 0],
+        [0, 7, 0, 9, 0, 0],
+        [0, 0, 9, 0, 6, 0],
+        [0, 0, 0, 6, 0, 8],
+        [0, 0, 0, 0, 8, 0],
+    ], dtype=float)
+    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
+    matrix = DenseDataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        out_html = os.path.join(output_dir, "report.html")
+        matrix.write(input_file, output_type="dense")
+        matrix_report.main(["-i", input_file, "--html", out_html])
+        html_content = open(out_html).read()
+
+    assert "const splitChartConfig = {" in html_content
+    assert "title: 'Download chart as PNG'" in html_content
+    assert "title: 'Download chart as SVG'" in html_content
+    assert "format: 'png'" in html_content
+    assert "format: 'svg'" in html_content
+    assert "filename: 'split_events'" in html_content
+    # Only the split chart gets the toolbar.
+    assert "}}, splitChartConfig);" not in html_content   # braces are doubled pre-render
+    assert "}, splitChartConfig);" in html_content
+    assert html_content.count("}, splitChartConfig);") == 1
+    assert html_content.count("displayModeBar: false") == 2

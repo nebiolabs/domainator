@@ -17,6 +17,7 @@ import numpy as np
 import json
 from domainator.ssn_hierarchy import (
     DEFAULT_MAX_MERGE_EVENTS,
+    MERGE_EVENT_DENSITY_BINS,
     MERGE_IMPACT_CHOICES,
     MERGE_IMPACT_MIN_CHILD,
     MERGE_IMPACT_PRODUCT,
@@ -146,6 +147,12 @@ def _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_
         "mst_knn_counts": mst_knn_counts if mst_knn_counts is not None else [],
         "mst_knn_min_k": mst_knn_config['min_k'] if mst_knn_config is not None else 0,
         "merge_event_series": filtered_merge_event_rows,
+        # The uncapped count and the cap, so the chart can say how much of the series it
+        # is showing. filter_merge_event_rows caps the series but the x-axis and the
+        # moving-sum line span every event, so without this a stretch of axis with no
+        # stems reads as a quiet region rather than a filtered one.
+        "merge_event_total": len(merge_event_rows),
+        "max_merge_events": int(max_merge_events),
         "merge_moving_sum": moving_sum,
         "slider_stops": _slider_stop_rows(filtered_merge_event_rows, tree=tree),
     }
@@ -218,12 +225,17 @@ class SummaryJSONWriter():
         self.payload["connected_components"] = tree.n_nodes - len(tree.mst_edges)
         self.payload["merge_impact_metric"] = merge_impact_metric
         if component_summary is not None and len(component_summary) > 1:
-            merge_event_rows = filter_merge_event_rows(
-                threshold_merge_event_rows(component_summary), max_merge_events=max_merge_events
+            all_merge_event_rows = threshold_merge_event_rows(component_summary)
+            self.payload["split_events"] = filter_merge_event_rows(
+                all_merge_event_rows, max_merge_events=max_merge_events
             )
-            self.payload["split_events"] = merge_event_rows
+            # split_events is a capped selection; this is what it was selected from.
+            self.payload["split_event_total"] = len(all_merge_event_rows)
+            self.payload["max_merge_events"] = int(max_merge_events)
         else:
             self.payload["split_events"] = []
+            self.payload["split_event_total"] = 0
+            self.payload["max_merge_events"] = int(max_merge_events)
 
     def write_footer(self):
         json.dump(_json_ready(self.payload), self.out_handle, separators=(",", ":"))
@@ -415,6 +427,12 @@ class SummaryHTMLWriter():
         overflow: hidden;
         grid-column: 1 / -1;
     }}
+    .chart-note {{
+        margin: 4px 2px 0 2px;
+        color: #666;
+        font-size: 12px;
+        line-height: 1.4;
+    }}
     .chart-wide {{
         grid-column: 1 / -1;
     }}
@@ -546,10 +564,18 @@ class SummaryHTMLWriter():
         component_signal_chart = ""
         component_signal_plot_block = ""
         axis_labels = merge_impact_axis_labels(merge_impact_metric)
+        # A product impact is not a count of nodes, so the hover readouts have to name
+        # the quantity the way the axis titles do instead of hardcoding "node(s)".
+        # Plotly interpolation is inserted here, so these carry single braces -- they
+        # reach the f-string below by interpolation, not as literal template text.
+        bead_size_phrase = axis_labels['impact_amount'].format('%{y}')
+        bead_total_phrase = axis_labels['impact_amount'].format('%{customdata[2]}')
+        moving_sum_hover_label = axis_labels['moving_sum_hover']
         if include_component_summary and len(filtered_merge_event_rows) > 0:
             component_signal_chart = """
     <div class=\"chart chart-wide\">
         <div id=\"cluster-discontinuity-by-threshold\"></div>
+        <div class=\"chart-note\" id=\"split-event-count\"></div>
     </div>"""
             component_signal_plot_block = f"""
 
@@ -575,6 +601,42 @@ class SummaryHTMLWriter():
         }});
         const mergeMovingSum = MERGE_MOVING_SUM;
         const mergeMovingSumWindow = mergeMovingSum && mergeMovingSum.window ? mergeMovingSum.window : 0;
+        // This is the chart from this report that ends up in a figure, so unlike the others
+        // it carries download buttons. Two of them, and custom rather than Plotly's stock
+        // camera, because that button exports whichever single format the config names:
+        // PNG for a slide, SVG for a figure you will restyle. The rest of the modebar
+        // (zoom, pan, lasso) is left off, as on every other chart here.
+        const splitChartConfig = {{
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtons: [[
+                {{
+                    name: 'downloadPng',
+                    title: 'Download chart as PNG',
+                    icon: Plotly.Icons.camera,
+                    click: gd => Plotly.downloadImage(gd, {{
+                        format: 'png',
+                        // 2x, matching the viewer's default PNG resolution.
+                        scale: 2,
+                        width: gd.offsetWidth,
+                        height: gd.offsetHeight,
+                        filename: 'split_events'
+                    }})
+                }},
+                {{
+                    name: 'downloadSvg',
+                    title: 'Download chart as SVG',
+                    icon: Plotly.Icons.disk,
+                    click: gd => Plotly.downloadImage(gd, {{
+                        format: 'svg',
+                        width: gd.offsetWidth,
+                        height: gd.offsetHeight,
+                        filename: 'split_events'
+                    }})
+                }}
+            ]]
+        }};
         Plotly.newPlot('cluster-discontinuity-by-threshold', [
             {{
                 x: mergeEventStemX,
@@ -597,7 +659,7 @@ class SummaryHTMLWriter():
                 // into a band that erases the stem. Bead and stem differ by shade, not outline.
                 marker: {{color: '#72b7b2', size: 5, line: {{width: 0}}}},
                 customdata: mergeBeadCustom,
-                hovertemplate: 'Threshold: %{{x:.2f}}<br>%{{customdata[0]}} split(s) of %{{y}} node(s)<br>%{{customdata[1]}} split(s) here, %{{customdata[2]}} nodes total<br>From: %{{customdata[3]}}<br>To: %{{customdata[4]}}<extra></extra>'
+                hovertemplate: 'Threshold: %{{x:.2f}}<br>%{{customdata[0]}} split(s) of {bead_size_phrase}<br>%{{customdata[1]}} split(s) here, {bead_total_phrase} total<br>From: %{{customdata[3]}}<br>To: %{{customdata[4]}}<extra></extra>'
             }},
             {{
                 x: mergeMovingSum ? mergeMovingSum.x : [],
@@ -607,7 +669,7 @@ class SummaryHTMLWriter():
                 name: '{axis_labels['moving_sum_short']}',
                 // 'hv': a moving sum over discrete events genuinely is a step function.
                 line: {{color: '#e45756', width: 2, shape: 'hv'}},
-                hovertemplate: 'Threshold: %{{x:.2f}}<br>Nodes displaced within \u00b1' + (mergeMovingSumWindow / 2).toFixed(2) + ': %{{y}}<extra></extra>'
+                hovertemplate: 'Threshold: %{{x:.2f}}<br>{moving_sum_hover_label} \u00b1' + (mergeMovingSumWindow / 2).toFixed(2) + ': %{{y}}<extra></extra>'
             }}
         ], {{
             ...chartLayout,
@@ -633,7 +695,38 @@ class SummaryHTMLWriter():
                 x: 0
             }},
             hovermode: 'closest'
-        }}, chartConfig);"""
+        }}, splitChartConfig);
+
+        // Say how much of the series is drawn. The x-axis and the moving-sum line span
+        // every split event, but the stems are a capped selection, so without this a
+        // stretch of axis with no stems reads as a quiet region rather than a filtered
+        // one. See ssn_hierarchy.filter_merge_event_rows.
+        (() => {{
+            const plotted = mergeEventPoints.length;
+            const total = Number.isFinite(MERGE_EVENT_TOTAL) ? MERGE_EVENT_TOTAL : null;
+            const cap = Number.isFinite(MAX_MERGE_EVENTS) ? MAX_MERGE_EVENTS : null;
+            const bandPercent = 100 / {MERGE_EVENT_DENSITY_BINS};
+            const plural = count => (count === 1 ? '' : 's');
+            const note = document.getElementById('split-event-count');
+            if (!note) {{ return; }}
+            if (total === null) {{
+                note.textContent = formatNumber(plotted) + ' merge event' + plural(plotted) + ' plotted.';
+            }} else if (plotted >= total) {{
+                note.textContent = 'All ' + formatNumber(total) + ' merge event' + plural(total) + ' plotted.';
+            }} else {{
+                const backfilled = cap === null ? 0 : Math.max(0, plotted - cap);
+                note.textContent = formatNumber(plotted) + ' of ' + formatNumber(total) +
+                    ' merge events plotted' +
+                    (backfilled > 0
+                        ? ' \u2014 the strongest ' + formatNumber(cap) + ' by impact, plus ' +
+                          formatNumber(backfilled) + ' so that every ' + bandPercent +
+                          '% of the axis with an event to show has one.'
+                        : ' \u2014 the strongest by impact.');
+                note.title = 'Set by matrix_report.py --max_merge_events (0 plots them all). ' +
+                    'A stretch with no stems is a stretch whose events were too small to make ' +
+                    'the cut, not necessarily a quiet one.';
+            }}
+        }})();"""
         if include_mst_knn:
             mst_knn_controls = f"""
             <label for=\"mst-knn-k-slider\">
@@ -722,6 +815,8 @@ class SummaryHTMLWriter():
     let MST_KNN_COUNTS;
     let MST_KNN_MIN_K;
     let MERGE_EVENT_SERIES;
+    let MERGE_EVENT_TOTAL;
+    let MAX_MERGE_EVENTS;
     let MERGE_MOVING_SUM;
     let SLIDER_STOPS;
     let CLUSTER_CHECKPOINTS = [];
@@ -755,6 +850,8 @@ class SummaryHTMLWriter():
         MST_KNN_COUNTS = reportData.mst_knn_counts;
         MST_KNN_MIN_K = reportData.mst_knn_min_k;
         MERGE_EVENT_SERIES = reportData.merge_event_series;
+        MERGE_EVENT_TOTAL = reportData.merge_event_total;
+        MAX_MERGE_EVENTS = reportData.max_merge_events;
         MERGE_MOVING_SUM = reportData.merge_moving_sum;
         SLIDER_STOPS = reportData.slider_stops;
     }}
@@ -1181,7 +1278,7 @@ def main(argv):
     parser.add_argument('--merge_impact_metric', choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric used for split-event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.")
     parser.add_argument('--max_merge_events', type=int, default=DEFAULT_MAX_MERGE_EVENTS,
-                        help="Maximum number of strongest merge events to embed in the interactive HTML threshold slider and split plot. Use 0 to include all merge events.")
+                        help="Maximum number of strongest merge events to embed in the interactive HTML threshold slider and split plot. A few more may be added on top: after the strongest are taken, the strongest event in each otherwise-empty 5%% band of the threshold axis is added back, so the plot never leaves a stretch of its own axis blank. Use 0 to include all merge events.")
     parser.add_argument('--progress', action='store_true', default=False,
                         help="Print live progress updates to stderr during long-running matrix_report stages.")
     parser.add_argument('--profile_stages', action='store_true', default=False,
