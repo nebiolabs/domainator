@@ -11,6 +11,7 @@ import pytest
 
 from domainator import build_ssn_viewer
 from domainator.data_matrix import DataMatrix, DenseDataMatrix, MaxTree
+from domainator import ssn_bundle
 
 
 def _read_bundle(path):
@@ -59,18 +60,27 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         bundle = _read_bundle(bundle_file)
 
         assert bundle["format"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_FORMAT
-        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION == 5
+        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION == 6
         # app_state is written only by the HTML viewer's "Save session" button.
         assert "app_state" not in bundle
         assert bundle["graph"]["nodes"] == row_names
         assert len(bundle["graph"]["mst_edges"]) == 3
-        assert len(bundle["graph"]["merge_event_series"]) == 3
-        for event in bundle["graph"]["merge_event_series"]:
+
+        # The split-event series, its moving sum and the slider's stops are derived from
+        # the merge order rather than stored, so the bundle carries none of them.
+        for derived_key in ("merge_event_series", "merge_event_total", "max_merge_events",
+                            "merge_moving_sum", "slider_stops",
+                            "cluster_count_by_threshold", "edges_by_threshold"):
+            assert derived_key not in bundle["graph"]
+
+        events = ssn_bundle.merge_event_rows(bundle)
+        assert len(events) == 3
+        for event in events:
             counts = event["merge_size_counts"]
             assert sum(counts.values()) == event["merge_count"]
             assert max(int(size) for size in counts) == event["largest_merge"]
             assert sum(int(size) * n for size, n in counts.items()) == event["merge_impact"]
-        moving_sum = bundle["graph"]["merge_moving_sum"]
+        moving_sum = ssn_bundle.moving_sum(bundle, event_rows=events)
         assert len(moving_sum["x"]) == len(moving_sum["y"]) > 0
         assert moving_sum["window"] > 0
         # A stop labelled T shows the `--lb T` cut, so edge_index is the last MST edge
@@ -78,11 +88,14 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         # floor that keeps every MST edge, so the fully merged network is reachable --
         # without it the lowest stop still splits the weakest merge apart. It sits 1% of
         # the weight range below the weakest edge (4.0 - 0.01 * (10.0 - 4.0)).
-        assert [stop["threshold_label"] for stop in bundle["graph"]["slider_stops"]] == [
+        stops = ssn_bundle.slider_stops(bundle, event_rows=events)
+        assert [stop["threshold_label"] for stop in stops] == [
             "∞", "10.00", "7.00", "4.00", "3.94"
         ]
-        assert [stop["edge_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, -1, 0, 1, 2]
-        assert [stop["threshold_index"] for stop in bundle["graph"]["slider_stops"]] == [-1, 0, 1, 2, 3]
+        assert [stop["edge_index"] for stop in stops] == [-1, -1, 0, 1, 2]
+        # threshold_index indexed threshold tables describing the full input graph.
+        # The bundle never carried those, so the stops no longer pretend to point at them.
+        assert all("threshold_index" not in stop for stop in stops)
         assert bundle["graph"]["hierarchy"]["roots"] == [6]
         assert bundle["graph"]["hierarchy"]["leaf_order"] == [0, 1, 2, 3]
         assert bundle["graph"]["hierarchy"]["nodes"][6]["leaf_count"] == 4
@@ -153,7 +166,7 @@ def test_build_ssn_viewer_rejects_unknown_categorical_column():
             ])
 
 
-def test_build_ssn_viewer_cluster_counts_match_maxtree():
+def test_build_ssn_viewer_omits_threshold_tables_but_still_cuts_like_maxtree():
     data = np.array([
         [0, 10, 0, 0, 0],
         [10, 0, 5, 0, 0],
@@ -177,22 +190,24 @@ def test_build_ssn_viewer_cluster_counts_match_maxtree():
 
         bundle = _read_bundle(bundle_file)
 
-        # One row per distinct threshold now; no separate "infinite threshold" row.
-        expected_counts = [
-            [float(row[0]), int(row[1])]
-            for row in tree.cluster_count_by_threshold
-        ]
+        # The bundle no longer carries the threshold tables: they described the *full*
+        # input graph, which a bundle never holds, and nothing in the viewer read them.
+        assert "cluster_count_by_threshold" not in bundle["graph"]
+        assert "edges_by_threshold" not in bundle["graph"]
 
-        assert bundle["graph"]["cluster_count_by_threshold"] == expected_counts
-        assert bundle["graph"]["edges_by_threshold"] == [
-            [int(row[0]), float(row[1])]
-            for row in tree.edges_by_threshold
-        ]
+        # What matters is that cutting the bundle still agrees with the matrix it came
+        # from. MaxTree's table has one row per distinct MST weight, and cutting the
+        # bundle's hierarchy at that weight must give the same component count.
+        hierarchy = bundle["graph"]["hierarchy"]
+        for threshold, expected_clusters in tree.cluster_count_by_threshold:
+            active = ssn_bundle.clusters_at_threshold(hierarchy, float(threshold))
+            assert len(active) == int(expected_clusters), f"clusters at lb={threshold}"
+
         assert bundle["graph"]["hierarchy"]["nodes"][8]["size"] == 5
         assert bundle["graph"]["hierarchy"]["nodes"][8]["leaf_count"] == 5
 
 
-def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
+def test_bundle_merge_events_and_slider_stops_honour_a_caller_supplied_cap():
     data = np.array([
         [0, 10, 0, 0, 0],
         [10, 0, 5, 0, 0],
@@ -208,39 +223,39 @@ def test_build_ssn_viewer_limits_merge_events_and_slider_stops():
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
         matrix.write(input_file, output_type="dense")
 
-        build_ssn_viewer.main([
-            "-i", input_file,
-            "-o", bundle_file,
-            "--max_merge_events", "2",
-        ])
+        build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
 
         bundle = _read_bundle(bundle_file)
+
+        # The cap is applied where the series is consumed, not baked into the file, so
+        # the same bundle answers for any cap.
+        events = ssn_bundle.merge_event_rows(bundle)
+        assert len(events) == 4
 
         # This network has four merge events spread over four different bands of the
         # axis, so the density back-fill restores every one the cap dropped -- the cap
         # and the back-fill are exercised against each other in test_ssn_hierarchy.py,
         # where the band layout can be controlled directly.
-        assert bundle["graph"]["merge_event_total"] == 4
-        assert bundle["graph"]["max_merge_events"] == 2
-        assert len(bundle["graph"]["merge_event_series"]) == 4
+        selected = ssn_bundle.merge_event_series(bundle, max_merge_events=2, event_rows=events)
+        assert len(selected) == 4
+
+        stops = ssn_bundle.slider_stops(bundle, max_merge_events=2, event_rows=events)
         # 4 merge events + the ∞ stop + the floor stop.
-        assert len(bundle["graph"]["slider_stops"]) == 6
-        assert bundle["graph"]["slider_stops"][-1]["threshold_value"] < min(
-            edge[2] for edge in bundle["graph"]["mst_edges"]
-        )
-        assert bundle["graph"]["slider_stops"][0]["threshold_value"] is None
+        assert len(stops) == 6
+        assert stops[-1]["threshold_value"] < min(edge[2] for edge in bundle["graph"]["mst_edges"])
+        assert stops[0]["threshold_value"] is None
 
         # The moving sum must come from the UNFILTERED rows, whatever the cap kept.
-        kept = {event["threshold_value"] for event in bundle["graph"]["merge_event_series"]}
+        kept = {event["threshold_value"] for event in selected}
         assert kept == {10.0, 5.0, 4.0, 1.0}
-        moving_sum = bundle["graph"]["merge_moving_sum"]
+        moving_sum = ssn_bundle.moving_sum(bundle, event_rows=events)
         assert min(moving_sum["x"]) == pytest.approx(1.0)
         assert max(moving_sum["x"]) == pytest.approx(10.0)
         # The window at the bottom of the range still counts the dropped t=1.0 merge.
         assert moving_sum["y"][0] >= 1
 
 
-def test_build_ssn_viewer_caps_merge_events_on_a_network_large_enough_to_bite():
+def test_bundle_cap_bites_on_a_network_large_enough_to_show_it():
     """The cap only shows on a network with more events than bands to spread them over.
 
     Three blocks of tightly connected nodes give ~60 merge events with a wide range of
@@ -263,14 +278,14 @@ def test_build_ssn_viewer_caps_merge_events_on_a_network_large_enough_to_bite():
         input_file = os.path.join(output_dir, "matrix.hdf5")
         bundle_file = os.path.join(output_dir, "bundle.dsnv")
         matrix.write(input_file, output_type="dense")
-        build_ssn_viewer.main([
-            "-i", input_file, "-o", bundle_file, "--max_merge_events", "5",
-        ])
-        graph = _read_bundle(bundle_file)["graph"]
+        build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
+        bundle = _read_bundle(bundle_file)
+        graph = bundle["graph"]
 
-        total = graph["merge_event_total"]
-        plotted = len(graph["merge_event_series"])
-        assert graph["max_merge_events"] == 5
+        events = ssn_bundle.merge_event_rows(bundle)
+        selected = ssn_bundle.merge_event_series(bundle, max_merge_events=5, event_rows=events)
+        total = len(events)
+        plotted = len(selected)
         assert total > 5 + MERGE_EVENT_DENSITY_BINS  # otherwise the cap proves nothing
         assert 5 <= plotted <= 5 + MERGE_EVENT_DENSITY_BINS
         assert plotted < total
@@ -278,16 +293,21 @@ def test_build_ssn_viewer_caps_merge_events_on_a_network_large_enough_to_bite():
         # The back-fill's purpose: the weakest plotted event reaches the bottom of the
         # axis rather than stopping wherever the strongest events happen to end.
         all_thresholds = [edge[2] for edge in graph["mst_edges"]]
-        plotted_thresholds = [row["threshold_value"] for row in graph["merge_event_series"]]
+        plotted_thresholds = [row["threshold_value"] for row in selected]
         axis_span = max(all_thresholds) - min(all_thresholds)
         assert (min(plotted_thresholds) - min(all_thresholds)) < 0.1 * axis_span
 
         # Every stop but ∞ and the floor is a plotted event.
-        assert len(graph["slider_stops"]) == plotted + 2
+        stops = ssn_bundle.slider_stops(bundle, max_merge_events=5, event_rows=events)
+        assert len(stops) == plotted + 2
+
+        # And the cap really is the caller's: raising it offers strictly more cut-points
+        # off the very same file.
+        assert len(ssn_bundle.slider_stops(bundle, max_merge_events=0, event_rows=events)) == total + 2
 
 
-def test_build_ssn_viewer_uncapped_series_reports_itself_as_complete():
-    """--max_merge_events 0 keeps everything, and the counts have to say so."""
+def test_uncapped_series_keeps_every_event():
+    """max_merge_events=0 means no cap at all."""
     data = np.array([
         [0, 10, 0, 0, 0],
         [10, 0, 5, 0, 0],
@@ -302,13 +322,12 @@ def test_build_ssn_viewer_uncapped_series_reports_itself_as_complete():
         input_file = os.path.join(output_dir, "matrix.hdf5")
         bundle_file = os.path.join(output_dir, "bundle.dsnv")
         matrix.write(input_file, output_type="dense")
-        build_ssn_viewer.main([
-            "-i", input_file, "-o", bundle_file, "--max_merge_events", "0",
-        ])
-        graph = _read_bundle(bundle_file)["graph"]
+        build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
+        bundle = _read_bundle(bundle_file)
 
-        assert graph["max_merge_events"] == 0
-        assert graph["merge_event_total"] == len(graph["merge_event_series"]) == 4
+        events = ssn_bundle.merge_event_rows(bundle)
+        selected = ssn_bundle.merge_event_series(bundle, max_merge_events=0, event_rows=events)
+        assert len(events) == len(selected) == 4
 
 
 def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
@@ -516,9 +535,19 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function renameNetwork(name)' in html_content
         assert 'function saveExtractionFile()' in html_content
         assert 'function buildExtractionHierarchy(nodeCount, edges)' in html_content
-        assert 'function extractionMergeEventRows(nodeCount, edges, metric)' in html_content
+        assert 'function mergeEventRows(nodeCount, edges, metric)' in html_content
+        # The series is derived in the browser, so the shell has to carry the whole
+        # pipeline and the control that sets its cap.
+        assert 'function deriveMergeSeries(nodeCount, edges, metric)' in html_content
+        assert 'function rebuildMergeSeries(maxMergeEvents)' in html_content
+        assert '<input id="split-event-cap"' in html_content
+        # The selection is taken against the chart's current window, so a zoom can
+        # re-spend the cap on what is on screen.
+        assert 'function selectMergeEvents(series, maxMergeEvents, window, pinnedThreshold)' in html_content
+        assert 'function currentSplitWindow()' in html_content
+        assert 'const DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50;' in html_content
         assert 'function originalComponentByNode()' in html_content
-        assert 'const SUPPORTED_BUNDLE_VERSIONS = [3, 4, 5];' in html_content
+        assert 'const SUPPORTED_BUNDLE_VERSIONS = [3, 4, 5, 6];' in html_content
 
         # The split chart draws a capped selection of the split events, so it has to
         # say how much of the series that is.
@@ -526,8 +555,8 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function updateSplitEventCount()' in html_content
         assert 'merge events plotted' in html_content
         assert 'const MERGE_EVENT_DENSITY_BINS = 20;' in html_content
-        assert 'function extractionMergeEventDensityBin(thresholdValue, lo, hi, densityBins)' in html_content
-        assert 'function compareExtractionMergeEventRank(left, right)' in html_content
+        assert 'function mergeEventDensityBin(thresholdValue, lo, hi, densityBins)' in html_content
+        assert 'function compareMergeEventRank(left, right)' in html_content
 
         # One geometry model behind the canvas painter, the SVG export and the
         # hit-test, so the three cannot place a mark or a tick differently.
@@ -828,10 +857,11 @@ def test_build_ssn_viewer_requires_viewer_html_without_input():
         build_ssn_viewer.main([])
 
 def test_load_bundle_accepts_every_supported_version():
-    """Each revision is additive, so previously written bundles still load.
+    """Older bundles still load: everything this build reads has been there since v3.
 
-    v4 adds the ignorable app_state section; v5 adds graph.merge_event_total and
-    graph.max_merge_events, which a reader that does not know them can skip.
+    v4 added the ignorable app_state section and v5 two event-count keys, both
+    additive. v6 *removed* the derived threshold data, so a v3/v4/v5 file carries keys
+    a v6 reader simply ignores -- it derives those values from the merge order instead.
     """
     from domainator import ssn_bundle
 
@@ -851,21 +881,35 @@ def test_load_bundle_accepts_every_supported_version():
             DataMatrix.from_file(input_file), name="versions"
         )
 
-        assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4, 5)
+        assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4, 5, 6)
+
+        stale_derived_keys = {
+            "cluster_count_by_threshold": [[10.0, 1.0]],
+            "edges_by_threshold": [[0.0, 10.0]],
+            "merge_event_series": [],
+            "merge_event_total": 0,
+            "max_merge_events": 500,
+            "merge_moving_sum": {"window": 0.0, "x": [], "y": []},
+            "slider_stops": [],
+        }
 
         for version in ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
             path = os.path.join(output_dir, f"v{version}.dsnv")
             payload = dict(bundle, version=version)
-            if version < 5:
-                # Older writers did not record how many events the series was
-                # selected from; loading must not depend on those keys.
-                payload["graph"] = {key: value for key, value in bundle["graph"].items()
-                                    if key not in ("merge_event_total", "max_merge_events")}
+            if version < 6:
+                # A pre-v6 writer stored the derived data in the file. Loading must not
+                # depend on it -- and, crucially, must not *use* it either: the stored
+                # series here is empty and the real one has three events.
+                payload["graph"] = dict(bundle["graph"], **stale_derived_keys)
             if version >= 4:
                 # A saved session; the reader must ignore the extra section.
                 payload["app_state"] = {"state_version": 1, "view": {"color_by": None}}
             build_ssn_viewer.write_ssn_viewer_bundle(path, payload)
-            assert ssn_bundle.load_bundle(path)["version"] == version
+            loaded = ssn_bundle.load_bundle(path)
+            assert loaded["version"] == version
+            # Derived from the merge order, so an old file's stale copy is ignored.
+            assert len(ssn_bundle.merge_event_rows(loaded)) == 3
+            assert len(ssn_bundle.slider_stops(loaded)) == 5
 
         unsupported = os.path.join(output_dir, "v99.dsnv")
         build_ssn_viewer.write_ssn_viewer_bundle(unsupported, dict(bundle, version=99))
@@ -913,7 +957,7 @@ def test_lowest_slider_stop_reaches_the_fully_merged_network():
         )
 
     hierarchy = bundle["graph"]["hierarchy"]
-    stops = bundle["graph"]["slider_stops"]
+    stops = ssn_bundle.slider_stops(bundle)
     lowest = min(stop["threshold_value"] for stop in stops if stop["threshold_value"] is not None)
     weakest_mst_edge = min(edge[2] for edge in bundle["graph"]["mst_edges"])
 

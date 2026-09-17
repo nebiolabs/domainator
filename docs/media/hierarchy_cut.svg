@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="630" viewBox="0 0 1120 630" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="1120" height="630" fill="#ffffff"/>
+<text x="24" y="34" font-size="17" font-weight="600" fill="#2b2620">Cutting the <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace">graph.hierarchy</tspan> dendrogram</text>
+<text x="24" y="56" font-size="12.5" fill="#6f6659">A 7-node forest: A–B–C–D joined at 90/80/60, E–F at 70, G never joined. Descend into a cluster when its <tspan font-style="italic">threshold ≤ cut</tspan>; otherwise emit it whole.</text>
+<text x="24" y="75" font-size="12.5" fill="#6f6659">Merges <tspan fill="#2f6f4f" font-weight="600">above the cut line</tspan> are in effect; those <tspan fill="#6f6659" font-weight="600">below it</tspan> have not happened yet at that threshold.</text>
+<g transform="translate(64,118)">
+<rect x="0" y="0" width="328" height="330" rx="12" fill="#faf8f5" stroke="#cfc7bb"/>
+<text x="16" y="26" font-size="13.5" font-weight="600" fill="#2b2620">cut at 90<tspan fill="#6f6659" font-weight="400"> → 7 clusters</tspan></text>
+<line x1="38" y1="91.5" x2="310" y2="91.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="95.0" font-size="9.5" fill="#6f6659" text-anchor="end">90</text>
+<line x1="38" y1="126.5" x2="310" y2="126.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="130.0" font-size="9.5" fill="#6f6659" text-anchor="end">80</text>
+<line x1="38" y1="161.5" x2="310" y2="161.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="165.0" font-size="9.5" fill="#6f6659" text-anchor="end">70</text>
+<line x1="38" y1="196.5" x2="310" y2="196.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="200.0" font-size="9.5" fill="#6f6659" text-anchor="end">60</text>
+<rect x="36.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="46.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">A</text>
+<rect x="80.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="90.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">B</text>
+<rect x="124.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="134.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">C</text>
+<rect x="168.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="178.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">D</text>
+<rect x="212.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="222.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">E</text>
+<rect x="256.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="266.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">F</text>
+<rect x="300.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="310.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">G</text>
+<line x1="44" y1="91.5" x2="316" y2="91.5" stroke="#b4472e" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="316" y="85.5" font-size="10" font-weight="600" fill="#b4472e" text-anchor="end">--lb 90</text>
+<line x1="46.0" y1="57.0" x2="46.0" y2="91.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="90.0" y1="57.0" x2="90.0" y2="91.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="46.0" y1="91.5" x2="90.0" y2="91.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="68.0" cy="91.5" r="2.6" fill="#cfc7bb"/>
+<text x="68.0" y="85.5" font-size="9" fill="#6f6659" text-anchor="middle">id 7</text>
+<line x1="68.0" y1="91.5" x2="68.0" y2="126.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="134.0" y1="57.0" x2="134.0" y2="126.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="68.0" y1="126.5" x2="134.0" y2="126.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="101.0" cy="126.5" r="2.6" fill="#cfc7bb"/>
+<text x="101.0" y="120.5" font-size="9" fill="#6f6659" text-anchor="middle">id 8</text>
+<line x1="222.0" y1="57.0" x2="222.0" y2="161.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="266.0" y1="57.0" x2="266.0" y2="161.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="222.0" y1="161.5" x2="266.0" y2="161.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="244.0" cy="161.5" r="2.6" fill="#cfc7bb"/>
+<text x="244.0" y="155.5" font-size="9" fill="#6f6659" text-anchor="middle">id 9</text>
+<line x1="101.0" y1="126.5" x2="101.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="178.0" y1="57.0" x2="178.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="101.0" y1="196.5" x2="178.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="139.5" cy="196.5" r="2.6" fill="#cfc7bb"/>
+<text x="139.5" y="190.5" font-size="9" fill="#6f6659" text-anchor="middle">id 10</text>
+<text x="16" y="248" font-size="10.5" fill="#6f6659">active clusters</text>
+<rect x="16.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="29.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">A</text>
+<text x="29.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 0</text>
+<rect x="49.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="62.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">B</text>
+<text x="62.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 1</text>
+<rect x="82.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="95.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">C</text>
+<text x="95.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 2</text>
+<rect x="115.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="128.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">D</text>
+<text x="128.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 3</text>
+<rect x="148.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="161.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">E</text>
+<text x="161.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 4</text>
+<rect x="181.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="194.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">F</text>
+<text x="194.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 5</text>
+<rect x="214.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="227.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">G</text>
+<text x="227.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 6</text>
+<text x="16" y="316" font-size="10" fill="#6f6659">7 nodes − 0 merges above the cut = 7 clusters</text>
+</g>
+<g transform="translate(416,118)">
+<rect x="0" y="0" width="328" height="330" rx="12" fill="#faf8f5" stroke="#cfc7bb"/>
+<text x="16" y="26" font-size="13.5" font-weight="600" fill="#2b2620">cut at 85<tspan fill="#6f6659" font-weight="400"> → 6 clusters</tspan></text>
+<line x1="38" y1="91.5" x2="310" y2="91.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="95.0" font-size="9.5" fill="#6f6659" text-anchor="end">90</text>
+<line x1="38" y1="126.5" x2="310" y2="126.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="130.0" font-size="9.5" fill="#6f6659" text-anchor="end">80</text>
+<line x1="38" y1="161.5" x2="310" y2="161.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="165.0" font-size="9.5" fill="#6f6659" text-anchor="end">70</text>
+<line x1="38" y1="196.5" x2="310" y2="196.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="200.0" font-size="9.5" fill="#6f6659" text-anchor="end">60</text>
+<rect x="36.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="46.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">A</text>
+<rect x="80.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="90.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">B</text>
+<rect x="124.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="134.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">C</text>
+<rect x="168.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="178.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">D</text>
+<rect x="212.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="222.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">E</text>
+<rect x="256.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="266.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">F</text>
+<rect x="300.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="310.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">G</text>
+<line x1="44" y1="109.0" x2="316" y2="109.0" stroke="#b4472e" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="316" y="103.0" font-size="10" font-weight="600" fill="#b4472e" text-anchor="end">--lb 85</text>
+<line x1="46.0" y1="57.0" x2="46.0" y2="91.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="90.0" y1="57.0" x2="90.0" y2="91.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="46.0" y1="91.5" x2="90.0" y2="91.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<circle cx="68.0" cy="91.5" r="2.6" fill="#2f6f4f"/>
+<text x="68.0" y="85.5" font-size="9" fill="#6f6659" text-anchor="middle">id 7</text>
+<line x1="68.0" y1="91.5" x2="68.0" y2="126.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="134.0" y1="57.0" x2="134.0" y2="126.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="68.0" y1="126.5" x2="134.0" y2="126.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="101.0" cy="126.5" r="2.6" fill="#cfc7bb"/>
+<text x="101.0" y="120.5" font-size="9" fill="#6f6659" text-anchor="middle">id 8</text>
+<line x1="222.0" y1="57.0" x2="222.0" y2="161.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="266.0" y1="57.0" x2="266.0" y2="161.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="222.0" y1="161.5" x2="266.0" y2="161.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="244.0" cy="161.5" r="2.6" fill="#cfc7bb"/>
+<text x="244.0" y="155.5" font-size="9" fill="#6f6659" text-anchor="middle">id 9</text>
+<line x1="101.0" y1="126.5" x2="101.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="178.0" y1="57.0" x2="178.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="101.0" y1="196.5" x2="178.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="139.5" cy="196.5" r="2.6" fill="#cfc7bb"/>
+<text x="139.5" y="190.5" font-size="9" fill="#6f6659" text-anchor="middle">id 10</text>
+<text x="16" y="248" font-size="10.5" fill="#6f6659">active clusters</text>
+<rect x="16.0" y="258" width="29.4" height="24" rx="7" fill="#e4efe8" stroke="#2f6f4f" stroke-width="1.2"/>
+<text x="30.7" y="274" font-size="11" text-anchor="middle" font-weight="600" fill="#2b2620">AB</text>
+<text x="30.7" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 7</text>
+<rect x="52.4" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="65.4" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">C</text>
+<text x="65.4" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 2</text>
+<rect x="85.4" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="98.4" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">D</text>
+<text x="98.4" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 3</text>
+<rect x="118.4" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="131.4" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">E</text>
+<text x="131.4" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 4</text>
+<rect x="151.4" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="164.4" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">F</text>
+<text x="164.4" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 5</text>
+<rect x="184.4" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="197.4" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">G</text>
+<text x="197.4" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 6</text>
+<text x="16" y="316" font-size="10" fill="#6f6659">7 nodes − 1 merge above the cut = 6 clusters</text>
+</g>
+<g transform="translate(768,118)">
+<rect x="0" y="0" width="328" height="330" rx="12" fill="#faf8f5" stroke="#cfc7bb"/>
+<text x="16" y="26" font-size="13.5" font-weight="600" fill="#2b2620">cut at 65<tspan fill="#6f6659" font-weight="400"> → 4 clusters</tspan></text>
+<line x1="38" y1="91.5" x2="310" y2="91.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="95.0" font-size="9.5" fill="#6f6659" text-anchor="end">90</text>
+<line x1="38" y1="126.5" x2="310" y2="126.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="130.0" font-size="9.5" fill="#6f6659" text-anchor="end">80</text>
+<line x1="38" y1="161.5" x2="310" y2="161.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="165.0" font-size="9.5" fill="#6f6659" text-anchor="end">70</text>
+<line x1="38" y1="196.5" x2="310" y2="196.5" stroke="#cfc7bb" stroke-width="0.6" stroke-dasharray="1 4"/>
+<text x="33" y="200.0" font-size="9.5" fill="#6f6659" text-anchor="end">60</text>
+<rect x="36.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="46.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">A</text>
+<rect x="80.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="90.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">B</text>
+<rect x="124.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="134.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">C</text>
+<rect x="168.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="178.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">D</text>
+<rect x="212.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="222.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">E</text>
+<rect x="256.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="266.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">F</text>
+<rect x="300.0" y="31" width="20" height="20" rx="5" fill="#ffffff" stroke="#b8afa2"/>
+<text x="310.0" y="45.5" font-size="11.5" font-weight="600" fill="#2b2620" text-anchor="middle">G</text>
+<line x1="44" y1="179.0" x2="316" y2="179.0" stroke="#b4472e" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="316" y="173.0" font-size="10" font-weight="600" fill="#b4472e" text-anchor="end">--lb 65</text>
+<line x1="46.0" y1="57.0" x2="46.0" y2="91.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="90.0" y1="57.0" x2="90.0" y2="91.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="46.0" y1="91.5" x2="90.0" y2="91.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<circle cx="68.0" cy="91.5" r="2.6" fill="#2f6f4f"/>
+<text x="68.0" y="85.5" font-size="9" fill="#6f6659" text-anchor="middle">id 7</text>
+<line x1="68.0" y1="91.5" x2="68.0" y2="126.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="134.0" y1="57.0" x2="134.0" y2="126.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="68.0" y1="126.5" x2="134.0" y2="126.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<circle cx="101.0" cy="126.5" r="2.6" fill="#2f6f4f"/>
+<text x="101.0" y="120.5" font-size="9" fill="#6f6659" text-anchor="middle">id 8</text>
+<line x1="222.0" y1="57.0" x2="222.0" y2="161.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="266.0" y1="57.0" x2="266.0" y2="161.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<line x1="222.0" y1="161.5" x2="266.0" y2="161.5" stroke="#2f6f4f" stroke-width="2.0"/>
+<circle cx="244.0" cy="161.5" r="2.6" fill="#2f6f4f"/>
+<text x="244.0" y="155.5" font-size="9" fill="#6f6659" text-anchor="middle">id 9</text>
+<line x1="101.0" y1="126.5" x2="101.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="178.0" y1="57.0" x2="178.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="101.0" y1="196.5" x2="178.0" y2="196.5" stroke="#cfc7bb" stroke-width="1.4" stroke-dasharray="4 3"/>
+<circle cx="139.5" cy="196.5" r="2.6" fill="#cfc7bb"/>
+<text x="139.5" y="190.5" font-size="9" fill="#6f6659" text-anchor="middle">id 10</text>
+<text x="16" y="248" font-size="10.5" fill="#6f6659">active clusters</text>
+<rect x="16.0" y="258" width="38.6" height="24" rx="7" fill="#e4efe8" stroke="#2f6f4f" stroke-width="1.2"/>
+<text x="35.3" y="274" font-size="11" text-anchor="middle" font-weight="600" fill="#2b2620">ABC</text>
+<text x="35.3" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 8</text>
+<rect x="61.6" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="74.6" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">D</text>
+<text x="74.6" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 3</text>
+<rect x="94.6" y="258" width="29.4" height="24" rx="7" fill="#e4efe8" stroke="#2f6f4f" stroke-width="1.2"/>
+<text x="109.3" y="274" font-size="11" text-anchor="middle" font-weight="600" fill="#2b2620">EF</text>
+<text x="109.3" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 9</text>
+<rect x="131.0" y="258" width="26.0" height="24" rx="7" fill="#f1eee8" stroke="#cfc7bb" stroke-width="1"/>
+<text x="144.0" y="274" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">G</text>
+<text x="144.0" y="294" font-size="8.5" text-anchor="middle" fill="#6f6659">id 6</text>
+<text x="16" y="316" font-size="10" fill="#6f6659">7 nodes − 3 merges above the cut = 4 clusters</text>
+</g>
+<rect x="24" y="456" width="1072" height="136" rx="10" fill="#fdf4f1" stroke="#e8c8bd"/>
+<text x="40" y="476" font-size="12" fill="#2b2620"><tspan font-weight="600">The comparison is ≤, not &lt;.</tspan> At <tspan font-family="ui-monospace, monospace">cut = 90</tspan> the A–B merge sits exactly on the line and is split back apart, because a cut keeps only</text>
+<text x="40" y="494" font-size="12" fill="#2b2620">edges scoring strictly <tspan font-style="italic">above</tspan> it — a threshold’s own tie group is excluded, which is why the counts below match <tspan font-family="ui-monospace, monospace">n_nodes − edges_above</tspan> exactly.</text>
+<text x="40" y="520" font-size="12" fill="#2b2620"><tspan font-weight="600">Membership needs no traversal.</tspan> <tspan fill="#6f6659">Every node carries a slice of <tspan font-family="ui-monospace, monospace">leaf_order</tspan>, so a cluster’s members are <tspan font-family="ui-monospace, monospace">leaf_order[leaf_start : leaf_start + leaf_count]</tspan>:</tspan></text>
+<text x="40" y="559" font-size="10" fill="#6f6659" font-family="ui-monospace, monospace">leaf_order</text>
+<rect x="118" y="542" width="29" height="26" rx="5" fill="#e4efe8" stroke="#2f6f4f" stroke-width="1.4"/>
+<text x="132.5" y="559" font-size="11" text-anchor="middle" font-weight="600" fill="#2b2620">A</text>
+<text x="132.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">0</text>
+<rect x="152" y="542" width="29" height="26" rx="5" fill="#e4efe8" stroke="#2f6f4f" stroke-width="1.4"/>
+<text x="166.5" y="559" font-size="11" text-anchor="middle" font-weight="600" fill="#2b2620">B</text>
+<text x="166.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">1</text>
+<rect x="186" y="542" width="29" height="26" rx="5" fill="#e4efe8" stroke="#2f6f4f" stroke-width="1.4"/>
+<text x="200.5" y="559" font-size="11" text-anchor="middle" font-weight="600" fill="#2b2620">C</text>
+<text x="200.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">2</text>
+<rect x="220" y="542" width="29" height="26" rx="5" fill="#ffffff" stroke="#d9d2c7" stroke-width="1"/>
+<text x="234.5" y="559" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">D</text>
+<text x="234.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">3</text>
+<rect x="254" y="542" width="29" height="26" rx="5" fill="#ffffff" stroke="#d9d2c7" stroke-width="1"/>
+<text x="268.5" y="559" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">E</text>
+<text x="268.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">4</text>
+<rect x="288" y="542" width="29" height="26" rx="5" fill="#ffffff" stroke="#d9d2c7" stroke-width="1"/>
+<text x="302.5" y="559" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">F</text>
+<text x="302.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">5</text>
+<rect x="322" y="542" width="29" height="26" rx="5" fill="#ffffff" stroke="#d9d2c7" stroke-width="1"/>
+<text x="336.5" y="559" font-size="11" text-anchor="middle" font-weight="400" fill="#6f6659">G</text>
+<text x="336.5" y="536" font-size="8.5" text-anchor="middle" fill="#6f6659">6</text>
+<path d="M 118 572 L 118 577 L 215 577 L 215 572" fill="none" stroke="#2f6f4f" stroke-width="1.2"/>
+<text x="166.5" y="589" font-size="10" text-anchor="middle" fill="#2f6f4f" font-weight="600">id 8 → leaf_start 0, leaf_count 3</text>
+<text x="374" y="559" font-size="11" fill="#6f6659">← “ABC”, the cluster the cut at 65 emits, read straight out of the array</text>
+</svg>

@@ -15,6 +15,11 @@ MERGE_IMPACT_PRODUCT = "product"
 MERGE_IMPACT_MIN_CHILD = "min_child"
 MERGE_IMPACT_CHOICES = (MERGE_IMPACT_PRODUCT, MERGE_IMPACT_MIN_CHILD)
 DEFAULT_MAX_MERGE_EVENTS = 500
+# The viewer picks its events from the chart's current window rather than from the whole
+# axis, so a much smaller number shows more: zoom in and the cap re-spends itself on the
+# stretch being looked at. A chart with no viewport (matrix_report, ssn_navigator) has
+# only one shot at the whole range and keeps the larger default above.
+DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50
 # How many equal bands the plotted threshold axis is cut into when back-filling the
 # capped event series. 20 bands = 5% of the axis each, so the filtered series can
 # exceed max_merge_events by at most 20 rows -- and every 5% of the axis that has an
@@ -339,7 +344,8 @@ def merge_event_density_bin(threshold_value, lo, hi, density_bins):
 
 
 def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENTS,
-                            density_bins=MERGE_EVENT_DENSITY_BINS):
+                            density_bins=MERGE_EVENT_DENSITY_BINS,
+                            window=None, pinned_threshold=None):
     """The strongest `max_merge_events` events, plus enough to keep the axis covered.
 
     Ranking by impact alone leaves long stretches of the threshold axis with nothing
@@ -358,6 +364,18 @@ def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENT
     untouched -- a back-filled row is an addition, never a replacement.
 
     `max_merge_events=0` means no cap, and no back-fill either: nothing was dropped.
+
+    `window` is an optional ``(low, high)`` threshold range -- the part of the axis a
+    zoomable chart is currently showing. It narrows only the **top-N pool**: the cap
+    then picks the strongest events *within the window*, so zooming in reveals the small
+    events a whole-range ranking buries, while the band back-fill still runs over the
+    whole axis so every stretch of the slider keeps a stop. ``None`` is the whole range,
+    which is what a chart without a viewport (``matrix_report``, ``ssn_navigator``) wants
+    and is exactly the behaviour this function had before windows existed.
+
+    `pinned_threshold` is a threshold whose event must survive the cut whatever the
+    window is. The viewer passes the cut currently in effect: if the selection could
+    drop it, zooming would silently re-cluster the network under the user.
     """
     if max_merge_events is None:
         max_merge_events = DEFAULT_MAX_MERGE_EVENTS
@@ -369,9 +387,20 @@ def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENT
         return list(event_rows)
 
     ranked_rows = sorted(event_rows, key=merge_event_rank_key)
-    filtered_rows = ranked_rows[:max_merge_events]
 
-    # The band edges come from the whole series, because that is what the axis spans.
+    if window is None:
+        pool = ranked_rows
+    else:
+        low, high = (float(window[0]), float(window[1]))
+        if low > high:
+            low, high = high, low
+        pool = [row for row in ranked_rows if low <= float(row["threshold_value"]) <= high]
+
+    filtered_rows = pool[:max_merge_events]
+    selected_ids = {id(row) for row in filtered_rows}
+
+    # The band edges come from the whole series, because that is what the axis spans --
+    # a window narrows what the cap ranks, never what the axis has to cover.
     thresholds = [value for value in (float(row["threshold_value"]) for row in event_rows)
                   if math.isfinite(value)]
     if thresholds and density_bins > 0:
@@ -382,13 +411,25 @@ def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENT
             for row in filtered_rows
         }
         # ranked_rows is strongest-first, so the first row seen in an empty band is
-        # the strongest one available to represent it.
-        for row in ranked_rows[max_merge_events:]:
+        # the strongest one available to represent it. Candidates come from the whole
+        # series, not the window: a band outside the window still needs its stop.
+        for row in ranked_rows:
+            if id(row) in selected_ids:
+                continue
             bin_index = merge_event_density_bin(row["threshold_value"], lo, hi, density_bins)
             if bin_index < 0 or bin_index in covered:
                 continue
             covered.add(bin_index)
             filtered_rows.append(row)
+            selected_ids.add(id(row))
+
+    if pinned_threshold is not None and math.isfinite(float(pinned_threshold)):
+        pinned = float(pinned_threshold)
+        if not any(float(row["threshold_value"]) == pinned for row in filtered_rows):
+            for row in ranked_rows:
+                if float(row["threshold_value"]) == pinned:
+                    filtered_rows.append(row)
+                    break
 
     filtered_rows.sort(key=lambda row: row["edge_index"])
     return filtered_rows
@@ -431,48 +472,60 @@ def floor_threshold_value(lowest_merge_threshold: float, highest_merge_threshold
     return lowest - (step if step > 0 else 1.0)
 
 
-def threshold_slider_stops(merge_event_rows, tree=None):
+def threshold_slider_stops(merge_event_rows, tree=None, threshold_index_lookup=None):
     """Slider stops for a merge-event series: ∞, one per event, then a floor.
 
-    Shared by ``build_ssn_viewer`` and ``matrix_report`` so their sliders offer the
-    same cuts. The trailing floor stop is what makes the fully merged network
-    reachable at all: every other stop excludes its own tie group under the
-    strictly-above ``--lb`` convention, so the lowest event stop still splits the
-    weakest merge back apart. It is derived from the MST rather than from
-    ``merge_event_rows``, which ``max_merge_events`` may have capped.
+    Shared by ``matrix_report``, the ``.dsnv`` viewer (via its JavaScript port) and
+    ``ssn_bundle`` so their sliders offer the same cuts. The trailing floor stop is
+    what makes the fully merged network reachable at all: every other stop excludes
+    its own tie group under the strictly-above ``--lb`` convention, so the lowest
+    event stop still splits the weakest merge back apart. It is derived from the MST
+    rather than from ``merge_event_rows``, which a cap may have thinned.
+
+    ``threshold_index_lookup`` is an optional ``threshold -> row index`` callable
+    (in practice :meth:`MaxTree.threshold_row_index`). When given, every stop also
+    carries a ``threshold_index`` pointing into the tree's threshold tables, which is
+    how ``matrix_report`` reports each cut's edge count. A ``.dsnv`` bundle carries no
+    threshold tables, so the viewer's stops omit the field entirely rather than
+    carrying an index into something that is not there.
     """
     stops = [{
         "edge_index": -1,
-        "threshold_index": -1,
         "threshold_label": "∞",
         "threshold_value": None,
     }]
+    if threshold_index_lookup is not None:
+        stops[0]["threshold_index"] = -1
     for merge_row in merge_event_rows:
-        stops.append({
+        stop = {
             "edge_index": int(merge_row["edge_index"]),
-            # Row in the tree's threshold tables for this cut. Those are keyed by
-            # distinct threshold, not by MST edge, so the lookup is separate.
-            "threshold_index": -1 if tree is None else tree.threshold_row_index(merge_row["threshold_value"]),
             "threshold_label": merge_row["threshold_to"],
             "threshold_value": float(merge_row["threshold_value"]),
-        })
+        }
+        if threshold_index_lookup is not None:
+            # Row in the tree's threshold tables for this cut. Those are keyed by
+            # distinct threshold, not by MST edge, so the lookup is separate.
+            stop["threshold_index"] = threshold_index_lookup(merge_row["threshold_value"])
+        stops.append(stop)
 
     mst_edges = [] if tree is None else list(tree.mst_edges)
     if len(mst_edges) > 0:
         # mst_edges are weight-descending.
         floor_value = floor_threshold_value(float(mst_edges[-1][2]), float(mst_edges[0][2]))
-        stops.append({
+        floor_stop = {
             # Every MST edge scores strictly above this cut.
             "edge_index": len(mst_edges) - 1,
+            "threshold_label": format_threshold_value(floor_value),
+            "threshold_value": floor_value,
+        }
+        if threshold_index_lookup is not None:
             # This stop stands for the complete-graph cut, so it reads its edge counts
             # from that row of the threshold tables. Its own value sits just below the
             # weakest merge rather than at 0 purely so the slider track stays usable,
             # and no table row is keyed there. The counts are exact whenever no graph
             # edge scores at or below the floor, which is the usual case.
-            "threshold_index": tree.threshold_row_index(0.0),
-            "threshold_label": format_threshold_value(floor_value),
-            "threshold_value": floor_value,
-        })
+            floor_stop["threshold_index"] = threshold_index_lookup(0.0)
+        stops.append(floor_stop)
     return stops
 
 

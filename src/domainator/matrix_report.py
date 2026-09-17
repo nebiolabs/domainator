@@ -63,8 +63,18 @@ def _slider_stop_rows(merge_event_rows, tree=None):
     The stop list ends with a floor cut below the weakest MST edge. Without it the
     slider stopped one merge short of the fully merged network, because every other
     stop excludes its own tie group under the strictly-above ``--lb`` convention.
+
+    ``threshold_index_lookup`` is passed because this report, unlike a ``.dsnv``
+    bundle, carries the threshold tables and reads each cut's edge count out of them.
     """
-    stops = [dict(stop, slider_position=0) for stop in threshold_slider_stops(merge_event_rows, tree=tree)]
+    stops = [
+        dict(stop, slider_position=0)
+        for stop in threshold_slider_stops(
+            merge_event_rows,
+            tree=tree,
+            threshold_index_lookup=None if tree is None else tree.threshold_row_index,
+        )
+    ]
 
     if len(stops) <= 1:
         return stops

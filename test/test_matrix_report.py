@@ -766,9 +766,13 @@ def test_slider_reaches_the_fully_merged_network():
 
 
 def test_slider_stops_match_the_ssn_viewer_bundle():
-    """matrix_report and build_ssn_viewer share one stop builder, so the two
-    tools must offer the same cuts for the same matrix."""
-    from domainator import build_ssn_viewer
+    """matrix_report and the .dsnv bundle share one stop builder, so the two tools
+    must offer the same cuts for the same matrix.
+
+    The report embeds its stops; a bundle derives them on the way out (ssn_bundle), so
+    this compares what each one actually hands its slider.
+    """
+    from domainator import build_ssn_viewer, ssn_bundle
     from domainator.ssn_bundle import load_bundle
 
     data = np.array([
@@ -788,12 +792,16 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
         matrix_report.main(["-i", input_file, "--html", out_html])
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_path])
         report_stops = _embedded_report_payload(open(out_html).read())['slider_stops']
-        bundle_stops = load_bundle(bundle_path)['graph']['slider_stops']
+        bundle_stops = ssn_bundle.slider_stops(load_bundle(bundle_path))
 
-    keys = ('edge_index', 'threshold_index', 'threshold_label', 'threshold_value')
+    keys = ('edge_index', 'threshold_label', 'threshold_value')
     assert [{k: stop[k] for k in keys} for stop in report_stops] == [
         {k: stop[k] for k in keys} for stop in bundle_stops
     ]
+    # Only the report carries the threshold tables, so only the report's stops index
+    # into them. A bundle's stops have no threshold_index at all.
+    assert all(stop['threshold_index'] >= -1 for stop in report_stops)
+    assert all('threshold_index' not in stop for stop in bundle_stops)
 
 
 def test_matrix_report_hover_labels_follow_the_merge_impact_metric():

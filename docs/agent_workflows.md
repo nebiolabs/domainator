@@ -76,8 +76,8 @@ is present only with `--taxonomy`.
 }
 ```
 
-`edge_scores` is `null` for a matrix with no non-zero edges. `split_events` is
-bounded by `--max_merge_events`; a `threshold_value` of `null` denotes ∞.
+`edge_scores` is `null` for a matrix with no non-zero edges. `split_events` is bounded by
+`matrix_report.py --max_merge_events`; a `threshold_value` of `null` denotes ∞.
 
 `merge_impact` is the **sum** of every merge at that threshold, so it cannot by itself
 distinguish one large cluster splitting off from a swarm of small ones. The other three
@@ -165,13 +165,14 @@ The `metadata.tsv` columns (from `enum_report`) become the per-cluster
 distributions in `--mode cluster` output: string columns yield the top values
 with counts; numeric columns yield min/max/mean/quartiles.
 
-`--mode thresholds` lists the cuts the bundle carries, and reports `merge_events` /
-`merge_event_total` alongside them: those cuts are one per *plotted* split event, which
-`build_ssn_viewer.py --max_merge_events` caps (default 500, plus up to 20 more so no 5%
-band of the threshold range is left unrepresented). On a large network that is a small
-sample of the real event list, so treat the stops as good candidate cut-points rather
-than as every threshold at which anything happens; rebuild with a higher cap, or `0`, to
-see them all.
+`--mode thresholds` derives the cuts from the bundle's merge order and reports
+`merge_events` / `merge_event_total` alongside them: those cuts are one per *selected*
+split event, which `ssn_navigator.py --max_merge_events` caps (default 500, plus up to 20
+more so no 5% band of the threshold range is left unrepresented). On a large network that
+is a small sample of the real event list, so treat the cuts as good candidate cut-points
+rather than as every threshold at which anything happens — and pass a higher cap, or `0`,
+to see them all. The cap is yours, not the file's: it is applied when you ask, so any
+bundle answers at any cap without being rebuilt.
 
 `--threshold` follows the viewer's slider: higher is finer. `--threshold inf` is the
 slider's ∞ end, where every node is its own cluster (reported as `"threshold": null`,

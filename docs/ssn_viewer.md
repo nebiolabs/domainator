@@ -69,8 +69,11 @@ build_ssn_viewer.py -i scores.hdf5 \
 | `--color_by`, `--label_by` | The columns the viewer selects on open. Both are changeable in the UI. |
 | `--categorical COL ...` | Numeric columns to color as discrete categories rather than a gradient — cluster numbers, plasmid groups, anything where the number is a name. Toggleable per column later. |
 | `--subset`, `--subset_file` | Restrict to a list of node ids before building. This is the right way to narrow a network when the subset is not MST-connected (see [Saving an extraction](#saving-an-extraction)). |
-| `--max_merge_events N` | How many of the strongest merge events reach the slider and the split plot (default 500, `0` for all). A few more are added on top so that no 5% band of the threshold axis is left empty, so the real count is between N and N + 20 — the chart's caption reports it. Raise it if the threshold you care about falls between two stops. |
-| `--merge_impact_metric` | What the split plot's y-axis measures: `min_child` (default; the node count of the smaller piece) or `product` (the product of the two piece sizes). |
+| `--merge_impact_metric` | What the split plot's y-axis measures: `min_child` (default; the node count of the smaller piece) or `product` (the product of the two piece sizes). Recorded as the bundle's default. |
+
+There is no `--max_merge_events`: how many split events reach the slider and the plot is
+a **viewer control**, not something the bundle is built with. See
+[the split chart](#the-threshold-cluster-splits-vs-threshold) below.
 
 ## Opening a viewer
 
@@ -134,8 +137,28 @@ session.
 example *"515 of 161,763 merge events plotted — the strongest 500 by impact, plus 15 so
 that every 5% of the axis with an event to show has one."* The axis and the moving-sum
 line always span *every* event, so without that caption a stretch with no stems would be
-indistinguishable from a stretch where nothing happens. Raise `--max_merge_events` (or set
-it to `0`) to plot more of them.
+indistinguishable from a stretch where nothing happens.
+
+**The `Split events` box beside that caption sets the cap** (default 50; `0` plots every
+event). Changing it re-selects from the merge order the bundle already carries — no
+rebuild, no source matrix, and the threshold you are looking at is kept. The cap is saved
+with a session.
+
+**The cap is spent on the part of the axis you are looking at, so zooming in shows more.**
+The events plotted at any moment are:
+
+- the strongest event in each 5% band of the **whole** range, so no stretch of the axis or
+  of the slider is ever left without a stop;
+- up to `Split events` of the strongest events **inside the current window**;
+- the cut currently selected, which is pinned so that zooming can never move it.
+
+Zoomed out, that second group is the strongest 50 overall — the same thing a fixed cap
+would give you. Zoom into a band and those 50 slots are re-spent on the events in that
+band, so merges too small to make the global list appear, and keep appearing as you go
+further in. This is why the default is 50 rather than something larger: on a zoomable
+chart a small number resolves *more*, because you can always go and get the detail where
+you want it. `matrix_report.py`'s split chart has no window to spend a cap on, so it keeps
+a default of 500.
 
 Below it, the **slider** moves between *stops*. A stop is a threshold at which the graph
 actually splits — nothing between two stops produces a different clustering, so the
@@ -150,9 +173,9 @@ leave only the first of each dozen selectable. Instead every stop is given a pos
 own, and the track left over after that is spent saying where the stops are. Two consequences
 worth knowing:
 
-- **Every stop can be reached by dragging**, up to about 900 of them (raise
-  `--max_merge_events` past that and the crowding returns — nothing can put a thousand stops
-  on a thousand positions and still leave them apart on screen).
+- **Every stop can be reached by dragging**, up to about 900 of them (raise `Split events`
+  past that and the crowding returns — nothing can put a thousand stops on a thousand
+  positions and still leave them apart on screen).
 - **Zooming the chart magnifies the matching stretch of the track.** The zoomed band carries
   more track per unit of threshold than the rest, so the stops you are looking at spread out
   under the thumb. The threshold does not move when this happens; only the map under it does,
@@ -533,8 +556,9 @@ If your subset is not MST-connected, subset the source matrix instead:
 `build_ssn_viewer.py --subset` / `--subset_file`, which *measures* those relationships
 rather than inferring them.
 
-One field cannot be rebuilt and is written empty: `graph.edges_by_threshold` counts edges
-of the full graph, which a bundle never carried.
+An extraction is a complete bundle: it carries the node ids, the induced MST edges, the
+rebuilt hierarchy and the impact metric, and everything else is derived from those on
+open, exactly as it is for the bundle it came from.
 
 ## Keyboard and mouse reference
 
@@ -569,11 +593,12 @@ canvas gestures in [Selecting nodes](#selecting-nodes) are the other half of thi
   of the comparison tools' score modes, or convert first.
 - **Zero-weight edges are dropped** when the tree is built, so a pair that scored exactly
   zero is treated as unrelated. Nodes with no non-zero edge at all end up as singletons.
-- **`--max_merge_events` bounds the slider and the split chart's stems.** With the default
-  500, a very large network's slider carries the 500 strongest merges plus up to 20 more
-  for axis coverage — not every one. If the threshold you want falls between two stops,
-  rebuild with a higher value or `0`. The caption under the chart always says how many of
-  how many are drawn.
+- **The split-event cap bounds the slider and the split chart's stems.** With the default
+  50, a very large network's slider carries the 50 strongest merges *in the current
+  window* plus up to 20 more for whole-axis coverage — not every one. If the threshold you
+  want falls between two stops, zoom into that stretch (the cap re-spends itself there) or
+  raise the `Split events` box; no rebuild is needed either way. The caption under the
+  chart always says how many of how many are drawn.
 - **A connected network has a long straggler tail.** An MST must attach every outlier, so
   the weakest MST edges are single nodes joining the giant component. Those merges have the
   smallest impact there is, so they are the first thing the cap drops — which is why the

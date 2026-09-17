@@ -4,6 +4,7 @@
 - [Similarity Network Viewer (DSNV)](ssn_viewer.md)
 - [Examples](examples.md)
 - [Agent-driven workflows](agent_workflows.md)
+- [Key algorithms](algorithms.md)
 - [Developing Domainator](developing_domainator.md)
 - [Structure search and annotation](structure_search.md)
 - [ESM-2 3B 3Di and foldseek integration](esm_3b_foldseek.md)

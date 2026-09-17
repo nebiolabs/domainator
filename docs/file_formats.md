@@ -175,37 +175,137 @@ format: "domainator_ssn_viewer_bundle"  # a mismatch here is fatal for every rea
 version: int                            # see the compatibility rules below
 name: str                               # display name
 domainator_version: str                 # the build that wrote the file
-graph: dict                             # nodes, mst_edges, hierarchy, slider_stops, merge series
+graph: dict                             # nodes, mst_edges, hierarchy, merge_impact_metric
 metadata: dict                          # positional node metadata table (see below)
 defaults: dict                          # color_by, label_by, categorical_columns
 (v4, optional) app_state: dict          # viewer UI state -- see below
 ```
 
-`graph.merge_event_series` is a **capped selection**, not the whole series.
-`graph.merge_event_total` is how many split events the network actually has and
-`graph.max_merge_events` is the cap that was applied (`0` means none), so a reader can say
-how much of the series it is showing. The selection is the strongest events by
-`merge_impact`, plus — because ranking by impact alone can strand every kept event at one
-end of the axis — the strongest event in each otherwise-empty 5% band of the threshold
-range. So the series holds between `max_merge_events` and `max_merge_events + 20` rows.
-`graph.merge_moving_sum` and the floor stop are both derived from the *uncapped* rows, so
-the chart's axis and the slider's track always span every event whatever the cap is;
-without the two counts, a stretch of axis with nothing plotted on it is indistinguishable
-from a stretch where nothing happens.
+### The `graph` section
 
-`graph.slider_stops` closes with a floor stop strictly below the weakest MST edge. Every
-other stop excludes its own tie group under the strictly-above rule, so without that last
-one the fully merged network (the true connected components) could not be reached: the
-lowest stop would still split the weakest merge apart. The floor sits **1% of the MST
-weight range** below the weakest edge rather than at `0`, so that a network scoring
-350–650 does not spend most of its slider track on empty space below the data, and so
-that negative scores are cleared too. It reports the `threshold_index` of the
-complete-graph row, since that is the cut it stands for.
+The merge order, and nothing derived from it. Every node reference inside it is an
+**index into `graph.nodes`**, never a node id.
 
-`graph.nodes` is the list of node ids, and its **position is the node index** used
-throughout the bundle: `metadata.rows[i]` describes `graph.nodes[i]`, and
-`graph.hierarchy.leaf_order` holds those same indices. `metadata` is a positional table
-rather than a per-row mapping:
+```python
+graph: {
+  "nodes":       [str, ...],                  # node ids; position i is node index i
+  "mst_edges":   [[int, int, float], ...],    # [node_i, node_j, weight], weight-descending
+  "hierarchy":   {...},                       # the merge dendrogram (below)
+  "merge_impact_metric": "min_child" | "product",
+}
+```
+
+That is the whole section. The split-event series, its moving sum and the threshold
+slider's stops are a pure function of these four keys, so **readers derive them rather
+than read them** — `ssn_bundle.merge_event_rows` / `merge_event_series` / `moving_sum` /
+`slider_stops` in Python, and the ports in `ssn_viewer_html.py` in the browser. See
+[Key algorithms](algorithms.md#split-event-scanning) for what that derivation does.
+
+Deriving costs one pass over `mst_edges` and scales with the node count, so the file
+stays O(nodes) on a network with hundreds of thousands of split events — and, more
+usefully, no selection is baked in when the file is written. How many split events to
+plot is chosen where they are displayed: the viewer's "Split events" box,
+`ssn_navigator.py --max_merge_events`, or the `max_merge_events` argument to those
+`ssn_bundle` functions. The viewer goes further and spends its cap on the part of the axis
+currently on screen, so the same file yields more detail as you zoom — see
+[Key algorithms](algorithms.md#spending-the-cap-on-a-window). A **pre-v6 bundle still carries a stored copy** of all of it,
+already capped by whoever built it; readers in this build ignore those keys, so an old
+file is not stuck with the cap it was written with.
+
+JSON has no infinity. Where a derived value is infinite — the `∞` slider stop's
+`threshold_value`, the first event row's `threshold_from_value` — a reader that writes
+it back out should spell it `null`, which is what pre-v6 writers did and what the
+viewer's ports still produce.
+
+
+#### `nodes`
+
+The node ids, in the order of the source matrix's rows (after `--subset`). Its
+**position is the node index** used throughout the bundle: `metadata.rows[i]` describes
+`graph.nodes[i]`, `graph.mst_edges` endpoints are these positions, and
+`graph.hierarchy.leaf_order` holds these same indices. Ids are the only stable handle on
+a node — a position means something different in a rebuilt or subsetted bundle — so
+anything written back into a file (notably `app_state` selections) stores ids.
+
+#### `mst_edges`
+
+The maximum spanning forest of the input matrix, sorted by **descending weight**; every
+consumer of this array relies on that order. Each entry is `[node_i, node_j, weight]`,
+where `weight` is `max(M[i, j], M[j, i])` — the matrix may be slightly asymmetric (DIAMOND
+bit scores, for instance) and the larger of the two directions is what the tree was built
+on. The pair is unordered: it comes from the matrix's lower triangle, so there is no
+min-first convention to rely on. The array holds
+`len(graph.nodes) - <number of connected components>` entries, so a fully connected
+network has `n - 1` and a network of isolated nodes has none.
+
+Replaying the first `m` of these through a union-find reproduces the connected components
+that `build_ssn --lb <weight of edge m>` would produce — the property the whole bundle
+rests on. See [Key algorithms](algorithms.md#why-a-maximum-spanning-tree).
+
+#### `hierarchy`
+
+The same merge order pre-built as a dendrogram, which is what makes cutting at a
+threshold O(clusters) instead of a replay:
+
+```python
+hierarchy: {
+  "nodes": [
+    # one leaf per node, at index == node index
+    {"id": int, "kind": "leaf", "node_index": int, "size": 1,
+     "parent": int | None, "leaf_start": int, "leaf_count": 1},
+    # then one cluster per merge, in merge order, ids continuing from len(graph.nodes)
+    {"id": int, "kind": "cluster", "left": int, "right": int, "threshold": float,
+     "size": int, "parent": int | None, "leaf_start": int, "leaf_count": int},
+    ...
+  ],
+  "roots":      [int, ...],   # top-level components, largest first, ties by id
+  "leaf_order": [int, ...],   # node indices in dendrogram order; one entry per node
+}
+```
+
+`nodes[i]["id"] == i`, so ids index the array directly. The array holds
+`len(graph.nodes) + len(graph.mst_edges)` entries: the leaves, then one cluster per merge
+in the order the merges happened, so a cluster's `threshold` is non-increasing down the
+array. `parent` is `null` on the roots. `left`/`right` are ordered by their subtrees'
+minimum leaf index, which is what makes the layout deterministic.
+
+`leaf_start`/`leaf_count` are a slice of `leaf_order`: a cluster's members are
+`leaf_order[leaf_start : leaf_start + leaf_count]`, with no traversal needed. Leaves carry
+the same pair, spanning one entry.
+
+To cut at threshold `T`: start from `roots`, and descend into a cluster whose
+`threshold <= T`, otherwise emit it whole. The comparison is `<=`, not `<`, because a cut
+keeps edges scoring **strictly above** `T` — a component that merged exactly at `T` comes
+apart again. `ssn_bundle.clusters_at_threshold` and the viewer's
+`activeClustersAtThreshold` are the two implementations and must agree.
+
+![Cutting the hierarchy dendrogram at three thresholds](media/hierarchy_cut.svg)
+
+*A 7-node forest — `A-B` at 90, `B-C` at 80, `E-F` at 70, `C-D` at 60, and `G` never
+joined — cut at three thresholds. Merges above the cut line are in effect; those below it
+have not happened yet, so the cut descends past them. The leftmost panel is the tie case:
+at `cut = 90` the `A-B` merge sits exactly on the line and is split back apart. Every
+number in the figure is the actual output of `build_mst_component_hierarchy` and
+`clusters_at_threshold` for that matrix.*
+
+#### What is derived, not stored
+
+`cluster_count_by_threshold`, `edges_by_threshold`, `merge_event_series`,
+`merge_event_total`, `max_merge_events`, `merge_moving_sum` and `slider_stops` were all
+keys of `graph` before v6. The first two described the **full input graph**, which a
+bundle never carried and no viewer ever read; the rest are derived from the merge order
+above. All seven are gone from a v6 file — see the version table below, and
+`ssn_bundle.py` for the functions that produce them now.
+
+A stop from `slider_stops` no longer carries `threshold_index` either: it indexed the
+two threshold tables, which no longer exist here. `matrix_report.py` keeps both the
+tables and the index, because that report does carry full-graph edge counts.
+
+
+### The `metadata` table
+
+`metadata` is a positional table rather than a per-node mapping — `metadata.rows[i]`
+describes `graph.nodes[i]`:
 
 ```python
 metadata: {
@@ -228,6 +328,7 @@ The version constants live in `ssn_bundle.py`
 | 3 | Per-event `merge_size_counts`/`largest_merge`/`merge_count` and `graph.merge_moving_sum`. |
 | 4 | Optional top-level `app_state`. Purely additive: `build_ssn_viewer.py` never writes it, and a reader that ignores the section can treat a v4 file exactly like a v3 file. |
 | 5 | `graph.merge_event_total` and `graph.max_merge_events`. Purely additive, and **both keys are optional** — a reader that ignores them treats a v5 file exactly like a v4 file, and a writer that does not know them may omit them. (The viewer's "Save session" re-stamps the current version onto whatever bundle was loaded, so a session saved from a v3/v4 file is a v5 file without them.) |
+| 6 | **A removal.** `graph.cluster_count_by_threshold`, `graph.edges_by_threshold`, `graph.merge_event_series`, `graph.merge_event_total`, `graph.max_merge_events`, `graph.merge_moving_sum` and `graph.slider_stops` (and its `threshold_index`) are all gone: the first two described a graph the bundle never carried, and the rest are derived from `graph.mst_edges`. This build reads v3–v6, because everything it needs has been present since v3, and it ignores the stored copies in an older file rather than inheriting the cap they were written with. A v3/v4/v5 *reader* handed a v6 file would find those keys missing. `build_ssn_viewer.py --max_merge_events` went with them; the cap is set where the series is displayed. |
 
 Bump `SSN_VIEWER_BUNDLE_VERSION` for any change to the schema, and add the old version to
 `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written
@@ -246,7 +347,7 @@ edited in the viewer is written into `metadata.rows`/`metadata.columns`, so
 ```python
 app_state: {
   "state_version": int, "saved_by": str, "saved_at": str,   # ISO 8601
-  "view":      {...},   # layout, color_by/label_by, toggles, threshold_value, view_transform
+  "view":      {...},   # layout, color_by/label_by, toggles, threshold_value, max_merge_events, view_transform
   "table":     {...},   # sort, filter, null_order, rows_per_page, column_widths
   "colors":    {...},   # custom_palettes, categorical_columns
   "selection": {"node_ids": [...], "presets": {"<slot 0-9>": {"node_ids": [...], "saved_at": str}}}
@@ -268,8 +369,10 @@ components would assert an absence of similarity the file cannot support. Nodes 
 different components of the original network are exempt, since they were already
 unrelated. To extract an arbitrary subset, subset the source matrix instead
 (`build_ssn_viewer.py --subset`), which measures those relationships rather than
-inferring them. One field cannot be rebuilt this way and is written empty:
-`graph.edges_by_threshold` counts edges of the *full* graph, which a bundle never carried.
+inferring them. Nothing has to be left empty any more: a v6 graph holds only the four
+keys an induced sub-MST can rebuild exactly. (`graph.edges_by_threshold` used to be the
+exception — it counted edges of the *full* graph, which a bundle never carried — and it
+is one of the keys v6 dropped.)
 
 Two rules make this section survive UI churn, and changes to it should preserve both:
 
@@ -283,7 +386,10 @@ Two rules make this section survive UI churn, and changes to it should preserve 
   `graph.nodes` and would silently mean a different sequence if the bundle were rebuilt or
   subsetted. Ids that are not in the bundle are counted and reported on load. For the same
   reason the threshold is stored as `threshold_value`, not as a slider position, which is
-  derived from `graph.slider_stops` and shifts whenever `--max_merge_events` changes.
+  derived from the current stop list and shifts whenever the split-event cap changes. The
+  cap itself is saved, as `view.max_merge_events`, and `view.split_chart_zoom` is applied
+  before it — the window is what the cap is spent on — with the threshold applied last, so
+  that the stop it names exists to snap to by then.
 
 
 ## Tabular data matrix

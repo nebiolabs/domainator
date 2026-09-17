@@ -9,6 +9,10 @@ splitting), matching the viewer's slider: ``--threshold inf`` is the "∞" stop 
 its fine end, where every node is its own cluster, and omitting ``--threshold``
 uses the floor at the coarse end, one cluster per connected component.
 
+The cut-points offered by ``thresholds`` and ``node`` are derived from the bundle's
+merge order, not read out of it, so ``--max_merge_events`` controls how many are offered
+(``0`` for one per split event) whatever the bundle was built with.
+
 Modes:
   overview    network size, metadata columns, component count, defaults.
   thresholds  suggested similarity cut-points with the resulting cluster counts.
@@ -29,9 +33,13 @@ from domainator.ssn_bundle import (
     coarsest_threshold,
     component_members,
     load_bundle,
+    merge_event_rows,
+    merge_event_series,
     node_index_by_name,
+    slider_stops,
     summarize_cluster_metadata,
 )
+from domainator.ssn_hierarchy import DEFAULT_MAX_MERGE_EVENTS
 
 MODES = ("overview", "thresholds", "clusters", "cluster", "node")
 
@@ -56,39 +64,41 @@ def _cluster_records(hierarchy, active_ids, min_size=1):
     return records
 
 
-def _merge_event_coverage(graph):
-    """How much of the network's split-event series this bundle carries.
+def _merge_event_coverage(event_rows, selected_rows, max_merge_events):
+    """How much of the network's split-event series this run is reporting.
 
-    ``graph.merge_event_series`` is capped by ``build_ssn_viewer.py
-    --max_merge_events``, and the slider stops are derived from it, so a caller
-    that treats either as the complete set of interesting thresholds is wrong on
-    any large network. Returns nothing for a pre-v5 bundle, which did not record
-    the uncapped total.
+    The cut-points offered are one per *selected* split event, and ``--max_merge_events``
+    keeps only the strongest (plus a back-fill so no stretch of the threshold range goes
+    unrepresented). A caller that treats the offered cut-points as the complete set of
+    interesting thresholds is wrong on any large network, so say what was left out.
+
+    The series itself is derived from the merge order rather than read from the bundle,
+    so the total is exact on every bundle version -- including pre-v6 files, whose stored
+    series was already capped when it was written.
     """
-    coverage = {"merge_events": len(graph.get("merge_event_series", []))}
-    total = graph.get("merge_event_total")
-    if total is not None:
-        coverage["merge_event_total"] = total
-        coverage["max_merge_events"] = graph.get("max_merge_events")
-    return coverage
+    return {
+        "merge_events": len(selected_rows),
+        "merge_event_total": len(event_rows),
+        "max_merge_events": int(max_merge_events),
+    }
 
 
-def _threshold_summary(bundle):
+def _threshold_summary(bundle, stops):
     hierarchy = bundle["graph"]["hierarchy"]
-    stops = []
-    for stop in bundle["graph"]["slider_stops"]:
+    summary = []
+    for stop in stops:
         threshold_value = stop["threshold_value"]
         active = clusters_at_threshold(hierarchy, threshold_value)
         sizes = [hierarchy["nodes"][cid]["size"] for cid in active]
         non_singleton = sum(1 for size in sizes if size > 1)
-        stops.append({
+        summary.append({
             "threshold_value": threshold_value,
             "threshold_label": stop["threshold_label"],
             "clusters": len(active),
             "non_singleton_clusters": non_singleton,
             "largest_cluster": max(sizes) if sizes else 0,
         })
-    return stops
+    return summary
 
 
 def _resolve_threshold(threshold, hierarchy):
@@ -118,24 +128,36 @@ def _threshold_out(threshold):
     return None if math.isinf(threshold) else threshold
 
 
-def _cluster_for_node(hierarchy, active_ids, node_index):
-    """Return the active cluster id whose leaf_order range covers ``node_index``."""
-    leaf_order = hierarchy["leaf_order"]
-    try:
-        position = leaf_order.index(node_index)
-    except ValueError:
-        return None
+def _cluster_for_node(hierarchy, node_index, threshold):
+    """The cluster containing ``node_index`` at ``threshold``, by walking up from its leaf.
+
+    Asking which cluster holds one node does not need the whole partition: climb from the
+    node's leaf while the parent merge scores strictly above the cut, and the last node
+    reached is the cluster :func:`clusters_at_threshold` would have emitted for it. A
+    cluster's ancestors merged later and therefore score lower, so the condition fails
+    once and the walk stops -- no need to look at any other branch of the tree.
+
+    This is O(depth) rather than O(clusters), which matters because ``--mode node``
+    repeats the question at every cut-point. The ``>`` is the same strictly-above rule
+    the descent uses, so a merge sitting exactly on the cut is not taken.
+
+    ``threshold`` is ``None`` for the ∞ cut, where every node stands alone.
+    """
     nodes = hierarchy["nodes"]
-    for component_id in active_ids:
-        node = nodes[component_id]
-        start = node["leaf_start"]
-        if start <= position < start + node["leaf_count"]:
-            return component_id
-    return None
+    if threshold is None:
+        return node_index
+    cut = float(threshold)
+    current = node_index
+    while True:
+        parent = nodes[current]["parent"]
+        if parent is None or not (float(nodes[parent]["threshold"]) > cut):
+            return current
+        current = parent
 
 
 def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
-                  min_size=1, top_n=50, members=False):
+                  min_size=1, top_n=50, members=False,
+                  max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
     """Answer a single navigation query against a loaded ``.dsnv`` bundle dict.
 
     Returns a JSON-serializable dict. See the module docstring for modes.
@@ -144,6 +166,30 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
     hierarchy = graph["hierarchy"]
     node_names = graph["nodes"]
     threshold = _resolve_threshold(threshold, hierarchy)
+
+    # Replaying the merge order costs a pass over the MST edges, so only the modes that
+    # report cut-points pay for it. Cached so a mode needing both the rows and the stops
+    # replays once.
+    derived = {}
+
+    def event_rows():
+        if "rows" not in derived:
+            derived["rows"] = merge_event_rows(bundle)
+        return derived["rows"]
+
+    def selected_rows():
+        if "selected" not in derived:
+            derived["selected"] = merge_event_series(
+                bundle, max_merge_events=max_merge_events, event_rows=event_rows()
+            )
+        return derived["selected"]
+
+    def stops():
+        if "stops" not in derived:
+            derived["stops"] = slider_stops(
+                bundle, max_merge_events=max_merge_events, event_rows=event_rows()
+            )
+        return derived["stops"]
 
     if mode == "overview":
         return {
@@ -155,15 +201,17 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
             "metadata_columns": bundle["metadata"].get("columns", []),
             "defaults": bundle.get("defaults", {}),
             "merge_impact_metric": graph.get("merge_impact_metric"),
-            **_merge_event_coverage(graph),
+            **_merge_event_coverage(event_rows(), selected_rows(), max_merge_events),
         }
 
     if mode == "thresholds":
-        # The stops are one per plotted merge event, so they inherit the cap. Say so:
-        # picking a cut-point from a silently truncated list is the failure this
-        # guards against. Both keys arrived in bundle v5 and are omitted when the
-        # bundle predates them.
-        return {"thresholds": _threshold_summary(bundle), **_merge_event_coverage(graph)}
+        # The cut-points are one per selected merge event, so they inherit the cap. Say
+        # so: picking a cut-point from a silently truncated list is the failure this
+        # guards against. Raise --max_merge_events (0 for all of them) to see more.
+        return {
+            "thresholds": _threshold_summary(bundle, stops()),
+            **_merge_event_coverage(event_rows(), selected_rows(), max_merge_events),
+        }
 
     if mode == "clusters":
         active = clusters_at_threshold(hierarchy, threshold)
@@ -186,7 +234,7 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
             index_by_name = node_index_by_name(bundle)
             if node not in index_by_name:
                 raise ValueError(f"Node '{node}' not found in the bundle.")
-            cluster_id = _cluster_for_node(hierarchy, active, index_by_name[node])
+            cluster_id = _cluster_for_node(hierarchy, index_by_name[node], threshold)
             if cluster_id is None:
                 raise ValueError(f"No active cluster found for node '{node}'.")
         elif cluster_id is not None:
@@ -219,10 +267,11 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
             raise ValueError(f"Node '{node}' not found in the bundle.")
         node_index = index_by_name[node]
         memberships = []
-        for stop in bundle["graph"]["slider_stops"]:
+        for stop in stops():
             stop_threshold = stop["threshold_value"]
-            active = clusters_at_threshold(hierarchy, stop_threshold)
-            cid = _cluster_for_node(hierarchy, active, node_index)
+            # One walk up from this node's leaf per cut-point, rather than rebuilding the
+            # whole partition at each one only to look up a single member.
+            cid = _cluster_for_node(hierarchy, node_index, stop_threshold)
             memberships.append({
                 "threshold_value": stop_threshold,
                 "threshold_label": stop["threshold_label"],
@@ -263,6 +312,8 @@ def main(argv):
                         help="Bound list output: at most this many clusters, category values, etc.")
     parser.add_argument("--members", action="store_true", default=False,
                         help="Include the full member id list in --mode cluster output.")
+    parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
+                        help="How many split events the --mode thresholds/node cut-points are drawn from: the strongest this many by impact, plus a few so that no 5%% band of the threshold range with an event to offer is left without one. 0 offers a cut-point at every split event. The series is derived from the bundle's merge order, so any value works on any bundle.")
     parser.add_argument("--config", action=ActionConfigFile)
     params = parser.parse_args(argv)
 
@@ -276,6 +327,7 @@ def main(argv):
         min_size=params.min_size,
         top_n=params.top_n,
         members=params.members,
+        max_merge_events=params.max_merge_events,
     )
 
     out_handle = open(params.output, "w") if params.output is not None else sys.stdout

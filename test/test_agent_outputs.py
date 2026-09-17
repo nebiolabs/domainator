@@ -10,6 +10,7 @@ import pytest
 from domainator import enum_report, hmmer_report, summary_report, matrix_report
 from domainator import build_ssn_viewer, ssn_navigator
 from domainator.data_matrix import DenseDataMatrix
+from domainator import ssn_bundle
 from domainator.ssn_bundle import (
     clusters_at_threshold,
     coarsest_threshold,
@@ -177,6 +178,59 @@ def test_ssn_navigator_modes(shared_datadir):
         assert len(node["memberships"]) == len(thresholds["thresholds"])
 
 
+def test_node_membership_matches_the_full_partition_at_every_cut():
+    """`--mode node` walks up from the node's leaf instead of partitioning the whole
+    network at each cut-point. The two must agree everywhere, including on a forest,
+    at the tie thresholds, and at both ends of the slider.
+
+    Walking up is O(depth) against O(clusters) for the partition, which is what makes
+    the mode usable on a large network -- but only if it answers identically.
+    """
+    from domainator.ssn_navigator import _cluster_for_node
+
+    rng = np.random.default_rng(4)
+    n = 90
+    data = np.zeros((n, n), dtype=float)
+    for i, weight in enumerate(rng.uniform(1, 100, size=n - 1)):
+        if i % 17 != 0:                      # gaps, so the MST is a forest
+            data[i, i + 1] = data[i + 1, i] = weight
+    names = [f"n{i:02d}" for i in range(n)]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        matrix_file = os.path.join(output_dir, "matrix.hdf5")
+        bundle_path = os.path.join(output_dir, "net.dsnv")
+        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        bundle = load_bundle(bundle_path)
+
+    hierarchy = bundle["graph"]["hierarchy"]
+    assert len(hierarchy["roots"]) > 1, "fixture should be a forest"
+    position_by_node = {ni: pos for pos, ni in enumerate(hierarchy["leaf_order"])}
+    merge_thresholds = sorted({node["threshold"] for node in hierarchy["nodes"]
+                               if node["kind"] == "cluster"})
+    # The merge weights themselves (the tie cases), plus points either side, plus both ends.
+    cuts = ([None] + merge_thresholds
+            + [t - 0.5 for t in merge_thresholds] + [min(merge_thresholds) - 10])
+
+    for cut in cuts:
+        active = clusters_at_threshold(hierarchy, cut)
+        for node_index in range(n):
+            position = position_by_node[node_index]
+            expected = next(
+                cid for cid in active
+                if hierarchy["nodes"][cid]["leaf_start"] <= position
+                < hierarchy["nodes"][cid]["leaf_start"] + hierarchy["nodes"][cid]["leaf_count"]
+            )
+            assert _cluster_for_node(hierarchy, node_index, cut) == expected, (cut, node_index)
+
+    # ...and the same through the CLI-level entry point.
+    result = ssn_navigator.ssn_navigator(bundle, "node", node=names[n // 2], max_merge_events=0)
+    for membership in result["memberships"]:
+        active = clusters_at_threshold(hierarchy, membership["threshold_value"])
+        assert membership["cluster_id"] in active
+        assert membership["cluster_size"] == hierarchy["nodes"][membership["cluster_id"]]["size"]
+
+
 def test_ssn_navigator_rejects_bad_bundle(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         bad = os.path.join(output_dir, "bad.dsnv")
@@ -218,7 +272,7 @@ def test_clusters_at_threshold_matches_build_ssn_clustering():
     hierarchy = bundle["graph"]["hierarchy"]
     finite_stops = [
         stop["threshold_value"]
-        for stop in bundle["graph"]["slider_stops"]
+        for stop in ssn_bundle.slider_stops(bundle)
         if stop["threshold_value"] is not None
     ]
     assert len(finite_stops) >= 3
@@ -304,24 +358,29 @@ def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
         bundle_path = os.path.join(output_dir, "net.dsnv")
-        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path,
-                               "--max_merge_events", "5"])
+        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
 
+    # The cap is the caller's, not the file's: the same bundle answers for any of them.
     for mode in ("overview", "thresholds"):
-        result = ssn_navigator.ssn_navigator(bundle, mode)
+        result = ssn_navigator.ssn_navigator(bundle, mode, max_merge_events=5)
         assert result["max_merge_events"] == 5
         assert 5 <= result["merge_events"] <= 5 + MERGE_EVENT_DENSITY_BINS
         assert result["merge_events"] < result["merge_event_total"]
 
-    # ...and the stops are one per plotted event, plus the infinity and floor cuts.
-    stops = ssn_navigator.ssn_navigator(bundle, "thresholds")["thresholds"]
-    assert len(stops) == ssn_navigator.ssn_navigator(bundle, "overview")["merge_events"] + 2
+    # ...and the stops are one per selected event, plus the infinity and floor cuts.
+    capped = ssn_navigator.ssn_navigator(bundle, "thresholds", max_merge_events=5)
+    assert len(capped["thresholds"]) == capped["merge_events"] + 2
 
-    # A pre-v5 bundle recorded no total, so the two optional keys are simply absent.
-    older = dict(bundle, graph={key: value for key, value in bundle["graph"].items()
-                                if key not in ("merge_event_total", "max_merge_events")})
-    result = ssn_navigator.ssn_navigator(older, "overview")
-    assert "merge_events" in result
-    assert "merge_event_total" not in result
-    assert "max_merge_events" not in result
+    # Uncapped, every split event gets a cut-point off that very same file.
+    uncapped = ssn_navigator.ssn_navigator(bundle, "thresholds", max_merge_events=0)
+    assert uncapped["merge_events"] == uncapped["merge_event_total"] == capped["merge_event_total"]
+    assert len(uncapped["thresholds"]) == uncapped["merge_event_total"] + 2
+
+    # A pre-v6 bundle stored its own capped series. It is ignored, not read back, so a
+    # stale copy cannot make the navigator under-report what the network really has.
+    stale = dict(bundle, graph=dict(bundle["graph"], merge_event_series=[],
+                                    merge_event_total=0, max_merge_events=1,
+                                    slider_stops=[]))
+    result = ssn_navigator.ssn_navigator(stale, "overview", max_merge_events=0)
+    assert result["merge_event_total"] == uncapped["merge_event_total"]

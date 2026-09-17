@@ -7,6 +7,13 @@ clusters that are active at a chosen similarity threshold and summarize the
 metadata of their members, mirroring the logic of the JavaScript viewer's
 ``activeClustersAtThreshold`` / ``componentMembers`` functions.
 
+From v6 the bundle carries only what cannot be derived from the merge order, so the
+split-event series, its moving sum and the threshold slider's stops are computed here
+on demand -- :func:`merge_event_rows`, :func:`merge_event_series`, :func:`moving_sum`
+and :func:`slider_stops` -- rather than read out of the file. The viewer does the same
+thing in JavaScript. A caller therefore picks its own ``max_merge_events`` at the point
+of display instead of inheriting one chosen when the file was written.
+
 A v4 bundle may also carry a top-level ``app_state`` section, written by the HTML
 viewer's "Save session" button. It holds viewer UI state only and is ignored
 here; the rest of such a file is an ordinary bundle, so a saved session's
@@ -16,11 +23,20 @@ here; the rest of such a file is an ordinary bundle, so a saved session's
 import gzip
 import json
 from os import PathLike
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
-from domainator.ssn_hierarchy import floor_threshold_value
+from domainator.ssn_hierarchy import (
+    DEFAULT_MAX_MERGE_EVENTS,
+    MERGE_IMPACT_MIN_CHILD,
+    component_size_summary_by_threshold,
+    filter_merge_event_rows,
+    floor_threshold_value,
+    merge_event_moving_sum,
+    threshold_merge_event_rows,
+    threshold_slider_stops,
+)
 
 
 SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
@@ -33,10 +49,23 @@ SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
 #     many of the network's split events the capped graph.merge_event_series is
 #     showing. Purely additive: a reader that ignores both keys treats a v5 file
 #     exactly like a v4 file.
-SSN_VIEWER_BUNDLE_VERSION = 5
+# v6: the derived threshold data is gone. graph.cluster_count_by_threshold and
+#     graph.edges_by_threshold described the *full* input graph, which a bundle never
+#     carried and no viewer ever read. graph.merge_event_series, merge_event_total,
+#     max_merge_events, merge_moving_sum and slider_stops (with its threshold_index)
+#     are all a pure function of (nodes, mst_edges, merge_impact_metric), so readers
+#     derive them instead -- see merge_event_rows / slider_stops below, and their
+#     JavaScript counterparts in ssn_viewer_html.py. This removes the build-time
+#     --max_merge_events cap: the selection is now made where it is displayed.
+#     A REMOVAL, not an addition, so a v3/v4/v5 reader would find keys missing from a
+#     v6 file. This build reads all of them, because everything v6 needs has been in
+#     the format since v3.
+SSN_VIEWER_BUNDLE_VERSION = 6
 # Versions this build can read. Kept as a tuple rather than an equality check so
-# that additive revisions do not strand previously written bundles.
-SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4, 5)
+# that additive revisions do not strand previously written bundles. Pre-v6 files
+# carry the derived keys as well; they are ignored in favour of recomputing, so that
+# a capped series written into an old file cannot silently limit what is shown now.
+SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4, 5, 6)
 
 
 def load_bundle(path: Union[str, PathLike]) -> dict:
@@ -60,6 +89,83 @@ def load_bundle(path: Union[str, PathLike]) -> dict:
             f"this build understands version(s) {supported}."
         )
     return bundle
+
+
+class _BundleTree:
+    """The slice of the :class:`~domainator.ssn_edges.MaxTree` surface that the
+    ``ssn_hierarchy`` functions actually touch, backed by a bundle's ``graph``.
+
+    They need only ``n_nodes`` and ``mst_edges``; everything else on a real ``MaxTree``
+    is derived from the input matrix, which a bundle does not carry.
+    """
+
+    __slots__ = ("n_nodes", "mst_edges")
+
+    def __init__(self, n_nodes: int, mst_edges: List[Sequence]):
+        self.n_nodes = n_nodes
+        self.mst_edges = mst_edges
+
+
+def bundle_tree(bundle: dict) -> _BundleTree:
+    """Adapt a loaded bundle to what the ``ssn_hierarchy`` functions expect."""
+    graph = bundle["graph"]
+    return _BundleTree(len(graph["nodes"]), graph["mst_edges"])
+
+
+def merge_event_rows(bundle: dict, merge_impact_metric: Optional[str] = None) -> List[dict]:
+    """The bundle's **complete, uncapped** split-event series.
+
+    Recomputed from ``graph.mst_edges`` rather than read from the file. Before v6 a
+    capped copy was stored under ``graph.merge_event_series``; deriving it here means
+    a caller is never silently limited to whatever cap the file happened to be built
+    with, and pre-v6 bundles get the full series too.
+
+    The metric defaults to the one the bundle records. Pass ``merge_impact_metric``
+    to recompute under the other one -- the series is a pure function of the merge
+    order and the metric, so nothing about the file constrains the choice.
+    """
+    if merge_impact_metric is None:
+        merge_impact_metric = bundle["graph"].get("merge_impact_metric", MERGE_IMPACT_MIN_CHILD)
+    summary = component_size_summary_by_threshold(
+        bundle_tree(bundle), merge_impact_metric=merge_impact_metric
+    )
+    return threshold_merge_event_rows(summary)
+
+
+def merge_event_series(bundle: dict, max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS,
+                       merge_impact_metric: Optional[str] = None,
+                       event_rows: Optional[List[dict]] = None) -> List[dict]:
+    """The capped selection of split events, as the viewer's split chart plots it.
+
+    ``max_merge_events=0`` means no cap. Pass ``event_rows`` from
+    :func:`merge_event_rows` to avoid replaying the merge order twice.
+    """
+    if event_rows is None:
+        event_rows = merge_event_rows(bundle, merge_impact_metric=merge_impact_metric)
+    return filter_merge_event_rows(event_rows, max_merge_events=max_merge_events)
+
+
+def moving_sum(bundle: dict, merge_impact_metric: Optional[str] = None,
+               event_rows: Optional[List[dict]] = None) -> dict:
+    """The centred moving sum of split impact, over the **uncapped** rows."""
+    if event_rows is None:
+        event_rows = merge_event_rows(bundle, merge_impact_metric=merge_impact_metric)
+    return merge_event_moving_sum(event_rows)
+
+
+def slider_stops(bundle: dict, max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS,
+                 merge_impact_metric: Optional[str] = None,
+                 event_rows: Optional[List[dict]] = None) -> List[dict]:
+    """The threshold cuts a slider over this bundle should offer.
+
+    ``∞``, one stop per selected split event, then the floor stop that reaches the
+    fully merged network. Stops carry no ``threshold_index``: that indexed threshold
+    tables which described the full input graph, and no bundle ever carried those.
+    """
+    if event_rows is None:
+        event_rows = merge_event_rows(bundle, merge_impact_metric=merge_impact_metric)
+    selected = filter_merge_event_rows(event_rows, max_merge_events=max_merge_events)
+    return threshold_slider_stops(selected, tree=bundle_tree(bundle))
 
 
 def coarsest_threshold(hierarchy: dict) -> float:

@@ -27,15 +27,9 @@ from domainator.ssn_bundle import (
     SSN_VIEWER_BUNDLE_VERSION,
 )
 from domainator.ssn_hierarchy import (
-    DEFAULT_MAX_MERGE_EVENTS,
     MERGE_IMPACT_CHOICES,
     MERGE_IMPACT_MIN_CHILD,
     build_mst_component_hierarchy,
-    component_size_summary_by_threshold,
-    filter_merge_event_rows,
-    merge_event_moving_sum,
-    threshold_merge_event_rows,
-    threshold_slider_stops,
 )
 from domainator.ssn_viewer_html import VIEWER_APP_NAME, write_ssn_viewer_html
 from domainator.utils import list_and_file_to_dict_keys
@@ -110,7 +104,6 @@ def build_ssn_viewer_bundle(
     metadata_files: List[Union[str, PathLike]] = None,
     subset_labels=None,
     merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
-    max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS,
     color_by: str = None,
     label_by: str = None,
     categorical_columns: List[str] = None,
@@ -118,8 +111,6 @@ def build_ssn_viewer_bundle(
 ):
     if merge_impact_metric not in MERGE_IMPACT_CHOICES:
         raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
-    if max_merge_events < 0:
-        raise ValueError("max_merge_events must be >= 0")
 
     matrix = subset_matrix_by_labels(matrix, subset_labels)
     if not matrix.symmetric_labels:
@@ -144,14 +135,6 @@ def build_ssn_viewer_bundle(
     tree = MaxTree(matrix)
     rows = list(matrix.rows)  # save label names before freeing matrix
     del matrix                # free O(n²) data array
-    component_summary = component_size_summary_by_threshold(tree, merge_impact_metric=merge_impact_metric)
-    merge_event_rows = threshold_merge_event_rows(component_summary)
-    merge_event_series = filter_merge_event_rows(
-        merge_event_rows,
-        max_merge_events=max_merge_events,
-    )
-    # From the unfiltered rows -- see merge_event_moving_sum's docstring.
-    merge_moving_sum = merge_event_moving_sum(merge_event_rows)
     hierarchy = build_mst_component_hierarchy(tree)
 
     bundle = {
@@ -159,21 +142,17 @@ def build_ssn_viewer_bundle(
         "version": SSN_VIEWER_BUNDLE_VERSION,
         "name": name,
         "domainator_version": __version__,
+        # Only what cannot be derived from the merge order itself. The split-event
+        # series, its moving sum and the threshold slider's stops are all a pure
+        # function of (nodes, mst_edges, merge_impact_metric), so readers compute them
+        # rather than carrying a copy: the viewer via ssn_viewer_html's ports, other
+        # readers via ssn_bundle.merge_event_rows / slider_stops. That keeps the file a
+        # function of the network alone -- no selection baked in at build time -- and
+        # keeps it O(nodes) on a network with hundreds of thousands of split events.
         "graph": {
             "nodes": rows,
             "mst_edges": tree.export_for_interactive_viz()["mst_edges"],
-            "cluster_count_by_threshold": tree.cluster_count_by_threshold,
-            "edges_by_threshold": tree.edges_by_threshold,
             "merge_impact_metric": merge_impact_metric,
-            "merge_event_series": merge_event_series,
-            # How many split events the network has, and the cap that was applied, so
-            # the viewer can say "515 of 161,763 plotted" rather than leaving the user
-            # to wonder whether the blank stretches of the axis are real. The series is
-            # capped; these two are not.
-            "merge_event_total": len(merge_event_rows),
-            "max_merge_events": int(max_merge_events),
-            "merge_moving_sum": merge_moving_sum,
-            "slider_stops": threshold_slider_stops(merge_event_series, tree=tree),
             "hierarchy": hierarchy,
         },
         "metadata": _metadata_payload(node_data),
@@ -253,9 +232,7 @@ def main(argv):
     parser.add_argument("--categorical", type=str, nargs="+", required=False, default=None,
                         help="Numeric metadata columns (for example integer cluster numbers) that the viewer should color as discrete categories instead of a gradient. Can be toggled per column in the viewer's color picker.")
     parser.add_argument("--merge_impact_metric", choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
-                        help="Metric recorded for split events in the bundle.")
-    parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
-                        help="Maximum number of strongest merge events to embed in the viewer bundle threshold slider and split plot. A few more may be added on top: after the strongest are taken, the strongest event in each otherwise-empty 5%% band of the threshold axis is added back, so the plot never leaves a stretch of its own axis blank. Use 0 to include all merge events.")
+                        help="Metric the viewer uses for split events: min_child (node count of the smaller piece) or product (the two piece sizes multiplied). Recorded in the bundle as the default; switchable in the viewer.")
     add_max_output_gb_argument(parser)
     parser.add_argument("--config", action=ActionConfigFile)
 
@@ -295,7 +272,6 @@ def main(argv):
             metadata_files=params.metadata,
             subset_labels=subset_labels,
             merge_impact_metric=params.merge_impact_metric,
-            max_merge_events=params.max_merge_events,
             color_by=params.color_by,
             label_by=params.label_by,
             categorical_columns=params.categorical,

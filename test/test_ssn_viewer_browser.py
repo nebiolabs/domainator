@@ -262,12 +262,16 @@ def dense_page(dense_viewer_html):
     yield from _yield_loaded_page(dense_viewer_html)
 
 
-def _build_embedded_viewer_capped(out_dir, node_count=60, max_merge_events=5):
-    """The same dense network, built with a cap small enough to drop most events.
+CAPPED_PAGE_MAX_MERGE_EVENTS = 5
+
+
+def _build_embedded_viewer_capped(out_dir, node_count=60):
+    """A dense network with enough split events that a small cap drops most of them.
 
     Every other fixture sits under the default cap of 500, so nothing in the suite
     would otherwise exercise a filtered split chart -- which is the state every large
-    network is in.
+    network is in. The cap itself is applied in the viewer (see capped_page): it is a
+    control there, not something the bundle was built with.
     """
     rng = np.random.default_rng(0)
     data = np.zeros((node_count, node_count), dtype=float)
@@ -286,9 +290,16 @@ def _build_embedded_viewer_capped(out_dir, node_count=60, max_merge_events=5):
         "--html", str(html_file),
         "--embed_data",
         "--name", "Capped Test Viewer",
-        "--max_merge_events", str(max_merge_events),
     ])
     return html_file
+
+
+def _set_split_event_cap(page, cap):
+    """Move the viewer's split-event cap -- the control that replaced the old
+    build-time ``--max_merge_events`` flag."""
+    page.fill("#split-event-cap", str(cap))
+    page.dispatch_event("#split-event-cap", "change")
+    page.wait_for_function("cap => state.maxMergeEvents === cap", arg=cap)
 
 
 @pytest.fixture(scope="module")
@@ -299,7 +310,9 @@ def capped_viewer_html(tmp_path_factory):
 @pytest.fixture
 def capped_page(capped_viewer_html):
     """A loaded page whose split chart shows only a capped slice of its events."""
-    yield from _yield_loaded_page(capped_viewer_html)
+    for page in _yield_loaded_page(capped_viewer_html):
+        _set_split_event_cap(page, CAPPED_PAGE_MAX_MERGE_EVENTS)
+        yield page
 
 
 def _build_embedded_viewer_two_bead(out_dir):
@@ -436,11 +449,11 @@ def test_split_chart_renders_with_moving_sum(page):
     # The legend advertises both series.
     assert page.is_visible(".legend-sum")
     assert page.is_visible(".legend-line")
-    # The moving sum is computed in Python and shipped in the bundle, not derived here.
-    assert page.evaluate("() => Array.isArray(state.bundle.graph.merge_moving_sum.y)")
+    # The moving sum is derived in the browser from the bundle's merge order.
+    assert page.evaluate("() => Array.isArray(state.series.movingSum.y)")
     # Stems are drawn at the largest single merge, so every event carries the new keys.
     assert page.evaluate(
-        "() => state.bundle.graph.merge_event_series.every("
+        "() => state.series.selectedRows.every("
         "e => typeof e.largest_merge === 'number' && e.merge_size_counts !== undefined)"
     )
     snapshot = page.eval_on_selector("#split-chart", "c => c.toDataURL()")
@@ -1139,7 +1152,7 @@ def test_saved_session_is_a_valid_current_bundle(meta_page, tmp_path):
     saved = _save_session(page, tmp_path)
 
     bundle = load_bundle(saved)  # would raise on a bad format/version
-    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 5
+    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 6
     assert bundle["graph"]["nodes"] == ["A", "B", "C", "D", "E", "F"]
 
     app_state = bundle["app_state"]
@@ -2363,14 +2376,76 @@ def _save_extraction(page, out_dir, filename="extraction.dsnv", name=None):
     return target
 
 
+def _assert_js_series_matches_python(page, graph):
+    """The viewer derives its split-event series in JavaScript; ssn_hierarchy derives
+    the same thing in Python. Same bundle, same numbers -- that is the port contract,
+    and from bundle v6 it is the only thing keeping the two in step, since neither
+    reads a stored copy any more.
+
+    The cap and the chart's window are read off the page, so this holds zoomed as well
+    as flat.
+    """
+    from domainator import ssn_bundle
+    from domainator.ssn_hierarchy import filter_merge_event_rows, threshold_slider_stops
+
+    bundle = {"graph": graph}
+    max_merge_events = page.evaluate("() => state.maxMergeEvents")
+    window = page.evaluate("() => currentSplitWindow()")
+    window = None if window is None else (window["min"], window["max"])
+    pinned = page.evaluate("() => selectedThresholdValue()")
+    pinned = pinned if isinstance(pinned, (int, float)) else None
+    py_events = ssn_bundle.merge_event_rows(bundle)
+    js_events = page.evaluate("() => state.series.eventRows")
+
+    assert len(js_events) == len(py_events)
+    for got, want in zip(js_events, py_events):
+        for field in ("edge_index", "threshold_to", "threshold_from", "merge_count",
+                      "summary_row_from", "summary_row_to"):
+            assert got[field] == want[field], field
+        # JSON object keys are strings; Python keys the histogram by int.
+        assert ({str(k): v for k, v in got["merge_size_counts"].items()}
+                == {str(k): v for k, v in want["merge_size_counts"].items()})
+        for field in ("threshold_value", "merge_impact", "largest_merge",
+                      "delta_largest", "delta_avg_non_singleton"):
+            assert got[field] == pytest.approx(want[field]), field
+
+    py_selected = filter_merge_event_rows(
+        py_events, max_merge_events=max_merge_events, window=window, pinned_threshold=pinned)
+    js_selected = page.evaluate("() => state.series.selectedRows")
+    assert ([row["edge_index"] for row in js_selected]
+            == [row["edge_index"] for row in py_selected])
+
+    py_stops = threshold_slider_stops(py_selected, tree=ssn_bundle.bundle_tree(bundle))
+    js_stops = page.evaluate("() => state.series.sliderStops")
+    assert len(js_stops) == len(py_stops)
+    for got, want in zip(js_stops, py_stops):
+        assert got["edge_index"] == want["edge_index"]
+        assert got["threshold_label"] == want["threshold_label"]
+        # threshold_index went with the threshold tables it indexed.
+        assert "threshold_index" not in got
+        if want["threshold_value"] is None:
+            assert got["threshold_value"] is None
+        else:
+            assert got["threshold_value"] == pytest.approx(want["threshold_value"])
+
+    py_sum = ssn_bundle.moving_sum(bundle, event_rows=py_events)
+    js_sum = page.evaluate("() => state.series.movingSum")
+    assert js_sum["window"] == pytest.approx(py_sum["window"])
+    assert js_sum["x"] == pytest.approx(py_sum["x"], rel=1e-9)
+    assert js_sum["y"] == pytest.approx(py_sum["y"], rel=1e-9)
+
+
 def test_extraction_of_everything_reproduces_the_python_bundle(meta_page, tmp_path):
     """The JS hierarchy/merge-series port must agree with ssn_hierarchy.py.
 
-    Selecting every node makes the extraction a rebuild of the whole network, so
-    it can be compared field-for-field against what build_ssn_viewer.py wrote.
+    Selecting every node makes the extraction a rebuild of the whole network, so its
+    structure can be compared field-for-field against what build_ssn_viewer.py wrote.
+    The derived series is checked against Python separately, since from v6 neither the
+    original nor the extraction stores one.
     """
     page = meta_page
     original = page.evaluate("() => state.bundle.graph")
+    _assert_js_series_matches_python(page, original)
     _select_nodes(page, list(range(6)))
 
     extracted = _read_session_bundle(_save_extraction(page, tmp_path))["graph"]
@@ -2378,26 +2453,9 @@ def test_extraction_of_everything_reproduces_the_python_bundle(meta_page, tmp_pa
     assert extracted["nodes"] == original["nodes"]
     assert extracted["mst_edges"] == original["mst_edges"]
     assert extracted["hierarchy"] == original["hierarchy"]
-    assert extracted["cluster_count_by_threshold"] == original["cluster_count_by_threshold"]
     assert extracted["merge_impact_metric"] == original["merge_impact_metric"]
-
-    assert len(extracted["merge_event_series"]) == len(original["merge_event_series"])
-    for got, want in zip(extracted["merge_event_series"], original["merge_event_series"]):
-        assert got == pytest.approx(want, rel=1e-9) if not isinstance(want, dict) else True
-        for field in ("edge_index", "threshold_value", "threshold_to", "threshold_from",
-                      "merge_impact", "largest_merge", "merge_count", "merge_size_counts",
-                      "summary_row_from", "summary_row_to"):
-            assert got[field] == want[field], field
-        for field in ("delta_largest", "delta_avg_non_singleton", "threshold_from_value"):
-            assert got[field] == pytest.approx(want[field]), field
-
-    assert extracted["slider_stops"] == original["slider_stops"]
-    assert extracted["merge_moving_sum"]["x"] == pytest.approx(
-        original["merge_moving_sum"]["x"], rel=1e-9
-    )
-    assert extracted["merge_moving_sum"]["y"] == pytest.approx(
-        original["merge_moving_sum"]["y"], rel=1e-9
-    )
+    # A v6 graph carries nothing derived, so an extraction writes nothing derived.
+    assert set(extracted) == {"nodes", "mst_edges", "hierarchy", "merge_impact_metric"}
     assert page.pageerrors == []
 
 
@@ -2515,13 +2573,11 @@ def test_extraction_of_everything_matches_python_on_a_tied_network(many_cat_page
 
     assert extracted["hierarchy"] == original["hierarchy"]
     assert extracted["mst_edges"] == original["mst_edges"]
-    assert extracted["cluster_count_by_threshold"] == original["cluster_count_by_threshold"]
-    assert extracted["slider_stops"] == original["slider_stops"]
-    assert extracted["merge_event_series"] == original["merge_event_series"]
-    assert extracted["merge_moving_sum"] == original["merge_moving_sum"]
+    _assert_js_series_matches_python(page, original)
     # One tie group covering all 119 merges.
-    assert len(original["merge_event_series"]) == 1
-    assert original["merge_event_series"][0]["merge_count"] == 119
+    events = page.evaluate("() => state.series.eventRows")
+    assert len(events) == 1
+    assert events[0]["merge_count"] == 119
     assert page.pageerrors == []
 
 
@@ -2550,29 +2606,18 @@ def test_extraction_of_everything_matches_python_on_distinct_weights(dense_page,
     the merge series has many rows and the moving sum window actually slides."""
     page = dense_page
     original = page.evaluate("() => state.bundle.graph")
-    assert len(original["merge_event_series"]) > 40      # many distinct thresholds
+    # Many distinct thresholds, so the moving-sum window actually slides.
+    assert page.evaluate("() => state.series.eventRows.length") > 40
+    _assert_js_series_matches_python(page, original)
     _select_nodes(page, list(range(60)))
 
     extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all60.dsnv"))["graph"]
 
     assert extracted["hierarchy"] == original["hierarchy"]
-    assert extracted["cluster_count_by_threshold"] == original["cluster_count_by_threshold"]
-    assert extracted["slider_stops"] == original["slider_stops"]
-    assert len(extracted["merge_event_series"]) == len(original["merge_event_series"])
-    for got, want in zip(extracted["merge_event_series"], original["merge_event_series"]):
-        assert got["edge_index"] == want["edge_index"]
-        assert got["merge_size_counts"] == want["merge_size_counts"]
-        assert got["merge_count"] == want["merge_count"]
-        assert got["threshold_value"] == pytest.approx(want["threshold_value"])
-        assert got["merge_impact"] == pytest.approx(want["merge_impact"])
-        assert got["largest_merge"] == pytest.approx(want["largest_merge"])
-        assert got["delta_largest"] == pytest.approx(want["delta_largest"])
-        assert got["delta_avg_non_singleton"] == pytest.approx(want["delta_avg_non_singleton"])
-    assert extracted["merge_moving_sum"]["window"] == pytest.approx(
-        original["merge_moving_sum"]["window"]
-    )
-    assert extracted["merge_moving_sum"]["x"] == pytest.approx(original["merge_moving_sum"]["x"])
-    assert extracted["merge_moving_sum"]["y"] == pytest.approx(original["merge_moving_sum"]["y"])
+    assert extracted["mst_edges"] == original["mst_edges"]
+    # Reloading the extraction must derive the very same series the original did.
+    _load_bundle_file(page, tmp_path / "all60.dsnv")
+    _assert_js_series_matches_python(page, extracted)
     assert page.pageerrors == []
 
 
@@ -2647,7 +2692,8 @@ def test_extraction_slider_keeps_the_floor_stop(meta_page, tmp_path):
     saved = _save_extraction(page, tmp_path, "floor.dsnv")
 
     graph = _read_session_bundle(saved)["graph"]
-    stops = graph["slider_stops"]
+    from domainator import ssn_bundle
+    stops = ssn_bundle.slider_stops({"graph": graph})
     weights = [edge[2] for edge in graph["mst_edges"]]
     weakest, span = min(weights), max(weights) - min(weights)
     # The JS port applies the same 1%-of-range offset as ssn_hierarchy does.
@@ -4701,10 +4747,11 @@ def _split_event_caption(page):
 
 def test_split_event_caption_says_the_whole_series_is_drawn(page):
     """Small networks are under the cap, and the caption has to say so plainly."""
-    graph = page.evaluate("() => state.bundle.graph")
-    assert len(graph["merge_event_series"]) == graph["merge_event_total"]
+    series = page.evaluate("() => ({plotted: state.series.selectedRows.length,"
+                           " total: state.series.total})")
+    assert series["plotted"] == series["total"]
     assert _split_event_caption(page) == (
-        f"All {graph['merge_event_total']:,} merge events plotted."
+        f"All {series['total']:,} merge events plotted."
     )
     assert "Every split event" in page.get_attribute("#split-event-count", "title")
     assert page.pageerrors == []
@@ -4713,11 +4760,10 @@ def test_split_event_caption_says_the_whole_series_is_drawn(page):
 def test_split_event_caption_reports_a_capped_series(capped_page):
     """The number that makes a blank stretch of axis readable as "filtered"."""
     page = capped_page
-    graph = page.evaluate("() => state.bundle.graph")
-    plotted = len(graph["merge_event_series"])
-    total = graph["merge_event_total"]
-    cap = graph["max_merge_events"]
-    assert cap == 5
+    series = page.evaluate("() => ({plotted: state.series.selectedRows.length,"
+                           " total: state.series.total, cap: state.series.cap})")
+    plotted, total, cap = series["plotted"], series["total"], series["cap"]
+    assert cap == CAPPED_PAGE_MAX_MERGE_EVENTS == 5
     assert plotted < total
     # The back-fill: between the cap and the cap plus one per 5% band.
     assert cap <= plotted <= cap + 20
@@ -4727,7 +4773,7 @@ def test_split_event_caption_reports_a_capped_series(capped_page):
     assert f"the strongest {cap:,} by impact" in caption
     assert f"plus {plotted - cap:,}" in caption
     assert "every 5% of the axis" in caption
-    assert "--max_merge_events" in page.get_attribute("#split-event-count", "title")
+    assert '"Split events" box' in page.get_attribute("#split-event-count", "title")
     assert page.pageerrors == []
 
 
@@ -4739,7 +4785,7 @@ def test_capped_series_still_reaches_the_bottom_of_the_axis(capped_page):
     strongest_edge = page.evaluate(
         "() => Math.max(...state.bundle.graph.mst_edges.map(e => e[2]))")
     weakest_plotted = page.evaluate(
-        "() => Math.min(...state.bundle.graph.merge_event_series.map(e => e.threshold_value))")
+        "() => Math.min(...state.series.selectedRows.map(e => e.threshold_value))")
     span = strongest_edge - weakest_edge
     assert (weakest_plotted - weakest_edge) < 0.1 * span
 
@@ -4750,15 +4796,20 @@ def test_capped_series_still_reaches_the_bottom_of_the_axis(capped_page):
     assert page.pageerrors == []
 
 
-def test_split_event_caption_falls_back_without_the_v5_counts(page):
-    """A v3/v4 bundle carries no total, so the caption must not invent one."""
+def test_split_event_caption_ignores_a_stale_stored_series(page):
+    """A pre-v6 bundle carries its own capped copy of the series. The viewer derives
+    its own, so a stale stored one can neither shrink the chart nor skew the caption."""
     page.evaluate("""() => {
-        delete state.bundle.graph.merge_event_total;
-        delete state.bundle.graph.max_merge_events;
+        state.bundle.graph.merge_event_series = [];
+        state.bundle.graph.merge_event_total = 999999;
+        state.bundle.graph.max_merge_events = 1;
+        state.bundle.graph.merge_moving_sum = {window: 0, x: [], y: []};
+        state.bundle.graph.slider_stops = [];
         updateSplitEventCount();
     }""")
-    plotted = page.evaluate("() => state.bundle.graph.merge_event_series.length")
-    assert _split_event_caption(page) == f"{plotted:,} merge events plotted."
+    total = page.evaluate("() => state.series.total")
+    assert total > 0
+    assert _split_event_caption(page) == f"All {total:,} merge events plotted."
     assert page.pageerrors == []
 
 
@@ -4783,7 +4834,7 @@ def test_js_merge_event_filter_matches_python_including_the_backfill(page):
 
     for cap in (1, 5, 25, 200):
         got = page.evaluate(
-            "([rows, cap]) => filterExtractionMergeEventRows(rows, cap)"
+            "([rows, cap]) => filterMergeEventRows(rows, cap)"
             ".map(row => row.edge_index)",
             [rows, cap],
         )
@@ -4793,46 +4844,157 @@ def test_js_merge_event_filter_matches_python_including_the_backfill(page):
 
     # The knob itself ports too.
     assert page.evaluate(
-        "rows => filterExtractionMergeEventRows(rows, 5, 0).length", rows) == 5
+        "rows => filterMergeEventRows(rows, 5, 0).length", rows) == 5
     assert page.pageerrors == []
 
 
-def test_extraction_carries_the_v5_event_counts(meta_page, tmp_path):
-    """An extraction is a bundle, so it has to describe its own series too."""
-    page = meta_page
-    _select_nodes(page, list(range(6)))
-    graph = _read_session_bundle(_save_extraction(page, tmp_path))["graph"]
-    original = page.evaluate("() => state.bundle.graph")
+def test_split_event_cap_control_rederives_the_series(dense_page):
+    """The cap is a control, not something the bundle was built with: moving it
+    re-derives the series and re-lays-out the slider, off the same file."""
+    page = dense_page
+    total = page.evaluate("() => state.series.total")
+    assert total > 25, "fixture needs more events than the caps under test"
 
-    assert graph["merge_event_total"] == original["merge_event_total"]
-    assert graph["merge_event_total"] == len(graph["merge_event_series"])
-    assert graph["max_merge_events"] == 500
+    _set_split_event_cap(page, 5)
+    capped = page.evaluate("() => state.series.selectedRows.length")
+    capped_stops = page.evaluate("() => state.sliderModel.stops.length")
+    assert 5 <= capped <= 5 + 20
+    assert capped < total
+
+    _set_split_event_cap(page, 0)
+    assert page.evaluate("() => state.series.selectedRows.length") == total
+    # Every event gets a stop, plus the floor; the infinity stop is in the model too.
+    assert page.evaluate("() => state.sliderModel.stops.length") > capped_stops
+    assert _split_event_caption(page) == f"All {total:,} merge events plotted."
     assert page.pageerrors == []
 
 
-def test_resaving_an_older_bundle_keeps_the_counts_optional(meta_page, tmp_path):
-    """A session saved from a v3/v4 bundle is stamped v5 without the v5 keys.
+def test_zooming_reveals_more_split_events_in_the_window(crowded_viewer_html):
+    """The point of the windowed cap: the same small number buys more detail as you
+    zoom, because it is spent on the events actually on screen."""
+    for page in _yield_loaded_page(crowded_viewer_html):
+        _set_split_event_cap(page, 10)
 
-    "Save session" re-serializes whatever graph was loaded, and the viewer cannot
-    invent a total it was never told. Both keys are therefore optional in a v5 file,
-    and every reader -- including the caption -- has to cope.
+        def in_window(window):
+            return page.evaluate(
+                """window => state.series.selectedRows.filter(
+                       row => row.threshold_value >= window.min
+                           && row.threshold_value <= window.max).length""",
+                window)
+
+        x, y = _split_chart_fraction_point(page, fraction=0.85)
+        page.mouse.move(x, y)
+        page.mouse.wheel(0, -1500)
+        page.wait_for_function("() => Boolean(state.splitChartZoom)")
+        window = page.evaluate("() => state.splitChartZoom")
+        zoomed = in_window(window)
+
+        page.click("#split-chart-reset-zoom")
+        page.wait_for_function("() => state.splitChartZoom === null")
+        flat = in_window(window)
+
+        # Zoomed, the cap is spent inside the window; flat, that same stretch competes
+        # with the whole axis for the same ten slots.
+        assert zoomed > flat
+        assert zoomed <= 10
+        assert page.pageerrors == []
+
+
+def test_zooming_keeps_whole_range_coverage_and_the_current_cut(crowded_viewer_html):
+    """Zooming must not strand the rest of the axis, nor move the cut in effect.
+
+    The band back-fill runs over the whole range however narrow the window is, so the
+    slider still spans everything; and the selected threshold is pinned through the
+    re-selection, so a zoom can never re-cluster the network under the user.
     """
+    for page in _yield_loaded_page(crowded_viewer_html):
+        _set_split_event_cap(page, 10)
+        # Sit on a stop well away from where we are about to zoom.
+        page.evaluate("""() => {
+            const finite = state.sliderModel.stops.filter(s => s.threshold_value !== null);
+            snapSliderToStop(finite[Math.floor(finite.length / 2)]);
+            updateThresholdUI();
+        }""")
+        before = page.evaluate("() => selectedThresholdValue()")
+        clusters_before = page.evaluate("() => activeClustersAtThreshold(selectedThresholdValue()).length")
+
+        x, y = _split_chart_fraction_point(page, fraction=0.05)
+        page.mouse.move(x, y)
+        page.mouse.wheel(0, -2000)
+        page.wait_for_function("() => Boolean(state.splitChartZoom)")
+
+        # The cut is untouched, so the clustering on the canvas is untouched.
+        assert page.evaluate("() => selectedThresholdValue()") == pytest.approx(before)
+        assert page.evaluate(
+            "() => activeClustersAtThreshold(selectedThresholdValue()).length") == clusters_before
+        # And the selected stop is still in the list, not merely nearest to it.
+        assert page.evaluate(
+            "value => state.sliderModel.stops.some(s => s.threshold_value === value)", before)
+
+        # Stops still reach across the whole axis, not just the zoomed window.
+        coverage = page.evaluate("""() => {
+            const finite = state.sliderModel.stops.filter(s => s.threshold_value !== null);
+            const all = state.series.eventRows.map(r => r.threshold_value);
+            const lo = Math.min(...all), hi = Math.max(...all);
+            // The production bin, clamp included: the topmost event lands in the last
+            // band rather than one past the end.
+            const bin = value => mergeEventDensityBin(value, lo, hi, 20);
+            return {
+                stopBins: [...new Set(finite.map(s => bin(s.threshold_value)))].sort((a, b) => a - b),
+                eventBins: [...new Set(all.map(bin))].sort((a, b) => a - b),
+                windowSpan: state.splitChartZoom.max - state.splitChartZoom.min,
+                dataSpan: hi - lo,
+            };
+        }""")
+        # Every 5% band that has an event to offer still has a stop, however narrow the
+        # window is -- that is what the back-fill running over the whole range buys. The
+        # band's representative is its strongest event, not its highest-scoring one, so
+        # this is coverage of the axis rather than a claim about particular thresholds.
+        assert set(coverage["eventBins"]) <= set(coverage["stopBins"])
+        assert len(coverage["eventBins"]) > 1, "fixture needs events in more than one band"
+        # ...and the window really was narrow, or the coverage claim proves nothing.
+        assert coverage["windowSpan"] < 0.5 * coverage["dataSpan"]
+        assert page.pageerrors == []
+
+
+def test_split_event_cap_keeps_the_threshold_you_are_looking_at(dense_page):
+    """Raising the cap re-lays-out the track, so the *value* has to be what survives."""
+    page = dense_page
+    _set_split_event_cap(page, 5)
+    page.evaluate("""() => {
+        const stop = state.sliderModel.stops.filter(s => s.threshold_value !== null)[1];
+        snapSliderToStop(stop);
+        updateThresholdUI();
+    }""")
+    before = page.evaluate("() => selectedThresholdValue()")
+
+    _set_split_event_cap(page, 0)
+    after = page.evaluate("() => selectedThresholdValue()")
+    # The old stop is still a stop at a larger cap, so the threshold is unchanged.
+    assert after == pytest.approx(before)
+    assert page.pageerrors == []
+
+
+def test_split_event_cap_is_saved_with_a_session(dense_page, tmp_path):
+    """A session records the cap, so reopening it shows the chart that was saved."""
     from domainator.ssn_bundle import SSN_VIEWER_BUNDLE_VERSION, load_bundle
 
-    page = meta_page
-    page.evaluate("""() => {
-        delete state.bundle.graph.merge_event_total;
-        delete state.bundle.graph.max_merge_events;
-    }""")
-    bundle = load_bundle(_save_session(page, tmp_path, "older.dsnv"))
+    page = dense_page
+    _set_split_event_cap(page, 7)
+    saved = _save_session(page, tmp_path, "capped_session.dsnv")
+    bundle = load_bundle(saved)
 
-    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 5
-    assert "merge_event_total" not in bundle["graph"]
-    assert "max_merge_events" not in bundle["graph"]
+    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 6
+    assert bundle["app_state"]["view"]["max_merge_events"] == 7
+    # Saving re-serializes the loaded graph, which carries nothing derived.
+    for derived_key in ("merge_event_series", "merge_event_total", "max_merge_events",
+                        "merge_moving_sum", "slider_stops",
+                        "cluster_count_by_threshold", "edges_by_threshold"):
+        assert derived_key not in bundle["graph"]
 
-    _load_bundle_file(page, tmp_path / "older.dsnv")
-    plotted = page.evaluate("() => state.bundle.graph.merge_event_series.length")
-    assert page.text_content("#split-event-count") == f"{plotted:,} merge events plotted."
+    _load_bundle_file(page, saved)
+    assert page.evaluate("() => state.maxMergeEvents") == 7
+    assert page.evaluate("() => state.series.cap") == 7
     assert page.pageerrors == []
 
 
@@ -4876,7 +5038,7 @@ def _split_hit_events(page):
 def test_split_chart_records_the_geometry_it_painted(page):
     """Hit-testing reads what the draw recorded, so the two cannot disagree."""
     hit = page.evaluate("() => state.splitChartHit")
-    events = page.evaluate("() => state.bundle.graph.merge_event_series")
+    events = page.evaluate("() => state.series.selectedRows")
 
     assert len(hit["events"]) == len(events)
     for entry, event in zip(hit["events"], events):
@@ -4978,8 +5140,8 @@ def test_moving_sum_lookup_matches_a_linear_scan(page):
     Checked against a scan rather than against itself, at sample points and at the
     exact sample thresholds where the step jumps.
     """
-    xs = page.evaluate("() => state.bundle.graph.merge_moving_sum.x")
-    ys = page.evaluate("() => state.bundle.graph.merge_moving_sum.y")
+    xs = page.evaluate("() => state.series.movingSum.x")
+    ys = page.evaluate("() => state.series.movingSum.y")
     assert len(xs) > 100
 
     probes = [xs[0], xs[1], xs[len(xs) // 2], xs[-1]]
@@ -5943,7 +6105,15 @@ def crowded_viewer_html(tmp_path_factory):
 
 @pytest.fixture
 def crowded_page(crowded_viewer_html):
-    yield from _yield_loaded_page(crowded_viewer_html)
+    """Every merge gets a stop, which is the crowding this fixture exists to show.
+
+    The viewer's default cap selects from the chart's *window*, so at full extent it
+    deliberately thins the track; uncapping is how this fixture gets the dense track its
+    tests are about.
+    """
+    for page in _yield_loaded_page(crowded_viewer_html):
+        _set_split_event_cap(page, 0)
+        yield page
 
 
 def _split_window(page):
@@ -6046,7 +6216,7 @@ def test_slider_positions_track_threshold_where_there_is_room(dense_page):
 def test_slider_positions_degrade_gracefully_past_the_track(page):
     """The two branches no real bundle here reaches, driven directly.
 
-    More stops than the track has positions (only with ``--max_merge_events`` raised
+    More stops than the track has positions (only with the split-event cap raised
     past ~900) and every stop at one threshold both have to stay ordered and inside
     the track; what they cannot keep is a position each, which is the one thing a
     thousand positions cannot give a thousand stops.

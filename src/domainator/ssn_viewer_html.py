@@ -621,9 +621,49 @@ def _session_state_js() -> str:
             },
         },
         {
+            // The split chart's x window, saved for the same reason the canvas
+            // transform below is: reopening a session onto the whole axis would throw
+            // away the part of it the session was about. Stored in threshold units, so
+            // it survives any change of cap; splitChartLayout clamps it into whatever
+            // range the bundle actually has.
+            //
+            // Restored before max_merge_events, because the window is what that cap is
+            // spent on: selecting first and setting the window afterwards would leave a
+            // zoomed session showing the unzoomed selection.
+            section: 'view',
+            key: 'split_chart_zoom',
+            get: () => state.splitChartZoom
+                ? {min: state.splitChartZoom.min, max: state.splitChartZoom.max}
+                : null,
+            set: value => {
+                if (value === null || value === undefined) {
+                    state.splitChartZoom = null;
+                    return;
+                }
+                if (!Number.isFinite(value.min) || !Number.isFinite(value.max) || !(value.max > value.min)) {
+                    throw new Error('malformed split chart zoom');
+                }
+                state.splitChartZoom = {min: Number(value.min), max: Number(value.max)};
+            },
+        },
+        {
+            // Restored after split_chart_zoom (the window it is spent on) and before
+            // threshold_value, because it decides which stops exist for that field to
+            // snap to. Uses rebuildMergeSeries rather than applyMaxMergeEvents for the
+            // same reason: snapping here would be undone.
+            section: 'view',
+            key: 'max_merge_events',
+            get: () => state.maxMergeEvents,
+            set: value => {
+                const cap = Number(value);
+                if (!Number.isFinite(cap) || cap < 0) { throw new Error('not a count: ' + value); }
+                rebuildMergeSeries(cap);
+            },
+        },
+        {
             // The threshold is stored as its value, not as the slider position:
-            // positions are derived from the bundle's slider_stops and shift
-            // whenever --max_merge_events changes.
+            // positions are derived from the slider's stops and shift whenever the
+            // split-event cap changes.
             section: 'view',
             key: 'threshold_value',
             get: () => {
@@ -659,28 +699,6 @@ def _session_state_js() -> str:
                 state.pendingRestoreViewTransform = {
                     scale: value.scale, offsetX: value.offsetX, offsetY: value.offsetY,
                 };
-            },
-        },
-        {
-            // The split chart's x window, saved for the same reason the canvas
-            // transform above is: reopening a session onto the whole axis would throw
-            // away the part of it the session was about. Stored in threshold units, so
-            // it survives a rebuild with another --max_merge_events; splitChartLayout
-            // clamps it into whatever range the bundle actually has.
-            section: 'view',
-            key: 'split_chart_zoom',
-            get: () => state.splitChartZoom
-                ? {min: state.splitChartZoom.min, max: state.splitChartZoom.max}
-                : null,
-            set: value => {
-                if (value === null || value === undefined) {
-                    state.splitChartZoom = null;
-                    return;
-                }
-                if (!Number.isFinite(value.min) || !Number.isFinite(value.max) || !(value.max > value.min)) {
-                    throw new Error('malformed split chart zoom');
-                }
-                state.splitChartZoom = {min: Number(value.min), max: Number(value.max)};
             },
         },
         domValueField('table', 'filter', 'metadata-filter'),
@@ -805,8 +823,10 @@ def _session_state_js() -> str:
         // Controls whose appearance is derived from the values just restored.
         updateComponentSortButton();
         updateCollapseLongPathsControl();
-        // The threshold is restored before the chart window its slider position is
-        // warped by, so the thumb is placed under the old map and has to be re-placed.
+        // Re-select and re-place under the window that was just restored. The registry
+        // order already does this for a session carrying view.max_merge_events, so this
+        // is idempotent there; it is load-bearing for an older session that carries a
+        // window but no cap, whose selection was otherwise made before the window was.
         repositionSliderStops();
 
         const notes = [];
@@ -2513,6 +2533,10 @@ def _extraction_js() -> str:
     const MOVING_SUM_WINDOW_FRACTION = 0.05;
     const MOVING_SUM_GRID_POINTS = 800;
     const DEFAULT_MAX_MERGE_EVENTS = 500;
+    // The viewer's own default. It picks its events from the chart's current window, so
+    // a much smaller number shows more: zoom in and the cap re-spends itself on the
+    // stretch being looked at. See ssn_hierarchy.DEFAULT_WINDOWED_MAX_MERGE_EVENTS.
+    const DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50;
     const MERGE_EVENT_DENSITY_BINS = 20;
 
     function makeUnionFind(size) {
@@ -2660,7 +2684,7 @@ def _extraction_js() -> str:
 
     // Port of ssn_hierarchy.component_size_summary_by_threshold followed by
     // threshold_merge_event_rows: one row per distinct MST edge weight.
-    function extractionMergeEventRows(nodeCount, edges, metric) {
+    function mergeEventRows(nodeCount, edges, metric) {
         if (nodeCount === 0 || edges.length === 0) { return []; }
         const unionFind = makeUnionFind(nodeCount);
         const componentSizes = new Int32Array(nodeCount).fill(1);
@@ -2740,7 +2764,7 @@ def _extraction_js() -> str:
     }
 
     // Port of ssn_hierarchy.merge_event_rank_key: strongest first.
-    function compareExtractionMergeEventRank(left, right) {
+    function compareMergeEventRank(left, right) {
         return right.merge_impact - left.merge_impact ||
             right.delta_largest - left.delta_largest ||
             right.delta_avg_non_singleton - left.delta_avg_non_singleton ||
@@ -2748,7 +2772,7 @@ def _extraction_js() -> str:
     }
 
     // Port of ssn_hierarchy.merge_event_density_bin.
-    function extractionMergeEventDensityBin(thresholdValue, lo, hi, densityBins) {
+    function mergeEventDensityBin(thresholdValue, lo, hi, densityBins) {
         if (densityBins < 1 || !Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
             return -1;
         }
@@ -2756,19 +2780,35 @@ def _extraction_js() -> str:
         return Math.max(0, Math.min(densityBins - 1, position));
     }
 
-    // Port of ssn_hierarchy.filter_merge_event_rows: the strongest maxMergeEvents
-    // events, plus the strongest event in each otherwise-empty band of the axis.
-    // See that function for why the back-fill exists.
-    function filterExtractionMergeEventRows(rows, maxMergeEvents = DEFAULT_MAX_MERGE_EVENTS,
-                                            densityBins = MERGE_EVENT_DENSITY_BINS) {
+    // Port of ssn_hierarchy.filter_merge_event_rows: the strongest maxMergeEvents events
+    // *within `window`*, plus the strongest event in each otherwise-empty band of the
+    // whole axis, plus `pinnedThreshold`'s event. See that function for the reasoning;
+    // in short, the window is what makes a small cap show more rather than less, the
+    // bands keep every stretch of the slider reachable, and the pin keeps the cut
+    // currently in effect from being filtered out from under the user.
+    function filterMergeEventRows(rows, maxMergeEvents = DEFAULT_MAX_MERGE_EVENTS,
+                                  densityBins = MERGE_EVENT_DENSITY_BINS,
+                                  window = null, pinnedThreshold = null) {
         if (maxMergeEvents === 0 || rows.length <= maxMergeEvents) { return rows.slice(); }
-        const ranked = rows.slice().sort(compareExtractionMergeEventRank);
-        const filtered = ranked.slice(0, maxMergeEvents);
+        const ranked = rows.slice().sort(compareMergeEventRank);
 
-        // Band edges come from the whole series, because that is what the axis spans.
+        let pool = ranked;
+        if (window) {
+            const low = Math.min(window.min, window.max);
+            const high = Math.max(window.min, window.max);
+            pool = ranked.filter(row => {
+                const value = Number(row.threshold_value);
+                return value >= low && value <= high;
+            });
+        }
+        const filtered = pool.slice(0, maxMergeEvents);
+        const selected = new Set(filtered);
+
+        // Band edges come from the whole series, because that is what the axis spans --
+        // a window narrows what the cap ranks, never what the axis has to cover.
         // Scanned rather than spread through Math.min: `rows` is the UNFILTERED series,
-        // which on a large extraction runs to six figures and would overflow the
-        // argument list.
+        // which on a large network runs to six figures and would overflow the argument
+        // list.
         let lo = Infinity;
         let hi = -Infinity;
         let finiteCount = 0;
@@ -2781,24 +2821,33 @@ def _extraction_js() -> str:
         }
         if (finiteCount > 0 && densityBins > 0) {
             const covered = new Set(filtered.map(row =>
-                extractionMergeEventDensityBin(row.threshold_value, lo, hi, densityBins)));
-            // `ranked` is strongest-first, so the first row seen in an empty band is
-            // the strongest one available to represent it.
-            for (let index = maxMergeEvents; index < ranked.length; index++) {
-                const row = ranked[index];
-                const bin = extractionMergeEventDensityBin(row.threshold_value, lo, hi, densityBins);
+                mergeEventDensityBin(row.threshold_value, lo, hi, densityBins)));
+            // `ranked` is strongest-first, so the first row seen in an empty band is the
+            // strongest one available to represent it. Candidates come from the whole
+            // series, not the window: a band outside the window still needs its stop.
+            for (const row of ranked) {
+                if (selected.has(row)) { continue; }
+                const bin = mergeEventDensityBin(row.threshold_value, lo, hi, densityBins);
                 if (bin < 0 || covered.has(bin)) { continue; }
                 covered.add(bin);
                 filtered.push(row);
+                selected.add(row);
             }
         }
+
+        if (pinnedThreshold !== null && Number.isFinite(pinnedThreshold)
+                && !filtered.some(row => Number(row.threshold_value) === pinnedThreshold)) {
+            const pinned = ranked.find(row => Number(row.threshold_value) === pinnedThreshold);
+            if (pinned) { filtered.push(pinned); }
+        }
+
         return filtered.sort((left, right) => left.edge_index - right.edge_index);
     }
 
     // Port of ssn_hierarchy.merge_event_moving_sum. Runs over the UNFILTERED rows:
     // filtering keeps the strongest events, so summing afterwards would undercount
     // exactly the small ones this series exists to show.
-    function extractionMovingSum(rows) {
+    function mergeEventMovingSum(rows) {
         const empty = {window: 0, x: [], y: []};
         if (rows.length === 0) { return empty; }
         const points = rows
@@ -2844,48 +2893,23 @@ def _extraction_js() -> str:
         return {window, x, y};
     }
 
-    // Distinct MST edge weights and the component count at each, mirroring
-    // MaxTree's cluster_count_by_threshold.
-    function extractionClusterCountByThreshold(nodeCount, edges) {
-        const table = [];
-        const rowIndexByThreshold = new Map();
-        for (let i = 0; i < edges.length; i++) {
-            if (i === 0 || edges[i][2] !== edges[i - 1][2]) {
-                // Edges are weight-descending, so every earlier edge is strictly above.
-                rowIndexByThreshold.set(edges[i][2], table.length);
-                table.push([edges[i][2], nodeCount - i]);
-            }
-        }
-        if (edges.length > 0 && edges[edges.length - 1][2] > 0) {
-            // The --lb 0 default: the complete graph, when every score is positive.
-            rowIndexByThreshold.set(0, table.length);
-            table.push([0, nodeCount - edges.length]);
-        }
-        return {table, rowIndexByThreshold};
-    }
-
-    // Mirrors build_ssn_viewer._slider_stops, including its trailing floor stop:
+    // Port of ssn_hierarchy.threshold_slider_stops, including its trailing floor stop:
     // every other stop excludes its own tie group, so without one strictly below the
     // weakest edge the fully merged network cannot be reached on the slider.
-    function extractionSliderStops(rows, rowIndexByThreshold, edges) {
-        const stops = [{edge_index: -1, threshold_index: -1, threshold_label: '∞', threshold_value: null}];
+    function buildSliderStops(rows, edges) {
+        const stops = [{edge_index: -1, threshold_label: '\u221e', threshold_value: null}];
         rows.forEach(row => {
             stops.push({
                 edge_index: row.edge_index,
-                threshold_index: rowIndexByThreshold.has(row.threshold_value)
-                    ? rowIndexByThreshold.get(row.threshold_value)
-                    : -1,
                 threshold_label: row.threshold_to,
                 threshold_value: row.threshold_value,
             });
         });
         if (edges.length > 0) {
             // edges are weight-descending.
-            const floorValue = extractionFloorThreshold(edges[edges.length - 1][2], edges[0][2]);
+            const floorValue = floorThresholdValue(edges[edges.length - 1][2], edges[0][2]);
             stops.push({
                 edge_index: edges.length - 1,   // every MST edge is strictly above
-                // Stands for the complete-graph cut, so it reads counts from that row.
-                threshold_index: rowIndexByThreshold.has(0) ? rowIndexByThreshold.get(0) : -1,
                 threshold_label: formatThresholdValue(floorValue),
                 threshold_value: floorValue,
             });
@@ -2893,10 +2917,64 @@ def _extraction_js() -> str:
         return stops;
     }
 
+    // The window-independent half of the series: the full event list and its moving sum,
+    // derived from the merge order the bundle carries. From bundle v6 the file stores
+    // none of it -- it is a pure function of (node count, mst_edges, metric), and
+    // deriving it here is what lets both the cap and the chart's window decide what is
+    // shown, neither of which is knowable when the file is written. Pre-v6 files still
+    // carry a capped copy; it is ignored in favour of this, so an old bundle is not
+    // stuck with whatever cap it happened to be built with.
+    //
+    // This is the expensive half -- one union-find replay over the MST edges -- so it
+    // runs once per bundle. Zooming re-runs only selectMergeEvents below.
+    function deriveMergeSeries(nodeCount, edges, metric) {
+        const eventRows = mergeEventRows(nodeCount, edges, metric);
+        return {
+            edges,
+            eventRows,
+            // From the UNFILTERED rows, so the chart's axis and the slider's track span
+            // every event whatever the cap and the window are.
+            movingSum: mergeEventMovingSum(eventRows),
+            total: eventRows.length,
+            // Filled in by selectMergeEvents, which needs a window this does not have.
+            selectedRows: [],
+            sliderStops: [],
+            cap: 0,
+        };
+    }
+
+    // The window-dependent half: which of those events the chart plots and the slider
+    // offers stops for. Cheap (a sort and a scan), so it re-runs on every zoom and pan.
+    function selectMergeEvents(series, maxMergeEvents, window, pinnedThreshold) {
+        series.selectedRows = filterMergeEventRows(
+            series.eventRows, maxMergeEvents, MERGE_EVENT_DENSITY_BINS, window, pinnedThreshold);
+        series.sliderStops = buildSliderStops(series.selectedRows, series.edges);
+        series.cap = maxMergeEvents;
+        return series;
+    }
+
+    // The full threshold range of the series, which is what the chart's axis spans and
+    // what a zoom window is clamped against. Taken from the UNFILTERED rows (and the
+    // moving sum, which runs over them too) rather than from the current selection --
+    // the selection depends on the window, so deriving the range from it would be
+    // circular, and would make the axis breathe as the user zoomed.
+    function splitSeriesDataRange(series) {
+        let min = Infinity;
+        let max = -Infinity;
+        const consider = value => {
+            if (!Number.isFinite(value)) { return; }
+            if (value < min) { min = value; }
+            if (value > max) { max = value; }
+        };
+        for (const row of series.eventRows) { consider(Number(row.threshold_value)); }
+        for (const value of (series.movingSum.x || [])) { consider(Number(value)); }
+        return Number.isFinite(min) ? {min, max} : {min: 0, max: 0};
+    }
+
     // Port of ssn_hierarchy.floor_threshold_value.
     const FLOOR_THRESHOLD_SPAN_FRACTION = 0.01;
 
-    function extractionFloorThreshold(lowestMstWeight, highestMstWeight) {
+    function floorThresholdValue(lowestMstWeight, highestMstWeight) {
         const span = highestMstWeight - lowestMstWeight;
         if (span > 0) {
             return lowestMstWeight - (FLOOR_THRESHOLD_SPAN_FRACTION * span);
@@ -2940,9 +3018,6 @@ def _extraction_js() -> str:
 
         const nodeCount = induced.nodeIndices.length;
         const metric = state.bundle.graph.merge_impact_metric;
-        const eventRows = extractionMergeEventRows(nodeCount, induced.edges, metric);
-        const clusterCounts = extractionClusterCountByThreshold(nodeCount, induced.edges);
-        const filteredRows = filterExtractionMergeEventRows(eventRows);
         const keptIds = new Set(induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)));
 
         return {
@@ -2951,25 +3026,15 @@ def _extraction_js() -> str:
                 version: BUNDLE_VERSION,
                 name: ((state.bundle.name || 'network') + '_extraction'),
                 domainator_version: DOMAINATOR_VERSION,
+                // A v6 graph: only what cannot be derived from the merge order. The
+                // split-event series, its moving sum and the slider's stops are all a
+                // function of these four keys, so an extraction no longer computes a
+                // frozen copy of them -- whoever opens it derives them, at whatever cap
+                // they are looking at it with.
                 graph: {
                     nodes: induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)),
                     mst_edges: induced.edges,
-                    cluster_count_by_threshold: clusterCounts.table,
-                    // Counts of *all* graph edges above each threshold. The bundle only
-                    // ever carried the MST, so this cannot be recomputed here; it is
-                    // left empty rather than filled with MST counts that would read as
-                    // full-graph ones. No reader consumes it.
-                    edges_by_threshold: [],
                     merge_impact_metric: metric,
-                    merge_event_series: filteredRows,
-                    // v5 fields: the uncapped event count and the cap, so the viewer can
-                    // report how much of the series it is showing. The extraction applies
-                    // the same default cap build_ssn_viewer.py does.
-                    merge_event_total: eventRows.length,
-                    max_merge_events: DEFAULT_MAX_MERGE_EVENTS,
-                    // From the unfiltered rows -- see extractionMovingSum.
-                    merge_moving_sum: extractionMovingSum(eventRows),
-                    slider_stops: extractionSliderStops(filteredRows, clusterCounts.rowIndexByThreshold, induced.edges),
                     hierarchy: buildExtractionHierarchy(nodeCount, induced.edges),
                 },
                 metadata: {
@@ -5876,6 +5941,34 @@ def ssn_viewer_html(
         font-weight: 600;
         letter-spacing: 0.01em;
     }}
+    .split-event-note {{
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }}
+    .split-event-note .note {{
+        flex: 1 1 320px;
+    }}
+    .split-event-cap {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }}
+    .split-event-cap label {{
+        color: var(--muted);
+        font-size: 0.9rem;
+    }}
+    .split-event-cap input {{
+        width: 84px;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 10px;
+        padding: 4px 8px;
+        font: inherit;
+        color: var(--ink);
+    }}
     .threshold-jump {{
         display: inline-flex;
         align-items: center;
@@ -6083,7 +6176,19 @@ def ssn_viewer_html(
                         <input id="threshold-input" type="text" inputmode="decimal" placeholder="Nearest split" disabled />
                     </div>
                 </div>
-                <div class="note" id="split-event-count"></div>
+                <div class="split-event-note">
+                    <div class="note" id="split-event-count"></div>
+                    <div class="split-event-cap">
+                        <label for="split-event-cap">Split events</label>
+                        <!-- The cap used to be build_ssn_viewer.py --max_merge_events,
+                             baked into the bundle. The series is derived on load now, so
+                             it is a control here instead: raising it costs one replay of
+                             the merge order, not a rebuild of the file. -->
+                        <input id="split-event-cap" type="number" min="0" step="50"
+                               title="How many split events the chart plots and the slider offers stops for: the strongest this many by impact, plus a few so no 5% band of the axis with an event to show is left empty. 0 plots every event."
+                               disabled />
+                    </div>
+                </div>
                 <div class="toolbar">
                     <button id="split-chart-reset-zoom" type="button" disabled title="Show the whole threshold range again (or double-click the chart)">Reset zoom</button>
                     <button id="export-split-png" type="button" disabled title="Download this chart as a PNG at the resolution chosen in View Settings">Export chart PNG</button>
@@ -6644,13 +6749,14 @@ def ssn_viewer_html(
         state.pendingRestoreViewTransform = null;
         state.dotLayoutCache = new Map();
         state.layoutCache = new Map();
-        state.sliderModel = buildSliderModel(bundle.graph.slider_stops || []);
-        // Point into the model just replaced, so they cannot outlive it.
-        state.selectedStop = null;
-        state.stopBeforeSplitChartClick = null;
         // A window onto the previous bundle's threshold range means nothing here; a
-        // session restore sets its own afterwards.
+        // session restore sets its own afterwards. Cleared before the series is built,
+        // because the selection is taken against whatever window is in force.
         state.splitChartZoom = null;
+        // Derived here rather than read from the file: see deriveMergeSeries. Every
+        // consumer below reads state.series, never the bundle's own copy (a pre-v6 file
+        // has one, already capped by whoever built it).
+        rebuildMergeSeries(DEFAULT_WINDOWED_MAX_MERGE_EVENTS);
         state.allNodeIndices = bundle.graph.nodes.map((_, i) => i);
         rebuildMetadataCaches();
 
@@ -6905,17 +7011,24 @@ def ssn_viewer_html(
         }});
     }}
 
-    // The warp is a function of the chart's window, so the stops have to be laid out
-    // again whenever that window moves -- and the thumb put back on the threshold it
-    // was already on, which is a different position under the new map.
+    // Both which stops exist and where they sit are functions of the chart's window, so
+    // both are redone whenever that window moves -- and the thumb put back on the
+    // threshold it was already on, which is a different position, and possibly a
+    // different stop object, under the new map.
+    //
+    // The selection is re-run because the cap spends itself on the window: zoom in and
+    // the same `maxMergeEvents` buys stops among the events actually on screen, which is
+    // what makes small events reachable at all. The threshold in effect is captured
+    // first and pinned through the re-selection, so the cut never changes under a zoom.
     function repositionSliderStops() {{
-        if (!state.sliderModel || state.sliderModel.stops.length === 0) {{
+        if (!state.series || !state.sliderModel || state.sliderModel.stops.length === 0) {{
             return;
         }}
-        const stop = currentSliderStop();
-        positionSliderStops(state.sliderModel.stops.filter(entry => entry.threshold_value !== null));
-        snapSliderToStop(stop);
+        const threshold = selectedThresholdValue();
+        applyMergeSelection(threshold);
+        restoreThreshold(threshold);
         updateThresholdStepButtons();
+        updateSplitEventCount();
     }}
 
     function buildSliderModel(sourceStops) {{
@@ -9472,7 +9585,7 @@ def ssn_viewer_html(
             }});
         }}
 
-        const events = state.bundle.graph.merge_event_series;
+        const events = state.series ? state.series.selectedRows : [];
         if (events.length === 0) {{
             return Object.assign(frame, {{
                 message: 'No split events in this bundle.',
@@ -9484,14 +9597,15 @@ def ssn_viewer_html(
         // one big cluster splitting off and a swarm of singletons are opposite stories that
         // the sum renders identically.
         const maxImpact = Math.max(...events.map(event => event.largest_merge), 1);
-        const movingSum = state.bundle.graph.merge_moving_sum || {{x: [], y: []}};
+        const movingSum = state.series.movingSum || {{x: [], y: []}};
         const movingSumX = movingSum.x || [];
         const movingSumY = movingSum.y || [];
-        // The moving sum is computed in Python over the UNFILTERED event rows, so its x range
-        // can extend past the capped merge_event_series; plot over the union of the two.
-        const thresholdValues = events.map(event => event.threshold_value).concat(movingSumX);
-        const dataMin = Math.min(...thresholdValues);
-        const dataMax = Math.max(...thresholdValues);
+        // The axis spans the whole series, never just what is selected -- the selection
+        // is a function of the window, so an axis derived from it would chase its own
+        // tail as the user zoomed.
+        const dataRange = splitSeriesDataRange(state.series);
+        const dataMin = dataRange.min;
+        const dataMax = dataRange.max;
         // The slice of the series the chart is showing: all of it unless it has been
         // zoomed. Every scale, tick, mark and marker below is derived from this window,
         // so it is the single place the zoom can be got wrong -- and the single place
@@ -12082,34 +12196,110 @@ def ssn_viewer_html(
         drawClusterView(resetView);
     }}
 
+    // The bundle carries the merge order; everything the threshold slider and the split
+    // chart show is derived from it, here, on load. See deriveMergeSeries.
+    function normalizeMaxMergeEvents(value) {{
+        const cap = Number(value);
+        if (!Number.isFinite(cap) || cap < 0) {{ return DEFAULT_WINDOWED_MAX_MERGE_EVENTS; }}
+        return Math.floor(cap);
+    }}
+
+    // The part of the axis the split chart is currently showing, in threshold units, or
+    // null when the whole series is on screen. Clamped by splitChartVisibleWindow against
+    // the series' real range, so a stale zoom left over from another bundle cannot narrow
+    // the selection to a stretch that no longer exists.
+    function currentSplitWindow() {{
+        if (!state.series || !state.splitChartZoom) {{ return null; }}
+        const range = splitSeriesDataRange(state.series);
+        const view = splitChartVisibleWindow(range.min, range.max);
+        return view.zoomed ? {{min: view.min, max: view.max}} : null;
+    }}
+
+    // Re-select which events the chart plots and the slider stops at, and re-lay-out the
+    // slider, without redrawing. Every caller that changes the cap or the window goes
+    // through here.
+    //
+    // `pinnedThreshold` is the cut currently in effect. It has to survive the
+    // re-selection: if zooming could filter out the stop the thumb is on, the slider
+    // would land on a neighbouring stop and the network would silently re-cluster.
+    function applyMergeSelection(pinnedThreshold) {{
+        selectMergeEvents(state.series, state.maxMergeEvents, currentSplitWindow(),
+                          Number.isFinite(pinnedThreshold) ? pinnedThreshold : null);
+        state.sliderModel = buildSliderModel(state.series.sliderStops);
+        // Point into the model just replaced, so they cannot outlive it.
+        state.selectedStop = null;
+        state.stopBeforeSplitChartClick = null;
+
+        const slider = document.getElementById('threshold-slider');
+        slider.max = String(state.sliderModel.maxPosition);
+        slider.disabled = state.sliderModel.stops.length === 0;
+        document.getElementById('threshold-min-label').textContent = state.sliderModel.minLabel;
+        document.getElementById('threshold-max-label').textContent = state.sliderModel.maxLabel;
+        document.getElementById('threshold-input').disabled = state.sliderModel.stops.length === 0;
+        const capInput = document.getElementById('split-event-cap');
+        capInput.disabled = false;
+        capInput.value = String(state.maxMergeEvents);
+    }}
+
+    // Put the thumb back on `threshold` under whatever stop list now exists.
+    function restoreThreshold(threshold) {{
+        snapSliderToStop(Number.isFinite(threshold)
+            ? nearestStopForThreshold(threshold)
+            : state.sliderModel.stops.find(stop => stop.threshold_value === null));
+    }}
+
+    // A new bundle, or a session restore setting the cap. Replays the merge order, which
+    // is the expensive half, then selects against the current window.
+    //
+    // A session restore uses this directly: the threshold_value field that follows it in
+    // the registry does the snapping, so snapping here would be undone a moment later.
+    function rebuildMergeSeries(maxMergeEvents) {{
+        state.maxMergeEvents = normalizeMaxMergeEvents(maxMergeEvents);
+        const graph = state.bundle.graph;
+        state.series = deriveMergeSeries(
+            graph.nodes.length, graph.mst_edges || [], graph.merge_impact_metric);
+        applyMergeSelection(null);
+    }}
+
+    // The user moved the cap. The stops are re-laid-out, so the old selection's slider
+    // position means nothing; the threshold *value* is what survives -- exactly as it
+    // does across a session save, and for the same reason. No replay here: the cap only
+    // changes which of the already-derived events are selected.
+    function applyMaxMergeEvents(maxMergeEvents) {{
+        if (!state.bundle || !state.series) {{ return; }}
+        const previousThreshold = selectedThresholdValue();
+        state.maxMergeEvents = normalizeMaxMergeEvents(maxMergeEvents);
+        applyMergeSelection(previousThreshold);
+        restoreThreshold(previousThreshold);
+        updateSplitEventCount();
+        updateThresholdUI(false);
+    }}
+
     // How much of the network's split-event series the chart is actually showing.
     // Without this the blank stretches of a large network's axis are unreadable: the
     // axis and the moving sum span every merge, but the stems are a capped selection,
     // so "nothing plotted here" and "nothing happens here" look identical.
     //
-    // graph.merge_event_total and graph.max_merge_events arrived in bundle v5. A v3/v4
-    // bundle carries neither, so the label falls back to the plotted count alone
-    // rather than inventing a denominator.
+    // The series is derived on load from the bundle's merge order, so the denominator
+    // is always known -- on a bundle of any version, including the pre-v6 files whose
+    // stored series was already capped when it was written.
     function updateSplitEventCount() {{
         const note = document.getElementById('split-event-count');
-        if (!state.bundle) {{
+        if (!state.bundle || !state.series) {{
             note.textContent = '';
             note.removeAttribute('title');
             return;
         }}
-        const graph = state.bundle.graph;
-        const plotted = (graph.merge_event_series || []).length;
-        const total = Number.isFinite(graph.merge_event_total) ? graph.merge_event_total : null;
-        const cap = Number.isFinite(graph.max_merge_events) ? graph.max_merge_events : null;
+        const plotted = state.series.selectedRows.length;
+        const total = state.series.total;
+        const cap = state.series.cap;
         const bandPercent = 100 / MERGE_EVENT_DENSITY_BINS;
         const plural = count => (count === 1 ? '' : 's');
 
-        if (total === null) {{
-            note.textContent = plotted.toLocaleString() + ' merge event' + plural(plotted) + ' plotted.';
-        }} else if (plotted >= total) {{
+        if (plotted >= total) {{
             note.textContent = 'All ' + total.toLocaleString() + ' merge event' + plural(total) + ' plotted.';
         }} else {{
-            const backfilled = cap === null ? 0 : Math.max(0, plotted - cap);
+            const backfilled = cap === 0 ? 0 : Math.max(0, plotted - cap);
             note.textContent = plotted.toLocaleString() + ' of ' + total.toLocaleString() +
                 ' merge events plotted' +
                 (backfilled > 0
@@ -12118,13 +12308,13 @@ def ssn_viewer_html(
                       + ' with an event to show has one.'
                     : ' \u2014 the strongest by impact.');
         }}
-        note.title = total === null || plotted >= total
+        note.title = plotted >= total
             ? 'Every split event in this network is drawn.'
             : 'The split chart draws a capped selection of the network\u2019s ' +
-              total.toLocaleString() + ' split events, set by build_ssn_viewer.py ' +
-              '--max_merge_events (0 plots them all). The axis and the moving-sum line ' +
-              'always span every event, so a stretch with no stems is a stretch whose ' +
-              'events were too small to make the cut, not necessarily a quiet one.';
+              total.toLocaleString() + ' split events, set by the "Split events" box ' +
+              '(0 plots them all). The axis and the moving-sum line always span every ' +
+              'event, so a stretch with no stems is a stretch whose events were too ' +
+              'small to make the cut, not necessarily a quiet one.';
     }}
 
     function scheduleThresholdUI(resetView = true) {{
@@ -12886,6 +13076,11 @@ def ssn_viewer_html(
         // Keep the user's current pan/zoom when the slider is released; only snap to the
         // nearest stop. (Use the Reset view button to re-fit.)
         scheduleThresholdUI(false);
+    }});
+    document.getElementById('split-event-cap').addEventListener('change', event => {{
+        // Re-deriving the whole series is one pass over the MST edges, so this is a
+        // plain 'change' handler rather than anything debounced or deferred.
+        applyMaxMergeEvents(event.target.value);
     }});
     document.getElementById('threshold-input').addEventListener('change', jumpToThresholdValue);
     document.getElementById('threshold-input').addEventListener('keydown', event => {{
