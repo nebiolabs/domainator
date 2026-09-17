@@ -226,13 +226,10 @@ Merge impact is one of two metrics:
 
 Two running statistics need care. The mean over non-singletons is maintained as a
 running `(count, sum)` pair, adjusting for the two components leaving and one arriving.
-The largest component would naively cost O(n) per merge to recompute; instead it is a
-**max-heap with lazy deletion** — merged sizes are pushed, consumed sizes are recorded in
-a pending-deletion count, and `heap_max()` pops stale entries only when it reaches them.
-That makes the whole pass O(n α(n) + n log n).
-
-(The browser port can skip the heap entirely: an extraction's summary tracks the largest
-component as a running maximum, because component sizes only ever grow.)
+The largest component is also a scalar running value. A merge only replaces two
+components with their larger combined component, so component sizes never decrease and
+`largest = max(largest, merged_size)` is exact. This avoids rescanning the components or
+maintaining a heap. The Python and browser implementations both use this invariant.
 
 ### Pass 2: group by threshold
 

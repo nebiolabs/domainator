@@ -10,6 +10,7 @@ import pytest
 
 from domainator.data_matrix import DenseDataMatrix, MaxTree
 from domainator.ssn_hierarchy import (
+    COMPONENT_LARGEST_COL,
     MERGE_EVENT_DENSITY_BINS,
     MERGE_IMPACT_MIN_CHILD,
     MERGE_IMPACT_PRODUCT,
@@ -42,6 +43,12 @@ def _event_rows(metric=MERGE_IMPACT_MIN_CHILD, tree=None):
     return threshold_merge_event_rows(
         component_size_summary_by_threshold(tree, merge_impact_metric=metric)
     )
+
+
+def test_component_summary_tracks_running_largest_component():
+    summary = component_size_summary_by_threshold(_tie_group_tree())
+
+    assert summary[:, COMPONENT_LARGEST_COL].tolist() == [1.0, 2.0, 2.0, 2.0, 4.0, 6.0]
 
 
 @pytest.mark.parametrize("metric", [MERGE_IMPACT_MIN_CHILD, MERGE_IMPACT_PRODUCT])
