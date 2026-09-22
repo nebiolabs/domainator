@@ -387,6 +387,9 @@ function seededUnit(componentId, salt) {
 // aspect), so it both fixes the tall linear-tidy seed and gives Force its radial branch shape.
 // Clearance between a parent bubble's rim and its child's in the radial seed.
 const RADIAL_SEED_RING_PAD = 36;
+// Arc each bubble is allotted along its ring, over and above its own diameter. Matches the
+// bubblePadding that refineLayoutGeometry separates overlapping bubbles to.
+const RADIAL_SEED_ARC_PAD = 17;
 
 function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
     const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
@@ -415,10 +418,22 @@ function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
         const depth = depthByNode.get(id) || 0;
         ringMaxRadius[depth] = Math.max(ringMaxRadius[depth], radii.get(id) || 10);
     });
+    // A ring also has to be long enough to hold everything standing on it. Sizing rings by
+    // radius alone let a cluster with hundreds of neighbours seed them shoulder to shoulder
+    // on a circle with no room for them, and the collision forces then blew the ring apart
+    // into a one-sided spike -- on a network whose main cluster had 351 neighbours, all 351
+    // ended up in a single beam off one side of it.
+    const ringArcNeed = new Array(maxDepth + 1).fill(0);
+    componentIds.forEach(id => {
+        const depth = depthByNode.get(id) || 0;
+        ringArcNeed[depth] += (2 * (radii.get(id) || 10)) + RADIAL_SEED_ARC_PAD;
+    });
     const depthRadius = new Array(maxDepth + 1).fill(0);
     for (let depth = 1; depth <= maxDepth; depth++) {
-        depthRadius[depth] = depthRadius[depth - 1]
-            + Math.max(gap, ringMaxRadius[depth - 1] + ringMaxRadius[depth] + RADIAL_SEED_RING_PAD);
+        depthRadius[depth] = Math.max(
+            depthRadius[depth - 1]
+                + Math.max(gap, ringMaxRadius[depth - 1] + ringMaxRadius[depth] + RADIAL_SEED_RING_PAD),
+            ringArcNeed[depth] / (2 * Math.PI));
     }
     const ringRadius = new Map(componentIds.map(id => [id, depthRadius[depthByNode.get(id) || 0]]));
     const leafCount = new Map();

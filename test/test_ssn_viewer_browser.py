@@ -6769,6 +6769,53 @@ def test_radial_seed_rings_stay_concentric_around_a_huge_cluster(spindle_page):
     assert spindle_page.pageerrors == []
 
 
+def test_radial_seed_ring_has_room_for_everything_on_it(spindle_page):
+    """A ring's circumference has to fit the bubbles standing on it.
+
+    Sizing rings by radius alone is not enough: a cluster with hundreds of
+    neighbours got them seeded shoulder to shoulder on a circle with no room, and
+    the collision forces then blew the ring apart. On the reported network -- main
+    cluster of 13,841 with 351 neighbours -- every one of those 351 ended up in a
+    single beam off one side, with the median neighbour 6,800px from the cluster's
+    rim instead of ~70.
+    """
+    result = spindle_page.evaluate(
+        """() => {
+            const hierarchyNodes = {};
+            const adjacency = new Map();
+            const ids = [];
+            const add = (id, size) => {
+                ids.push(id);
+                hierarchyNodes[id] = {size, leaf_start: id};
+                adjacency.set(id, []);
+            };
+            const link = (a, b) => { adjacency.get(a).push(b); adjacency.get(b).push(a); };
+            // The reported shape: one dominant cluster carrying a large fan of singletons.
+            add(0, 13841);
+            for (let i = 1; i <= 351; i++) { add(i, 1); link(0, i); }
+
+            const seed = radialTreeSeed(ids, adjacency, hierarchyNodes, 90);
+            const hub = seed.positionById.get(0);
+            const kids = ids.filter(id => id !== 0);
+            // Arc available per neighbour on their shared ring, against what they occupy.
+            const ringRadius = Math.hypot(
+                seed.positionById.get(kids[0]).x - hub.x,
+                seed.positionById.get(kids[0]).y - hub.y);
+            const circumference = 2 * Math.PI * ringRadius;
+            const occupied = kids.reduce(
+                (sum, k) => sum + (2 * seed.positionById.get(k).radius), 0);
+            return {ringRadius, circumference, occupied, kids: kids.length,
+                    hubRadius: hub.radius};
+        }"""
+    )
+    assert result["kids"] == 351
+    # The ring is measured from the hub centre, so it must clear the hub itself...
+    assert result["ringRadius"] > result["hubRadius"]
+    # ...and still leave room for every bubble standing on it, with clearance between.
+    assert result["circumference"] > result["occupied"] * 1.5
+    assert spindle_page.pageerrors == []
+
+
 def test_worker_and_main_thread_force_layouts_agree(crowded_page):
     """The Worker and the fallback must draw the same network the same way.
 
