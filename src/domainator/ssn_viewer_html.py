@@ -9870,6 +9870,49 @@ def ssn_viewer_html(
         ].filter(segment => Math.hypot(segment.endX - segment.startX, segment.endY - segment.startY) > 1e-6);
     }}
 
+    // Where an edge's score badge belongs: the halfway point *along the line as drawn*,
+    // plus the unit normal of the segment it lands on.
+    //
+    // This used to be the midpoint of the two bubble centers, which is not on the drawn line.
+    // The link is trimmed to each bubble's own radius, so that midpoint is off by
+    // (rightRadius - leftRadius) / 2; and in the Tree layout the link is drawn as a
+    // three-segment elbow the straight chord does not follow at all. Offsetting along the
+    // normal rather than straight up also keeps the badge clear of a vertical elbow riser.
+    //
+    // `length` is the drawn length, which is what the fit test has to measure -- two large
+    // bubbles nearly touching are far apart center to center but have almost no edge showing.
+    function linkLabelAnchor(link) {{
+        const segments = renderedLinkSegments(link);
+        if (segments.length === 0) {{
+            return null;
+        }}
+        const lengths = segments.map(segment =>
+            Math.hypot(segment.endX - segment.startX, segment.endY - segment.startY));
+        const total = lengths.reduce((sum, value) => sum + value, 0);
+        let remaining = total / 2;
+        for (let index = 0; index < segments.length; index++) {{
+            const length = lengths[index];
+            if (remaining > length && index < segments.length - 1) {{
+                remaining -= length;
+                continue;
+            }}
+            const segment = segments[index];
+            const fraction = length > 1e-9 ? remaining / length : 0;
+            const unitX = length > 1e-9 ? (segment.endX - segment.startX) / length : 1;
+            const unitY = length > 1e-9 ? (segment.endY - segment.startY) / length : 0;
+            return {{
+                x: segment.startX + ((segment.endX - segment.startX) * fraction),
+                y: segment.startY + ((segment.endY - segment.startY) * fraction),
+                // Normal pointing "up" for a left-to-right segment, matching the -8px nudge
+                // the badge used to get unconditionally.
+                normalX: unitY,
+                normalY: -unitX,
+                length: total,
+            }};
+        }}
+        return null;
+    }}
+
     // ---- Label level-of-detail ----
     //
     // A label is worth drawing when it fits the mark it labels, which is a property
@@ -9893,6 +9936,8 @@ def ssn_viewer_html(
     // endpoints, where it would sit on top of the cluster bubbles it joins.
     const EDGE_SCORE_BADGE_PADDING = 12;
     const EDGE_SCORE_LINK_MARGIN = 8;
+    // How far the badge sits off the line it labels, along that segment's normal.
+    const EDGE_SCORE_LABEL_OFFSET = 8;
     // Below this a dot is not a mark any more, just a tinted pixel, and labeling it
     // points at nothing the user can see.
     const MIN_LABELED_DOT_SCREEN_RADIUS = 1.5;
@@ -10254,15 +10299,18 @@ def ssn_viewer_html(
 
         if (showEdgeScoresEnabled()) {{
             state.splitLinks.forEach(link => {{
-                const left = worldToScreenPoint(link.left.x, link.left.y);
-                const right = worldToScreenPoint(link.right.x, link.right.y);
-                const dx = right.x - left.x;
-                const dy = right.y - left.y;
-                const text = formatValue(link.threshold);
-                if (!edgeScoreLabelFits(text, Math.hypot(dx, dy))) {{
+                const anchor = linkLabelAnchor(link);
+                if (anchor === null) {{
                     return;
                 }}
-                drawBadge(clusterContext, text, left.x + (dx / 2), left.y + (dy / 2) - 8);
+                const text = formatValue(link.threshold);
+                if (!edgeScoreLabelFits(text, anchor.length * state.viewTransform.scale)) {{
+                    return;
+                }}
+                const point = worldToScreenPoint(anchor.x, anchor.y);
+                drawBadge(clusterContext, text,
+                    point.x + (anchor.normalX * EDGE_SCORE_LABEL_OFFSET),
+                    point.y + (anchor.normalY * EDGE_SCORE_LABEL_OFFSET));
             }});
         }}
 
@@ -11056,16 +11104,17 @@ def ssn_viewer_html(
             clusterContext.save();
             clusterContext.font = EDGE_SCORE_LABEL_FONT + 'px Georgia';
             state.splitLinks.forEach(link => {{
-                const left = worldToScreenPoint(link.left.x, link.left.y);
-                const right = worldToScreenPoint(link.right.x, link.right.y);
-                const dx = right.x - left.x;
-                const dy = right.y - left.y;
-                const text = formatValue(link.threshold);
-                if (!edgeScoreLabelFits(text, Math.hypot(dx, dy))) {{
+                const anchor = linkLabelAnchor(link);
+                if (anchor === null) {{
                     return;
                 }}
-                const x = left.x + (dx / 2);
-                const y = left.y + (dy / 2) - 8;
+                const text = formatValue(link.threshold);
+                if (!edgeScoreLabelFits(text, anchor.length * state.viewTransform.scale)) {{
+                    return;
+                }}
+                const point = worldToScreenPoint(anchor.x, anchor.y);
+                const x = point.x + (anchor.normalX * EDGE_SCORE_LABEL_OFFSET);
+                const y = point.y + (anchor.normalY * EDGE_SCORE_LABEL_OFFSET);
                 // Measured here rather than estimated: the badge is being drawn, and
                 // the rectangle has to actually enclose the glyphs.
                 const textWidth = clusterContext.measureText(text).width;

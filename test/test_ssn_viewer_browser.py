@@ -6598,3 +6598,225 @@ def test_split_chart_zoom_round_trips_through_a_session(crowded_page):
         page.evaluate("() => state.splitChartHit.dataMax - state.splitChartHit.dataMin")
     )
     assert page.pageerrors == []
+
+
+
+# ---------------------------------------------------------------------------
+# Layout compactness, and the edge score badge sitting on the line it labels
+# ---------------------------------------------------------------------------
+
+
+# Everything the compactness tests need, measured off the same two arrays the
+# canvas draws from. state.splitLinks[i].left/.right are the *same objects* as
+# entries in state.visibleLayout (applyComputedLayout builds both from one map),
+# so identity comparison is enough to skip a link's own endpoints. The geometry
+# comes from the viewer's own pointSegmentDistance rather than a reimplementation.
+_LAYOUT_METRICS = """() => {
+    const med = values => {
+        const sorted = [...values].sort((left, right) => left - right);
+        return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+    };
+    const items = state.visibleLayout;
+    const links = state.splitLinks;
+    const drawn = links.map(link =>
+        Math.hypot(link.right.x - link.left.x, link.right.y - link.left.y)
+        - link.left.radius - link.right.radius);
+
+    let minBubbleSlack = Infinity;
+    for (let a = 0; a < items.length; a++) {
+        for (let b = a + 1; b < items.length; b++) {
+            const left = items[a], right = items[b];
+            minBubbleSlack = Math.min(minBubbleSlack,
+                Math.hypot(right.x - left.x, right.y - left.y) - left.radius - right.radius);
+        }
+    }
+
+    let minEdgeClearance = Infinity;
+    links.forEach(link => items.forEach(item => {
+        if (item === link.left || item === link.right) { return; }
+        const hit = pointSegmentDistance(item, link.left, link.right);
+        if (hit.t <= 0.03 || hit.t >= 0.97) { return; }
+        minEdgeClearance = Math.min(minEdgeClearance, hit.distance - item.radius);
+    }));
+
+    const side = (p, q, r) => ((q.y - p.y) * (r.x - q.x)) - ((q.x - p.x) * (r.y - q.y));
+    const crosses = (a, b, c, d) =>
+        side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+    let crossings = 0;
+    for (let i = 0; i < links.length; i++) {
+        for (let j = i + 1; j < links.length; j++) {
+            const first = links[i], second = links[j];
+            if (first.left === second.left || first.left === second.right
+                || first.right === second.left || first.right === second.right) { continue; }
+            if (crosses(first.left, first.right, second.left, second.right)) { crossings++; }
+        }
+    }
+
+    return {
+        ratio: med(drawn) / med(items.map(item => item.radius * 2)),
+        minDrawnEdge: Math.min(...drawn),
+        minBubbleSlack,
+        minEdgeClearance: minEdgeClearance === Infinity ? null : minEdgeClearance,
+        crossings,
+        links: links.length,
+    };
+}"""
+
+
+@pytest.mark.parametrize("layout", ["tree", "force"])
+def test_layout_is_compact_without_collapsing(spindle_page, layout):
+    """Edges should be sized by the bubbles they join, not by the biggest bubble around.
+
+    The measurable is median drawn edge length over median bubble diameter. Both
+    layouts used to derive their spacing from a component-wide maximum radius, which
+    on this fixture (six-node blobs beside singletons) put it at 8.5 for the tree and
+    5.8 for the force layout; they now sit at 3.6 and 2.4. The ceiling is set between
+    the two so it fails loudly if that spacing regresses.
+
+    The other four assertions are the half that matters just as much: without them
+    "compact" would also be satisfied by collapsing the drawing into a pile.
+    """
+    page = spindle_page
+    _spindle_state(page, layout=layout)
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleLayout.length > 0"
+    )
+    metrics = page.evaluate(_LAYOUT_METRICS)
+
+    assert metrics["links"] > 0
+    assert metrics["ratio"] < 5.0
+    # Edges stay visible rather than shrinking to stubs between touching bubbles.
+    assert metrics["minDrawnEdge"] >= 8
+    # No bubble overlaps and no edge driven through a third bubble -- the two
+    # guarantees refineLayoutGeometry exists to provide.
+    assert metrics["minBubbleSlack"] >= -0.5
+    assert metrics["minEdgeClearance"] is None or metrics["minEdgeClearance"] >= -0.5
+    # This fixture lays out cleanly today; compaction must not buy itself crossings.
+    assert metrics["crossings"] == 0
+    assert page.pageerrors == []
+
+
+def test_worker_and_main_thread_force_layouts_agree(crowded_page):
+    """The Worker and the fallback must draw the same network the same way.
+
+    They are one source (`_layout_core_js`) sharing one tuning factory, but that is
+    exactly the invariant worth pinning: the layout used to exist as two hand-kept
+    copies, and nothing caught it when they drifted. A viewer whose picture depends
+    on whether `new Worker(...)` succeeded is a bug nobody would think to look for.
+
+    This is an end-to-end check that the fallback path runs and lands in the same
+    place, not a tripwire for the two copies drifting again: the drift that actually
+    happened was a floating-point difference in how the anchor and gravity terms were
+    summed, and neither this fixture nor the spindle one is large enough for that to
+    amplify past 1e-6 -- both paths agreed here even while the sources differed. The
+    guard for "there is only one copy" is structural and lives in
+    test_build_ssn_viewer.py::test_layout_core_is_shared_by_the_worker_and_the_page.
+    """
+    page = crowded_page
+    page.select_option("#layout-algorithm", "force")
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleLayout.length > 0"
+    )
+    positions = """() => state.visibleLayout
+        .map(item => [item.componentId, item.x, item.y])
+        .sort((left, right) => left[0] - right[0])"""
+    with_worker = page.evaluate(positions)
+    assert page.evaluate("() => state.layoutWorker !== null")
+
+    page.evaluate("() => { state.layoutWorker = null; state.layoutCache.clear(); }")
+    page.evaluate("() => drawClusterView(false)")
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleLayout.length > 0"
+    )
+    without_worker = page.evaluate(positions)
+
+    assert len(with_worker) == len(without_worker)
+    for (left_id, left_x, left_y), (right_id, right_x, right_y) in zip(
+        with_worker, without_worker
+    ):
+        assert left_id == right_id
+        assert left_x == pytest.approx(right_x, abs=1e-6)
+        assert left_y == pytest.approx(right_y, abs=1e-6)
+    assert page.pageerrors == []
+
+
+def test_force_layout_is_deterministic(spindle_page):
+    """Same network, same settings, same picture -- twice."""
+    page = spindle_page
+    _spindle_state(page, layout="force")
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleLayout.length > 0"
+    )
+    positions = "() => state.visibleLayout.map(item => [item.componentId, item.x, item.y])"
+    first = page.evaluate(positions)
+    page.evaluate("() => { state.layoutCache.clear(); drawClusterView(false); }")
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleLayout.length > 0"
+    )
+    assert page.evaluate(positions) == first
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("layout", ["tree", "force"])
+def test_edge_score_badge_sits_on_the_drawn_link(spindle_page, layout):
+    """The badge anchor has to land on the polyline the viewer actually strokes.
+
+    It used to be the midpoint of the two bubble *centers*, which is off the drawn
+    line by (rightRadius - leftRadius) / 2 once each end is trimmed to its own
+    bubble -- and in the tree layout, where the link is drawn as a three-segment
+    elbow, generally nowhere near it.
+    """
+    page = spindle_page
+    _spindle_state(page, layout=layout)
+    page.check("#show-edge-scores")
+    page.wait_for_function(
+        "() => !state.layoutComputing && state.visibleLayout.length > 0"
+    )
+    worst = page.evaluate(
+        """() => {
+            let worstDistance = 0;
+            let worstLengthError = 0;
+            state.splitLinks.forEach(link => {
+                const anchor = linkLabelAnchor(link);
+                const segments = renderedLinkSegments(link);
+                const nearest = Math.min(...segments.map(segment => pointSegmentDistance(
+                    anchor,
+                    {x: segment.startX, y: segment.startY},
+                    {x: segment.endX, y: segment.endY}).distance));
+                worstDistance = Math.max(worstDistance, nearest);
+                // `length` must be the drawn length, since that is what gates the badge.
+                const drawn = segments.reduce((sum, segment) => sum + Math.hypot(
+                    segment.endX - segment.startX, segment.endY - segment.startY), 0);
+                worstLengthError = Math.max(worstLengthError, Math.abs(anchor.length - drawn));
+            });
+            return {worstDistance, worstLengthError, links: state.splitLinks.length};
+        }"""
+    )
+    assert worst["links"] > 0
+    assert worst["worstDistance"] < 0.5
+    assert worst["worstLengthError"] < 1e-6
+    assert page.pageerrors == []
+
+
+def test_edge_score_label_is_gated_on_the_drawn_length_not_the_centers(spindle_page):
+    """Two big bubbles nearly touching are far apart center to center, but show
+    almost no edge. Gating on the center distance let the badge overflow onto them."""
+    page = spindle_page
+    _spindle_state(page, layout="force")
+    verdict = page.evaluate(
+        """() => {
+            const link = {left: {x: 0, y: 0, radius: 140},
+                          right: {x: 300, y: 0, radius: 140}};
+            const anchor = linkLabelAnchor(link);
+            return {
+                centerDistance: 300,
+                drawnLength: anchor.length,
+                fitsOnDrawn: edgeScoreLabelFits('9.87', anchor.length),
+                fitsOnCenters: edgeScoreLabelFits('9.87', 300),
+            };
+        }"""
+    )
+    assert verdict["drawnLength"] == pytest.approx(20)
+    assert verdict["fitsOnCenters"] is True   # what the old rule saw
+    assert verdict["fitsOnDrawn"] is False    # what is actually on screen
+    assert page.pageerrors == []

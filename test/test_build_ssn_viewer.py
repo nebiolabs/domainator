@@ -12,6 +12,7 @@ import pytest
 from domainator import build_ssn_viewer
 from domainator.data_matrix import DataMatrix, DenseDataMatrix, MaxTree
 from domainator import ssn_bundle
+from domainator import ssn_viewer_html as ssn_viewer_html_module
 
 
 def _read_bundle(path):
@@ -974,3 +975,32 @@ def test_lowest_slider_stop_reaches_the_fully_merged_network():
     # strictly-above rule excludes; the viewer's cut there splits it back apart.
     assert stops[-1]["threshold_value"] == lowest
     assert stops[-2]["threshold_value"] == weakest_mst_edge
+
+
+def test_layout_core_is_shared_by_the_worker_and_the_page():
+    """One copy of the layout math, reaching both places that run it.
+
+    It used to be two: a hand-minified copy inside the Web Worker source and a
+    readable one inline in the page, which had to be edited in lockstep and were
+    already out of sync by the time anyone noticed. Nothing in the suite could tell,
+    because each copy worked. Assert the identical text reaches both, so a future
+    edit cannot quietly restore the split.
+    """
+    core = ssn_viewer_html_module._layout_core_js()
+    assert "function simulateComponentLayout" in core
+    assert "function tidyComponentLayout" in core
+    assert "function forestForceOptions" in core
+
+    worker = ssn_viewer_html_module._layout_worker_js()
+    assert core in worker, "the Worker must be built from the shared core"
+
+    html = ssn_viewer_html_module.ssn_viewer_html()
+    assert core in html, "the page must embed the same core text, not its own copy"
+
+    # Each shared function is defined exactly twice in the page: once inline in the
+    # <script>, and once inside the JSON-encoded Worker source the page also carries.
+    # A third would mean someone reintroduced a hand-maintained copy.
+    for name in ("simulateComponentLayout", "tidyComponentLayout", "radialTreeSeed"):
+        definition = "function " + name + "("
+        assert worker.count(definition) == 1, name
+        assert html.count(definition) == 2, name
