@@ -32,199 +32,367 @@ def viewer_heading(network_name: str | None) -> str:
     return VIEWER_APP_NAME if name in _GENERIC_TITLES else f"{VIEWER_APP_NAME}: {name}"
 
 
-def _layout_worker_js() -> str:
-    """Standalone JS for the layout Web Worker (no f-string escaping needed here)."""
+def _layout_core_js() -> str:
+    """Layout math shared by the layout Web Worker and the main-thread fallback.
+
+    Pure functions only -- no `state`, no DOM -- because this same source is
+    compiled into the Worker, where neither exists. Plain (non-f) string, so the
+    JavaScript uses normal single braces; it is interpolated both into the worker
+    blob (via `_layout_worker_js`) and into the page's one `<script>` scope (via
+    the `{layout_core_js}` placeholder). Function declarations hoist, so the
+    order below is for reading, not for dependency.
+
+    This used to exist twice -- once here in minified form and once inline in the
+    page f-string -- and the two copies had already drifted. Keep it single-copy.
+    """
     return """
-function seededUnit(componentId, salt) {
-    const raw = Math.sin((componentId + 1) * 12.9898 + salt * 78.233) * 43758.5453;
-    return raw - Math.floor(raw);
-}
-function componentRadiusForSize(size) {
-    return Math.sqrt(Math.max(1, size) * 48 / Math.PI);
-}
-function componentLeafOrder(componentIds, hierarchyNodes) {
-    return [...componentIds].sort((a, b) => {
-        const an = hierarchyNodes[a], bn = hierarchyNodes[b];
-        return an.leaf_start - bn.leaf_start || bn.size - an.size || a - b;
-    });
-}
 function treeCenter(nodeIds, adjacency, hierarchyNodes) {
-    if (nodeIds.length <= 2) { return nodeIds[0]; }
+    if (nodeIds.length <= 2) {
+        return nodeIds[0];
+    }
     const degree = new Map();
-    nodeIds.forEach(id => degree.set(id, (adjacency.get(id) || []).length));
-    let leaves = nodeIds.filter(id => (degree.get(id) || 0) <= 1), remaining = nodeIds.length;
+    nodeIds.forEach(nodeId => {
+        degree.set(nodeId, (adjacency.get(nodeId) || []).length);
+    });
+    let leaves = nodeIds.filter(nodeId => (degree.get(nodeId) || 0) <= 1);
+    let remaining = nodeIds.length;
     while (remaining > 2 && leaves.length > 0) {
         remaining -= leaves.length;
         const nextLeaves = [];
         leaves.forEach(leafId => {
-            (adjacency.get(leafId) || []).forEach(nid => {
-                if (!degree.has(nid)) { return; }
-                degree.set(nid, degree.get(nid) - 1);
-                if (degree.get(nid) === 1) { nextLeaves.push(nid); }
+            (adjacency.get(leafId) || []).forEach(neighborId => {
+                if (!degree.has(neighborId)) {
+                    return;
+                }
+                degree.set(neighborId, degree.get(neighborId) - 1);
+                if (degree.get(neighborId) === 1) {
+                    nextLeaves.push(neighborId);
+                }
             });
             degree.delete(leafId);
         });
         leaves = nextLeaves;
     }
     const candidates = degree.size > 0 ? Array.from(degree.keys()) : nodeIds;
-    candidates.sort((a, b) => hierarchyNodes[b].size - hierarchyNodes[a].size || a - b);
+    candidates.sort((leftId, rightId) => {
+        const leftSize = hierarchyNodes[leftId].size;
+        const rightSize = hierarchyNodes[rightId].size;
+        return rightSize - leftSize || leftId - rightId;
+    });
     return candidates[0];
 }
+
 function rootedTree(rootId, adjacency, hierarchyNodes) {
-    const parent = new Map([[rootId, null]]), order = [rootId];
-    for (let i = 0; i < order.length; i++) {
-        const nodeId = order[i];
-        (adjacency.get(nodeId) || []).forEach(nid => { if (!parent.has(nid)) { parent.set(nid, nodeId); order.push(nid); } });
+    const parent = new Map([[rootId, null]]);
+    const order = [rootId];
+    for (let index = 0; index < order.length; index++) {
+        const nodeId = order[index];
+        (adjacency.get(nodeId) || []).forEach(neighborId => {
+            if (parent.has(neighborId)) {
+                return;
+            }
+            parent.set(neighborId, nodeId);
+            order.push(neighborId);
+        });
     }
+
     const children = new Map();
-    order.forEach(id => children.set(id, []));
-    for (let i = 1; i < order.length; i++) { children.get(parent.get(order[i])).push(order[i]); }
-    children.forEach(childIds => {
-        childIds.sort((a, b) => {
-            const an = hierarchyNodes[a], bn = hierarchyNodes[b];
-            return an.leaf_start - bn.leaf_start || bn.size - an.size || a - b;
+    order.forEach(nodeId => children.set(nodeId, []));
+    for (let index = 1; index < order.length; index++) {
+        const nodeId = order[index];
+        children.get(parent.get(nodeId)).push(nodeId);
+    }
+    children.forEach((childIds, nodeId) => {
+        childIds.sort((leftId, rightId) => {
+            const leftNode = hierarchyNodes[leftId];
+            const rightNode = hierarchyNodes[rightId];
+            return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
         });
     });
+
     return {parent, order, children};
 }
+
+function componentRadiusForSize(size) {
+    // Bubble radius scales so its area is proportional to the node count (every node
+    // is always drawn).
+    const areaPerNode = 48;
+    return Math.sqrt((Math.max(1, size) * areaPerNode) / Math.PI);
+}
+
+function normalizeComponentLayout(items, padding = 20) {
+    if (items.length === 0) {
+        return {items: [], width: 0, height: 0};
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    items.forEach(item => {
+        minX = Math.min(minX, item.x - item.radius);
+        minY = Math.min(minY, item.y - item.radius);
+        maxX = Math.max(maxX, item.x + item.radius);
+        maxY = Math.max(maxY, item.y + item.radius);
+    });
+    const normalizedItems = items.map(item => ({
+        ...item,
+        x: item.x - minX + padding,
+        y: item.y - minY + padding,
+    }));
+    return {
+        items: normalizedItems,
+        width: (maxX - minX) + (padding * 2),
+        height: (maxY - minY) + (padding * 2),
+    };
+}
+
+function componentLeafOrder(componentIds, hierarchyNodes) {
+    return [...componentIds].sort((leftId, rightId) => {
+        const leftNode = hierarchyNodes[leftId];
+        const rightNode = hierarchyNodes[rightId];
+        return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
+    });
+}
+
+function layoutLinkPairs(linksOrPairs) {
+    return linksOrPairs.map(link => {
+        if (Array.isArray(link)) {
+            return {sourceId: link[0], targetId: link[1]};
+        }
+        return {sourceId: link.sourceId, targetId: link.targetId};
+    });
+}
+
 function pointSegmentDistance(point, start, end) {
-    const dx = end.x - start.x, dy = end.y - start.y, lsq = dx * dx + dy * dy;
-    if (lsq < 1e-9) { return {distance: Math.hypot(point.x - start.x, point.y - start.y), t: 0, closestX: start.x, closestY: start.y}; }
-    const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lsq));
-    const cx = start.x + dx * t, cy = start.y + dy * t;
-    return {distance: Math.hypot(point.x - cx, point.y - cy), t, closestX: cx, closestY: cy};
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSq = (dx * dx) + (dy * dy);
+    if (lengthSq < 1e-9) {
+        return {distance: Math.hypot(point.x - start.x, point.y - start.y), t: 0, closestX: start.x, closestY: start.y};
+    }
+    const t = Math.max(0, Math.min(1, (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / lengthSq));
+    const closestX = start.x + (dx * t);
+    const closestY = start.y + (dy * t);
+    return {distance: Math.hypot(point.x - closestX, point.y - closestY), t, closestX, closestY};
 }
-function segmentOrientation(a, b, c) { return (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y); }
+
+function segmentOrientation(a, b, c) {
+    return ((b.y - a.y) * (c.x - b.x)) - ((b.x - a.x) * (c.y - b.y));
+}
+
 function segmentsCross(a, b, c, d) {
-    return segmentOrientation(a,b,c) * segmentOrientation(a,b,d) < 0 && segmentOrientation(c,d,a) * segmentOrientation(c,d,b) < 0;
+    const o1 = segmentOrientation(a, b, c);
+    const o2 = segmentOrientation(a, b, d);
+    const o3 = segmentOrientation(c, d, a);
+    const o4 = segmentOrientation(c, d, b);
+    return (o1 * o2 < 0) && (o3 * o4 < 0);
 }
-function refineLayoutGeometry(items, edgePairs, options) {
-    options = options || {};
-    const refined = items.map(item => Object.assign({}, item));
-    if (refined.length <= 1) { return refined; }
+
+function refineLayoutGeometry(items, linksOrPairs, options = {}) {
+    const refined = items.map(item => ({...item}));
+    if (refined.length <= 1) {
+        return refined;
+    }
+
     const itemById = new Map(refined.map(item => [item.componentId, item]));
-    const links = edgePairs.map(pair => Array.isArray(pair) ? {sourceId: pair[0], targetId: pair[1]} : pair)
-        .filter(link => itemById.has(link.sourceId) && itemById.has(link.targetId));
-    const bp = options.bubblePadding != null ? options.bubblePadding : 14;
-    const ep = options.edgePadding != null ? options.edgePadding : 8;
-    const oi = options.overlapIterations != null ? options.overlapIterations : 5;
-    const ei = options.edgeIterations != null ? options.edgeIterations : 3;
-    const ci = options.crossingIterations != null ? options.crossingIterations : 2;
-    const mpc = 180000, menc = 140000, mcc = 90000;
-    const pairChecks = refined.length * (refined.length - 1) / 2;
-    function overlapPass(iters, strength) {
-        if (pairChecks > mpc) { return; }
-        for (let it = 0; it < iters; it++) {
-            for (let li = 0; li < refined.length; li++) {
-                const l = refined[li];
-                for (let ri = li + 1; ri < refined.length; ri++) {
-                    const r = refined[ri];
-                    let dx = r.x - l.x, dy = r.y - l.y, dist = Math.hypot(dx, dy);
-                    if (dist < 1e-6) {
-                        dx = (seededUnit(l.componentId + r.componentId, it + 21) - 0.5) || 0.01;
-                        dy = (seededUnit(l.componentId + r.componentId, it + 22) - 0.5) || 0.01;
-                        dist = Math.hypot(dx, dy);
+    const links = layoutLinkPairs(linksOrPairs).filter(link => itemById.has(link.sourceId) && itemById.has(link.targetId));
+    const bubblePadding = options.bubblePadding ?? 14;
+    const edgePadding = options.edgePadding ?? 8;
+    const overlapIterations = options.overlapIterations ?? 5;
+    const edgeIterations = options.edgeIterations ?? 3;
+    const crossingIterations = options.crossingIterations ?? 2;
+    const maxPairChecks = options.maxPairChecks ?? 180000;
+    const maxEdgeNodeChecks = options.maxEdgeNodeChecks ?? 140000;
+    const maxCrossingChecks = options.maxCrossingChecks ?? 90000;
+    const pairChecks = (refined.length * (refined.length - 1)) / 2;
+
+    if (pairChecks <= maxPairChecks) {
+        for (let iteration = 0; iteration < overlapIterations; iteration++) {
+            for (let leftIndex = 0; leftIndex < refined.length; leftIndex++) {
+                const left = refined[leftIndex];
+                for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex++) {
+                    const right = refined[rightIndex];
+                    let dx = right.x - left.x;
+                    let dy = right.y - left.y;
+                    let distance = Math.hypot(dx, dy);
+                    if (distance < 1e-6) {
+                        dx = (seededUnit(left.componentId + right.componentId, iteration + 21) - 0.5) || 0.01;
+                        dy = (seededUnit(left.componentId + right.componentId, iteration + 22) - 0.5) || 0.01;
+                        distance = Math.hypot(dx, dy);
                     }
-                    const md = l.radius + r.radius + bp;
-                    if (dist >= md) { continue; }
-                    const sh = (md - dist) / 2 * strength;
-                    l.x -= dx / dist * sh; l.y -= dy / dist * sh;
-                    r.x += dx / dist * sh; r.y += dy / dist * sh;
+                    const minimumDistance = left.radius + right.radius + bubblePadding;
+                    if (distance >= minimumDistance) {
+                        continue;
+                    }
+                    const shift = ((minimumDistance - distance) / 2) * 0.72;
+                    const shiftX = (dx / distance) * shift;
+                    const shiftY = (dy / distance) * shift;
+                    left.x -= shiftX;
+                    left.y -= shiftY;
+                    right.x += shiftX;
+                    right.y += shiftY;
                 }
             }
         }
     }
-    function edgePass(iters, strength) {
-        if (links.length * refined.length > menc) { return; }
-        for (let it = 0; it < iters; it++) {
+
+    if (links.length * refined.length <= maxEdgeNodeChecks) {
+        for (let iteration = 0; iteration < edgeIterations; iteration++) {
             links.forEach(link => {
-                const s = itemById.get(link.sourceId), t = itemById.get(link.targetId);
-                if (!s || !t) { return; }
+                const source = itemById.get(link.sourceId);
+                const target = itemById.get(link.targetId);
+                if (!source || !target) {
+                    return;
+                }
                 refined.forEach(item => {
-                    if (item.componentId === link.sourceId || item.componentId === link.targetId) { return; }
-                    const hit = pointSegmentDistance(item, s, t);
-                    if (hit.t <= 0.03 || hit.t >= 0.97) { return; }
-                    const md = item.radius + ep;
-                    if (hit.distance >= md) { return; }
-                    let nx = item.x - hit.closestX, ny = item.y - hit.closestY, nl = Math.hypot(nx, ny);
-                    if (nl < 1e-6) { const ex = t.x - s.x, ey = t.y - s.y; nx = -ey || 1; ny = ex || 0; nl = Math.hypot(nx, ny); }
-                    const push = (md - hit.distance) * strength;
-                    item.x += nx / nl * push; item.y += ny / nl * push;
+                    if (item.componentId === link.sourceId || item.componentId === link.targetId) {
+                        return;
+                    }
+                    const hit = pointSegmentDistance(item, source, target);
+                    if (hit.t <= 0.03 || hit.t >= 0.97) {
+                        return;
+                    }
+                    const minimumDistance = item.radius + edgePadding;
+                    if (hit.distance >= minimumDistance) {
+                        return;
+                    }
+                    let normalX = item.x - hit.closestX;
+                    let normalY = item.y - hit.closestY;
+                    let normalLength = Math.hypot(normalX, normalY);
+                    if (normalLength < 1e-6) {
+                        const edgeDx = target.x - source.x;
+                        const edgeDy = target.y - source.y;
+                        normalX = -edgeDy || 1;
+                        normalY = edgeDx || 0;
+                        normalLength = Math.hypot(normalX, normalY);
+                    }
+                    const push = (minimumDistance - hit.distance) * 0.68;
+                    item.x += (normalX / normalLength) * push;
+                    item.y += (normalY / normalLength) * push;
                 });
             });
         }
     }
-    overlapPass(oi, 0.72);
-    edgePass(ei, 0.68);
-    if (links.length * (links.length - 1) / 2 <= mcc) {
-        for (let it = 0; it < ci; it++) {
-            for (let li = 0; li < links.length; li++) {
-                const la = links[li], a = itemById.get(la.sourceId), b = itemById.get(la.targetId);
-                if (!a || !b) { continue; }
-                for (let ri = li + 1; ri < links.length; ri++) {
-                    const rb = links[ri];
-                    if (la.sourceId === rb.sourceId || la.sourceId === rb.targetId || la.targetId === rb.sourceId || la.targetId === rb.targetId) { continue; }
-                    const c = itemById.get(rb.sourceId), d = itemById.get(rb.targetId);
-                    if (!c || !d || !segmentsCross(a, b, c, d)) { continue; }
-                    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-                    if (len < 1e-6) { continue; }
-                    const nx = -dy / len, ny = dx / len, push = 4.5 + it * 1.5;
-                    a.x += nx * push; a.y += ny * push; b.x += nx * push; b.y += ny * push;
-                    c.x -= nx * push; c.y -= ny * push; d.x -= nx * push; d.y -= ny * push;
+
+    const crossingChecks = (links.length * (links.length - 1)) / 2;
+    if (crossingChecks <= maxCrossingChecks) {
+        for (let iteration = 0; iteration < crossingIterations; iteration++) {
+            for (let leftIndex = 0; leftIndex < links.length; leftIndex++) {
+                const leftLink = links[leftIndex];
+                const a = itemById.get(leftLink.sourceId);
+                const b = itemById.get(leftLink.targetId);
+                if (!a || !b) {
+                    continue;
+                }
+                for (let rightIndex = leftIndex + 1; rightIndex < links.length; rightIndex++) {
+                    const rightLink = links[rightIndex];
+                    if (leftLink.sourceId === rightLink.sourceId || leftLink.sourceId === rightLink.targetId || leftLink.targetId === rightLink.sourceId || leftLink.targetId === rightLink.targetId) {
+                        continue;
+                    }
+                    const c = itemById.get(rightLink.sourceId);
+                    const d = itemById.get(rightLink.targetId);
+                    if (!c || !d || !segmentsCross(a, b, c, d)) {
+                        continue;
+                    }
+                    let dx = b.x - a.x;
+                    let dy = b.y - a.y;
+                    let length = Math.hypot(dx, dy);
+                    if (length < 1e-6) {
+                        continue;
+                    }
+                    const normalX = -dy / length;
+                    const normalY = dx / length;
+                    const push = 4.5 + (iteration * 1.5);
+                    a.x += normalX * push;
+                    a.y += normalY * push;
+                    b.x += normalX * push;
+                    b.y += normalY * push;
+                    c.x -= normalX * push;
+                    c.y -= normalY * push;
+                    d.x -= normalX * push;
+                    d.y -= normalY * push;
                 }
             }
         }
     }
-    edgePass(1, 0.82);
-    overlapPass(4, 0.9);
+
+    if (links.length * refined.length <= maxEdgeNodeChecks) {
+        links.forEach(link => {
+            const source = itemById.get(link.sourceId);
+            const target = itemById.get(link.targetId);
+            if (!source || !target) {
+                return;
+            }
+            refined.forEach(item => {
+                if (item.componentId === link.sourceId || item.componentId === link.targetId) {
+                    return;
+                }
+                const hit = pointSegmentDistance(item, source, target);
+                if (hit.t <= 0.03 || hit.t >= 0.97) {
+                    return;
+                }
+                const minimumDistance = item.radius + edgePadding;
+                if (hit.distance >= minimumDistance) {
+                    return;
+                }
+                let normalX = item.x - hit.closestX;
+                let normalY = item.y - hit.closestY;
+                let normalLength = Math.hypot(normalX, normalY);
+                if (normalLength < 1e-6) {
+                    const edgeDx = target.x - source.x;
+                    const edgeDy = target.y - source.y;
+                    normalX = -edgeDy || 1;
+                    normalY = edgeDx || 0;
+                    normalLength = Math.hypot(normalX, normalY);
+                }
+                const push = (minimumDistance - hit.distance) * 0.82;
+                item.x += (normalX / normalLength) * push;
+                item.y += (normalY / normalLength) * push;
+            });
+        });
+    }
+
+    if (pairChecks <= maxPairChecks) {
+        for (let iteration = 0; iteration < 4; iteration++) {
+            for (let leftIndex = 0; leftIndex < refined.length; leftIndex++) {
+                const left = refined[leftIndex];
+                for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex++) {
+                    const right = refined[rightIndex];
+                    let dx = right.x - left.x;
+                    let dy = right.y - left.y;
+                    let distance = Math.hypot(dx, dy);
+                    if (distance < 1e-6) {
+                        dx = (seededUnit(left.componentId + right.componentId, iteration + 41) - 0.5) || 0.01;
+                        dy = (seededUnit(left.componentId + right.componentId, iteration + 42) - 0.5) || 0.01;
+                        distance = Math.hypot(dx, dy);
+                    }
+                    const minimumDistance = left.radius + right.radius + bubblePadding;
+                    if (distance >= minimumDistance) {
+                        continue;
+                    }
+                    const shift = ((minimumDistance - distance) / 2) * 0.9;
+                    const shiftX = (dx / distance) * shift;
+                    const shiftY = (dy / distance) * shift;
+                    left.x -= shiftX;
+                    left.y -= shiftY;
+                    right.x += shiftX;
+                    right.y += shiftY;
+                }
+            }
+        }
+    }
+
     return refined;
 }
-function normalizeComponentLayout(items, padding) {
-    padding = padding != null ? padding : 20;
-    if (!items.length) { return {items: [], width: 0, height: 0}; }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    items.forEach(item => {
-        minX = Math.min(minX, item.x - item.radius); minY = Math.min(minY, item.y - item.radius);
-        maxX = Math.max(maxX, item.x + item.radius); maxY = Math.max(maxY, item.y + item.radius);
-    });
-    return {
-        items: items.map(item => Object.assign({}, item, {x: item.x - minX + padding, y: item.y - minY + padding})),
-        width: (maxX - minX) + padding * 2, height: (maxY - minY) + padding * 2,
-    };
+
+function seededUnit(componentId, salt) {
+    const raw = Math.sin((componentId + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+    return raw - Math.floor(raw);
 }
-function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
-    const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
-    const tree = rootedTree(rootId, adjacency, hierarchyNodes);
-    const depthByNode = new Map([[rootId, 0]]);
-    tree.order.forEach(nodeId => { (tree.children.get(nodeId) || []).forEach(childId => { depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1); }); });
-    const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
-    const maxRadius = Math.max(...componentIds.map(id => radii.get(id) || 10), 10);
-    const siblingGap = Math.max(20, maxRadius * 0.42);
-    const levelGap = Math.max(168, maxRadius * 2.2 + 96);
-    const subtreeSpan = new Map();
-    [...tree.order].reverse().forEach(nodeId => {
-        const childIds = tree.children.get(nodeId) || [];
-        const nodeSpan = (radii.get(nodeId) || 12) * 2 + 18;
-        if (childIds.length === 0) { subtreeSpan.set(nodeId, nodeSpan); return; }
-        const childrenSpan = childIds.reduce((s, c) => s + subtreeSpan.get(c), 0) + Math.max(0, childIds.length - 1) * siblingGap;
-        subtreeSpan.set(nodeId, Math.max(nodeSpan, childrenSpan));
-    });
-    const positionById = new Map();
-    function placeNode(nodeId, topY) {
-        const nodeSpan = subtreeSpan.get(nodeId) || 26;
-        const childIds = tree.children.get(nodeId) || [];
-        const x = originX + (depthByNode.get(nodeId) || 0) * levelGap;
-        if (childIds.length === 0) { positionById.set(nodeId, {componentId: nodeId, x, y: topY + nodeSpan / 2, radius: radii.get(nodeId) || 10}); return; }
-        const childrenSpan = childIds.reduce((s, c) => s + subtreeSpan.get(c), 0) + Math.max(0, childIds.length - 1) * siblingGap;
-        let childCursor = topY + Math.max(0, (nodeSpan - childrenSpan) / 2);
-        const childCenters = [];
-        childIds.forEach(childId => { placeNode(childId, childCursor); childCenters.push(positionById.get(childId).y); childCursor += subtreeSpan.get(childId) + siblingGap; });
-        const centerY = childCenters.reduce((s, v) => s + v, 0) / Math.max(1, childCenters.length);
-        positionById.set(nodeId, {componentId: nodeId, x, y: centerY, radius: radii.get(nodeId) || 10});
-    }
-    placeNode(rootId, 0);
-    return {positionById, order: tree.order};
-}
+
+// Radial tree layout seed: root (tree center) at origin, children placed in concentric rings
+// with angular wedges allocated per subtree leaf count. Crossing-free and near-circular (compact
+// aspect), so it both fixes the tall linear-tidy seed and gives Force its radial branch shape.
 function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
     const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
     const tree = rootedTree(rootId, adjacency, hierarchyNodes);
@@ -233,7 +401,6 @@ function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
     const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
     const maxRadius = Math.max(...componentIds.map(id => radii.get(id) || 10), 10);
     const gap = Math.max(ringGap || 0, maxRadius * 2 + 24, 60);
-    // Subtree leaf counts (post-order over reversed BFS order) drive proportional wedge widths.
     const leafCount = new Map();
     [...tree.order].reverse().forEach(id => {
         const ch = tree.children.get(id) || [];
@@ -253,12 +420,12 @@ function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
             cursor = ca1;
             wedge.set(c, [ca0, ca1]);
             const ang = (ca0 + ca1) / 2, r = (depthByNode.get(c) || 0) * gap;
-            // Tiny deterministic jitter keeps positions distinct (avoids degenerate quadtree cells).
             positionById.set(c, {componentId: c, x: Math.cos(ang) * r + (seededUnit(c, 11) - 0.5) * 0.5, y: Math.sin(ang) * r + (seededUnit(c, 12) - 0.5) * 0.5, radius: radii.get(c) || 10});
         });
     });
     return {positionById, order: tree.order};
 }
+
 // --- Barnes-Hut quadtree: O(n log n) repulsion so physics scales to large forests ---
 function bhBuild(ids, positions, radii) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -357,134 +524,317 @@ function bhResolveOverlaps(ids, positions, radii, passes, pad) {
         if (maxMoved < 1) break;
     }
 }
-function simulateComponentLayout(componentIds, adjacency, options, hierarchyNodes) {
-    options = options || {};
-    const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
-    const positions = new Map(), velocities = new Map(), anchors = new Map();
-    const damping = options.damping != null ? options.damping : 0.8;
-    const repulsion = options.repulsion != null ? options.repulsion : 6000;
-    const spring = options.spring != null ? options.spring : 0.07;
-    const gravity = options.gravity != null ? options.gravity : 0.008;
-    const anchorStrength = options.anchorStrength != null ? options.anchorStrength : 0;
-    const iterations = options.iterations != null ? options.iterations : 110;
-    const preferredEdgeLength = options.preferredEdgeLength != null ? options.preferredEdgeLength : 120;
-    const collisionStrength = options.collisionStrength != null ? options.collisionStrength : 0.28;
-    const maxStep = options.maxStep != null ? options.maxStep : 48;
-    const maxPhysicsNodes = options.maxPhysicsNodes != null ? options.maxPhysicsNodes : 50000;
-    const theta = options.theta != null ? options.theta : 0.9;
+
+function simulateComponentLayout(componentIds, adjacency, options = {}, hierarchyNodes) {
+    const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
+    const positions = new Map();
+    const velocities = new Map();
+    const anchors = new Map();
+    const damping = options.damping ?? 0.8;
+    const repulsion = options.repulsion ?? 6000;
+    const spring = options.spring ?? 0.07;
+    const gravity = options.gravity ?? 0.008;
+    const anchorStrength = options.anchorStrength ?? 0;
+    const iterations = options.iterations ?? 110;
+    const preferredEdgeLength = options.preferredEdgeLength ?? 120;
+    const collisionStrength = options.collisionStrength ?? 0.28;
+    const maxStep = options.maxStep ?? 48;
+    // Barnes-Hut keeps repulsion O(n log n), so physics now runs on large components too; only
+    // truly huge ones fall back to the (already compact) radial seed.
+    const maxPhysicsNodes = options.maxPhysicsNodes ?? 50000;
+    const theta = options.theta ?? 0.9;
     const thetaSq = theta * theta;
-    // Seed from the crossing-free radial tree layout (compact + near-circular), centered on origin.
+
+    // Seed positions AND anchors from the crossing-free radial tree layout (compact + circular),
+    // centered on the origin so gravity pulls toward the middle.
     const seed = radialTreeSeed(componentIds, adjacency, hierarchyNodes, preferredEdgeLength);
-    let centerX = 0, centerY = 0;
-    componentIds.forEach(id => { const s = seed.positionById.get(id) || {x: 0, y: 0}; centerX += s.x; centerY += s.y; });
-    centerX /= Math.max(1, componentIds.length); centerY /= Math.max(1, componentIds.length);
-    componentIds.forEach(id => {
-        const s = seed.positionById.get(id) || {x: 0, y: 0};
-        const ax = s.x - centerX, ay = s.y - centerY;
-        anchors.set(id, {x: ax, y: ay});
-        positions.set(id, {x: ax, y: ay});
-        velocities.set(id, {x: 0, y: 0});
+    let centerX = 0;
+    let centerY = 0;
+    componentIds.forEach(nodeId => {
+        const s = seed.positionById.get(nodeId) || {x: 0, y: 0};
+        centerX += s.x;
+        centerY += s.y;
     });
+    centerX /= Math.max(1, componentIds.length);
+    centerY /= Math.max(1, componentIds.length);
+    componentIds.forEach(nodeId => {
+        const s = seed.positionById.get(nodeId) || {x: 0, y: 0};
+        const anchorX = s.x - centerX;
+        const anchorY = s.y - centerY;
+        anchors.set(nodeId, {x: anchorX, y: anchorY});
+        positions.set(nodeId, {x: anchorX, y: anchorY});
+        velocities.set(nodeId, {x: 0, y: 0});
+    });
+
     const edgePairs = [];
-    componentIds.forEach(id => { (adjacency.get(id) || []).forEach(nid => { if (id < nid) { edgePairs.push([id, nid]); } }); });
+    componentIds.forEach(nodeId => {
+        (adjacency.get(nodeId) || []).forEach(neighborId => {
+            if (nodeId < neighborId) {
+                edgePairs.push([nodeId, neighborId]);
+            }
+        });
+    });
+
     if (componentIds.length <= maxPhysicsNodes) {
-    for (let iter = 0; iter < iterations; iter++) {
-        const forces = new Map(componentIds.map(id => [id, {x: 0, y: 0}]));
+    for (let iteration = 0; iteration < iterations; iteration++) {
+        const forces = new Map(componentIds.map(nodeId => [nodeId, {x: 0, y: 0}]));
+        // Repulsion + near-field collision via Barnes-Hut (O(n log n) instead of O(n^2)). The
+        // distance floor (max(distSq, 16)) keeps a near-coincident pair from exploding.
         const tree = bhBuild(componentIds, positions, radii);
-        const params = {repulsion, collisionStrength, thetaSq, iter};
-        componentIds.forEach(id => { const pos = positions.get(id); bhAccumulate(tree, id, pos.x, pos.y, radii.get(id) || 10, forces.get(id), params); });
-        edgePairs.forEach(([lid, rid]) => {
-            const lp = positions.get(lid), rp = positions.get(rid);
-            let dx = rp.x - lp.x, dy = rp.y - lp.y, dist = Math.hypot(dx, dy);
-            if (dist < 1e-6) { dist = 1e-6; dx = preferredEdgeLength; dy = 0; }
-            // Rest length keeps connected neighbors outside each other's bubbles (radii can exceed
-            // the base edge length), so big clusters don't swallow their neighbors.
-            const rest = Math.max(preferredEdgeLength, (radii.get(lid) || 0) + (radii.get(rid) || 0) + 24);
-            const df = spring * (dist - rest), fx = dx / dist * df, fy = dy / dist * df;
-            forces.get(lid).x += fx; forces.get(lid).y += fy;
-            forces.get(rid).x -= fx; forces.get(rid).y -= fy;
+        const bhParams = {repulsion, collisionStrength, thetaSq, iter: iteration};
+        componentIds.forEach(nodeId => {
+            const pos = positions.get(nodeId);
+            bhAccumulate(tree, nodeId, pos.x, pos.y, radii.get(nodeId) || 10, forces.get(nodeId), bhParams);
         });
+
+        edgePairs.forEach(([leftId, rightId]) => {
+            const leftPos = positions.get(leftId);
+            const rightPos = positions.get(rightId);
+            let dx = rightPos.x - leftPos.x;
+            let dy = rightPos.y - leftPos.y;
+            let dist = Math.hypot(dx, dy);
+            if (dist < 1e-6) {
+                dist = 1e-6;
+                dx = preferredEdgeLength;
+                dy = 0;
+            }
+            // Rest length keeps connected neighbors outside each other's bubbles.
+            const rest = Math.max(preferredEdgeLength, (radii.get(leftId) || 0) + (radii.get(rightId) || 0) + 24);
+            const delta = dist - rest;
+            const force = spring * delta;
+            const forceX = (dx / dist) * force;
+            const forceY = (dy / dist) * force;
+            forces.get(leftId).x += forceX;
+            forces.get(leftId).y += forceY;
+            forces.get(rightId).x -= forceX;
+            forces.get(rightId).y -= forceY;
+        });
+
         let totalMovement = 0;
-        componentIds.forEach(id => {
-            const pos = positions.get(id), vel = velocities.get(id), f = forces.get(id), anch = anchors.get(id);
-            f.x += (anch.x - pos.x) * anchorStrength - pos.x * gravity;
-            f.y += (anch.y - pos.y) * anchorStrength - pos.y * gravity;
-            vel.x = (vel.x + f.x) * damping; vel.y = (vel.y + f.y) * damping;
-            const speed = Math.hypot(vel.x, vel.y);
-            if (speed > maxStep) { vel.x *= maxStep / speed; vel.y *= maxStep / speed; }
-            pos.x += vel.x; pos.y += vel.y;
-            totalMovement += Math.abs(vel.x) + Math.abs(vel.y);
+        componentIds.forEach(nodeId => {
+            const position = positions.get(nodeId);
+            const velocity = velocities.get(nodeId);
+            const force = forces.get(nodeId);
+            const anchor = anchors.get(nodeId);
+            // Anchor and gravity are summed in one expression on purpose. Splitting them
+            // into two `+=` steps is the same arithmetic but not the same floating point
+            // (addition is not associative), and over ~90 iterations of a chaotic
+            // simulation that reshuffles the whole layout. This grouping is the one the
+            // Web Worker has always used, i.e. the layout people actually see.
+            force.x += (anchor.x - position.x) * anchorStrength - position.x * gravity;
+            force.y += (anchor.y - position.y) * anchorStrength - position.y * gravity;
+            velocity.x = (velocity.x + force.x) * damping;
+            velocity.y = (velocity.y + force.y) * damping;
+            // Cap per-step displacement to keep the simulation numerically stable.
+            const speed = Math.hypot(velocity.x, velocity.y);
+            if (speed > maxStep) {
+                velocity.x *= maxStep / speed;
+                velocity.y *= maxStep / speed;
+            }
+            position.x += velocity.x;
+            position.y += velocity.y;
+            totalMovement += Math.abs(velocity.x) + Math.abs(velocity.y);
         });
-        if (iter > 12 && totalMovement / componentIds.length < 0.05) { break; }
+        // Early-exit once the system has settled (avoids the worker hanging on big forests).
+        if (iteration > 12 && (totalMovement / componentIds.length) < 0.05) {
+            break;
+        }
     }
     // Large components skip the O(n^2) refine overlap pass; clean residual overlaps via the quadtree.
     if (componentIds.length > 600) { bhResolveOverlaps(componentIds, positions, radii, 14, 8); }
     }
-    const rawItems = componentIds.map(id => { const pos = positions.get(id); return {componentId: id, x: pos.x, y: pos.y, radius: radii.get(id) || 10}; });
-    return normalizeComponentLayout(refineLayoutGeometry(rawItems, edgePairs, {
-        bubblePadding: options.bubblePadding != null ? options.bubblePadding : 14,
-        edgePadding: options.edgePadding != null ? options.edgePadding : 8,
-        overlapIterations: options.geometryIterations != null ? options.geometryIterations : 5,
-        edgeIterations: options.edgeIterations != null ? options.edgeIterations : 3,
-        crossingIterations: options.crossingIterations != null ? options.crossingIterations : 2,
-    }), 24);
+
+    const rawItems = componentIds.map(nodeId => {
+        const position = positions.get(nodeId);
+        return {componentId: nodeId, x: position.x, y: position.y, radius: radii.get(nodeId) || 10};
+    });
+    const refinedItems = refineLayoutGeometry(rawItems, edgePairs, {
+        bubblePadding: options.bubblePadding ?? 14,
+        edgePadding: options.edgePadding ?? 8,
+        overlapIterations: options.geometryIterations ?? 5,
+        edgeIterations: options.edgeIterations ?? 3,
+        crossingIterations: options.crossingIterations ?? 2,
+    });
+    return normalizeComponentLayout(refinedItems, 24);
 }
+
 function clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {
     const adjacency = new Map();
-    visibleIds.forEach(id => adjacency.set(id, []));
+    visibleIds.forEach(nodeId => adjacency.set(nodeId, []));
     links.forEach(link => {
-        (adjacency.get(link.sourceId) || []).push(link.targetId);
-        (adjacency.get(link.targetId) || []).push(link.sourceId);
+        adjacency.get(link.sourceId)?.push(link.targetId);
+        adjacency.get(link.targetId)?.push(link.sourceId);
     });
-    const components = [], seen = new Set();
-    visibleIds.forEach(id => {
-        if (seen.has(id)) { return; }
-        const stack = [id], comp = [];
-        seen.add(id);
-        while (stack.length > 0) { const cur = stack.pop(); comp.push(cur); (adjacency.get(cur) || []).forEach(nid => { if (!seen.has(nid)) { seen.add(nid); stack.push(nid); } }); }
-        components.push(comp);
+
+    const components = [];
+    const seen = new Set();
+    visibleIds.forEach(nodeId => {
+        if (seen.has(nodeId)) {
+            return;
+        }
+        const stack = [nodeId];
+        const componentIds = [];
+        seen.add(nodeId);
+        while (stack.length > 0) {
+            const currentId = stack.pop();
+            componentIds.push(currentId);
+            (adjacency.get(currentId) || []).forEach(neighborId => {
+                if (seen.has(neighborId)) {
+                    return;
+                }
+                seen.add(neighborId);
+                stack.push(neighborId);
+            });
+        }
+        components.push(componentIds);
     });
-    components.sort((a, b) => {
-        const ac = a.reduce((s, id) => s + hierarchyNodes[id].size, 0), bc = b.reduce((s, id) => s + hierarchyNodes[id].size, 0);
-        const as_ = Math.min(...a.map(id => hierarchyNodes[id].leaf_start)), bs_ = Math.min(...b.map(id => hierarchyNodes[id].leaf_start));
-        return sortBySizeEnabled ? (bc - ac || as_ - bs_ || b.length - a.length) : (as_ - bs_ || b.length - a.length);
+
+    components.sort((leftIds, rightIds) => {
+        const leftNodeCount = leftIds.reduce((sum, nodeId) => sum + hierarchyNodes[nodeId].size, 0);
+        const rightNodeCount = rightIds.reduce((sum, nodeId) => sum + hierarchyNodes[nodeId].size, 0);
+        const leftStart = Math.min(...leftIds.map(nodeId => hierarchyNodes[nodeId].leaf_start));
+        const rightStart = Math.min(...rightIds.map(nodeId => hierarchyNodes[nodeId].leaf_start));
+        if (sortBySizeEnabled) {
+            return rightNodeCount - leftNodeCount || leftStart - rightStart || rightIds.length - leftIds.length;
+        }
+        return leftStart - rightStart || rightIds.length - leftIds.length;
     });
     return {adjacency, components};
 }
-function packLayouts(componentLayouts, options) {
-    options = options || {};
-    const gapX = options.gapX != null ? options.gapX : 120, gapY = options.gapY != null ? options.gapY : 120;
-    const op = options.outerPadding != null ? options.outerPadding : 72;
-    let rw;
-    if (options.rowTargetWidth != null) {
-        rw = options.rowTargetWidth;
-    } else {
-        const valid = componentLayouts.filter(c => c && c.items.length > 0);
-        const totalArea = valid.reduce((s, c) => s + c.width * c.height, 0);
-        const widest = valid.reduce((m, c) => Math.max(m, c.width), 0);
-        rw = Math.max(widest, Math.sqrt(totalArea) * 1.3) + op;
+
+function packLayouts(componentLayouts, options = {}) {
+    const gapX = options.gapX ?? 120;
+    const gapY = options.gapY ?? 120;
+    const outerPadding = options.outerPadding ?? 72;
+    const valid = componentLayouts.filter(component => component && component.items.length > 0);
+    // Adaptive near-square arrangement when no explicit width is given: keeps many disconnected
+    // single-cluster components from spreading into a wide sparse grid (which would make
+    // fit-to-view collapse to invisible specks).
+    let rowTargetWidth = options.rowTargetWidth;
+    if (rowTargetWidth == null) {
+        const totalArea = valid.reduce((sum, component) => sum + (component.width * component.height), 0);
+        const widest = valid.reduce((maxWidth, component) => Math.max(maxWidth, component.width), 0);
+        rowTargetWidth = Math.max(widest, Math.sqrt(totalArea) * 1.3) + outerPadding;
     }
-    const packed = []; let cx = op, cy = op, rh = 0;
-    componentLayouts.forEach(comp => {
-        if (!comp || !comp.items.length) { return; }
-        if (cx > op && cx + comp.width > rw) { cx = op; cy += rh + gapY; rh = 0; }
-        comp.items.forEach(item => packed.push({componentId: item.componentId, x: item.x + cx, y: item.y + cy, radius: item.radius}));
-        cx += comp.width + gapX; rh = Math.max(rh, comp.height);
+    const packed = [];
+    let cursorX = outerPadding;
+    let cursorY = outerPadding;
+    let rowHeight = 0;
+
+    componentLayouts.forEach(component => {
+        if (!component || component.items.length === 0) {
+            return;
+        }
+        if (cursorX > outerPadding && cursorX + component.width > rowTargetWidth) {
+            cursorX = outerPadding;
+            cursorY += rowHeight + gapY;
+            rowHeight = 0;
+        }
+        component.items.forEach(item => {
+            packed.push({
+                componentId: item.componentId,
+                x: item.x + cursorX,
+                y: item.y + cursorY,
+                radius: item.radius,
+            });
+        });
+        cursorX += component.width + gapX;
+        rowHeight = Math.max(rowHeight, component.height);
     });
     return packed;
 }
+
+// Tidy (Reingold-Tilford style) layout for a single component, rooted at its tree center.
+// Returns crossing-free positions for forest topology even with long branches. Shared by the
+// Tree layout and used to seed the Force-directed simulation. O(n), x offset by originX.
+function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
+    const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
+    const tree = rootedTree(rootId, adjacency, hierarchyNodes);
+    const depthByNode = new Map([[rootId, 0]]);
+    tree.order.forEach(nodeId => {
+        (tree.children.get(nodeId) || []).forEach(childId => {
+            depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1);
+        });
+    });
+    const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
+    const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
+    const siblingGap = Math.max(20, maxRadius * 0.42);
+    const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
+    const subtreeSpan = new Map();
+    [...tree.order].reverse().forEach(nodeId => {
+        const childIds = tree.children.get(nodeId) || [];
+        const nodeSpan = ((radii.get(nodeId) || 12) * 2) + 18;
+        if (childIds.length === 0) {
+            subtreeSpan.set(nodeId, nodeSpan);
+            return;
+        }
+        const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
+        subtreeSpan.set(nodeId, Math.max(nodeSpan, childrenSpan));
+    });
+
+    const positionById = new Map();
+    function placeNode(nodeId, topY) {
+        const nodeSpan = subtreeSpan.get(nodeId) || 26;
+        const childIds = tree.children.get(nodeId) || [];
+        const x = originX + (depthByNode.get(nodeId) || 0) * levelGap;
+        if (childIds.length === 0) {
+            positionById.set(nodeId, {componentId: nodeId, x, y: topY + (nodeSpan / 2), radius: radii.get(nodeId) || 10});
+            return;
+        }
+        const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
+        let childCursor = topY + Math.max(0, (nodeSpan - childrenSpan) / 2);
+        const childCenters = [];
+        childIds.forEach(childId => {
+            placeNode(childId, childCursor);
+            childCenters.push(positionById.get(childId).y);
+            childCursor += subtreeSpan.get(childId) + siblingGap;
+        });
+        const centerY = childCenters.reduce((sum, value) => sum + value, 0) / Math.max(1, childCenters.length);
+        positionById.set(nodeId, {componentId: nodeId, x, y: centerY, radius: radii.get(nodeId) || 10});
+    }
+
+    placeNode(rootId, 0);
+    const maxDepth = tree.order.reduce((maxValue, nodeId) => Math.max(maxValue, depthByNode.get(nodeId) || 0), 0);
+    const width = (maxDepth * levelGap) + (Math.max(...tree.order.map(nodeId => radii.get(nodeId) || 10), 10) * 2);
+    return {positionById, order: tree.order, width};
+}
+
+// Force-layout tuning, shared by the Web Worker and the main-thread fallback so the
+// two paths cannot drift into producing different layouts for the same network.
+function forestForceOptions(componentSize) {
+    return {
+        repulsion: 5000,
+        spring: 0.08,
+        gravity: 0.004,
+        damping: 0.85,
+        preferredEdgeLength: 124,
+        iterations: Math.max(30, Math.min(90, Math.round(850000 / componentSize))),
+        collisionStrength: 0.5,
+        bubblePadding: 17,
+        edgePadding: 10,
+        geometryIterations: 7,
+        edgeIterations: 4,
+        crossingIterations: 4,
+        anchorStrength: 0.04,
+        maxPhysicsNodes: 50000,
+        theta: 1.5,
+    };
+}
+const FOREST_PACK_OPTIONS = {gapX: 36, gapY: 36, outerPadding: 72};
+"""
+
+
+def _layout_worker_js() -> str:
+    """Standalone JS for the layout Web Worker: the shared core plus its entry point."""
+    return _layout_core_js() + """
 self.onmessage = function(event) {
     const msg = event.data;
     if (msg.type !== 'computeLayout') { return; }
     const {requestId, key, algorithm, visibleIds, links, hierarchyNodes, sortBySizeEnabled} = msg;
     const {adjacency, components} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
-    const componentLayouts = components.map(ids => simulateComponentLayout(ids, adjacency, {
-        repulsion: 5000, spring: 0.08, gravity: 0.004,
-        damping: 0.85, preferredEdgeLength: 124, iterations: Math.max(30, Math.min(90, Math.round(850000 / ids.length))),
-        collisionStrength: 0.5, bubblePadding: 17, edgePadding: 10, geometryIterations: 7,
-        edgeIterations: 4, crossingIterations: 4, anchorStrength: 0.04, maxPhysicsNodes: 50000, theta: 1.5,
-    }, hierarchyNodes));
-    const layout = packLayouts(componentLayouts, {gapX: 36, gapY: 36, outerPadding: 72});
+    const componentLayouts = components.map(ids =>
+        simulateComponentLayout(ids, adjacency, forestForceOptions(ids.length), hierarchyNodes));
+    const layout = packLayouts(componentLayouts, FOREST_PACK_OPTIONS);
     self.postMessage({requestId, key, layout});
 };
 """
@@ -5001,6 +5351,7 @@ def ssn_viewer_html(
     if embedded_bundle_json is not None:
         embedded_bundle_base64 = base64.b64encode(embedded_bundle_json).decode("ascii")
     layout_worker_code_json = json.dumps(_layout_worker_js())
+    layout_core_js = _layout_core_js()
     # Plain-string JS modules (single braces, no f-string escaping). They are
     # interpolated into the one <script> scope below, so they share `state` and
     # can call the functions defined around them; declarations hoist.
@@ -7894,80 +8245,6 @@ def ssn_viewer_html(
         }};
     }}
 
-    function treeCenter(nodeIds, adjacency, hierarchyNodes) {{
-        if (nodeIds.length <= 2) {{
-            return nodeIds[0];
-        }}
-        const degree = new Map();
-        nodeIds.forEach(nodeId => {{
-            degree.set(nodeId, (adjacency.get(nodeId) || []).length);
-        }});
-        let leaves = nodeIds.filter(nodeId => (degree.get(nodeId) || 0) <= 1);
-        let remaining = nodeIds.length;
-        while (remaining > 2 && leaves.length > 0) {{
-            remaining -= leaves.length;
-            const nextLeaves = [];
-            leaves.forEach(leafId => {{
-                (adjacency.get(leafId) || []).forEach(neighborId => {{
-                    if (!degree.has(neighborId)) {{
-                        return;
-                    }}
-                    degree.set(neighborId, degree.get(neighborId) - 1);
-                    if (degree.get(neighborId) === 1) {{
-                        nextLeaves.push(neighborId);
-                    }}
-                }});
-                degree.delete(leafId);
-            }});
-            leaves = nextLeaves;
-        }}
-        const candidates = degree.size > 0 ? Array.from(degree.keys()) : nodeIds;
-        candidates.sort((leftId, rightId) => {{
-            const leftSize = hierarchyNodes[leftId].size;
-            const rightSize = hierarchyNodes[rightId].size;
-            return rightSize - leftSize || leftId - rightId;
-        }});
-        return candidates[0];
-    }}
-
-    function rootedTree(rootId, adjacency, hierarchyNodes) {{
-        const parent = new Map([[rootId, null]]);
-        const order = [rootId];
-        for (let index = 0; index < order.length; index++) {{
-            const nodeId = order[index];
-            (adjacency.get(nodeId) || []).forEach(neighborId => {{
-                if (parent.has(neighborId)) {{
-                    return;
-                }}
-                parent.set(neighborId, nodeId);
-                order.push(neighborId);
-            }});
-        }}
-
-        const children = new Map();
-        order.forEach(nodeId => children.set(nodeId, []));
-        for (let index = 1; index < order.length; index++) {{
-            const nodeId = order[index];
-            children.get(parent.get(nodeId)).push(nodeId);
-        }}
-        children.forEach((childIds, nodeId) => {{
-            childIds.sort((leftId, rightId) => {{
-                const leftNode = hierarchyNodes[leftId];
-                const rightNode = hierarchyNodes[rightId];
-                return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
-            }});
-        }});
-
-        return {{parent, order, children}};
-    }}
-
-    function componentRadiusForSize(size) {{
-        // Bubble radius scales so its area is proportional to the node count (every node
-        // is always drawn).
-        const areaPerNode = 48;
-        return Math.sqrt((Math.max(1, size) * areaPerNode) / Math.PI);
-    }}
-
     function componentDotCount(componentSize) {{
         // Every node in the component is drawn as a dot.
         return componentSize;
@@ -8387,92 +8664,6 @@ def ssn_viewer_html(
         return layout;
     }}
 
-    function clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
-        const adjacency = new Map();
-        visibleIds.forEach(nodeId => adjacency.set(nodeId, []));
-        links.forEach(link => {{
-            adjacency.get(link.sourceId)?.push(link.targetId);
-            adjacency.get(link.targetId)?.push(link.sourceId);
-        }});
-
-        const components = [];
-        const seen = new Set();
-        visibleIds.forEach(nodeId => {{
-            if (seen.has(nodeId)) {{
-                return;
-            }}
-            const stack = [nodeId];
-            const componentIds = [];
-            seen.add(nodeId);
-            while (stack.length > 0) {{
-                const currentId = stack.pop();
-                componentIds.push(currentId);
-                (adjacency.get(currentId) || []).forEach(neighborId => {{
-                    if (seen.has(neighborId)) {{
-                        return;
-                    }}
-                    seen.add(neighborId);
-                    stack.push(neighborId);
-                }});
-            }}
-            components.push(componentIds);
-        }});
-
-        components.sort((leftIds, rightIds) => {{
-            const leftNodeCount = leftIds.reduce((sum, nodeId) => sum + hierarchyNodes[nodeId].size, 0);
-            const rightNodeCount = rightIds.reduce((sum, nodeId) => sum + hierarchyNodes[nodeId].size, 0);
-            const leftStart = Math.min(...leftIds.map(nodeId => hierarchyNodes[nodeId].leaf_start));
-            const rightStart = Math.min(...rightIds.map(nodeId => hierarchyNodes[nodeId].leaf_start));
-            if (sortBySizeEnabled) {{
-                return rightNodeCount - leftNodeCount || leftStart - rightStart || rightIds.length - leftIds.length;
-            }}
-            return leftStart - rightStart || rightIds.length - leftIds.length;
-        }});
-        return {{adjacency, components}};
-    }}
-
-    function packLayouts(componentLayouts, options = {{}}) {{
-        const gapX = options.gapX ?? 120;
-        const gapY = options.gapY ?? 120;
-        const outerPadding = options.outerPadding ?? 72;
-        const valid = componentLayouts.filter(component => component && component.items.length > 0);
-        // Adaptive near-square arrangement when no explicit width is given: keeps many disconnected
-        // single-cluster components from spreading into a wide sparse grid (which would make
-        // fit-to-view collapse to invisible specks).
-        let rowTargetWidth = options.rowTargetWidth;
-        if (rowTargetWidth == null) {{
-            const totalArea = valid.reduce((sum, component) => sum + (component.width * component.height), 0);
-            const widest = valid.reduce((maxWidth, component) => Math.max(maxWidth, component.width), 0);
-            rowTargetWidth = Math.max(widest, Math.sqrt(totalArea) * 1.3) + outerPadding;
-        }}
-        const packed = [];
-        let cursorX = outerPadding;
-        let cursorY = outerPadding;
-        let rowHeight = 0;
-
-        componentLayouts.forEach(component => {{
-            if (!component || component.items.length === 0) {{
-                return;
-            }}
-            if (cursorX > outerPadding && cursorX + component.width > rowTargetWidth) {{
-                cursorX = outerPadding;
-                cursorY += rowHeight + gapY;
-                rowHeight = 0;
-            }}
-            component.items.forEach(item => {{
-                packed.push({{
-                    componentId: item.componentId,
-                    x: item.x + cursorX,
-                    y: item.y + cursorY,
-                    radius: item.radius,
-                }});
-            }});
-            cursorX += component.width + gapX;
-            rowHeight = Math.max(rowHeight, component.height);
-        }});
-        return packed;
-    }}
-
     function gridClusterLayout(visibleIds) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
@@ -8782,541 +8973,6 @@ def ssn_viewer_html(
         }});
     }}
 
-    function normalizeComponentLayout(items, padding = 20) {{
-        if (items.length === 0) {{
-            return {{items: [], width: 0, height: 0}};
-        }}
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        items.forEach(item => {{
-            minX = Math.min(minX, item.x - item.radius);
-            minY = Math.min(minY, item.y - item.radius);
-            maxX = Math.max(maxX, item.x + item.radius);
-            maxY = Math.max(maxY, item.y + item.radius);
-        }});
-        const normalizedItems = items.map(item => ({{
-            ...item,
-            x: item.x - minX + padding,
-            y: item.y - minY + padding,
-        }}));
-        return {{
-            items: normalizedItems,
-            width: (maxX - minX) + (padding * 2),
-            height: (maxY - minY) + (padding * 2),
-        }};
-    }}
-
-    function componentLeafOrder(componentIds, hierarchyNodes) {{
-        return [...componentIds].sort((leftId, rightId) => {{
-            const leftNode = hierarchyNodes[leftId];
-            const rightNode = hierarchyNodes[rightId];
-            return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
-        }});
-    }}
-
-    function layoutLinkPairs(linksOrPairs) {{
-        return linksOrPairs.map(link => {{
-            if (Array.isArray(link)) {{
-                return {{sourceId: link[0], targetId: link[1]}};
-            }}
-            return {{sourceId: link.sourceId, targetId: link.targetId}};
-        }});
-    }}
-
-    function pointSegmentDistance(point, start, end) {{
-        const dx = end.x - start.x;
-        const dy = end.y - start.y;
-        const lengthSq = (dx * dx) + (dy * dy);
-        if (lengthSq < 1e-9) {{
-            return {{distance: Math.hypot(point.x - start.x, point.y - start.y), t: 0, closestX: start.x, closestY: start.y}};
-        }}
-        const t = Math.max(0, Math.min(1, (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / lengthSq));
-        const closestX = start.x + (dx * t);
-        const closestY = start.y + (dy * t);
-        return {{distance: Math.hypot(point.x - closestX, point.y - closestY), t, closestX, closestY}};
-    }}
-
-    function segmentOrientation(a, b, c) {{
-        return ((b.y - a.y) * (c.x - b.x)) - ((b.x - a.x) * (c.y - b.y));
-    }}
-
-    function segmentsCross(a, b, c, d) {{
-        const o1 = segmentOrientation(a, b, c);
-        const o2 = segmentOrientation(a, b, d);
-        const o3 = segmentOrientation(c, d, a);
-        const o4 = segmentOrientation(c, d, b);
-        return (o1 * o2 < 0) && (o3 * o4 < 0);
-    }}
-
-    function refineLayoutGeometry(items, linksOrPairs, options = {{}}) {{
-        const refined = items.map(item => ({{...item}}));
-        if (refined.length <= 1) {{
-            return refined;
-        }}
-
-        const itemById = new Map(refined.map(item => [item.componentId, item]));
-        const links = layoutLinkPairs(linksOrPairs).filter(link => itemById.has(link.sourceId) && itemById.has(link.targetId));
-        const bubblePadding = options.bubblePadding ?? 14;
-        const edgePadding = options.edgePadding ?? 8;
-        const overlapIterations = options.overlapIterations ?? 5;
-        const edgeIterations = options.edgeIterations ?? 3;
-        const crossingIterations = options.crossingIterations ?? 2;
-        const maxPairChecks = options.maxPairChecks ?? 180000;
-        const maxEdgeNodeChecks = options.maxEdgeNodeChecks ?? 140000;
-        const maxCrossingChecks = options.maxCrossingChecks ?? 90000;
-        const pairChecks = (refined.length * (refined.length - 1)) / 2;
-
-        if (pairChecks <= maxPairChecks) {{
-            for (let iteration = 0; iteration < overlapIterations; iteration++) {{
-                for (let leftIndex = 0; leftIndex < refined.length; leftIndex++) {{
-                    const left = refined[leftIndex];
-                    for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex++) {{
-                        const right = refined[rightIndex];
-                        let dx = right.x - left.x;
-                        let dy = right.y - left.y;
-                        let distance = Math.hypot(dx, dy);
-                        if (distance < 1e-6) {{
-                            dx = (seededUnit(left.componentId + right.componentId, iteration + 21) - 0.5) || 0.01;
-                            dy = (seededUnit(left.componentId + right.componentId, iteration + 22) - 0.5) || 0.01;
-                            distance = Math.hypot(dx, dy);
-                        }}
-                        const minimumDistance = left.radius + right.radius + bubblePadding;
-                        if (distance >= minimumDistance) {{
-                            continue;
-                        }}
-                        const shift = ((minimumDistance - distance) / 2) * 0.72;
-                        const shiftX = (dx / distance) * shift;
-                        const shiftY = (dy / distance) * shift;
-                        left.x -= shiftX;
-                        left.y -= shiftY;
-                        right.x += shiftX;
-                        right.y += shiftY;
-                    }}
-                }}
-            }}
-        }}
-
-        if (links.length * refined.length <= maxEdgeNodeChecks) {{
-            for (let iteration = 0; iteration < edgeIterations; iteration++) {{
-                links.forEach(link => {{
-                    const source = itemById.get(link.sourceId);
-                    const target = itemById.get(link.targetId);
-                    if (!source || !target) {{
-                        return;
-                    }}
-                    refined.forEach(item => {{
-                        if (item.componentId === link.sourceId || item.componentId === link.targetId) {{
-                            return;
-                        }}
-                        const hit = pointSegmentDistance(item, source, target);
-                        if (hit.t <= 0.03 || hit.t >= 0.97) {{
-                            return;
-                        }}
-                        const minimumDistance = item.radius + edgePadding;
-                        if (hit.distance >= minimumDistance) {{
-                            return;
-                        }}
-                        let normalX = item.x - hit.closestX;
-                        let normalY = item.y - hit.closestY;
-                        let normalLength = Math.hypot(normalX, normalY);
-                        if (normalLength < 1e-6) {{
-                            const edgeDx = target.x - source.x;
-                            const edgeDy = target.y - source.y;
-                            normalX = -edgeDy || 1;
-                            normalY = edgeDx || 0;
-                            normalLength = Math.hypot(normalX, normalY);
-                        }}
-                        const push = (minimumDistance - hit.distance) * 0.68;
-                        item.x += (normalX / normalLength) * push;
-                        item.y += (normalY / normalLength) * push;
-                    }});
-                }});
-            }}
-        }}
-
-        const crossingChecks = (links.length * (links.length - 1)) / 2;
-        if (crossingChecks <= maxCrossingChecks) {{
-            for (let iteration = 0; iteration < crossingIterations; iteration++) {{
-                for (let leftIndex = 0; leftIndex < links.length; leftIndex++) {{
-                    const leftLink = links[leftIndex];
-                    const a = itemById.get(leftLink.sourceId);
-                    const b = itemById.get(leftLink.targetId);
-                    if (!a || !b) {{
-                        continue;
-                    }}
-                    for (let rightIndex = leftIndex + 1; rightIndex < links.length; rightIndex++) {{
-                        const rightLink = links[rightIndex];
-                        if (leftLink.sourceId === rightLink.sourceId || leftLink.sourceId === rightLink.targetId || leftLink.targetId === rightLink.sourceId || leftLink.targetId === rightLink.targetId) {{
-                            continue;
-                        }}
-                        const c = itemById.get(rightLink.sourceId);
-                        const d = itemById.get(rightLink.targetId);
-                        if (!c || !d || !segmentsCross(a, b, c, d)) {{
-                            continue;
-                        }}
-                        let dx = b.x - a.x;
-                        let dy = b.y - a.y;
-                        let length = Math.hypot(dx, dy);
-                        if (length < 1e-6) {{
-                            continue;
-                        }}
-                        const normalX = -dy / length;
-                        const normalY = dx / length;
-                        const push = 4.5 + (iteration * 1.5);
-                        a.x += normalX * push;
-                        a.y += normalY * push;
-                        b.x += normalX * push;
-                        b.y += normalY * push;
-                        c.x -= normalX * push;
-                        c.y -= normalY * push;
-                        d.x -= normalX * push;
-                        d.y -= normalY * push;
-                    }}
-                }}
-            }}
-        }}
-
-        if (links.length * refined.length <= maxEdgeNodeChecks) {{
-            links.forEach(link => {{
-                const source = itemById.get(link.sourceId);
-                const target = itemById.get(link.targetId);
-                if (!source || !target) {{
-                    return;
-                }}
-                refined.forEach(item => {{
-                    if (item.componentId === link.sourceId || item.componentId === link.targetId) {{
-                        return;
-                    }}
-                    const hit = pointSegmentDistance(item, source, target);
-                    if (hit.t <= 0.03 || hit.t >= 0.97) {{
-                        return;
-                    }}
-                    const minimumDistance = item.radius + edgePadding;
-                    if (hit.distance >= minimumDistance) {{
-                        return;
-                    }}
-                    let normalX = item.x - hit.closestX;
-                    let normalY = item.y - hit.closestY;
-                    let normalLength = Math.hypot(normalX, normalY);
-                    if (normalLength < 1e-6) {{
-                        const edgeDx = target.x - source.x;
-                        const edgeDy = target.y - source.y;
-                        normalX = -edgeDy || 1;
-                        normalY = edgeDx || 0;
-                        normalLength = Math.hypot(normalX, normalY);
-                    }}
-                    const push = (minimumDistance - hit.distance) * 0.82;
-                    item.x += (normalX / normalLength) * push;
-                    item.y += (normalY / normalLength) * push;
-                }});
-            }});
-        }}
-
-        if (pairChecks <= maxPairChecks) {{
-            for (let iteration = 0; iteration < 4; iteration++) {{
-                for (let leftIndex = 0; leftIndex < refined.length; leftIndex++) {{
-                    const left = refined[leftIndex];
-                    for (let rightIndex = leftIndex + 1; rightIndex < refined.length; rightIndex++) {{
-                        const right = refined[rightIndex];
-                        let dx = right.x - left.x;
-                        let dy = right.y - left.y;
-                        let distance = Math.hypot(dx, dy);
-                        if (distance < 1e-6) {{
-                            dx = (seededUnit(left.componentId + right.componentId, iteration + 41) - 0.5) || 0.01;
-                            dy = (seededUnit(left.componentId + right.componentId, iteration + 42) - 0.5) || 0.01;
-                            distance = Math.hypot(dx, dy);
-                        }}
-                        const minimumDistance = left.radius + right.radius + bubblePadding;
-                        if (distance >= minimumDistance) {{
-                            continue;
-                        }}
-                        const shift = ((minimumDistance - distance) / 2) * 0.9;
-                        const shiftX = (dx / distance) * shift;
-                        const shiftY = (dy / distance) * shift;
-                        left.x -= shiftX;
-                        left.y -= shiftY;
-                        right.x += shiftX;
-                        right.y += shiftY;
-                    }}
-                }}
-            }}
-        }}
-
-        return refined;
-    }}
-
-    function seededUnit(componentId, salt) {{
-        const raw = Math.sin((componentId + 1) * 12.9898 + salt * 78.233) * 43758.5453;
-        return raw - Math.floor(raw);
-    }}
-
-    // Radial tree layout seed: root (tree center) at origin, children placed in concentric rings
-    // with angular wedges allocated per subtree leaf count. Crossing-free and near-circular (compact
-    // aspect), so it both fixes the tall linear-tidy seed and gives Force its radial branch shape.
-    function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {{
-        const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
-        const tree = rootedTree(rootId, adjacency, hierarchyNodes);
-        const depthByNode = new Map([[rootId, 0]]);
-        tree.order.forEach(nodeId => {{ (tree.children.get(nodeId) || []).forEach(c => depthByNode.set(c, (depthByNode.get(nodeId) || 0) + 1)); }});
-        const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
-        const maxRadius = Math.max(...componentIds.map(id => radii.get(id) || 10), 10);
-        const gap = Math.max(ringGap || 0, maxRadius * 2 + 24, 60);
-        const leafCount = new Map();
-        [...tree.order].reverse().forEach(id => {{
-            const ch = tree.children.get(id) || [];
-            leafCount.set(id, ch.length === 0 ? 1 : ch.reduce((s, c) => s + (leafCount.get(c) || 1), 0));
-        }});
-        const positionById = new Map();
-        positionById.set(rootId, {{componentId: rootId, x: 0, y: 0, radius: radii.get(rootId) || 10}});
-        const wedge = new Map([[rootId, [0, Math.PI * 2]]]);
-        tree.order.forEach(id => {{
-            const span = wedge.get(id) || [0, Math.PI * 2];
-            const a0 = span[0], a1 = span[1];
-            const ch = tree.children.get(id) || [];
-            const total = ch.reduce((s, c) => s + (leafCount.get(c) || 1), 0) || 1;
-            let cursor = a0;
-            ch.forEach(c => {{
-                const ca0 = cursor, ca1 = cursor + (a1 - a0) * ((leafCount.get(c) || 1) / total);
-                cursor = ca1;
-                wedge.set(c, [ca0, ca1]);
-                const ang = (ca0 + ca1) / 2, r = (depthByNode.get(c) || 0) * gap;
-                positionById.set(c, {{componentId: c, x: Math.cos(ang) * r + (seededUnit(c, 11) - 0.5) * 0.5, y: Math.sin(ang) * r + (seededUnit(c, 12) - 0.5) * 0.5, radius: radii.get(c) || 10}});
-            }});
-        }});
-        return {{positionById, order: tree.order}};
-    }}
-
-    // --- Barnes-Hut quadtree: O(n log n) repulsion so physics scales to large forests ---
-    function bhBuild(ids, positions, radii) {{
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const id of ids) {{ const p = positions.get(id); if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }}
-        if (!isFinite(minX)) {{ minX = 0; minY = 0; maxX = 1; maxY = 1; }}
-        const size = Math.max(maxX - minX, maxY - minY, 1) * 1.0001;
-        const root = {{x0: minX, y0: minY, size, mass: 0, comX: 0, comY: 0, maxR: 0, id: null, px: 0, py: 0, r: 0, children: null, bucket: false}};
-        for (const id of ids) {{ const p = positions.get(id); bhInsert(root, id, p.x, p.y, radii.get(id) || 10, 0); }}
-        return root;
-    }}
-    function bhInsert(cell, id, px, py, r, depth) {{
-        cell.mass += 1; cell.comX += px; cell.comY += py; if (r > cell.maxR) cell.maxR = r;
-        if (cell.children === null) {{
-            if (cell.id === null) {{ cell.id = id; cell.px = px; cell.py = py; cell.r = r; return; }}
-            if (depth >= 48 || cell.size < 1e-6) {{ cell.bucket = true; return; }}
-            const eid = cell.id, epx = cell.px, epy = cell.py, er = cell.r;
-            cell.id = null; cell.children = [null, null, null, null];
-            bhInsertChild(cell, eid, epx, epy, er, depth);
-            bhInsertChild(cell, id, px, py, r, depth);
-            return;
-        }}
-        bhInsertChild(cell, id, px, py, r, depth);
-    }}
-    function bhInsertChild(cell, id, px, py, r, depth) {{
-        const half = cell.size / 2;
-        const qx = px >= cell.x0 + half ? 1 : 0, qy = py >= cell.y0 + half ? 1 : 0, qi = qy * 2 + qx;
-        let child = cell.children[qi];
-        if (!child) {{ child = {{x0: cell.x0 + qx * half, y0: cell.y0 + qy * half, size: half, mass: 0, comX: 0, comY: 0, maxR: 0, id: null, px: 0, py: 0, r: 0, children: null, bucket: false}}; cell.children[qi] = child; }}
-        bhInsert(child, id, px, py, r, depth + 1);
-    }}
-    function bhAccumulate(cell, selfId, px, py, selfR, acc, p) {{
-        if (cell.mass === 0) return;
-        if (cell.children === null) {{
-            if (cell.bucket) {{
-                const comX = cell.comX / cell.mass, comY = cell.comY / cell.mass;
-                let dx = px - comX, dy = py - comY, distSq = dx * dx + dy * dy;
-                if (distSq < 1) return;
-                const dist = Math.sqrt(distSq), rf = p.repulsion * cell.mass / Math.max(distSq, 16);
-                acc.x += dx / dist * rf; acc.y += dy / dist * rf;
-                return;
-            }}
-            if (cell.id === null || cell.id === selfId) return;
-            let dx = px - cell.px, dy = py - cell.py, distSq = dx * dx + dy * dy;
-            if (distSq < 1e-6) {{ dx = (seededUnit(selfId + cell.id, p.iter + 7) - 0.5) * 0.01; dy = (seededUnit(selfId + cell.id, p.iter + 8) - 0.5) * 0.01; distSq = dx * dx + dy * dy; }}
-            const dist = Math.sqrt(distSq), rf = p.repulsion / Math.max(distSq, 16);
-            const ov = selfR + cell.r + 12 - dist;
-            const cf = ov > 0 ? ov * p.collisionStrength : 0;
-            acc.x += dx / dist * (rf + cf); acc.y += dy / dist * (rf + cf);
-            return;
-        }}
-        const comX = cell.comX / cell.mass, comY = cell.comY / cell.mass;
-        let dx = px - comX, dy = py - comY, distSq = dx * dx + dy * dy;
-        if (distSq < 1e-9) distSq = 1e-9;
-        // Always descend cells whose nearest edge is within collision range of self, so the radii-aware
-        // collision is exact in the near field even when theta would aggregate.
-        const nx = px < cell.x0 ? cell.x0 : (px > cell.x0 + cell.size ? cell.x0 + cell.size : px);
-        const ny = py < cell.y0 ? cell.y0 : (py > cell.y0 + cell.size ? cell.y0 + cell.size : py);
-        const bdx = px - nx, bdy = py - ny, colR = selfR + cell.maxR + 12;
-        const near = (bdx * bdx + bdy * bdy) < colR * colR;
-        if (!near && cell.size * cell.size < p.thetaSq * distSq) {{
-            const dist = Math.sqrt(distSq), rf = p.repulsion * cell.mass / Math.max(distSq, 16);
-            acc.x += dx / dist * rf; acc.y += dy / dist * rf;
-            return;
-        }}
-        for (let i = 0; i < 4; i++) {{ const c = cell.children[i]; if (c) bhAccumulate(c, selfId, px, py, selfR, acc, p); }}
-    }}
-    // Collect the separation push needed to lift `self` out of any bubble it overlaps (local descent).
-    function bhCollect(cell, selfId, px, py, selfR, d, pad) {{
-        if (cell.mass === 0) return;
-        if (cell.children === null) {{
-            if (cell.bucket || cell.id === null || cell.id === selfId) return;
-            let dx = px - cell.px, dy = py - cell.py, distSq = dx * dx + dy * dy;
-            const minD = selfR + cell.r + pad;
-            if (distSq >= minD * minD) return;
-            let dist = Math.sqrt(distSq);
-            if (dist < 1e-6) {{ dx = (seededUnit(selfId + cell.id, 7) - 0.5) || 0.01; dy = (seededUnit(selfId + cell.id, 8) - 0.5) || 0.01; dist = Math.hypot(dx, dy); }}
-            const push = (minD - dist) * 0.5;
-            d.x += dx / dist * push; d.y += dy / dist * push;
-            return;
-        }}
-        const nx = px < cell.x0 ? cell.x0 : (px > cell.x0 + cell.size ? cell.x0 + cell.size : px);
-        const ny = py < cell.y0 ? cell.y0 : (py > cell.y0 + cell.size ? cell.y0 + cell.size : py);
-        const bdx = px - nx, bdy = py - ny, colR = selfR + cell.maxR + pad;
-        if (bdx * bdx + bdy * bdy > colR * colR) return;
-        for (let i = 0; i < 4; i++) {{ const c = cell.children[i]; if (c) bhCollect(c, selfId, px, py, selfR, d, pad); }}
-    }}
-    // Iteratively separate overlapping bubbles using the quadtree (replaces the O(n^2) overlap pass on
-    // large components, where refineLayoutGeometry is skipped). Mutates positions in place.
-    function bhResolveOverlaps(ids, positions, radii, passes, pad) {{
-        for (let pass = 0; pass < passes; pass++) {{
-            const tree = bhBuild(ids, positions, radii);
-            const disp = new Map(ids.map(id => [id, {{x: 0, y: 0}}]));
-            ids.forEach(id => {{ const pos = positions.get(id); bhCollect(tree, id, pos.x, pos.y, radii.get(id) || 10, disp.get(id), pad); }});
-            let maxMoved = 0;
-            ids.forEach(id => {{ const d = disp.get(id), pos = positions.get(id); pos.x += d.x; pos.y += d.y; maxMoved = Math.max(maxMoved, Math.abs(d.x) + Math.abs(d.y)); }});
-            if (maxMoved < 1) break;
-        }}
-    }}
-
-    function simulateComponentLayout(componentIds, adjacency, options = {{}}, hierarchyNodes) {{
-        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
-        const positions = new Map();
-        const velocities = new Map();
-        const anchors = new Map();
-        const damping = options.damping ?? 0.8;
-        const repulsion = options.repulsion ?? 6000;
-        const spring = options.spring ?? 0.07;
-        const gravity = options.gravity ?? 0.008;
-        const anchorStrength = options.anchorStrength ?? 0;
-        const iterations = options.iterations ?? 110;
-        const preferredEdgeLength = options.preferredEdgeLength ?? 120;
-        const collisionStrength = options.collisionStrength ?? 0.28;
-        const maxStep = options.maxStep ?? 48;
-        // Barnes-Hut keeps repulsion O(n log n), so physics now runs on large components too; only
-        // truly huge ones fall back to the (already compact) radial seed.
-        const maxPhysicsNodes = options.maxPhysicsNodes ?? 50000;
-        const theta = options.theta ?? 0.9;
-        const thetaSq = theta * theta;
-
-        // Seed positions AND anchors from the crossing-free radial tree layout (compact + circular),
-        // centered on the origin so gravity pulls toward the middle.
-        const seed = radialTreeSeed(componentIds, adjacency, hierarchyNodes, preferredEdgeLength);
-        let centerX = 0;
-        let centerY = 0;
-        componentIds.forEach(nodeId => {{
-            const s = seed.positionById.get(nodeId) || {{x: 0, y: 0}};
-            centerX += s.x;
-            centerY += s.y;
-        }});
-        centerX /= Math.max(1, componentIds.length);
-        centerY /= Math.max(1, componentIds.length);
-        componentIds.forEach(nodeId => {{
-            const s = seed.positionById.get(nodeId) || {{x: 0, y: 0}};
-            const anchorX = s.x - centerX;
-            const anchorY = s.y - centerY;
-            anchors.set(nodeId, {{x: anchorX, y: anchorY}});
-            positions.set(nodeId, {{x: anchorX, y: anchorY}});
-            velocities.set(nodeId, {{x: 0, y: 0}});
-        }});
-
-        const edgePairs = [];
-        componentIds.forEach(nodeId => {{
-            (adjacency.get(nodeId) || []).forEach(neighborId => {{
-                if (nodeId < neighborId) {{
-                    edgePairs.push([nodeId, neighborId]);
-                }}
-            }});
-        }});
-
-        if (componentIds.length <= maxPhysicsNodes) {{
-        for (let iteration = 0; iteration < iterations; iteration++) {{
-            const forces = new Map(componentIds.map(nodeId => [nodeId, {{x: 0, y: 0}}]));
-            // Repulsion + near-field collision via Barnes-Hut (O(n log n) instead of O(n^2)). The
-            // distance floor (max(distSq, 16)) keeps a near-coincident pair from exploding.
-            const tree = bhBuild(componentIds, positions, radii);
-            const bhParams = {{repulsion, collisionStrength, thetaSq, iter: iteration}};
-            componentIds.forEach(nodeId => {{
-                const pos = positions.get(nodeId);
-                bhAccumulate(tree, nodeId, pos.x, pos.y, radii.get(nodeId) || 10, forces.get(nodeId), bhParams);
-            }});
-
-            edgePairs.forEach(([leftId, rightId]) => {{
-                const leftPos = positions.get(leftId);
-                const rightPos = positions.get(rightId);
-                let dx = rightPos.x - leftPos.x;
-                let dy = rightPos.y - leftPos.y;
-                let dist = Math.hypot(dx, dy);
-                if (dist < 1e-6) {{
-                    dist = 1e-6;
-                    dx = preferredEdgeLength;
-                    dy = 0;
-                }}
-                // Rest length keeps connected neighbors outside each other's bubbles.
-                const rest = Math.max(preferredEdgeLength, (radii.get(leftId) || 0) + (radii.get(rightId) || 0) + 24);
-                const delta = dist - rest;
-                const force = spring * delta;
-                const forceX = (dx / dist) * force;
-                const forceY = (dy / dist) * force;
-                forces.get(leftId).x += forceX;
-                forces.get(leftId).y += forceY;
-                forces.get(rightId).x -= forceX;
-                forces.get(rightId).y -= forceY;
-            }});
-
-            let totalMovement = 0;
-            componentIds.forEach(nodeId => {{
-                const position = positions.get(nodeId);
-                const velocity = velocities.get(nodeId);
-                const force = forces.get(nodeId);
-                const anchor = anchors.get(nodeId);
-                force.x += (anchor.x - position.x) * anchorStrength;
-                force.y += (anchor.y - position.y) * anchorStrength;
-                force.x += -position.x * gravity;
-                force.y += -position.y * gravity;
-                velocity.x = (velocity.x + force.x) * damping;
-                velocity.y = (velocity.y + force.y) * damping;
-                // Cap per-step displacement to keep the simulation numerically stable.
-                const speed = Math.hypot(velocity.x, velocity.y);
-                if (speed > maxStep) {{
-                    velocity.x *= maxStep / speed;
-                    velocity.y *= maxStep / speed;
-                }}
-                position.x += velocity.x;
-                position.y += velocity.y;
-                totalMovement += Math.abs(velocity.x) + Math.abs(velocity.y);
-            }});
-            // Early-exit once the system has settled (avoids the worker hanging on big forests).
-            if (iteration > 12 && (totalMovement / componentIds.length) < 0.05) {{
-                break;
-            }}
-        }}
-        // Large components skip the O(n^2) refine overlap pass; clean residual overlaps via the quadtree.
-        if (componentIds.length > 600) {{ bhResolveOverlaps(componentIds, positions, radii, 14, 8); }}
-        }}
-
-        const rawItems = componentIds.map(nodeId => {{
-            const position = positions.get(nodeId);
-            return {{componentId: nodeId, x: position.x, y: position.y, radius: radii.get(nodeId) || 10}};
-        }});
-        const refinedItems = refineLayoutGeometry(rawItems, edgePairs, {{
-            bubblePadding: options.bubblePadding ?? 14,
-            edgePadding: options.edgePadding ?? 8,
-            overlapIterations: options.geometryIterations ?? 5,
-            edgeIterations: options.edgeIterations ?? 3,
-            crossingIterations: options.crossingIterations ?? 2,
-        }});
-        return normalizeComponentLayout(refinedItems, 24);
-    }}
-
     function forceDirectedForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
         if (visibleIds.length === 0) {{
             clusterCanvas.height = 760;
@@ -9324,79 +8980,11 @@ def ssn_viewer_html(
         }}
         clusterCanvas.height = Math.max(760, Math.min(1180, Math.round(window.innerHeight * 0.8)));
         const {{adjacency, components}} = clusterGraphComponents(visibleIds, links, hierarchyNodes, sortBySizeEnabled);
-        const componentLayouts = components.map(componentIds => simulateComponentLayout(componentIds, adjacency, {{
-            repulsion: 5000,
-            spring: 0.08,
-            gravity: 0.004,
-            damping: 0.85,
-            preferredEdgeLength: 124,
-            iterations: Math.max(30, Math.min(90, Math.round(850000 / componentIds.length))),
-            collisionStrength: 0.5,
-            bubblePadding: 17,
-            edgePadding: 10,
-            geometryIterations: 7,
-            edgeIterations: 4,
-            crossingIterations: 4,
-            anchorStrength: 0.04,
-            maxPhysicsNodes: 50000,
-            theta: 1.5,
-        }}, hierarchyNodes));
-        return packLayouts(componentLayouts, {{gapX: 36, gapY: 36, outerPadding: 72}});
-    }}
-
-    // Tidy (Reingold-Tilford style) layout for a single component, rooted at its tree center.
-    // Returns crossing-free positions for forest topology even with long branches. Shared by the
-    // Tree layout and used to seed the Force-directed simulation. O(n), x offset by originX.
-    function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {{
-        const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
-        const tree = rootedTree(rootId, adjacency, hierarchyNodes);
-        const depthByNode = new Map([[rootId, 0]]);
-        tree.order.forEach(nodeId => {{
-            (tree.children.get(nodeId) || []).forEach(childId => {{
-                depthByNode.set(childId, (depthByNode.get(nodeId) || 0) + 1);
-            }});
-        }});
-        const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
-        const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
-        const siblingGap = Math.max(20, maxRadius * 0.42);
-        const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
-        const subtreeSpan = new Map();
-        [...tree.order].reverse().forEach(nodeId => {{
-            const childIds = tree.children.get(nodeId) || [];
-            const nodeSpan = ((radii.get(nodeId) || 12) * 2) + 18;
-            if (childIds.length === 0) {{
-                subtreeSpan.set(nodeId, nodeSpan);
-                return;
-            }}
-            const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
-            subtreeSpan.set(nodeId, Math.max(nodeSpan, childrenSpan));
-        }});
-
-        const positionById = new Map();
-        function placeNode(nodeId, topY) {{
-            const nodeSpan = subtreeSpan.get(nodeId) || 26;
-            const childIds = tree.children.get(nodeId) || [];
-            const x = originX + (depthByNode.get(nodeId) || 0) * levelGap;
-            if (childIds.length === 0) {{
-                positionById.set(nodeId, {{componentId: nodeId, x, y: topY + (nodeSpan / 2), radius: radii.get(nodeId) || 10}});
-                return;
-            }}
-            const childrenSpan = childIds.reduce((sum, childId) => sum + subtreeSpan.get(childId), 0) + (Math.max(0, childIds.length - 1) * siblingGap);
-            let childCursor = topY + Math.max(0, (nodeSpan - childrenSpan) / 2);
-            const childCenters = [];
-            childIds.forEach(childId => {{
-                placeNode(childId, childCursor);
-                childCenters.push(positionById.get(childId).y);
-                childCursor += subtreeSpan.get(childId) + siblingGap;
-            }});
-            const centerY = childCenters.reduce((sum, value) => sum + value, 0) / Math.max(1, childCenters.length);
-            positionById.set(nodeId, {{componentId: nodeId, x, y: centerY, radius: radii.get(nodeId) || 10}});
-        }}
-
-        placeNode(rootId, 0);
-        const maxDepth = tree.order.reduce((maxValue, nodeId) => Math.max(maxValue, depthByNode.get(nodeId) || 0), 0);
-        const width = (maxDepth * levelGap) + (Math.max(...tree.order.map(nodeId => radii.get(nodeId) || 10), 10) * 2);
-        return {{positionById, order: tree.order, width}};
+        // Same tuning the Worker uses (forestForceOptions lives in the shared layout core),
+        // so the fallback path cannot drift into drawing a different layout.
+        const componentLayouts = components.map(componentIds => simulateComponentLayout(
+            componentIds, adjacency, forestForceOptions(componentIds.length), hierarchyNodes));
+        return packLayouts(componentLayouts, FOREST_PACK_OPTIONS);
     }}
 
     function tidyForestLayout(visibleIds, links, hierarchyNodes, sortBySizeEnabled) {{
@@ -10815,6 +10403,7 @@ def ssn_viewer_html(
         applyComputedLayout(result.layout, visibleGraph, layoutAlgorithm, resetView);
     }}
 
+{layout_core_js}
 {session_state_js}
 {selection_presets_js}
 {table_editing_js}
