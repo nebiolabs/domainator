@@ -128,3 +128,30 @@ def test_hmmer_select_no_criteria_selects_nothing(shared_datadir):
         out_path = os.path.join(output_dir, "out.hmm")
         main(["-i", str(shared_datadir / "dna_profiles.hmm"), "-o", out_path])
         assert os.path.getsize(out_path) == 0
+
+
+def test_hmmer_select_gzip_roundtrip(shared_datadir, tmp_path):
+    """gz in, gz out: the profiles must match the uncompressed run exactly."""
+    import gzip
+    import helpers
+    from domainator.utils import detect_compression, open_hmm_file
+
+    plain_out = tmp_path / "plain.hmm"
+    gz_out = tmp_path / "out.hmm.gz"
+    gz_in = helpers.gzip_file(shared_datadir / "pdonr_hmms.hmm", tmp_path / "in.hmm.gz")
+
+    main(['--input', str(shared_datadir / "pdonr_hmms.hmm"), "--output", str(plain_out),
+          "--field", "all", "--regex", "dehyd.*"])
+    main(['--input', gz_in, "--output", str(gz_out), "--field", "all", "--regex", "dehyd.*"])
+
+    assert detect_compression(gz_out) == "gzip"
+    assert gzip.open(gz_out, "rb").read() == plain_out.read_bytes()
+    with open_hmm_file(gz_out) as handle:
+        assert len([m for m in handle]) == 1
+
+
+def test_hmmer_select_rejects_bgzf_output(shared_datadir, tmp_path):
+    with pytest.raises(ValueError, match="BGZF"):
+        main(['--input', str(shared_datadir / "pdonr_hmms.hmm"),
+              "--output", str(tmp_path / "out.hmm.bgz"),
+              "--field", "all", "--regex", "dehyd.*"])

@@ -99,6 +99,44 @@ per-alphabet outputs. DNA and RNA count as different alphabets.
 both carry `DATE` and `COM` lines recording when and how they were built, so two profiles
 built from the same alignment are not byte-identical.
 
+### Compression
+
+`.hmm` inputs may be gzip- or BGZF-compressed anywhere a plain `.hmm` is accepted. Domainator
+decides from the file's **magic bytes**, not its name, so a compressed file under any name is
+read correctly, as is an uncompressed file that happens to be named `.gz`. (HMMER itself
+dispatches on the extension: it pipes any `.gz` path through `gzip -dc`, which is why it fails
+on an uncompressed file named `.gz` and cannot read BGZF at all.)
+
+Output is different, and deliberately asymmetric with sequence files: an output path ending in
+`.gz` is written as **plain gzip**, and `.bgz`/`.bgzf` output is **refused**. Two reasons:
+
+- easel cannot open a BGZF stream by path, so a BGZF `.hmm` would be unreadable by `hmmsearch`,
+  by `hmmpress`, and by Domainator's own path-based reads. Writing one would produce a file
+  HMMER itself could not read. Plain gzip is read correctly by all of them.
+- BGZF's advantage over plain gzip is seekable random access, and nothing seeks within a
+  `.hmm`. There is no HMM offset index; the `.didx` format is for sequence databases only.
+
+This is the opposite of the advice for sequence databases below, which should be BGZF.
+
+Output written to stdout is never compressed. `--max_output_gb` counts profile bytes **before**
+compression: that is the deterministic, compression-level-independent quantity bounding what
+downstream tools must read, and it cannot be measured accurately mid-stream anyway.
+
+### `hmmpress` sidecars are ignored
+
+Domainator always reads the `.hmm` itself and never the `.h3f`/`.h3i`/`.h3m`/`.h3p` files that
+`hmmpress` writes beside it. Those sidecars are tied to the `.hmm` only by filename, so a
+profile file edited or regenerated after pressing silently yields the *old* profiles, with no
+error and no warning — HMMER's own readers prefer the sidecars whenever they exist. The load
+speedup they offer is large in relative terms but irrelevant in practice, because loading a
+profile database is a fixed cost that is dwarfed by the profile-to-sequence comparisons in any
+real search. Ignoring them trades a speedup nobody notices for the removal of a
+silent-wrong-results failure mode.
+
+Leftover sidecars are therefore harmless, and safe to delete. Note that pressing a *compressed*
+`.hmm` accomplishes nothing even outside Domainator: HMMER skips sidecar detection entirely for
+`.gz` paths, so the sidecars are never read.
+
 ## Protein structures
 
 The `structure_*` tools read protein structure files: `.pdb`, `.pdb1`, `.ent`, `.cif`,
@@ -507,6 +545,8 @@ and — unlike plain gzip — still randomly seekable, so parallel search is una
 Combine with `--index` for small files *and* fast startup. Don't bother for tiny or
 short-lived databases. (Plain gzip is readable as a convenience but is **not** seekable or
 indexable, so it forces slow single-stream reads — re-compress as BGZF for any real use.)
+This advice is about *sequence* databases. It does not carry over to `.hmm` profile files,
+which must be plain gzip rather than BGZF — see [HMMER profiles](#hmmer-profiles-hmm).
 
 **Shard (`--shards N`): for distribution and operations, not single-machine speed.**
 - *One machine:* you generally don't need shards — an indexed single file already

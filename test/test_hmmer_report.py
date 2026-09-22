@@ -68,3 +68,19 @@ def test_hmmer_report_reports_mixed_alphabet_file(shared_datadir, tmp_path):
     with tempfile.TemporaryDirectory() as output_dir:
         with pytest.raises(ValueError, match="more than one alphabet"):
             hmmer_report.main(["-i", str(mixed), "--alphabet", "-o", output_dir + "/out.tsv"])
+
+
+def test_hmmer_report_source_ignores_compression_suffix(shared_datadir, tmp_path):
+    """The --source column must not gain a ".hmm" for a compressed input."""
+    import helpers
+
+    plain_out = tmp_path / "plain.tsv"
+    gz_out = tmp_path / "gz.tsv"
+    gz_in = helpers.gzip_file(shared_datadir / "pdonr_hmms.hmm", tmp_path / "pdonr_hmms.hmm.gz")
+
+    hmmer_report.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-o", str(plain_out), "--source"])
+    hmmer_report.main(["-i", gz_in, "-o", str(gz_out), "--source"])
+
+    assert plain_out.read_text() == gz_out.read_text()
+    sources = {line.split("\t")[1] for line in gz_out.read_text().splitlines()[1:]}
+    assert sources == {"pdonr_hmms"}

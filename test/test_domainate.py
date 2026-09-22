@@ -11,7 +11,7 @@ from domainator.utils import DomainatorCDS, count_peptides_in_record
 from domainator.domainate import read_references
 import pyhmmer
 import pytest
-from helpers import compare_seqfiles, compare_seqrecords
+from helpers import compare_seqfiles, compare_seqrecords, gzip_file, bgzip_file
 
 @pytest.mark.parametrize("Z,expected_string",
 [(0, "CcdB (CcdB protein, 1.3e-33, 103.1)"),
@@ -688,3 +688,52 @@ def test_domainate_mixed_query_1(shared_datadir):
         assert len(cdss[0].domain_features) == 2
         assert len(cdss[1].domain_features) == 3
         assert len(cdss[2].domain_features) == 3
+
+
+def _database_qualifiers(path):
+    dbs = set()
+    for rec in SeqIO.parse(path, "genbank"):
+        for feat in rec.features:
+            if feat.type == DOMAIN_FEATURE_NAME:
+                dbs.update(feat.qualifiers.get("database", []))
+    return dbs
+
+
+@pytest.mark.parametrize("compressor,suffix", [
+    (gzip_file, ".hmm.gz"),
+    (bgzip_file, ".hmm.bgz"),   # raised "format not recognized by HMMER" before
+])
+def test_annotate_with_compressed_references(shared_datadir, tmp_path, compressor, suffix):
+    """A compressed reference must give byte-for-byte the same result as a plain one.
+
+    It previously did not: the database qualifier was derived with a single-suffix
+    stem, so a .gz reference was labelled "FeSOD_pfam.hmm" instead of "FeSOD_pfam".
+    """
+    plain_ref = shared_datadir / "FeSOD_pfam.hmm"
+    compressed_ref = compressor(plain_ref, tmp_path / ("FeSOD_pfam" + suffix))
+
+    plain_out = str(tmp_path / "plain.gb")
+    compressed_out = str(tmp_path / "compressed.gb")
+    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--references', str(plain_ref), '-o', plain_out])
+    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--references', str(compressed_ref), '-o', compressed_out])
+
+    assert _database_qualifiers(plain_out) == {"FeSOD_pfam"}
+    assert _database_qualifiers(compressed_out) == {"FeSOD_pfam"}
+    compare_seqfiles(plain_out, compressed_out)
+
+
+def test_annotate_ignores_stale_pressed_sidecars(shared_datadir, tmp_path):
+    """hmmpress sidecars left next to an edited .hmm must not be used."""
+    from domainator import utils
+    ref = tmp_path / "ref.hmm"
+    ref.write_bytes((shared_datadir / "FeSOD_pfam.hmm").read_bytes())
+    pyhmmer.hmmer.hmmpress(list(utils.open_hmm_file(ref)), str(ref))
+    # Replace the profiles; the sidecars still describe the FeSOD ones.
+    ref.write_bytes((shared_datadir / "pdonr_hmms.hmm").read_bytes())
+
+    out = str(tmp_path / "out.gb")
+    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--references', str(ref), '-o', out])
+    # The stale sidecars would have annotated Sod_Fe_C / Sod_Fe_N.
+    names = {q for rec in SeqIO.parse(out, "genbank") for f in rec.features
+             if f.type == DOMAIN_FEATURE_NAME for q in f.qualifiers.get("name", [])}
+    assert not (names & {"Sod_Fe_C", "Sod_Fe_N"})

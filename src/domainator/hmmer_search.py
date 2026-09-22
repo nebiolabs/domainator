@@ -30,7 +30,7 @@ import pyhmmer
 from typing import List, Iterable, TextIO, Tuple, Union, Dict, Optional, BinaryIO
 import heapq
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.utils import make_pool, pyhmmer_decode, read_hmms, alphabet_name, alphabet_score_scale, common_hmm_alphabet, iter_hmms_with_alphabet
+from domainator.utils import make_pool, pyhmmer_decode, read_hmms, alphabet_name, alphabet_score_scale, common_hmm_alphabet, iter_hmms_with_alphabet, open_writable_hmm_file, is_compressed_path, check_writable_hmm_path, OUTPUT_COMPRESSION_HELP
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 from numba import jit
 import numba as nb
@@ -525,7 +525,7 @@ def main(argv):
                         help="Reference files. One or more hmm text files with one or more hmmer3 profiles.\nIf -i and -r are different, -r will typically be the smaller of the two, as it is used as a filtering criterion.")
     
     parser.add_argument('-o', '--output', type=str, required=False, default=None,
-                        help=".hmm file to write hit profiles to. Default: stdout")
+                        help=".hmm file to write hit profiles to. Default: stdout" + OUTPUT_COMPRESSION_HELP)
 
     parser.add_argument('--score_cutoff', type=float, default = None,
                         help=f"Report alignments with scores greater than or equal to this. "
@@ -552,13 +552,14 @@ def main(argv):
         cpus = params.cpu
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
+    check_writable_hmm_path(params.output)
     output_description = f"hmmer_search HMM output '{params.output if params.output is not None else 'stdout'}'"
     temp_output_path = None
     if params.output is None:
         out = sys.stdout.buffer
     else:
         temp_output_path = make_temporary_output_path(params.output)
-        out = open(temp_output_path, "wb")
+        out = open_writable_hmm_file(temp_output_path, compressed=is_compressed_path(params.output))
     
     if params.input is None:
         input_files = [sys.stdin.buffer] # pyhmmer needs a binary stream

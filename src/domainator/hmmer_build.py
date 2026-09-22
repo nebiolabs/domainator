@@ -6,7 +6,7 @@
 from jsonargparse import ArgumentParser, ActionConfigFile
 from pyhmmer.easel import MSAFile
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.utils import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name
+from domainator.utils import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name, open_writable_hmm_file, OUTPUT_COMPRESSION_HELP
 import os
 import sys
 import pyhmmer
@@ -106,7 +106,7 @@ def main(argv):
                           help="Path of input msa. If not supplied, reads from stdin. Acceptable formats are the same as for hmmbuild.")
 
     parser.add_argument("-o", "--output", default=None, required=False,  type=str,
-                        help="hmm output file path. If not supplied writes to stdout.")
+                        help="hmm output file path. If not supplied writes to stdout." + OUTPUT_COMPRESSION_HELP)
 
     parser.add_argument("--name", default=None, required=True, type=str,
                             help="Name of the HMM profile.")
@@ -135,7 +135,7 @@ def main(argv):
     if params.output is None:
         output_handle = sys.stdout.buffer
     else:
-        output_handle = open(params.output, "wb")
+        output_handle = open_writable_hmm_file(params.output)
 
     alphabet = get_alphabet(params.alphabet)
 

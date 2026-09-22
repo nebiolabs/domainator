@@ -6,7 +6,7 @@ alphabet each profile uses.
 
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, pyhmmer_decode, alphabet_name, iter_hmms_with_alphabet
+from domainator.utils import list_and_file_to_dict_keys, pyhmmer_decode, alphabet_name, iter_hmms_with_alphabet, db_name_from_path
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from pathlib import Path
 from typing import List, Tuple, Union, Iterable, Dict
@@ -31,7 +31,7 @@ def read_hmms_to_iterators(hmm_files:Iterable[Union[str,os.PathLike, IOBase]]) -
             name = file.name
         else:
             name = file
-        name = os.path.basename(Path(name).stem)
+        name = db_name_from_path(name)
 
         _alphabet, profiles = iter_hmms_with_alphabet(file, role="input")
         out.append((name, profiles))

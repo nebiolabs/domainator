@@ -8,6 +8,7 @@ from array import array
 import re
 import math
 import pandas as pd
+import helpers
 from pyhmmer import easel
 
 
@@ -402,3 +403,140 @@ def test_iter_hmms_reports_mixed_alphabet_file(shared_datadir, tmp_path):
     _alphabet, profiles = utils.iter_hmms_with_alphabet(mixed)
     with pytest.raises(ValueError, match="mixed.hmm"):
         list(profiles)
+
+
+# ---------------------------------------------------------------------------
+# Compressed hmm files, pressed-sidecar handling, and database naming.
+# ---------------------------------------------------------------------------
+
+def _names(hmm_file):
+    with hmm_file as handle:
+        return [utils.pyhmmer_decode(h.name) for h in handle]
+
+
+def test_open_hmm_file_reads_gzip_and_bgzf(shared_datadir, tmp_path):
+    src = shared_datadir / "FeSOD_pfam.hmm"
+    plain = _names(utils.open_hmm_file(src))
+    assert plain  # sanity
+    assert _names(utils.open_hmm_file(helpers.gzip_file(src, tmp_path / "r.hmm.gz"))) == plain
+    # BGZF used to raise "format not recognized by HMMER": easel rejects the
+    # FEXTRA header, so it has to be read through gzip.open rather than by path.
+    assert _names(utils.open_hmm_file(helpers.bgzip_file(src, tmp_path / "r.hmm.bgz"))) == plain
+
+
+def test_open_hmm_file_detects_compression_by_content_not_extension(shared_datadir, tmp_path):
+    # easel dispatches on the extension and would fail on both of these.
+    src = shared_datadir / "FeSOD_pfam.hmm"
+    plain = _names(utils.open_hmm_file(src))
+    misnamed_gz = helpers.gzip_file(src, tmp_path / "compressed.hmm")   # gzip content, no .gz
+    assert _names(utils.open_hmm_file(misnamed_gz)) == plain
+    uncompressed_but_named_gz = tmp_path / "plain.hmm.gz"
+    uncompressed_but_named_gz.write_bytes(src.read_bytes())
+    assert _names(utils.open_hmm_file(uncompressed_but_named_gz)) == plain
+
+
+def test_open_hmm_file_rewind_and_close_compressed(shared_datadir, tmp_path):
+    gz = helpers.gzip_file(shared_datadir / "FeSOD_pfam.hmm", tmp_path / "r.hmm.gz")
+    handle = utils.open_hmm_file(gz)
+    first = [utils.pyhmmer_decode(h.name) for h in handle]
+    handle.rewind()
+    assert [utils.pyhmmer_decode(h.name) for h in handle] == first
+    handle.close()
+    handle.close()  # must be idempotent: pyhmmer 0.12 double-frees on a second close
+
+
+def test_open_hmm_file_closes_underlying_handle(shared_datadir, tmp_path):
+    gz = helpers.gzip_file(shared_datadir / "FeSOD_pfam.hmm", tmp_path / "r.hmm.gz")
+    with utils.open_hmm_file(gz) as handle:
+        inner = handle._handle
+        assert not inner.closed
+    assert inner.closed
+
+
+def test_open_hmm_file_passes_handles_through(shared_datadir):
+    with open(shared_datadir / "FeSOD_pfam.hmm", "rb") as fh:
+        assert _names(utils.open_hmm_file(fh))
+
+
+def test_pressed_sidecars_are_ignored(shared_datadir, tmp_path):
+    """An .hmm edited after hmmpress must not be read from its stale sidecars."""
+    import pyhmmer
+    target = tmp_path / "ref.hmm"
+    target.write_bytes((shared_datadir / "FeSOD_pfam.hmm").read_bytes())
+    pyhmmer.hmmer.hmmpress(list(utils.open_hmm_file(target)), str(target))
+    assert (tmp_path / "ref.hmm.h3m").exists()
+
+    # Replace the contents entirely; the sidecars now describe the old profiles.
+    target.write_bytes((shared_datadir / "pdonr_hmms.hmm").read_bytes())
+    expected = [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(shared_datadir / "pdonr_hmms.hmm")]
+    assert _names(utils.open_hmm_file(target)) == expected
+    assert list(utils.iter_hmm_names(target)) == expected
+
+
+@pytest.mark.parametrize("path,expected", [
+    ("a.hmm", "a"),
+    ("a.hmm.gz", "a"),
+    ("a.hmm.bgz", "a"),
+    ("/p/some.long.name.hmm", "some.long.name"),
+    ("refs.v1", "refs"),
+    ("db.gz", "db"),
+    ("plain", "plain"),
+])
+def test_db_name_from_path(path, expected):
+    assert utils.db_name_from_path(path) == expected
+
+
+def test_read_hmms_db_name_ignores_compression_suffix(shared_datadir, tmp_path):
+    gz = helpers.gzip_file(shared_datadir / "FeSOD_pfam.hmm", tmp_path / "FeSOD_pfam.hmm.gz")
+    assert set(utils.read_hmms([gz])) == {"FeSOD_pfam"}
+
+
+def test_open_writable_hmm_file_rejects_bgzf(tmp_path):
+    with pytest.raises(ValueError, match="BGZF"):
+        utils.open_writable_hmm_file(tmp_path / "out.hmm.bgz")
+
+
+def test_open_writable_hmm_file_writes_plain_gzip(shared_datadir, tmp_path):
+    out = tmp_path / "out.hmm.gz"
+    with utils.open_writable_hmm_file(out) as handle:
+        for hmm in utils.iter_hmms(shared_datadir / "FeSOD_pfam.hmm"):
+            hmm.write(handle)
+    # Plain gzip, deliberately not BGZF: easel cannot open BGZF by path, so a
+    # BGZF .hmm would be unreadable by hmmsearch and by Domainator itself.
+    assert utils.detect_compression(out) == "gzip"
+    import pyhmmer
+    with pyhmmer.plan7.HMMFile(str(out)) as handle:  # the HMMER interop proof
+        assert [utils.pyhmmer_decode(h.name) for h in handle] == \
+            [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(shared_datadir / "FeSOD_pfam.hmm")]
+
+
+@pytest.mark.parametrize("fixture", [
+    "CcdB.hmm", "FeSOD_pfam.hmm", "Peptidase_M28.hmm", "SPR.hmm",
+    "pdonr_hmms.hmm", "dna_profiles.hmm", "rna_profiles.hmm",
+])
+def test_iter_hmm_names_matches_parsed_names(shared_datadir, fixture):
+    path = shared_datadir / fixture
+    scanned = list(utils.iter_hmm_names(path))
+    parsed = [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(path)]
+    assert scanned == parsed
+
+
+@pytest.mark.parametrize("fixture", ["CcdB.hmm", "Peptidase_M28.hmm"])
+def test_committed_fixtures_with_sidecars_read_as_text(shared_datadir, fixture):
+    """test/data ships .h3* sidecars for these two; they must not be read.
+
+    They were committed in the repo's first commit and no code references them.
+    Before hmm reads were pinned to db=False, pyhmmer preferred the sidecars, so
+    these fixtures exercised the binary path everywhere they were used. Keeping
+    them means this invariant is checked against files that really do have
+    sidecars on disk, which is the situation users hit after running hmmpress.
+    """
+    import pyhmmer
+    path = shared_datadir / fixture
+    assert (shared_datadir / (fixture + ".h3m")).exists(), "fixture lost its sidecars"
+    with pyhmmer.plan7.HMMFile(path) as stock:
+        assert stock.is_pressed(), "fixture no longer pressed; this test is meaningless"
+    with utils.open_hmm_file(path) as handle:
+        assert not handle.is_pressed()
+    assert [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(path)] == \
+        [utils.pyhmmer_decode(h.name) for h in pyhmmer.plan7.HMMFile(path, db=False)]

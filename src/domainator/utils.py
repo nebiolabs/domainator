@@ -217,6 +217,85 @@ def _hmm_file_display_name(file) -> str:
     return getattr(file, "name", repr(file))
 
 
+class _DecompressingHMMFile(pyhmmer.plan7.HMMFile):
+    """An HMMFile that also closes the decompressing handle it was built on.
+
+    pyhmmer does not take ownership of a file object passed to HMMFile, and an
+    HMMFile cannot carry an extra attribute, so the handle has to be held by a
+    subclass to be closed deterministically.
+    """
+
+    def __init__(self, handle):
+        self._handle = handle
+        super().__init__(handle, db=False)
+
+    def close(self):
+        # Guard against closing twice: pyhmmer 0.12 aborts with a double free if
+        # HMMFile.close() is called a second time. close() is also reached from
+        # pyhmmer's __dealloc__, which can run during interpreter shutdown after
+        # the attribute is already gone, hence the getattr.
+        if not self.closed:
+            super().close()
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            self._handle = None
+            handle.close()
+
+
+def open_hmm_file(file: Union[str, os.PathLike, IOBase]) -> pyhmmer.plan7.HMMFile:
+    """Open an hmm file for reading, transparently handling gzip and BGZF.
+
+    Two behaviors differ deliberately from handing the path straight to pyhmmer:
+
+    Compression is detected from magic bytes rather than from the extension, and
+    compressed files are read through gzip.open() rather than by path. HMMER's
+    own dispatch is extension-based -- it pipes any path ending in ".gz" through
+    "gzip -dc", so an uncompressed file merely named ".gz" fails outright, and it
+    rejects BGZF entirely because of BGZF's FEXTRA header. gzip.open() reads both
+    plain gzip and BGZF (BGZF is valid multi-member gzip) regardless of the name.
+
+    Pressed hmmpress sidecars (.h3f/.h3i/.h3m/.h3p) are ignored: db=False. They
+    are keyed to the .hmm only by filename, so an edited .hmm whose sidecars were
+    not regenerated silently yields the *old* profiles with no warning. The load
+    speedup they buy is negligible next to the profile-to-sequence comparisons
+    that dominate a search, so the correct trade is to always read the .hmm.
+
+    Args:
+        file: path to, or open binary handle on, an hmm file. Handles are passed
+            through as-is; compression and sidecar detection are both path-based.
+    """
+    if isinstance(file, (str, os.PathLike)):
+        if detect_compression(file) is not None:
+            return _DecompressingHMMFile(gzip.open(file, "rb"))
+        if is_compressed_path(file):
+            # Uncompressed content under a compressed name. Handing the path to
+            # pyhmmer would make easel pipe it through "gzip -dc" and fail, so
+            # open it ourselves and let the content decide.
+            return _DecompressingHMMFile(open(file, "rb"))
+    return pyhmmer.plan7.HMMFile(file, db=False)
+
+
+def iter_hmm_names(file: Union[str, os.PathLike]) -> Iterable[str]:
+    """Yield the profile names in an hmm file without parsing the profiles.
+
+    Reads only the NAME lines, which is many times faster than building HMM
+    objects and avoids holding the whole database in memory, for callers that
+    want names only. A profile name cannot contain whitespace and NAME is a
+    single line, so this yields exactly what pyhmmer_decode(hmm.name) would.
+
+    Handles gzip and BGZF, like open_hmm_file(). Raises no error on a file with
+    no NAME lines; callers that need to distinguish "no profiles" from "not an
+    hmm file after all" should check for an empty result.
+    """
+    opener = gzip.open if detect_compression(file) is not None else open
+    with opener(file, "rb") as handle:
+        for line in handle:
+            if line.startswith(b"NAME"):
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    yield parts[1].strip().decode()
+
+
 def iter_hmms(file: Union[str, os.PathLike, IOBase]) -> Iterable[pyhmmer.plan7.HMM]:
     """Iterate over the profiles in one hmm file, with a readable alphabet error.
 
@@ -227,7 +306,7 @@ def iter_hmms(file: Union[str, os.PathLike, IOBase]) -> Iterable[pyhmmer.plan7.H
     """
     name = _hmm_file_display_name(file)
     try:
-        with pyhmmer.plan7.HMMFile(file) as hmm_file:
+        with open_hmm_file(file) as hmm_file:
             yield from hmm_file
     except pyhmmer.errors.AlphabetMismatch as exc:
         raise _mixed_alphabet_in_file_error("input", name, exc) from None
@@ -249,7 +328,7 @@ def iter_hmms_with_alphabet(file: Union[str, os.PathLike, IOBase], role: str = "
         role: what the file is to the calling tool, interpolated into error messages.
     """
     name = _hmm_file_display_name(file)
-    handle = pyhmmer.plan7.HMMFile(file)
+    handle = open_hmm_file(file)
     try:
         first = handle.read()
     except pyhmmer.errors.AlphabetMismatch as exc:
@@ -300,7 +379,7 @@ def peek_hmm_alphabet(file: Union[str, os.PathLike]) -> Optional[pyhmmer.easel.A
             "peek_hmm_alphabet only accepts file paths, because it consumes the start "
             f"of the file. Got: {type(file).__name__}."
         )
-    with pyhmmer.plan7.HMMFile(file) as hmm_file:
+    with open_hmm_file(file) as hmm_file:
         for hmm in hmm_file:
             return hmm.alphabet
     return None
@@ -359,7 +438,7 @@ def read_hmms(hmm_files:Iterable[Union[str,os.PathLike,IOBase]]) -> Dict[str, Di
             name = file.name
         else:
             name = file
-        name = os.path.basename(Path(name).stem)
+        name = db_name_from_path(name)
 
         hmmer_models = OrderedDict() 
         for model in iter_hmms(file):
@@ -376,7 +455,7 @@ def read_hmms(hmm_files:Iterable[Union[str,os.PathLike,IOBase]]) -> Dict[str, Di
 def read_pyhmmer_fastas(sequence_files):
     out = dict()
     for file_name in sequence_files:
-        name = os.path.basename(Path(file_name).stem)
+        name = db_name_from_path(file_name)
         seqs_dict = dict()
         with pyhmmer.easel.SequenceFile(file_name, digital=True) as seq_file:
             for seq in seq_file:
@@ -397,7 +476,7 @@ def read_pyhmmer_peptide_fastas(peptide_files):
 def read_infernal_cms(cm_files):
     out = dict()
     for file_name in cm_files:
-        name = os.path.basename(Path(file_name).stem)
+        name = db_name_from_path(file_name)
         cms_dict = OrderedDict()
         with pyinfernal.cm.CMFile(file_name) as cm_file:
             for cm in cm_file:
@@ -409,6 +488,27 @@ def read_infernal_cms(cm_files):
             raise RuntimeError(f"Multiple cm files with the same name, please combine the models into a single file, or rename one of the files.")
         out[name] = cms_dict
     return out
+
+def db_name_from_path(name) -> str:
+    """Derive the database name Domainator labels annotations with from a file path.
+
+    Strips a trailing compression suffix before the format suffix, so that
+    "refs.hmm" and "refs.hmm.gz" both yield "refs". Without this, a compressed
+    reference would be labelled "refs.hmm" and produce output that differs from
+    the uncompressed one.
+
+    Only the format suffix is removed after the compression suffix, and only when
+    something is left over, so paths with unknown-but-meaningful extensions keep
+    behaving as they always have ("some.long.name.hmm" -> "some.long.name",
+    "refs.v1" -> "refs", "db.gz" -> "db").
+    """
+    stem = os.path.basename(os.fspath(name))
+    suffix = Path(stem).suffix
+    if suffix and suffix[1:].lower() in COMPRESSION_EXTENSIONS:
+        stem = stem[: -len(suffix)]
+    trimmed = Path(stem).stem
+    return trimmed if trimmed else stem
+
 
 def get_file_type(filename):
     out = None
@@ -490,6 +590,51 @@ def open_writable_seqfile(path, compressed=None):
     if compressed:
         return bgzf.BgzfWriter(str(path))
     return open(path, "w")
+
+
+OUTPUT_COMPRESSION_HELP = (
+    " Writes gzip-compressed output if the path ends in '.gz'; '.bgz' is refused because "
+    "HMMER cannot read BGZF. Output to stdout is never compressed."
+)
+
+
+def check_writable_hmm_path(path):
+    """Raise if an hmm output path asks for a compression HMMER cannot read.
+
+    Callers that stage output through a temporary file should call this on the
+    real destination before doing any work, since the temporary name does not
+    carry the destination's extension.
+    """
+    if path is None:
+        return
+    if Path(path).suffix.lower() in (".bgz", ".bgzf"):
+        raise ValueError(
+            f"Cannot write '{path}': BGZF-compressed hmm files are not supported, "
+            "because HMMER cannot read them (easel rejects the BGZF header, so "
+            "hmmsearch, hmmpress and Domainator itself would all fail to open the "
+            "result). Use a '.gz' extension to write plain gzip instead."
+        )
+
+
+def open_writable_hmm_file(path, compressed=None):
+    """Open a path for writing hmm profiles, using plain gzip for compressed outputs.
+
+    Deliberately unlike open_writable_seqfile() above, which writes BGZF: HMMER
+    cannot read a BGZF profile file. easel dispatches on the filename extension
+    and pipes ".gz" paths through "gzip -dc", and it rejects BGZF's FEXTRA header
+    outright, so a BGZF .hmm is unreadable by hmmsearch, by hmmpress, and by
+    Domainator's own path-based reads. Plain gzip is read correctly by all of
+    them. BGZF's advantage is seekability, and nothing seeks within a .hmm.
+
+    ``compressed`` overrides the extension-based decision, for callers writing to
+    a temporary path whose own extension does not reflect the destination.
+    """
+    check_writable_hmm_path(path)
+    if compressed is None:
+        compressed = is_compressed_path(path)
+    if compressed:
+        return gzip.open(path, "wb")
+    return open(path, "wb")
 
 
 def open_if_is_name_for_write(filename_or_handle):
@@ -1121,10 +1266,17 @@ def list_and_file_to_dict_keys(input_list=None, input_file=None, as_set=False):
                     if len(line) != 0:
                         out[line] = None
         elif input_file_type == "hmm":
-            hmms = read_hmms([input_file]) # dict of dicts of hmm objects, we're looking for the keys to the second level dicts, because those are the hmm names
-            for hmmdb in hmms:
-                for hmm_name in hmms[hmmdb]:
-                    out[hmm_name] = None
+            # Only the names are wanted, so scan the NAME lines rather than
+            # building (and discarding) every profile in the file.
+            names = list(iter_hmm_names(input_file))
+            if not names and os.path.getsize(input_file) > 0:
+                # Not recognizable as hmm text after all; fall back to parsing so
+                # that any real format error surfaces from pyhmmer, not silently
+                # as an empty selection.
+                for hmmdb in read_hmms([input_file]).values():
+                    names = list(hmmdb)
+            for hmm_name in names:
+                out[hmm_name] = None
         elif input_file_type in {"fasta","genbank"}:
             for rec in parse_seqfiles([input_file]):
                 out[rec.id] = None

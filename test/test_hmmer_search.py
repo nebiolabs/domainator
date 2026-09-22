@@ -126,3 +126,63 @@ def test_hmmer_search_rejects_dna_against_rna(shared_datadir):
         with pytest.raises(ValueError, match="are DNA, but the reference .* are RNA"):
             hmmer_search.main(["-i", str(shared_datadir / "dna_profiles_1.hmm"), "-r", str(shared_datadir / "rna_profiles.hmm"),
                                "-o", output_dir + "/out.hmm", "--cpu", "2"])
+
+
+def test_hmmer_search_gzip_output(shared_datadir, tmp_path):
+    """-o *.hmm.gz writes plain gzip that HMMER itself can still open by path."""
+    import gzip
+    import pyhmmer
+    from domainator import utils
+
+    plain = str(tmp_path / "out.hmm")
+    gz = str(tmp_path / "out.hmm.gz")
+    args = ["-i", str(shared_datadir / "pdonr_hmms_1.hmm"), "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+            "--score_cutoff", "13"]
+    hmmer_search.main(args + ["-o", plain])
+    hmmer_search.main(args + ["-o", gz])
+
+    # Plain gzip, deliberately NOT bgzf: easel cannot open BGZF by path, so a
+    # BGZF .hmm would be unreadable by hmmsearch and by domainator itself.
+    assert utils.detect_compression(gz) == "gzip"
+    assert gzip.open(gz, "rb").read() == Path(plain).read_bytes()
+
+    contents = gzip.open(gz, "rt").read()
+    assert "NAME  CAT" in contents
+    assert "NAME  2-oxoacid_dh" in contents
+    assert "NAME  CcdB" not in contents
+
+    with pyhmmer.plan7.HMMFile(gz) as handle:   # the HMMER interop proof
+        assert [utils.pyhmmer_decode(h.name) for h in handle]
+
+
+def test_hmmer_search_rejects_bgzf_output(shared_datadir, tmp_path):
+    with pytest.raises(ValueError, match="BGZF"):
+        hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
+                           "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+                           "-o", str(tmp_path / "out.hmm.bgz"), "--score_cutoff", "13"])
+
+
+@pytest.mark.parametrize("compressor,suffix", [("gzip_file", ".hmm.gz"), ("bgzip_file", ".hmm.bgz")])
+def test_hmmer_search_compressed_input(shared_datadir, tmp_path, compressor, suffix):
+    import helpers
+    compress = getattr(helpers, compressor)
+    plain_out = str(tmp_path / "plain.hmm")
+    comp_out = str(tmp_path / "comp.hmm")
+    hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
+                       "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+                       "-o", plain_out, "--score_cutoff", "13"])
+    hmmer_search.main(["-i", compress(shared_datadir / "pdonr_hmms_1.hmm", tmp_path / ("q" + suffix)),
+                       "-r", compress(shared_datadir / "pdonr_hmms.hmm", tmp_path / ("r" + suffix)),
+                       "-o", comp_out, "--score_cutoff", "13"])
+    assert Path(comp_out).read_bytes() == Path(plain_out).read_bytes()
+
+
+def test_hmmer_search_max_output_gb_counts_uncompressed(shared_datadir, tmp_path):
+    """The guardrail measures profile bytes before compression, so it still trips."""
+    out = tmp_path / "out.hmm.gz"
+    with pytest.raises(SystemExit):
+        hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
+                           "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+                           "-o", str(out), "--score_cutoff", "13",
+                           "--max_output_gb", "0.000001"])
+    assert not out.exists()

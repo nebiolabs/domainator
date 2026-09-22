@@ -54,3 +54,19 @@ def compare_seqrecords(rec1, rec2, skip_attrs={}, skip_qualifiers={}):
                 print(f"{feature1}, {feature2}")
                 print(f"{feature1.qualifiers[qualifier]}, {feature2.qualifiers[qualifier]}")
                 raise
+
+
+def gzip_file(src, dst):
+    """Write src to dst as plain gzip. Returns str(dst)."""
+    import gzip as _gzip
+    with open(src, "rb") as fh, _gzip.open(str(dst), "wb") as w:
+        w.write(fh.read())
+    return str(dst)
+
+
+def bgzip_file(src, dst):
+    """Write src to dst as BGZF (block gzip). Returns str(dst)."""
+    from domainator.Bio import bgzf as _bgzf
+    with open(src, "rb") as fh, _bgzf.BgzfWriter(str(dst)) as w:
+        w.write(fh.read())
+    return str(dst)

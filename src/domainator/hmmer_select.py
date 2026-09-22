@@ -17,7 +17,7 @@ import pyhmmer
 import re
 import sys
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.utils import pyhmmer_decode, ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet
+from domainator.utils import pyhmmer_decode, ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file, OUTPUT_COMPRESSION_HELP
 from typing import Optional, List
 
 def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exact:Optional[List[str]]=None, query_contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False, match_all=False):
@@ -124,7 +124,7 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
                 yield  model
     
     if hmm_iterator is None:
-        with pyhmmer.plan7.HMMFile(hmm_path) as hmm_iterator:
+        with open_hmm_file(hmm_path) as hmm_iterator:
             yield from inner(hmm_iterator)
     else:
         yield from inner(hmm_iterator)
@@ -139,7 +139,7 @@ def main(argv):
                           help="names of input hmm files. If not supplied, reads from stdin.")
 
     parser.add_argument("-o", "--output", default=None, required=False,  type=str,
-                        help="Hmm output file name. If not supplied writes to stdout.")
+                        help="Hmm output file name. If not supplied writes to stdout." + OUTPUT_COMPRESSION_HELP)
 
     parser.add_argument("--regex", default=None, required=False, type=str, nargs="+",
                         help="What regex(es) to search.")
@@ -200,7 +200,7 @@ def main(argv):
     if params.output is None:
         output_handle = sys.stdout.buffer
     else:
-        output_handle = open(params.output, "wb")
+        output_handle = open_writable_hmm_file(params.output)
 
     # Every profile written to one output file must share an alphabet, otherwise the
     # output cannot be read back past its first profile.

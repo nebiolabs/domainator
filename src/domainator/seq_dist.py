@@ -24,7 +24,7 @@ import scipy.sparse
 import pyhmmer
 import tqdm
 from typing import Iterator, List
-from domainator.utils import get_file_type, parse_seqfiles, make_pool, pyhmmer_decode
+from domainator.utils import get_file_type, open_hmm_file, parse_seqfiles, make_pool, pyhmmer_decode
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.hmmer_search import compare_hmmer
@@ -578,7 +578,7 @@ def make_hmm_name_to_idx_dict_from_path(hmm_path):
     idx_to_len = list()
 
     idx = 0
-    for rec in pyhmmer.plan7.HMMFile(hmm_path):
+    for rec in open_hmm_file(hmm_path):
         name = pyhmmer_decode(rec.name)
         if name in name_to_idx:  
             warnings.warn(f"Warning: duplicate hmm name found: {name}")
@@ -641,10 +641,20 @@ class _run_hmmer_compare_worker():
         self.k = k
         self.hmmer_targets = hmmer_targets
         self.min_score = min_score
-    
+        # Parsed on first use inside the worker process, not here: pyhmmer objects
+        # are not picklable, and this instance is sent to every worker. Caching it
+        # trades memory (the whole target set stays resident per worker) for not
+        # re-parsing the target file once per query profile.
+        self._targets = None
+
+    def _target_profiles(self):
+        if self._targets is None:
+            self._targets = list(open_hmm_file(self.hmmer_targets))
+        return self._targets
+
     def __call__(self, input_profile):
         out_heap = []
-        for target_profile in pyhmmer.plan7.HMMFile(self.hmmer_targets):
+        for target_profile in self._target_profiles():
             
             score, _traceback, _max_index, _match_scores = compare_hmmer(input_profile, target_profile)
             score = round(score,2)
@@ -661,7 +671,7 @@ def run_hmmer_compare(hmmer_queries, hmmer_targets, k, threads, min_score: float
     
     worker = _run_hmmer_compare_worker(hmmer_targets, k, min_score=min_score)
     with make_pool(processes=threads) as pool:
-        for hits in _progress(pool.imap_unordered(worker, pyhmmer.plan7.HMMFile(hmmer_queries)), progress, total=query_count, desc="hmmer_compare queries"):
+        for hits in _progress(pool.imap_unordered(worker, open_hmm_file(hmmer_queries)), progress, total=query_count, desc="hmmer_compare queries"):
             for hit in sorted(hits, key=lambda item: (-item.score, item.reference)):
                 yield hit
 
@@ -774,7 +784,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
 
 
             if reference_type == "hmm":
-                db_data = list(pyhmmer.plan7.HMMFile(reference_path))
+                db_data = list(open_hmm_file(reference_path))
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_hmm_name_to_idx_dict(db_data)
                 search_type = "hmmsearch"
             else: # a sequence type

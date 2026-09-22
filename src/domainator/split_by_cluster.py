@@ -21,7 +21,7 @@ from domainator import build_ssn
 from domainator.Bio import SeqIO
 from domainator.data_matrix import DataMatrix
 from domainator import select_by_cds
-from domainator.utils import DomainatorCDS, get_file_type, parse_seqfiles, pyhmmer_decode, write_genbank
+from domainator.utils import COMPRESSION_EXTENSIONS, DomainatorCDS, get_file_type, is_compressed_path, open_hmm_file, open_writable_hmm_file, open_writable_seqfile, parse_seqfiles, pyhmmer_decode, write_genbank
 
 
 SUPPORTED_INPUT_TYPES = {"genbank", "fasta", "hmm", "cm"}
@@ -44,7 +44,17 @@ def _get_supported_input_type(input_path: Union[str, PathLike]) -> str:
 
 
 def _get_output_extension(input_path: Union[str, PathLike]) -> str:
-    extension = Path(input_path).suffix
+    """Return the suffix the per-cluster outputs should carry.
+
+    Keeps a compression suffix together with the format suffix it follows, so a
+    "clusters.hmm.gz" input yields "0.hmm.gz" rather than "0.gz". The outputs are
+    written in the input's format, so they must be named for it.
+    """
+    suffixes = Path(input_path).suffixes
+    if suffixes and suffixes[-1][1:].lower() in COMPRESSION_EXTENSIONS and len(suffixes) >= 2:
+        extension = "".join(suffixes[-2:])
+    else:
+        extension = Path(input_path).suffix
     if extension == "":
         raise ValueError("Input file must have an extension so output files can preserve the input format.")
     return extension
@@ -65,7 +75,7 @@ def _validate_unique_labels(labels: Iterable[str], label_source: str) -> List[st
 
 
 def _iter_hmm_models(input_path: Union[str, PathLike]) -> Iterator[Tuple[str, pyhmmer.plan7.HMM]]:
-    with pyhmmer.plan7.HMMFile(input_path) as hmm_file:
+    with open_hmm_file(input_path) as hmm_file:
         for model in hmm_file:
             yield pyhmmer_decode(model.name), model
 
@@ -203,6 +213,12 @@ def split_by_cluster(
     pad_on_search_hits: bool = False,
 ) -> Dict[str, Union[Dict[int, Path], Optional[Path]]]:
     input_type = _get_supported_input_type(input_path)
+    if input_type == "cm" and is_compressed_path(input_path):
+        raise ValueError(
+            f"Cannot split '{input_path}': compressed cm files are not supported. "
+            "Infernal covariance models are split by scanning the file as text, which "
+            "a compressed file would silently corrupt. Decompress it first."
+        )
     extension = _get_output_extension(input_path)
 
     if pad_on_search_hits and input_type != "genbank":
@@ -219,18 +235,23 @@ def split_by_cluster(
         min_cluster_size,
         write_small_clusters,
     )
-    open_mode = "wb" if input_type == "hmm" else "w"
+    def _open_cluster_output(path):
+        """Open one per-cluster output in the input's format and compression."""
+        if input_type == "hmm":
+            return open_writable_hmm_file(path)
+        if is_compressed_path(path):
+            # genbank/fasta follow the sequence-file convention (BGZF).
+            return open_writable_seqfile(path)
+        return open(path, "w", encoding="utf-8")
 
     with ExitStack() as stack:
         regular_handles = {
-            cluster_id: stack.enter_context(open(path, open_mode, encoding=None if open_mode == "wb" else "utf-8"))
+            cluster_id: stack.enter_context(_open_cluster_output(path))
             for cluster_id, path in cluster_paths.items()
         }
         small_clusters_handle = None
         if small_clusters_path is not None:
-            small_clusters_handle = stack.enter_context(
-                open(small_clusters_path, open_mode, encoding=None if open_mode == "wb" else "utf-8")
-            )
+            small_clusters_handle = stack.enter_context(_open_cluster_output(small_clusters_path))
 
         if input_type in {"genbank", "fasta"}:
             padded_cluster_records = None

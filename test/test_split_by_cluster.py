@@ -278,3 +278,83 @@ def test_split_by_cluster_reuses_build_ssn_mst_cut_logic(tmp_path):
 
     assert [label_to_cluster[label] for label in labels] == [int(x) for x in expected]
     assert sorted(cluster_sizes.values()) == [1, 2, 2]
+
+def test_split_by_cluster_hmm_gzip(shared_datadir, tmp_path):
+    """A .hmm.gz input yields .hmm.gz outputs, not ".gz" files holding plain text."""
+    import helpers
+    from domainator.utils import detect_compression, open_hmm_file
+
+    plain = shared_datadir / "pdonr_hmms.hmm"
+    input_path = helpers.gzip_file(plain, tmp_path / "clusters.hmm.gz")
+    labels = _read_hmm_names(plain)
+    matrix_path = tmp_path / "matrix.tsv"
+    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
+
+    split_by_cluster.main([
+        "-i", str(input_path),
+        "--matrix", str(matrix_path),
+        "--outdir", str(tmp_path / "out"),
+        "--lb", "0",
+        "--min_cluster_size", "2",
+        "--write_small_clusters",
+    ])
+
+    outdir = tmp_path / "out"
+    for cluster_id, members in expected_clusters.items():
+        out = outdir / f"{cluster_id}.hmm.gz"
+        assert out.exists(), f"expected {out.name}, got {sorted(p.name for p in outdir.iterdir())}"
+        assert detect_compression(out) == "gzip"
+        with open_hmm_file(out) as handle:
+            assert [pyhmmer_decode(m.name) for m in handle] == members
+    with open_hmm_file(outdir / "small_clusters.hmm.gz") as handle:
+        assert [pyhmmer_decode(m.name) for m in handle] == expected_small
+
+
+def test_split_by_cluster_rejects_compressed_cm(shared_datadir, tmp_path):
+    import helpers
+    matrix_path = tmp_path / "matrix.tsv"
+    _write_test_matrix(matrix_path, ["x"], output_type="dense_text")
+    compressed_cm = helpers.gzip_file(shared_datadir / "RF00042.cm", tmp_path / "in.cm.gz")
+    with pytest.raises(ValueError, match="compressed cm files"):
+        split_by_cluster.main([
+            "-i", str(compressed_cm),
+            "--matrix", str(matrix_path),
+            "--outdir", str(tmp_path / "out"),
+        ])
+
+
+def test_split_by_cluster_genbank_bgzf(shared_datadir, tmp_path):
+    """A compressed genbank input must produce real compressed genbank outputs.
+
+    Before the compound-extension fix these landed in files named "0.gz" holding
+    uncompressed text.
+    """
+    import helpers
+    from domainator.utils import detect_compression
+
+    plain = shared_datadir / "FeSOD_20.gb"
+    input_path = helpers.bgzip_file(plain, tmp_path / "in.gb.bgz")
+    labels = [record.id for record in parse_seqfiles([plain], filetype_override="genbank")]
+    matrix_path = tmp_path / "matrix.tsv"
+    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
+
+    split_by_cluster.main([
+        "-i", str(input_path),
+        "--matrix", str(matrix_path),
+        "--outdir", str(tmp_path / "out"),
+        "--lb", "0",
+        "--min_cluster_size", "2",
+        "--write_small_clusters",
+    ])
+
+    outdir = tmp_path / "out"
+    for cluster_id, members in expected_clusters.items():
+        out = outdir / f"{cluster_id}.gb.bgz"
+        assert out.exists(), f"expected {out.name}, got {sorted(p.name for p in outdir.iterdir())}"
+        # sequence files keep the BGZF convention, unlike .hmm
+        assert detect_compression(out) == "bgzf"
+        assert [r.id for r in parse_seqfiles([out], filetype_override="genbank")] == members
+    small = outdir / "small_clusters.gb.bgz"
+    assert [r.id for r in parse_seqfiles([small], filetype_override="genbank")] == expected_small

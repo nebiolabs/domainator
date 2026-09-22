@@ -148,3 +148,18 @@ def test_hmmer_build_empty_input_raises():
 def test_hmmer_build_unnamed_msa_raises():
     with pytest.raises(ValueError, match="unnamed"):
         hmmer_build(BytesIO(b">seq1\nACGTACGTACGTACGTACGTAC\n>seq2\nACGTACGTTCGTACGTACGTAC\n"))
+
+
+def test_hmmer_build_gzip_output(msa_file, tmp_path):
+    from domainator.utils import detect_compression, open_hmm_file, pyhmmer_decode
+    out = tmp_path / "out.hmm.gz"
+    main(["--name", "test_profile", "--input", msa_file, "-o", str(out)])
+    assert detect_compression(out) == "gzip"
+    with open_hmm_file(out) as handle:
+        profiles = list(handle)
+    assert [pyhmmer_decode(h.name) for h in profiles] == ["test_profile"]
+
+
+def test_hmmer_build_rejects_bgzf_output(msa_file, tmp_path):
+    with pytest.raises(ValueError, match="BGZF"):
+        main(["--name", "test_profile", "--input", msa_file, "-o", str(tmp_path / "out.hmm.bgz")])
