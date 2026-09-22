@@ -146,14 +146,6 @@ function normalizeComponentLayout(items, padding = 20) {
     };
 }
 
-function componentLeafOrder(componentIds, hierarchyNodes) {
-    return [...componentIds].sort((leftId, rightId) => {
-        const leftNode = hierarchyNodes[leftId];
-        const rightNode = hierarchyNodes[rightId];
-        return leftNode.leaf_start - rightNode.leaf_start || rightNode.size - leftNode.size || leftId - rightId;
-    });
-}
-
 function layoutLinkPairs(linksOrPairs) {
     return linksOrPairs.map(link => {
         if (Array.isArray(link)) {
@@ -8067,15 +8059,6 @@ def ssn_viewer_html(
             return numericColor(value, info.min, info.max, palette);
         }}
         return categoricalColor(value, palette);
-    }}
-
-    function labelForComponent(componentId) {{
-        const hierarchyNode = state.bundle.graph.hierarchy.nodes[componentId];
-        if (hierarchyNode.kind === 'leaf') {{
-            const field = currentLabelField();
-            return formatValue(metadataValue(hierarchyNode.node_index, field)) === '—' ? nodeId(hierarchyNode.node_index) : formatValue(metadataValue(hierarchyNode.node_index, field));
-        }}
-        return hierarchyNode.size.toLocaleString() + ' nodes';
     }}
 
     function activeClusterAssignments(activeClusterIds) {{
