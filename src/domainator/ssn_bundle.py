@@ -63,7 +63,7 @@ SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
 SSN_VIEWER_BUNDLE_VERSION = 6
 # Versions this build can read. Kept as a tuple rather than an equality check so
 # that additive revisions do not strand previously written bundles. Pre-v6 files
-# carry the derived keys as well; they are ignored in favour of recomputing, so that
+# carry the derived keys as well; they are ignored in favor of recomputing, so that
 # a capped series written into an old file cannot silently limit what is shown now.
 SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS = (3, 4, 5, 6)
 
@@ -147,7 +147,7 @@ def merge_event_series(bundle: dict, max_merge_events: int = DEFAULT_MAX_MERGE_E
 
 def moving_sum(bundle: dict, merge_impact_metric: Optional[str] = None,
                event_rows: Optional[List[dict]] = None) -> dict:
-    """The centred moving sum of split impact, over the **uncapped** rows."""
+    """The centered moving sum of split impact, over the **uncapped** rows."""
     if event_rows is None:
         event_rows = merge_event_rows(bundle, merge_impact_metric=merge_impact_metric)
     return merge_event_moving_sum(event_rows)

@@ -2308,7 +2308,7 @@ def test_cluster_column_takes_a_custom_name_and_is_categorical(meta_page):
         "family", "score", "clusters_at_6"
     ]
     assert page.evaluate("() => metadataColumnType('clusters_at_6')") == "int"
-    # Cluster ids are labels, not magnitudes, so they colour as discrete categories.
+    # Cluster ids are labels, not magnitudes, so they color as discrete categories.
     assert "clusters_at_6" in page.evaluate("() => Array.from(state.categoricalColumns)")
     assert page.eval_on_selector("#metadata-new-column-name", "e => e.value") == ""
     # A second name gives a second snapshot rather than replacing the first.
@@ -2711,12 +2711,12 @@ def test_extraction_slider_keeps_the_floor_stop(meta_page, tmp_path):
 
 
 def test_session_restores_categorical_colouring_of_a_numeric_column(meta_page, tmp_path):
-    """A numeric column marked categorical must come back *coloured* that way.
+    """A numeric column marked categorical must come back *colored* that way.
 
-    Regression: whether a numeric column colours as discrete categories is derived
+    Regression: whether a numeric column colors as discrete categories is derived
     from state.categoricalColumns by rebuildMetadataCaches, which runs before a
     session is applied. Restoring the set alone left the derived flag stale, so the
-    checkbox read categorical while the colours and the picker stayed on the
+    checkbox read categorical while the colors and the picker stayed on the
     gradient until the box was toggled by hand.
     """
     page = meta_page
@@ -3697,7 +3697,7 @@ def test_hex_field_reverts_text_that_is_not_a_color(meta_page):
 
 
 def test_clearing_the_hex_field_cancels_quietly(meta_page):
-    """Emptying the field and tabbing away reads as cancelling, not as an error."""
+    """Emptying the field and tabbing away reads as canceling, not as an error."""
     page = meta_page
     _open_gradient_picker(page)
     _type_hex(page, 0, "#123456")
@@ -5520,7 +5520,7 @@ def test_cluster_label_shows_whenever_the_bubble_has_room_for_it(page):
         return out;
     }""")
     for row in shown:
-        # The 3000-unit bubble is 120px wide even at scale 0.02, so it is labelled
+        # The 3000-unit bubble is 120px wide even at scale 0.02, so it is labeled
         # at every zoom; the 40-unit one only once it is wide enough for "12".
         assert row["big"] is True, row
         assert row["bigWidth"] >= 100, row
@@ -5590,7 +5590,7 @@ def test_labels_are_drawn_at_low_zoom_when_the_marks_are_large(page):
     readable proxy for what the canvas just painted.
     """
     page.check("#show-node-counts")
-    # Centre the view as well as zooming it, so the off-screen cull is held constant
+    # Center the view as well as zooming it, so the off-screen cull is held constant
     # and the fit rule is the only thing under test.
     before = page.evaluate("""() => {
         state.viewTransform.scale = 0.04;
@@ -5599,7 +5599,7 @@ def test_labels_are_drawn_at_low_zoom_when_the_marks_are_large(page):
         renderClusterView();
         return (buildClusterViewSVG().match(/<text/g) || []).length;
     }""")
-    # At that zoom this fixture's bubbles are a few pixels wide, so none is labelled...
+    # At that zoom this fixture's bubbles are a few pixels wide, so none is labeled...
     assert before == 0
 
     after = page.evaluate("""() => {
@@ -5615,7 +5615,7 @@ def test_labels_are_drawn_at_low_zoom_when_the_marks_are_large(page):
 def test_dot_labels_are_dropped_for_sub_pixel_dots(page):
     """A label beside an invisible dot points at nothing."""
     page.select_option("#label-by", "__node_id__")
-    labelled = page.evaluate("""() => {
+    labeled = page.evaluate("""() => {
         const counts = {};
         for (const scale of [0.01, 1]) {
             state.viewTransform.scale = scale;
@@ -5626,8 +5626,8 @@ def test_dot_labels_are_dropped_for_sub_pixel_dots(page):
         }
         return counts;
     }""")
-    assert labelled["0.01"] == 0
-    assert labelled["1"] > 0
+    assert labeled["0.01"] == 0
+    assert labeled["1"] > 0
     assert page.pageerrors == []
 
 

@@ -494,7 +494,7 @@ def db_name_from_path(name) -> str:
 
     Strips a trailing compression suffix before the format suffix, so that
     "refs.hmm" and "refs.hmm.gz" both yield "refs". Without this, a compressed
-    reference would be labelled "refs.hmm" and produce output that differs from
+    reference would be labeled "refs.hmm" and produce output that differs from
     the uncompressed one.
 
     Only the format suffix is removed after the compression suffix, and only when

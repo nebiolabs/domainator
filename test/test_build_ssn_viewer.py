@@ -83,7 +83,7 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         moving_sum = ssn_bundle.moving_sum(bundle, event_rows=events)
         assert len(moving_sum["x"]) == len(moving_sum["y"]) > 0
         assert moving_sum["window"] > 0
-        # A stop labelled T shows the `--lb T` cut, so edge_index is the last MST edge
+        # A stop labeled T shows the `--lb T` cut, so edge_index is the last MST edge
         # scoring strictly above T (T's own tie group is excluded). The final stop is the
         # floor that keeps every MST edge, so the fully merged network is reachable --
         # without it the lowest stop still splits the weakest merge apart. It sits 1% of
@@ -563,7 +563,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function splitChartLayout(viewWidth, viewHeight)' in html_content
         assert 'const SPLIT_CHART_COLORS = {' in html_content
         # Tick values on round numbers, printed to the precision their step needs:
-        # a tick placed at 0.8736 and labelled "0.87" reads as misaligned beside a
+        # a tick placed at 0.8736 and labeled "0.87" reads as misaligned beside a
         # lollipop whose own readout says 0.87.
         assert 'function splitAxisTicks(min, max, targetCount, options = {})' in html_content
         assert 'function decimalsForTickStep(step)' in html_content

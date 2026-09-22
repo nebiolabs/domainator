@@ -6,7 +6,7 @@ server ships as part of the main `domainator` package and reuses the same
 schemas, executors, and file-management utilities as the CLI workflows.
 
 ## Features
-- Upload, catalogue, and download data sets through a simple file manager.
+- Upload, catalog, and download data sets through a simple file manager.
 - Launch jobs that execute Domainator CLIs in the background and stream logs in
   real time.
 - Retrieve generated outputs and configuration files from the job workspace.
@@ -31,7 +31,7 @@ schemas, executors, and file-management utilities as the CLI workflows.
 4. Pass `--schema-dir` one or more times to load additional tool schema
    directories alongside the bundled defaults.
 
-## Tool schemas and customisation
+## Tool schemas and customization
 Schema files live under `src/domainator/server/schemas/` inside the project.
 Use [`scripts/server/generate_tool_schemas.py`](../../scripts/server/generate_tool_schemas.py)
 to capture argument definitions from CLI entry points and emit JSON schemas for

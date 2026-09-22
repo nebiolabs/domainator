@@ -1639,7 +1639,7 @@ async function cancelJob(jobId) {
       const message = payload.error || "Failed to cancel job";
       throw new Error(message);
     }
-    setMessage(`Job ${jobId} cancelled.`, "success");
+    setMessage(`Job ${jobId} canceled.`, "success");
     const job = await response.json().catch(() => null);
     if (job) {
       updateJobs([job]);

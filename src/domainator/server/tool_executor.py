@@ -24,7 +24,7 @@ class JobStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
-    CANCELLED = "cancelled"
+    CANCELED = "canceled"
 
 
 @dataclass(slots=True)
@@ -137,7 +137,7 @@ class ToolExecutor:
         except subprocess.TimeoutExpired:
             job.process.kill()
             job.process.wait()
-        job.status = JobStatus.CANCELLED
+        job.status = JobStatus.CANCELED
         job.completed_at = time.time()
         if job._log_handle:
             job._log_handle.close()
@@ -460,7 +460,7 @@ class ToolExecutor:
 
     def _write_job_manifest(self, job: Job) -> None:
         if not job.work_dir:
-            raise ValueError("Job workspace not initialised")
+            raise ValueError("Job workspace not initialized")
         manifest_dir = self.config.paths.jobs_dir / job.job_id
         manifest_dir.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -498,6 +498,9 @@ class ToolExecutor:
                 continue
 
             status_value = data.get("status", JobStatus.FAILED.value)
+            # Manifests written before the value was respelled carry "cancelled".
+            if status_value == "cancelled":
+                status_value = JobStatus.CANCELED.value
             try:
                 status = JobStatus(status_value)
             except ValueError:

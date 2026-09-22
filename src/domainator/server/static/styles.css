@@ -419,7 +419,7 @@ body {
   color: #b91c1c;
 }
 
-.job-status.cancelled {
+.job-status.canceled {
   color: #92400e;
 }
 

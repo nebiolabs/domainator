@@ -531,7 +531,7 @@ POST /api/tools/domainate/execute
 {
   "job_id": "job_789",
   "tool": "domainate",
-  "status": "completed",  // queued, running, completed, failed, cancelled
+  "status": "completed",  // queued, running, completed, failed, canceled
   "started_at": "2025-11-24T10:30:00Z",
   "completed_at": "2025-11-24T10:35:00Z",
   "progress": 100,
@@ -637,7 +637,7 @@ class JobStatus(Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
-    CANCELLED = "cancelled"
+    CANCELED = "canceled"
 
 @dataclass
 class Job:
@@ -725,7 +725,7 @@ class ToolExecutor:
         except subprocess.TimeoutExpired:
             job.process.kill()
             job.process.wait()
-        job.status = JobStatus.CANCELLED
+        job.status = JobStatus.CANCELED
         job.completed_at = time.time()
         self._write_job_manifest(job)
 
@@ -906,7 +906,7 @@ Workflows are simply CLIs stored in a dedicated directory (e.g., `workflows/`). 
     "id": "genome_annotation",
     "display_name": "Genome Annotation Workflow",
     "category": "Workflows",
-    "description": "Search, annotate, and visualise neighborhoods",
+    "description": "Search, annotate, and visualize neighborhoods",
     "help_url": "/help/workflows/genome_annotation",
     "runner": "python",
     "entry_point": "workflows/genome_annotation.py",
@@ -1034,7 +1034,7 @@ Continuous integration should run unit and integration suites on pull requests, 
 **Option B: Integrated (`domainator.server` subpackage)**
 - ✅ Single installation and version number.
 - ✅ Shared utility modules without duplication.
-- ✅ Tight coupling guarantees parity with CLI behaviour.
+- ✅ Tight coupling guarantees parity with CLI behavior.
 - ❌ Web dependencies imposed on all users.
 - ❌ Larger distribution footprint.
 - ❌ Mixed concerns within a single repository.

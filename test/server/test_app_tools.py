@@ -64,4 +64,4 @@ def test_cancel_job_endpoint(client, flask_app, tmp_path):
     assert resp.status_code == 200
     payload = resp.get_json()
     assert payload["job_id"] == job_id
-    assert payload["status"] == JobStatus.CANCELLED.value
+    assert payload["status"] == JobStatus.CANCELED.value

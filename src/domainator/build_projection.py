@@ -28,7 +28,7 @@ XCOLNAME="projection_X"
 YCOLNAME="projection_Y"
 ZCOLNAME="projection_Z"
 
-#TODO: for projections that are less overweighted towards dense regions of sequence space, learn a PCA on the reduced sequence set then apply it to the expanded sequence set.
+#TODO: for projections that are less overweighted toward dense regions of sequence space, learn a PCA on the reduced sequence set then apply it to the expanded sequence set.
 
 
 

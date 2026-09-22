@@ -273,7 +273,7 @@ def test_matrix_report_includes_merge_event_outputs():
         assert len(moving_sum['x']) == len(moving_sum['y']) > 0
         assert moving_sum['window'] > 0
         assert payload['slider_stops'][0]['edge_index'] == -1
-        # A stop labelled T shows the `--lb T` cut, so it excludes T's own tie group:
+        # A stop labeled T shows the `--lb T` cut, so it excludes T's own tie group:
         # edge_index is the last MST edge scoring strictly above T. The list ends with
         # the `--lb 0` floor cut, which keeps every MST edge -- without it the slider
         # stopped one merge short of the fully merged network.

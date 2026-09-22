@@ -13,7 +13,7 @@
 //!   object-construction floor from the ~99% of records that don't hit.
 //!
 //! Records whose LOCUS line gb-io could not parse (molecule_type None), parse
-//! errors, unmodelled location kinds, or (for search mode) a CDS lacking a
+//! errors, unmodeled location kinds, or (for search mode) a CDS lacking a
 //! `/translation` all stop the run early so the Python side falls back to the
 //! Biopython parser for the remaining records.
 
@@ -170,7 +170,7 @@ fn translate_dna(seq: &[u8]) -> String {
 
 /// Extract the spliced nucleotide sequence for a feature location from the contig,
 /// honoring per-part strand (reverse-complementing minus parts) and join order.
-/// Returns None for unmodelled locations.
+/// Returns None for unmodeled locations.
 fn extract_location_seq(loc: &Location, contig: &[u8]) -> Option<Vec<u8>> {
     let (_op, _between, parts) = lean_location(loc, 1)?;
     let mut out = Vec::new();
@@ -249,7 +249,7 @@ fn parse_ox_taxid(desc: &str) -> Option<i64> {
     None
 }
 
-/// Flatten a location to normalized (start, end) half-open intervals. None for unmodelled.
+/// Flatten a location to normalized (start, end) half-open intervals. None for unmodeled.
 fn location_intervals(loc: &Location) -> Option<Vec<(i64, i64)>> {
     let (_op, _between, parts) = lean_location(loc, 1)?;
     Some(parts.into_iter().map(|(s, e, ..)| if s <= e { (s, e) } else { (e, s) }).collect())
@@ -343,7 +343,7 @@ fn build_feature<'py>(
 
 /// Build the 14-field header tuple + features list for a record, dropping any
 /// features whose kind is in `dropped`. Returns None if a feature location is
-/// unmodelled (caller falls back).
+/// unmodeled (caller falls back).
 fn record_fields<'py>(
     py: Python<'py>,
     seq: &Seq,
@@ -556,13 +556,13 @@ impl LeanSearchContig {
         match record_fields(py, &self.seq, &dropped)? {
             Some(t) => Ok(t),
             // Shouldn't happen (we validated at parse time), but be safe.
-            None => Err(PyValueError::new_err("unmodelled feature location")),
+            None => Err(PyValueError::new_err("unmodeled feature location")),
         }
     }
 }
 
 /// Parse a partition into LeanSearchContig objects. A record is only accepted if
-/// gb-io parsed its LOCUS (molecule_type Some), all its locations are modelled,
+/// gb-io parsed its LOCUS (molecule_type Some), all its locations are modeled,
 /// and every searchable CDS has a /translation (otherwise we stop early and the
 /// Python side falls back to Biopython, which can translate).
 #[pyfunction]
@@ -592,7 +592,7 @@ pub fn parse_lean_search<'py>(
             stopped_early = true;
             break;
         }
-        // Validate: all locations are modelled (CDS translation, when absent, is
+        // Validate: all locations are modeled (CDS translation, when absent, is
         // computed in Rust by cds_peptides, so it does not force a fallback).
         let mut ok = true;
         for feature in &seq.features {

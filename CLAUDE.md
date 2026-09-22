@@ -48,6 +48,10 @@ A Flask app (`app.py`, launched by `cli.py` → `domainator_server`) that surfac
 
 To add a tool to the UI: generate a schema with `python scripts/server/generate_tool_schemas.py --pyproject pyproject.toml --output-dir src/domainator/server/schemas/generated/`, then hand-edit it (move niche params into `advanced_parameters`). Full guide: `docs/server/adding_tools.md`. Server design: `docs/server/technical_overview.md`.
 
+## Spelling
+
+Use **American English spelling** everywhere: code identifiers, string literals, comments, docstrings, docs, and commit messages. Prefer `color` / `behavior` / `neighbor` / `center` / `labeled` / `modeled` / `canceled` / `analog` / `catalog` / `-ize` / `-ization` / `toward` over their British forms. Two exceptions: the vendored BioPython fork under `src/domainator/Bio/` stays as upstream wrote it, and standard identifiers from external specs keep their own spelling (e.g. the HTML attribute `aria-labelledby`).
+
 ## Versioning
 
 The version string lives in `src/domainator/__init__.py` (`__version__`) and **must be updated in `README.md` too**. Breaking changes to the matrix file format require bumping `_MATRIX_FILE_VERSION` in `data_matrix.py`. Changes to the `.dsnv` Domainator Similarity Network Viewer bundle schema require bumping `SSN_VIEWER_BUNDLE_VERSION` in `ssn_bundle.py`; if the change is additive, add the previous version to `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` so existing bundles keep loading (see the `.dsnv` section of `docs/file_formats.md`). Don't bump versions of anything without first confirming with the user.

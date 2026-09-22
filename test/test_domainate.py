@@ -707,7 +707,7 @@ def test_annotate_with_compressed_references(shared_datadir, tmp_path, compresso
     """A compressed reference must give byte-for-byte the same result as a plain one.
 
     It previously did not: the database qualifier was derived with a single-suffix
-    stem, so a .gz reference was labelled "FeSOD_pfam.hmm" instead of "FeSOD_pfam".
+    stem, so a .gz reference was labeled "FeSOD_pfam.hmm" instead of "FeSOD_pfam".
     """
     plain_ref = shared_datadir / "FeSOD_pfam.hmm"
     compressed_ref = compressor(plain_ref, tmp_path / ("FeSOD_pfam" + suffix))

@@ -25,7 +25,7 @@ DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50
 # event to show gets one. See filter_merge_event_rows.
 MERGE_EVENT_DENSITY_BINS = 20
 
-# Width of the centred moving-sum window, as a fraction of the plotted threshold range,
+# Width of the centered moving-sum window, as a fraction of the plotted threshold range,
 # and how many points to sample it at. The moving sum answers "how much of the graph is
 # decomposing around here overall?", as a counterweight to the per-threshold largest
 # single merge that the split chart's stems show.
@@ -53,7 +53,7 @@ def merge_impact_axis_labels(metric: str) -> dict:
     """Axis titles and prose for the split chart, per what merge_impact measures.
 
     Under ``min_child`` an impact is a count of nodes; under ``product`` it is a product of
-    two component sizes, which is not a node count and must not be labelled as one. Both
+    two component sizes, which is not a node count and must not be labeled as one. Both
     the Plotly chart in matrix_report and the canvas chart in the Domainator Similarity
     Network Viewer read these so the two cannot drift apart.
 
@@ -200,7 +200,7 @@ def threshold_merge_event_rows(component_summary):
             row_idx += 1
 
         # The MST edge index of the last edge scoring strictly above this threshold, so a
-        # stop labelled `threshold_to` reproduces the `--lb threshold_to` cut exactly (the
+        # stop labeled `threshold_to` reproduces the `--lb threshold_to` cut exactly (the
         # tie group at that threshold is excluded, as `--lb` excludes it).
         edge_index = first_summary_row_idx - 2
 
@@ -230,7 +230,7 @@ def threshold_merge_event_rows(component_summary):
 def merge_event_moving_sum(event_rows,
                            window_fraction=MOVING_SUM_WINDOW_FRACTION,
                            grid_points=MOVING_SUM_GRID_POINTS):
-    """Centred moving sum of ``merge_impact`` over the plotted threshold range.
+    """Centered moving sum of ``merge_impact`` over the plotted threshold range.
 
     Call this with the rows straight from :func:`threshold_merge_event_rows`, *before*
     :func:`filter_merge_event_rows` caps them. Filtering keeps the top rows ranked by
@@ -345,7 +345,7 @@ def filter_merge_event_rows(event_rows, max_merge_events=DEFAULT_MAX_MERGE_EVENT
     events a whole-range ranking buries, while the band back-fill still runs over the
     whole axis so every stretch of the slider keeps a stop. ``None`` is the whole range,
     which is what a chart without a viewport (``matrix_report``, ``ssn_navigator``) wants
-    and is exactly the behaviour this function had before windows existed.
+    and is exactly the behavior this function had before windows existed.
 
     `pinned_threshold` is a threshold whose event must survive the cut whatever the
     window is. The viewer passes the cut currently in effect: if the selection could

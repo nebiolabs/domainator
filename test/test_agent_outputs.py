@@ -278,7 +278,7 @@ def test_clusters_at_threshold_matches_build_ssn_clustering():
     assert len(finite_stops) >= 3
 
     for threshold in finite_stops:
-        # Partition by cluster membership, so the two labellings can be compared
+        # Partition by cluster membership, so the two labelings can be compared
         # without depending on how either numbers its clusters.
         from_bundle = {
             frozenset(component_members(hierarchy, cid))

@@ -272,7 +272,7 @@ which narrows **the top-N pool only**. The three parts of the result are then:
    its stop;
 3. the row at `pinned_threshold`, if the first two missed it.
 
-`window=None` collapses (1) to a whole-range ranking, which is exactly the behaviour this
+`window=None` collapses (1) to a whole-range ranking, which is exactly the behavior this
 function had before windows existed, and is what the two consumers without a viewport
 (`matrix_report`, `ssn_navigator`) pass.
 
@@ -285,7 +285,7 @@ globally become visible — and keep becoming visible as the zoom goes further i
 
 Part (3) is a correctness requirement, not a nicety. The slider's stops are the selected
 events; if a zoom could drop the stop the thumb is sitting on, the thumb would resolve to
-a neighbouring stop and **the displayed clustering would change as a side effect of
+a neighboring stop and **the displayed clustering would change as a side effect of
 zooming**. The viewer captures `selectedThresholdValue()` before every re-selection and
 pins it, so the cut in effect survives any window change.
 
@@ -314,7 +314,7 @@ The per-threshold stems show the largest single split; the moving sum answers th
 complementary question, "how much of the graph is coming apart around here in total?".
 
 `merge_event_moving_sum` ([ssn_hierarchy.py:251](../src/domainator/ssn_hierarchy.py#L251))
-evaluates a centred window of 5% of the threshold range at 800 grid points. A nested loop
+evaluates a centered window of 5% of the threshold range at 800 grid points. A nested loop
 would be O(n · grid); instead the impacts are sorted by threshold once, a prefix sum is
 built, and each grid point's window becomes two `searchsorted` calls and a subtraction —
 O(n log n + grid). `side="left"`/`side="right"` make the window inclusive at both ends,

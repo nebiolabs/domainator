@@ -51,7 +51,7 @@ LeanFastaContig = getattr(_gbfast, "LeanFastaContig", None)    # FASTA
 
 class LeanParseError(Exception):
     """Raised when the native (Rust) parser stops early on a record it cannot
-    handle (an unparseable LOCUS line, an unmodelled location, a rejected
+    handle (an unparseable LOCUS line, an unmodeled location, a rejected
     sequence), carrying how many records it already emitted so callers can fall
     back to the Biopython parser for the remainder."""
 

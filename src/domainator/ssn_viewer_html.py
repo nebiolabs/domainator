@@ -397,8 +397,8 @@ function simulateComponentLayout(componentIds, adjacency, options, hierarchyNode
             const lp = positions.get(lid), rp = positions.get(rid);
             let dx = rp.x - lp.x, dy = rp.y - lp.y, dist = Math.hypot(dx, dy);
             if (dist < 1e-6) { dist = 1e-6; dx = preferredEdgeLength; dy = 0; }
-            // Rest length keeps connected neighbours outside each other's bubbles (radii can exceed
-            // the base edge length), so big clusters don't swallow their neighbours.
+            // Rest length keeps connected neighbors outside each other's bubbles (radii can exceed
+            // the base edge length), so big clusters don't swallow their neighbors.
             const rest = Math.max(preferredEdgeLength, (radii.get(lid) || 0) + (radii.get(rid) || 0) + 24);
             const df = spring * (dist - rest), fx = dx / dist * df, fy = dy / dist * df;
             forces.get(lid).x += fx; forces.get(lid).y += fy;
@@ -1298,7 +1298,7 @@ def _table_editing_js() -> str:
             parsed.value === metadataValue(editing.nodeIndex, editing.columnKey);
         if (!commit || unchanged ||
                 !setMetadataValue(editing.nodeIndex, editing.columnKey, rawText)) {
-            // Cancelled, unchanged, or rejected: repaint to restore the cell text.
+            // Canceled, unchanged, or rejected: repaint to restore the cell text.
             updateMetadataTable();
         }
     }
@@ -1395,7 +1395,7 @@ def _table_editing_js() -> str:
         state.allNodeIndices.forEach(nodeIndex => {
             writeMetadataValue(nodeIndex, columnName, clusterNumbers.numberFor(nodeIndex));
         });
-        // Cluster ids are labels, not magnitudes, so colour them as discrete
+        // Cluster ids are labels, not magnitudes, so color them as discrete
         // categories -- the same thing build_ssn_viewer.py's --categorical asks for.
         state.categoricalColumns.add(columnName);
 
@@ -2125,9 +2125,9 @@ def _gradient_stops_js() -> str:
         return (domain.high - domain.low) / 100;
     }
 
-    // A stop is held between its neighbours so the ramp cannot fold over during
+    // A stop is held between its neighbors so the ramp cannot fold over during
     // a drag. Typing into the number inputs is left unconstrained -- values are
-    // re-sorted on commit instead, so a stop can be typed past its neighbour.
+    // re-sorted on commit instead, so a stop can be typed past its neighbor.
     function clampGradientStopValue(index, value, domain) {
         const stops = currentGradientStops();
         let lowLimit = domain.low;
@@ -2228,7 +2228,7 @@ def _gradient_stops_js() -> str:
         const midpoint = (lower.value + upper.value) / 2;
         const rounded = roundGradientValue(midpoint, domain);
         // Rounding an integer column would land the new stop on top of a
-        // neighbour when the gap is a single unit; keep the exact midpoint there.
+        // neighbor when the gap is a single unit; keep the exact midpoint there.
         const value = (rounded > lower.value && rounded < upper.value) ? rounded : midpoint;
         stops.splice(gapIndex, 0, {
             // Taking the color the ramp already has here means adding a stop
@@ -2322,7 +2322,7 @@ def _gradient_stops_js() -> str:
             commitGradientStops();
         });
         // Leaving the hex field rewrites whatever was typed into the canonical
-        // spelling; text that is not a color at all reverts to the stop's colour
+        // spelling; text that is not a color at all reverts to the stop's color
         // rather than being silently dropped or left sitting there looking valid.
         list.addEventListener('change', event => {
             if (!event.target.dataset || event.target.dataset.stopField !== 'hex') {
@@ -2334,7 +2334,7 @@ def _gradient_stops_js() -> str:
                 return;
             }
             const typed = event.target.value.trim();
-            // Clearing the field and tabbing away reads as cancelling the edit, so
+            // Clearing the field and tabbing away reads as canceling the edit, so
             // that reverts quietly; anything else that is not a color is worth saying.
             if (typed !== '' && normalizeColorHex(typed) === null) {
                 setStatus('"' + typed + '" is not a hex color (expected #RGB or #RRGGBB).');
@@ -2342,7 +2342,7 @@ def _gradient_stops_js() -> str:
             setGradientStopHexField(index, stop.color);
         });
         // Re-sorting mid-keystroke would yank the row out from under the cursor,
-        // so a stop typed past its neighbour is only reordered on commit.
+        // so a stop typed past its neighbor is only reordered on commit.
         list.addEventListener('change', event => {
             if (!event.target.dataset || event.target.dataset.stopField !== 'value') {
                 return;
@@ -2922,7 +2922,7 @@ def _extraction_js() -> str:
     // none of it -- it is a pure function of (node count, mst_edges, metric), and
     // deriving it here is what lets both the cap and the chart's window decide what is
     // shown, neither of which is knowable when the file is written. Pre-v6 files still
-    // carry a capped copy; it is ignored in favour of this, so an old bundle is not
+    // carry a capped copy; it is ignored in favor of this, so an old bundle is not
     // stuck with whatever cap it happened to be built with.
     //
     // This is the expensive half -- one union-find replay over the MST edges -- so it
@@ -3156,7 +3156,7 @@ def _split_chart_hover_js() -> str:
 
     // The one writer of the window, so "zoomed all the way out is not a window at
     // all" is decided once -- and the Reset button, which reads state.splitChartZoom,
-    // greys itself out the moment a zoom-out gesture reaches the full range.
+    // grays itself out the moment a zoom-out gesture reaches the full range.
     function setSplitChartWindow(min, max, dataMin, dataMax) {
         const dataSpan = dataMax - dataMin;
         if (!(dataSpan > 0) || (max - min) >= dataSpan) {
@@ -3262,7 +3262,7 @@ def _split_chart_hover_js() -> str:
             moved: false,
         };
         // Captured so a fast drag that leaves the canvas keeps panning, and so the
-        // matching pointerup arrives here however far the pointer has travelled.
+        // matching pointerup arrives here however far the pointer has traveled.
         if (splitCanvas.setPointerCapture) { splitCanvas.setPointerCapture(event.pointerId); }
     }
 
@@ -3384,7 +3384,7 @@ def _split_chart_hover_js() -> str:
     }
 
     // A min_child impact is a count of nodes; a product impact is not, and must not
-    // be labelled as one. The phrasing comes from merge_impact_axis_labels, which
+    // be labeled as one. The phrasing comes from merge_impact_axis_labels, which
     // matrix_report's hovertemplates read too, so the two charts word it alike.
     function splitImpactAmount(value) {
         const amount = Number(value);
@@ -3655,7 +3655,7 @@ def _column_charts_js() -> str:
         return counts;
     }
 
-    // Scoped analogue of distinctColumnValues (which walks every node): same
+    // Scoped analog of distinctColumnValues (which walks every node): same
     // String(raw) keying, same formatValue labels, and the same count-desc then
     // key-asc ordering, so a chart's category order matches the color picker's
     // swatch order and the legend's rows.
@@ -8722,7 +8722,7 @@ def ssn_viewer_html(
 
     // Node index under a world-space point, or -1. O(1) via the fixed lattice. The whole cell
     // (node square + its surrounding padding) counts as a hit, not just the drawn square: each
-    // cell's padding splits evenly to its neighbours, so a click in the gap between two nodes
+    // cell's padding splits evenly to its neighbors, so a click in the gap between two nodes
     // snaps to the nearer one. This keeps clicks between nodes selecting their cluster instead of
     // falling through. Empty cells (no node) still miss.
     function latticeNodeAtWorld(worldX, worldY) {{
@@ -9260,7 +9260,7 @@ def ssn_viewer_html(
                     dx = preferredEdgeLength;
                     dy = 0;
                 }}
-                // Rest length keeps connected neighbours outside each other's bubbles.
+                // Rest length keeps connected neighbors outside each other's bubbles.
                 const rest = Math.max(preferredEdgeLength, (radii.get(leftId) || 0) + (radii.get(rightId) || 0) + 24);
                 const delta = dist - rest;
                 const force = spring * delta;
@@ -9488,7 +9488,7 @@ def ssn_viewer_html(
     }}
 
     // Axis titles for the split chart. A `product` merge impact is a product of two
-    // component sizes, not a count of nodes, so it must not be labelled as one.
+    // component sizes, not a count of nodes, so it must not be labeled as one.
     function splitAxisLabels() {{
         const labels = {split_axis_labels_js};
         const metric = state.bundle && state.bundle.graph
@@ -10256,7 +10256,7 @@ def ssn_viewer_html(
     // endpoints, where it would sit on top of the cluster bubbles it joins.
     const EDGE_SCORE_BADGE_PADDING = 12;
     const EDGE_SCORE_LINK_MARGIN = 8;
-    // Below this a dot is not a mark any more, just a tinted pixel, and labelling it
+    // Below this a dot is not a mark any more, just a tinted pixel, and labeling it
     // points at nothing the user can see.
     const MIN_LABELED_DOT_SCREEN_RADIUS = 1.5;
 
@@ -11997,7 +11997,7 @@ def ssn_viewer_html(
 
     function updateGradientPreview() {{
         const preview = document.getElementById('color-gradient-preview');
-        // Sorted for display only: a stop typed past its neighbour is not
+        // Sorted for display only: a stop typed past its neighbor is not
         // reordered until the field commits, and the bar should still read left
         // to right in the meantime.
         const stops = sortedGradientStops(currentGradientStops());
@@ -12221,7 +12221,7 @@ def ssn_viewer_html(
     //
     // `pinnedThreshold` is the cut currently in effect. It has to survive the
     // re-selection: if zooming could filter out the stop the thumb is on, the slider
-    // would land on a neighbouring stop and the network would silently re-cluster.
+    // would land on a neighboring stop and the network would silently re-cluster.
     function applyMergeSelection(pinnedThreshold) {{
         selectMergeEvents(state.series, state.maxMergeEvents, currentSplitWindow(),
                           Number.isFinite(pinnedThreshold) ? pinnedThreshold : null);
@@ -12718,7 +12718,7 @@ def ssn_viewer_html(
     // skips nothing -- it is here because the promise belongs to the arrows rather than
     // to an invariant held one module away in ssn_hierarchy.
     //
-    // (The arrows' own stuck-looking behaviour came from somewhere else: many stops
+    // (The arrows' own stuck-looking behavior came from somewhere else: many stops
     // share one slider position. See currentSliderStop.)
     function nextDistinctStopIndex(stops, index, delta) {{
         const current = stops[index].threshold_value;
@@ -13084,7 +13084,7 @@ def ssn_viewer_html(
     }});
     document.getElementById('threshold-input').addEventListener('change', jumpToThresholdValue);
     document.getElementById('threshold-input').addEventListener('keydown', event => {{
-        // Up/Down step stops -- the behaviour a number input's spinner would have had
+        // Up/Down step stops -- the behavior a number input's spinner would have had
         // if its step were the distance to the next split. Left/Right are left alone
         // so they still move the caret inside the field.
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {{

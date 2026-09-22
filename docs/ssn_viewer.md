@@ -99,7 +99,7 @@ The chart plots, against similarity threshold:
 
 - **Largest single split** — the biggest thing that breaks apart at that threshold,
   measured by `--merge_impact_metric`.
-- **Moving sum (5% window)** — the same quantity totalled over a sliding 5% window of the
+- **Moving sum (5% window)** — the same quantity totaled over a sliding 5% window of the
   threshold range, which reveals *regions* of instability that individual spikes hide.
 - **Current threshold** — where the slider is now.
 
@@ -194,7 +194,7 @@ proportional scale it looks like.
 - **↑** and **↓** in the field do the same as **→** and **←**. (The field is a plain text
   box rather than a number input on purpose: a spinner's fixed step of 1.0 is meaningless
   on an axis whose splits can be 0.001 apart or 30 apart.)
-- An arrow greys out at the ends of the stop list.
+- An arrow grays out at the ends of the stop list.
 
 ## The network canvas
 
@@ -234,7 +234,7 @@ stays.
 
 A contracted edge is drawn **dashed**, on screen and in the SVG export, because it is not a
 measured similarity between the two clusters it joins — it is the weakest step of a path
-that is no longer drawn. Contracted clusters count towards the hidden-node total, and the
+that is no longer drawn. Contracted clusters count toward the hidden-node total, and the
 pill above the chart says how many paths went away.
 
 | Toggle | Effect |
