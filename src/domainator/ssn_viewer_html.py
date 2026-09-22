@@ -770,6 +770,13 @@ function packLayouts(componentLayouts, options = {}) {
 // Tidy (Reingold-Tilford style) layout for a single component, rooted at its tree center.
 // Returns crossing-free positions for forest topology even with long branches. Shared by the
 // Tree layout and used to seed the Force-directed simulation. O(n), x offset by originX.
+// Tree layout spacing. TREE_MIN_LEVEL_GAP is the floor on the horizontal distance between
+// adjacent columns; it also decides how many edge score labels have room to be drawn.
+const TREE_MIN_LEVEL_GAP = 72;
+const TREE_LEVEL_PAD = 48;
+const TREE_SIBLING_GAP = 20;
+const MIN_TREE_NODE_RADIUS = 10;
+
 function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
     const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
     const tree = rootedTree(rootId, adjacency, hierarchyNodes);
@@ -780,9 +787,24 @@ function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
         });
     });
     const radii = new Map(componentIds.map(nodeId => [nodeId, componentRadiusForSize(hierarchyNodes[nodeId].size)]));
-    const maxRadius = Math.max(...componentIds.map(nodeId => radii.get(nodeId) || 10), 10);
-    const siblingGap = Math.max(20, maxRadius * 0.42);
-    const levelGap = Math.max(168, (maxRadius * 2.2) + 96);
+    const maxDepth = componentIds.reduce((maxValue, nodeId) => Math.max(maxValue, depthByNode.get(nodeId) || 0), 0);
+    // Each column is placed relative to the one before it, spaced by the widest bubbles on
+    // those two depths. Using one component-wide levelGap meant a single large cluster set the
+    // column spacing for the whole tree, including columns joining two 4px singletons -- on the
+    // reference networks that was a 288px gap between bubbles 8px across.
+    const maxRadiusAtDepth = new Array(maxDepth + 1).fill(MIN_TREE_NODE_RADIUS);
+    componentIds.forEach(nodeId => {
+        const depth = depthByNode.get(nodeId) || 0;
+        maxRadiusAtDepth[depth] = Math.max(maxRadiusAtDepth[depth], radii.get(nodeId) || MIN_TREE_NODE_RADIUS);
+    });
+    const columnX = [0];
+    for (let depth = 0; depth < maxDepth; depth++) {
+        columnX.push(columnX[depth] + Math.max(TREE_MIN_LEVEL_GAP,
+            maxRadiusAtDepth[depth] + maxRadiusAtDepth[depth + 1] + TREE_LEVEL_PAD));
+    }
+    // subtreeSpan already reserves each node's own diameter, so this only has to keep adjacent
+    // subtrees apart; it does not need to scale with the biggest bubble in the component.
+    const siblingGap = TREE_SIBLING_GAP;
     const subtreeSpan = new Map();
     [...tree.order].reverse().forEach(nodeId => {
         const childIds = tree.children.get(nodeId) || [];
@@ -799,7 +821,7 @@ function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
     function placeNode(nodeId, topY) {
         const nodeSpan = subtreeSpan.get(nodeId) || 26;
         const childIds = tree.children.get(nodeId) || [];
-        const x = originX + (depthByNode.get(nodeId) || 0) * levelGap;
+        const x = originX + columnX[depthByNode.get(nodeId) || 0];
         if (childIds.length === 0) {
             positionById.set(nodeId, {componentId: nodeId, x, y: topY + (nodeSpan / 2), radius: radii.get(nodeId) || 10});
             return;
@@ -817,8 +839,9 @@ function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
     }
 
     placeNode(rootId, 0);
-    const maxDepth = tree.order.reduce((maxValue, nodeId) => Math.max(maxValue, depthByNode.get(nodeId) || 0), 0);
-    const width = (maxDepth * levelGap) + (Math.max(...tree.order.map(nodeId => radii.get(nodeId) || 10), 10) * 2);
+    // tidyForestLayout advances its cursor by this, so it has to track columnX or the gap
+    // between components grows to fill the space the columns no longer take.
+    const width = columnX[maxDepth] + (maxRadiusAtDepth[maxDepth] * 2);
     return {positionById, order: tree.order, width};
 }
 
