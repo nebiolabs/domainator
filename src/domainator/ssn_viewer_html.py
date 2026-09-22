@@ -393,14 +393,25 @@ function seededUnit(componentId, salt) {
 // Radial tree layout seed: root (tree center) at origin, children placed in concentric rings
 // with angular wedges allocated per subtree leaf count. Crossing-free and near-circular (compact
 // aspect), so it both fixes the tall linear-tidy seed and gives Force its radial branch shape.
+// Clearance between a parent bubble's rim and its child's in the radial seed.
+const RADIAL_SEED_RING_PAD = 36;
+
 function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
     const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
     const tree = rootedTree(rootId, adjacency, hierarchyNodes);
-    const depthByNode = new Map([[rootId, 0]]);
-    tree.order.forEach(nodeId => { (tree.children.get(nodeId) || []).forEach(c => depthByNode.set(c, (depthByNode.get(nodeId) || 0) + 1)); });
     const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
-    const maxRadius = Math.max(...componentIds.map(id => radii.get(id) || 10), 10);
-    const gap = Math.max(ringGap || 0, maxRadius * 2 + 24, 60);
+    // Each ring sits one parent-plus-child apart from the ring inside it, rather than every
+    // ring being spaced by the largest bubble anywhere in the component. One big cluster used
+    // to push every ring out, including rings joining two singletons, and anchorStrength then
+    // held the simulation in that spread-out arrangement.
+    const gap = Math.max(ringGap || 0, 60);
+    const ringRadius = new Map([[rootId, 0]]);
+    tree.order.forEach(nodeId => {
+        (tree.children.get(nodeId) || []).forEach(c => {
+            const step = Math.max(gap, (radii.get(nodeId) || 10) + (radii.get(c) || 10) + RADIAL_SEED_RING_PAD);
+            ringRadius.set(c, (ringRadius.get(nodeId) || 0) + step);
+        });
+    });
     const leafCount = new Map();
     [...tree.order].reverse().forEach(id => {
         const ch = tree.children.get(id) || [];
@@ -419,7 +430,7 @@ function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
             const ca0 = cursor, ca1 = cursor + (a1 - a0) * ((leafCount.get(c) || 1) / total);
             cursor = ca1;
             wedge.set(c, [ca0, ca1]);
-            const ang = (ca0 + ca1) / 2, r = (depthByNode.get(c) || 0) * gap;
+            const ang = (ca0 + ca1) / 2, r = ringRadius.get(c) || 0;
             positionById.set(c, {componentId: c, x: Math.cos(ang) * r + (seededUnit(c, 11) - 0.5) * 0.5, y: Math.sin(ang) * r + (seededUnit(c, 12) - 0.5) * 0.5, radius: radii.get(c) || 10});
         });
     });
@@ -536,9 +547,19 @@ function simulateComponentLayout(componentIds, adjacency, options = {}, hierarch
     const gravity = options.gravity ?? 0.008;
     const anchorStrength = options.anchorStrength ?? 0;
     const iterations = options.iterations ?? 110;
-    const preferredEdgeLength = options.preferredEdgeLength ?? 120;
     const collisionStrength = options.collisionStrength ?? 0.28;
     const maxStep = options.maxStep ?? 48;
+    // Rim-to-rim clearance a relaxed edge aims for. It is 2x bubblePadding so the spring and
+    // refineLayoutGeometry's overlapPass (which separates to rL + rR + bubblePadding) are not
+    // pulling against each other, which also guarantees the drawn edge survives that pass.
+    const linkGap = options.linkGap ?? 34;
+    // Floor, so two singletons stay visually distinct rather than fusing into one blob.
+    const minEdgeLength = options.minEdgeLength ?? 46;
+    // Minimum spacing between rings of the radial seed. This is the single biggest control on
+    // how spread out the finished drawing is, because anchorStrength holds the simulation near
+    // the seed. Tightening it compacts the drawing but eventually costs edge crossings: on the
+    // reference networks, 60 roughly doubles the crossing count while 90 nearly halves it.
+    const seedRingGap = options.seedRingGap ?? 90;
     // Barnes-Hut keeps repulsion O(n log n), so physics now runs on large components too; only
     // truly huge ones fall back to the (already compact) radial seed.
     const maxPhysicsNodes = options.maxPhysicsNodes ?? 50000;
@@ -547,7 +568,7 @@ function simulateComponentLayout(componentIds, adjacency, options = {}, hierarch
 
     // Seed positions AND anchors from the crossing-free radial tree layout (compact + circular),
     // centered on the origin so gravity pulls toward the middle.
-    const seed = radialTreeSeed(componentIds, adjacency, hierarchyNodes, preferredEdgeLength);
+    const seed = radialTreeSeed(componentIds, adjacency, hierarchyNodes, seedRingGap);
     let centerX = 0;
     let centerY = 0;
     componentIds.forEach(nodeId => {
@@ -595,11 +616,13 @@ function simulateComponentLayout(componentIds, adjacency, options = {}, hierarch
             let dist = Math.hypot(dx, dy);
             if (dist < 1e-6) {
                 dist = 1e-6;
-                dx = preferredEdgeLength;
+                dx = minEdgeLength;
                 dy = 0;
             }
-            // Rest length keeps connected neighbors outside each other's bubbles.
-            const rest = Math.max(preferredEdgeLength, (radii.get(leftId) || 0) + (radii.get(rightId) || 0) + 24);
+            // Rest length keeps connected neighbors outside each other's bubbles, and is set
+            // by the two bubbles actually being joined. It used to carry a flat 124px floor,
+            // which is what made a pair of 4px singletons settle 124px apart.
+            const rest = Math.max(minEdgeLength, (radii.get(leftId) || 0) + (radii.get(rightId) || 0) + linkGap);
             const delta = dist - rest;
             const force = spring * delta;
             const forceX = (dx / dist) * force;
@@ -641,7 +664,7 @@ function simulateComponentLayout(componentIds, adjacency, options = {}, hierarch
         }
     }
     // Large components skip the O(n^2) refine overlap pass; clean residual overlaps via the quadtree.
-    if (componentIds.length > 600) { bhResolveOverlaps(componentIds, positions, radii, 14, 8); }
+    if (componentIds.length > 600) { bhResolveOverlaps(componentIds, positions, radii, 14, options.bubblePadding ?? 14); }
     }
 
     const rawItems = componentIds.map(nodeId => {
@@ -803,11 +826,14 @@ function tidyComponentLayout(componentIds, adjacency, hierarchyNodes, originX) {
 // two paths cannot drift into producing different layouts for the same network.
 function forestForceOptions(componentSize) {
     return {
-        repulsion: 5000,
+        // repulsion and anchorStrength are the two dominant levers on how spread out the
+        // drawing is; both were tuned against real networks. Loosening them further compacts
+        // more but starts trading edge crossings for it, sharply so below anchorStrength 0.01.
+        repulsion: 1000,
+        seedRingGap: 90,
         spring: 0.08,
         gravity: 0.004,
         damping: 0.85,
-        preferredEdgeLength: 124,
         iterations: Math.max(30, Math.min(90, Math.round(850000 / componentSize))),
         collisionStrength: 0.5,
         bubblePadding: 17,
@@ -815,7 +841,7 @@ function forestForceOptions(componentSize) {
         geometryIterations: 7,
         edgeIterations: 4,
         crossingIterations: 4,
-        anchorStrength: 0.04,
+        anchorStrength: 0.02,
         maxPhysicsNodes: 50000,
         theta: 1.5,
     };
