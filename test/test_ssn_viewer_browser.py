@@ -6696,6 +6696,79 @@ def test_layout_is_compact_without_collapsing(spindle_page, layout):
     assert page.pageerrors == []
 
 
+def test_radial_seed_rings_stay_concentric_around_a_huge_cluster(spindle_page):
+    """One radius per depth, even when a single bubble dwarfs the rest.
+
+    radialTreeSeed lays subtrees out as disjoint annular sectors, which is what keeps
+    sibling subtrees from interleaving. Sizing each parent->child step individually
+    breaks that: nodes on the same depth land at different radii, the sectors stop
+    being disjoint, and subtrees tangle. On a real network with one 14k-member cluster
+    and a few hundred singletons hanging off it that produced 216 edge crossings and 11
+    overlapping bubbles, which on screen was the cluster's neighbours piled up in
+    stacked rows off to one side.
+
+    The seed is a pure function of the topology, so this drives it directly with a
+    synthetic hub rather than needing a fixture big enough to grow a 14k cluster.
+    """
+    result = spindle_page.evaluate(
+        """() => {
+            // One huge hub, a tail so the tree centre is not the hub itself, and a
+            // few hundred singletons hanging off the hub.
+            const hierarchyNodes = {};
+            const adjacency = new Map();
+            const ids = [];
+            const add = (id, size) => {
+                ids.push(id);
+                hierarchyNodes[id] = {size, leaf_start: id};
+                adjacency.set(id, []);
+            };
+            const link = (a, b) => { adjacency.get(a).push(b); adjacency.get(b).push(a); };
+            add(0, 14000);
+            for (let i = 1; i <= 300; i++) { add(i, 1); link(0, i); }
+            let prev = 0;
+            for (let t = 0; t < 8; t++) { const id = 400 + t; add(id, 1); link(prev, id); prev = id; }
+
+            const seed = radialTreeSeed(ids, adjacency, hierarchyNodes, 90);
+            // Recover each node's depth from the same rooting the seed used.
+            const rootId = treeCenter(ids, adjacency, hierarchyNodes);
+            const tree = rootedTree(rootId, adjacency, hierarchyNodes);
+            const depth = new Map([[rootId, 0]]);
+            tree.order.forEach(n => (tree.children.get(n) || []).forEach(
+                c => depth.set(c, (depth.get(n) || 0) + 1)));
+
+            // Radius from the root, bucketed by depth: every bucket must be a single value.
+            const byDepth = new Map();
+            ids.forEach(id => {
+                const p = seed.positionById.get(id);
+                const r = Math.hypot(p.x, p.y);
+                const d = depth.get(id) || 0;
+                if (!byDepth.has(d)) { byDepth.set(d, []); }
+                byDepth.get(d).push(r);
+            });
+            let worstSpread = 0;
+            byDepth.forEach(radii => {
+                worstSpread = Math.max(worstSpread, Math.max(...radii) - Math.min(...radii));
+            });
+
+            // And the ring beyond the hub has to clear the hub's own rim.
+            const hub = seed.positionById.get(0);
+            const kids = (tree.children.get(0) || []);
+            const clearance = Math.min(...kids.map(k => {
+                const p = seed.positionById.get(k);
+                return Math.hypot(p.x - hub.x, p.y - hub.y) - hub.radius - p.radius;
+            }));
+            return {worstSpread, clearance, hubRadius: hub.radius, kids: kids.length};
+        }"""
+    )
+    assert result["kids"] > 250
+    assert result["hubRadius"] > 400          # the hub really does dwarf the singletons
+    # Same depth, same radius (the jitter the seed adds is sub-pixel).
+    assert result["worstSpread"] < 2
+    # Nothing on the next ring is buried inside the hub.
+    assert result["clearance"] > 0
+    assert spindle_page.pageerrors == []
+
+
 def test_worker_and_main_thread_force_layouts_agree(crowded_page):
     """The Worker and the fallback must draw the same network the same way.
 

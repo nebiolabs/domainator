@@ -392,18 +392,35 @@ function radialTreeSeed(componentIds, adjacency, hierarchyNodes, ringGap) {
     const rootId = treeCenter(componentIds, adjacency, hierarchyNodes);
     const tree = rootedTree(rootId, adjacency, hierarchyNodes);
     const radii = new Map(componentIds.map(id => [id, componentRadiusForSize(hierarchyNodes[id].size)]));
-    // Each ring sits one parent-plus-child apart from the ring inside it, rather than every
-    // ring being spaced by the largest bubble anywhere in the component. One big cluster used
-    // to push every ring out, including rings joining two singletons, and anchorStrength then
-    // held the simulation in that spread-out arrangement.
+    // Concentric rings, one radius per depth, with the step from each ring to the next sized
+    // by the biggest bubbles actually on those two depths.
+    //
+    // Both halves of that matter. Spacing every ring by the largest bubble anywhere in the
+    // component (what this used to do) let one big cluster push apart rings that only join
+    // singletons, and anchorStrength then held the simulation in that spread-out arrangement.
+    // But giving each parent->child pair its own step is worse: nodes at the same depth end
+    // up at different radii, the wedges stop being disjoint annular sectors, and subtrees
+    // interleave -- on a network with one 14k-member cluster that produced 216 edge crossings
+    // and 11 overlapping bubbles. Per depth keeps the rings concentric, so sibling subtrees
+    // stay in their own sectors, while still being sized by what is actually there.
     const gap = Math.max(ringGap || 0, 60);
-    const ringRadius = new Map([[rootId, 0]]);
+    const depthByNode = new Map([[rootId, 0]]);
     tree.order.forEach(nodeId => {
-        (tree.children.get(nodeId) || []).forEach(c => {
-            const step = Math.max(gap, (radii.get(nodeId) || 10) + (radii.get(c) || 10) + RADIAL_SEED_RING_PAD);
-            ringRadius.set(c, (ringRadius.get(nodeId) || 0) + step);
-        });
+        (tree.children.get(nodeId) || []).forEach(c => depthByNode.set(c, (depthByNode.get(nodeId) || 0) + 1));
     });
+    let maxDepth = 0;
+    componentIds.forEach(id => { maxDepth = Math.max(maxDepth, depthByNode.get(id) || 0); });
+    const ringMaxRadius = new Array(maxDepth + 1).fill(0);
+    componentIds.forEach(id => {
+        const depth = depthByNode.get(id) || 0;
+        ringMaxRadius[depth] = Math.max(ringMaxRadius[depth], radii.get(id) || 10);
+    });
+    const depthRadius = new Array(maxDepth + 1).fill(0);
+    for (let depth = 1; depth <= maxDepth; depth++) {
+        depthRadius[depth] = depthRadius[depth - 1]
+            + Math.max(gap, ringMaxRadius[depth - 1] + ringMaxRadius[depth] + RADIAL_SEED_RING_PAD);
+    }
+    const ringRadius = new Map(componentIds.map(id => [id, depthRadius[depthByNode.get(id) || 0]]));
     const leafCount = new Map();
     [...tree.order].reverse().forEach(id => {
         const ch = tree.children.get(id) || [];
