@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.21
+        uses: pypa/cibuildwheel@v2.23.4
         # All cibuildwheel configuration lives in [tool.cibuildwheel] in
         # pyproject.toml (Python versions, Rust install, test command).
 
