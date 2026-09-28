@@ -1,7 +1,8 @@
 name: Build wheels
 
 # Builds binary wheels (with the optional native `domainator._gbfast` Rust
-# extension compiled in) for Linux/macOS/Windows, plus an sdist. Wheels are
+# extension compiled in) for Linux and macOS, plus an sdist. Windows is not built:
+# the pyhmmer/pyinfernal dependencies don't compile there. Wheels are
 # uploaded as artifacts; publishing to PyPI is left to the maintainer (add a
 # pypa/gh-action-pypi-publish step gated on a release if desired).
 #
@@ -27,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 

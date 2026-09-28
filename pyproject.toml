@@ -16,7 +16,7 @@ debug = false
 [tool.cibuildwheel]
 # Build CPython wheels for the supported versions; skip 32-bit and musl.
 build = "cp310-* cp311-* cp312-* cp313-*"
-skip = "*_i686 *-win32 *-musllinux_*"
+skip = "*_i686 *-musllinux_*"
 # Verify the native extension actually compiled into the wheel. domainator's
 # __init__ is lightweight, so importing _gbfast does not pull the heavy runtime
 # deps.
@@ -32,9 +32,6 @@ environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 [tool.cibuildwheel.macos]
 # GitHub macOS runners have Rust preinstalled via rustup.
 before-all = "rustup target add x86_64-apple-darwin aarch64-apple-darwin || true"
-
-[tool.cibuildwheel.windows]
-# GitHub Windows runners have Rust preinstalled.
 
 [project]
 name="domainator"
