@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel", "setuptools-rust>=1.7"]
+requires = ["setuptools>=61.0.0", "packaging>=24.2", "wheel", "setuptools-rust>=1.7"]
 build-backend = "setuptools.build_meta"
 
 # Optional native acceleration (domainator._gbfast). `optional = true` means a
@@ -16,7 +16,7 @@ debug = false
 [tool.cibuildwheel]
 # Build CPython wheels for the supported versions; skip 32-bit and musl.
 build = "cp310-* cp311-* cp312-* cp313-*"
-skip = "*_i686 *-musllinux_*"
+skip = "*_i686 *-win32 *-musllinux_*"
 # Verify the native extension actually compiled into the wheel. domainator's
 # __init__ is lightweight, so importing _gbfast does not pull the heavy runtime
 # deps.
