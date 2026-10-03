@@ -302,3 +302,19 @@ def test_extract_domains_splice_reverse_strand_marks_rc():
     parts = [FeatureLocation(start, end, strand=-1).extract(record.seq) for start, end in spans]
     expected = functools.reduce(lambda x, y: x + y, parts)
     assert str(stitched.seq) == str(expected)
+
+
+# --- --partial ---
+
+import pytest
+import helpers as _helpers
+
+
+@pytest.mark.parametrize("partial,expected", [("include", {"HOV79_30120", "HOV79_30125"}), ("exclude", {"HOV79_30120"}), ("only", {"HOV79_30125"})])
+def test_extract_domains_partial(shared_datadir, partial, expected):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
+        out = output_dir + "/domains.gb"
+        extract_domains.main(["-i", annotated, "-o", out, "--partial", partial])
+        names = {f.qualifiers["name"][0] for r in SeqIO.parse(out, "genbank") for f in r.features if f.type == DOMAIN_FEATURE_NAME}
+        assert names == expected

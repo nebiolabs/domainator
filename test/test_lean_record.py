@@ -326,7 +326,8 @@ def test_nucleotide_contig_searchable_bypass(shared_datadir):
 
 @pytest.mark.skipif(not utils.native_parser_available(), reason="native parser not built")
 def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
-    """LeanFastaContig.fragment() and LeanSearchContig.fragment() agree with utils.get_fragment_status."""
+    """LeanFastaContig.fragment() agrees with utils.get_fragment_status, and LeanSearchContig.cds_peptides filters partial CDSs.
+    (Protein GenBank records always fall back to the Biopython parser, so their fragment status comes from utils.)"""
     from domainator import _gbfast
     fasta = tmp_path / "fragments.fasta"
     fasta.write_text(
@@ -339,5 +340,5 @@ def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
     assert [r.fragment() for r in native] == [utils.get_fragment_status(r) for r in python] == [None, "?", "?"]
 
     native, _, _ = _gbfast.parse_lean_search(str(shared_datadir / "JABFVH010000506_extraction.gb"), 0, -1, None, False)
-    assert native[0].fragment() is None # nucleotide records have per-CDS fragment status
     assert [i for i, _ in native[0].cds_peptides(set(), "exclude")] != [i for i, _ in native[0].cds_peptides(set(), "only")]
+

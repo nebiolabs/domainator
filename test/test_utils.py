@@ -710,3 +710,35 @@ def test_fragment_status_allowed(status, include, exclude, only):
     assert utils.fragment_status_allowed(status, "include") == include
     assert utils.fragment_status_allowed(status, "exclude") == exclude
     assert utils.fragment_status_allowed(status, "only") == only
+
+
+def test_get_fragment_status_uniprot_text_entries():
+    """UniProt .dat entries converted to GenBank: NON_TER features and the 'Flags:' description."""
+    def record(description, non_ter=()):
+        rec = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILA"), id="p", description=description)
+        rec.annotations["molecule_type"] = "protein"
+        rec.features = [SeqFeature(FeatureLocation(s, s + 1), type="NON_TER") for s in non_ter]
+        return rec
+    assert utils.get_fragment_status(record("SubName: Full=SOD;")) is None
+    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;")) == "?"
+    assert utils.get_fragment_status(record("RecName: Full=SOD; Flags: Precursor; Fragments;")) == "?"
+    assert utils.get_fragment_status(record("RecName: Full=SOD; Flags: Precursor;")) is None
+    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[0])) == "N"
+    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[9])) == "C"
+    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[0, 9])) == "NC"
+
+
+def test_contig_has_fragment_and_filter_by_partial():
+    complete = _partial_test_record(FeatureLocation(5, 71, strand=1))
+    partial = _partial_test_record(FeatureLocation(BeforePosition(5), 71, strand=1))
+    protein = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILA"), id="p", description="p (Fragment) OS=x")
+    protein.annotations["molecule_type"] = "protein"
+    assert not utils.contig_has_fragment(complete)
+    assert utils.contig_has_fragment(partial)
+    assert utils.contig_has_fragment(protein)
+    records = [complete, partial, protein]
+    assert list(utils.filter_by_partial(records, "include")) == records
+    assert list(utils.filter_by_partial(records, "exclude")) == [complete]
+    assert list(utils.filter_by_partial(records, "only")) == [partial, protein]
+    assert utils.cds_fragment_status(partial, partial.features[1]) == "N"
+    assert utils.cds_fragment_status(protein, None) == "?"

@@ -29,7 +29,7 @@ import pandas as pd
 from io import BytesIO
 import base64
 import html
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, TaxonomyData, get_taxid
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, TaxonomyData, get_taxid, get_fragment_status, fragment_status_allowed, get_cds_unique_name, PARTIAL_CHOICES, partial_help
 from domainator.data_matrix import DataMatrix
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
 import numpy as np
@@ -49,7 +49,7 @@ class SummaryTextWriter():
         # self.column_types = column_types
         self.out_handle = out_handle
     
-    def write_header(self, num_contigs, num_cdss, lengths):
+    def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         if len(lengths) != 0:
             hist_str = io.StringIO()
             with redirect_stdout(hist_str):
@@ -62,6 +62,8 @@ class SummaryTextWriter():
 
 contigs: {num_contigs}
 CDSs: {num_cdss}
+partial CDSs: {num_partial_cdss}
+protein fragments: {num_fragment_proteins}
 CDSs per 10 kb: {num_cdss / ((sum(lengths)+0.01)/10000) : .2f}
 
 {hist_str}""", file=self.out_handle)
@@ -105,7 +107,7 @@ class SummaryJSONWriter():
         self.out_handle = out_handle
         self.payload = {}
 
-    def write_header(self, num_contigs, num_cdss, lengths):
+    def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         length_stats = None
         if len(lengths) != 0:
             arr = np.asarray(lengths, dtype=float)
@@ -119,6 +121,8 @@ class SummaryJSONWriter():
         self.payload["contig_stats"] = {
             "contigs": num_contigs,
             "cdss": num_cdss,
+            "partial_cdss": num_partial_cdss,
+            "fragment_proteins": num_fragment_proteins,
             "cds_per_10kb": num_cdss / ((sum(lengths) + 0.01) / 10000),
             "length": length_stats,
         }
@@ -151,7 +155,7 @@ class SummaryHTMLWriter():
     def __init__(self, out_handle): #TODO: consolidate with TSVWriter with a super class?
         self.out_handle = out_handle
     
-    def write_header(self, num_contigs, num_cdss, lengths):
+    def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         print(f"""<!doctype html><html lang="en"><head><meta charset="utf-8" name="viewport" content="width=device-width"/><title>Summary Report</title></head><body>
 <div>
 <h1>Contig Stats</h1>
@@ -159,6 +163,8 @@ class SummaryHTMLWriter():
 <tbody>
     <tr> <th>contigs</th> <td>{num_contigs}</td> </tr> 
     <tr> <th>CDSs</th> <td>{num_cdss}</td> </tr> 
+    <tr> <th>partial CDSs</th> <td>{num_partial_cdss}</td> </tr> 
+    <tr> <th>protein fragments</th> <td>{num_fragment_proteins}</td> </tr> 
     <tr> <th>CDSs per 10 kb</th> <td>{num_cdss / ((sum(lengths)+0.01)/10000) : .2f}</td> </tr>
 </tbody>
 </table>
@@ -463,11 +469,13 @@ def tax_data_to_hierarchy(tax_data):
 
     
 
-def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurence_fraction_outfile=None, co_occurence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None):
+def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurence_fraction_outfile=None, co_occurence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None, partial="include"):
     """
 
         Args:
-
+            partial: which CDSs/proteins to count, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments).
+                Protein records that are filtered out are skipped entirely. On nucleotide contigs, filtered CDSs and the domains on them are not counted,
+                but the contig is. See utils.get_fragment_status.
 
         Returns:
 
@@ -483,6 +491,8 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
 
     num_contigs = 0
     num_cdss = 0
+    num_partial_cdss = 0 # CDSs with '<' or '>' in their location
+    num_fragment_proteins = 0 # protein records that are fragments (see utils.get_fragment_status)
     lengths = list() # contig lengths
     domains = dict() # dict of dicts, domain_name: {count: int, description: str, correlations: dict, average_score: float, database: str} 
     if focus_domains is None:
@@ -497,9 +507,19 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
     for contig in records:
         if databases is not None:
             contig = tuple(filter_domains((contig,), evalue=float("inf"), max_overlap=1, databases_keep=databases))[0]
+
+        excluded_cds_ids = set() # cds_ids of CDSs filtered out by partial
+        if partial != "include":
+            if contig.annotations.get("molecule_type") == "protein":
+                if not fragment_status_allowed(get_fragment_status(contig), partial):
+                    continue
+            else:
+                excluded_cds_ids = {get_cds_unique_name(f) for f in contig.features if f.type == "CDS" and not fragment_status_allowed(get_fragment_status(f), partial)}
         
         lengths.append(len(contig))
         num_contigs += 1
+        if contig.annotations.get("molecule_type") == "protein" and get_fragment_status(contig) is not None:
+            num_fragment_proteins += 1
         contig_domains = dict() #dict of lists of locations.
         
         if report_taxonomy:
@@ -511,9 +531,11 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
                 taxa_data[taxid] = {'count': 1, 'data': TaxonomyData(ncbi_taxonomy, taxid=taxid)}
 
         for feature in contig.features:
-            if feature.type == 'CDS':
+            if feature.type == 'CDS' and (not excluded_cds_ids or get_cds_unique_name(feature) not in excluded_cds_ids):
                 num_cdss += 1
-            if feature.type == DOMAIN_FEATURE_NAME:
+                if get_fragment_status(feature) is not None:
+                    num_partial_cdss += 1
+            if feature.type == DOMAIN_FEATURE_NAME and (not excluded_cds_ids or feature.qualifiers.get("cds_id", ["."])[0] not in excluded_cds_ids):
                 db = feature.qualifiers['database'][0]
                 name = feature.qualifiers['name'][0]
                 description = feature.qualifiers['description'][0]
@@ -579,7 +601,7 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
         domain_cooccurence_df = pd.DataFrame.from_dict(correlations_dict, orient='index').fillna("")
 
     for output in longform_outputs:
-        output.write_header(num_contigs, num_cdss, lengths)
+        output.write_header(num_contigs, num_cdss, lengths, num_partial_cdss=num_partial_cdss, num_fragment_proteins=num_fragment_proteins)
         output.write_domain_table(domain_table_df, domain_cooccurence_df)
         if report_taxonomy:
             output.write_taxonomy(taxa_data)
@@ -639,6 +661,8 @@ def main(argv):
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Ignore domain annotations not from these databases. default: consider all databases.")
+    parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES,
+                        help=partial_help("Which CDSs/proteins to count") + " Protein records that are filtered out are skipped; on nucleotide contigs, filtered CDSs and their domains are not counted, but the contig is.")
 
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -700,6 +724,7 @@ def main(argv):
         domains_table=params.domains_table,
         databases=databases,
         out_json_handle=out_json_handle,
+        partial=params.partial,
     )
 
     if params.output is not None and params.output != "-":

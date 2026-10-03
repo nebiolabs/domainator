@@ -394,7 +394,7 @@
     {
       "name": "Partial",
       "parameter": "partial",
-      "help": "Which proteins/CDSs to search, by fragment status. include: all. exclude: skip fragments. only: only fragments. CDSs with '<' or '>' in their location are fragments, as are protein records with a UniProt ' (Fragment)' or ' (Fragments)' header, or a CDS/Protein feature with '<' or '>' spanning the record.",
+      "help": "Which CDSs/proteins to search, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it.",
       "type": "string",
       "choices": [
         "include",

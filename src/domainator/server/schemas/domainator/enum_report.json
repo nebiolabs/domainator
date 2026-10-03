@@ -548,7 +548,7 @@
     {
       "name": "Fragment",
       "parameter": "output_cols__fragment",
-      "help": "Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, from a UniProt ' (Fragment)' header). Nucleotide contigs reported by contig are complete.",
+      "help": "Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' header). Only for rows that are a single protein or CDS (protein records, CDSs, and the domains of protein records); otherwise empty, with a warning. See also --partial_count.",
       "type": "boolean",
       "flags": [
         "--fragment"
@@ -557,6 +557,21 @@
       "append_const": {
         "target": "output_cols",
         "value": "fragment"
+      },
+      "target_parameter": "output_cols"
+    },
+    {
+      "name": "Partial Count",
+      "parameter": "output_cols__partial_count",
+      "help": "Reports the number of partial CDSs: by contig, the number of CDSs with '<' or '>' in their location (for a protein record, 1 if it is a fragment); by cds, 1 if the CDS or protein is a fragment, otherwise 0; by domain, 1 if the CDS or protein the domain is on is a fragment, otherwise 0, whether or not the domain reaches the missing end.",
+      "type": "boolean",
+      "flags": [
+        "--partial_count"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "partial_count"
       },
       "target_parameter": "output_cols"
     }
@@ -638,6 +653,21 @@
       "default": "/tmp/ncbi_taxonomy",
       "flags": [
         "--ncbi_taxonomy_path"
+      ]
+    },
+    {
+      "name": "Partial",
+      "parameter": "partial",
+      "help": "Which rows to report, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.",
+      "type": "string",
+      "choices": [
+        "include",
+        "exclude",
+        "only"
+      ],
+      "default": "include",
+      "flags": [
+        "--partial"
       ]
     }
   ]

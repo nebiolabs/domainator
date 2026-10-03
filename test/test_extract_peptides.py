@@ -318,3 +318,17 @@ def test_extract_peptides_source_compound_locations_are_translated():
 
     assert isinstance(source_feature.location, CompoundLocation)
     assert [(int(part.start), int(part.end)) for part in source_feature.location.parts] == [(0, 1), (3, 4)]
+
+
+# --- --partial ---
+
+import pytest
+import helpers as _helpers
+
+
+@pytest.mark.parametrize("partial,expected", [("include", {"NUT37324.1", "NUT37325.1"}), ("exclude", {"NUT37324.1"}), ("only", {"NUT37325.1"})])
+def test_extract_peptides_partial(shared_datadir, partial, expected):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/peptides.gb"
+        extract_peptides.main(["-i", str(shared_datadir / _helpers.PARTIAL_FIXTURE), "-o", out, "--partial", partial])
+        assert {r.name for r in SeqIO.parse(out, "genbank")} == expected

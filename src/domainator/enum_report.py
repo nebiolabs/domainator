@@ -5,9 +5,10 @@ Takes a genbank file which has been annotated using Domainate, write tabulated d
 """
 
 import sys
+import warnings
 import argparse
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status
+from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status, cds_fragment_status, contig_has_fragment, feature_partial_ends, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from domainator.find_features import search_motif
@@ -646,21 +647,27 @@ def molecular_weight_factory():
 
 
 def fragment_factory():
-    """Factory for reporting the fragment status of a protein or CDS.
+    """Factory for reporting the fragment status of rows that are a single protein or CDS.
 
     Values: "complete", "N" (missing the N-terminus), "C" (missing the C-terminus), "NC" (missing both),
     or "?" (a fragment with unknown missing ends, e.g. a UniProt " (Fragment)" header). See utils.get_fragment_status.
-    Nucleotide contigs (reported by contig) and nucleotide domains are "complete" unless the record is a single CDS.
+    Like the other protein-specific columns, the value is empty (with a warning, once) for rows that are not a single protein:
+    a protein record, or a nucleotide record with exactly one CDS. Domain rows on protein records get the status of the protein.
     """
+    warned = False
 
     def fragment(rec, loc, tax):
-        status = get_fragment_status(rec)
-        if status is None and rec.annotations.get("molecule_type") != "protein":
-            # by cds: the record is a single CDS
-            for feature in rec.features:
-                if feature.type == "CDS" and int(feature.location.start) == 0 and int(feature.location.end) == len(rec):
-                    status = get_fragment_status(feature)
-                    break
+        nonlocal warned
+        if rec.annotations.get("molecule_type") == "protein":
+            status = rec.annotations.get(FRAGMENT_STATUS_ANNOTATION) # set by process_record: the protein's status, also for its domains
+        else:
+            cdss = [f for f in rec.features if f.type == "CDS" and "pseudo" not in f.qualifiers and "pseudogene" not in f.qualifiers]
+            if len(cdss) != 1:
+                if not warned:
+                    warnings.warn(f"--fragment is only reported for rows that are a single protein or CDS, so it is empty for {rec.id} and any others like it. Use --partial_count instead.")
+                    warned = True
+                return None
+            status = get_fragment_status(cdss[0])
         return status if status is not None else "complete"
 
     return {
@@ -670,8 +677,33 @@ def fragment_factory():
     }
 
 
+FRAGMENT_STATUS_ANNOTATION = "_fragment_status" # set on each row's record by process_record
+PARTIAL_COUNT_ANNOTATION = "_partial_count" # set on each row's record by process_record
 FRAGMENT_HELP = ("Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), "
-                 "or ? (missing ends unknown, from a UniProt ' (Fragment)' header). Nucleotide contigs reported by contig are complete.")
+                 "or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' header). Only for rows that are a single protein or CDS "
+                 "(protein records, CDSs, and the domains of protein records); otherwise empty, with a warning. See also --partial_count.")
+
+def partial_count_factory():
+    """Factory for reporting the number of partial CDSs/proteins in each row.
+
+    By contig: the number of CDSs with '<' or '>' in their location (for a protein record, 1 if it is a fragment, otherwise 0).
+    By cds: 1 if the CDS (or protein record) is a fragment, otherwise 0.
+    By domain: 1 if the CDS (or protein record) the domain is on is a fragment, otherwise 0, whether or not the domain reaches the missing end.
+    """
+
+    def partial_count(rec, loc, tax):
+        return rec.annotations.get(PARTIAL_COUNT_ANNOTATION, 0)
+
+    return {
+        "columns": ["partial_count"],
+        "column_types": ["int"],
+        "function": partial_count,
+    }
+
+
+PARTIAL_COUNT_HELP = ("Reports the number of partial CDSs: by contig, the number of CDSs with '<' or '>' in their location (for a protein record, 1 if it is a fragment); "
+                      "by cds, 1 if the CDS or protein is a fragment, otherwise 0; by domain, 1 if the CDS or protein the domain is on is a fragment, "
+                      "otherwise 0, whether or not the domain reaches the missing end.")
 
 def get_analysis_names(analyses):
     analysis_names = list()
@@ -682,13 +714,15 @@ def get_analysis_names(analyses):
             analysis_names.append(analysis[0])
     return set(analysis_names)
 
-def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], ncbi_taxonomy):
+def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], ncbi_taxonomy, partial:str="include"):
     """
     Args:
         rec (SeqRecord): 
         by (str): one of "contig", "cds", "domain"
         analyses_to_run (list): list of dicts with keys "columns", "column_types", "function"
         ncbi_taxonomy (NCBITaxonomy): 
+        partial (str): which rows to report, by fragment status: "include" (all), "exclude" (skip fragments), or "only" (only fragments).
+            by contig: utils.contig_has_fragment. by cds: the CDS (or protein record). by domain: the CDS (or protein record) the domain is on.
 
     Yields:
         list: one line of output
@@ -698,9 +732,16 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
     source_filename = rec.annotations.get("_source_filename", "")
     sub_recs = list()
     locs = list()
+    fragment_statuses = list() # one per sub_rec, for the partial filter
     if by == "contig":
         sub_recs.append(rec)
         locs.append(FeatureLocation(0, len(rec), 1))
+        if rec.annotations.get("molecule_type") == "protein":
+            fragment_statuses.append(get_fragment_status(rec))
+            contig_partial_count = 0 if fragment_statuses[-1] is None else 1
+        else:
+            fragment_statuses.append("?" if contig_has_fragment(rec) else None) # for the partial filter
+            contig_partial_count = sum(1 for f in rec.features if f.type == "CDS" and any(feature_partial_ends(f)))
     else: #by cds or domain
         cds_names = list()
         domain_names = list()
@@ -719,6 +760,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                     sub_recs.append(cds_rec)
                     locs.append(cdss[i].feature.location)
                     cds_names.append(cdss[i].name)
+                    fragment_statuses.append(cds_fragment_status(rec, cdss[i].feature))
                 else: # by == "domain"
                     cds_summary = cdss[i]
                     for domain in cds_summary.domain_features:
@@ -730,11 +772,13 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                         domain_names.append(domain_name)
                         sub_recs.append(domain_rec)
                         locs.append(domain.location)
+                        fragment_statuses.append(cds_fragment_status(rec, cds_summary.feature))
         else: # protein
             if by == "cds":
                 sub_recs.append(rec)
                 cds_names.append(" ")
                 locs.append(FeatureLocation(0, len(rec), 1))
+                fragment_statuses.append(get_fragment_status(rec))
             else: # by == "domain"
                 sources = get_sources(rec)
                 for feature in rec.features:
@@ -746,9 +790,14 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                         domain_names.append(feature.qualifiers["name"][0])
                         sub_recs.append(domain_rec)
                         locs.append(feature.location)
+                        fragment_statuses.append(get_fragment_status(rec))
             
     
     for i, sub_rec in enumerate(sub_recs):
+        if not fragment_status_allowed(fragment_statuses[i], partial):
+            continue
+        sub_rec.annotations[FRAGMENT_STATUS_ANNOTATION] = fragment_statuses[i]
+        sub_rec.annotations[PARTIAL_COUNT_ANNOTATION] = contig_partial_count if by == "contig" else (0 if fragment_statuses[i] is None else 1)
         out_line = [contig_name]
         if by == "cds" or by == "domain":
             out_line.append(cds_names[i])
@@ -799,7 +848,7 @@ def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None
             rec.annotations["_source_filename"] = filename
             yield rec
 
-def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None, json_out_handle=None):
+def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None, json_out_handle=None, partial="include"):
     """
       input:
         records: an iterator of SeqRecords
@@ -810,6 +859,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
         column_names: If supplied, then this list will be used instead of the default column names.
         html_max_height: Max height in pixels to set the html output to.
         json_out_handle: a file handle to write streaming NDJSON (one object per record) to.
+        partial: which rows to report, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments). See process_record.
     """
     
     # {command_line_variable: {"columns":[names_to_appear_in_output], "function": function_mapping_SeqRec_to_table_value} }
@@ -837,7 +887,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
                 "rank_lineage": { "columns": ["rank_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.ranks][1:]) }, # [1:] to remove root
                 }
     DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
-    STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory, "fragment": fragment_factory} # factories that take no arguments
+    STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory, "fragment": fragment_factory, "partial_count": partial_count_factory} # factories that take no arguments
     
     headers = ["contig"]
     column_types = ["str"]
@@ -890,7 +940,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
     for rec in records:
         if databases is not None:
             rec = tuple(filter_domains((rec,), evalue=float("inf"), max_overlap=1, databases_keep=databases))[0]
-        for out_line in process_record(rec, by, analyses_to_run, ncbi_taxonomy):
+        for out_line in process_record(rec, by, analyses_to_run, ncbi_taxonomy, partial=partial):
             for writer in writers:
                 writer.write_row(out_line)
     
@@ -920,6 +970,8 @@ def main(argv):
 
     parser.add_argument('--by', type=str.lower, default="contig", choices=SELECT_CATEGORIES,
                         help="One line in output for every by contig, cds or domain. For protein genbanks, contig and cds are treated the same. default: by contig")
+    parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES,
+                        help=partial_help("Which rows to report") + " By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.")
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Ignore domain annotations not from these databases. default: consider all databases.")
@@ -1013,6 +1065,8 @@ def main(argv):
     parser.add_argument('--molecular_weight', action='append_const', dest=COLS_ARG_NAME, const="molecular_weight",
                         help="Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.")
     
+    parser.add_argument('--partial_count', action='append_const', dest=COLS_ARG_NAME, const="partial_count",
+                        help=PARTIAL_COUNT_HELP)
     parser.add_argument('--fragment', action='append_const', dest=COLS_ARG_NAME, const="fragment",
                         help=FRAGMENT_HELP)
 
@@ -1093,7 +1147,8 @@ def main(argv):
                 params.html_max_height,
                 ncbi_taxonomy=ncbi_taxonomy,
                 databases=databases,
-                json_out_handle=json_out_handle
+                json_out_handle=json_out_handle,
+                partial=params.partial,
                 )
 
     if params.output is not None:

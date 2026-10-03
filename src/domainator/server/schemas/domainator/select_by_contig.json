@@ -280,5 +280,20 @@
       "flags": [
         "--taxonomy_update"
       ]
+    },
+    {
+      "name": "Partial",
+      "parameter": "partial",
+      "help": "Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. A protein record is a fragment if it has a UniProt ' (Fragment)' header or 'Flags: Fragment' definition, NON_TER features, or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location. Not affected by --invert.",
+      "type": "string",
+      "choices": [
+        "include",
+        "exclude",
+        "only"
+      ],
+      "default": "include",
+      "flags": [
+        "--partial"
+      ]
     }]
 }

@@ -13,11 +13,11 @@ can write a fasta or a genbank file
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.Bio import SeqIO
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, slice_record, get_sources, pad_location
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, slice_record, get_sources, pad_location, get_cds_unique_name, cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 
-def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pad_down=0, combine=False, keep_direction=False, keep_name=False, search_hits=False, databases=None, splice=False):
+def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pad_down=0, combine=False, keep_direction=False, keep_name=False, search_hits=False, databases=None, splice=False, partial="include"):
     """
 
       input: 
@@ -33,6 +33,8 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
         search_hits: if True, then only select domains that are marked as search hits (from domain_search.py).
         databases: if not None, then only select domains from these databases. default: all databases.
         splice: if True, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together.s
+        partial: select domains by the fragment status of the CDS (or protein record) they are on: "include" (default, all), "exclude" (skip domains on fragments), or "only" (only domains on fragments).
+            Contig-level nucleotide hits are never on fragments. See utils.get_fragment_status.
     
       yields the extracted regions as SeqRecord objects
     """
@@ -46,6 +48,8 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
     #TODO: ensure naming consistency with select_by_cds.
     for rec in records:
         hit_domains = list() #list of SeqFeatures
+        if partial != "include":
+            cds_by_id = {get_cds_unique_name(f): f for f in rec.features if f.type == "CDS"}
         for feature in rec.features:
             if (search_hits and feature.type == DOMAIN_SEARCH_BEST_HIT_NAME) or (feature.type == DOMAIN_FEATURE_NAME):
                 if databases is not None and feature.qualifiers["database"][0] not in databases:
@@ -59,6 +63,15 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                     keep = False
                 elif score is not None and float(feature.qualifiers["score"][0]) < score:
                     keep = False
+                elif partial != "include":
+                    cds_id = feature.qualifiers.get("cds_id", ["."])[0]
+                    if rec.annotations.get("molecule_type") == "protein":
+                        status = cds_fragment_status(rec, None)
+                    elif cds_id in cds_by_id:
+                        status = cds_fragment_status(rec, cds_by_id[cds_id])
+                    else: # contig-level nucleotide hit
+                        status = None
+                    keep = fragment_status_allowed(status, partial)
                 if keep:
                     hit_domains.append(feature)
         
@@ -214,6 +227,7 @@ def main(argv):
                         help="Domain databases to use for domain extraction. default: all databases.")
 
     parser.add_argument('--search_hits', action='store_true', default=False, help="Select domains that are marked as search hits (from domain_search.py).")
+    parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which domains to extract, by the CDS or protein they are on") + " Contig-level nucleotide hits are never on fragments.")
 
     #parser.add_argument("--padding", type=int, default=0, help="extract this many additional residues (or bases) to each side of the hit region.")
     parser.add_argument("--pad_up", type=int, default=0, help="extract this many additional residues (or bases) upstream of the hit region.")
@@ -273,6 +287,7 @@ def main(argv):
         search_hits=params.search_hits,
         databases=params.databases,
         splice=params.splice,
+        partial=params.partial,
         )
 
     if params.fasta_out:

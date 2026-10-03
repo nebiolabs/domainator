@@ -70,3 +70,43 @@ def bgzip_file(src, dst):
     with open(src, "rb") as fh, _bgzf.BgzfWriter(str(dst)) as w:
         w.write(fh.read())
     return str(dst)
+
+
+# --- partial CDS fixture: JABFVH010000506_extraction.gb has a complete CDS (HOV79_30120) and a 5'-partial CDS (HOV79_30125) ---
+
+PARTIAL_FIXTURE = "JABFVH010000506_extraction.gb"
+PARTIAL_CDS_LOCUS_TAG = "HOV79_30125"
+COMPLETE_CDS_LOCUS_TAG = "HOV79_30120"
+
+def write_partial_fixture_hmms(shared_datadir, path):
+    """Writes single-sequence HMMs built from the translations of both CDSs in the partial fixture, named by locus_tag."""
+    import pyhmmer
+    record = next(SeqIO.parse(str(shared_datadir / PARTIAL_FIXTURE), "genbank"))
+    alphabet = pyhmmer.easel.Alphabet.amino()
+    builder = pyhmmer.plan7.Builder(alphabet)
+    background = pyhmmer.plan7.Background(alphabet)
+    with open(path, "wb") as handle:
+        for feature in record.features:
+            if feature.type == "CDS":
+                name = feature.qualifiers["locus_tag"][0].encode()
+                sequence = pyhmmer.easel.TextSequence(name=name, sequence=feature.qualifiers["translation"][0]).digitize(alphabet)
+                hmm, _, _ = builder.build(sequence, background)
+                hmm.write(handle)
+
+def domainate_partial_fixture(shared_datadir, output_dir):
+    """Annotates the partial fixture with domains named after the CDSs they hit. Returns the path of the annotated genbank file."""
+    from domainator import domainate
+    hmms = output_dir + "/partial_fixture.hmm"
+    write_partial_fixture_hmms(shared_datadir, hmms)
+    out = output_dir + "/partial_fixture_domainated.gb"
+    domainate.main(["-i", str(shared_datadir / PARTIAL_FIXTURE), "-r", hmms, "-o", out])
+    return out
+
+def write_uniprot_fragment_fasta(shared_datadir, path):
+    """Writes swissprot_CuSOD_subset.fasta with ' (Fragment)' added to the first header. Returns the id of the fragment."""
+    records = list(SeqIO.parse(str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "fasta"))
+    with open(path, "w") as handle:
+        for i, record in enumerate(records):
+            description = record.description.replace(" OS=", " (Fragment) OS=", 1) if i == 0 else record.description
+            handle.write(f">{description}\n{str(record.seq)}\n")
+    return records[0].id

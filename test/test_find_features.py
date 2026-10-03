@@ -340,3 +340,20 @@ def test_motif_annotation_format():
         assert result.score == 100.0
         assert result.evalue == 0.0
         assert result.identity == 100.0
+
+
+# --- --partial ---
+
+import helpers as _helpers
+from domainator.find_features import main as _find_features_main
+
+
+@pytest.mark.parametrize("partial,expected_cds_ids", [("include", 2), ("exclude", 1), ("only", 1)])
+def test_find_features_partial(shared_datadir, partial, expected_cds_ids):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        # 'A' occurs in both proteins
+        _find_features_main(["-i", str(shared_datadir / _helpers.PARTIAL_FIXTURE), "--motif", "A", "-o", out, "--partial", partial])
+        record = next(SeqIO.parse(out, "genbank"))
+        cds_ids = {f.qualifiers["cds_id"][0] for f in record.features if f.type == DOMAIN_FEATURE_NAME}
+        assert len(cds_ids) == expected_cds_ids

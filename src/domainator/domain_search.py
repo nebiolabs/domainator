@@ -19,7 +19,7 @@ import sys
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available, PARTIAL_CHOICES
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -364,7 +364,7 @@ def main(argv):
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
 
-    parser.add_argument("--partial", type=str, default="include", choices=domainate.PARTIAL_CHOICES, help=domainate.PARTIAL_HELP)
+    parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES, help=domainate.PARTIAL_HELP)
     parser.add_argument('--decoys', type=str, default=None, nargs='+',
                         help="Names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.")
     parser.add_argument('--decoys_file', type=str, default=None,

@@ -188,5 +188,20 @@
       "file_types": [
         "txt"
       ]
+    },
+    {
+      "name": "Partial",
+      "parameter": "partial",
+      "help": "Which domains to extract, by the CDS or protein they are on, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Contig-level nucleotide hits are never on fragments.",
+      "type": "string",
+      "choices": [
+        "include",
+        "exclude",
+        "only"
+      ],
+      "default": "include",
+      "flags": [
+        "--partial"
+      ]
     }]
 }

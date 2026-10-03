@@ -9,6 +9,8 @@ AND
 (contig CDS count within specified bounds [cds_count_lb, cds_count_ub])
 AND 
 (contig matches specified taxonomy filters)
+AND
+(contig passes the fragment filter [partial])
 AND # INVERT applies to this list of criteria
 (
    (contig name in specified list [contigs, contigs_file])
@@ -29,7 +31,7 @@ but the contigs that would have been selected by the middle expression are inste
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, filter_by_taxonomy
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, filter_by_taxonomy, filter_by_partial, PARTIAL_CHOICES
 from typing import Set, Optional
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 import re
@@ -85,7 +87,7 @@ def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
 
 
 
-def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain"):
+def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain", partial="include"):
     """
 
         Args:
@@ -134,6 +136,9 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             search_score_ub: only keep contigs with a domain_search annotation score less than this
 
             domain_type: the type of domain to consider, domain, search, both. Default: domain
+            partial: "include" (default) keeps all contigs, "exclude" drops fragments, "only" keeps only fragments.
+                A protein record is a fragment if utils.get_fragment_status says so (e.g. a UniProt " (Fragment)" header);
+                a nucleotide contig is a fragment if it contains a CDS with '<' or '>' in its location.
 
         Yields:
             SeqRecords of the selected contigs
@@ -166,6 +171,9 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
     if include_taxids or exclude_taxids or taxonomy_expr:
         contigs = filter_by_taxonomy(contigs, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
     
+    if partial != "include":
+        contigs = filter_by_partial(contigs, partial)
+
     if length_lb is not None or length_ub is not None:
         contigs = length_filter(contigs, length_lb, length_ub)
 
@@ -272,6 +280,10 @@ def main(argv):
     parser.add_argument('--domain_expr', type=str, default=None,
                         help="a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains")
 
+    parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES,
+                        help="Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. "
+                        "A protein record is a fragment if it has a UniProt ' (Fragment)' header or 'Flags: Fragment' definition, NON_TER features, "
+                        "or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location. Not affected by --invert.")
     parser.add_argument("--domain_type", type=str, default="domain", choices={"domain", "search", "both"}, help="The type of domain to consider, domain, search, both. Default: domain")    
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
@@ -390,7 +402,8 @@ def main(argv):
                     unanntotated=params.unannotated,
                     search_score_lb=params.search_score_lb,
                     search_score_ub=params.search_score_ub,
-                    domain_type=params.domain_type
+                    domain_type=params.domain_type,
+                    partial=params.partial
     )
 
     if params.fasta_out:

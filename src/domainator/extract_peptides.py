@@ -9,7 +9,7 @@ By default, extracts peptides from all CDSs in the genbank file.
 If any criteria are supplied, then only peptides from CDSs that meet the criteria will be extracted.
 
 Criteria are combined with the following logic:
-    (all OR target_CDSs OR target_domains OR unannotated OR search_hits) AND (target_contigs OR strand)
+    (all OR target_CDSs OR target_domains OR unannotated OR search_hits) AND (target_contigs OR strand) AND partial
 
 """
 
@@ -20,7 +20,7 @@ from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, CompoundLocation, BeforePosition, AfterPosition
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.Seq import Seq
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, DomainatorCDS, get_sources, copy_feature, slice_record_from_location, codon_offset
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, DomainatorCDS, get_sources, copy_feature, slice_record_from_location, codon_offset, fragment_status_allowed, get_fragment_status, PARTIAL_CHOICES, partial_help
 import warnings
 from domainator.Bio import SeqIO
 from domainator import __version__, RawAndDefaultsFormatter
@@ -56,7 +56,7 @@ def dna_to_peptide_location(location, offset=0):
     end = _dna_to_peptide_position(location.end, offset)
     return FeatureLocation(start, end, strand=location.strand)
 
-def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss, keep_cds_feature=True, cds_id_type="name", search_hits=False, strand=None, unannotated=False, _from_domain_search=False, extract_all=False, invert=False, _domain_search_negatives:Optional[Set[str]]=None, databases=None, keep_name=False, name_field=None):
+def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss, keep_cds_feature=True, cds_id_type="name", search_hits=False, strand=None, unannotated=False, _from_domain_search=False, extract_all=False, invert=False, _domain_search_negatives:Optional[Set[str]]=None, databases=None, keep_name=False, name_field=None, partial="include"):
     """
         Extracts all peptide sequences from each SeqRecord in records.
         Yields the extracted peptides as SeqRecord objects.
@@ -76,6 +76,8 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
             _domain_search_negatives: if not None, then this is a set of domain names that are considered negative hits. If a CDS has the best search hit as a negative, then it will be skipped.
             databases: if not None, then only consider domains from these databases when filtering by domain. default: all databases.
             keep_name: if True, then keep the original name of the contig. If False, then the name will be the name of the CDS.
+            partial: select CDSs by fragment status: "include" (default, all), "exclude" (skip fragments), or "only" (only fragments).
+                A CDS is a fragment if its location has '<' or '>' (see utils.get_fragment_status). Not affected by invert.
     """
     
     # TODO: if fasta_out is set, we can skip all the annotation propagation, because it won't be used. This should speed things up for that case.
@@ -120,6 +122,9 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
             
             if invert:
                 keep = not keep
+
+            if keep and partial != "include" and not fragment_status_allowed(get_fragment_status(cds.feature), partial):
+                keep = False
 
             if keep:
                 if keep_cds_feature:
@@ -193,6 +198,7 @@ def main(argv):
     parser.add_argument('--search_hits', action='store_true', default=False, help="extract peptides from the search hits (from domain_search.py).")
 
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract peptides from CDSs on the specified strand.")
+    parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which CDSs to extract peptides from") + " Not affected by --invert.")
 
     parser.add_argument('--invert', action='store_true',
                         help="Invert the CDS selection criteria. i.e. return peptides from CDSs that don't match the CDS selection criteria. (Only applies to CDS selection, not contig selection)")
@@ -264,7 +270,8 @@ def main(argv):
                     invert=params.invert,
                     databases=params.databases,
                     keep_name = params.keep_name,
-                    name_field = params.name_field
+                    name_field = params.name_field,
+                    partial = params.partial,
                     )
 
     if params.fasta_out:

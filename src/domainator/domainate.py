@@ -148,10 +148,7 @@ class SearchResult(NamedTuple):
 STRUCTURAL_METRIC_FIELDS = ("tmscore", "lddt", "rmsd", "prob")
 
 
-PARTIAL_CHOICES = ("include", "exclude", "only")
-PARTIAL_HELP = ("Which proteins/CDSs to search, by fragment status. include: all. exclude: skip fragments. only: only fragments. "
-                "CDSs with '<' or '>' in their location are fragments, as are protein records with a UniProt ' (Fragment)' or ' (Fragments)' header, "
-                "or a CDS/Protein feature with '<' or '>' spanning the record.")
+PARTIAL_HELP = utils.partial_help("Which CDSs/proteins to search")
 
 def domain_feature_qualifiers(hit: SearchResult, cds_id: str) -> Dict[str, List[str]]:
     """Build the qualifier dict shared by every Domainator/Domain_Search feature.
@@ -1129,8 +1126,8 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
         include_taxids = set(include_taxids)
     if exclude_taxids is not None:
         exclude_taxids = set(exclude_taxids)
-    if partial not in PARTIAL_CHOICES:
-        raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
+    if partial not in utils.PARTIAL_CHOICES:
+        raise ValueError(f"partial must be one of {', '.join(utils.PARTIAL_CHOICES)}, not {partial}")
     
     contigs_list = list()
     proteins_list = list()
@@ -1253,7 +1250,7 @@ def main(argv):
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
-    parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES, help=PARTIAL_HELP)
+    parser.add_argument("--partial", type=str, default="include", choices=utils.PARTIAL_CHOICES, help=PARTIAL_HELP)
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 

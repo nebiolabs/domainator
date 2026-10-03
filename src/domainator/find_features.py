@@ -24,7 +24,7 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import utils, DOMAIN_FEATURE_NAME
-from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, BooleanEvaluator
+from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, BooleanEvaluator, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
 
@@ -554,6 +554,7 @@ def find_features(
     model_dir: Optional[str] = None,
     tmbed_model_dir: Optional[str] = None,
     motifs: Optional[List[str]] = None,
+    partial: str = "include",
 ) -> Iterator[SeqRecord]:
     """
     Main function for feature detection.
@@ -570,6 +571,8 @@ def find_features(
         model_dir: Base directory for all algorithm models (can be overridden per-algorithm)
         tmbed_model_dir: Directory for TMbed's ProtT5 model (overrides model_dir if set)
         motifs: List of PROSITE pattern strings to search for
+        partial: which CDSs/proteins to annotate, by fragment status: "include" (all, the default), "exclude" (skip fragments),
+            or "only" (only fragments). See utils.get_fragment_status. Records are written either way.
     
     Yields:
         Annotated SeqRecord objects
@@ -631,12 +634,13 @@ def find_features(
         
         # Collect sequences for batch processing
         if rec.annotations.get('molecule_type') == "protein":
-            seq = str(rec.seq)
-            seq_hash = get_md5(seq)
-            batch_sequences.append((contig_idx, -1, seq_hash, seq))  # -1 indicates protein contig
+            if fragment_status_allowed(get_fragment_status(rec), partial):
+                seq = str(rec.seq)
+                seq_hash = get_md5(seq)
+                batch_sequences.append((contig_idx, -1, seq_hash, seq))  # -1 indicates protein contig
         else:
             for cds_idx, feature in enumerate(rec.features):
-                if feature.type == 'CDS' and 'translation' in feature.qualifiers:
+                if feature.type == 'CDS' and 'translation' in feature.qualifiers and fragment_status_allowed(get_fragment_status(feature), partial):
                     seq = feature.qualifiers['translation'][0]
                     seq_hash = get_md5(seq)
                     batch_sequences.append((contig_idx, cds_idx, seq_hash, seq))
@@ -823,6 +827,11 @@ def main(argv):
              "downloads to tmbed/models/t5/ inside the installed package."
     )
     
+    parser.add_argument(
+        '--partial', type=str, default="include", choices=PARTIAL_CHOICES,
+        help=partial_help("Which CDSs/proteins to annotate")
+    )
+    
     parser.add_argument('--config', action=ActionConfigFile)
     
     params = parser.parse_args(argv)
@@ -855,6 +864,7 @@ def main(argv):
             model_dir=params.model_dir,
             tmbed_model_dir=params.tmbed_model_dir,
             motifs=params.motif,
+            partial=params.partial,
         ),
         out
     )

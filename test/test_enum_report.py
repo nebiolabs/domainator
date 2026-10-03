@@ -1018,3 +1018,95 @@ def test_enum_report_molecular_weight_dna_1(shared_datadir):
                 assert mw / length > 250  # at least 250 Da per nucleotide
                 assert mw / length < 400  # at most 400 Da per nucleotide
                 assert len(l) == 3
+
+
+# --- --partial ---
+
+import helpers as _helpers
+
+
+@pytest.mark.parametrize("by,partial,expected_rows", [
+    ("contig", "include", 1), ("contig", "exclude", 0), ("contig", "only", 1),
+    ("cds", "include", 2), ("cds", "exclude", 1), ("cds", "only", 1),
+    ("domain", "include", 2), ("domain", "exclude", 1), ("domain", "only", 1),
+])
+def test_enum_report_partial(shared_datadir, by, partial, expected_rows):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
+        out = output_dir + "/report.tsv"
+        enum_report.main(["-i", annotated, "--by", by, "--domains", "--partial_count", "--partial", partial, "-o", out])
+        with open(out) as handle:
+            lines = handle.read().splitlines()
+        rows = lines[1:]
+        assert len(rows) == expected_rows
+        counts = {int(row.split("\t")[-1]) for row in rows}
+        if partial == "exclude":
+            assert counts <= {0}
+        elif partial == "only":
+            assert 0 not in counts
+
+
+@pytest.mark.parametrize("by,expected", [
+    ("contig", {"JABFVH010000506_extraction": 1, "pDONR201_1": 0}),
+    ("cds", {"HOV79_30120": 0, "HOV79_30125": 1, "pDONR201_1": 0}),
+    # the domain on HOV79_30125 doesn't reach the partial end (805..2686 of 803..>2688), but it is on a partial CDS
+    ("domain", {"HOV79_30120": 0, "HOV79_30125": 1}),
+])
+def test_enum_report_partial_count(shared_datadir, by, expected):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
+        out = output_dir + "/report.tsv"
+        enum_report.main(["-i", annotated, str(shared_datadir / "pDONR201_multi_genemark.gb"), "--by", by, "--partial_count", "-o", out])
+        with open(out) as handle:
+            lines = [line.split("\t") for line in handle.read().splitlines()]
+        key_column = {"contig": 0, "cds": 1, "domain": 2}[by]
+        counts = {row[key_column]: int(row[-1]) for row in lines[1:]}
+        assert lines[0][-1] == "partial_count"
+        for key, count in expected.items():
+            assert counts[key] == count
+
+
+def test_enum_report_partial_count_protein_fragments(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        fasta = output_dir + "/fragments.fasta"
+        fragment_id = _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
+        out = output_dir + "/report.tsv"
+        enum_report.main(["-i", fasta, "--partial_count", "-o", out])
+        with open(out) as handle:
+            counts = {row.split("\t")[0]: int(row.split("\t")[1]) for row in handle.read().splitlines()[1:]}
+        assert counts[fragment_id] == 1
+        assert sum(counts.values()) == 1
+
+
+def test_enum_report_fragment(shared_datadir):
+    """--fragment is only reported for rows that are a single protein or CDS; otherwise it is empty, with a warning."""
+    import pyhmmer
+    from domainator.Bio import SeqIO
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
+        out = output_dir + "/report.tsv"
+        def report(*args):
+            enum_report.main(["-i"] + list(args) + ["--fragment", "-o", out])
+            with open(out) as handle:
+                return [row.split("\t") for row in handle.read().splitlines()[1:]]
+        assert {row[1]: row[-1] for row in report(annotated, "--by", "cds")} == {"HOV79_30120": "complete", "HOV79_30125": "N"}
+        with pytest.warns(UserWarning, match="single protein or CDS"):
+            assert [row[-1] for row in report(annotated, "--by", "contig")] == [""] # two CDSs
+        with pytest.warns(UserWarning, match="single protein or CDS"):
+            assert {row[-1] for row in report(annotated, "--by", "domain")} == {""} # nucleotide domains
+
+        # protein records, and domains on them
+        fasta = output_dir + "/fragments.fasta"
+        fragment_id = _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
+        sequence = next(SeqIO.parse(fasta, "fasta")).seq
+        alphabet = pyhmmer.easel.Alphabet.amino()
+        hmm, _, _ = pyhmmer.plan7.Builder(alphabet).build(pyhmmer.easel.TextSequence(name=b"sod", sequence=str(sequence)).digitize(alphabet), pyhmmer.plan7.Background(alphabet))
+        with open(output_dir + "/sod.hmm", "wb") as handle:
+            hmm.write(handle)
+        proteins = output_dir + "/proteins.gb"
+        domainate_main(["-i", fasta, "-r", output_dir + "/sod.hmm", "-o", proteins])
+        contig_rows = {row[0]: row[-1] for row in report(proteins)}
+        assert contig_rows[fragment_id] == "?"
+        assert set(contig_rows.values()) == {"?", "complete"}
+        domain_rows = {row[0]: row[-1] for row in report(proteins, "--by", "domain")}
+        assert domain_rows[fragment_id] == "?" # the domain doesn't need to reach the missing end

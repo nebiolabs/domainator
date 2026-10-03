@@ -6,7 +6,7 @@ Specify a range to extract around selected CDSs, if no range is specified, then 
 
 if target_cdss, target_domains or domain_expr is specified then selection logic is:
 
-    contigs & (target_cdss or target_domains or domain_expr or unannotated)
+    contigs & (target_cdss or target_domains or domain_expr or unannotated) & strand & partial
 
 otherwise:
     return every cds in contigs
@@ -14,7 +14,7 @@ otherwise:
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help
 from typing import Tuple, List, Optional, Set
 from domainator import __version__, RawAndDefaultsFormatter
 
@@ -244,7 +244,7 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
                   kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, evalue=float("inf"),
                   invert=False, search_hits=False, max_region_overlap=1.0, strand=None, _from_domain_search=False,
                   _domain_search_negatives:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, unannotated=False,
-                  include_nucleic_acids:bool = False,
+                  include_nucleic_acids:bool = False, partial:str = "include",
                   ):
     """
 
@@ -284,6 +284,9 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
             databases: a set of database names to consider when filtering by domain. If None, then all databases will be considered.
 
             include_nucleic_acids: if True, then pretend nucleic acid annotations are CDSs, and include them in the output if they match the selection criteria.
+
+            partial: select focus CDSs by fragment status: "include" (default, all), "exclude" (skip fragments), or "only" (only fragments).
+                A CDS is a fragment if its location has '<' or '>' (see utils.get_fragment_status). Not affected by invert.
 
         Yields:
             SeqRecords of the selected regions
@@ -348,6 +351,9 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
 
             if invert:
                 keep = not keep
+
+            if keep and partial != "include" and not fragment_status_allowed(cds_fragment_status(rec, cds.feature), partial):
+                keep = False
 
             if keep:
                 record, record_location = get_cds_neighborhood(rec, cdss, focus_index, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, _from_domain_search=_from_domain_search)
@@ -476,6 +482,7 @@ def main(argv):
                         help="Consider only domains from these databases when filtering by domain. default: all databases.")
 
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract regions around CDSs on the specified strand.")
+    parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which CDSs to extract regions around") + " Not affected by --invert.")
 
     parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
 
@@ -571,7 +578,8 @@ def main(argv):
         strand = params.strand,
         databases = params.databases,
         unannotated = params.unannotated,
-        include_nucleic_acids = params.include_nucleic_acids
+        include_nucleic_acids = params.include_nucleic_acids,
+        partial = params.partial,
         ):
         #skip_deduplicate, pad
         if not pad:

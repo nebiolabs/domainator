@@ -383,3 +383,24 @@ def test_select_by_cds_unannoated_1(shared_datadir):
         select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--unannotated"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 8
+
+
+# --- --partial ---
+
+import helpers as _helpers
+
+
+def test_select_by_cds_partial(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        locations = dict()
+        for partial in ("include", "exclude", "only"):
+            out = output_dir + f"/{partial}.gb"
+            select_by_cds.main(["-i", str(shared_datadir / _helpers.PARTIAL_FIXTURE), "-o", out, "--partial", partial])
+            locations[partial] = [str(f.location) for r in parse_seqfiles([out]) for f in r.features if f.type == "CDS"]
+        assert locations["only"] == ["[<0:1886](+)"]
+        assert locations["exclude"] == ["[0:501](+)"]
+        assert sorted(locations["include"]) == sorted(locations["only"] + locations["exclude"])
+        # --invert doesn't apply to --partial: inverting "every CDS" selects nothing
+        out = output_dir + "/invert.gb"
+        select_by_cds.main(["-i", str(shared_datadir / _helpers.PARTIAL_FIXTURE), "-o", out, "--partial", "only", "--cds", _helpers.COMPLETE_CDS_LOCUS_TAG, "--invert"])
+        assert [str(f.location) for r in parse_seqfiles([out]) for f in r.features if f.type == "CDS"] == ["[<0:1886](+)"]

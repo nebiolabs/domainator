@@ -322,3 +322,71 @@ def test_process_via_datasets_gzip_flag(shared_datadir, monkeypatch):
 
     off = _run(False)
     assert off and not any("--gzip" in c for c in off)
+
+
+# --- --partial (offline: requests.get is mocked) ---
+
+import io
+
+
+_UNIPROT_DAT = """ID   A0A001_TEST             Unreviewed;        10 AA.
+AC   A0A001;
+DT   01-JAN-2020, integrated into UniProtKB/TrEMBL.
+DT   01-JAN-2020, sequence version 1.
+DT   01-JAN-2020, entry version 1.
+DE   SubName: Full=Complete protein;
+OS   Escherichia coli.
+OC   Bacteria; Pseudomonadota.
+OX   NCBI_TaxID=562;
+SQ   SEQUENCE   10 AA;  1000 MW;  0000000000000000 CRC64;
+     MKRFSLAILA
+//
+ID   A0A002_TEST             Unreviewed;        10 AA.
+AC   A0A002;
+DT   01-JAN-2020, integrated into UniProtKB/TrEMBL.
+DT   01-JAN-2020, sequence version 1.
+DT   01-JAN-2020, entry version 1.
+DE   SubName: Full=Fragment protein;
+DE   Flags: Fragment;
+OS   Escherichia coli.
+OC   Bacteria; Pseudomonadota.
+OX   NCBI_TaxID=562;
+FT   NON_TER         1
+SQ   SEQUENCE   10 AA;  1000 MW;  0000000000000000 CRC64;
+     MKRFSLAILA
+//
+"""
+
+_UNIPROT_FASTA = """>sp|A0A001|A_ECOLI Complete protein OS=Escherichia coli OX=562 PE=1 SV=1
+MKRFSLAILA
+>tr|A0A002|B_ECOLI Fragment protein (Fragment) OS=Escherichia coli OX=562 PE=4 SV=1
+MKRFSLAILA
+"""
+
+
+class _FakeResponse:
+    def __init__(self, text):
+        self.raw = io.BytesIO(gzip.compress(text.encode()))
+    def raise_for_status(self):
+        pass
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        return False
+
+
+@pytest.mark.parametrize("db,payload", [("swissprot", _UNIPROT_FASTA), ("swissprot_gb", _UNIPROT_DAT)])
+@pytest.mark.parametrize("partial,expected", [("include", {"A0A001", "A0A002"}), ("exclude", {"A0A001"}), ("only", {"A0A002"})])
+def test_uniprot_download_partial(monkeypatch, tmp_path, db, payload, partial, expected):
+    monkeypatch.setattr(domainator_db_download.requests, "get", lambda url, stream=True: _FakeResponse(payload))
+    outfile = tmp_path / ("out.gb" if db.endswith("_gb") else "out.fasta")
+    domainator_db_download.main(["--db", db, "--output", str(outfile), "--partial", partial, "--skip_taxonomy_update"])
+    records = list(utils.parse_seqfiles([str(outfile)]))
+    assert {accession for accession in ("A0A001", "A0A002") if any(accession in r.id + r.name for r in records)} == expected
+    if db == "swissprot_gb" and partial == "only":
+        assert utils.get_fragment_status(records[0]) == "N" # NON_TER on residue 1 survives the conversion to GenBank
+
+
+def test_uniprot_download_partial_rejects_ncbi(tmp_path):
+    with pytest.raises(ValueError, match="UniProt"):
+        domainator_db_download.domainator_db_download(None, str(tmp_path / "out.gb"), None, None, "ncbi_all", None, None, None, None, None, partial="exclude")

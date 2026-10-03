@@ -88,9 +88,25 @@ Domain hits on a CDS are placed relative to its `codon_start`: residue 1 of the 
 **Fragment status.** Like taxids, Domainator reads a fragment status for each protein or CDS:
 * A CDS is a fragment if either outer end of its location has a `<` or `>`. Its status is `N` (5' end, and so the N-terminus, missing), `C` (3' end missing), or `NC` (both).
 * For a protein record, a `CDS` or `Protein` feature spanning the record decides, the same way. This is what `domain_search.py --translate` writes, and what NCBI GenPept records carry.
-* Otherwise, a protein record whose description contains ` (Fragment)` or ` (Fragments)` is a fragment with unknown missing ends, `?`. This is how UniProt marks fragments in FASTA headers, e.g. `>tr|A0A0|A0A0_ECOLI Superoxide dismutase (Fragment) OS=Escherichia coli OX=562`. The status is never written into descriptions, so the header round-trips unchanged.
+* Otherwise, UniProt `NON_TER` features on the first or last residue decide: `N` for the first residue, `C` for the last, or `NC` for both. UniProt text (`.dat`) entries carry these, and `domainator_db_download.py --db swissprot_gb` (and `trembl_gb`, `uniprot_gb`) keeps them in the GenBank files it writes.
+* Otherwise, a protein record is a fragment with unknown missing ends, `?`, if its description contains ` (Fragment)` or ` (Fragments)`, or a `Flags:` list with `Fragment` or `Fragments`. The first is how UniProt marks fragments in FASTA headers, e.g. `>tr|A0A0|A0A0_ECOLI Superoxide dismutase (Fragment) OS=Escherichia coli OX=562`. The second is the `DE   Flags: Fragment;` line of a UniProt text entry, which ends up in the DEFINITION of a converted GenBank file. The status is never written into descriptions, so headers round-trip unchanged.
 
-`domainate.py` and `domain_search.py` take `--partial {include,exclude,only}` (default `include`) to choose which proteins/CDSs are searched by fragment status. `enum_report.py --fragment` adds a `fragment` column with the status (`complete`, `N`, `C`, `NC`, or `?`).
+These tools take `--partial {include,exclude,only}` (default `include`) to select by fragment status:
+
+| Tool | What `--partial` selects |
+|---|---|
+| `domainate.py`, `domain_search.py`, `find_features.py` | which CDSs/proteins are searched or annotated. Records are still written by `domainate.py` and `find_features.py`. |
+| `select_by_cds.py` | which CDSs regions are extracted around |
+| `extract_peptides.py` | which CDSs peptides are extracted from |
+| `extract_domains.py` | which domains are extracted, by the CDS or protein they are on. Contig-level nucleotide hits are never on fragments. |
+| `select_by_contig.py` | which contigs are selected. A protein record by its own status; a nucleotide contig is a fragment if it contains any partial CDS. |
+| `enum_report.py` | which rows are reported: by contig (as for `select_by_contig.py`), by CDS, or by domain (by the CDS or protein the domain is on) |
+| `summary_report.py` | which CDSs/proteins are counted. Filtered protein records are skipped; on nucleotide contigs, filtered CDSs and the domains on them aren't counted, but the contig is. The report always includes the number of partial CDSs and protein fragments among those counted. |
+| `domainator_db_download.py` | which UniProt records are downloaded (UniProt databases only) |
+
+`--partial` is never inverted by `--invert`. `enum_report.py --fragment` adds a `fragment` column with the status (`complete`, `N`, `C`, `NC`, or `?`) for rows that are a single protein or CDS: protein records, CDSs, and domains on protein records (which get the status of the protein). Like the other protein-specific columns, it is empty for other rows, with a warning. `enum_report.py --partial_count` adds a `partial_count` column: by contig, the number of partial CDSs on the contig (for a protein record, 1 if it is a fragment); by CDS, 1 if the CDS or protein is a fragment; by domain, 1 if the CDS or protein the domain is on is a fragment, whether or not the domain reaches the missing end. Otherwise 0.
+
+FASTA output (`--fasta_out`, `genbank_to_fasta.py`) carries no locations, so a fragment's status survives only if its header already says ` (Fragment)`.
 
 
 ### Differences from BioPython in internal storing of Genbank records

@@ -38,7 +38,7 @@ from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
 import sys
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
-from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager, compile_taxonomy_allowed
+from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager, compile_taxonomy_allowed, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator import __version__, RawAndDefaultsFormatter
 from typing import Dict, List, Set, Tuple, Union, Optional, Iterator
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
@@ -644,7 +644,7 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
 
 ##### Uniprot #####
 
-def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None):
+def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
         with open(output_file_path, "w") as output_handle:
@@ -655,6 +655,9 @@ def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, excl
                     records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
                 
                 for record in records:
+                    # fragment status from the "Flags: Fragment" description and NON_TER features
+                    if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial):
+                        continue
                     features = [SeqFeature(FeatureLocation(0, len(record)), type="source", qualifiers={"db_xref": f"taxon:{record.annotations['ncbi_taxid'][0]}"})]
                     for feature in record.features:
                         skip = False
@@ -670,7 +673,7 @@ def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, excl
                     if num_recs is not None and recs_written >= num_recs:
                         break
 
-def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None):
+def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
         with open(output_file_path, "w") as output_handle:
@@ -680,16 +683,22 @@ def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids
                 if include_taxids or exclude_taxids or taxonomy_expr:
                     records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
                 for record in records:
+                    if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial): # " (Fragment)" header
+                        continue
                     SeqIO.write(record, output_handle, "fasta")
                     recs_written += 1
                     if num_recs is not None and recs_written >= num_recs:
                         break
 
 
-def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None):
+UNIPROT_DBS = {"swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}
+
+def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None, partial="include"):
 
     if taxonomy_expr and (include_taxids or exclude_taxids):
         raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
+    if partial != "include" and db.lower() not in UNIPROT_DBS:
+        raise ValueError(f"partial only applies to the UniProt databases ({', '.join(sorted(UNIPROT_DBS))}), not {db}.")
 
     if include_taxids is not None:
         include_taxids = set(include_taxids)
@@ -731,6 +740,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_taxonomy,
             num_recs=num_recs,
             taxonomy_expr=taxonomy_expr,
+            partial=partial,
         )
     if db.lower() in {"trembl_gb", "uniprot_gb"}:
         download_and_convert_uniprot_dat(
@@ -741,6 +751,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_taxonomy,
             num_recs=num_recs,
             taxonomy_expr=taxonomy_expr,
+            partial=partial,
         )
     if db.lower() in {"swissprot", "uniprot"}:
         download_uniprot_fasta(
@@ -751,6 +762,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_taxonomy,
             num_recs=num_recs,
             taxonomy_expr=taxonomy_expr,
+            partial=partial,
         )
     if db.lower() in {"trembl", "uniprot"}:
         download_uniprot_fasta(
@@ -761,6 +773,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_taxonomy,
             num_recs=num_recs,
             taxonomy_expr=taxonomy_expr,
+            partial=partial,
         )
 
     if db.lower() == "ncbi_complete_genome_proks":
@@ -904,6 +917,8 @@ def main(argv):
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
     parser.add_argument("--db", type=str.lower, choices={"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks", "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all", "swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}, help="Database to download")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output filename")
+    parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES,
+                        help=partial_help("Which UniProt records to download") + " Only for the UniProt databases.")
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a record when it is in the record's lineage. Mutually exclusive with --include_taxids/--exclude_taxids. For prokaryote-only (_proks) databases, Eukaryota are excluded in addition to this expression.")
@@ -1013,7 +1028,7 @@ def main(argv):
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
                            datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,
-                           datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr)
+                           datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr, partial=params.partial)
 
 def _entrypoint():
     main(sys.argv[1:])

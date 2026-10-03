@@ -2119,8 +2119,22 @@ def get_taxid(record:SeqRecord) -> Optional[int]:
                             pass
     return taxid
 
-# UniProt FASTA headers flag partial proteins with one of these tokens before " OS=".
+# UniProt FASTA headers flag partial proteins with one of these tokens.
 FRAGMENT_TOKENS = (" (Fragment)", " (Fragments)")
+# UniProt text (.dat) entries flag them with a "Flags:" DE line, e.g. "Flags: Fragment;" or "Flags: Precursor; Fragments;",
+# which the swiss parser appends to the description (and so to the DEFINITION of a converted GenBank file).
+FRAGMENT_FLAGS_PREFIX = "Flags:"
+# UniProt marks a missing terminus with a NON_TER feature on the first or last residue.
+NON_TERMINAL_FEATURE_NAME = "NON_TER"
+PARTIAL_CHOICES = ("include", "exclude", "only")
+
+def partial_help(what:str) -> str:
+    """
+        Help text for a --partial argument. what: what is selected, e.g. "Which CDSs/proteins to search".
+    """
+    return (f"{what}, by fragment status. include: all. exclude: skip fragments. only: only fragments. "
+            "A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, "
+            "a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it.")
 
 def location_partial_ends(location) -> Tuple[bool, bool]:
     """
@@ -2164,7 +2178,8 @@ def get_fragment_status(record_or_feature:Union[SeqRecord, SeqFeature]) -> Optio
             "?": a fragment with unknown missing ends (UniProt " (Fragment)" header)
 
         For a protein record, a CDS or Protein feature spanning the record (e.g. from domain_search --translate, or GenPept)
-        decides, otherwise the UniProt fragment token in the description does.
+        decides. Otherwise UniProt NON_TER features on the first or last residue (UniProt text entries) decide,
+        and otherwise a UniProt fragment token in the description (see description_is_fragment) gives "?".
     """
     if isinstance(record_or_feature, (SeqFeature, lean_record.LeanFeature)):
         return partial_ends_to_status(*feature_partial_ends(record_or_feature))
@@ -2179,15 +2194,56 @@ def get_fragment_status(record_or_feature:Union[SeqRecord, SeqFeature]) -> Optio
                 start, end = int(feature.location.start), int(feature.location.end)
             if start == 0 and end >= len(record):
                 return partial_ends_to_status(*feature_partial_ends(feature))
+    missing_n_terminus = False
+    missing_c_terminus = False
+    for feature in record.features:
+        if feature.type == NON_TERMINAL_FEATURE_NAME:
+            if isinstance(feature, lean_record.LeanFeature):
+                start, end = feature.start, feature.end
+            else:
+                start, end = int(feature.location.start), int(feature.location.end)
+            missing_n_terminus = missing_n_terminus or start == 0
+            missing_c_terminus = missing_c_terminus or end >= len(record)
+    if missing_n_terminus or missing_c_terminus:
+        return partial_ends_to_status(missing_n_terminus, missing_c_terminus)
     if description_is_fragment(record.description):
         return "?"
     return None
 
 def description_is_fragment(description:str) -> bool:
     """
-        True if a description carries a UniProt fragment token.
+        True if a description carries a UniProt fragment token: " (Fragment)" or " (Fragments)" (FASTA headers),
+        or a "Flags:" list containing Fragment or Fragments (text entries).
     """
-    return any(token in description for token in FRAGMENT_TOKENS)
+    if any(token in description for token in FRAGMENT_TOKENS):
+        return True
+    flags_start = description.find(FRAGMENT_FLAGS_PREFIX)
+    return flags_start != -1 and "Fragment" in description[flags_start:]
+
+def contig_has_fragment(record) -> bool:
+    """
+        Contig-level fragment test used by contig selection and reporting:
+        a protein record is a fragment if get_fragment_status says so; a nucleotide contig if it contains any partial CDS.
+    """
+    if record.annotations.get("molecule_type") == "protein":
+        return get_fragment_status(record) is not None
+    return any(feature.type == "CDS" and any(feature_partial_ends(feature)) for feature in record.features)
+
+def cds_fragment_status(record, feature:Optional[SeqFeature]) -> Optional[str]:
+    """
+        The fragment status of a CDS on a record: the record's status if it is a protein record, otherwise the CDS feature's.
+    """
+    if record.annotations.get("molecule_type") == "protein" or feature is None:
+        return get_fragment_status(record)
+    return get_fragment_status(feature)
+
+def filter_by_partial(records, partial:str):
+    """
+        Yields the records that pass a --partial filter at the contig level (see contig_has_fragment).
+    """
+    for record in records:
+        if partial == "include" or fragment_status_allowed("?" if contig_has_fragment(record) else None, partial):
+            yield record
 
 def fragment_status_allowed(status:Optional[str], partial:str) -> bool:
     """
@@ -2199,7 +2255,7 @@ def fragment_status_allowed(status:Optional[str], partial:str) -> bool:
         return status is None
     elif partial == "only":
         return status is not None
-    raise ValueError(f"partial must be one of include, exclude, only, not {partial}")
+    raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
 
 def codon_offset(feature:SeqFeature) -> int:
     """

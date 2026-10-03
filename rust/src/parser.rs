@@ -235,17 +235,6 @@ fn partial_ends(loc: &Location) -> Option<(bool, bool, i64)> {
     Some((five, three, len))
 }
 
-/// Fragment status from partial ends: None (complete), "N", "C", or "NC"
-/// (utils.partial_ends_to_status).
-fn partial_status(five: bool, three: bool) -> Option<String> {
-    match (five, three) {
-        (false, false) => None,
-        (true, false) => Some("N".to_string()),
-        (false, true) => Some("C".to_string()),
-        (true, true) => Some("NC".to_string()),
-    }
-}
-
 /// Whether a protein/CDS with this fragment status passes a --partial filter
 /// (utils.fragment_status_allowed).
 fn partial_allowed(is_fragment: bool, partial: &str) -> bool {
@@ -258,9 +247,18 @@ fn partial_allowed(is_fragment: bool, partial: &str) -> bool {
 
 /// UniProt FASTA headers flag partial proteins with one of these tokens (utils.FRAGMENT_TOKENS).
 const FRAGMENT_TOKENS: [&str; 2] = [" (Fragment)", " (Fragments)"];
+/// UniProt text entries flag them in a "Flags:" list (utils.FRAGMENT_FLAGS_PREFIX).
+const FRAGMENT_FLAGS_PREFIX: &str = "Flags:";
 
+/// utils.description_is_fragment
 fn description_is_fragment(desc: &str) -> bool {
-    FRAGMENT_TOKENS.iter().any(|t| desc.contains(t))
+    if FRAGMENT_TOKENS.iter().any(|t| desc.contains(t)) {
+        return true;
+    }
+    match desc.find(FRAGMENT_FLAGS_PREFIX) {
+        Some(pos) => desc[pos..].contains("Fragment"),
+        None => false,
+    }
 }
 
 /// Restrict a partial CDS's translation to the residues encoded on the contig,
@@ -653,35 +651,6 @@ impl LeanSearchContig {
     /// utils.get_taxid's whole-record rule.
     fn taxid(&self) -> Option<i64> {
         collect_sources(&self.seq.features).first().and_then(|s| s.taxon)
-    }
-
-    /// Fragment status of a protein record, matching utils.get_fragment_status: a CDS
-    /// or Protein feature spanning the record decides ("N", "C", "NC", or None),
-    /// otherwise a UniProt fragment token in the DEFINITION gives "?". None for
-    /// nucleotide records, whose fragment status is per-CDS.
-    fn fragment(&self) -> Option<String> {
-        if self.molecule_type().as_deref() != Some("protein") {
-            return None;
-        }
-        let len = self.seq.seq.len() as i64;
-        for feature in &self.seq.features {
-            let kind = feature.kind.as_ref();
-            if kind != "CDS" && kind != "Protein" {
-                continue;
-            }
-            if let Some((_op, _between, parts)) = lean_location(&feature.location, 1) {
-                let start = parts.iter().map(|p| p.0).min().unwrap_or(0);
-                let end = parts.iter().map(|p| p.1).max().unwrap_or(0);
-                if start == 0 && end >= len {
-                    let (five, three, _len) = partial_ends(&feature.location).unwrap_or((false, false, 0));
-                    return partial_status(five, three);
-                }
-            }
-        }
-        match &self.seq.definition {
-            Some(d) if description_is_fragment(d) => Some("?".to_string()),
-            _ => None,
-        }
     }
 
     /// Build the full record header tuple + LeanFeature list (hit path only),

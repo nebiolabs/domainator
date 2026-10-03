@@ -93,3 +93,39 @@ def test_summary_report_nucleotide_annotations(shared_datadir):
             text = open(path).read()
             assert "Domain Stats" in text
             assert "dna_query_1" in text
+
+
+# --- --partial ---
+
+import pytest
+import helpers as _helpers
+
+
+@pytest.mark.parametrize("partial,expected_cdss,expected_domains", [("include", 2, {"HOV79_30120", "HOV79_30125"}), ("exclude", 1, {"HOV79_30120"}), ("only", 1, {"HOV79_30125"})])
+def test_summary_report_partial(shared_datadir, partial, expected_cdss, expected_domains):
+    with tempfile.TemporaryDirectory() as output_dir:
+        annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
+        out = output_dir + "/summary.txt"
+        table = output_dir + "/domains.tsv"
+        summary_report.main(["-i", annotated, "-o", out, "--domains_table", table, "--partial", partial])
+        with open(out) as handle:
+            text = handle.read()
+        assert f"CDSs: {expected_cdss}\n" in text
+        assert f"partial CDSs: {1 if partial != 'exclude' else 0}\n" in text
+        assert "contigs: 1\n" in text # the contig is counted either way
+        with open(table) as handle:
+            domains = {line.split("\t")[0] for line in handle.read().splitlines()[1:]}
+        assert domains == expected_domains
+
+
+def test_summary_report_counts_protein_fragments(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        fasta = output_dir + "/fragments.fasta"
+        _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
+        out = output_dir + "/summary.json"
+        summary_report.main(["-i", fasta, "--json", out])
+        import json
+        with open(out) as handle:
+            stats = json.load(handle)["contig_stats"]
+        assert stats["fragment_proteins"] == 1
+        assert stats["partial_cdss"] == 0

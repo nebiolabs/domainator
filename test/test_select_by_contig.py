@@ -252,3 +252,34 @@ def test_select_by_contig_search_name_2(shared_datadir):
 
         seqs = list(utils.parse_seqfiles([out]))
         assert len(seqs) == 2
+
+
+# --- --partial ---
+
+import helpers as _helpers
+
+
+def test_select_by_contig_partial(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        inputs = [str(shared_datadir / _helpers.PARTIAL_FIXTURE), str(shared_datadir / "pDONR201_multi_genemark.gb")]
+        ids = dict()
+        for partial in ("include", "exclude", "only"):
+            out = output_dir + f"/{partial}.gb"
+            select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", partial])
+            ids[partial] = [r.id for r in utils.parse_seqfiles([out])]
+        assert ids["only"] == ["JABFVH010000506_extraction"] # contains a partial CDS
+        assert ids["exclude"] == ["pDONR201_1", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
+        assert ids["include"] == ids["only"] + ids["exclude"]
+        # --invert doesn't apply to --partial
+        out = output_dir + "/invert.gb"
+        select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", "exclude", "--contigs", "pDONR201_1", "--invert"])
+        assert [r.id for r in utils.parse_seqfiles([out])] == ["pDONR201_2", "pDONR201_3", "pDONR201_4"]
+
+
+def test_select_by_contig_partial_uniprot_fasta(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        fasta = output_dir + "/fragments.fasta"
+        fragment_id = _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
+        out = output_dir + "/only.gb"
+        select_by_contig.main(["-i", fasta, "-o", out, "--partial", "only"])
+        assert [r.id for r in utils.parse_seqfiles([out])] == [fragment_id]
