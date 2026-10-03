@@ -110,7 +110,7 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
 
         cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the selected CDSs. A 2-tuple of (upstream-range, downstream-range). If None, then don't use a CDS range.
 
-        kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output. A 2-tuple of (upstream-range, downstream-range). If None, then don't use a kb range.
+        kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends; partially enclosed domain annotations are dropped. A 2-tuple of (upstream-range, downstream-range). If None, then don't use a kb range.
 
         whole_contig: extract the whole contigs containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
 
@@ -202,13 +202,12 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
 
     features = get_non_domainator_features(contig)
     
+    # Domain annotations cut by the edge of the region are dropped by slice_record_from_location.
     for cds_i, cds in enumerate(cds_list):
-        if slice_location.contains(cds.feature.location):
-            # features.append(cds.feature)
-            features.extend(cds.domain_features)
-            if cds.domain_search_feature is not None:
-                if not _from_domain_search or cds_i == cds_idx:
-                    features.append(cds.domain_search_feature)
+        features.extend(cds.domain_features)
+        if cds.domain_search_feature is not None:
+            if not _from_domain_search or cds_i == cds_idx:
+                features.append(cds.domain_search_feature)
     try:
         record = slice_record_from_location(contig, slice_location, features)
         start = int(slice_location.stranded_start)
@@ -262,7 +261,7 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
             
             cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the selected CDSs
 
-            kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output.
+            kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends; partially enclosed domain annotations are dropped.
 
             whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
 

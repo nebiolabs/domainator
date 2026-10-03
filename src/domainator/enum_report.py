@@ -7,7 +7,7 @@ Takes a genbank file which has been annotated using Domainate, write tabulated d
 import sys
 import argparse
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData
+from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from domainator.find_features import search_motif
@@ -645,6 +645,34 @@ def molecular_weight_factory():
     }
 
 
+def fragment_factory():
+    """Factory for reporting the fragment status of a protein or CDS.
+
+    Values: "complete", "N" (missing the N-terminus), "C" (missing the C-terminus), "NC" (missing both),
+    or "?" (a fragment with unknown missing ends, e.g. a UniProt " (Fragment)" header). See utils.get_fragment_status.
+    Nucleotide contigs (reported by contig) and nucleotide domains are "complete" unless the record is a single CDS.
+    """
+
+    def fragment(rec, loc, tax):
+        status = get_fragment_status(rec)
+        if status is None and rec.annotations.get("molecule_type") != "protein":
+            # by cds: the record is a single CDS
+            for feature in rec.features:
+                if feature.type == "CDS" and int(feature.location.start) == 0 and int(feature.location.end) == len(rec):
+                    status = get_fragment_status(feature)
+                    break
+        return status if status is not None else "complete"
+
+    return {
+        "columns": ["fragment"],
+        "column_types": ["str"],
+        "function": fragment,
+    }
+
+
+FRAGMENT_HELP = ("Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), "
+                 "or ? (missing ends unknown, from a UniProt ' (Fragment)' header). Nucleotide contigs reported by contig are complete.")
+
 def get_analysis_names(analyses):
     analysis_names = list()
     for analysis in analyses:
@@ -685,7 +713,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                 if by == "cds":
                     if cdss[i].is_nucleic_acid:
                         continue # skip nucleic acid domains if we are reporting by CDS.
-                    cds_rec = slice_record_from_location(rec, cdss[i].feature.location, sources + [cdss[i].feature] + cdss[i].domain_features, truncate_features=True) #  get_cds_neighborhood(rec, cdss, i) # extract a single CDS.
+                    cds_rec = slice_record_from_location(rec, cdss[i].feature.location, sources + [cdss[i].feature] + cdss[i].domain_features) #  get_cds_neighborhood(rec, cdss, i) # extract a single CDS.
                     if source_filename:
                         cds_rec.annotations["_source_filename"] = source_filename
                     sub_recs.append(cds_rec)
@@ -695,7 +723,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                     cds_summary = cdss[i]
                     for domain in cds_summary.domain_features:
                         domain_name = domain.qualifiers["name"][0]
-                        domain_rec = slice_record_from_location(rec, domain.location, sources + [domain], truncate_features=True)
+                        domain_rec = slice_record_from_location(rec, domain.location, sources + [domain])
                         if source_filename:
                             domain_rec.annotations["_source_filename"] = source_filename
                         cds_names.append(cds_summary.name)
@@ -711,7 +739,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                 sources = get_sources(rec)
                 for feature in rec.features:
                     if feature.type == DOMAIN_FEATURE_NAME:
-                        domain_rec = slice_record_from_location(rec, feature.location, sources + [feature], truncate_features=True)
+                        domain_rec = slice_record_from_location(rec, feature.location, sources + [feature])
                         if source_filename:
                             domain_rec.annotations["_source_filename"] = source_filename
                         cds_names.append(" ")        
@@ -809,7 +837,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
                 "rank_lineage": { "columns": ["rank_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.ranks][1:]) }, # [1:] to remove root
                 }
     DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
-    STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory} # factories that take no arguments
+    STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory, "fragment": fragment_factory} # factories that take no arguments
     
     headers = ["contig"]
     column_types = ["str"]
@@ -985,6 +1013,9 @@ def main(argv):
     parser.add_argument('--molecular_weight', action='append_const', dest=COLS_ARG_NAME, const="molecular_weight",
                         help="Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.")
     
+    parser.add_argument('--fragment', action='append_const', dest=COLS_ARG_NAME, const="fragment",
+                        help=FRAGMENT_HELP)
+
     parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
                         help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
 

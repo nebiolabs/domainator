@@ -136,3 +136,15 @@ def test_stranded_coordinates_single_part():
     """
     for loc in (SimpleLocation(100, 200, 1), SimpleLocation(100, 200, -1)):
         _assert_stranded_human_readable_consistency(loc)
+
+@pytest.mark.parametrize("location", [FeatureLocation(1000, 1300, 1), FeatureLocation(1000, 1300, -1), FeatureLocation(100, 400, 1)])
+def test_simple_location_overlay_bounds(location):
+    """overlay bounds are relative to the feature, not to its position on the contig."""
+    assert location.overlay(0, 300) == location
+    if location.strand == -1:
+        assert location.overlay(30, 60) == FeatureLocation(1210, 1270, -1)
+    else:
+        assert location.overlay(30, 60) == FeatureLocation(int(location.start) + 30, int(location.start) + 90, 1)
+    for offset, length in [(150, 300), (0, 301), (-1, 10), (0, -1)]:
+        with pytest.raises(ValueError):
+            location.overlay(offset, length)

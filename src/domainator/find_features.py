@@ -511,7 +511,7 @@ def add_feature_annotations(
             # Map protein coordinates to nucleotide coordinates
             annot_length = (feat.end - feat.start) * 3
             try:
-                location = cds_feature.location.overlay(feat.start * 3, annot_length)
+                location = cds_feature.location.overlay(utils.codon_offset(cds_feature) + feat.start * 3, annot_length)
             except Exception as e:
                 warnings.warn(
                     f"Could not overlay location for {feat.name} on {contig.id}. "

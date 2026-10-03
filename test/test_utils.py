@@ -540,3 +540,173 @@ def test_committed_fixtures_with_sidecars_read_as_text(shared_datadir, fixture):
         assert not handle.is_pressed()
     assert [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(path)] == \
         [utils.pyhmmer_decode(h.name) for h in pyhmmer.plan7.HMMFile(path, db=False)]
+
+
+# --- partial ('<' / '>') locations, cut features, and fragment status ---
+
+from domainator.Bio.SeqFeature import BeforePosition, AfterPosition, ExactPosition
+
+_PARTIAL_TEST_SEQ = "AAAAAATGGCTAGCAAAGGTGAAGAACTGTTTACCGGTGTTGTGCCGATTCTGGTGGAACTGGATGGCAAAAAA" # 75 nt; ORF from 5 to 71
+
+
+def _partial_test_record(location, qualifiers=None, extra_features=()):
+    record = SeqRecord.SeqRecord(Seq.Seq(_PARTIAL_TEST_SEQ), id="partial_test", name="partial_test", description="partial test")
+    record.annotations["molecule_type"] = "DNA"
+    qualifiers = dict(qualifiers) if qualifiers is not None else {}
+    feature = SeqFeature(location, type="CDS", qualifiers=qualifiers)
+    if "translation" not in qualifiers:
+        feature.qualifiers["translation"] = [str(feature.translate(record.seq, cds=False))]
+    record.features = [SeqFeature(FeatureLocation(0, len(record), 1), type="source", qualifiers={})] + [feature] + list(extra_features)
+    return record
+
+
+def _sliced_cds(record):
+    return [f for f in record.features if f.type == "CDS"]
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+def test_slice_keeps_existing_partial_markers(strand):
+    record = _partial_test_record(FeatureLocation(BeforePosition(5), AfterPosition(71), strand=1))
+    sliced = utils.slice_record_from_location(record, FeatureLocation(2, 74, strand))
+    cds = _sliced_cds(sliced)[0]
+    if strand == 1:
+        assert str(cds.location) == "[<3:>69](+)"
+    else: # reverse complemented, so '<' and '>' swap ends
+        assert str(cds.location) == "[<3:>69](-)"
+    assert utils.get_fragment_status(cds) == "NC"
+    assert cds.qualifiers["translation"] == record.features[1].qualifiers["translation"]
+
+
+def test_slice_marks_cut_ends():
+    record = _partial_test_record(FeatureLocation(5, 71, strand=1))
+    cds = _sliced_cds(utils.slice_record_from_location(record, FeatureLocation(20, 74, 1)))[0]
+    assert str(cds.location) == "[<0:51](+)"
+    assert utils.get_fragment_status(cds) == "N"
+    cds = _sliced_cds(utils.slice_record_from_location(record, FeatureLocation(0, 40, 1)))[0]
+    assert str(cds.location) == "[5:>40](+)"
+    assert utils.get_fragment_status(cds) == "C"
+    # reverse slice: the cut 5' end of a forward CDS becomes the high coordinate, '>'
+    cds = _sliced_cds(utils.slice_record_from_location(record, FeatureLocation(20, 74, -1)))[0]
+    assert str(cds.location) == "[3:>54](-)"
+    assert utils.get_fragment_status(cds) == "N"
+    # source features don't get new markers
+    source = utils.slice_record_from_location(record, FeatureLocation(20, 74, 1)).features[0]
+    assert str(source.location) == "[0:54](+)"
+
+
+@pytest.mark.parametrize("cut", range(6, 13))
+@pytest.mark.parametrize("cds_strand", [1, -1])
+@pytest.mark.parametrize("slice_strand", [1, -1])
+@pytest.mark.parametrize("codon_start", [1, 2, 3])
+def test_slice_cut_cds_codon_start_and_translation(cut, cds_strand, slice_strand, codon_start):
+    record = _partial_test_record(FeatureLocation(5, 71, strand=cds_strand), qualifiers={"codon_start": [str(codon_start)]})
+    original = record.features[1]
+    # cut off the 5' end of the CDS
+    if cds_strand == 1:
+        slice_location = FeatureLocation(cut, len(record), slice_strand)
+    else:
+        slice_location = FeatureLocation(0, 71 + 5 - cut, slice_strand) # removes the same number of bases from the 5' end
+    sliced = utils.slice_record_from_location(record, slice_location)
+    cds = _sliced_cds(sliced)[0]
+    assert utils.get_fragment_status(cds) == "N"
+    removed = cut - 5
+    assert cds.qualifiers["codon_start"] == [str(((codon_start - 1 - removed) % 3) + 1)]
+    # the trimmed translation matches translating the cut CDS in its new frame
+    assert cds.qualifiers["translation"][0] == str(cds.translate(sliced.seq, cds=False))
+    assert original.qualifiers["translation"][0].endswith(cds.qualifiers["translation"][0])
+    # the parent record is unchanged
+    assert original.qualifiers["codon_start"] == [str(codon_start)]
+    assert str(original.location) == f"[5:71]({'+' if cds_strand == 1 else '-'})"
+
+
+def test_slice_cut_cds_3_prime():
+    record = _partial_test_record(FeatureLocation(5, 71, strand=1))
+    original_translation = record.features[1].qualifiers["translation"][0]
+    for end in range(40, 46):
+        sliced = utils.slice_record_from_location(record, FeatureLocation(0, end, 1))
+        cds = _sliced_cds(sliced)[0]
+        assert utils.get_fragment_status(cds) == "C"
+        assert "codon_start" not in cds.qualifiers
+        assert cds.qualifiers["translation"][0] == original_translation[:(end - 5) // 3]
+
+
+def test_slice_cut_cds_interior_removed_drops_translation():
+    location = CompoundLocation([FeatureLocation(5, 20, 1), FeatureLocation(30, 50, 1), FeatureLocation(60, 71, 1)], operator="join")
+    record = _partial_test_record(location)
+    slice_location = CompoundLocation([FeatureLocation(0, 25, 1), FeatureLocation(55, 75, 1)], operator="join")
+    cds = _sliced_cds(utils.slice_record_from_location(record, slice_location))[0]
+    assert "translation" not in cds.qualifiers
+
+
+def test_slice_drops_cut_domain_features():
+    domain = SeqFeature(FeatureLocation(10, 40, 1), type=DOMAIN_FEATURE_NAME, qualifiers={"name": ["d"], "cds_id": ["x"]})
+    best_hit = SeqFeature(FeatureLocation(30, 50, 1), type=DOMAIN_SEARCH_BEST_HIT_NAME, qualifiers={"name": ["d"], "cds_id": ["x"]})
+    record = _partial_test_record(FeatureLocation(5, 71, strand=1), extra_features=[domain, best_hit])
+    sliced = utils.slice_record_from_location(record, FeatureLocation(20, 75, 1))
+    assert [f.type for f in sliced.features] == ["source", "CDS", DOMAIN_SEARCH_BEST_HIT_NAME]
+    sliced = utils.slice_record_from_location(record, FeatureLocation(20, 75, 1), truncate_features=False)
+    assert [f.type for f in sliced.features] == ["source", DOMAIN_SEARCH_BEST_HIT_NAME]
+
+
+def test_merge_parts_keeps_partial_markers():
+    merged = CompoundLocation.merge_parts([FeatureLocation(BeforePosition(0), 10, 1), FeatureLocation(10, AfterPosition(20), 1)])
+    assert len(merged) == 1
+    assert isinstance(merged[0].start, BeforePosition)
+    assert isinstance(merged[0].end, AfterPosition)
+
+
+@pytest.mark.parametrize("location,status", [
+    (FeatureLocation(5, 71, 1), None),
+    (FeatureLocation(BeforePosition(5), 71, 1), "N"),
+    (FeatureLocation(5, AfterPosition(71), 1), "C"),
+    (FeatureLocation(5, AfterPosition(71), -1), "N"),
+    (FeatureLocation(BeforePosition(5), 71, -1), "C"),
+    (FeatureLocation(BeforePosition(5), AfterPosition(71), -1), "NC"),
+    (CompoundLocation([FeatureLocation(30, AfterPosition(71), -1), FeatureLocation(BeforePosition(5), 20, -1)]), "NC"),
+])
+def test_get_fragment_status_feature(location, status):
+    assert utils.get_fragment_status(SeqFeature(location, type="CDS")) == status
+
+
+@pytest.mark.parametrize("description,status", [
+    ("sp|P0AGD1|SODC_ECOLI Superoxide dismutase [Cu-Zn] OS=Escherichia coli (strain K12) OX=562 GN=sodC PE=1 SV=1", None),
+    ("tr|A0A0|A0A0_ECOLI Superoxide dismutase (Fragment) OS=Escherichia coli OX=562 GN=sodC PE=4 SV=1", "?"),
+    ("tr|A0A0|A0A0_ECOLI Superoxide dismutase (Fragments) OS=Escherichia coli OX=562 GN=sodC PE=4 SV=1", "?"),
+])
+def test_get_fragment_status_protein_description(description, status):
+    record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILALV"), id="p", description=description)
+    record.annotations["molecule_type"] = "protein"
+    assert utils.get_fragment_status(record) == status
+    record.annotations["molecule_type"] = "DNA" # nucleotide records have per-CDS fragment status
+    assert utils.get_fragment_status(record) is None
+
+
+def test_get_fragment_status_protein_cds_feature():
+    record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILALV"), id="p", description="p (Fragment)")
+    record.annotations["molecule_type"] = "protein"
+    record.features.append(SeqFeature(FeatureLocation(BeforePosition(0), 13, 1), type="CDS"))
+    assert utils.get_fragment_status(record) == "N" # the spanning CDS feature takes precedence over the description
+
+
+@pytest.mark.parametrize("translation,five_prime,three_prime,expected", [
+    ("MAKV", False, False, "MAKV"),
+    ("XXMAKV", False, False, "XXMAKV"), # not partial, left as is
+    ("XXMAKV", True, False, "AKV"), # complete 3' end without '*': the last codon is the omitted stop codon
+    ("XXMAK*", True, False, "MAK*"),
+    ("MAKVXX", False, True, "MAKV"),
+    ("XXMAKVXX", True, True, None),
+    ("MAK", True, True, "MAK"), # shorter than the location, left as is
+])
+def test_on_contig_translation(translation, five_prime, three_prime, expected):
+    assert utils.on_contig_translation(translation, 14, 2, five_prime, three_prime) == expected # 4 codons
+
+
+@pytest.mark.parametrize("status,include,exclude,only", [
+    (None, True, True, False),
+    ("N", True, False, True),
+    ("?", True, False, True),
+])
+def test_fragment_status_allowed(status, include, exclude, only):
+    assert utils.fragment_status_allowed(status, "include") == include
+    assert utils.fragment_status_allowed(status, "exclude") == exclude
+    assert utils.fragment_status_allowed(status, "only") == only

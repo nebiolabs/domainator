@@ -200,6 +200,21 @@
       ]
     },
     {
+      "name": "Partial",
+      "parameter": "partial",
+      "help": "Which proteins/CDSs to search, by fragment status. include: all. exclude: skip fragments. only: only fragments. CDSs with '<' or '>' in their location are fragments, as are protein records with a UniProt ' (Fragment)' or ' (Fragments)' header, or a CDS/Protein feature with '<' or '>' spanning the record.",
+      "type": "string",
+      "choices": [
+        "include",
+        "exclude",
+        "only"
+      ],
+      "default": "include",
+      "flags": [
+        "--partial"
+      ]
+    },
+    {
       "name": "Max Mode",
       "parameter": "max_mode",
       "help": "Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.",

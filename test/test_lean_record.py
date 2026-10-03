@@ -322,3 +322,22 @@ def test_nucleotide_contig_searchable_bypass(shared_datadir):
     assert whole is not None
     assert _nucleotide_contig_searchable(s206, frozenset({whole}))
     assert not _nucleotide_contig_searchable(s206, frozenset({whole + 1}))
+
+
+@pytest.mark.skipif(not utils.native_parser_available(), reason="native parser not built")
+def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
+    """LeanFastaContig.fragment() and LeanSearchContig.fragment() agree with utils.get_fragment_status."""
+    from domainator import _gbfast
+    fasta = tmp_path / "fragments.fasta"
+    fasta.write_text(
+        ">a protein one OS=Escherichia coli OX=562\nMKRFSLAILALV\n"
+        ">b protein two (Fragment) OS=Escherichia coli OX=562\nMKRFSLAILALV\n"
+        ">c protein three (Fragments) OS=Escherichia coli OX=562\nMKRFSLAILALV\n"
+    )
+    native, _, _ = _gbfast.parse_fasta_search(str(fasta), 0, -1, "protein", False)
+    python = list(utils.parse_seqfiles([str(fasta)], default_molecule_type="protein", genbank_parser="biopython"))
+    assert [r.fragment() for r in native] == [utils.get_fragment_status(r) for r in python] == [None, "?", "?"]
+
+    native, _, _ = _gbfast.parse_lean_search(str(shared_datadir / "JABFVH010000506_extraction.gb"), 0, -1, None, False)
+    assert native[0].fragment() is None # nucleotide records have per-CDS fragment status
+    assert [i for i, _ in native[0].cds_peptides(set(), "exclude")] != [i for i, _ in native[0].cds_peptides(set(), "only")]

@@ -206,17 +206,119 @@ fn translation_value(feature: &gb_io::seq::Feature) -> Option<&str> {
 /// "unidentified" taxid; matches utils.get_taxid's default for records lacking a taxon.
 const UNIDENTIFIED_TAXID: i64 = 32644;
 
-/// Alnum-filtered peptide for a CDS feature: the /translation if present, else the
-/// translated spliced nucleotide sequence. Shared by cds_peptides{,_with_taxid}.
+/// 0-based reading frame offset from a feature's /codon_start (0 if absent or invalid),
+/// matching utils.codon_offset.
+fn codon_offset(feature: &gb_io::seq::Feature) -> usize {
+    feature
+        .qualifiers
+        .iter()
+        .find(|(k, _)| k == "codon_start")
+        .and_then(|(_, v)| v.as_deref())
+        .and_then(|v| v.trim_matches('"').trim().parse::<usize>().ok())
+        .filter(|n| (1..=3).contains(n))
+        .map(|n| n - 1)
+        .unwrap_or(0)
+}
+
+/// (five_prime_partial, three_prime_partial, location length) in transcript
+/// orientation, matching utils.location_partial_ends. None for unmodeled locations.
+fn partial_ends(loc: &Location) -> Option<(bool, bool, i64)> {
+    let (_op, between, parts) = lean_location(loc, 1)?;
+    if between || parts.is_empty() {
+        return Some((false, false, 0));
+    }
+    let (_s, _e, first_strand, first_before, first_after) = parts[0];
+    let (_s, _e, last_strand, last_before, last_after) = parts[parts.len() - 1];
+    let five = if first_strand == -1 { first_after } else { first_before };
+    let three = if last_strand == -1 { last_before } else { last_after };
+    let len = parts.iter().map(|(s, e, ..)| e - s).sum();
+    Some((five, three, len))
+}
+
+/// Fragment status from partial ends: None (complete), "N", "C", or "NC"
+/// (utils.partial_ends_to_status).
+fn partial_status(five: bool, three: bool) -> Option<String> {
+    match (five, three) {
+        (false, false) => None,
+        (true, false) => Some("N".to_string()),
+        (false, true) => Some("C".to_string()),
+        (true, true) => Some("NC".to_string()),
+    }
+}
+
+/// Whether a protein/CDS with this fragment status passes a --partial filter
+/// (utils.fragment_status_allowed).
+fn partial_allowed(is_fragment: bool, partial: &str) -> bool {
+    match partial {
+        "exclude" => !is_fragment,
+        "only" => is_fragment,
+        _ => true,
+    }
+}
+
+/// UniProt FASTA headers flag partial proteins with one of these tokens (utils.FRAGMENT_TOKENS).
+const FRAGMENT_TOKENS: [&str; 2] = [" (Fragment)", " (Fragments)"];
+
+fn description_is_fragment(desc: &str) -> bool {
+    FRAGMENT_TOKENS.iter().any(|t| desc.contains(t))
+}
+
+/// Restrict a partial CDS's translation to the residues encoded on the contig,
+/// matching utils.on_contig_translation. None when the excess can't be placed
+/// (both ends partial).
+fn on_contig_translation(tr: &str, loc_len: i64, offset: usize, five: bool, three: bool) -> Option<String> {
+    let chars: Vec<char> = tr.chars().collect();
+    let mut expected = ((loc_len - offset as i64).max(0) / 3) as usize;
+    if !three && !tr.ends_with('*') {
+        expected = expected.saturating_sub(1); // the stop codon is not in the translation
+    }
+    if chars.len() <= expected || !(five || three) {
+        return Some(tr.to_string());
+    }
+    let excess = chars.len() - expected;
+    if five && !three {
+        return Some(chars[excess..].iter().collect());
+    }
+    if three && !five {
+        return Some(chars[..expected].iter().collect());
+    }
+    None
+}
+
+/// Translate a feature from the contig, starting at its /codon_start frame
+/// (Biopython's SeqFeature.translate, as used by clean_rec).
+fn translate_feature(feature: &gb_io::seq::Feature, seq: &[u8]) -> String {
+    match extract_location_seq(&feature.location, seq) {
+        Some(nt) => translate_dna(&nt[codon_offset(feature).min(nt.len())..]),
+        None => String::new(),
+    }
+}
+
+/// Alnum-filtered peptide for a CDS feature: the on-contig part of the /translation
+/// if present, else the translated spliced nucleotide sequence. Shared by
+/// cds_peptides{,_with_taxid}; mirrors utils.normalize_cds_translation.
 fn cds_peptide(feature: &gb_io::seq::Feature, seq: &[u8]) -> String {
     let raw = match translation_value(feature) {
-        Some(tr) => tr.to_string(),
-        None => match extract_location_seq(&feature.location, seq) {
-            Some(nt) => translate_dna(&nt),
-            None => String::new(),
-        },
+        Some(tr) => {
+            let tr: String = tr.chars().filter(|c| !c.is_whitespace()).collect();
+            let (five, three, len) = partial_ends(&feature.location).unwrap_or((false, false, 0));
+            match on_contig_translation(&tr, len, codon_offset(feature), five, three) {
+                Some(t) => t,
+                None => translate_feature(feature, seq),
+            }
+        }
+        None => translate_feature(feature, seq),
     };
     raw.chars().filter(|c| c.is_ascii_alphanumeric()).collect()
+}
+
+/// Whether a CDS passes a --partial filter, from its location's '<' / '>' markers.
+fn cds_partial_allowed(feature: &gb_io::seq::Feature, partial: &str) -> bool {
+    if partial == "include" {
+        return true;
+    }
+    let (five, three, _len) = partial_ends(&feature.location).unwrap_or((false, false, 0));
+    partial_allowed(five || three, partial)
 }
 
 /// Parse the integer from a feature's /db_xref="taxon:NNN" qualifier (first match).
@@ -489,14 +591,16 @@ impl LeanSearchContig {
     /// CDS peptides for the search as (surviving_feature_index, peptide). Indices
     /// are over the post-drop feature list so they match `materialize(dropped)`.
     /// Peptides are alnum-filtered to match get_prot_list.
-    fn cds_peptides(&self, dropped: HashSet<String>) -> Vec<(usize, String)> {
+    /// CDSs excluded by `partial` ("include", "exclude", or "only") are skipped.
+    #[pyo3(signature = (dropped, partial="include"))]
+    fn cds_peptides(&self, dropped: HashSet<String>, partial: &str) -> Vec<(usize, String)> {
         let mut out = Vec::new();
         let mut idx = 0usize;
         for feature in &self.seq.features {
             if !dropped.is_empty() && dropped.contains(feature.kind.as_ref()) {
                 continue;
             }
-            if is_searchable_cds(feature) {
+            if is_searchable_cds(feature) && cds_partial_allowed(feature, partial) {
                 out.push((idx, cds_peptide(feature, &self.seq.seq)));
             }
             idx += 1;
@@ -508,7 +612,8 @@ impl LeanSearchContig {
     /// feature whose location covers the CDS (UNIDENTIFIED_TAXID if covered by a source
     /// with no taxon, None if no source covers it). Used for pre-hmmer taxonomy filtering;
     /// kept separate so the no-filter path pays nothing.
-    fn cds_peptides_with_taxid(&self, dropped: HashSet<String>) -> Vec<(usize, String, Option<i64>)> {
+    #[pyo3(signature = (dropped, partial="include"))]
+    fn cds_peptides_with_taxid(&self, dropped: HashSet<String>, partial: &str) -> Vec<(usize, String, Option<i64>)> {
         let sources = collect_sources(&self.seq.features);
         let mut out = Vec::new();
         let mut idx = 0usize;
@@ -516,7 +621,7 @@ impl LeanSearchContig {
             if !dropped.is_empty() && dropped.contains(feature.kind.as_ref()) {
                 continue;
             }
-            if is_searchable_cds(feature) {
+            if is_searchable_cds(feature) && cds_partial_allowed(feature, partial) {
                 let taxid = location_intervals(&feature.location)
                     .and_then(|iv| longest_covering(&sources, &iv))
                     .map(|src| src.taxon.unwrap_or(UNIDENTIFIED_TAXID));
@@ -548,6 +653,35 @@ impl LeanSearchContig {
     /// utils.get_taxid's whole-record rule.
     fn taxid(&self) -> Option<i64> {
         collect_sources(&self.seq.features).first().and_then(|s| s.taxon)
+    }
+
+    /// Fragment status of a protein record, matching utils.get_fragment_status: a CDS
+    /// or Protein feature spanning the record decides ("N", "C", "NC", or None),
+    /// otherwise a UniProt fragment token in the DEFINITION gives "?". None for
+    /// nucleotide records, whose fragment status is per-CDS.
+    fn fragment(&self) -> Option<String> {
+        if self.molecule_type().as_deref() != Some("protein") {
+            return None;
+        }
+        let len = self.seq.seq.len() as i64;
+        for feature in &self.seq.features {
+            let kind = feature.kind.as_ref();
+            if kind != "CDS" && kind != "Protein" {
+                continue;
+            }
+            if let Some((_op, _between, parts)) = lean_location(&feature.location, 1) {
+                let start = parts.iter().map(|p| p.0).min().unwrap_or(0);
+                let end = parts.iter().map(|p| p.1).max().unwrap_or(0);
+                if start == 0 && end >= len {
+                    let (five, three, _len) = partial_ends(&feature.location).unwrap_or((false, false, 0));
+                    return partial_status(five, three);
+                }
+            }
+        }
+        match &self.seq.definition {
+            Some(d) if description_is_fragment(d) => Some("?".to_string()),
+            _ => None,
+        }
     }
 
     /// Build the full record header tuple + LeanFeature list (hit path only),
@@ -678,13 +812,24 @@ impl LeanFastaContig {
 
     /// FASTA records have no CDS features; the protein sequence (if any) is taken
     /// from `.seq` by get_prot_list, and nucleotide records are searched whole.
-    fn cds_peptides(&self, _dropped: HashSet<String>) -> Vec<(usize, String)> {
+    #[pyo3(signature = (_dropped, _partial="include"))]
+    fn cds_peptides(&self, _dropped: HashSet<String>, _partial: &str) -> Vec<(usize, String)> {
         Vec::new()
     }
 
     /// Per-record taxid from the description's ` OX=` / ` TaxID=` token (None if absent).
     fn taxid(&self) -> Option<i64> {
         parse_ox_taxid(&self.description)
+    }
+
+    /// Fragment status from the description's UniProt ` (Fragment)` / ` (Fragments)`
+    /// token: "?" (missing ends unknown) or None. Matches utils.get_fragment_status.
+    fn fragment(&self) -> Option<String> {
+        if self.molecule_type.as_deref() == Some("protein") && description_is_fragment(&self.description) {
+            Some("?".to_string())
+        } else {
+            None
+        }
     }
 
     /// Materialize to the fields a minimal LeanContig is built from on the Python

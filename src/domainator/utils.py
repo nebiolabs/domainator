@@ -6,7 +6,7 @@ warnings.filterwarnings("ignore", module='numpy')
 from domainator.Bio import SeqIO, BiopythonParserWarning, BiopythonWarning
 from domainator.Bio import bgzf
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition
+from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition, BeforePosition, AfterPosition
 import gzip
 from domainator import lean_record
 from domainator import db_index
@@ -1821,10 +1821,53 @@ def pad_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], 
                     return out_location
 
                 
-def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], features:Iterable[SeqFeature]=None, pad_upstream:int = 0, pad_downstream:int = 0, truncate_features=False) -> SeqRecord:
+def _merge_intervals(intervals:List[Tuple[int,int]]) -> List[Tuple[int,int]]:
+    """
+        Merges touching or overlapping (start, end) intervals. Returns them sorted by start.
+    """
+    merged = list()
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+def _truncate_cds_qualifiers(feature:SeqFeature, kept_intervals:List[Tuple[int,int]]) -> Dict[str, List]:
+    """
+        Returns a copy of a CDS feature's qualifiers, updated for a CDS that was cut by slicing.
+
+        codon_start is updated so that the reading frame is preserved, and the translation is trimmed to the residues
+        whose codons are completely kept. If the kept part of the CDS is not contiguous (e.g. an interior exon was cut out),
+        or the translation can't be placed on the CDS, the translation is removed, so that it will be re-translated.
+
+        Args:
+            feature: the original (uncut) CDS feature
+            kept_intervals: the kept parts of the CDS, as merged (start, end) intervals along the CDS, 5' to 3'
+    """
+    qualifiers = feature.qualifiers.copy()
+    offset = codon_offset(feature)
+    kept_start, kept_end = kept_intervals[0][0], kept_intervals[-1][1]
+    new_codon_start = ((offset - kept_start) % 3) + 1
+    if new_codon_start != 1 or "codon_start" in qualifiers:
+        qualifiers["codon_start"] = [str(new_codon_start)]
+
+    translation = qualifiers.get("translation", [""])[0]
+    if len(translation) != 0:
+        five_prime, three_prime = location_partial_ends(feature.location)
+        translation = on_contig_translation(str(translation), len(feature.location), offset, five_prime, three_prime)
+    if len(kept_intervals) != 1 or translation is None:
+        qualifiers.pop("translation", None)
+    elif len(translation) != 0:
+        first_residue = max(0, -(-(kept_start - offset) // 3)) # first codon that starts at or after kept_start
+        last_residue = max(0, (kept_end - offset) // 3) # codons that end at or before kept_end
+        qualifiers["translation"] = [translation[first_residue:last_residue]]
+    return qualifiers
+
+def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], features:Iterable[SeqFeature]=None, pad_upstream:int = 0, pad_downstream:int = 0, truncate_features=True) -> SeqRecord:
     """Extract a sub-record from supplied parent record using the location of the SeqFeature object.
         Output record will have the same id, name, description, dbxrefs, and annotations as the parent record.
-        Output record will have the same features as the parent record, except that features that are not completely contained in the location will be removed.
+        Output record will have the same features as the parent record, truncated to the location (see truncate_features).
         Output record will have the same letter annotations as the parent record, except that the letter annotations will be sliced to match the sliced sequence.
 
         sub-parts of the location will be extracted from the parent record, and then concatenated together to form the output record.
@@ -1846,9 +1889,11 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
         features (Iterable[SeqFeature]): subset of features to slice. If None, all features will be sliced.
         pad_upstream (int): number of bases/residues to pad upstream of the location
         pad_downstream (int): number of bases/residues to pad downstream of the location
-        truncate_features (bool): if True, then features that are not completely contained in the location will 
-            be removed from the output record. If False, then features that are not completely contained in the location will be 
-            included in the output record, but will be truncated to the size of the location. "source" features will always be included, regardless of this setting.
+        truncate_features (bool): if True, then features that are not completely contained in the location will be
+            included in the output record, truncated to the size of the location, with '<' or '>' markers on the cut ends.
+            Cut CDSs get an updated codon_start and a translation trimmed to the kept codons. Cut Domainator hit features are dropped.
+            If False, then features that are not completely contained in the location will be removed from the output record.
+            "source" features will always be included (without new markers), regardless of this setting.
 
         Returns:
             SeqRecord: sliced record
@@ -1897,8 +1942,11 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
         
         seq_parts_len += len(seq_parts[-1])
     
-    # include features if they completely overlap with the location, or they are a source feature
+    is_protein = r.annotations.get("molecule_type") == "protein"
+    # include features that overlap the location. Features cut by the edge of the location are truncated, and the cut ends get '<' or '>' markers.
+    # Domain hit features that are cut are dropped, because their scores and coordinates describe the whole hit.
     for f in features:
+        is_hit_feature = f.type == DOMAIN_FEATURE_NAME or f.type == DOMAIN_SEARCH_BEST_HIT_NAME
         f_parts = f.location.parts
         overlap = [set() for _ in range(len(f_parts))] # list of sets of indices of location parts that overlap with the feature part
         total_overlap = 0
@@ -1916,29 +1964,65 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
                     overlap[feature_part_index].add(loc_part_index)
                     part_found = True
                 elif f.type == "source" or truncate_features: # part is partially contained in loc_part
-                    if regions_overlap((f_start, f_end), (loc_start, loc_end)): #TODO: should only be overlap for source features, all other features should be completely contained.
+                    if regions_overlap((f_start, f_end), (loc_start, loc_end)):
                         overlap[feature_part_index].add(loc_part_index)
                         part_found = True
             if part_found:
                 total_overlap += 1
         if total_overlap == len(f_parts) or f.type == "source" or truncate_features:
-            new_parts = list()
+            # Collect the kept pieces of the feature: one per (feature part, location part) overlap.
+            # Each piece also gets its interval in coordinates along the feature (5' to 3'), to find the ends that are really cut,
+            # as opposed to pieces that continue in another location part (e.g. a feature split across the origin of a rotated contig).
+            pieces = list()
+            transcript_offset = 0
             for feature_part_index, f_part in enumerate(f_parts):
                 f_start = int(f_part.start)
                 f_end = int(f_part.end)
-                for loc_part_index in overlap[feature_part_index]:
+                for loc_part_index in sorted(overlap[feature_part_index]):
                     loc_part = location.parts[loc_part_index]
-                    loc_start = int(loc_part.start)
-                    loc_end = int(loc_part.end)
-                    loc_part_strand = strands[loc_part_index]
-                    
-                    new_start = max(f_start - loc_start, 0) # if the feature does not completely overlap with the extracted region, only include the part that does
-                    new_end = min(f_end-loc_start, loc_end-loc_start)
-                    new_loc = FeatureLocation(new_start, new_end, strand=f_part.strand)
-                    if loc_part_strand == -1:
-                        new_loc = new_loc._flip(loc_end-loc_start)
-                    new_loc = new_loc._shift(coord_shifts[loc_part_index])
-                    new_parts.append(new_loc)
+                    kept_start = max(f_start, int(loc_part.start))
+                    kept_end = min(f_end, int(loc_part.end))
+                    if f_part.strand == -1:
+                        transcript_interval = (transcript_offset + f_end - kept_end, transcript_offset + f_end - kept_start)
+                    else:
+                        transcript_interval = (transcript_offset + kept_start - f_start, transcript_offset + kept_end - f_start)
+                    pieces.append((transcript_interval, f_part, loc_part_index, kept_start, kept_end))
+                transcript_offset += f_end - f_start
+            transcript_intervals = _merge_intervals([piece[0] for piece in pieces])
+            is_cut = sum(end - start for start, end in transcript_intervals) < transcript_offset
+            if is_cut and is_hit_feature:
+                continue
+            cut_5p_ends = {start for start, end in transcript_intervals if start > 0}
+            cut_3p_ends = {end for start, end in transcript_intervals if end < transcript_offset}
+
+            new_parts = list()
+            for (t_start, t_end), f_part, loc_part_index, kept_start, kept_end in sorted(pieces, key=lambda piece: piece[0]): # in order along the feature
+                loc_part = location.parts[loc_part_index]
+                loc_start = int(loc_part.start)
+                loc_end = int(loc_part.end)
+                if f_part.strand == -1:
+                    start_is_cut, end_is_cut = t_end in cut_3p_ends, t_start in cut_5p_ends
+                else:
+                    start_is_cut, end_is_cut = t_start in cut_5p_ends, t_end in cut_3p_ends
+                # Ends of the original feature keep their position type (e.g. an existing '<' or '>').
+                # Ends that are really cut get a new '<' or '>', except on source features.
+                if kept_start == int(f_part.start):
+                    new_start = f_part.start + (-loc_start)
+                elif start_is_cut and f.type != "source":
+                    new_start = BeforePosition(kept_start - loc_start)
+                else:
+                    new_start = ExactPosition(kept_start - loc_start)
+                if kept_end == int(f_part.end):
+                    new_end = f_part.end + (-loc_start)
+                elif end_is_cut and f.type != "source":
+                    new_end = AfterPosition(kept_end - loc_start)
+                else:
+                    new_end = ExactPosition(kept_end - loc_start)
+                new_loc = FeatureLocation(new_start, new_end, strand=f_part.strand)
+                if strands[loc_part_index] == -1:
+                    new_loc = new_loc._flip(loc_end-loc_start)
+                new_loc = new_loc._shift(coord_shifts[loc_part_index])
+                new_parts.append(new_loc)
             # Merge parts that are adjacent or overlap
             if getattr(f.location, "operator", None) == "join" or getattr(f.location, "operator", None) is None: # only merge parts if the original location was a join or not a CompoundLocation (for example, an origin-spanning source) TODO: should we merge parts for any other operators?
                 new_parts = CompoundLocation.merge_parts(new_parts) # TODO: There are some edge cases where this will merge things that maybe users won't want to merge, but it's better than not merging at all. Can fix later if anyone complains.
@@ -1951,11 +2035,14 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
                 elif len(new_parts) > 1:
                     new_operator = getattr(f.location, "operator", "join")
                     new_location = CompoundLocation(new_parts, new_operator) 
+                qualifiers = f.qualifiers
+                if is_cut and f.type == "CDS" and not is_protein:
+                    qualifiers = _truncate_cds_qualifiers(f, transcript_intervals)
                 new_feature = f.__class__(
                     new_location,
                     type=f.type,
                     id=f.id,
-                    qualifiers=f.qualifiers,
+                    qualifiers=qualifiers,
                 )
                 new_features.append(new_feature)
     # TODO: handle other partially cut annotations
@@ -2031,6 +2118,137 @@ def get_taxid(record:SeqRecord) -> Optional[int]:
                         except ValueError:
                             pass
     return taxid
+
+# UniProt FASTA headers flag partial proteins with one of these tokens before " OS=".
+FRAGMENT_TOKENS = (" (Fragment)", " (Fragments)")
+
+def location_partial_ends(location) -> Tuple[bool, bool]:
+    """
+        Returns (five_prime_partial, three_prime_partial) for a location, in transcript orientation.
+        A '<' or '>' marker on the outer end of the first part (5') or last part (3') makes that end partial.
+    """
+    first = location.parts[0]
+    last = location.parts[-1]
+    if first.strand == -1:
+        five_prime = isinstance(first.end, AfterPosition)
+    else:
+        five_prime = isinstance(first.start, BeforePosition)
+    if last.strand == -1:
+        three_prime = isinstance(last.start, BeforePosition)
+    else:
+        three_prime = isinstance(last.end, AfterPosition)
+    return five_prime, three_prime
+
+def feature_partial_ends(feature:Union[SeqFeature, "lean_record.LeanFeature"]) -> Tuple[bool, bool]:
+    """
+        location_partial_ends for a SeqFeature or a LeanFeature.
+    """
+    if isinstance(feature, lean_record.LeanFeature):
+        return feature.partial_ends
+    return location_partial_ends(feature.location)
+
+def partial_ends_to_status(five_prime:bool, three_prime:bool) -> Optional[str]:
+    """
+        Converts partial end flags to a fragment status: None (complete), "N", "C", or "NC".
+    """
+    status = ("N" if five_prime else "") + ("C" if three_prime else "")
+    return status if status else None
+
+def get_fragment_status(record_or_feature:Union[SeqRecord, SeqFeature]) -> Optional[str]:
+    """
+        Returns the fragment status of a CDS feature or a protein record:
+            None: complete (or nucleotide record, whose fragment status is per-CDS)
+            "N": missing the N-terminus (5' partial)
+            "C": missing the C-terminus (3' partial)
+            "NC": missing both ends
+            "?": a fragment with unknown missing ends (UniProt " (Fragment)" header)
+
+        For a protein record, a CDS or Protein feature spanning the record (e.g. from domain_search --translate, or GenPept)
+        decides, otherwise the UniProt fragment token in the description does.
+    """
+    if isinstance(record_or_feature, (SeqFeature, lean_record.LeanFeature)):
+        return partial_ends_to_status(*feature_partial_ends(record_or_feature))
+    record = record_or_feature
+    if record.annotations.get("molecule_type") != "protein":
+        return None
+    for feature in record.features:
+        if feature.type in ("CDS", "Protein"):
+            if isinstance(feature, lean_record.LeanFeature):
+                start, end = feature.start, feature.end
+            else:
+                start, end = int(feature.location.start), int(feature.location.end)
+            if start == 0 and end >= len(record):
+                return partial_ends_to_status(*feature_partial_ends(feature))
+    if description_is_fragment(record.description):
+        return "?"
+    return None
+
+def description_is_fragment(description:str) -> bool:
+    """
+        True if a description carries a UniProt fragment token.
+    """
+    return any(token in description for token in FRAGMENT_TOKENS)
+
+def fragment_status_allowed(status:Optional[str], partial:str) -> bool:
+    """
+        Whether a protein/CDS with the given fragment status passes a --partial filter ("include", "exclude", or "only").
+    """
+    if partial == "include":
+        return True
+    elif partial == "exclude":
+        return status is None
+    elif partial == "only":
+        return status is not None
+    raise ValueError(f"partial must be one of include, exclude, only, not {partial}")
+
+def codon_offset(feature:SeqFeature) -> int:
+    """
+        Returns the 0-based reading frame offset of a CDS from its codon_start qualifier (0 if absent or invalid).
+    """
+    try:
+        offset = int(feature.qualifiers.get("codon_start", ["1"])[0]) - 1
+    except ValueError:
+        return 0
+    return offset if 0 <= offset <= 2 else 0
+
+def on_contig_translation(translation:str, location_length:int, offset:int, five_prime_partial:bool, three_prime_partial:bool) -> Optional[str]:
+    """
+        Restricts a partial CDS's translation to the residues encoded on the contig.
+
+        Some files give partial CDSs the translation of the full protein, including residues off the edge of the contig.
+        If the translation is longer than the on-contig coding sequence allows, the excess is removed from the partial end.
+        A complete 3' end ends in a stop codon, which GenBank translations omit, but Domainator's own translations include as '*'.
+
+        Returns:
+            the on-contig translation, or None if the excess can't be placed (both ends partial).
+    """
+    expected = (location_length - offset) // 3
+    if not three_prime_partial and not translation.endswith("*"):
+        expected -= 1 # the stop codon is not in the translation
+    excess = len(translation) - expected
+    if excess <= 0 or not (five_prime_partial or three_prime_partial):
+        return translation
+    if five_prime_partial and not three_prime_partial:
+        return translation[excess:]
+    if three_prime_partial and not five_prime_partial:
+        return translation[:expected]
+    return None
+
+def normalize_cds_translation(feature:SeqFeature, contig_seq) -> None:
+    """
+        Sets feature's translation qualifier to the on-contig translation: translated from contig_seq if absent or empty,
+        and trimmed if it includes residues off the edge of the contig (see on_contig_translation).
+    """
+    translation = feature.qualifiers.get("translation", [""])[0]
+    if len(translation) != 0:
+        five_prime, three_prime = location_partial_ends(feature.location)
+        translation = on_contig_translation(translation, len(feature.location), codon_offset(feature), five_prime, three_prime)
+        if translation is None:
+            warnings.warn(f"Translation of partial CDS {get_cds_unique_name(feature)} is longer than its location, and both ends are partial. Re-translating from the contig.")
+            translation = ""
+    if len(translation) == 0:
+        translation = str(feature.translate(contig_seq, cds=False)) # cds = False, because we don't want to throw exceptions on weird annotations.
+    feature.qualifiers["translation"] = [translation]
 
 _UNIDENTIFIED_TAXID = 32644  # "unidentified", get_taxid's default for records lacking a taxid
 

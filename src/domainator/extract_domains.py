@@ -123,7 +123,7 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                 else:
                     splice_location = CompoundLocation(merged_parts, operator="join")
 
-                new_rec = slice_record_from_location(rec, splice_location, truncate_features=True) # slice_record_from_location handles maintaining source and taxonomy annotations.
+                new_rec = slice_record_from_location(rec, splice_location) # slice_record_from_location handles maintaining source and taxonomy annotations.
                 if rec.annotations.get("topology", None) == "circular":
                     new_rec.annotations["topology"] = "circular"
 

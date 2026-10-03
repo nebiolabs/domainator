@@ -17,10 +17,10 @@ import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import List, Optional, Dict, Set
 from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, CompoundLocation
+from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, CompoundLocation, BeforePosition, AfterPosition
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.Seq import Seq
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, DomainatorCDS, get_sources, copy_feature, slice_record_from_location
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, DomainatorCDS, get_sources, copy_feature, slice_record_from_location, codon_offset
 import warnings
 from domainator.Bio import SeqIO
 from domainator import __version__, RawAndDefaultsFormatter
@@ -35,13 +35,25 @@ from itertools import chain
 #     record.annotations["molecule_type"] = "protein"
 #     return record
 
-def dna_to_peptide_location(location):
+def _dna_to_peptide_position(position, offset):
+    """Converts a nucleotide position (relative to the start of the CDS) to a peptide position, keeping '<' and '>' markers."""
+    peptide_position = max(0, (int(position) - offset) // 3)
+    if isinstance(position, BeforePosition):
+        return BeforePosition(peptide_position)
+    if isinstance(position, AfterPosition):
+        return AfterPosition(peptide_position)
+    return peptide_position
 
+def dna_to_peptide_location(location, offset=0):
+    """
+        Converts a nucleotide location, relative to the start of a CDS, to peptide coordinates.
+        offset is the reading frame offset of the CDS (codon_start - 1).
+    """
     if isinstance(location, CompoundLocation):
-        return CompoundLocation([dna_to_peptide_location(part)
+        return CompoundLocation([dna_to_peptide_location(part, offset)
                                     for part in location.parts], operator=location.operator)
-    start = int(location.start) // 3
-    end = int(location.end) // 3
+    start = _dna_to_peptide_position(location.start, offset)
+    end = _dna_to_peptide_position(location.end, offset)
     return FeatureLocation(start, end, strand=location.strand)
 
 def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss, keep_cds_feature=True, cds_id_type="name", search_hits=False, strand=None, unannotated=False, _from_domain_search=False, extract_all=False, invert=False, _domain_search_negatives:Optional[Set[str]]=None, databases=None, keep_name=False, name_field=None):
@@ -116,14 +128,15 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
 
                     if "translation" in cds_feature_tmp.qualifiers: # remove the translation qualifier, because it's not necessary in the output
                         del cds_feature_tmp.qualifiers["translation"]
+                    cds_feature_tmp.qualifiers.pop("codon_start", None) # the reading frame is meaningless in peptide coordinates
                     
                     features = chain(source_features, (x for x in (cds.domain_search_feature,) if x is not None), cds.domain_features, (cds_feature_tmp,))
                 else:
                     features = chain(source_features, (x for x in (cds.domain_search_feature,) if x is not None), cds.domain_features)
                 
-                contig_slice = slice_record_from_location(contig, cds.feature.location, features, truncate_features=True)
+                contig_slice = slice_record_from_location(contig, cds.feature.location, features)
                 if ('translation' not in cds.feature.qualifiers) or (len(cds.feature.qualifiers["translation"][0]) == 0):
-                    peptide = Seq.translate(contig_slice.seq, cds=False) # cds=False because we don't want to throw errors on weird stuff.
+                    peptide = Seq.translate(contig_slice.seq[codon_offset(cds.feature):], cds=False) # cds=False because we don't want to throw errors on weird stuff.
                 else:
                     peptide = Seq(cds.feature.qualifiers["translation"][0])
 
@@ -144,7 +157,7 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
 
                 rec.features = list()
                 for feature in contig_slice.features:
-                    feature.location = dna_to_peptide_location(feature.location)
+                    feature.location = dna_to_peptide_location(feature.location, codon_offset(cds.feature))
                     rec.features.append(feature)
 
                 if _from_domain_search:

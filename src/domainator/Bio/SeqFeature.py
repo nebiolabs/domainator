@@ -1399,8 +1399,12 @@ class SimpleLocation(Location):
 
             returns a new SimpleLocation object
         """
-        if offset + length > self.end: #TODO: warnings.warn("overlay is out of bounds")  .  not sure if this should raise an exception, or just go to the end of the location, or maybe go out of bounds?
-            raise ValueError("overlay is out of bounds")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        if length < 0:
+            raise ValueError("length must be >= 0")
+        if offset + length > len(self):
+            raise ValueError("offset + length must be <= len(self)")
         
         if self.strand == -1:
             return __class__(self.end - offset - length, self.end - offset, self.strand)
@@ -2025,7 +2029,8 @@ class CompoundLocation(Location):
         for part in parts[1:]:
             if part.strand == merged_parts[-1].strand:
                 if part.touches(merged_parts[-1]):
-                    merged_parts[-1] = SimpleLocation(min(int(merged_parts[-1].start), int(part.start)), max(int(part.end), (merged_parts[-1].end)), strand=part.strand)
+                    # keep the position objects, so that '<' and '>' markers on the outer ends survive the merge
+                    merged_parts[-1] = SimpleLocation(min(merged_parts[-1].start, part.start, key=int), max(merged_parts[-1].end, part.end, key=int), strand=part.strand)
                 else:
                     merged_parts.append(part)
             else:

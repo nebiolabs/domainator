@@ -544,6 +544,21 @@
         "value": "molecular_weight"
       },
       "target_parameter": "output_cols"
+    },
+    {
+      "name": "Fragment",
+      "parameter": "output_cols__fragment",
+      "help": "Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, from a UniProt ' (Fragment)' header). Nucleotide contigs reported by contig are complete.",
+      "type": "boolean",
+      "flags": [
+        "--fragment"
+      ],
+      "behavior": "append_const",
+      "append_const": {
+        "target": "output_cols",
+        "value": "fragment"
+      },
+      "target_parameter": "output_cols"
     }
   ],
   "advanced_parameters": [

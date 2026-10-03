@@ -64,7 +64,7 @@ def _init_search_worker(reference_paths, foldseek_paths, allowed_taxids):
 
 class _domain_search_worker():
 
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None):
+    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include"):
 
         self.z = z
         self.evalue = evalue
@@ -89,6 +89,7 @@ class _domain_search_worker():
         self.strand = strand
         self.decoy_names = decoy_names
         self.max_hits_per_contig = max_hits_per_contig
+        self.partial = partial
         # When max_hits is set, each worker keeps only its own top-max_hits records
         # (by best domain score) before returning, so the parent receives at most
         # O(workers * max_hits) records to merge instead of every hit. The global
@@ -110,7 +111,7 @@ class _domain_search_worker():
                 max_overlap: The maximum fractional of overlap to be allowed between domains
                 add_annotations: When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.
                 cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the CDS hits
-                kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output.
+                kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends.
                 whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
                 normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
             returns:
@@ -149,6 +150,7 @@ class _domain_search_worker():
                 max_mode=self.max_mode,
                 max_hits_per_contig=self.max_hits_per_contig,
                 allowed_taxids=_WORKER_ALLOWED_TAXIDS,  # per-CDS / per-region pre-hmmer taxonomy filter
+                partial=self.partial,
             ):
             try:
                 if rec.annotations['molecule_type'] == "protein":
@@ -199,7 +201,7 @@ class _partition_seqfile_worker():
         return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
     
 
-def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None):
+def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None, partial="include"):
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 
@@ -213,7 +215,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         cpu: number of threads to use. Must be at least 2.
         add_annotations: if True, then add new domainate annotations .
         cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the CDS hits
-        kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed CDSs will not be annotated in the output.
+        kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends.
         whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
         normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
         translate: if True then translate nucleotide hits into proteins before returning.
@@ -227,6 +229,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         strand: only extract regions around CDSs on the specified strand. If None, then extract regions around CDSs on both strands.
         decoy_names: a set of names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.
         max_hits_per_contig: the maximum number of independent hits per contig. If None, then all hits will be returned. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit.
+        partial: which proteins/CDSs to search, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments). See domainate.domainate.
     yields:
         SeqRecords of the selected regions
     """
@@ -257,7 +260,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
 
     out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits)
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial)
 
     # Pool tuning notes (speed_up_plan.md Q4):
     #   - No maxtasksperchild: workers must persist so the references parsed once
@@ -361,6 +364,7 @@ def main(argv):
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
 
+    parser.add_argument("--partial", type=str, default="include", choices=domainate.PARTIAL_CHOICES, help=domainate.PARTIAL_HELP)
     parser.add_argument('--decoys', type=str, default=None, nargs='+',
                         help="Names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.")
     parser.add_argument('--decoys_file', type=str, default=None,
@@ -553,7 +557,8 @@ def main(argv):
             max_region_overlap=params.max_region_overlap,
             strand=params.strand,
             decoy_names=decoy_names,
-            max_hits_per_contig=params.max_hits_per_contig
+            max_hits_per_contig=params.max_hits_per_contig,
+            partial=params.partial,
             ):
             if not pad:
                 if not deduplicate or (record.id not in seen):

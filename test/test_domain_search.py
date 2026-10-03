@@ -781,3 +781,98 @@ def test_domain_search_bgzf_output(shared_datadir):
         with pytest.warns(RuntimeWarning, match="native .* parser could not fully parse"):
             main(["--input", str(out_comp), "-o", out_rt] + common)
         assert len(list(utils.parse_seqfiles([out_rt], genbank_parser="biopython"))) == len(plain_recs)
+
+
+# --- partial CDSs: '<' / '>' markers survive extraction, cut neighbors are kept, and the --partial filter ---
+
+import pyhmmer
+
+_PARTIAL_CDS_LOCUS_TAG = "HOV79_30125" # complement(803..>2688), /codon_start=3
+
+
+def _write_hmm(sequence, path, name=b"query"):
+    alphabet = pyhmmer.easel.Alphabet.amino()
+    digital = pyhmmer.easel.TextSequence(name=name, sequence=sequence).digitize(alphabet)
+    hmm, _, _ = pyhmmer.plan7.Builder(alphabet).build(digital, pyhmmer.plan7.Background(alphabet))
+    with open(path, "wb") as handle:
+        hmm.write(handle)
+
+
+def _partial_cds_hmm(shared_datadir, path):
+    record = next(SeqIO.parse(str(shared_datadir / "JABFVH010000506_extraction.gb"), "genbank"))
+    cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") == [_PARTIAL_CDS_LOCUS_TAG]][0]
+    _write_hmm(cds.qualifiers["translation"][0], path)
+
+
+@pytest.mark.parametrize("extra_args,expected_cds,expected_hit", [
+    ([], "[<0:1886](+)", "[2:1883](+)"),
+    (["--keep_direction"], "[0:>1886](-)", "[3:1884](-)"),
+    (["--translate"], "[<0:628]", "[0:627]"), # protein records have no strand
+])
+def test_domain_search_keeps_partial_markers(shared_datadir, extra_args, expected_cds, expected_hit):
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = output_dir + "/partial.hmm"
+        _partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm, "-o", out] + extra_args)
+        records = list(SeqIO.parse(out, "genbank"))
+        assert len(records) == 1
+        cds = [f for f in records[0].features if f.type == "CDS"]
+        assert len(cds) == 1
+        assert str(cds[0].location) == expected_cds
+        assert utils.get_fragment_status(cds[0] if "--translate" not in extra_args else records[0]) == "N"
+        hit = [f for f in records[0].features if f.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert str(hit[0].location) == expected_hit
+        if "--translate" in extra_args:
+            assert "codon_start" not in cds[0].qualifiers
+        else:
+            assert cds[0].qualifiers["codon_start"] == ["3"]
+
+
+def test_domain_search_kb_range_keeps_cut_neighbors(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = output_dir + "/partial.hmm"
+        _partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm, "-o", out, "--kb_range", "0.1"])
+        records = list(SeqIO.parse(out, "genbank"))
+        assert len(records) == 1
+        cdss = [f for f in records[0].features if f.type == "CDS"]
+        assert len(cdss) == 2
+        # the neighbor complement(280..780) is cut by the window, which ends 100 bp past the hit CDS (803), at 703:
+        # the low end of a minus-strand CDS is its 3' end
+        neighbor = [f for f in cdss if f.qualifiers.get("locus_tag") != [_PARTIAL_CDS_LOCUS_TAG]][0]
+        assert utils.get_fragment_status(neighbor) == "C"
+        # the translation is trimmed to the kept codons (the first residue differs: the GTG start codon is translated as M in GenBank)
+        assert neighbor.qualifiers["translation"][0][1:] == str(neighbor.translate(records[0].seq, cds=False))[1:]
+
+
+@pytest.mark.parametrize("partial,expected_records", [("include", 1), ("exclude", 0), ("only", 1)])
+def test_domain_search_partial_filter(shared_datadir, partial, expected_records):
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = output_dir + "/partial.hmm"
+        _partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm, "-o", out, "--partial", partial])
+        assert len(list(SeqIO.parse(out, "genbank"))) == expected_records
+
+
+def test_domain_search_uniprot_fragment_filter(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        records = list(SeqIO.parse(str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "fasta"))
+        fasta = output_dir + "/fragments.fasta"
+        with open(fasta, "w") as handle:
+            for i, record in enumerate(records):
+                description = record.description.replace(" OS=", " (Fragment) OS=", 1) if i == 0 else record.description
+                handle.write(f">{description}\n{str(record.seq)}\n")
+        hmm = output_dir + "/sod.hmm"
+        _write_hmm(str(records[0].seq), hmm)
+        hit_ids = dict()
+        for partial in ("include", "exclude", "only"):
+            out = output_dir + f"/out_{partial}.gb"
+            main(["-i", fasta, "-r", hmm, "-o", out, "--partial", partial])
+            hit_ids[partial] = {r.name for r in SeqIO.parse(out, "genbank")}
+        fragment_name = records[0].id
+        assert fragment_name in hit_ids["include"]
+        assert fragment_name not in hit_ids["exclude"]
+        assert hit_ids["only"] == {fragment_name}

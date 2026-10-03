@@ -148,6 +148,11 @@ class SearchResult(NamedTuple):
 STRUCTURAL_METRIC_FIELDS = ("tmscore", "lddt", "rmsd", "prob")
 
 
+PARTIAL_CHOICES = ("include", "exclude", "only")
+PARTIAL_HELP = ("Which proteins/CDSs to search, by fragment status. include: all. exclude: skip fragments. only: only fragments. "
+                "CDSs with '<' or '>' in their location are fragments, as are protein records with a UniProt ' (Fragment)' or ' (Fragments)' header, "
+                "or a CDS/Protein feature with '<' or '>' spanning the record.")
+
 def domain_feature_qualifiers(hit: SearchResult, cds_id: str) -> Dict[str, List[str]]:
     """Build the qualifier dict shared by every Domainator/Domain_Search feature.
 
@@ -522,8 +527,7 @@ def clean_rec(rec, clear_best_hit=False, clear_domainator_annotations=False, cle
             if feature.type == 'CDS' and "pseudo" not in feature.qualifiers and "pseudogene" not in feature.qualifiers:
                 feature.qualifiers['cds_id'] = [get_cds_unique_name(feature)]
                 CDS_counter += 1
-                if ('translation' not in feature.qualifiers) or (len(feature.qualifiers["translation"][0]) == 0):
-                    feature.qualifiers['translation'] = [feature.translate(rec.seq,cds=False)] # cds = False, because we don't want to throw exceptions on weird annotations.
+                utils.normalize_cds_translation(feature, rec.seq)
 
         
         
@@ -559,8 +563,16 @@ def _lean_clean(lean, clear_best_hit=False, clear_domainator_annotations=False, 
             if feature.type == 'CDS' and "pseudo" not in feature.qualifiers and "pseudogene" not in feature.qualifiers:
                 CDS_counter += 1
                 translation = feature.qualifiers.get('translation')
-                if (translation is None) or (len(translation) == 0) or (len(translation[0]) == 0):
-                    feature.qualifiers['translation'] = [lean_translate(feature, lean.seq)]
+                translation = translation[0] if translation else ""
+                if len(translation) != 0:
+                    # Same trimming as utils.normalize_cds_translation, on the lean feature.
+                    translation = utils.on_contig_translation(translation, len(feature), utils.codon_offset(feature), *feature.partial_ends)
+                    if translation is None:
+                        warnings.warn(f"Translation of a partial CDS on {lean.id} is longer than its location, and both ends are partial. Re-translating from the contig.")
+                        translation = ""
+                if len(translation) == 0:
+                    translation = lean_translate(feature, lean.seq)
+                feature.qualifiers['translation'] = [translation]
 
         new_list.append(feature)
 
@@ -581,7 +593,16 @@ def _materialize_lean_for_annotation(lean):
     return record
 
 
-def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
+def _materialize_lean_contig(contig, dropped_types):
+    """Returns contig as a full, cleaned SeqRecord if it is a lean/search record, otherwise unchanged."""
+    if LEAN_SEARCH_TYPES and isinstance(contig, LEAN_SEARCH_TYPES):
+        return _materialize_lean_for_annotation(materialize_lean_search(contig, dropped_types))
+    elif isinstance(contig, LeanContig):
+        return _materialize_lean_for_annotation(contig)
+    return contig
+
+
+def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None, partial="include"):
     """
 
     Gets a dictionary of every protein to be annotated from the contig
@@ -596,6 +617,9 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
         allowed_taxids: if not None, a set of allowed taxids; a CDS is yielded only when its
             taxid -- the longest `source` feature covering it (per-record for protein/FASTA) --
             is in the set. This is the pre-hmmer taxonomy filter: excluded CDSs are never searched.
+        partial: "include" (default) searches every protein/CDS, "exclude" skips fragments, "only" searches only fragments.
+            A CDS is a fragment if its location has a '<' or '>' marker; a protein record if utils.get_fragment_status says so
+            (e.g. a UniProt " (Fragment)" header). Excluded proteins/CDSs are never searched.
 
     Returns:
         iterator of (name, protein_sequence)
@@ -611,6 +635,8 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
         if contig.molecule_type == "protein":
             if allowed_taxids is not None and not utils.taxid_allowed(contig.taxid(), allowed_taxids):
                 return
+            if not utils.fragment_status_allowed(contig.fragment(), partial):
+                return
             prot = ''.join(filter(str.isalnum, contig.seq))
             if len(prot) > MAX_PROTEIN_SIZE:
                 warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
@@ -620,7 +646,7 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
             dropped = set(dropped_types) if dropped_types else set()
             if allowed_taxids is not None:
                 # Per-CDS taxid (longest covering source) computed in Rust; skip excluded CDSs.
-                for feature_index, prot, taxid in contig.cds_peptides_with_taxid(dropped):
+                for feature_index, prot, taxid in contig.cds_peptides_with_taxid(dropped, partial):
                     if not utils.taxid_allowed(taxid, allowed_taxids):
                         continue
                     if len(prot) > MAX_PROTEIN_SIZE:
@@ -628,7 +654,7 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
                     else:
                         yield (f"{i},{feature_index}", prot)
             else:
-                for feature_index, prot in contig.cds_peptides(dropped):
+                for feature_index, prot in contig.cds_peptides(dropped, partial):
                     if len(prot) > MAX_PROTEIN_SIZE:
                         warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
                     else:
@@ -638,6 +664,8 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
     #prot_list = list()
     if contig.annotations['molecule_type'] == "protein":
         if allowed_taxids is not None and not utils.taxid_allowed(utils.get_taxid(contig), allowed_taxids):
+            return
+        if not utils.fragment_status_allowed(utils.get_fragment_status(contig), partial):
             return
         j = 0 #0 because there is only one
         prot = ''.join(filter(str.isalnum, str(contig.seq)))
@@ -654,6 +682,8 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None):
                     taxid = utils.location_taxid(utils.feature_intervals(feature), sources)
                     if not utils.taxid_allowed(taxid, allowed_taxids):
                         continue
+                if partial != "include" and not utils.fragment_status_allowed(utils.get_fragment_status(feature), partial):
+                    continue
                 prot = ''.join(filter(str.isalnum, feature.qualifiers['translation'][0]))
                 if len(prot) > MAX_PROTEIN_SIZE:
                     warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
@@ -840,11 +870,12 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
         hits[feature_id].sort(key=lambda x: x.score, reverse=True)
         hit_scores[feature_id] = hits[feature_id][0].score #TODO: this might be inconsistent if max_hits is 0, but it would be weird for max_hits to be 0.
         best_hits[feature_id] = hits[feature_id][0].name
+        offset = utils.codon_offset(feature) # residue 0 starts codon_start - 1 nucleotides into the CDS
         if best_annotation:
             hit = hits[feature_id][0]
             annot_length = (hit.end - hit.start) * 3
             try:
-                location = feature.location.overlay(hit.start*3, annot_length)
+                location = feature.location.overlay(offset + hit.start*3, annot_length)
             except:
                 warnings.warn(f"Could not overlay location for {hit.name} on {contig.name}, {feature.qualifiers['cds_id'][0]}. Skipping annotation.")
                 continue
@@ -858,7 +889,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
                 # Create new domain feature with information on the HMMER hit
                 annot_length = (hit.end - hit.start) * 3
                 try:
-                    location = feature.location.overlay(hit.start*3, annot_length)
+                    location = feature.location.overlay(offset + hit.start*3, annot_length)
                 except:
                     warnings.warn(f"Could not overlay location for {hit.name} on {contig.name}, {feature.qualifiers['cds_id'][0]}. Skipping annotation.")
                     continue
@@ -939,13 +970,9 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
     for contig_id in hits:
         contig = contigs_list[contig_id]
         # Hit-conversion boundary: a record only becomes a full SeqRecord once it
-        # has a hit. Non-hit lean/search records are never materialized.
-        if LEAN_SEARCH_TYPES and isinstance(contig, LEAN_SEARCH_TYPES):
-            contig = _materialize_lean_for_annotation(materialize_lean_search(contig, dropped_types))
-            contigs_list[contig_id] = contig
-        elif isinstance(contig, LeanContig):
-            contig = _materialize_lean_for_annotation(contig)
-            contigs_list[contig_id] = contig
+        # has a hit. Non-hit lean/search records are only materialized if they are returned (below).
+        contig = _materialize_lean_contig(contig, dropped_types)
+        contigs_list[contig_id] = contig
         if contig.annotations['molecule_type'] == "protein":
             add_protein_annotations(contig, hits[contig_id][0], max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
         else:
@@ -977,6 +1004,8 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
         return_contigs = list(hits.keys())
     else:
         return_contigs = list(range(len(contigs_list)))
+        for contig_id in return_contigs: # contigs without hits are returned too, so they need to be full SeqRecords
+            contigs_list[contig_id] = _materialize_lean_contig(contigs_list[contig_id], dropped_types)
 
     return return_contigs
 
@@ -1003,7 +1032,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         rec.features.append(feature)
         i += 1
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, partial="include"):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -1052,6 +1081,9 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
 
         taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
 
+        partial: which proteins/CDSs to search, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments).
+            CDSs with '<' or '>' location markers are fragments, as are protein records with a UniProt " (Fragment)" header. See utils.get_fragment_status.
+
         max_mode: if True, then run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.
 
         foldseek: paths to foldseek database files. [default: None]
@@ -1097,6 +1129,8 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
         include_taxids = set(include_taxids)
     if exclude_taxids is not None:
         exclude_taxids = set(exclude_taxids)
+    if partial not in PARTIAL_CHOICES:
+        raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
     
     contigs_list = list()
     proteins_list = list()
@@ -1136,9 +1170,9 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             prodigal_CDS_annotate(rec)
         contigs_list.append(rec)
         if "foldseek" in reference_groups:
-            foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index, dropped_types, allowed_taxids=allowed_taxids)])
+            foldseek_list.extend([foldseek_builder(name, prot) for name, prot in get_prot_list(rec, contig_index, dropped_types, allowed_taxids=allowed_taxids, partial=partial)])
         if "hmmsearch" in reference_groups or "phmmer" in reference_groups or "foldseek" in reference_groups:
-            proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index, dropped_types, allowed_taxids=allowed_taxids)])
+            proteins_list.extend([get_pyhmmer_digital_sequence(name, prot) for (name, prot) in get_prot_list(rec, contig_index, dropped_types, allowed_taxids=allowed_taxids, partial=partial)])
         # Whole-contig nucleotide search can't pre-filter per region (the hit envelope is
         # unknown until after the search), so we only skip a contig pre-search when its
         # taxonomy excludes it entirely; surviving contigs are post-filtered per hit region
@@ -1219,6 +1253,7 @@ def main(argv):
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
+    parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES, help=PARTIAL_HELP)
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
@@ -1324,6 +1359,7 @@ def main(argv):
             esm2_3Di_device=params.esm2_3Di_device,
             foldseek_device=params.foldseek_device,
             overlap_by_db=params.overlap_by_db,
+            partial=params.partial,
         ),
         out)
 

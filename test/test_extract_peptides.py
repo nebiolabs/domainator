@@ -184,8 +184,9 @@ def test_overhanging_annotations_1(shared_datadir):
         rec_ids = {rec.id for rec in new_file}
         recs = {rec.id:rec for rec in new_file}
         assert rec_ids == {"pDONR201_2", "pDONR201_3"}
-        assert len(recs["pDONR201_2"].features) == 2
-        assert len(recs["pDONR201_3"].features) == 2
+        # The Domainator annotation overhangs both CDSs, so it is cut, and cut domain annotations are dropped.
+        assert [f.type for f in recs["pDONR201_2"].features] == ["CDS"]
+        assert [f.type for f in recs["pDONR201_3"].features] == ["CDS"]
         assert recs["pDONR201_2"].features[0].location.start == 0
         assert recs["pDONR201_2"].features[0].location.end == 102
         assert recs["pDONR201_3"].features[0].location.start == 0

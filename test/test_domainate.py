@@ -737,3 +737,142 @@ def test_annotate_ignores_stale_pressed_sidecars(shared_datadir, tmp_path):
     names = {q for rec in SeqIO.parse(out, "genbank") for f in rec.features
              if f.type == DOMAIN_FEATURE_NAME for q in f.qualifiers.get("name", [])}
     assert not (names & {"Sod_Fe_C", "Sod_Fe_N"})
+
+
+# --- partial CDSs: '<' / '>' markers, codon_start, and the --partial filter ---
+
+from domainator import utils as _utils
+
+_PARTIAL_CDS_LOCUS_TAG = "HOV79_30125" # complement(803..>2688), /codon_start=3, translation of the on-contig part
+
+
+def _write_partial_cds_hmm(shared_datadir, path):
+    """Builds a single-sequence HMM from the translation of the partial CDS in JABFVH010000506_extraction.gb."""
+    record = next(SeqIO.parse(str(shared_datadir / "JABFVH010000506_extraction.gb"), "genbank"))
+    cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") == [_PARTIAL_CDS_LOCUS_TAG]][0]
+    alphabet = pyhmmer.easel.Alphabet.amino()
+    sequence = pyhmmer.easel.TextSequence(name=b"partial_cds", sequence=cds.qualifiers["translation"][0]).digitize(alphabet)
+    hmm, _, _ = pyhmmer.plan7.Builder(alphabet).build(sequence, pyhmmer.plan7.Background(alphabet))
+    with open(path, "wb") as handle:
+        hmm.write(handle)
+
+
+def _domainator_features(record):
+    return [f for f in record.features if f.type == DOMAIN_FEATURE_NAME]
+
+
+@pytest.mark.parametrize("parser", ["biopython", "lean"])
+def test_domainate_partial_cds_codon_start(shared_datadir, monkeypatch, parser):
+    monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = output_dir + "/partial.hmm"
+        _write_partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm, "-o", out])
+        record = next(SeqIO.parse(out, "genbank"))
+        cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") == [_PARTIAL_CDS_LOCUS_TAG]][0]
+        assert str(cds.location) == "[802:>2688](-)" # markers survive
+        source = [f for f in record.features if f.type == "source"][0]
+        assert str(source.location) == "[<0:2688](+)"
+        hits = _domainator_features(record)
+        assert len(hits) == 1
+        # residue 0 starts at codon_start (3), 2 nucleotides into the CDS, which runs from the high end on the minus strand
+        assert hits[0].location.end == 2686
+        assert (hits[0].location.end - hits[0].location.start) % 3 == 0
+
+
+@pytest.mark.parametrize("partial,expected_hits", [("include", 1), ("exclude", 0), ("only", 1)])
+@pytest.mark.parametrize("parser", ["biopython", "lean"])
+def test_domainate_partial_filter(shared_datadir, monkeypatch, parser, partial, expected_hits):
+    monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = output_dir + "/partial.hmm"
+        _write_partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm, "-o", out, "--partial", partial])
+        records = list(SeqIO.parse(out, "genbank"))
+        assert len(records) == 1 # written with or without hits
+        assert len(_domainator_features(records[0])) == expected_hits
+
+
+def test_domainate_partial_filter_excludes_complete_with_only(shared_datadir):
+    # the complete CDS in the fixture is not searched with --partial only
+    with tempfile.TemporaryDirectory() as output_dir:
+        record = next(_utils.parse_seqfiles([str(shared_datadir / "JABFVH010000506_extraction.gb")]))
+        cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") != [_PARTIAL_CDS_LOCUS_TAG]][0]
+        alphabet = pyhmmer.easel.Alphabet.amino()
+        sequence = pyhmmer.easel.TextSequence(name=b"complete_cds", sequence=cds.qualifiers["translation"][0]).digitize(alphabet)
+        hmm, _, _ = pyhmmer.plan7.Builder(alphabet).build(sequence, pyhmmer.plan7.Background(alphabet))
+        hmm_path = output_dir + "/complete.hmm"
+        with open(hmm_path, "wb") as handle:
+            hmm.write(handle)
+        for partial, expected_hits in (("include", 1), ("exclude", 1), ("only", 0)):
+            out = output_dir + f"/out_{partial}.gb"
+            main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm_path, "-o", out, "--partial", partial])
+            assert len(_domainator_features(next(_utils.parse_seqfiles([out])))) == expected_hits
+
+
+@pytest.mark.parametrize("parser", ["biopython", "lean"])
+def test_domainate_trims_overlong_partial_translation(shared_datadir, monkeypatch, parser):
+    """A 5'-partial CDS whose translation includes residues off the edge of the contig is trimmed to the on-contig residues."""
+    monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+    with tempfile.TemporaryDirectory() as output_dir:
+        record = next(SeqIO.parse(str(shared_datadir / "JABFVH010000506_extraction.gb"), "genbank"))
+        cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") == [_PARTIAL_CDS_LOCUS_TAG]][0]
+        on_contig_translation = cds.qualifiers["translation"][0]
+        cds.qualifiers["translation"] = ["MKRFSLAIL" + on_contig_translation]
+        overlong = output_dir + "/overlong.gb"
+        SeqIO.write([record], overlong, "genbank")
+        hmm = output_dir + "/partial.hmm"
+        _write_partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", overlong, "-r", hmm, "-o", out])
+        out_record = next(SeqIO.parse(out, "genbank"))
+        out_cds = [f for f in out_record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") == [_PARTIAL_CDS_LOCUS_TAG]][0]
+        assert out_cds.qualifiers["translation"][0] == on_contig_translation
+        hits = _domainator_features(out_record)
+        assert len(hits) == 1
+        assert hits[0].location.end == 2686
+
+
+def test_domainate_uniprot_fragment_filter(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        records = list(_utils.parse_seqfiles([str(shared_datadir / "swissprot_CuSOD_subset.fasta")]))
+        fragment_id = records[0].id
+        fasta = output_dir + "/fragments.fasta"
+        with open(fasta, "w") as handle:
+            for i, record in enumerate(records):
+                description = record.description
+                if i == 0:
+                    description = description.replace(" OS=", " (Fragment) OS=", 1)
+                handle.write(f">{description}\n{str(record.seq)}\n")
+        alphabet = pyhmmer.easel.Alphabet.amino()
+        sequence = pyhmmer.easel.TextSequence(name=b"sod", sequence=str(records[0].seq)).digitize(alphabet)
+        hmm, _, _ = pyhmmer.plan7.Builder(alphabet).build(sequence, pyhmmer.plan7.Background(alphabet))
+        hmm_path = output_dir + "/sod.hmm"
+        with open(hmm_path, "wb") as handle:
+            hmm.write(handle)
+        hit_ids = dict()
+        for partial in ("include", "exclude", "only"):
+            out = output_dir + f"/out_{partial}.gb"
+            main(["-i", fasta, "-r", hmm_path, "-o", out, "--partial", partial, "--hits_only"])
+            hit_ids[partial] = {r.id for r in _utils.parse_seqfiles([out])}
+        assert fragment_id in hit_ids["include"]
+        assert fragment_id not in hit_ids["exclude"]
+        assert hit_ids["only"] == {fragment_id}
+        assert hit_ids["include"] == hit_ids["exclude"] | hit_ids["only"]
+
+
+@pytest.mark.parametrize("input_file", ["pDONR201_multi_genemark.gb", "FeSOD_20.gb", "FeSOD_20.fasta", "pDONR201_multi_genemark_domainator.gb"])
+def test_domainate_lean_parser_writes_contigs_without_hits(shared_datadir, monkeypatch, input_file):
+    """Without --hits_only, contigs without hits are written too, and the lean parser gives the same output as Biopython."""
+    with tempfile.TemporaryDirectory() as output_dir:
+        outputs = dict()
+        for parser in ("biopython", "lean"):
+            monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+            outputs[parser] = output_dir + f"/{parser}.gb"
+            main(["-i", str(shared_datadir / input_file), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", outputs[parser]])
+        monkeypatch.delenv("DOMAINATOR_GB_PARSER")
+        # Biopython output first: the lean parser adds topology="linear" when the LOCUS line has none, which is ignored here.
+        compare_seqfiles(outputs["biopython"], outputs["lean"])
+        assert len(list(SeqIO.parse(outputs["lean"], "genbank"))) == len(list(SeqIO.parse(str(shared_datadir / input_file), "genbank" if input_file.endswith(".gb") else "fasta")))

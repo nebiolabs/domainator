@@ -143,6 +143,17 @@ class LeanFeature:
         return self.parts[0][2] if self.parts else 0
 
     @property
+    def partial_ends(self):
+        """(five_prime_partial, three_prime_partial) in transcript orientation, like utils.location_partial_ends."""
+        if not self.parts:
+            return False, False
+        _s, _e, first_strand, first_before, first_after = self.parts[0]
+        _s, _e, last_strand, last_before, last_after = self.parts[-1]
+        five_prime = first_after if first_strand == -1 else first_before
+        three_prime = last_before if last_strand == -1 else last_after
+        return five_prime, three_prime
+
+    @property
     def start(self):
         return min(p[0] for p in self.parts)
 

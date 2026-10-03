@@ -70,6 +70,28 @@ If that is not present, the `source` features will be examined in order from lon
 
 If no taxid is noted in either place, the Taxid will be assigned [32644](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=32644) for "unidentified". This taxid will be used internally by Domainator, but will not be written to any output files.
 
+### Partial features and fragments
+
+Domainator keeps the GenBank partial markers `<` and `>` on feature locations. `<` means the feature starts before the given position, and `>` means it ends after it. For example, `complement(803..>2688)` is a CDS on the minus strand that runs off the end of the contig, so its 5' end (and its protein's N-terminus) is missing.
+
+**Slicing.** Tools that extract part of a record (`domain_search.py` and `select_by_cds.py` neighborhoods, `select_by_coord.py`, `extract_domains.py`, `trim_contigs.py`, `extract_peptides.py`, and others) keep features that the slice cuts, and mark the cut ends with `<` or `>`. Existing markers on ends that are kept are preserved. There are three exceptions:
+* `source` features don't get new markers.
+* `Domainator` and `Domain_Search` features that the slice cuts are dropped, because their scores and coordinates describe the whole hit.
+* A feature split across the ends of a rotated circular contig is not cut (its whole sequence is still in the record), so it is written as a `join` without markers.
+
+**CDS reading frame and translation.** When a CDS is cut, its `codon_start` qualifier is updated so the reading frame is preserved. Its `translation` is trimmed to the residues whose codons are completely kept, following the NCBI convention that the translation of a partial CDS covers only the part on the contig. If the kept part is not contiguous (an interior exon was cut out), the `translation` is removed and is re-translated the next time the record goes through `domainate.py`.
+
+Some files give a partial CDS the translation of the full protein, including residues encoded off the edge of the contig. When `domainate.py` and `domain_search.py` read such a CDS, they trim the translation to the on-contig residues, from the partial end. If both ends are partial, they can't tell where the extra residues belong, so they re-translate from the contig and warn. A complete 3' end is assumed to end in a stop codon, which GenBank translations omit and Domainator's own translations include as `*`.
+
+Domain hits on a CDS are placed relative to its `codon_start`: residue 1 of the translation starts `codon_start - 1` bases into the CDS.
+
+**Fragment status.** Like taxids, Domainator reads a fragment status for each protein or CDS:
+* A CDS is a fragment if either outer end of its location has a `<` or `>`. Its status is `N` (5' end, and so the N-terminus, missing), `C` (3' end missing), or `NC` (both).
+* For a protein record, a `CDS` or `Protein` feature spanning the record decides, the same way. This is what `domain_search.py --translate` writes, and what NCBI GenPept records carry.
+* Otherwise, a protein record whose description contains ` (Fragment)` or ` (Fragments)` is a fragment with unknown missing ends, `?`. This is how UniProt marks fragments in FASTA headers, e.g. `>tr|A0A0|A0A0_ECOLI Superoxide dismutase (Fragment) OS=Escherichia coli OX=562`. The status is never written into descriptions, so the header round-trips unchanged.
+
+`domainate.py` and `domain_search.py` take `--partial {include,exclude,only}` (default `include`) to choose which proteins/CDSs are searched by fragment status. `enum_report.py --fragment` adds a `fragment` column with the status (`complete`, `N`, `C`, `NC`, or `?`).
+
 
 ### Differences from BioPython in internal storing of Genbank records
 
