@@ -18,7 +18,7 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import NamedTuple, List, Dict, Set, Tuple, Optional, Union, Iterable, Iterator
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
+from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
 from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, read_hmms, read_infernal_cms, get_file_type, read_pyhmmer_fastas, read_pyhmmer_peptide_fastas, filter_by_taxonomy, pyhmmer_decode, is_nucleic_acid_alphabet, peek_hmm_alphabet
 import pyhmmer
@@ -1006,28 +1006,112 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
 
     return return_contigs
 
+# Bases on each side of the origin of a circular contig that are searched for genes crossing it. Longer than nearly all genes.
+CIRCULAR_GENE_CALL_WINDOW = 20000
+# prodigal never predicts genes that overlap by more than this on the same strand, or on opposite strands
+# (MAX_SAM_OVLP and MAX_OPP_OVLP in prodigal). An origin-crossing gene overlapping a gene from the main pass by more conflicts with it.
+_PRODIGAL_MAX_SAME_STRAND_OVERLAP = 60
+_PRODIGAL_MAX_OPPOSITE_STRAND_OVERLAP = 200
+
+def _prodigal_linear_location(pred, rec_len):
+    """The location of a prodigal gene on a linear sequence, and its codon_start.
+
+    A gene that runs off the edge of the sequence is extended to the edge (prodigal stops it at the last whole codon), and the extended
+    end is marked with '<' or '>'. codon_start is set if the 5' end was extended.
+    """
+    strand = pred.strand
+    start = pred.begin - 1
+    end = pred.end
+    five_prime_extension = 0 # bases added to the 5' end by extending it to the edge of the contig
+    # pyrodigal's partial_begin and partial_end refer to the left and right ends of the sequence, regardless of strand.
+    if pred.partial_begin:
+        if start < 3:
+            if strand != -1:
+                five_prime_extension = start
+            start = 0
+        start = BeforePosition(start)
+    if pred.partial_end:
+        if rec_len - end < 3:
+            if strand == -1:
+                five_prime_extension = rec_len - end
+            end = rec_len
+        end = AfterPosition(end)
+    return FeatureLocation(start, end, strand), five_prime_extension + 1
+
+def _prodigal_origin_genes(orf_finder, seq:bytes, existing_locations):
+    """Finds the genes that cross the origin of a circular sequence.
+
+    prodigal treats sequences as linear, so the main pass can't call genes that cross the origin. Here prodigal is run on a window
+    spanning the origin (the end of the sequence followed by its start), and the genes that cross the junction are mapped back
+    to the sequence as joins. The rest of the window's genes are ignored: the main pass already called them, using the whole sequence.
+    Genes that conflict with the main pass (they overlap a main-pass gene more than prodigal itself would allow) are skipped.
+
+    Args:
+        orf_finder: the pyrodigal.GeneFinder used for the main pass
+        seq: the sequence of the circular contig
+        existing_locations: locations of the genes from the main pass
+
+    Returns:
+        list of (location, translation) for the genes that cross the origin
+    """
+    seq_len = len(seq)
+    # bases from the end and from the start of the sequence. Short sequences are rotated whole, so no base is used twice.
+    left = min(CIRCULAR_GENE_CALL_WINDOW, seq_len - seq_len // 2)
+    right = min(CIRCULAR_GENE_CALL_WINDOW, seq_len // 2)
+    window = seq[seq_len - left:] + seq[:right]
+    out = list()
+    for pred in orf_finder.find_genes(window):
+        start = pred.begin - 1
+        end = pred.end
+        if pred.partial_begin or pred.partial_end or not (start < left < end):
+            continue
+        before_origin = FeatureLocation(seq_len - left + start, seq_len, pred.strand)
+        after_origin = FeatureLocation(0, end - left, pred.strand)
+        parts = [before_origin, after_origin] if pred.strand != -1 else [after_origin, before_origin] # in order along the gene
+        location = CompoundLocation(parts, operator="join")
+        conflict = False
+        for existing in existing_locations:
+            max_overlap = _PRODIGAL_MAX_SAME_STRAND_OVERLAP if existing.strand == location.strand else _PRODIGAL_MAX_OPPOSITE_STRAND_OVERLAP
+            overlap = sum(max(0, min(int(a.end), int(b.end)) - max(int(a.start), int(b.start))) for a in location.parts for b in existing.parts)
+            if overlap > max_overlap:
+                conflict = True
+                break
+        if not conflict:
+            out.append((location, pred.translate()))
+    return out
+
 def prodigal_CDS_annotate(rec:SeqRecord):
     """Annotate a SeqRecord with CDS features using prodigal
 
     Args:
         rec (SeqRecord): SeqRecord to annotate
 
+    On linear contigs, genes that run off the edge of the contig are kept, as partial CDSs: like GenBank partial CDSs, they are extended
+    to the edge (prodigal stops them at the last whole codon), marked with '<' or '>', and given a codon_start if the 5' end is partial.
+    The translation is prodigal's, of the codons on the contig.
+    On circular contigs, the ends of the sequence aren't real ends. Genes that cross the origin are called separately
+    (see _prodigal_origin_genes) and annotated as joins across the origin.
     """
     orf_finder = pyrodigal.GeneFinder(meta=True) #TODO: maybe make this static?
+    circular = rec.annotations.get("topology") == "circular"
+    seq = bytes(rec.seq)
 
-    i = 1
-    for pred in orf_finder.find_genes(bytes(rec.seq)):
-        
-        if pred.partial_begin or pred.partial_end:
-            continue
-        translation = pred.translate()
-        strand = pred.strand
-        start = pred.begin - 1
-        end = pred.end
-        feature = SeqFeature(location=FeatureLocation(start,end,strand), type="CDS", qualifiers={"translation":[translation], "gene_id":[f"{rec.id}_{i}"]})
+    genes = list() # (location, translation, codon_start)
+    for pred in orf_finder.find_genes(seq):
+        if circular and (pred.partial_begin or pred.partial_end):
+            continue # called whole by _prodigal_origin_genes, if it crosses the origin
+        location, codon_start = _prodigal_linear_location(pred, len(rec))
+        genes.append((location, pred.translate(), codon_start))
+    if circular and len(seq) > 0:
+        genes.extend((location, translation, 1) for location, translation in _prodigal_origin_genes(orf_finder, seq, [gene[0] for gene in genes]))
+
+    for i, (location, translation, codon_start) in enumerate(genes, start=1):
+        qualifiers = {"translation":[translation], "gene_id":[f"{rec.id}_{i}"]}
+        if codon_start != 1:
+            qualifiers["codon_start"] = [str(codon_start)]
+        feature = SeqFeature(location=location, type="CDS", qualifiers=qualifiers)
         feature.qualifiers['cds_id'] = [get_cds_unique_name(feature)]
         rec.features.append(feature)
-        i += 1
 
 def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, partial="include"):
     """

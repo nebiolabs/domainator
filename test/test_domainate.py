@@ -876,3 +876,64 @@ def test_domainate_lean_parser_writes_contigs_without_hits(shared_datadir, monke
         # Biopython output first: the lean parser adds topology="linear" when the LOCUS line has none, which is ignored here.
         compare_seqfiles(outputs["biopython"], outputs["lean"])
         assert len(list(SeqIO.parse(outputs["lean"], "genbank"))) == len(list(SeqIO.parse(str(shared_datadir / input_file), "genbank" if input_file.endswith(".gb") else "fasta")))
+
+
+def test_prodigal_partial_genes(shared_datadir):
+    """Gene calling keeps genes that run off the edge of a linear contig, annotated like GenBank partial CDSs."""
+    from domainator.domainate import prodigal_CDS_annotate
+    record = next(_utils.parse_seqfiles([str(shared_datadir / "JABFVH010000506_extraction.gb")]))
+    ncbi = [(str(f.location), f.qualifiers.get("codon_start", ["1"])) for f in record.features if f.type == "CDS"]
+    record.features = [f for f in record.features if f.type != "CDS"]
+    prodigal_CDS_annotate(record)
+    cdss = [f for f in record.features if f.type == "CDS"]
+    # same as the NCBI annotation: complement(803..>2688) with /codon_start=3 (prodigal itself stops at the last whole codon, 2686)
+    assert [(str(f.location), f.qualifiers.get("codon_start", ["1"])) for f in cdss] == ncbi
+    for cds in cdss: # prodigal's translation is of the codons on the contig
+        assert cds.qualifiers["translation"][0][1:].rstrip("*") == str(cds.translate(record.seq, cds=False))[1:].rstrip("*")
+
+    # on a circular contig, a gene running off the end continues across the origin, so it isn't partial: it's skipped
+    record.features = [f for f in record.features if f.type != "CDS"]
+    record.annotations["topology"] = "circular"
+    prodigal_CDS_annotate(record)
+    assert [str(f.location) for f in record.features if f.type == "CDS"] == ["[279:780](-)"]
+
+
+@pytest.mark.parametrize("partial,expected_hits", [("include", 1), ("exclude", 0), ("only", 1)])
+def test_domainate_gene_call_partial_filter(shared_datadir, partial, expected_hits):
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = output_dir + "/partial.hmm"
+        _write_partial_cds_hmm(shared_datadir, hmm)
+        out = output_dir + "/out.gb"
+        main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm, "-o", out, "--gene_call", "all", "-Z", "1000", "--partial", partial])
+        record = next(SeqIO.parse(out, "genbank"))
+        assert any(f.type == "CDS" and str(f.location) == "[802:>2688](-)" for f in record.features)
+        hits = _domainator_features(record)
+        assert len(hits) == expected_hits
+        if expected_hits:
+            assert hits[0].location.end == 2686 # placed in the CDS's reading frame (codon_start=3)
+
+
+def test_prodigal_circular_origin_genes(shared_datadir):
+    """On circular contigs, genes crossing the origin are called and annotated as joins across it."""
+    from domainator.domainate import prodigal_CDS_annotate
+    record = next(_utils.parse_seqfiles([str(shared_datadir / "bacillus_phage_SPR.gb")]))
+    assert record.annotations["topology"] == "circular"
+    annotated = [str(f.location) for f in record.features if f.type == "CDS"]
+    assert "join{[1842:2552](-), [0:130](-)}" in annotated or "join{[0:130](-), [1842:2552](-)}" in annotated
+    record.features = [f for f in record.features if f.type != "CDS"]
+    prodigal_CDS_annotate(record)
+    origin_genes = [f for f in record.features if f.type == "CDS" and len(f.location.parts) == 2]
+    assert len(origin_genes) == 1
+    # matches the GenBank annotation complement(join(1843..2552,1..130)), with parts in order along the gene
+    assert [(int(p.start), int(p.end), p.strand) for p in origin_genes[0].location.parts] == [(0, 130, -1), (1842, 2552, -1)]
+    assert origin_genes[0].qualifiers["translation"][0][1:].rstrip("*") == str(origin_genes[0].translate(record.seq, cds=False))[1:].rstrip("*")
+
+    # rotating the contig moves the origin; the gene that crossed it is then called by the main pass, at the same place
+    shift = 1000
+    rotated = record[shift:] + record[:shift]
+    rotated.annotations["topology"] = "circular"
+    rotated.features = [f for f in rotated.features if f.type != "CDS"]
+    prodigal_CDS_annotate(rotated)
+    def gene_ends(rec, offset):
+        return sorted(((int(f.location.stranded_start) + offset) % len(rec), (int(f.location.stranded_end) + offset) % len(rec)) for f in rec.features if f.type == "CDS")
+    assert gene_ends(rotated, shift) == gene_ends(record, 0)

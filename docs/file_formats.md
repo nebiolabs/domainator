@@ -85,6 +85,8 @@ Some files give a partial CDS the translation of the full protein, including res
 
 Domain hits on a CDS are placed relative to its `codon_start`: residue 1 of the translation starts `codon_start - 1` bases into the CDS.
 
+**Gene calling.** With `--gene_call` (`domainate.py`, `domain_search.py`, `find_features.py`, `kmer_dist.py`, `domainator_db_download.py`), genes that prodigal finds running off the edge of a linear contig are kept as partial CDSs, annotated the way GenBank annotates them: extended to the edge of the contig (prodigal itself stops at the last whole codon), marked with `<` or `>`, and given a `codon_start` when the 5' end is partial. On circular contigs, genes that cross the origin are called by running prodigal again on a window spanning the origin (20 kb on each side, or the whole contig, rotated, if it is shorter than 40 kb), and annotated as joins across the origin, e.g. `complement(join(1843..2552,1..130))`. Only genes crossing the origin are taken from that second run, and one that overlaps a gene from the main run more than prodigal itself allows (60 bp on the same strand, 200 bp on opposite strands) is skipped.
+
 **Fragment status.** Like taxids, Domainator reads a fragment status for each protein or CDS:
 * A CDS is a fragment if either outer end of its location has a `<` or `>`. Its status is `N` (5' end, and so the N-terminus, missing), `C` (3' end missing), or `NC` (both).
 * For a protein record, a `CDS` or `Protein` feature spanning the record decides, the same way. This is what `domain_search.py --translate` writes, and what NCBI GenPept records carry.
