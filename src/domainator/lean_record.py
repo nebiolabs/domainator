@@ -56,6 +56,95 @@ class LeanParseError(Exception):
     back to the Biopython parser for the remainder."""
 
 
+# --- prodigal-style /partial="10" codes ---
+# Gene callers like prodigal and GeneMark mark genes that run off the edge of the sequence (or into a gap) with a two-digit code:
+# the first digit is the left (low coordinate) end, the second the right end, regardless of strand; 1 means the gene runs off
+# that end. They stop such genes at the last whole codon. Domainator converts the code to '<' / '>' location markers when
+# records are read (the code is tied to the coordinates, so it would be wrong after reverse complementing).
+
+PARTIAL_QUALIFIER = "partial"
+
+
+def partial_code_ends(qualifiers):
+    """(left_partial, right_partial) from a prodigal-style /partial code like "10", or None if there is no such code.
+
+    A bare /partial (the legacy INSDC qualifier, with no value) is not a code, so it gives None.
+    """
+    values = qualifiers.get(PARTIAL_QUALIFIER)
+    if not values:
+        return None
+    code = values[0].strip().strip('"')
+    if len(code) != 2 or any(c not in "01" for c in code):
+        return None
+    return code[0] == "1", code[1] == "1"
+
+
+def apply_partial_code(start, end, left_partial, right_partial, contig_length):
+    """Applies a prodigal-style partial code to a span.
+
+    A partial end within 2 bases of the edge of the contig is extended to the edge (gene callers stop at the last whole codon,
+    GenBank partial CDSs run to the edge); a partial end elsewhere (running into a gap) is kept where it is.
+
+    Returns:
+        (start, end, left_extension, right_extension): the new span and the number of bases added at each end
+    """
+    left_extension = right_extension = 0
+    if left_partial and start < 3:
+        left_extension = start
+        start = 0
+    if right_partial and contig_length - end < 3:
+        right_extension = contig_length - end
+        end = contig_length
+    return start, end, left_extension, right_extension
+
+
+def new_codon_start(qualifiers, five_prime_extension):
+    """The codon_start value after adding five_prime_extension bases to the 5' end of a CDS, or None if it stays 1 and was absent."""
+    try:
+        offset = int(qualifiers.get("codon_start", ["1"])[0]) - 1
+    except ValueError:
+        offset = 0
+    if not 0 <= offset <= 2:
+        offset = 0
+    new_offset = (offset + five_prime_extension) % 3
+    if new_offset == 0 and "codon_start" not in qualifiers:
+        return None
+    return str(new_offset + 1)
+
+
+def normalize_lean_partial_code(feature, contig_length):
+    """Converts a prodigal-style /partial code on a LeanFeature to '<' / '>' markers (see apply_partial_code), and removes the code.
+
+    If the location already has markers on its outer ends, they win and the code is just removed.
+    """
+    ends = partial_code_ends(feature.qualifiers)
+    if ends is None or not feature.parts or feature.between:
+        return
+    del feature.qualifiers[PARTIAL_QUALIFIER]
+    if any(feature.partial_ends) or ends == (False, False):
+        return
+    parts = [list(p) for p in feature.parts] # [start, end, strand, before, after]
+    leftmost = min(range(len(parts)), key=lambda i: parts[i][0])
+    rightmost = max(range(len(parts)), key=lambda i: parts[i][1])
+    left_partial, right_partial = ends
+    start, _end, left_extension, _r = apply_partial_code(parts[leftmost][0], parts[leftmost][1], left_partial, False, contig_length)
+    _start, end, _l, right_extension = apply_partial_code(parts[rightmost][0], parts[rightmost][1], False, right_partial, contig_length)
+    if left_partial:
+        parts[leftmost][0] = start
+        parts[leftmost][3] = True
+    if right_partial:
+        parts[rightmost][1] = end
+        parts[rightmost][4] = True
+    # the 5' end is the start of the first part on the plus strand, the end of the first part on the minus strand
+    first_strand = parts[0][2]
+    five_prime_extension = (right_extension if rightmost == 0 else 0) if first_strand == -1 else (left_extension if leftmost == 0 else 0)
+    feature.parts = tuple(tuple(p) for p in parts)
+    if feature.type == "CDS":
+        codon_start = new_codon_start(feature.qualifiers, five_prime_extension)
+        if codon_start is not None:
+            feature.qualifiers["codon_start"] = [codon_start]
+
+
 # --- GenBank header-field normalization (mirrors Bio.GenBank's parsing rules) ---
 # These operate on the raw header strings the native parser hands back, so the
 # per-record normalization is single-sourced here.
@@ -231,6 +320,8 @@ def build_lean_contig(name, accession, version, definition, molecule_type, circu
             if entry:
                 dbxrefs.append(entry.replace(": ", ":"))
 
+    for feature in features:
+        normalize_lean_partial_code(feature, len(seq))
     return LeanContig(record_id, rec_name, description, seq, annotations, features, dbxrefs)
 
 

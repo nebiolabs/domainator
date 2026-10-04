@@ -10,17 +10,17 @@ FEATURES             Location/Qualifiers
      source          1..4470
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
-     CDS             2..106
+     CDS             <1..106
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
      CDS             complement(959..1264)
                      /gene_id="pDONR201_2"
@@ -90,10 +90,9 @@ FEATURES             Location/Qualifiers
                      ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
                      MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
                      PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
-     CDS             4378..4470
+     CDS             4378..>4470
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"
@@ -191,17 +190,17 @@ FEATURES             Location/Qualifiers
      source          1..4470
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
-     CDS             2..106
+     CDS             <1..106
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
      CDS             complement(959..1264)
                      /gene_id="pDONR201_2"
@@ -271,10 +270,9 @@ FEATURES             Location/Qualifiers
                      ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
                      MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
                      PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
-     CDS             4378..4470
+     CDS             4378..>4470
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"
@@ -372,17 +370,17 @@ FEATURES             Location/Qualifiers
      source          1..4470
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
-     CDS             2..106
+     CDS             <1..106
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
      CDS             complement(959..1264)
                      /gene_id="pDONR201_2"
@@ -452,10 +450,9 @@ FEATURES             Location/Qualifiers
                      ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
                      MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
                      PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
-     CDS             4378..4470
+     CDS             4378..>4470
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"
@@ -553,17 +550,17 @@ FEATURES             Location/Qualifiers
      source          1..4470
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
-     CDS             2..106
+     CDS             <1..106
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
      CDS             complement(959..1264)
                      /gene_id="pDONR201_2"
@@ -633,10 +630,9 @@ FEATURES             Location/Qualifiers
                      ALAVFLRRLHSIPVCNCPFNSDRVFRLAQAQSRMNNGLVDASDFDDERNGWPVEQVWKE
                      MHKLLPFSPDSVVTHGDFSLDNLIFDEGKLIGCIDVGRVGIADRYQDLAILWNCLGEFS
                      PSLQKRLFQKYGIDNPDMNKLQFHLMLDEFF*"
-     CDS             4378..4470
+     CDS             4378..>4470
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"

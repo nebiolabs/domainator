@@ -726,7 +726,7 @@ ORIGIN
      2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
 //
-LOCUS       pDONR201_1_1391:2rc     2967 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_1_1391:1rc     2967 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_1.
 ACCESSION   pDONR201_1
 VERSION     pDONR201_1
@@ -735,7 +735,7 @@ SOURCE
   ORGANISM  .
             .
 FEATURES             Location/Qualifiers
-     source          complement(1286..2675)
+     source          complement(1286..2676)
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
      CDS             1286..1411
@@ -801,17 +801,17 @@ FEATURES             Location/Qualifiers
                      /rstart="1"
                      /rend="100"
                      /rlen="100"
-     CDS             complement(2571..2675)
+     CDS             complement(2571..>2676)
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
 ORIGIN
         1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
@@ -858,14 +858,14 @@ ORIGIN
      2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
      2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
      2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
-     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2641 cggttatcca cagaatcagg ggataacgca ggaaagnnnn nnnnnnnnnn nnnnnnnnnn
      2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
 //
-LOCUS       pDONR201_2_1391:2rc     2967 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_2_1391:1rc     2967 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_2.
 ACCESSION   pDONR201_2
 VERSION     pDONR201_2
@@ -874,7 +874,7 @@ SOURCE
   ORGANISM  .
             .
 FEATURES             Location/Qualifiers
-     source          complement(1286..2675)
+     source          complement(1286..2676)
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
      CDS             1286..1411
@@ -940,17 +940,17 @@ FEATURES             Location/Qualifiers
                      /rstart="1"
                      /rend="100"
                      /rlen="100"
-     CDS             complement(2571..2675)
+     CDS             complement(2571..>2676)
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
 ORIGIN
         1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
@@ -997,14 +997,14 @@ ORIGIN
      2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
      2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
      2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
-     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2641 cggttatcca cagaatcagg ggataacgca ggaaagnnnn nnnnnnnnnn nnnnnnnnnn
      2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
 //
-LOCUS       pDONR201_3_1391:2rc     2967 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_3_1391:1rc     2967 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_3.
 ACCESSION   pDONR201_3
 VERSION     pDONR201_3
@@ -1013,7 +1013,7 @@ SOURCE
   ORGANISM  .
             .
 FEATURES             Location/Qualifiers
-     source          complement(1286..2675)
+     source          complement(1286..2676)
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
      CDS             1286..1411
@@ -1079,17 +1079,17 @@ FEATURES             Location/Qualifiers
                      /rstart="1"
                      /rend="100"
                      /rlen="100"
-     CDS             complement(2571..2675)
+     CDS             complement(2571..>2676)
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
 ORIGIN
         1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
@@ -1136,14 +1136,14 @@ ORIGIN
      2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
      2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
      2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
-     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2641 cggttatcca cagaatcagg ggataacgca ggaaagnnnn nnnnnnnnnn nnnnnnnnnn
      2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2881 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2941 nnnnnnnnnn nnnnnnnnnn nnnnnnn
 //
-LOCUS       pDONR201_4_1391:2rc     2967 bp    DNA              UNK 27-DEC-2023
+LOCUS       pDONR201_4_1391:1rc     2967 bp    DNA              UNK 27-DEC-2023
 DEFINITION  pDONR201_4.
 ACCESSION   pDONR201_4
 VERSION     pDONR201_4
@@ -1152,7 +1152,7 @@ SOURCE
   ORGANISM  .
             .
 FEATURES             Location/Qualifiers
-     source          complement(1286..2675)
+     source          complement(1286..2676)
                      /invitrogen="""584"
                      /label="Invitrogen vector 584"
      CDS             1286..1411
@@ -1218,17 +1218,17 @@ FEATURES             Location/Qualifiers
                      /rstart="1"
                      /rend="100"
                      /rlen="100"
-     CDS             complement(2571..2675)
+     CDS             complement(2571..>2676)
                      /gene_id="pDONR201_1"
                      /gene_type="bacteria"
-                     /partial="10"
                      /gc="49"
                      /length="105"
                      /source="GeneMark.hmm2"
                      /score="5.09"
                      /phase="0"
                      /name="pDONR201_1"
-                     /cds_id="2_1_106"
+                     /codon_start=2
+                     /cds_id="1_1_106"
                      /translation="FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*"
 ORIGIN
         1 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
@@ -1275,7 +1275,7 @@ ORIGIN
      2461 gaacgctctc ctgagtagga caaatccgcc gggagcggat ttgaacgttg tgaagcaacg
      2521 gcccggaggg tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ctaagcagaa
      2581 ggccatcctg acggatggcc tttttgcgtt tctacaaact cttcctggct agcggtaata
-     2641 cggttatcca cagaatcagg ggataacgca ggaaannnnn nnnnnnnnnn nnnnnnnnnn
+     2641 cggttatcca cagaatcagg ggataacgca ggaaagnnnn nnnnnnnnnn nnnnnnnnnn
      2701 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2761 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
      2821 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
@@ -1387,10 +1387,9 @@ FEATURES             Location/Qualifiers
                      /rstart="305"
                      /rend="350"
                      /rlen="437"
-     CDS             2875..2967
+     CDS             2875..>2967
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"
@@ -1556,10 +1555,9 @@ FEATURES             Location/Qualifiers
                      /rstart="305"
                      /rend="350"
                      /rlen="437"
-     CDS             2875..2967
+     CDS             2875..>2967
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"
@@ -1725,10 +1723,9 @@ FEATURES             Location/Qualifiers
                      /rstart="305"
                      /rend="350"
                      /rlen="437"
-     CDS             2875..2967
+     CDS             2875..>2967
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"
@@ -1894,10 +1891,9 @@ FEATURES             Location/Qualifiers
                      /rstart="305"
                      /rend="350"
                      /rlen="437"
-     CDS             2875..2967
+     CDS             2875..>2967
                      /gene_id="pDONR201_6"
                      /gene_type="bacteria"
-                     /partial="01"
                      /gc="56"
                      /length="93"
                      /source="GeneMark.hmm2"

@@ -1215,6 +1215,7 @@ def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None,
                 is_search_contig = bool(lean_search_types) and isinstance(rec, lean_search_types)
                 if file_type == "genbank" and not is_search_contig:
                     swap_name_id(rec)
+                    normalize_partial_codes(rec)
                 if contigs is None or rec.id in contigs:
                     if not is_search_contig and 'molecule_type' not in rec.annotations:  # TODO: is this ok (will a nucleotide sequence always have molecule_type defined and a peptide sequence always not have?)
                         rec.annotations['molecule_type'] = default_molecule_type
@@ -2160,6 +2161,46 @@ def feature_partial_ends(feature:Union[SeqFeature, "lean_record.LeanFeature"]) -
     if isinstance(feature, lean_record.LeanFeature):
         return feature.partial_ends
     return location_partial_ends(feature.location)
+
+def normalize_partial_codes(record) -> None:
+    """
+        Converts prodigal-style /partial="10" codes on a record's features to '<' / '>' location markers, and removes the codes.
+        See lean_record.apply_partial_code. Called by parse_seqfiles on every GenBank record.
+    """
+    if isinstance(record, lean_record.LeanContig):
+        for feature in record.features:
+            lean_record.normalize_lean_partial_code(feature, len(record))
+        return
+    for feature in record.features:
+        ends = lean_record.partial_code_ends(feature.qualifiers)
+        if ends is None:
+            continue
+        del feature.qualifiers[lean_record.PARTIAL_QUALIFIER]
+        if any(location_partial_ends(feature.location)) or ends == (False, False):
+            continue
+        left_partial, right_partial = ends
+        parts = list(feature.location.parts)
+        leftmost = min(range(len(parts)), key=lambda i: int(parts[i].start))
+        rightmost = max(range(len(parts)), key=lambda i: int(parts[i].end))
+        left_extension = right_extension = 0
+        if left_partial:
+            part = parts[leftmost]
+            start, _end, left_extension, _r = lean_record.apply_partial_code(int(part.start), int(part.end), True, False, len(record))
+            parts[leftmost] = FeatureLocation(BeforePosition(start), part.end, strand=part.strand)
+        if right_partial:
+            part = parts[rightmost]
+            _start, end, _l, right_extension = lean_record.apply_partial_code(int(part.start), int(part.end), False, True, len(record))
+            parts[rightmost] = FeatureLocation(part.start, AfterPosition(end), strand=part.strand)
+        # the 5' end is the start of the first part on the plus strand, the end of the first part on the minus strand
+        if parts[0].strand == -1:
+            five_prime_extension = right_extension if rightmost == 0 else 0
+        else:
+            five_prime_extension = left_extension if leftmost == 0 else 0
+        feature.location = parts[0] if len(parts) == 1 else CompoundLocation(parts, operator=feature.location.operator)
+        if feature.type == "CDS":
+            codon_start = lean_record.new_codon_start(feature.qualifiers, five_prime_extension)
+            if codon_start is not None:
+                feature.qualifiers["codon_start"] = [codon_start]
 
 def partial_ends_to_status(five_prime:bool, three_prime:bool) -> Optional[str]:
     """

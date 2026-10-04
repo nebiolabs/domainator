@@ -235,6 +235,59 @@ fn partial_ends(loc: &Location) -> Option<(bool, bool, i64)> {
     Some((five, three, len))
 }
 
+/// (left_partial, right_partial) from a prodigal-style /partial code like "10"
+/// (lean_record.partial_code_ends). None without such a code.
+fn partial_code_ends(feature: &gb_io::seq::Feature) -> Option<(bool, bool)> {
+    let value = feature
+        .qualifiers
+        .iter()
+        .find(|(k, _)| k == "partial")
+        .and_then(|(_, v)| v.as_deref())?;
+    let code = value.trim().trim_matches('"').as_bytes();
+    if code.len() != 2 || !code.iter().all(|c| *c == b'0' || *c == b'1') {
+        return None;
+    }
+    Some((code[0] == b'1', code[1] == b'1'))
+}
+
+/// (five_prime_partial, three_prime_partial, location length, codon offset) for a CDS
+/// as the Python side sees it after converting a prodigal-style /partial code to
+/// location markers (lean_record.normalize_lean_partial_code): a partial end within
+/// 2 bases of the contig edge is extended to the edge, and an extended 5' end moves
+/// the reading frame. Location markers, when present, win over the code.
+fn feature_partial_info(feature: &gb_io::seq::Feature, contig_len: i64) -> (bool, bool, i64, usize) {
+    let offset = codon_offset(feature);
+    let (five, three, len) = match partial_ends(&feature.location) {
+        Some(ends) => ends,
+        None => return (false, false, 0, offset),
+    };
+    if five || three {
+        return (five, three, len, offset);
+    }
+    let (left, right) = match partial_code_ends(feature) {
+        Some(ends) => ends,
+        None => return (false, false, len, offset),
+    };
+    let parts = match lean_location(&feature.location, 1) {
+        Some((_op, false, parts)) if !parts.is_empty() => parts,
+        _ => return (false, false, len, offset),
+    };
+    let leftmost = (0..parts.len()).min_by_key(|&i| parts[i].0).unwrap_or(0);
+    let rightmost = (0..parts.len()).max_by_key(|&i| parts[i].1).unwrap_or(0);
+    let left_extension = if left && parts[leftmost].0 < 3 { parts[leftmost].0 } else { 0 };
+    let right_extension = if right && contig_len - parts[rightmost].1 < 3 { contig_len - parts[rightmost].1 } else { 0 };
+    let minus = parts[0].2 == -1;
+    let five_prime_extension = if minus {
+        if rightmost == 0 { right_extension } else { 0 }
+    } else if leftmost == 0 {
+        left_extension
+    } else {
+        0
+    };
+    let (five, three) = if minus { (right, left) } else { (left, right) };
+    (five, three, len + left_extension + right_extension, (offset + five_prime_extension as usize) % 3)
+}
+
 /// Whether a protein/CDS with this fragment status passes a --partial filter
 /// (utils.fragment_status_allowed).
 fn partial_allowed(is_fragment: bool, partial: &str) -> bool {
@@ -299,8 +352,8 @@ fn cds_peptide(feature: &gb_io::seq::Feature, seq: &[u8]) -> String {
     let raw = match translation_value(feature) {
         Some(tr) => {
             let tr: String = tr.chars().filter(|c| !c.is_whitespace()).collect();
-            let (five, three, len) = partial_ends(&feature.location).unwrap_or((false, false, 0));
-            match on_contig_translation(&tr, len, codon_offset(feature), five, three) {
+            let (five, three, len, offset) = feature_partial_info(feature, seq.len() as i64);
+            match on_contig_translation(&tr, len, offset, five, three) {
                 Some(t) => t,
                 None => translate_feature(feature, seq),
             }
@@ -310,12 +363,13 @@ fn cds_peptide(feature: &gb_io::seq::Feature, seq: &[u8]) -> String {
     raw.chars().filter(|c| c.is_ascii_alphanumeric()).collect()
 }
 
-/// Whether a CDS passes a --partial filter, from its location's '<' / '>' markers.
-fn cds_partial_allowed(feature: &gb_io::seq::Feature, partial: &str) -> bool {
+/// Whether a CDS passes a --partial filter, from its location's '<' / '>' markers or
+/// a prodigal-style /partial code.
+fn cds_partial_allowed(feature: &gb_io::seq::Feature, partial: &str, contig_len: i64) -> bool {
     if partial == "include" {
         return true;
     }
-    let (five, three, _len) = partial_ends(&feature.location).unwrap_or((false, false, 0));
+    let (five, three, _len, _offset) = feature_partial_info(feature, contig_len);
     partial_allowed(five || three, partial)
 }
 
@@ -598,7 +652,7 @@ impl LeanSearchContig {
             if !dropped.is_empty() && dropped.contains(feature.kind.as_ref()) {
                 continue;
             }
-            if is_searchable_cds(feature) && cds_partial_allowed(feature, partial) {
+            if is_searchable_cds(feature) && cds_partial_allowed(feature, partial, self.seq.seq.len() as i64) {
                 out.push((idx, cds_peptide(feature, &self.seq.seq)));
             }
             idx += 1;
@@ -619,7 +673,7 @@ impl LeanSearchContig {
             if !dropped.is_empty() && dropped.contains(feature.kind.as_ref()) {
                 continue;
             }
-            if is_searchable_cds(feature) && cds_partial_allowed(feature, partial) {
+            if is_searchable_cds(feature) && cds_partial_allowed(feature, partial, self.seq.seq.len() as i64) {
                 let taxid = location_intervals(&feature.location)
                     .and_then(|iv| longest_covering(&sources, &iv))
                     .map(|src| src.taxon.unwrap_or(UNIDENTIFIED_TAXID));

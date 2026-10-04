@@ -742,3 +742,61 @@ def test_contig_has_fragment_and_filter_by_partial():
     assert list(utils.filter_by_partial(records, "only")) == [partial, protein]
     assert utils.cds_fragment_status(partial, partial.features[1]) == "N"
     assert utils.cds_fragment_status(protein, None) == "?"
+
+
+# --- prodigal-style /partial="10" codes ---
+
+def _coded_record(location, code, extra_qualifiers=None):
+    record = SeqRecord.SeqRecord(Seq.Seq("A" * 60), id="coded", name="coded", description="coded")
+    record.annotations["molecule_type"] = "DNA"
+    qualifiers = {"partial": [code]} if code is not None else {}
+    qualifiers.update(extra_qualifiers or {})
+    record.features = [SeqFeature(location, type="CDS", qualifiers=qualifiers)]
+    return record
+
+
+@pytest.mark.parametrize("location,code,expected_location,expected_codon_start", [
+    # left end runs off the sequence; the gene caller stopped at the last whole codon (1 base from the edge)
+    (FeatureLocation(1, 30, 1), "10", "[<0:30](+)", ["2"]), # plus strand: the left end is the 5' end
+    (FeatureLocation(1, 30, -1), "10", "[<0:30](-)", None), # minus strand: the left end is the 3' end
+    (FeatureLocation(30, 58, -1), "01", "[30:>60](-)", ["3"]), # minus strand: the right end is the 5' end
+    (FeatureLocation(30, 58, 1), "01", "[30:>60](+)", None),
+    (FeatureLocation(0, 60, 1), "11", "[<0:>60](+)", None),
+    (FeatureLocation(10, 30, 1), "10", "[<10:30](+)", None), # runs into a gap, not the edge: marked where it is
+    (FeatureLocation(1, 30, 1), "00", "[1:30](+)", None),
+    (FeatureLocation(BeforePosition(0), 30, 1), "01", "[<0:30](+)", None), # existing markers win
+])
+def test_normalize_partial_codes(location, code, expected_location, expected_codon_start):
+    record = _coded_record(location, code)
+    utils.normalize_partial_codes(record)
+    feature = record.features[0]
+    assert str(feature.location) == expected_location
+    assert feature.qualifiers.get("codon_start") == expected_codon_start
+    assert "partial" not in feature.qualifiers
+
+
+def test_normalize_partial_codes_keeps_bare_partial_and_combines_codon_start():
+    record = _coded_record(FeatureLocation(1, 30, 1), "")
+    utils.normalize_partial_codes(record)
+    assert record.features[0].qualifiers["partial"] == [""] # legacy INSDC /partial: no end information
+    assert str(record.features[0].location) == "[1:30](+)"
+    record = _coded_record(FeatureLocation(1, 30, 1), "10", {"codon_start": ["2"]})
+    utils.normalize_partial_codes(record)
+    assert record.features[0].qualifiers["codon_start"] == ["3"]
+
+
+@pytest.mark.parametrize("parser", ["biopython", "lean"])
+def test_parse_seqfiles_converts_partial_codes(shared_datadir, parser):
+    """Both GenBank parsers convert GeneMark's /partial codes in pDONR201_multi_genemark.gb, and the native search agrees."""
+    from domainator import lean_record
+    records = list(utils.parse_seqfiles([str(shared_datadir / "pDONR201_multi_genemark.gb")], genbank_parser=parser))
+    for record in records:
+        if lean_record.LEAN_SEARCH_TYPES and isinstance(record, lean_record.LEAN_SEARCH_TYPES):
+            assert [i for i, _ in record.cds_peptides(set(), "only")] == [1, 6] # feature indexes of the coded CDSs
+            record = lean_record.lean_to_seqrecord(lean_record.materialize_lean_search(record, None))
+        cdss = [f for f in record.features if f.type == "CDS"]
+        assert str(cdss[0].location) == "[<0:106](+)" and cdss[0].qualifiers["codon_start"] == ["2"]
+        assert str(cdss[-1].location) == "[4377:>4470](+)"
+        assert not any("partial" in f.qualifiers for f in cdss)
+        # the translation is unchanged by extending the CDS to the edge
+        assert str(cdss[0].translate(record.seq, cds=False)).startswith("FPALSPDSVDNR")

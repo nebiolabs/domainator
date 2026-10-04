@@ -95,7 +95,18 @@ def test_domainator_multi_hmm(shared_datadir):
 
         main(args)
 
-        compare_seqfiles(out, ref_file, skip_qualifiers={"identity", "accession"})
+        # The reference keeps GeneMark's /partial="10" and "01" codes, so it also tests reading them. Domainator converts them
+        # to '<' / '>' markers when reading, so compare against the reference as Domainator reads it.
+        # The reference's cds_id for the /partial="10" CDS was generated from its old location (2..106); new runs generate it from <1..106.
+        ref_records = list(SeqIO.parse(str(ref_file), "genbank"))
+        for record in ref_records:
+            _utils.normalize_partial_codes(record)
+            for feature in record.features:
+                if feature.qualifiers.get("cds_id") == ["2_1_106"]:
+                    feature.qualifiers["cds_id"] = ["1_1_106"]
+        normalized_ref = output_dir + "/ref.gb"
+        SeqIO.write(ref_records, normalized_ref, "genbank")
+        compare_seqfiles(out, normalized_ref, skip_qualifiers={"identity", "accession"})
 
 def test_domainator_multi_hmm_2(shared_datadir):
     query_seqs = shared_datadir / "pDONR201_multi_genemark.gb"

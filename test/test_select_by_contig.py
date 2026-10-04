@@ -261,19 +261,20 @@ import helpers as _helpers
 
 def test_select_by_contig_partial(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        inputs = [str(shared_datadir / _helpers.PARTIAL_FIXTURE), str(shared_datadir / "pDONR201_multi_genemark.gb")]
+        # pDONR201_multi_genemark.gb has GeneMark /partial="10" and "01" codes, read as partial CDSs
+        inputs = [str(shared_datadir / _helpers.PARTIAL_FIXTURE), str(shared_datadir / "pDONR201.gb"), str(shared_datadir / "pDONR201_multi_genemark.gb")]
         ids = dict()
         for partial in ("include", "exclude", "only"):
             out = output_dir + f"/{partial}.gb"
             select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", partial])
             ids[partial] = [r.id for r in utils.parse_seqfiles([out])]
-        assert ids["only"] == ["JABFVH010000506_extraction"] # contains a partial CDS
-        assert ids["exclude"] == ["pDONR201_1", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
-        assert ids["include"] == ids["only"] + ids["exclude"]
+        assert ids["only"] == ["JABFVH010000506_extraction", "pDONR201_1", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
+        assert ids["exclude"] == ["pDONR201"]
+        assert sorted(ids["include"]) == sorted(ids["only"] + ids["exclude"])
         # --invert doesn't apply to --partial
         out = output_dir + "/invert.gb"
-        select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", "exclude", "--contigs", "pDONR201_1", "--invert"])
-        assert [r.id for r in utils.parse_seqfiles([out])] == ["pDONR201_2", "pDONR201_3", "pDONR201_4"]
+        select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", "only", "--contigs", "pDONR201_1", "--invert"])
+        assert [r.id for r in utils.parse_seqfiles([out])] == ["JABFVH010000506_extraction", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
 
 
 def test_select_by_contig_partial_uniprot_fasta(shared_datadir):
