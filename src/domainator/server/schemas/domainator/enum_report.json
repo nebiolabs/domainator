@@ -658,7 +658,7 @@
     {
       "name": "Partial",
       "parameter": "partial",
-      "help": "Which rows to report, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.",
+      "help": "Which rows to report, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.",
       "type": "string",
       "choices": [
         "include",

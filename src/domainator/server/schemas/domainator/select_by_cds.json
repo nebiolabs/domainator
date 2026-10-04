@@ -291,7 +291,7 @@
     {
       "name": "Partial",
       "parameter": "partial",
-      "help": "Which CDSs to extract regions around, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Not affected by --invert.",
+      "help": "Which CDSs to extract regions around, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Not affected by --invert.",
       "type": "string",
       "choices": [
         "include",

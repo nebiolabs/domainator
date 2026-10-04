@@ -780,6 +780,8 @@ def test_normalize_partial_codes_keeps_bare_partial_and_combines_codon_start():
     utils.normalize_partial_codes(record)
     assert record.features[0].qualifiers["partial"] == [""] # legacy INSDC /partial: no end information
     assert str(record.features[0].location) == "[1:30](+)"
+    assert utils.get_fragment_status(record.features[0]) == "?" # a fragment, missing end unknown
+    assert utils.contig_has_fragment(record)
     record = _coded_record(FeatureLocation(1, 30, 1), "10", {"codon_start": ["2"]})
     utils.normalize_partial_codes(record)
     assert record.features[0].qualifiers["codon_start"] == ["3"]
@@ -800,3 +802,20 @@ def test_parse_seqfiles_converts_partial_codes(shared_datadir, parser):
         assert not any("partial" in f.qualifiers for f in cdss)
         # the translation is unchanged by extending the CDS to the edge
         assert str(cdss[0].translate(record.seq, cds=False)).startswith("FPALSPDSVDNR")
+
+
+@pytest.mark.parametrize("parser", ["biopython", "lean"])
+def test_bare_partial_qualifier_is_a_fragment(shared_datadir, tmp_path, parser):
+    """A CDS with a legacy /partial qualifier (no value) is a fragment, for the Python and native (Rust) --partial filters."""
+    from domainator import lean_record, domainate
+    text = (shared_datadir / "JABFVH010000506_extraction.gb").read_text()
+    text = text.replace("     CDS             complement(280..780)\n", "     CDS             complement(280..780)\n                     /partial\n", 1)
+    path = tmp_path / "bare_partial.gb"
+    path.write_text(text)
+    record = next(utils.parse_seqfiles([str(path)], genbank_parser=parser))
+    for partial, expected in (("include", 2), ("exclude", 0), ("only", 2)): # the other CDS is '>'-partial
+        assert len(list(domainate.get_prot_list(record, 0, partial=partial))) == expected
+    if lean_record.LEAN_SEARCH_TYPES and isinstance(record, lean_record.LEAN_SEARCH_TYPES):
+        record = lean_record.lean_to_seqrecord(lean_record.materialize_lean_search(record, None))
+    cdss = [f for f in record.features if f.type == "CDS"]
+    assert [utils.get_fragment_status(f) for f in cdss] == ["?", "N"]

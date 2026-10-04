@@ -8,7 +8,7 @@ import sys
 import warnings
 import argparse
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status, cds_fragment_status, contig_has_fragment, feature_partial_ends, fragment_status_allowed, PARTIAL_CHOICES, partial_help
+from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status, cds_fragment_status, contig_has_fragment, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator.select_by_cds import get_cds_neighborhood
 from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
 from domainator.find_features import search_motif
@@ -741,7 +741,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
             contig_partial_count = 0 if fragment_statuses[-1] is None else 1
         else:
             fragment_statuses.append("?" if contig_has_fragment(rec) else None) # for the partial filter
-            contig_partial_count = sum(1 for f in rec.features if f.type == "CDS" and any(feature_partial_ends(f)))
+            contig_partial_count = sum(1 for f in rec.features if f.type == "CDS" and get_fragment_status(f) is not None)
     else: #by cds or domain
         cds_names = list()
         domain_names = list()

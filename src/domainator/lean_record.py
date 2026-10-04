@@ -79,6 +79,12 @@ def partial_code_ends(qualifiers):
     return code[0] == "1", code[1] == "1"
 
 
+def has_bare_partial(qualifiers):
+    """True for the legacy INSDC /partial qualifier with no value: the feature is partial, but which end is missing is unknown."""
+    values = qualifiers.get(PARTIAL_QUALIFIER)
+    return bool(values) and values[0].strip().strip('"') == ""
+
+
 def apply_partial_code(start, end, left_partial, right_partial, contig_length):
     """Applies a prodigal-style partial code to a span.
 

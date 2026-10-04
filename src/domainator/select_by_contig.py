@@ -283,7 +283,7 @@ def main(argv):
     parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES,
                         help="Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. "
                         "A protein record is a fragment if it has a UniProt ' (Fragment)' header or 'Flags: Fragment' definition, NON_TER features, "
-                        "or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location. Not affected by --invert.")
+                        "or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location, or a /partial qualifier. Not affected by --invert.")
     parser.add_argument("--domain_type", type=str, default="domain", choices={"domain", "search", "both"}, help="The type of domain to consider, domain, search, both. Default: domain")    
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",

@@ -235,6 +235,16 @@ fn partial_ends(loc: &Location) -> Option<(bool, bool, i64)> {
     Some((five, three, len))
 }
 
+/// The legacy INSDC /partial qualifier with no value: partial, missing end unknown
+/// (lean_record.has_bare_partial).
+fn has_bare_partial(feature: &gb_io::seq::Feature) -> bool {
+    match feature.qualifiers.iter().find(|(k, _)| k == "partial") {
+        Some((_, None)) => true,
+        Some((_, Some(v))) => v.trim().trim_matches('"').is_empty(),
+        None => false,
+    }
+}
+
 /// (left_partial, right_partial) from a prodigal-style /partial code like "10"
 /// (lean_record.partial_code_ends). None without such a code.
 fn partial_code_ends(feature: &gb_io::seq::Feature) -> Option<(bool, bool)> {
@@ -370,7 +380,7 @@ fn cds_partial_allowed(feature: &gb_io::seq::Feature, partial: &str, contig_len:
         return true;
     }
     let (five, three, _len, _offset) = feature_partial_info(feature, contig_len);
-    partial_allowed(five || three, partial)
+    partial_allowed(five || three || has_bare_partial(feature), partial)
 }
 
 /// Parse the integer from a feature's /db_xref="taxon:NNN" qualifier (first match).

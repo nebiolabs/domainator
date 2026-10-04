@@ -2134,7 +2134,7 @@ def partial_help(what:str) -> str:
         Help text for a --partial argument. what: what is selected, e.g. "Which CDSs/proteins to search".
     """
     return (f"{what}, by fragment status. include: all. exclude: skip fragments. only: only fragments. "
-            "A CDS is a fragment if its location has '<' or '>'. A protein record is a fragment if it has a UniProt ' (Fragment)' header, "
+            "A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' header, "
             "a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it.")
 
 def location_partial_ends(location) -> Tuple[bool, bool]:
@@ -2216,14 +2216,17 @@ def get_fragment_status(record_or_feature:Union[SeqRecord, SeqFeature]) -> Optio
             "N": missing the N-terminus (5' partial)
             "C": missing the C-terminus (3' partial)
             "NC": missing both ends
-            "?": a fragment with unknown missing ends (UniProt " (Fragment)" header)
+            "?": a fragment with unknown missing ends (UniProt " (Fragment)" header, or a CDS with a /partial qualifier without a value)
 
         For a protein record, a CDS or Protein feature spanning the record (e.g. from domain_search --translate, or GenPept)
         decides. Otherwise UniProt NON_TER features on the first or last residue (UniProt text entries) decide,
         and otherwise a UniProt fragment token in the description (see description_is_fragment) gives "?".
     """
     if isinstance(record_or_feature, (SeqFeature, lean_record.LeanFeature)):
-        return partial_ends_to_status(*feature_partial_ends(record_or_feature))
+        status = partial_ends_to_status(*feature_partial_ends(record_or_feature))
+        if status is None and lean_record.has_bare_partial(record_or_feature.qualifiers):
+            return "?" # legacy /partial qualifier with no value: partial, missing end unknown
+        return status
     record = record_or_feature
     if record.annotations.get("molecule_type") != "protein":
         return None
@@ -2268,7 +2271,7 @@ def contig_has_fragment(record) -> bool:
     """
     if record.annotations.get("molecule_type") == "protein":
         return get_fragment_status(record) is not None
-    return any(feature.type == "CDS" and any(feature_partial_ends(feature)) for feature in record.features)
+    return any(feature.type == "CDS" and get_fragment_status(feature) is not None for feature in record.features)
 
 def cds_fragment_status(record, feature:Optional[SeqFeature]) -> Optional[str]:
     """
