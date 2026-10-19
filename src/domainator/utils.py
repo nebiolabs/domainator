@@ -6,6 +6,7 @@ warnings.filterwarnings("ignore", module='numpy')
 from domainator.Bio import SeqIO, BiopythonParserWarning, BiopythonWarning
 from domainator.Bio import bgzf
 from domainator.Bio.SeqRecord import SeqRecord
+from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition, BeforePosition, AfterPosition
 import gzip
 from domainator import lean_record
@@ -30,6 +31,7 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from typing import List, Optional
 from collections import defaultdict, OrderedDict
 import functools
+import hashlib
 import sys
 import math
 import pandas as pd
@@ -2685,4 +2687,24 @@ def get_palette(values, max_groups=None):
             out[value] = OTHER_COLOR
     if has_missing:
         out[None] = OTHER_COLOR
+    return out
+
+def sequence_hashes(seq, both_strands: bool = False) -> List[bytes]:
+    """
+        SHA-256 digests identifying a sequence for exact-duplicate detection.
+
+        The sequence is uppercased and terminal '*' stripped before hashing, so case and stop codons don't distinguish sequences.
+
+        seq: a Seq or str.
+        both_strands: if True, also return the digests of the complement and reverse complement (for nucleotide sequences),
+            so a sequence matches its other-strand copies.
+
+        returns: a list of digests (1, or 3 if both_strands). Two sequences are duplicates if their lists share any digest.
+    """
+    seq_str = str(seq).upper().strip("*")
+    out = [hashlib.sha256(seq_str.encode("utf-8")).digest()]
+    if both_strands:
+        seq_obj = Seq(seq_str)
+        out.append(hashlib.sha256(str(seq_obj.complement()).encode("utf-8")).digest())
+        out.append(hashlib.sha256(str(seq_obj.reverse_complement()).encode("utf-8")).digest())
     return out

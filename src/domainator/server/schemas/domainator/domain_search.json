@@ -329,6 +329,26 @@
       ]
     },
     {
+      "name": "Deduplicate By Sequence",
+      "parameter": "deduplicate_by_sequence",
+      "help": "Drop hits whose output sequence is identical to an earlier hit (SHA-256 hash, as in deduplicate_genbank.py --algorithm hash). Useful for highly redundant databases. Independent of --deduplicate, which only drops repeated record IDs.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--deduplicate_by_sequence"
+      ]
+    },
+    {
+      "name": "Dedup Both Strands",
+      "parameter": "dedup_both_strands",
+      "help": "With --deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--dedup_both_strands"
+      ]
+    },
+    {
       "name": "Max Region Overlap",
       "parameter": "max_region_overlap",
       "help": "the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.",

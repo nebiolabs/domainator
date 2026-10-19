@@ -9,14 +9,13 @@ import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
 from typing import List
 from domainator.Bio import SeqIO, Seq
-from domainator.utils import parse_seqfiles, write_genbank
+from domainator.utils import parse_seqfiles, write_genbank, sequence_hashes
 import tempfile
 import subprocess
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 import psutil
-import hashlib
 from domainator import __version__, RawAndDefaultsFormatter
 
 def add_params_to_args_list(arg_list, params):
@@ -279,12 +278,7 @@ class DeduplicateGenbank():
                 raise ValueError(f"hash algorithm only valid for id = 1, not {id}.")
             seen = dict()
             for i, rec in enumerate(parse_seqfiles(genbanks, default_molecule_type=fasta_type)):
-                seq_str = str(rec.seq).upper().strip("*")
-                seq_hashes = [hashlib.sha256(seq_str.encode("utf-8")).hexdigest()]
-                if both_strands:
-                    seq = Seq.Seq(seq_str)
-                    seq_hashes.append(hashlib.sha256(str(seq.complement()).encode("utf-8")).hexdigest())
-                    seq_hashes.append(hashlib.sha256(str(seq.reverse_complement()).encode("utf-8")).hexdigest())
+                seq_hashes = sequence_hashes(rec.seq, both_strands)
 
                 hit = None
                 for seq_hash in seq_hashes:

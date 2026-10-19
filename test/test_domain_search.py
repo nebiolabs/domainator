@@ -388,6 +388,84 @@ def test_deduplicate(shared_datadir):
         
         # compare_seqfiles(out, shared_datadir / "pDONR201_multi_genemark_domainator.gb")
 
+def test_deduplicate_by_sequence_nucleotide(shared_datadir):
+    # the four contigs in this file have identical sequences
+    gb = shared_datadir / "pDONR201_multi_genemark_domainator.gb"
+    hmms = shared_datadir / "pdonr_hmms.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        base_args = ['--input', str(gb), "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--whole_contig", "--cpu", "1", "--keep_direction"]
+        main(base_args + ["--deduplicate"])
+        assert len(list(SeqIO.parse(out, "genbank"))) == 4
+
+        main(base_args + ["--deduplicate_by_sequence"])
+        assert len(list(SeqIO.parse(out, "genbank"))) == 1
+
+        # neighborhoods: one copy of each distinct region
+        region_args = ['--input', str(gb), "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--cds_range", "1", "--cpu", "1"]
+        main(region_args)
+        all_seqs = [str(rec.seq) for rec in SeqIO.parse(out, "genbank")]
+        main(region_args + ["--deduplicate_by_sequence"])
+        dedup_seqs = [str(rec.seq) for rec in SeqIO.parse(out, "genbank")]
+        assert len(dedup_seqs) < len(all_seqs)
+        assert len(dedup_seqs) == len(set(dedup_seqs))
+        assert set(dedup_seqs) == set(all_seqs)
+
+def test_deduplicate_by_sequence_both_strands(shared_datadir):
+    gb = shared_datadir / "pDONR201_multi_genemark_domainator.gb"
+    hmms = shared_datadir / "pdonr_hmms.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        fwd = next(iter(utils.parse_seqfiles([str(gb)])))
+        rev = fwd.reverse_complement(id="pDONR201_rc", name="pDONR201_rc", description="", annotations=True)
+        in_gb = output_dir + "/in.gb"
+        utils.write_genbank([fwd, rev], in_gb)
+        out = output_dir + "/out.gb"
+        base_args = ['--input', in_gb, "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--whole_contig", "--cpu", "1", "--keep_direction", "--deduplicate_by_sequence"]
+        main(base_args)
+        assert len(list(SeqIO.parse(out, "genbank"))) == 2
+
+        main(base_args + ["--dedup_both_strands"])
+        assert len(list(SeqIO.parse(out, "genbank"))) == 1
+
+@pytest.mark.parametrize("extra_args", [
+    ["--cpu", "1"],
+    ["--cpu", "3", "--batch_size", "2"],
+    ["--cpu", "3", "--batch_size", "2", "--max_hits", "2"],
+])
+def test_deduplicate_by_sequence_protein(shared_datadir, extra_args):
+    hmms = shared_datadir / "pdonr_hmms.hmm"
+    orig = list(utils.parse_seqfiles([str(shared_datadir / "pdonr_peptides.fasta")]))
+    with tempfile.TemporaryDirectory() as output_dir:
+        # each protein three times: as-is, under a new name, and with an extra trailing stop
+        dup_fasta = output_dir + "/dup.fasta"
+        with open(dup_fasta, "w") as handle:
+            for rec in orig:
+                handle.write(f">{rec.id}\n{rec.seq}\n>{rec.id}_lower\n{str(rec.seq).lower()}\n>{rec.id}_stop\n{rec.seq}*\n")
+        out = output_dir + "/out.gb"
+        base_args = ["-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000"] + extra_args
+
+        main(['--input', str(shared_datadir / "pdonr_peptides.fasta")] + base_args)
+        expected = {str(rec.seq).upper().strip("*") for rec in SeqIO.parse(out, "genbank")}
+        assert len(expected) > 0
+
+        main(['--input', dup_fasta] + base_args)
+        dup_seqs = [str(rec.seq).upper().strip("*") for rec in SeqIO.parse(out, "genbank")]
+        assert len(set(dup_seqs)) < len(dup_seqs)
+
+        main(['--input', dup_fasta] + base_args + ["--deduplicate_by_sequence"])
+        dedup_seqs = [str(rec.seq).upper().strip("*") for rec in SeqIO.parse(out, "genbank")]
+        assert len(dedup_seqs) == len(expected)
+        assert set(dedup_seqs) == expected
+
+def test_deduplicate_by_sequence_validation(shared_datadir):
+    hmms = shared_datadir / "pdonr_hmms.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        with pytest.raises(ValueError, match="requires --deduplicate_by_sequence"):
+            main(['--input', str(shared_datadir / "pDONR201.gb"), "-r", str(hmms), "-o", out, "--cpu", "1", "--dedup_both_strands"])
+        with pytest.raises(ValueError, match="only supported for nucleotide output"):
+            main(['--input', str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(hmms), "-o", out, "--cpu", "1", "--deduplicate_by_sequence", "--dedup_both_strands"])
+
 def test_domain_search_peptides(shared_datadir):
     input_files = [str(shared_datadir / "simple_genpept.gb"),  str(shared_datadir / "pdonr_peptides.fasta")]
     hmms = shared_datadir / "CcdB.hmm"

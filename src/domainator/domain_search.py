@@ -19,7 +19,7 @@ import sys
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available, PARTIAL_CHOICES
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available, PARTIAL_CHOICES, sequence_hashes
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -48,6 +48,15 @@ _WORKER_ALLOWED_TAXIDS = None
 _WORKER_REFERENCES = None
 
 
+def _is_new_sequence(record, seen: Set[bytes], both_strands: bool) -> bool:
+    """Exact-sequence dedup check: True (and record its hashes in seen) if record's sequence hasn't been seen yet."""
+    hashes = sequence_hashes(record.seq, both_strands)
+    if any(h in seen for h in hashes):
+        return False
+    seen.update(hashes)
+    return True
+
+
 def _init_search_worker(reference_paths, foldseek_paths, allowed_taxids):
     """Pool initializer: parse references once per worker, install the taxonomy filter.
 
@@ -64,7 +73,7 @@ def _init_search_worker(reference_paths, foldseek_paths, allowed_taxids):
 
 class _domain_search_worker():
 
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include"):
+    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include", deduplicate_by_sequence: bool = False, dedup_both_strands: bool = False):
 
         self.z = z
         self.evalue = evalue
@@ -96,6 +105,11 @@ class _domain_search_worker():
         # top-max_hits is unchanged: a single worker can contribute at most max_hits
         # records to a global top-max_hits, so trimming per worker is lossless.
         self.max_hits = max_hits
+        # Sequence dedup is also done per partition so that, with max_hits set, the
+        # per-worker top-max_hits isn't crowded out by copies of one sequence (which
+        # would make the per-worker trim lossy). domain_search dedups again globally.
+        self.deduplicate_by_sequence = deduplicate_by_sequence
+        self.dedup_both_strands = dedup_both_strands
         # References are no longer parsed per-partition here; the pool initializer
         # (_init_search_worker) parses them once per worker into _WORKER_REFERENCES.
 
@@ -120,8 +134,11 @@ class _domain_search_worker():
         """
         out = list()
         max_hits = self.max_hits
+        seen = set() if self.deduplicate_by_sequence else None
 
         def _emit(record):
+            if seen is not None and not _is_new_sequence(record, seen, self.dedup_both_strands):
+                return
             # Bounded min-heap over this worker's own hits: with max_hits set the
             # worker never holds (or returns) more than max_hits records. Domainator
             # SeqRecords compare by DOMAINATOR_HIT_BEST_SCORE_ANNOTATION, so the heap
@@ -201,7 +218,7 @@ class _partition_seqfile_worker():
         return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
     
 
-def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None, partial="include"):
+def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None, partial="include", deduplicate_by_sequence=False, dedup_both_strands=False):
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 
@@ -230,6 +247,10 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         decoy_names: a set of names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.
         max_hits_per_contig: the maximum number of independent hits per contig. If None, then all hits will be returned. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit.
         partial: which proteins/CDSs to search, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments). See domainate.domainate.
+        deduplicate_by_sequence: if True, drop hits whose output sequence is identical (case-insensitive, ignoring terminal '*') to an earlier hit.
+            The first copy to arrive is kept; partitions finish in arbitrary order, so which of several identical copies is kept is arbitrary.
+            Only a set of 32-byte hashes is held, not the duplicate records.
+        dedup_both_strands: with deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.
     yields:
         SeqRecords of the selected regions
     """
@@ -260,7 +281,8 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
 
     out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial)
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=dedup_both_strands)
+    seen = set() if deduplicate_by_sequence else None
 
     # Pool tuning notes (speed_up_plan.md Q4):
     #   - No maxtasksperchild: workers must persist so the references parsed once
@@ -279,6 +301,8 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         for hits in pool.imap_unordered(worker, partitions):
 
             for rec in hits:
+                if seen is not None and not _is_new_sequence(rec, seen, dedup_both_strands):
+                    continue
                 if max_hits is None:
                     yield rec
                 else:
@@ -381,6 +405,11 @@ def main(argv):
                         help="When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.")
     parser.add_argument('--deduplicate', action='store_true', default=False,
                         help="by default if the same region is extracted for multiple hits then both will be kept. Set this option to eliminate redundancies.")
+    parser.add_argument('--deduplicate_by_sequence', action='store_true', default=False,
+                        help="Drop hits whose output sequence is identical to an earlier hit (SHA-256 hash, as in deduplicate_genbank.py --algorithm hash). "
+                        "Useful for highly redundant databases. Independent of --deduplicate, which only drops repeated record IDs.")
+    parser.add_argument('--dedup_both_strands', action='store_true', default=False,
+                        help="With --deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.")
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")
 
@@ -490,6 +519,11 @@ def main(argv):
         raise ValueError("Inputs are a combination of DNA and protein sequences, but --translate is not set. This would lead to an output genbank file with mixed protein and DNA sequences.")
     if ("protein" in molecule_types or translate) and (kb_range is not None or cds_range is not None or whole_contig or pad):
         raise ValueError("Protein sequence output is not compatible with neighborhood extraction or padding.")
+    if params.dedup_both_strands:
+        if not params.deduplicate_by_sequence:
+            raise ValueError("--dedup_both_strands requires --deduplicate_by_sequence.")
+        if "protein" in molecule_types or translate:
+            raise ValueError("--dedup_both_strands is only supported for nucleotide output.")
     
 
 
@@ -559,6 +593,8 @@ def main(argv):
             decoy_names=decoy_names,
             max_hits_per_contig=params.max_hits_per_contig,
             partial=params.partial,
+            deduplicate_by_sequence=params.deduplicate_by_sequence,
+            dedup_both_strands=params.dedup_both_strands,
             ):
             if not pad:
                 if not deduplicate or (record.id not in seen):
