@@ -207,7 +207,7 @@
     {
       "name": "Whole Contig",
       "parameter": "whole_contig",
-      "help": "If set, then return the entire matching contigs.",
+      "help": "If set, then return the entire matching contigs. Circular contigs stay circular, and are rotated so that the hit is in the center.",
       "type": "boolean",
       "default": false,
       "flags": [

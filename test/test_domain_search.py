@@ -302,6 +302,52 @@ def test_domain_search_whole_contig_nucleotide_query_spanning_circular_origin():
         domainator_features = [x for x in new_file[0].features if x.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) == 1
         assert len(domainator_features[0]) == 36
+        assert new_file[0].annotations["topology"] == "circular"
+
+
+@pytest.mark.parametrize("keep_direction", [False, True])
+def test_domain_search_whole_contig_circular_centered_on_hit(shared_datadir, keep_direction):
+    # whole circular contigs stay circular, rotated so that the search hit (not the CDS containing it) is in the center
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = os.path.join(output_dir, "out.gb")
+        args = ["-i", str(shared_datadir / "bacillus_phage_SPR.gb"), "-r", str(shared_datadir / "SPR.hmm"), "--whole_contig", "-Z", "1000", "--cpu", "1", "-o", out]
+        if keep_direction:
+            args.append("--keep_direction")
+        main(args)
+        recs = list(utils.parse_seqfiles([out]))
+    assert len(recs) == 2
+    for rec in recs:
+        assert rec.annotations["topology"] == "circular"
+        assert len(rec) == 2552
+        hits = [f for f in rec.features if f.type == DOMAIN_SEARCH_BEST_HIT_NAME]
+        assert len(hits) == 1
+        hit = hits[0].location
+        assert len(hit.parts) == 1
+        assert hit.strand == (-1 if keep_direction else 1)
+        upstream = int(hit.start) if hit.strand == 1 else len(rec) - int(hit.end)
+        downstream = len(rec) - len(hit) - upstream
+        assert abs(upstream - downstream) <= 1
+    assert {rec.id for rec in recs} == ({"OM236515mod_980:981", "OM236515mod_315:316"} if keep_direction else {"OM236515mod_980:981rc", "OM236515mod_315:316rc"})
+
+
+def test_domain_search_whole_contig_circular_pad_aligns_cds(shared_datadir):
+    # with --pad, padding still aligns the focus CDSs, not the hits
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = os.path.join(output_dir, "out.gb")
+        main(["-i", str(shared_datadir / "bacillus_phage_SPR.gb"), "-r", str(shared_datadir / "SPR.hmm"), "--whole_contig", "--pad", "-Z", "1000", "--cpu", "1", "-o", out])
+        recs = list(utils.parse_seqfiles([out]))
+    assert len(recs) == 2
+    focus_cds_starts = set()
+    for rec in recs:
+        hit = [f for f in rec.features if f.type == DOMAIN_SEARCH_BEST_HIT_NAME][0]
+        focus_cds = [f for f in rec.features if f.type == "CDS" and len(f.location.parts) == 1 and int(f.location.start) <= int(hit.location.start) and int(f.location.end) >= int(hit.location.end)][0]
+        focus_cds_starts.add(int(focus_cds.location.start))
+    assert len(focus_cds_starts) == 1
+    # the padding isn't part of the circular molecule, so padded records are linear
+    for rec in recs:
+        assert "N" in str(rec.seq)
+        assert rec.annotations["topology"] == "linear"
+
 
 def test_domain_search_one_file_no_z(shared_datadir):
     gb = shared_datadir / "pDONR201.gb"

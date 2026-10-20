@@ -233,8 +233,7 @@ def test_rotate_search_hits(shared_datadir):
         hits = os.path.join(output_dir, "hits.gb")
         domain_search_main(["-i", str(shared_datadir / "bacillus_phage_SPR.gb"), "-r", str(shared_datadir / "SPR.hmm"), "--whole_contig", "-Z", "1000", "--cpu", "1", "-o", hits])
         hits_recs = list(parse_seqfiles([hits]))
-        # domain_search writes whole contigs as linear, so they need --circularize
-        recs = _rotate(["-i", hits, "--search_hits", "--circularize"])
+        recs = _rotate(["-i", hits, "--search_hits"])
     assert len(recs) == len(hits_recs) == 2
     for rec in recs:
         search_hits = _domains(rec, feature_type=DOMAIN_SEARCH_BEST_HIT_NAME)

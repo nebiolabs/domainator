@@ -272,6 +272,43 @@ def test_select_by_cds_invert_1(shared_datadir):
                 assert 0
                 assert "CAT" not in record.annotations["domainator_Pfam-A"]
 
+@pytest.mark.parametrize("strand", [1, -1])
+def test_circular_focus_distances_match_pad_location(shared_datadir, strand):
+    contig = next(parse_seqfiles([shared_datadir / "bacillus_phage_SPR_with_annotations.gb"]))
+    for feature in contig.features:
+        if feature.type != "CDS":
+            continue
+        envelope = feature.location.circular_envelope(len(contig), strand)
+        for pad in [(0, 0), (100, 50), (len(contig), len(contig))]:
+            slice_location, distances = select_by_cds.pad_location(contig, envelope, pad[0], pad[1], return_extension_sizes=True)
+            assert select_by_cds.circular_focus_distances(slice_location, feature.location, len(contig), strand) == distances
+
+
+def test_pad_records_circular_becomes_linear():
+    from domainator.Bio.Seq import Seq
+    from domainator.Bio.SeqRecord import SeqRecord
+    records = list()
+    for seq, dist_to_start in (("AAAACCCC", 4), ("CCCC", 0)):
+        record = SeqRecord(Seq(seq), id="x")
+        record.annotations.update(molecule_type="DNA", topology="circular")
+        record.set_dist_to_start(dist_to_start)
+        record.set_dist_to_end(0)
+        record.set_focus_strand(1)
+        records.append(record)
+    select_by_cds.pad_records(records)
+    # only the record that was padded is no longer the circular molecule
+    assert [(str(r.seq), r.annotations["topology"]) for r in records] == [("AAAACCCC", "circular"), ("NNNNCCCC", "linear")]
+
+
+def test_select_by_cds_circular_whole_contig_stays_circular(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction.gb"
+        select_by_cds.main(["-i", str(shared_datadir / "bacillus_phage_SPR_with_annotations.gb"), "-o", out, "--domains", "DHFR_1", "--whole_contig"])
+        recs = list(parse_seqfiles([out]))
+    assert len(recs) == 1
+    assert recs[0].annotations["topology"] == "circular"
+
+
 def test_select_by_cds_circular_cds_range_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:

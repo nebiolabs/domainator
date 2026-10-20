@@ -435,7 +435,7 @@ def main(argv):
                         help="How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS.")
 
     parser.add_argument('--whole_contig', default=False, action="store_true",
-                        help="If set, then return the entire matching contigs.")
+                        help="If set, then return the entire matching contigs. Circular contigs stay circular, and are rotated so that the hit is in the center.")
 
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract regions around CDSs on the specified strand.")
 

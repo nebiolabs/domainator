@@ -58,6 +58,7 @@ def pad_anchor(record, where:str="start") -> int:
 def pad_records(records, pad_char="N", where:str="start"):
     """
         Pads the ends of records in place so that their focus CDSs align.
+        Padded records are linear, because the padding is not part of the original molecule.
 
         Args:
             records: a list of records from get_cds_neighborhood
@@ -76,7 +77,11 @@ def pad_records(records, pad_char="N", where:str="start"):
     max_end = max(ends)
     right_pad_amount = [max_end - x for x in ends]
     for i in range(len(records)):
+        if shift_amount[i] == 0 and right_pad_amount[i] == 0:
+            continue
         records[i] = (pad_char * shift_amount[i]) + records[i] + (pad_char * right_pad_amount[i])
+        if records[i].annotations.get("topology") == "circular":
+            records[i].annotations["topology"] = "linear"
 
 def pad_circular_cds(center:int, size:int, left_pad:int, right_pad:int) -> Tuple[int,int]:
     """
@@ -138,7 +143,25 @@ def pad_circular_cds(center:int, size:int, left_pad:int, right_pad:int) -> Tuple
 
         return (min_coord, max_coord % size) # TODO: is % size necessary?
 
-def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=None, kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, _from_domain_search=False):
+def circular_focus_distances(slice_location, focus_location, contig_length:int, strand:int) -> Tuple[int, int]:
+    """
+        Distances from the start of a slice of a circular contig to the start of a focus feature, and from the end of the focus feature to the end of the slice,
+        in the direction of strand.
+
+        slice_location: the slice, as returned by pad_location
+        focus_location: the location of the focus feature, which must be inside the slice
+        contig_length: the length of the contig
+        strand: the strand of the slice and focus feature
+    """
+    focus_envelope = focus_location.circular_envelope(contig_length, strand)
+    if strand == -1:
+        dist_to_start = circular_dist(int(focus_envelope.stranded_start), int(slice_location.stranded_start), contig_length)
+    else:
+        dist_to_start = circular_dist(int(slice_location.stranded_start), int(focus_envelope.stranded_start), contig_length)
+    dist_to_end = len(slice_location) - dist_to_start - len(focus_envelope)
+    return dist_to_start, dist_to_end
+
+def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=None, kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, _from_domain_search=False):
     """
         contig: a SeqRecord object
 
@@ -201,7 +224,12 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
         if whole_contig:
             upstream_pad = len(contig)
             downstream_pad = len(contig)
-            slice_location, (dist_to_start, dist_to_end) = pad_location(contig, focus_cds.feature.location.circular_envelope(len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
+            if _from_domain_search and focus_cds.domain_search_feature is not None:
+                # center the contig on the search hit, rather than on the CDS containing it. Distances are still to the focus CDS, so that padding aligns CDSs.
+                slice_location = pad_location(contig, focus_cds.domain_search_feature.location.circular_envelope(len(contig), strand), upstream_pad, downstream_pad)
+                dist_to_start, dist_to_end = circular_focus_distances(slice_location, focus_cds.feature.location, len(contig), strand)
+            else:
+                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, focus_cds.feature.location.circular_envelope(len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
         elif kb_range is not None or cds_range is None:
             upstream_pad = 0
             downstream_pad = 0
@@ -248,6 +276,8 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
                 features.append(cds.domain_search_feature)
     try:
         record = slice_record_from_location(contig, slice_location, features)
+        if contig.annotations.get("topology") == "circular" and len(slice_location) == len(contig): # the whole circular contig, rotated
+            record.annotations["topology"] = "circular"
         start = int(slice_location.stranded_start)
         end = int(slice_location.stranded_end)
     except Exception as e:
