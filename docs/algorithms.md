@@ -133,8 +133,15 @@ graph (`build_ssn`, `transform_matrix`, `seq_dist`, `compare_contigs`, `structur
 computes the same selection from a stream of edges fed in one at a time via `add_edge`,
 never materializing the matrix. `compare_contigs.py` and `kmer_dist.py` use it to sparsify
 while they compute chunks of the similarity matrix, discarding each chunk after feeding it in
-([compare_contigs.py:290](../src/domainator/compare_contigs.py#L290)); `seq_dist.py` and
+([compare_contigs.py:304](../src/domainator/compare_contigs.py#L304)); `seq_dist.py` and
 `structure_dist.py` feed it each hit as the aligner reports it.
+
+The metrics of `compare_contigs.py` (weighted Jaccard and adjacency indices) and
+`kmer_dist.py` (Jaccard and containment) are exactly symmetric in a self-comparison, so
+unless `--max_hits_per_query` is set (a per-row cap needs whole rows) each chunk scores only
+columns at or right of the diagonal. The full matrix is then rebuilt by mirroring
+(`data_matrix.mirror_upper_triangle`), which roughly halves the scoring work. The streaming
+accumulator keeps one slot per unordered pair, so it is fed the upper triangle directly.
 
 A `--max_hits_per_query` cap is applied before the edges reach the accumulator, in every
 tool. Where hits arrive in no fixed order (`structure_dist.py`), `sparsify.PerQueryTopK`

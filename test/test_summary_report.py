@@ -129,3 +129,25 @@ def test_summary_report_counts_protein_fragments(shared_datadir):
             stats = json.load(handle)["contig_stats"]
         assert stats["fragment_proteins"] == 1
         assert stats["partial_cdss"] == 0
+
+
+def test_co_occurence_count_is_unaffected_by_focus_domains(shared_datadir, tmp_path):
+    # The focus-domain percentages shown in the report used to overwrite those domains'
+    # rows of the count matrix.
+    import numpy as np
+    from domainator.data_matrix import DataMatrix
+
+    gb = str(shared_datadir / "FeSOD_20_pfam.gb")
+    plain, focused = tmp_path / "plain.tsv", tmp_path / "focused.tsv"
+    plain_fraction, focused_fraction = tmp_path / "plain_fraction.tsv", tmp_path / "focused_fraction.tsv"
+    summary_report.main(["-i", gb, "-o", str(tmp_path / "plain.txt"), "--co_occurence_count", str(plain),
+                         "--co_occurence_fraction", str(plain_fraction)])
+    summary_report.main(["-i", gb, "-o", str(tmp_path / "focused.txt"), "--co_occurence_count", str(focused),
+                         "--co_occurence_fraction", str(focused_fraction), "--domains", "Sod_Fe_C", "Sod_Fe_N"])
+
+    counts = DataMatrix.from_file(plain)
+    focused_counts = DataMatrix.from_file(focused)
+    assert counts.rows == focused_counts.rows
+    np.testing.assert_array_equal(focused_counts.toarray(), counts.toarray())
+    assert counts.symmetric
+    np.testing.assert_array_equal(DataMatrix.from_file(focused_fraction).toarray(), DataMatrix.from_file(plain_fraction).toarray())

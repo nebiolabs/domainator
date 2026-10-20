@@ -777,3 +777,42 @@ def test_compare_contigs_warns_for_slow_optimal_leaf_ordering(shared_datadir, mo
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             compare_contigs.main(["-i", input_path, "-o", out_gb, "--leaf_ordering", "greedy"])
+
+
+@pytest.mark.parametrize("lb", [0.0, 0.3])
+def test_compare_contigs_upper_triangle_scoring_matches_full_rows(lb):
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+        _make_compare_contig_record("rec3", ["A", "C", "E"]),
+        _make_compare_contig_record("rec4", ["B", "C", "F"]),
+        _make_compare_contig_record("rec5", ["X", "Y", "Z"]),
+        _make_compare_contig_record("rec6", ["X", "Y", "W"]),
+        _make_compare_contig_record("rec7", []),
+    ]
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+
+        recs = list(utils.parse_seqfiles([input_path]))
+        prepared_metrics = [
+            compare_contigs.JaccardIndex(0.5).prepare_sparse_metric(recs),
+            compare_contigs.AdjacencyIndex(0.25).prepare_sparse_metric(recs),
+        ]
+        full = compare_contigs._compute_combined_sparse_similarity_matrix(prepared_metrics, k=None, lb=lb, cpu=1)
+        for cpu in (1, 2):
+            upper = compare_contigs._compute_combined_sparse_similarity_matrix(
+                prepared_metrics, k=None, lb=lb, cpu=cpu, upper_only=True)
+            np.testing.assert_array_equal(upper.toarray(), full.toarray())
+
+        streamed = [
+            compare_contigs._compute_sparsified_similarity_matrix(
+                prepared_metrics, mst=True, knn=2, k=None, lb=lb, cpu=1, upper_only=upper_only).toarray()
+            for upper_only in (False, True)
+        ]
+        np.testing.assert_array_equal(streamed[0], streamed[1])
+
+        with pytest.raises(ValueError, match="cannot be combined with upper_only"):
+            compare_contigs._compute_combined_similarity_chunk(prepared_metrics, 0, 2, 1, lb, upper_only=True)

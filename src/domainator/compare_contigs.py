@@ -15,7 +15,7 @@ from collections import OrderedDict
 import scipy.cluster.hierarchy
 import math
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
-from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator, mirror_upper_triangle
 from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_matrix, sparsify_requested
 from domainator.filter_domains import filter_domains
 from domainator.matrix_output import add_matrix_output_arguments, resolve_matrix_outputs, write_matrix_outputs
@@ -143,8 +143,14 @@ class _StreamingCSRChunkBuilder:
         )
 
 
-def _compute_similarity_chunk(feature_matrix, row_counts, start, end):
-    overlaps = (feature_matrix[start:end] @ feature_matrix.transpose()).tocsr()
+def _compute_similarity_chunk(feature_matrix, row_counts, start, end, upper_only=False):
+    """Score rows start:end against every row (or, with ``upper_only``, only columns >= the row).
+
+    The score is symmetric, so ``upper_only`` computes the upper triangle (diagonal
+    included) and the caller mirrors it, which halves the work.
+    """
+    column_offset = start if upper_only else 0
+    overlaps = (feature_matrix[start:end] @ feature_matrix[column_offset:].transpose()).tocsr()
     overlaps.sort_indices()
 
     row_idx = list()
@@ -159,10 +165,10 @@ def _compute_similarity_chunk(feature_matrix, row_counts, start, end):
 
         row_start = overlaps.indptr[local_query_idx]
         row_end = overlaps.indptr[local_query_idx + 1]
-        target_indices = overlaps.indices[row_start:row_end]
+        target_indices = overlaps.indices[row_start:row_end].astype(np.int64) + column_offset
         shared_counts = overlaps.data[row_start:row_end].astype(np.float64, copy=False)
 
-        off_diagonal_mask = target_indices != query_idx
+        off_diagonal_mask = target_indices > query_idx if upper_only else target_indices != query_idx
         target_indices = target_indices[off_diagonal_mask]
         shared_counts = shared_counts[off_diagonal_mask]
 
@@ -197,13 +203,15 @@ def _prune_scores_inplace(scores, threshold):
     return scores
 
 
-def _compute_combined_similarity_chunk(prepared_metrics, start, end, k, lb):
+def _compute_combined_similarity_chunk(prepared_metrics, start, end, k, lb, upper_only=False):
+    if upper_only and k is not None:
+        raise ValueError("A per-row hit cap needs whole rows, so it cannot be combined with upper_only.")
     chunk_shape = (end - start, prepared_metrics[0].feature_matrix.shape[0])
     combined_chunk = scipy.sparse.csr_array(chunk_shape, dtype=np.float64)
     remaining_weight = sum(metric.weight for metric in prepared_metrics)
 
     for metric in prepared_metrics:
-        metric_chunk = _compute_similarity_chunk(metric.feature_matrix, metric.row_counts, start, end)
+        metric_chunk = _compute_similarity_chunk(metric.feature_matrix, metric.row_counts, start, end, upper_only)
         combined_chunk = combined_chunk + (metric.weight * metric_chunk)
         remaining_weight -= metric.weight
         if lb > 0:
@@ -221,8 +229,8 @@ def _compute_similarity_chunk_worker(args):
 
 
 def _compute_combined_similarity_chunk_worker(args):
-    start, end, k, lb = args
-    return start, end, _compute_combined_similarity_chunk(_PREPARED_SIMILARITY_METRICS, start, end, k, lb)
+    start, end, k, lb, upper_only = args
+    return start, end, _compute_combined_similarity_chunk(_PREPARED_SIMILARITY_METRICS, start, end, k, lb, upper_only)
 
 
 def _compute_sparse_similarity_matrix(contig_data, cpu=1, progress=False, desc=None):
@@ -251,7 +259,12 @@ def _compute_sparse_similarity_matrix(contig_data, cpu=1, progress=False, desc=N
     return chunk_builder.build()
 
 
-def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, progress=False, desc=None):
+def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, progress=False, desc=None, upper_only=False):
+    """Score every contig against every contig, chunk by chunk.
+
+    With ``upper_only`` (only valid when ``k`` is None) each chunk computes just the upper
+    triangle, which is mirrored at the end: the scores are symmetric, so this halves the work.
+    """
     if len(prepared_metrics) == 0:
         return scipy.sparse.csr_array((0, 0), dtype=np.float64)
 
@@ -262,7 +275,7 @@ def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, p
     if k == 0:
         return scipy.sparse.csr_array(matrix_shape, dtype=np.float64)
 
-    query_chunks = [(start, end, k, lb) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
+    query_chunks = [(start, end, k, lb, upper_only) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
     chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
 
     if cpu > 1 and len(query_chunks) > 1:
@@ -274,10 +287,11 @@ def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, p
             for start, end, chunk_matrix in _progress(pool.imap(_compute_combined_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
                 chunk_builder.append_chunk(start, end, chunk_matrix)
     else:
-        for start, end, chunk_k, chunk_lb in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
-            chunk_builder.append_chunk(start, end, _compute_combined_similarity_chunk(prepared_metrics, start, end, chunk_k, chunk_lb))
+        for chunk_args in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
+            chunk_builder.append_chunk(chunk_args[0], chunk_args[1], _compute_combined_similarity_chunk(prepared_metrics, *chunk_args))
 
-    return chunk_builder.build()
+    scores = chunk_builder.build()
+    return mirror_upper_triangle(scores) if upper_only else scores
 
 
 def _feed_chunk_to_accumulator(accumulator, start, chunk_matrix):
@@ -287,18 +301,19 @@ def _feed_chunk_to_accumulator(accumulator, start, chunk_matrix):
         accumulator.add_edge(int(start) + int(local_row), int(col), float(value))
 
 
-def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, cpu=1, progress=False, desc=None):
+def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, cpu=1, progress=False, desc=None, upper_only=False):
     """Stream per-row similarity chunks into an MST and/or kNN accumulator.
 
     Equivalent to building the full combined similarity matrix (with the per-row top-k
     cap and ``--lb`` applied) and then calling :func:`~domainator.sparsify.sparsify_matrix`,
     but the full matrix is never materialized: each chunk's edges are fed into the
-    accumulator and discarded.
+    accumulator and discarded. The accumulator keeps one slot per unordered pair, so with
+    ``upper_only`` feeding it one direction of each (symmetric) pair gives the same result.
     """
     n = prepared_metrics[0].feature_matrix.shape[0]
     accumulator = StreamingMstKnnAccumulator(n, mst=mst, knn=knn, lower_bound=lb)
 
-    query_chunks = [(start, end, k, lb) for start, end in _iter_query_chunks(n, cpu)]
+    query_chunks = [(start, end, k, lb, upper_only) for start, end in _iter_query_chunks(n, cpu)]
 
     if cpu > 1 and len(query_chunks) > 1:
         with make_pool(
@@ -309,8 +324,8 @@ def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, 
             for start, end, chunk_matrix in _progress(pool.imap(_compute_combined_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
                 _feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
     else:
-        for start, end, chunk_k, chunk_lb in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
-            _feed_chunk_to_accumulator(accumulator, start, _compute_combined_similarity_chunk(prepared_metrics, start, end, chunk_k, chunk_lb))
+        for chunk_args in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
+            _feed_chunk_to_accumulator(accumulator, chunk_args[0], _compute_combined_similarity_chunk(prepared_metrics, *chunk_args))
 
     return accumulator.to_csr()
 
@@ -695,6 +710,8 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
         prepared_metrics.append(prepared_metric)
 
     if prepared_metrics is not None:
+        # Every metric is symmetric, so without a per-row cap only half the pairs need scoring.
+        upper_only = max_hits_per_query is None
         if sparsify:
             results_matrix = _compute_sparsified_similarity_matrix(
                 prepared_metrics,
@@ -705,6 +722,7 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
                 cpu=cpu,
                 progress=progress,
                 desc="Scoring combined metrics (sparsified)",
+                upper_only=upper_only,
             )
         else:
             results_matrix = _compute_combined_sparse_similarity_matrix(
@@ -714,6 +732,7 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
                 cpu=cpu,
                 progress=progress,
                 desc="Scoring combined metrics",
+                upper_only=upper_only,
             )
     else:
         results_matrix = scipy.sparse.csr_array(matrix_shape, dtype=np.float64)

@@ -125,7 +125,9 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
             embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.toarray())
 
     elif algorithm == "coords":
-        embedded = check_coords(n_components, data_matrix,  **algorithm_parameters)
+        if algorithm_parameters:
+            raise ValueError(f"--params does not apply to --algorithm coords, which reads the coordinates as given: {algorithm_parameters}")
+        embedded = check_coords(n_components, data_matrix)
 
     embedded = center_and_scale(embedded, scale)
 

@@ -129,3 +129,10 @@ def test_build_projection_from_coords_file(shared_datadir):
         first_table = pd.read_csv(first_coords, sep="\t", index_col=0)
         second_table = pd.read_csv(second_coords, sep="\t", index_col=0)
         pd.testing.assert_frame_equal(first_table, second_table)
+
+def test_build_projection_coords_rejects_params(shared_datadir, tmp_path):
+    first_coords = str(tmp_path / "first.tsv")
+    build_projection.main(["-i", str(shared_datadir / "scorefull.tsv"), "--algorithm", "pca", "--coords_out", first_coords])
+    with pytest.raises(ValueError, match="--params does not apply to --algorithm coords"):
+        build_projection.main(["-i", first_coords, "--algorithm", "coords", "--coords_out", str(tmp_path / "second.tsv"),
+                               "--params", '"perplexity": 5'])

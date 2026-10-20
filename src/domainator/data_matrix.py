@@ -109,6 +109,18 @@ def _is_exactly_symmetric(matrix: scipy.sparse.csr_array) -> bool:
     )
 
 
+def mirror_upper_triangle(upper) -> scipy.sparse.csr_array:
+    """Return the symmetric matrix whose upper triangle (diagonal included) is ``upper``.
+
+    ``upper`` must hold no values below the diagonal. Returns canonical CSR.
+    """
+    upper = scipy.sparse.csr_array(upper)
+    full = (upper + scipy.sparse.triu(upper, k=1, format="csr").transpose()).tocsr()
+    full.sum_duplicates()
+    full.eliminate_zeros()
+    return full
+
+
 def _labels_are_symmetric(row_names: List[str], col_names: List[str],
                           row_lengths: Optional[np.ndarray], col_lengths: Optional[np.ndarray]) -> bool:
     """True if the column axis can be stored as a reference to the row axis."""
@@ -491,8 +503,7 @@ class DataMatrix:
                     (len(row_names), len(col_names))
                 )
                 if array_type == cls._SPARSE_CSR_UPPER_TRIANGLE:
-                    strictly_upper = scipy.sparse.triu(data, k=1, format="csr")
-                    data = (data + strictly_upper.transpose()).tocsr()
+                    data = mirror_upper_triangle(data)
                     exactly_symmetric = True
             elif array_type == cls._DENSE:
                 data = f[cls._DENSE_DATASET][:]

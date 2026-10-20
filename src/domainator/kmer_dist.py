@@ -26,7 +26,7 @@ from domainator.compare_contigs import (
     _keep_top_k_per_row,
     _prune_scores_inplace,
 )
-from domainator.data_matrix import StreamingMstKnnAccumulator
+from domainator.data_matrix import StreamingMstKnnAccumulator, mirror_upper_triangle
 from domainator.domainate import (
     clean_rec,
     get_prot_list,
@@ -339,12 +339,21 @@ def _compute_metric_chunk(
     self_comparison: bool,
     k: Optional[int],
     lb: float,
+    upper_only: bool = False,
 ) -> scipy.sparse.csr_array:
+    """Score query rows start:end against the references.
+
+    ``upper_only`` (a self-comparison with no per-row cap) scores only columns >= the row:
+    every metric is symmetric, so the caller mirrors the upper triangle instead.
+    """
+    if upper_only and (not self_comparison or k is not None):
+        raise ValueError("upper_only requires a self-comparison without a per-row hit cap.")
     chunk_shape = (end - start, reference_feature_matrix.shape[0])
     if chunk_shape[0] == 0:
         return scipy.sparse.csr_array(chunk_shape, dtype=np.float64)
 
-    overlaps = (query_feature_matrix[start:end] @ reference_feature_matrix.transpose()).tocsr()
+    column_offset = start if upper_only else 0
+    overlaps = (query_feature_matrix[start:end] @ reference_feature_matrix[column_offset:].transpose()).tocsr()
     overlaps.sort_indices()
 
     row_idx = list()
@@ -362,11 +371,11 @@ def _compute_metric_chunk(
 
         row_start = overlaps.indptr[local_query_idx]
         row_end = overlaps.indptr[local_query_idx + 1]
-        target_indices = overlaps.indices[row_start:row_end]
+        target_indices = overlaps.indices[row_start:row_end].astype(np.int64) + column_offset
         shared_counts = overlaps.data[row_start:row_end].astype(np.float64, copy=False)
 
         if self_comparison:
-            off_diagonal_mask = target_indices != query_idx
+            off_diagonal_mask = target_indices > query_idx if upper_only else target_indices != query_idx
             target_indices = target_indices[off_diagonal_mask]
             shared_counts = shared_counts[off_diagonal_mask]
 
@@ -424,7 +433,7 @@ def _init_metric_chunk_worker(
 
 
 def _compute_metric_chunk_worker(args):
-    start, end, k, lb = args
+    start, end, k, lb, upper_only = args
     return (
         start,
         end,
@@ -439,6 +448,7 @@ def _compute_metric_chunk_worker(args):
             _SELF_COMPARISON,
             k,
             lb,
+            upper_only,
         ),
     )
 
@@ -471,7 +481,10 @@ def _compute_sparse_metric_matrix(
 
     query_row_counts = np.diff(query_feature_matrix.indptr)
     reference_row_counts = np.diff(reference_feature_matrix.indptr)
-    query_chunks = [(start, end, k, lb) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
+    # Every metric is symmetric: a self-comparison without a per-row cap only needs the upper
+    # triangle. The accumulator keeps one slot per unordered pair, so it needs no mirroring.
+    upper_only = self_comparison and k is None
+    query_chunks = [(start, end, k, lb, upper_only) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
     if sparsify_requested(mst, knn):
         accumulator = StreamingMstKnnAccumulator(matrix_shape[0], mst=mst, knn=knn, lower_bound=lb)
 
@@ -482,7 +495,10 @@ def _compute_sparse_metric_matrix(
     else:
         chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
         append_chunk = chunk_builder.append_chunk
-        build = chunk_builder.build
+
+        def build():
+            scores = chunk_builder.build()
+            return mirror_upper_triangle(scores) if upper_only else scores
     _progress_checkpoint(progress, f"Scoring {matrix_shape[0]} query records against {matrix_shape[1]} reference records")
 
     if cpu > 1 and len(query_chunks) > 1:
@@ -506,7 +522,7 @@ def _compute_sparse_metric_matrix(
             ):
                 append_chunk(start, end, chunk_matrix)
     else:
-        for start, end, chunk_k, chunk_lb in _progress(query_chunks, progress, total=len(query_chunks), desc="Scoring"):
+        for start, end, chunk_k, chunk_lb, chunk_upper_only in _progress(query_chunks, progress, total=len(query_chunks), desc="Scoring"):
             append_chunk(
                 start,
                 end,
@@ -521,6 +537,7 @@ def _compute_sparse_metric_matrix(
                     self_comparison,
                     chunk_k,
                     chunk_lb,
+                    chunk_upper_only,
                 ),
             )
 

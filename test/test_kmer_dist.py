@@ -290,3 +290,24 @@ def test_kmer_dist_sparsify_rejects_invalid_use(shared_datadir):
             kmer_dist.main(["-i", proteins, "--hdf", out, "--mode", "score_dist", "--knn", "1"])
         with pytest.raises(SystemExit):
             kmer_dist.main(["-i", proteins, "--hdf", out, "--knn", "0"])
+
+
+@pytest.mark.parametrize("metric", ["jaccard", "max_containment", "min_containment"])
+@pytest.mark.parametrize("extra_args", [[], ["--lb", "0.2"], ["--knn", "2"], ["--cpu", "2"]])
+def test_kmer_dist_upper_triangle_scoring_matches_full_rows(shared_datadir, metric, extra_args):
+    # Without --max_hits_per_query a self-comparison scores only the upper triangle and
+    # mirrors it; a cap that keeps every hit forces whole-row scoring of the same matrix.
+    import h5py
+
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    with tempfile.TemporaryDirectory() as output_dir:
+        upper, full = output_dir + "/upper.hdf5", output_dir + "/full.hdf5"
+        base = ["-i", fasta, "--ksize", "3", "--metric", metric] + (["--cpu", "1"] if "--cpu" not in extra_args else []) + extra_args
+        kmer_dist.main(base + ["--hdf", upper])
+        kmer_dist.main(base + ["--hdf", full, "--max_hits_per_query", "1000"])
+
+        upper_array = DataMatrix.from_file(upper).toarray()
+        np.testing.assert_array_equal(upper_array, DataMatrix.from_file(full).toarray())
+        assert np.count_nonzero(upper_array - np.diag(np.diag(upper_array))) > 0
+        with h5py.File(upper, "r") as handle:
+            assert handle.attrs["ARRAY_TYPE"] == "SPARSE_CSR_UPPER_TRIANGLE"

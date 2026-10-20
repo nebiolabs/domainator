@@ -589,10 +589,10 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
     correlations_dict = {}
     for domain1 in focus_domains:
         if domain1 in domains:
-            original_count =  domains[domain1]['correlations'][domain1]
-            for domain2 in domains[domain1]['correlations']:
-                domains[domain1]['correlations'][domain2] = 100 * (domains[domain1]['correlations'][domain2] / original_count)
-            correlations_dict[domain1] = domains[domain1]["correlations"]
+            # A new dict: the raw counts are still needed for the co-occurrence matrix outputs.
+            original_count = domains[domain1]['correlations'][domain1]
+            correlations_dict[domain1] = {domain2: 100 * (count / original_count)
+                                          for domain2, count in domains[domain1]['correlations'].items()}
 
     domain_table_df = pd.DataFrame.from_dict(domains, orient='index', columns=['database', 'count', "description", 'avg score']).sort_values("count", ascending=False)
     domain_table_df.reset_index(inplace=True, names='domain')
