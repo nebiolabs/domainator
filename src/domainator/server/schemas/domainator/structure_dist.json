@@ -139,12 +139,13 @@
       ]
     },
     {
-      "name": "Max entries per row",
-      "parameter": "k",
-      "help": "Include at most this many non-zero entries in the matrix for each input structure.",
+      "name": "Max matrix entries per query",
+      "parameter": "max_hits_per_query",
+      "help": "Include at most this many non-zero entries in the matrix for each input structure, keeping the highest-valued ones. Applied before MST and kNN pruning.",
       "type": "integer",
+      "min": 0,
       "flags": [
-        "-k"
+        "--max_hits_per_query"
       ]
     },
     {
@@ -183,19 +184,21 @@
       ]
     },
     {
-      "name": "MST + kNN pruning",
-      "parameter": "mst_knn",
-      "help": "Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. Requires a square self-comparison. Always max-symmetric.",
-      "type": "integer",
+      "name": "MST",
+      "parameter": "mst",
+      "help": "Keep only the edges of the maximum spanning tree (forest). The clusters are the same as the full graph's, with the connections inside each cluster pruned to the minimum needed to keep it connected. Combine with kNN to also keep each node's nearest neighbors. Computed while streaming; requires a square self-comparison and a mode whose value is computable per pair.",
+      "type": "boolean",
+      "default": false,
       "flags": [
-        "--mst_knn"
+        "--mst"
       ]
     },
     {
-      "name": "kNN pruning",
+      "name": "kNN",
       "parameter": "knn",
-      "help": "Prune the output to OR-symmetric k-nearest-neighbor edges only. Same requirements as MST + kNN.",
+      "help": "Keep only OR-symmetric K-nearest-neighbor edges (K at least 1): an edge is kept if it is among the K best for either of its nodes. On its own this can split a cluster of the full graph into several; combine with MST to keep the clusters connected. Computed while streaming; requires a square self-comparison and a mode whose value is computable per pair.",
       "type": "integer",
+      "min": 1,
       "flags": [
         "--knn"
       ]

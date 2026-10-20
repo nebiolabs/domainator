@@ -8,12 +8,13 @@ warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.data_matrix import DataMatrix, mst_knn_edge_index_dict, symmetric_knn_edge_index_dict
+from domainator.data_matrix import DataMatrix
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
 import scipy.sparse
 import numpy as np
 from domainator.utils import get_file_type
+from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_matrix, sparsify_requested
 
 PASS_THROUGH_MODE = "none"
 LOG10_2 = np.log10(2.0)
@@ -149,22 +150,6 @@ MODES = {
         "efi_score_dist": efi_score_dist}
 
 
-def _mst_knn_arg(value):
-    value = int(value)
-    if value < 0:
-        raise ValueError("--mst_knn must be an integer >= 0")
-    return value
-
-
-def _knn_arg(value):
-    value = int(value)
-    if value < 1:
-        # Without the spanning tree there is nothing else to select, so k=0 would
-        # empty the matrix; --mst_knn 0 is the way to ask for just the tree.
-        raise ValueError("--knn must be an integer >= 1")
-    return value
-
-
 def apply_lower_bound(array, lower_bound):
     if lower_bound is None:
         return array
@@ -179,48 +164,6 @@ def apply_lower_bound(array, lower_bound):
     out[out <= lower_bound] = 0
     return out
 
-
-def apply_mst_knn_sparsification(matrix, k, lower_bound=0, include_mst=True):
-    """Keep only the OR-symmetric kNN edges, plus the maximum spanning tree if asked.
-
-    include_mst=True is ``--mst_knn k``; include_mst=False is a pure ``--knn k`` graph,
-    which does not preserve the connected components of the input.
-
-    Kept edges are written as a strict max over the diagonal: both cells of a pair get
-    ``max(M[i, j], M[j, i])``, the same score the OR-symmetric kNN ranking and the maximum
-    spanning tree select on. The output is therefore symmetric, matching
-    :class:`~domainator.ssn_edges.StreamingMstKnnAccumulator`.
-    """
-    option = "--mst_knn" if include_mst else "--knn"
-    if matrix.shape[0] != matrix.shape[1]:
-        raise ValueError(f"{option} requires a square matrix.")
-
-    if include_mst:
-        edge_dict = mst_knn_edge_index_dict(matrix, k, lower_bound=lower_bound)
-    else:
-        edge_dict = symmetric_knn_edge_index_dict(matrix, k, lower_bound=lower_bound)
-    diagonal_indices = np.arange(matrix.shape[0])
-
-    if scipy.sparse.issparse(matrix.data):
-        out = scipy.sparse.dok_array(matrix.shape, dtype=matrix.data.dtype)
-        for index in diagonal_indices:
-            value = matrix.data[index, index]
-            if value != 0:
-                out[index, index] = value
-        for source_idx, target_idx in edge_dict:
-            value = max(matrix.data[source_idx, target_idx], matrix.data[target_idx, source_idx])
-            if value != 0:
-                out[source_idx, target_idx] = value
-                out[target_idx, source_idx] = value
-        return scipy.sparse.csr_array(out)
-
-    out = np.zeros_like(matrix.data)
-    out[diagonal_indices, diagonal_indices] = matrix.data[diagonal_indices, diagonal_indices]
-    for source_idx, target_idx in edge_dict:
-        value = max(matrix.data[source_idx, target_idx], matrix.data[target_idx, source_idx])
-        out[source_idx, target_idx] = value
-        out[target_idx, source_idx] = value
-    return out
 
 def transform_matrix(array, mode, row_lengths=None, col_lengths=None):
     """
@@ -253,11 +196,7 @@ def main(argv):
 
     parser.add_argument('--lb', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
-    sparsify_group = parser.add_mutually_exclusive_group(required=False)
-    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                        help="Keep only the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, using the post-transform values. Set to 0 to keep only the maximum spanning tree.")
-    sparsify_group.add_argument('--knn', type=_knn_arg, required=False, default=None,
-                        help="Keep only OR-symmetric k-nearest-neighbor edges (K >= 1), using the post-transform values. Unlike --mst_knn this does not preserve the connected components of the input.")
+    add_sparsify_arguments(parser, requirements="Uses the post-transform values, except that --mode bool selects on the scores and then keeps the selected cells as 1; requires a square, non-distance matrix.")
 
     add_max_output_gb_argument(parser)
     
@@ -296,6 +235,7 @@ def main(argv):
         matrix.data_type = params.input_type
 
     requested_mode = None if params.mode == PASS_THROUGH_MODE else params.mode
+    sparsify = sparsify_requested(params.mst, params.knn)
 
     if requested_mode is not None:
         if matrix.data_type == "":
@@ -305,16 +245,22 @@ def main(argv):
         if matrix.data_type != "score" and matrix.data_type != requested_mode:
             raise ValueError(f"Input matrix format is '{matrix.data_type}', but --mode is '{requested_mode}'. Transforming between data types is only supported from a 'score' matrix.")
 
+        if sparsify and requested_mode == "bool" and matrix.data_type == "score":
+            # Every bool cell is 1, which would leave --mst/--knn nothing to rank, so select
+            # on the scores and keep the mask afterward. The kept cells are exactly the
+            # nonzero scores, so --lb still applies to the bool values below.
+            matrix.data = sparsify_matrix(matrix, mst=params.mst, knn=params.knn, lower_bound=0)
+            sparsify = False
+
         if matrix.data_type == "score" and matrix.data_type != requested_mode:
             matrix.data = transform_matrix(matrix.data, requested_mode, matrix.row_lengths, matrix.column_lengths)
 
         matrix.data_type = requested_mode
 
-    if params.mst_knn is not None or params.knn is not None:
-        include_mst = params.mst_knn is not None
-        k = params.mst_knn if include_mst else params.knn
-        matrix.data = apply_mst_knn_sparsification(matrix, k, lower_bound=0 if params.lb is None else params.lb,
-                                                   include_mst=include_mst)
+    if sparsify:
+        check_sparsify_data_type(matrix.data_type, params.mst, params.knn)
+        matrix.data = sparsify_matrix(matrix, mst=params.mst, knn=params.knn,
+                                      lower_bound=0 if params.lb is None else params.lb)
 
     if params.lb is not None:
         matrix.data = apply_lower_bound(matrix.data, params.lb)
@@ -332,7 +278,7 @@ def main(argv):
                 data_type=matrix.data_type,
                 max_output_bytes=max_output_bytes,
                 output_path=dense,
-                mitigation_options=["--sparse", "--lb", "--mst_knn", "--knn"],
+                mitigation_options=["--sparse", "--lb", "--mst", "--knn"],
             )
             matrix.write(dense, "dense")
         if dense_text is not None:
@@ -346,7 +292,7 @@ def main(argv):
                 data_type=matrix.data_type,
                 max_output_bytes=max_output_bytes,
                 output_path=dense_text,
-                mitigation_options=["--sparse", "--lb", "--mst_knn", "--knn"],
+                mitigation_options=["--sparse", "--lb", "--mst", "--knn"],
             )
             matrix.write(dense_text,"dense_text")
         if sparse:
@@ -360,7 +306,7 @@ def main(argv):
                 data_type=matrix.data_type,
                 max_output_bytes=max_output_bytes,
                 output_path=sparse,
-                mitigation_options=["--lb", "--mst_knn", "--knn"],
+                mitigation_options=["--lb", "--mst", "--knn"],
             )
             matrix.write(sparse, "sparse")
     except OutputSizeLimitExceeded as exc:

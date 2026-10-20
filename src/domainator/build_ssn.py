@@ -11,8 +11,8 @@ from os import PathLike
 import os
 import sys
 from domainator.cytoscape import write_cytoscape_xgmml
-from domainator.data_matrix import (DataMatrix, MaxTree, mst_edge_index_dict, mst_knn_edge_index_dict,
-                                    symmetric_knn_edge_index_dict)
+from domainator.data_matrix import DataMatrix, MaxTree, mst_edge_index_dict
+from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_edge_index_dict
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 import scipy.sparse
 from scipy.sparse.csgraph import connected_components
@@ -68,21 +68,6 @@ def rename_labels_by_frequency(labels:np.ndarray) -> np.ndarray:
     for i, label in enumerate(sorted_labels):
         new_labels[labels == label] = i
     return new_labels
-
-
-def _mst_knn_arg(value: Union[str, int]) -> int:
-    value = int(value)
-    if value < 0:
-        raise ValueError("--mst_knn must be an integer >= 0")
-    return value
-
-
-def _knn_arg(value: Union[str, int]) -> int:
-    value = int(value)
-    if value < 1:
-        # k=0 selects no neighbors, so without --mst there would be no edges at all.
-        raise ValueError("--knn must be an integer >= 1")
-    return value
 
 
 def cluster_labels_from_tree(tree: MaxTree, lb: float) -> np.ndarray:
@@ -192,8 +177,8 @@ def iter_mst_ssn_edges(tree: "MaxTree", rows, lb: float, mark_mst: bool = False)
             yield source, target, score
 
 
-def iter_mst_knn_ssn_edges(edge_dict, rows, mst_edges=None):
-    """Yield MST+kNN edges as (source_name, target_name, score) in canonical order.
+def iter_edge_dict_ssn_edges(edge_dict, rows, mst_edges=None):
+    """Yield --knn (optionally plus --mst) edges as (source_name, target_name, score) in canonical order.
 
     mst_edges, when given, is a container of normalized (low_idx, high_idx) pairs;
     each edge then carries a trailing bool separating the MST backbone from the
@@ -210,7 +195,7 @@ def iter_mst_knn_ssn_edges(edge_dict, rows, mst_edges=None):
 
 
 def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, mst_knn: int = None, subset_labels=None, max_output_bytes=None, max_color_groups:int=None, mark_mst:bool=False, knn: int = None):
+              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, knn: int = None, subset_labels=None, max_output_bytes=None, max_color_groups:int=None, mark_mst:bool=False):
     """build a sequence similarity network from a matrix
 
     Args:
@@ -223,9 +208,8 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         cluster_tsv (Union[str, PathLike], optional): write a metadata tab-separated file with the cluster ids to this path. Defaults to None.
         no_cluster_header (bool, optional): If True, then the cluster tsv file will not have a header. Defaults to False.
         color_table_out (str, optional): write a color table to this path. Defaults to None.
-        mst (bool, optional): If True, then write 
-        mst_knn (int, optional): shorthand for mst=True plus knn=<k>: emit the union of the MST and an OR-symmetric kNN graph. 0 emits just the MST.
-        knn (int, optional): If set, emit OR-symmetric k-nearest-neighbor edges. Combined with mst=True the MST is added too (the mst_knn graph); on its own the emitted graph need not preserve the input's connected components.
+        mst (bool, optional): If True, emit only maximum spanning tree edges, which preserves the input's connected components. Defaults to False.
+        knn (int, optional): If set, emit OR-symmetric k-nearest-neighbor edges. Combined with mst=True the result is the union of the two; on its own the emitted graph need not preserve the input's connected components. Defaults to None.
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
         max_color_groups (int, optional): if set, only this many of the largest color_by groups get distinct colors, the rest share a neutral gray. Defaults to None, meaning every group gets a color.
         mark_mst (bool, optional): If True, give every edge a boolean MST property saying whether it belongs to the maximum spanning tree. Defaults to False.
@@ -233,13 +217,9 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     Raises:
         ValueError: if the input does not have symmetric row and column labels
     """
-    if mst_knn is not None:
-        if mst or knn is not None:
-            raise ValueError("mst_knn is shorthand for mst plus knn; pass either mst_knn or mst/knn, not both.")
-        mst = True
-        knn = mst_knn
-    if knn is not None and knn < 1 and not mst:
-        raise ValueError("knn must be >= 1 without mst, otherwise no edges would be selected at all.")
+    if knn is not None and knn < 1:
+        raise ValueError("knn must be >= 1")
+    check_sparsify_data_type(matrix.data_type, mst, knn)
 
     matrix = subset_matrix_by_labels(matrix, subset_labels)
 
@@ -262,7 +242,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     # selected edges -- computed here, while matrix.data is still around.
     knn_edge_dict = None
     if knn is not None and not mst:
-        knn_edge_dict = symmetric_knn_edge_index_dict(matrix, knn, lower_bound=lb)
+        knn_edge_dict = sparsify_edge_index_dict(matrix, mst=False, knn=knn, lower_bound=lb)
 
     node_data = pd.DataFrame(index=matrix.rows)
     if cluster:
@@ -273,7 +253,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         else:
             node_data[CLUSTER_COLUMN] = cluster_labels_from_graph(matrix, lb)
 
-    # Determine the edge source for the XGMML write.  For mst/mst_knn we free
+    # Determine the edge source for the XGMML write.  For --mst/--knn we free
     # the large matrix.data as soon as it is no longer needed.
     edge_column_names = [SCORE_COLUMN]
     edge_metadata_types = {SCORE_COLUMN: "real"}
@@ -293,13 +273,13 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
             edge_endpoint_style="name",
         )
     elif knn is not None:
-        # mst + knn is the mst_knn union; knn on its own was selected above.
-        edge_dict = (mst_knn_edge_index_dict(matrix, knn, lower_bound=lb, tree=tree)
+        # mst + knn is the union of the two; knn on its own was selected above.
+        edge_dict = (sparsify_edge_index_dict(matrix, mst=True, knn=knn, lower_bound=lb, tree=tree)
                      if mst else knn_edge_dict)
         mst_edges = set(mst_edge_index_dict(tree, lower_bound=lb)) if mark_mst else None
         rows = matrix.rows
         del matrix  # free O(n²) data array
-        xgmml_edge_rows = iter_mst_knn_ssn_edges(edge_dict, rows, mst_edges=mst_edges)
+        xgmml_edge_rows = iter_edge_dict_ssn_edges(edge_dict, rows, mst_edges=mst_edges)
         xgmml_edge_kwargs = dict(
             edge_rows=xgmml_edge_rows,
             edge_column_names=edge_column_names,
@@ -337,7 +317,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
                 color_table=color_table,
                 max_output_bytes=max_output_bytes,
                 output_description=f"XGMML network output '{xgmml}'",
-                mitigation_options=["--lb", "--mst", "--mst_knn", "--knn", "--subset"],
+                mitigation_options=["--lb", "--mst", "--knn", "--subset"],
             )
             os.replace(temp_xgmml_path, xgmml)
             temp_xgmml_path = None
@@ -404,18 +384,7 @@ def main(argv):
 
     add_max_output_gb_argument(parser)
 
-    parser.add_argument('--mst', action="store_true", required=False, default=False,
-                        help="If set, then only include edges that are part of the maximum spanning tree of the graph. " \
-                        "The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to " \
-                        "the minimum necessary to preserve the clusters. Combine with --knn to keep k-nearest-neighbor edges as well.")
-
-    # --mst_knn is shorthand for '--mst --knn K', so it conflicts with --knn here and
-    # with --mst in build_ssn (argparse cannot express 'either mst_knn, or mst and/or knn').
-    sparsify_group = parser.add_mutually_exclusive_group(required=False)
-    sparsify_group.add_argument('--knn', type=_knn_arg, required=False, default=None,
-                                help="Include OR-symmetric k-nearest-neighbor edges, where K must be >= 1. On its own this can split a cluster of the full graph into several clusters; add --mst to keep the graph's connectivity.")
-    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                                help="Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges, where K must be >= 0. Equivalent to '--mst --knn K'; K=0 gives just the maximum spanning tree (equivalent to --mst).")
+    add_sparsify_arguments(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
 
@@ -451,11 +420,11 @@ def main(argv):
     try:
         # The MST paths need the unthresholded matrix; --lb is applied later by the tree
         # walk. Pure --knn and the default path can prune on load and save the memory.
-        load_lower_bound = None if (params.mst or params.mst_knn is not None) else params.lb
+        load_lower_bound = None if params.mst else params.lb
         build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.lb, params.metadata, params.color_by, color_table,
                   params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
-                  params.mst, params.mst_knn, subset_labels, max_output_bytes=max_output_bytes,
-                  max_color_groups=params.max_color_groups, mark_mst=params.mark_mst, knn=params.knn)
+                  params.mst, params.knn, subset_labels, max_output_bytes=max_output_bytes,
+                  max_color_groups=params.max_color_groups, mark_mst=params.mark_mst)
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 

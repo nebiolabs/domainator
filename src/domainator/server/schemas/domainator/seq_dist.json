@@ -70,12 +70,13 @@
       ]
     },
     {
-      "name": "K",
-      "parameter": "k",
-      "help": "Include at most this many non-zero entries in the matrix for each input sequence. Default: Include all hits.",
+      "name": "Max hits per query",
+      "parameter": "max_hits_per_query",
+      "help": "Keep at most this many hits for each input sequence, the highest-scoring ones. Caps the search itself, and applies before MST and kNN pruning.",
       "type": "integer",
+      "min": 0,
       "flags": [
-        "-k"
+        "--max_hits_per_query"
       ]
     },
     {
@@ -129,7 +130,8 @@
       ]
     }
   ],
-  "advanced_parameters": [    {
+  "advanced_parameters": [
+    {
       "name": "Input Type",
       "parameter": "input_type",
       "help": "File type for the sequence file",
@@ -183,6 +185,26 @@
       "default": 25.0,
       "flags": [
         "--max_output_gb"
+      ]
+    },
+    {
+      "name": "MST",
+      "parameter": "mst",
+      "help": "Keep only the edges of the maximum spanning tree (forest). The clusters are the same as the full graph's, with the connections inside each cluster pruned to the minimum needed to keep it connected. Combine with kNN to also keep each node's nearest neighbors. Computed while streaming; requires the reference to be the input file and mode score, bool, or efi_score.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--mst"
+      ]
+    },
+    {
+      "name": "kNN",
+      "parameter": "knn",
+      "help": "Keep only OR-symmetric K-nearest-neighbor edges (K at least 1): an edge is kept if it is among the K best for either of its nodes. On its own this can split a cluster of the full graph into several; combine with MST to keep the clusters connected. Computed while streaming; requires the reference to be the input file and mode score, bool, or efi_score.",
+      "type": "integer",
+      "min": 1,
+      "flags": [
+        "--knn"
       ]
     }
   ]

@@ -159,9 +159,9 @@
       ]
     },
     {
-      "name": "Mst",
+      "name": "MST",
       "parameter": "mst",
-      "help": "If set, then only include edges that are part of the maximum spanning tree of the graph. The clusters will be the same as the full graph, but the intra-cluster connections will be pruned to the minimum necessary to preserve the clusters. Mutually exclusive with Mst KNN.",
+      "help": "Keep only the edges of the maximum spanning tree (forest). The clusters are the same as the full graph's, with the connections inside each cluster pruned to the minimum needed to keep it connected. Combine with kNN to also keep each node's nearest neighbors.",
       "type": "boolean",
       "default": false,
       "flags": [
@@ -169,23 +169,13 @@
       ]
     },
     {
-      "name": "KNN",
+      "name": "kNN",
       "parameter": "knn",
-      "help": "Include OR-symmetric k-nearest-neighbor edges (K at least 1). On its own this can split a cluster of the full graph into several clusters; combine with Mst to keep the graph's connectivity. Mutually exclusive with Mst KNN.",
+      "help": "Keep only OR-symmetric K-nearest-neighbor edges (K at least 1): an edge is kept if it is among the K best for either of its nodes. On its own this can split a cluster of the full graph into several; combine with MST to keep the clusters connected.",
       "type": "integer",
       "min": 1,
       "flags": [
         "--knn"
-      ]
-    },
-    {
-      "name": "Mst KNN",
-      "parameter": "mst_knn",
-      "help": "Include the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges. Equivalent to Mst plus KNN. K must be at least 0; K=0 gives just the maximum spanning tree. Mutually exclusive with Mst and KNN.",
-      "type": "integer",
-      "min": 0,
-      "flags": [
-        "--mst_knn"
       ]
     },
     {
@@ -199,6 +189,4 @@
       ]
     }
   ]
-
-
 }

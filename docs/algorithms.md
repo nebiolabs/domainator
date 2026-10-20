@@ -17,7 +17,7 @@ features *do*, see the [Similarity Network Viewer guide](ssn_viewer.md), the
 - [Batch MST: Kruskal over a sorted edge table](#batch-mst-kruskal-over-a-sorted-edge-table)
 - [Threshold tables](#threshold-tables)
 - [Streaming MST ∪ kNN](#streaming-mst--knn)
-- [Exact MST-kNN edge counts per threshold](#exact-mst-knn-edge-counts-per-threshold)
+- [Exact MST + kNN edge counts per threshold](#exact-mst--knn-edge-counts-per-threshold)
 - [Split-event scanning](#split-event-scanning)
 - [Replaying the merge order in the browser](#replaying-the-merge-order-in-the-browser)
 - [Ports that must stay in step](#ports-that-must-stay-in-step)
@@ -118,16 +118,24 @@ the slider stops so a stop can carry the exact edge counts for its cut.
 
 ## Streaming MST ∪ kNN
 
-`--mst_knn k` keeps the union of the MST and an OR-symmetric k-nearest-neighbor graph:
+`--mst --knn k` keeps the union of the MST and an OR-symmetric k-nearest-neighbor graph:
 the kNN part gives each node its local context, and the MST guarantees the result has the
-same connected components as the full graph at every threshold. In batch form that is
-`transform_matrix.apply_mst_knn_sparsification`, which needs the full matrix in memory.
+same connected components as the full graph at every threshold. Every tool that prunes a
+graph (`build_ssn`, `transform_matrix`, `seq_dist`, `compare_contigs`, `structure_dist`,
+`kmer_dist`) takes the same two independent options, `--mst` and `--knn k`, from
+[sparsify.py](../src/domainator/sparsify.py). In batch form the selection is
+`sparsify.sparsify_matrix`, which needs the full matrix in memory.
 
 `StreamingMstKnnAccumulator` ([ssn_edges.py:370](../src/domainator/ssn_edges.py#L370))
 computes the same selection from a stream of edges fed in one at a time via `add_edge`,
-never materializing the matrix. `compare_contigs.py` uses it to sparsify while it computes
-chunks of the similarity matrix, discarding each chunk after feeding it in
-([compare_contigs.py:290](../src/domainator/compare_contigs.py#L290)).
+never materializing the matrix. `compare_contigs.py` and `kmer_dist.py` use it to sparsify
+while they compute chunks of the similarity matrix, discarding each chunk after feeding it in
+([compare_contigs.py:290](../src/domainator/compare_contigs.py#L290)); `seq_dist.py` and
+`structure_dist.py` feed it each hit as the aligner reports it.
+
+A `--max_hits_per_query` cap is applied before the edges reach the accumulator, in every
+tool. Where hits arrive in no fixed order (`structure_dist.py`), `sparsify.PerQueryTopK`
+holds each query's best hits until the stream ends, in O(n · cap) memory.
 
 ### The MST half is exact, via the matroid property
 
@@ -162,10 +170,9 @@ slightly-asymmetric input it is exact as long as no node ever holds more than
 `knn_soft_cap` neighbors above its true top-k — i.e. always, short of a pathological
 high-degree hub.
 
-Two shortcuts keep the common cases cheap: at `k = 0` (`--mst_knn 0`, MST only) the
-adjacency is never allocated, since it would never be read back; with `include_mst=False`
-(a pure `--knn k` graph, which does **not** preserve components) the MST buffer is never
-allocated.
+Two shortcuts keep the common cases cheap: with `--mst` alone (`knn=None`) the adjacency
+is never allocated, since it would never be read back; with `--knn k` alone (`mst=False`, a
+graph which does **not** preserve components) the MST buffer is never allocated.
 
 `finalize()` merges the two halves into one `{(min, max): score}` dict, taking the MST
 edge's recorded weight as authoritative — adjacency trimming may since have dropped that
@@ -173,10 +180,10 @@ pair from both neighbor dicts, but the forest still needs the edge. `to_csr()` w
 kept edge to both cells as the symmetric score it was selected on, so the streaming and
 batch paths agree on values as well as on membership.
 
-## Exact MST-kNN edge counts per threshold
+## Exact MST + kNN edge counts per threshold
 
-`matrix_report.py` shows how many edges a `--lb t --mst_knn k` run would emit, for every
-threshold in the table and every k in `[2, max_k]`. Computing that by re-running the
+`matrix_report.py --knn_projection` shows how many edges a `--lb t --mst --knn k` run would
+emit, for every threshold in the table and every k in `[1, max_k]`. Computing that by re-running the
 selection per (threshold, k) pair would be quadratic in the table size.
 
 `mst_knn_edge_counts_by_threshold` ([ssn_edges.py:555](../src/domainator/ssn_edges.py#L555))
@@ -294,7 +301,7 @@ is window-independent and runs once per bundle — `deriveMergeSeries` in the br
 `ssn_bundle` functions in Python — while `selectMergeEvents` (a sort and a scan) is what
 each zoom and pan re-runs.
 
-Ranking by impact alone produces a broken chart. On a connected MST-kNN graph the weak
+Ranking by impact alone produces a broken chart. On a connected MST + kNN graph the weak
 tail of the MST is individual outliers being attached to the giant component one or two
 nodes at a time — the smallest impacts there are, so the cap drops every one of them —
 while the axis and the slider still span the full threshold range, because the moving sum

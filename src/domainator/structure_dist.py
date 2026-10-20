@@ -47,11 +47,16 @@ from domainator.output_guardrails import (
     enforce_matrix_output_limit,
 )
 from domainator.seq_dist import _SparseMaxResultBuilder
+from domainator.sparsify import (
+    MAX_HITS_PER_QUERY_SPARSIFY_NOTE,
+    PerQueryTopK,
+    add_sparsify_arguments,
+    sparsify_option_label,
+    sparsify_requested,
+)
 from domainator.transform_matrix import (
     LOG10_2,
     MODES,
-    _knn_arg,
-    _mst_knn_arg,
     transform_matrix,
 )
 from domainator.utils import get_file_type
@@ -80,10 +85,10 @@ DIST_MODES = frozenset({"score_dist", "efi_score_dist"} | set(STRUCTURE_DIST_MOD
 MODE_METRICS = {"tmscore": ("tmscore",), "tmscore_dist": ("tmscore",),
                 "lddt": ("lddt",), "lddt_dist": ("lddt",)}
 
-# Modes whose cell value is computable from a single hit, so --mst_knn/--knn can stream
+# Modes whose cell value is computable from a single hit, so --mst/--knn can stream
 # them. The rest normalize against global matrix maxima, which streaming cannot see.
-MST_KNN_STREAMABLE_MODES = frozenset({"score", "bool", "efi_score",
-                                      "tmscore", "lddt", "fident"})
+SPARSIFY_STREAMABLE_MODES = frozenset({"score", "bool", "efi_score",
+                                       "tmscore", "lddt", "fident"})
 
 # efi_score reads the cell as a bit score in its 2^(-score) term, which -log10(p) is not.
 BITSCORE_ONLY_MODES = frozenset({"efi_score", "efi_score_dist"})
@@ -263,13 +268,12 @@ def _apply_mode(matrix, mode: str, row_lengths, col_lengths, self_comparison: bo
 
 def _streaming_value(raw: float, mode: str, log_lengths,
                      row_idx: int, col_idx: int) -> Optional[float]:
-    """The cell value for one hit, for the --mst_knn/--knn path, which sees no maxima.
+    """The value --mst/--knn select on for one hit, since that path sees no maxima.
 
-    Takes the already-read raw value rather than the hit, so the reader counts each
-    alignment exactly once.
+    bool selects on the raw value, since all-1 values would leave nothing to rank; the
+    caller turns the kept cells into a 0/1 mask afterward. Takes the already-read raw
+    value rather than the hit, so the reader counts each alignment exactly once.
     """
-    if mode == "bool":
-        return 1.0
     if mode == "efi_score":
         value = raw * LOG10_2 - log_lengths[row_idx] - log_lengths[col_idx]
         return value if value > 0 else None
@@ -280,10 +284,10 @@ def _write_matrix_outputs(matrix, mode, row_names, col_names, row_lengths, col_l
                           dense, dense_text, sparse, max_output_bytes):
     """The enforce-then-write pair for each requested output format."""
     targets = (
-        ("dense", dense, DataMatrix.write_dense, ["--sparse", "-k", "--lb", "-e/--evalue"]),
+        ("dense", dense, DataMatrix.write_dense, ["--sparse", "--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"]),
         ("dense_text", dense_text, DataMatrix.write_dense_text,
-         ["--sparse", "-k", "--lb", "-e/--evalue"]),
-        ("sparse", sparse, DataMatrix.write_sparse, ["-k", "--lb", "-e/--evalue"]),
+         ["--sparse", "--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"]),
+        ("sparse", sparse, DataMatrix.write_sparse, ["--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"]),
     )
     try:
         for output_type, path, writer, mitigations in targets:
@@ -315,10 +319,10 @@ def structure_dist(input_values: Sequence[str],
                    dense_text: Optional[str] = None,
                    sparse: Optional[str] = None,
                    evalue: float = 0.001,
-                   k: Optional[int] = None,
+                   max_hits_per_query: Optional[int] = None,
                    lb: float = 0.0,
                    symmetrize: str = "none",
-                   mst_knn: Optional[int] = None,
+                   mst: bool = False,
                    knn: Optional[int] = None,
                    alignment_type: Optional[int] = None,
                    max_seqs: Optional[int] = None,
@@ -331,11 +335,7 @@ def structure_dist(input_values: Sequence[str],
 
     reference_values of None compares the input against itself.
     """
-    if mst_knn is not None and knn is not None:
-        raise ValueError("--mst_knn already includes the kNN edges; pass either "
-                         "--mst_knn or --knn, not both.")
-    sparsify_k = mst_knn if mst_knn is not None else knn
-    sparsify_include_mst = mst_knn is not None
+    sparsify = sparsify_requested(mst, knn)
 
     self_comparison = reference_values is None
     metrics = _mode_metrics(mode)
@@ -383,12 +383,20 @@ def structure_dist(input_values: Sequence[str],
         reader = _MetricValueReader(field)
         hit_counts: Dict[str, int] = dict()
 
-        if sparsify_k is not None:
+        if sparsify:
             log_lengths = (np.log10(np.asarray(row_lengths, dtype=np.float64))
                            if mode == "efi_score" else None)
-            accumulator = StreamingMstKnnAccumulator(
-                len(row_names), sparsify_k, lower_bound=0,
-                include_mst=sparsify_include_mst)
+            accumulator = StreamingMstKnnAccumulator(len(row_names), mst=mst, knn=knn, lower_bound=0)
+
+            def add_raw(row_idx, col_idx, raw):
+                value = _streaming_value(raw, mode, log_lengths, row_idx, col_idx)
+                if value is not None:
+                    accumulator.add_edge(row_idx, col_idx, value)
+
+            # The per-query cap ranks raw values, as _keep_top_k_per_row does on the
+            # non-streaming path, and has to see a query's every hit before it can choose.
+            top_hits = (PerQueryTopK(len(row_names), max_hits_per_query)
+                        if max_hits_per_query is not None else None)
             for hit in _progress(hits, progress, desc="Scoring pairs"):
                 hit_counts[hit.query] = hit_counts.get(hit.query, 0) + 1
                 raw = reader.value(hit)
@@ -396,11 +404,16 @@ def structure_dist(input_values: Sequence[str],
                     continue
                 row_idx = row_name_to_idx[hit.query]
                 col_idx = col_name_to_idx[hit.target]
-                value = _streaming_value(raw, mode, log_lengths, row_idx, col_idx)
-                if value is None:
-                    continue
-                accumulator.add_edge(row_idx, col_idx, value)
+                if top_hits is not None:
+                    top_hits.add_edge(row_idx, col_idx, raw)
+                else:
+                    add_raw(row_idx, col_idx, raw)
+            if top_hits is not None:
+                for row_idx, col_idx, raw in top_hits.iter_edges():
+                    add_raw(row_idx, col_idx, raw)
             matrix = accumulator.to_csr()
+            if mode == "bool":
+                matrix.data[:] = 1
         else:
             # The order-agnostic builder: it makes no assumption about how the backend
             # groups its output, and duplicate (query, target) pairs -- which are what the
@@ -422,15 +435,16 @@ def structure_dist(input_values: Sequence[str],
             # The work directory goes away when this context exits.
             structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv, aligner)
 
-    if sparsify_k is None:
-        # The streaming accumulator has already reconciled both directions itself.
+    if not sparsify:
+        # The streaming accumulator has already reconciled both directions itself, and
+        # applied the per-query cap before pruning.
         matrix = symmetrize_matrix(matrix, symmetrize)
-    matrix = _keep_top_k_per_row(matrix, k)  # a no-op when k is None
+        matrix = _keep_top_k_per_row(matrix, max_hits_per_query)  # a no-op when None
 
     row_lengths_array = np.array(row_lengths)
     col_lengths_array = (row_lengths_array if self_comparison else np.array(col_lengths))
 
-    if sparsify_k is None:
+    if not sparsify:
         matrix = _apply_mode(matrix, mode, row_lengths_array, col_lengths_array,
                              self_comparison)
 
@@ -462,19 +476,15 @@ def main(argv):
                         help="what kind of values should be in the matrix. Score-based, from the aligner's alignment score, exactly as in seq_dist: score: raw score, bool: 1 if a hit otherwise 0, norm_score: score/min(row_max, col_max), row_norm_score: score/row_max, score_dist: 1 - norm_score, efi_score: -log10[2^(-score) * (row_len * col_len)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Structural, already in [0,1] so the distance forms are just 1 - value: tmscore, lddt, fident, tmscore_dist, lddt_dist, fident_dist. tmscore and lddt require --algorithm foldseek and C-alpha coordinates in both databases; fident works with either backend. efi_score and efi_score_dist require a real bit score, so they are rejected with --algorithm reseek. Default: score")
 
     parser.add_argument('--symmetrize', type=str, default="none", choices=list(SYMMETRIZE_CHOICES),
-                        help="reconcile the two directions of each pair before the --mode transform. Requires a square self-comparison (no -r). none: leave the matrix as the aligner reported it, which is usually slightly asymmetric. max: the better of the two directions in both cells, the OR-symmetric convention used by --mst_knn and by build_ssn. min: the worse of the two -- note a pair found in only one direction has a stored zero in the other, so min DELETES it, making this a mutual-hit filter. mean: the average of the two -- note a pair found in only one direction is HALVED, because the missing direction contributes zero. Cannot be combined with --mst_knn/--knn, whose output is always max-symmetric.")
+                        help="reconcile the two directions of each pair before the --mode transform. Requires a square self-comparison (no -r). none: leave the matrix as the aligner reported it, which is usually slightly asymmetric. max: the better of the two directions in both cells, the OR-symmetric convention used by --mst/--knn and by build_ssn. min: the worse of the two -- note a pair found in only one direction has a stored zero in the other, so min DELETES it, making this a mutual-hit filter. mean: the average of the two -- note a pair found in only one direction is HALVED, because the missing direction contributes zero. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
     parser.add_argument('--lb', type=float, default=0,
                         help="Round any values lower than or equal to this down to zero. This applies to the raw per-hit value before the --mode transform: the aligner's alignment score for the score-based modes, and the metric itself (0-1) for the tmscore/lddt/fident modes.")
 
-    parser.add_argument('-k', type=int, default=None,
-                        help="Include at most this many non-zero entries in the matrix for each input structure, keeping the highest-valued ones. Applied to the assembled matrix, after --symmetrize. Use --max_seqs to bound the search itself.")
+    parser.add_argument('--max_hits_per_query', type=int, default=None,
+                        help="Include at most this many non-zero entries in the matrix for each input structure, keeping the highest-valued ones. Applied after --symmetrize. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE + " Use --max_seqs to bound the search itself.")
 
-    sparsify_group = parser.add_mutually_exclusive_group(required=False)
-    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, default=None,
-                                help="Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer >= 0, where 0 keeps only the maximum spanning tree), computed as a streaming operation to keep memory and output size small. Requires a square self-comparison and a --mode whose value is computable from a single alignment. Best paired with --sparse.")
-    sparsify_group.add_argument('--knn', type=_knn_arg, default=None,
-                                help="Prune the output to OR-symmetric k-nearest-neighbor edges only (integer >= 1), computed as a streaming operation. Unlike --mst_knn this does not preserve the connected components of the full comparison. Same requirements as --mst_knn.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires a square self-comparison and --mode in {score, bool, efi_score, tmscore, lddt, fident}; bool selects on the alignment scores and then keeps the selected cells as 1. Best paired with --sparse.")
 
     parser.add_argument('--keep_db', default=None, type=str,
                         help="when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.")
@@ -498,8 +508,8 @@ def main(argv):
 
     if params.evalue <= 0:
         raise ValueError("--evalue must be greater than 0.")
-    if params.k is not None and params.k < 0:
-        raise ValueError("-k must be >= 0")
+    if params.max_hits_per_query is not None and params.max_hits_per_query < 0:
+        raise ValueError("--max_hits_per_query must be >= 0")
     if params.dense is not None and get_file_type(params.dense) != "hdf5":
         raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
     if params.sparse is not None and get_file_type(params.sparse) != "hdf5":
@@ -523,19 +533,18 @@ def main(argv):
         reference_values = None
     self_comparison = reference_values is None
 
-    sparsify_k = params.mst_knn if params.mst_knn is not None else params.knn
-    if sparsify_k is not None:
-        option = "--mst_knn" if params.mst_knn is not None else "--knn"
+    if sparsify_requested(params.mst, params.knn):
+        option = sparsify_option_label(params.mst, params.knn)
         if not self_comparison:
             raise ValueError(f"{option} requires a square, symmetric comparison: omit -r, "
                              "or pass the same value for -i and -r.")
-        if params.mode not in MST_KNN_STREAMABLE_MODES:
+        if params.mode not in SPARSIFY_STREAMABLE_MODES:
             raise ValueError(
-                f"{option} is only supported with --mode {sorted(MST_KNN_STREAMABLE_MODES)} "
+                f"{option} is only supported with --mode {sorted(SPARSIFY_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
                 f"For '{params.mode}', run 'structure_dist --mode score --sparse out.hdf5' "
                 f"then 'transform_matrix -i out.hdf5 --mode {params.mode} {option} "
-                f"{sparsify_k} --sparse pruned.hdf5'."
+                f"--sparse pruned.hdf5'."
             )
         if params.symmetrize != "none":
             raise ValueError(
@@ -565,10 +574,10 @@ def main(argv):
         dense_text=params.dense_text,
         sparse=params.sparse,
         evalue=params.evalue,
-        k=params.k,
+        max_hits_per_query=params.max_hits_per_query,
         lb=params.lb,
         symmetrize=params.symmetrize,
-        mst_knn=params.mst_knn,
+        mst=params.mst,
         knn=params.knn,
         alignment_type=params.alignment_type,
         max_seqs=params.max_seqs,

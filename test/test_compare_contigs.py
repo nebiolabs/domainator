@@ -370,15 +370,15 @@ def test_compare_contigs_mst_knn_matches_batch_transform():
 
         base_args = ["-i", input_path, "--ji", "0.5", "--ai", "0.5"]
 
-        # batch reference: full matrix, then post-hoc mst_knn
+        # batch reference: full matrix, then post-hoc --mst --knn
         full_sparse = output_dir + "/full.hdf5"
         batch_sparse = output_dir + "/batch.hdf5"
         compare_contigs.main(base_args + ["--sparse", full_sparse])
-        transform_matrix.main(["-i", full_sparse, "--sparse", batch_sparse, "--mst_knn", "2"])
+        transform_matrix.main(["-i", full_sparse, "--sparse", batch_sparse, "--mst", "--knn", "2"])
 
         # streaming path
         stream_sparse = output_dir + "/stream.hdf5"
-        compare_contigs.main(base_args + ["--sparse", stream_sparse, "--mst_knn", "2"])
+        compare_contigs.main(base_args + ["--sparse", stream_sparse, "--mst", "--knn", "2"])
 
         batch_dm = DataMatrix.from_file(batch_sparse)
         stream_dm = DataMatrix.from_file(stream_sparse)
@@ -440,7 +440,7 @@ def test_compare_contigs_k_applies_to_combined_scores():
             [input_path],
             [metric_1, metric_2],
             [capture],
-            k=2,
+            max_hits_per_query=2,
             contigs=[record.id for record in records],
             name_by_order=False,
         )
@@ -539,12 +539,12 @@ def test_compare_contigs_knn_matches_batch_transform():
             return {(min(i, j), max(i, j)) for i, j in zip(*np.nonzero(array)) if i != j}
 
         # Equal similarity scores make the selected edge set tie-dependent in the same way
-        # as --mst_knn, so compare the kept pair count and the containment property that
+        # as --mst --knn, so compare the kept pair count and the containment property that
         # holds regardless of tie order.
         assert len(off_diagonal_pairs(stream_dm)) == len(off_diagonal_pairs(batch_dm))
 
         mst_knn_sparse = output_dir + "/mst_knn.hdf5"
-        compare_contigs.main(base_args + ["--sparse", mst_knn_sparse, "--mst_knn", "2"])
+        compare_contigs.main(base_args + ["--sparse", mst_knn_sparse, "--mst", "--knn", "2"])
         mst_knn_pairs = off_diagonal_pairs(DataMatrix.from_file(mst_knn_sparse))
         assert off_diagonal_pairs(stream_dm) <= mst_knn_pairs
 
@@ -562,5 +562,35 @@ def test_compare_contigs_knn_rejects_invalid_use():
 
         with pytest.raises(SystemExit):  # k must be >= 1
             compare_contigs.main(args + ["--knn", "0"])
-        with pytest.raises(SystemExit):  # mutually exclusive
-            compare_contigs.main(args + ["--knn", "2", "--mst_knn", "2"])
+        with pytest.raises(SystemExit):  # the old shorthand is gone
+            compare_contigs.main(args + ["--mst_knn", "2"])
+
+
+@pytest.mark.parametrize("sparsify_args", [["--knn", "1"], ["--knn", "2"]])
+def test_compare_contigs_max_hits_per_query_applies_before_sparsify(sparsify_args):
+    """The per-query cap applies before --knn on the streaming path, like everywhere else."""
+    from domainator import transform_matrix
+
+    records = [
+        _make_compare_contig_record("rec1", ["A", "B", "C"]),
+        _make_compare_contig_record("rec2", ["A", "B", "D"]),
+        _make_compare_contig_record("rec3", ["A", "C", "E", "G"]),
+        _make_compare_contig_record("rec4", ["B", "C", "F"]),
+        _make_compare_contig_record("rec5", ["A", "Y", "Z"]),
+        _make_compare_contig_record("rec6", ["X", "Y", "W", "B"]),
+    ]
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+        base_args = ["-i", input_path, "--ji", "1.0", "--max_hits_per_query", "2"]
+
+        capped = output_dir + "/capped.hdf5"
+        batch = output_dir + "/batch.hdf5"
+        stream = output_dir + "/stream.hdf5"
+        compare_contigs.main(base_args + ["--sparse", capped])
+        transform_matrix.main(["-i", capped, "--sparse", batch] + sparsify_args)
+        compare_contigs.main(base_args + ["--sparse", stream] + sparsify_args)
+
+        np.testing.assert_array_equal(DataMatrix.from_file(stream).toarray(),
+                                      DataMatrix.from_file(batch).toarray())

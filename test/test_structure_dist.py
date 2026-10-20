@@ -53,7 +53,7 @@ def test_mode_sets_do_not_drift_from_transform_matrix():
     # than silently falling behind.
     assert structure_dist.BITSCORE_MODES == frozenset(transform_matrix.MODES)
     assert structure_dist.ALL_MODES >= structure_dist.BITSCORE_MODES
-    assert structure_dist.MST_KNN_STREAMABLE_MODES <= structure_dist.ALL_MODES
+    assert structure_dist.SPARSIFY_STREAMABLE_MODES <= structure_dist.ALL_MODES
     assert structure_dist.DIST_MODES <= structure_dist.ALL_MODES
 
 
@@ -78,7 +78,7 @@ def test_symmetrize_rejected_with_streaming_pruning(inputs, tmp_path):
 
 def test_streaming_pruning_rejects_a_non_streamable_mode(inputs, tmp_path):
     with pytest.raises(ValueError, match="only supported with --mode"):
-        structure_dist.main(["-i", inputs, "--mode", "norm_score", "--mst_knn", "2",
+        structure_dist.main(["-i", inputs, "--mode", "norm_score", "--mst", "--knn", "2",
                              "--sparse", str(tmp_path / "out.hdf5")])
 
 
@@ -305,7 +305,7 @@ def test_tmscore_dist_is_one_minus_tmscore_with_a_zero_diagonal(inputs, tmp_path
 @needs_foldseek
 def test_k_keeps_one_entry_per_row(inputs, tmp_path):
     out = tmp_path / "k.hdf5"
-    structure_dist.main(["-i", inputs, "-k", "1", "--dense", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--max_hits_per_query", "1", "--dense", str(out), "--cpu", "2"])
     array = DataMatrix.from_file(str(out)).toarray()
     assert ((array != 0).sum(axis=1) == 1).all()
 
@@ -349,8 +349,8 @@ def test_mst_knn_streaming_matches_the_batch_transform(inputs, tmp_path):
     batch = tmp_path / "batch.hdf5"
     stream = tmp_path / "stream.hdf5"
     structure_dist.main(["-i", inputs, "--sparse", str(full), "--cpu", "2"])
-    transform_matrix.main(["-i", str(full), "--mst_knn", "2", "--sparse", str(batch)])
-    structure_dist.main(["-i", inputs, "--mst_knn", "2", "--sparse", str(stream),
+    transform_matrix.main(["-i", str(full), "--mst", "--knn", "2", "--sparse", str(batch)])
+    structure_dist.main(["-i", inputs, "--mst", "--knn", "2", "--sparse", str(stream),
                          "--cpu", "2"])
 
     batch_matrix = DataMatrix.from_file(str(batch))
@@ -378,7 +378,7 @@ def test_knn_output_is_max_symmetric(inputs, tmp_path):
 def test_mst_knn_with_a_structural_mode(inputs, tmp_path):
     out = tmp_path / "tm_knn.hdf5"
     structure_dist.main(["-i", inputs, "--mode", "tmscore", "--alignment_type", "1",
-                         "-e", "10", "--mst_knn", "2", "--sparse", str(out), "--cpu", "2"])
+                         "-e", "10", "--mst", "--knn", "2", "--sparse", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     assert matrix.data_type == "tmscore"
     array = matrix.toarray()
@@ -532,3 +532,29 @@ def test_backends_agree_on_which_pairs_are_related(inputs, tmp_path):
     for a, b in [("1UBQ_A", "1NDD_A"), ("1IGD_A", "some.long.name_A"),
                  ("1UBQ_A", "1CRN_A")]:
         assert bool(_cell(foldseek, a, b)) == bool(_cell(reseek, a, b))
+
+
+@needs_foldseek
+def test_max_hits_per_query_applies_before_streaming_sparsify(inputs, tmp_path):
+    capped = tmp_path / "capped.hdf5"
+    batch = tmp_path / "batch.hdf5"
+    stream = tmp_path / "stream.hdf5"
+    structure_dist.main(["-i", inputs, "--max_hits_per_query", "2", "--sparse", str(capped), "--cpu", "2"])
+    transform_matrix.main(["-i", str(capped), "--knn", "1", "--sparse", str(batch)])
+    structure_dist.main(["-i", inputs, "--max_hits_per_query", "2", "--knn", "1",
+                         "--sparse", str(stream), "--cpu", "2"])
+    stream_array = DataMatrix.from_file(str(stream)).toarray()
+    np.testing.assert_array_equal(stream_array, stream_array.T)
+    np.testing.assert_allclose(stream_array, DataMatrix.from_file(str(batch)).toarray())
+
+
+@needs_foldseek
+def test_bool_sparsify_selects_on_scores(inputs, tmp_path):
+    score_out = tmp_path / "score.hdf5"
+    bool_out = tmp_path / "bool.hdf5"
+    structure_dist.main(["-i", inputs, "--knn", "1", "--sparse", str(score_out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--knn", "1", "--mode", "bool", "--sparse", str(bool_out), "--cpu", "2"])
+    score_array = DataMatrix.from_file(str(score_out)).toarray()
+    bool_array = DataMatrix.from_file(str(bool_out)).toarray()
+    np.testing.assert_array_equal(bool_array != 0, score_array != 0)
+    assert set(np.unique(bool_array)) <= {0, 1}

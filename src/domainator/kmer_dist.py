@@ -21,11 +21,12 @@ from jsonargparse import ActionConfigFile, ArgumentParser
 from domainator import RawAndDefaultsFormatter, __version__
 from domainator.compare_contigs import (
     _StreamingCSRChunkBuilder,
+    _feed_chunk_to_accumulator,
     _iter_query_chunks,
     _keep_top_k_per_row,
     _prune_scores_inplace,
 )
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.domainate import (
     clean_rec,
     get_prot_list,
@@ -37,6 +38,12 @@ from domainator.output_guardrails import (
     enforce_matrix_output_limit,
     max_output_gb_to_bytes,
 )
+from domainator.sparsify import (
+    MAX_HITS_PER_QUERY_SPARSIFY_NOTE,
+    add_sparsify_arguments,
+    sparsify_option_label,
+    sparsify_requested,
+)
 from domainator.transform_matrix import transform_matrix
 from domainator.utils import get_file_type, get_multiprocessing_context, parse_seqfiles
 
@@ -46,6 +53,8 @@ DEFAULT_NUCLEOTIDE_KSIZE = 15
 VALID_GENE_CALL_VALUES = {None, "all", "unannotated"}
 VALID_METRICS = {"max_containment", "min_containment", "jaccard"}
 VALID_MODES = {"score", "bool", "score_dist"}
+# --mst/--knn select on the similarity itself, which bool keeps as a 0/1 mask afterward.
+SPARSIFY_MODES = {"score", "bool"}
 _PROTEIN_ALPHABET = "ACDEFGHIKLMNPQRSTVWY"
 _PROTEIN_BASE = len(_PROTEIN_ALPHABET)
 _PROTEIN_CHAR_TO_INT = {char: idx for idx, char in enumerate(_PROTEIN_ALPHABET)}
@@ -443,7 +452,14 @@ def _compute_sparse_metric_matrix(
     cpu: int,
     progress: bool,
     self_comparison: bool,
+    mst: bool = False,
+    knn: Optional[int] = None,
 ) -> scipy.sparse.csr_array:
+    """Score every query against every reference, chunk by chunk.
+
+    With --mst/--knn each chunk is streamed into an accumulator instead of being kept, so
+    the full matrix is never materialized.
+    """
     matrix_shape = (query_feature_matrix.shape[0], reference_feature_matrix.shape[0])
     if k == 0:
         return scipy.sparse.csr_array(matrix_shape, dtype=np.float64)
@@ -456,7 +472,17 @@ def _compute_sparse_metric_matrix(
     query_row_counts = np.diff(query_feature_matrix.indptr)
     reference_row_counts = np.diff(reference_feature_matrix.indptr)
     query_chunks = [(start, end, k, lb) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
-    chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
+    if sparsify_requested(mst, knn):
+        accumulator = StreamingMstKnnAccumulator(matrix_shape[0], mst=mst, knn=knn, lower_bound=lb)
+
+        def append_chunk(start, end, chunk_matrix):
+            _feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
+
+        build = accumulator.to_csr
+    else:
+        chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
+        append_chunk = chunk_builder.append_chunk
+        build = chunk_builder.build
     _progress_checkpoint(progress, f"Scoring {matrix_shape[0]} query records against {matrix_shape[1]} reference records")
 
     if cpu > 1 and len(query_chunks) > 1:
@@ -478,10 +504,10 @@ def _compute_sparse_metric_matrix(
                 total=len(query_chunks),
                 desc="Scoring",
             ):
-                chunk_builder.append_chunk(start, end, chunk_matrix)
+                append_chunk(start, end, chunk_matrix)
     else:
         for start, end, chunk_k, chunk_lb in _progress(query_chunks, progress, total=len(query_chunks), desc="Scoring"):
-            chunk_builder.append_chunk(
+            append_chunk(
                 start,
                 end,
                 _compute_metric_chunk(
@@ -498,7 +524,7 @@ def _compute_sparse_metric_matrix(
                 ),
             )
 
-    return chunk_builder.build()
+    return build()
 
 
 def _resolve_sequence_file_type(path: str, file_type: Optional[str], label: str) -> str:
@@ -533,7 +559,7 @@ def kmer_dist(
     input_type: str,
     reference_path: str,
     reference_type: str,
-    k: Optional[int],
+    max_hits_per_query: Optional[int],
     metric: str,
     mode: str,
     cpu: int,
@@ -548,6 +574,8 @@ def kmer_dist(
     gene_call: Optional[str],
     max_output_bytes: Optional[int],
     progress: bool,
+    mst: bool = False,
+    knn: Optional[int] = None,
 ) -> None:
     input_molecule_type = _resolve_molecule_type(input_path, input_type, fasta_type)
     reference_molecule_type = _resolve_molecule_type(reference_path, reference_type, fasta_type)
@@ -555,6 +583,13 @@ def kmer_dist(
         raise ValueError("Input and reference must have the same molecule type.")
 
     self_comparison = input_path == reference_path and input_type == reference_type
+    if sparsify_requested(mst, knn):
+        option = sparsify_option_label(mst, knn)
+        if not self_comparison:
+            raise ValueError(f"{option} requires a square, symmetric comparison (reference must be the same file as input).")
+        if mode not in SPARSIFY_MODES:
+            raise ValueError(f"{option} is only supported with --mode {sorted(SPARSIFY_MODES)}. For a distance matrix, "
+                             f"sparsify with --mode score and convert the result with transform_matrix.")
 
     resolved_ksize = _resolve_ksize(input_molecule_type, nucleotide_kmers, ksize)
     feature_to_idx: Dict[int, int] = dict()
@@ -595,11 +630,13 @@ def kmer_dist(
         query_feature_matrix,
         reference_feature_matrix,
         metric,
-        k,
+        max_hits_per_query,
         lb,
         cpu,
         progress,
         self_comparison=self_comparison,
+        mst=mst,
+        knn=knn,
     )
     matrix = transform_matrix(
         matrix,
@@ -620,7 +657,7 @@ def kmer_dist(
                 data_type=mode,
                 max_output_bytes=max_output_bytes,
                 output_path=dense,
-                mitigation_options=["--sparse", "-k", "--lb"],
+                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
             )
             DataMatrix.write_dense(
                 matrix,
@@ -642,7 +679,7 @@ def kmer_dist(
                 data_type=mode,
                 max_output_bytes=max_output_bytes,
                 output_path=dense_text,
-                mitigation_options=["--sparse", "-k", "--lb"],
+                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
             )
             DataMatrix.write_dense_text(
                 matrix,
@@ -664,7 +701,7 @@ def kmer_dist(
                 data_type=mode,
                 max_output_bytes=max_output_bytes,
                 output_path=sparse,
-                mitigation_options=["-k", "--lb"],
+                mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
             )
             DataMatrix.write_sparse(
                 matrix,
@@ -708,8 +745,9 @@ def main(argv):
     parser.add_argument('--sparse', type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
     parser.add_argument('--lb', default=0, type=float, required=False,
                         help="Round any similarities lower than or equal to this down to zero before mode transforms.")
-    parser.add_argument('-k', type=int, required=False, default=None,
-                        help="Include at most this many non-zero entries in the matrix for each input sequence.")
+    parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
+                        help="Include at most this many non-zero entries in the matrix for each input sequence, keeping the highest-valued ones. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE)
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Selects on the k-mer similarity. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool}. Best paired with --sparse.")
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="How many cpu threads to use. Default: use all physical cores.")
     parser.add_argument('--progress', action='store_true',
@@ -735,8 +773,8 @@ def main(argv):
         raise ValueError("Sparse distance matrices not implemented.")
     if not 0 <= params.lb <= 1:
         raise ValueError("--lb must be between 0 and 1 for k-mer similarities.")
-    if params.k is not None and params.k < 0:
-        raise ValueError("-k must be >= 0")
+    if params.max_hits_per_query is not None and params.max_hits_per_query < 0:
+        raise ValueError("--max_hits_per_query must be >= 0")
     if params.gene_call is not None and params.nucleotide_kmers:
         warnings.warn("--gene_call has no effect when --nucleotide_kmers is supplied.")
 
@@ -757,7 +795,7 @@ def main(argv):
         input_type,
         reference_path,
         reference_type,
-        params.k,
+        params.max_hits_per_query,
         params.metric,
         params.mode,
         cpu,
@@ -771,6 +809,8 @@ def main(argv):
         gene_call=params.gene_call,
         max_output_bytes=max_output_bytes,
         progress=params.progress,
+        mst=params.mst,
+        knn=params.knn,
     )
 
 

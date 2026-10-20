@@ -371,7 +371,7 @@ class StreamingMstKnnAccumulator:
     """Compute MST ∪ OR-symmetric kNN edges from a stream of edges with bounded memory.
 
     This is the streaming counterpart of
-    :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`. Instead of
+    :func:`~domainator.sparsify.sparsify_matrix`. Instead of
     materializing the full all-vs-all matrix and pruning afterwards, edges are fed in
     one at a time via :meth:`add_edge` and only bounded state is retained:
 
@@ -394,39 +394,39 @@ class StreamingMstKnnAccumulator:
       long as no node retains more than ``knn_soft_cap`` neighbors above its true top-k —
       effectively always, except for pathological high-degree hubs.
 
-    ``k = 0`` selects no kNN edges, so the result is just the maximum spanning forest, and
-    the adjacency is then not maintained at all -- it would never be read back.
-    ``include_mst=False`` drops the forest instead, leaving a pure kNN graph; the MST
-    buffer is then never allocated, so only the bounded adjacency state is kept.
+    ``mst=True`` with ``knn=None`` keeps just the maximum spanning forest, and the
+    adjacency is then not maintained at all -- it would never be read back.
+    ``mst=False`` drops the forest instead, leaving a pure kNN graph; the MST buffer is
+    then never allocated, so only the bounded adjacency state is kept.
 
     :meth:`to_csr` writes each kept edge as a strict max over the diagonal: both cells get
     ``max(M[i, j], M[j, i])``, the score the edge was selected on. This matches
-    :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`, so the streaming and
-    batch paths agree on values as well as on which edges are kept.
+    :func:`~domainator.sparsify.sparsify_matrix`, so the streaming and batch paths agree
+    on values as well as on which edges are kept.
     """
 
-    def __init__(self, n_nodes: int, k: int, lower_bound: float = 0.0, include_equal: bool = False,
-                 mst_buffer_cap: Optional[int] = None, knn_soft_cap: Optional[int] = None,
-                 include_mst: bool = True):
-        if k < 0:
-            raise ValueError("k must be >= 0")
-        if not include_mst and k < 1:
-            raise ValueError("k must be >= 1 when the maximum spanning tree is excluded, "
-                             "otherwise no edges would be selected at all")
+    def __init__(self, n_nodes: int, *, mst: bool = False, knn: Optional[int] = None,
+                 lower_bound: float = 0.0, include_equal: bool = False,
+                 mst_buffer_cap: Optional[int] = None, knn_soft_cap: Optional[int] = None):
+        if knn is not None and knn < 1:
+            raise ValueError("knn must be >= 1")
+        if not mst and knn is None:
+            raise ValueError("Select mst, knn, or both; otherwise no edges would be kept.")
+        k = 0 if knn is None else knn
         self.n_nodes = n_nodes
         self.k = k
         self.lower_bound = lower_bound
         self.include_equal = include_equal
-        self.include_mst = include_mst
+        self.mst = mst
         self.mst_buffer_cap = max(1, mst_buffer_cap) if mst_buffer_cap is not None else max(4 * n_nodes, 100_000)
         # A soft cap below k could evict a true top-k neighbor, so never trim below k.
         self.knn_soft_cap = max(k, knn_soft_cap) if knn_soft_cap is not None else max(4 * k, k + 16)
 
         self._mst_edges: List[Tuple[int, int, float]] = []  # running maximum spanning forest
         self._mst_buffer: List[Tuple[int, int, float]] = []
-        # At k == 0 no kNN edges are selected, so the adjacency is pure overhead: two dict
-        # updates plus periodic trimming per edge, for state that is never read back.
-        self._mst_only = include_mst and k == 0
+        # Without kNN the adjacency is pure overhead: two dict updates plus periodic
+        # trimming per edge, for state that is never read back.
+        self._mst_only = knn is None
         self._adj: List[Dict[int, float]] = (
             [] if self._mst_only else [dict() for _ in range(n_nodes)]  # node -> {nbr: symmetric score}
         )
@@ -444,7 +444,7 @@ class StreamingMstKnnAccumulator:
         if not _score_passes_lower_bound(score, self.lower_bound, include_equal=self.include_equal):
             return
 
-        if self.include_mst:
+        if self.mst:
             self._mst_buffer.append((i, j, score))
             if len(self._mst_buffer) >= self.mst_buffer_cap:
                 self._flush_mst()
@@ -469,7 +469,7 @@ class StreamingMstKnnAccumulator:
         self._adj[node] = dict(ranked[:self.knn_soft_cap])
 
     def _flush_mst(self) -> None:
-        if not self.include_mst:
+        if not self.mst:
             return
         if not self._mst_buffer and not self._mst_edges:
             return
@@ -496,8 +496,8 @@ class StreamingMstKnnAccumulator:
     def finalize(self) -> Dict[Tuple[int, int], float]:
         """Return the selected edges keyed by canonical ``(min, max)`` pair.
 
-        The union of MST and OR-symmetric kNN edges, or just the kNN edges when this
-        accumulator was built with ``include_mst=False``.
+        The union of the MST and OR-symmetric kNN edges, or whichever of the two this
+        accumulator was built with.
         """
         self._flush_mst()
 
@@ -538,7 +538,7 @@ class StreamingMstKnnAccumulator:
         Each kept off-diagonal edge is written to both cells as the symmetric score it was
         selected on, ``max(M[i, j], M[j, i])``; the diagonal is populated from self-edges
         seen during streaming. Mirrors the sparse branch of
-        :func:`~domainator.transform_matrix.apply_mst_knn_sparsification`.
+        :func:`~domainator.sparsify.sparsify_matrix`.
         """
         edge_dict = self.finalize()
         out = scipy.sparse.dok_array((self.n_nodes, self.n_nodes), dtype=dtype)
@@ -555,21 +555,21 @@ class StreamingMstKnnAccumulator:
 def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
                                      include_equal: bool = False,
                                      neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:
-    """Return exact MST-kNN edge counts for each threshold of ``tree`` and k in [2, max_k].
+    """Return exact MST + kNN edge counts for each threshold of ``tree`` and k in [1, max_k].
 
-    Row ``i`` corresponds to ``tree.thresholds[i]`` and counts the edges a
-    ``--lb <threshold> --mst_knn <k>`` run would emit: by default only scores strictly
+    Row ``i`` corresponds to ``tree.thresholds[i]`` and column ``k - 1`` counts the edges a
+    ``--lb <threshold> --mst --knn <k>`` run would emit: by default only scores strictly
     greater than the threshold are kept, matching ``--lb``. Pass ``include_equal=True``
     to count ties at the threshold as well.
     """
-    if max_k < 2:
-        raise ValueError("max_k must be >= 2")
+    if max_k < 1:
+        raise ValueError("max_k must be >= 1")
 
     if neighbor_rankings is None:
         neighbor_rankings = build_symmetric_neighbor_rankings(matrix, max_k=max_k)
 
     thresholds = tree.thresholds
-    counts = np.zeros((len(thresholds), max_k - 1), dtype=int)
+    counts = np.zeros((len(thresholds), max_k), dtype=int)
     if len(thresholds) == 0:
         return counts
 
@@ -642,7 +642,7 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
             mst_idx += 1
 
         cumulative_non_mst = np.cumsum(non_mst_rank_counts)
-        counts[threshold_idx, :] = len(mst_prefix_edges) + cumulative_non_mst[2:]
+        counts[threshold_idx, :] = len(mst_prefix_edges) + cumulative_non_mst[1:]
 
     return counts
 

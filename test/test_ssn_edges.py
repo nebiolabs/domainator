@@ -4,7 +4,7 @@ import scipy.sparse
 
 from domainator.data_matrix import SparseDataMatrix
 from domainator.ssn_edges import StreamingMstKnnAccumulator
-from domainator.transform_matrix import apply_mst_knn_sparsification
+from domainator.sparsify import sparsify_matrix
 
 
 def _feed_dense(accumulator, data):
@@ -24,9 +24,8 @@ def _as_matrix(data):
 def test_streaming_knn_retains_negative_scores():
     accumulator = StreamingMstKnnAccumulator(
         n_nodes=3,
-        k=1,
+        knn=1,
         lower_bound=-1.0,
-        include_mst=False,
     )
     accumulator.add_edge(0, 1, -0.2)
     accumulator.add_edge(0, 2, -0.8)
@@ -47,7 +46,7 @@ def test_streaming_knn_retains_negative_scores():
 
 
 def test_streaming_mst_knn_retains_negative_scores():
-    # include_mst=True, so the forest seeds edge_dict before the kNN pass runs. The two
+    # mst=True, so the forest seeds edge_dict before the kNN pass runs. The two
     # kNN-only edges here, (0,2) and (1,3), are the ones a "0.0 means absent" default in
     # finalize() would silently discard.
     data = np.array([
@@ -60,7 +59,7 @@ def test_streaming_mst_knn_retains_negative_scores():
     lb = -2.0
 
     accumulator = _feed_dense(
-        StreamingMstKnnAccumulator(len(data), k, lower_bound=lb, include_mst=True), data
+        StreamingMstKnnAccumulator(len(data), mst=True, knn=k, lower_bound=lb), data
     )
     result = accumulator.to_csr().toarray()
 
@@ -75,7 +74,7 @@ def test_streaming_mst_knn_retains_negative_scores():
         ]),
     )
     np.testing.assert_array_equal(
-        result, apply_mst_knn_sparsification(_as_matrix(data), k, lower_bound=lb).toarray()
+        result, sparsify_matrix(_as_matrix(data), mst=True, knn=k, lower_bound=lb).toarray()
     )
 
 
@@ -88,7 +87,7 @@ def test_streaming_negative_scores_below_lower_bound_are_dropped():
     ])
 
     accumulator = _feed_dense(
-        StreamingMstKnnAccumulator(3, 2, lower_bound=-0.5, include_mst=True), data
+        StreamingMstKnnAccumulator(3, mst=True, knn=2, lower_bound=-0.5), data
     )
 
     np.testing.assert_array_equal(
@@ -101,10 +100,9 @@ def test_streaming_negative_scores_below_lower_bound_are_dropped():
     )
 
 
-@pytest.mark.parametrize("include_mst", [True, False])
-@pytest.mark.parametrize("k", [1, 2, 3])
+@pytest.mark.parametrize("mst, k", [(True, None), (True, 1), (True, 2), (True, 3), (False, 1), (False, 2), (False, 3)])
 @pytest.mark.parametrize("lb", [-10.0, -0.5])
-def test_streaming_matches_batch_on_negative_scores(lb, k, include_mst):
+def test_streaming_matches_batch_on_negative_scores(lb, k, mst):
     # Randomized parity against the batch path. Distinct weights everywhere, so the
     # maximum spanning forest is unique and there is no tie ambiguity to tolerate.
     rng = np.random.default_rng(20240917)
@@ -114,11 +112,9 @@ def test_streaming_matches_batch_on_negative_scores(lb, k, include_mst):
         data = np.triu(upper, 1)
         data = data + data.T
 
-        expected = apply_mst_knn_sparsification(
-            _as_matrix(data), k, lower_bound=lb, include_mst=include_mst
-        ).toarray()
+        expected = sparsify_matrix(_as_matrix(data), mst=mst, knn=k, lower_bound=lb).toarray()
         result = _feed_dense(
-            StreamingMstKnnAccumulator(n, k, lower_bound=lb, include_mst=include_mst), data
+            StreamingMstKnnAccumulator(n, mst=mst, knn=k, lower_bound=lb), data
         ).to_csr().toarray()
 
         np.testing.assert_allclose(result, expected)

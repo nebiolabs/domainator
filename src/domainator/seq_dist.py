@@ -29,11 +29,13 @@ from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.hmmer_search import compare_hmmer
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
-from domainator.transform_matrix import MODES, _mst_knn_arg, _knn_arg, LOG10_2
+from domainator.transform_matrix import MODES, LOG10_2
+from domainator.sparsify import (MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_option_label,
+                                 sparsify_requested)
 
 # Modes whose post-transform values are computable per edge (no global matrix maxes),
-# and therefore compatible with streaming --mst_knn pruning.
-MST_KNN_STREAMABLE_MODES = {"score", "bool", "efi_score"}
+# and therefore compatible with streaming --mst/--knn pruning.
+SPARSIFY_STREAMABLE_MODES = {"score", "bool", "efi_score"}
 import psutil
 
 CmpResult = namedtuple("CmpResult", ["score", "input", "reference"])
@@ -340,7 +342,7 @@ def build_diamond_failure_message(stage, returncode, stderr_text, input_fasta,
             lines.append(f"  Scratch directory: {tmpdir}" + (f" ({free})" if free else ""))
             lines.append("  Note: diamond unlinks these files while holding them open, so they")
             lines.append("        never appear in `du` or `ls` -- only free space reflects them.")
-        lines.append("  This happens before diamond emits any results, so --mst_knn/--knn")
+        lines.append("  This happens before diamond emits any results, so --mst/--knn")
         lines.append("  streaming cannot reduce it: all seed hits for a query block are")
         lines.append("  materialized before that block produces any output.")
         _add_mitigations(_DISK_MITIGATIONS)
@@ -708,23 +710,19 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, k, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst_knn=None, knn=None, diamond_params=None):
+def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_per_query, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst: bool = False, knn=None, diamond_params=None):
     """
 
     """
-    if mst_knn is not None and knn is not None:
-        raise ValueError("--mst_knn already includes the kNN edges; pass either --mst_knn or --knn, not both.")
-    # One streaming accumulator serves both flags; only the spanning tree differs.
-    sparsify_k = mst_knn if mst_knn is not None else knn
-    sparsify_include_mst = mst_knn is not None
-    if sparsify_k is not None:
-        option = "--mst_knn" if sparsify_include_mst else "--knn"
-        if mode not in MST_KNN_STREAMABLE_MODES:
+    sparsify = sparsify_requested(mst, knn)
+    if sparsify:
+        option = sparsify_option_label(mst, knn)
+        if mode not in SPARSIFY_STREAMABLE_MODES:
             raise ValueError(
-                f"{option} is only supported with --mode {sorted(MST_KNN_STREAMABLE_MODES)} "
+                f"{option} is only supported with --mode {sorted(SPARSIFY_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
                 f"For '{mode}', run 'seq_dist --mode score --sparse out.hdf5' then "
-                f"'transform_matrix -i out.hdf5 --mode {mode} {option} {sparsify_k} --sparse pruned.hdf5'."
+                f"'transform_matrix -i out.hdf5 --mode {mode} {option} --sparse pruned.hdf5'."
             )
         if reference_path != input_path:
             raise ValueError(
@@ -769,7 +767,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
 
             # call diamond
             
-            results_iter = diamond(dmnd_input, dmnd_ref, k, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params)
+            results_iter = diamond(dmnd_input, dmnd_ref, max_hits_per_query, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params)
             score_progress = False
         
         elif algorithm == "hmmer":
@@ -799,7 +797,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
                 
             #TODO: do easel and biopython split names and descriptions in the same way?
                        
-            results_iter = run_hmmsearch(hmmer_seqs, db_data, k, threads, search_type, min_score=lb, progress=progress, query_count=len(db_data))
+            results_iter = run_hmmsearch(hmmer_seqs, db_data, max_hits_per_query, threads, search_type, min_score=lb, progress=progress, query_count=len(db_data))
             score_progress = False
         
         
@@ -808,7 +806,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
             db_name_to_idx, db_idx_to_name, db_idx_to_len = query_name_to_idx, query_idx_to_name, query_idx_to_len
             if input_path != reference_path:
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_hmm_name_to_idx_dict_from_path(reference_path)
-            results_iter = run_hmmer_compare(input_path, reference_path, k, threads, min_score=lb, progress=progress, query_count=len(query_name_to_idx))
+            results_iter = run_hmmer_compare(input_path, reference_path, max_hits_per_query, threads, min_score=lb, progress=progress, query_count=len(query_name_to_idx))
             score_progress = False
 
         else: 
@@ -816,30 +814,30 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
 
         
 
-        if sparsify_k is not None:
-            # Stream edges straight into the kNN (optionally plus MST) accumulator with
+        if sparsify:
+            # Stream edges straight into the MST and/or kNN accumulator with
             # bounded memory; the full all-vs-all matrix is never materialized. mode value
-            # is computed per edge (no global maxima needed for score/bool/efi_score). The
-            # raw-score --lb gate runs first (matching the help text), then the
-            # accumulator prunes on values > 0.
+            # is computed per edge (no global maxima needed for score/efi_score). bool
+            # selects on the raw score, since all-1 values would leave nothing to rank, and
+            # becomes a 0/1 mask afterward. The raw-score --lb gate runs first (matching the
+            # help text), then the accumulator prunes on values > 0.
             log_lengths = np.log10(np.asarray(query_idx_to_len, dtype=np.float64)) if mode == "efi_score" else None
-            accumulator = StreamingMstKnnAccumulator(len(query_name_to_idx), sparsify_k, lower_bound=0,
-                                                     include_mst=sparsify_include_mst)
+            accumulator = StreamingMstKnnAccumulator(len(query_name_to_idx), mst=mst, knn=knn, lower_bound=0)
             for (score, query_id, subject_id) in _progress(results_iter, score_progress, desc="Scoring pairs"):
                 if score <= lb:
                     continue
                 query_idx = query_name_to_idx[query_id]
                 subject_idx = db_name_to_idx[subject_id]
-                if mode == "bool":
-                    value = 1.0
-                elif mode == "efi_score":
+                if mode == "efi_score":
                     value = score * LOG10_2 - log_lengths[query_idx] - log_lengths[subject_idx]
                     if value <= 0:
                         continue
-                else:  # score
+                else:  # score, bool
                     value = score
                 accumulator.add_edge(query_idx, subject_idx, value)
             matrix = accumulator.to_csr()
+            if mode == "bool":
+                matrix.data[:] = 1
         else:
             result_builder = _make_result_builder(
                 algorithm,
@@ -861,7 +859,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
     db_idx_to_len = np.array(db_idx_to_len)
     if progress:
         print("Transforming matrix...", flush=True, file=sys.stderr)
-    if sparsify_k is None and MODES[mode] is not None:
+    if not sparsify and MODES[mode] is not None:
         matrix = MODES[mode](matrix, query_idx_to_len, db_idx_to_len)
 
 
@@ -877,7 +875,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
                 data_type=mode,
                 max_output_bytes=max_output_bytes,
                 output_path=dense,
-                mitigation_options=["--sparse", "-k", "--lb"],
+                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
             )
             DataMatrix.write_dense(matrix, dense, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
         if dense_text is not None:
@@ -891,7 +889,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
                 data_type=mode,
                 max_output_bytes=max_output_bytes,
                 output_path=dense_text,
-                mitigation_options=["--sparse", "-k", "--lb"],
+                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
             )
             DataMatrix.write_dense_text(matrix, dense_text, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
         if sparse:
@@ -905,7 +903,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, k, algorith
                 data_type=mode,
                 max_output_bytes=max_output_bytes,
                 output_path=sparse,
-                mitigation_options=["-k", "--lb"],
+                mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
             )
             DataMatrix.write_sparse(matrix, sparse, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
     except OutputSizeLimitExceeded as exc:
@@ -936,8 +934,8 @@ def main(argv):
                         help="Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).")
 
 
-    parser.add_argument('-k', type=int, required=False, default=None,
-                        help="Include at most this many non-zero entries in the matrix for each input sequence. Default: Include all hits.")
+    parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
+                        help="Keep at most this many hits for each input sequence, the highest-scoring ones. This caps the search itself (diamond --max-target-seqs, or the hmmer hit list). " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE + " Default: keep all hits.")
 
     parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices={"diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"},
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
@@ -951,11 +949,7 @@ def main(argv):
                              "Useful for large all-vs-all runs, where diamond's seed-search scratch can exceed available disk: "
                              "a smaller --block-size (-b) and/or more --index-chunks (-c) bound its peak scratch usage.")
 
-    sparsify_group = parser.add_mutually_exclusive_group(required=False)
-    sparsify_group.add_argument('--mst_knn', type=_mst_knn_arg, required=False, default=None,
-                        help="Prune the output to the maximum spanning tree plus OR-symmetric k-nearest-neighbor edges (integer >= 0, where 0 keeps only the maximum spanning tree), computed as a streaming operation to keep memory and output size small. Requires the reference to be the same file as the input (a square symmetric comparison) and --mode in {score, bool, efi_score}. Best paired with --sparse.")
-    sparsify_group.add_argument('--knn', type=_knn_arg, required=False, default=None,
-                        help="Prune the output to OR-symmetric k-nearest-neighbor edges only (integer >= 1), computed as a streaming operation. Unlike --mst_knn this does not preserve the connected components of the full comparison. Same requirements as --mst_knn.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool, efi_score}; bool selects on the scores and then keeps the selected cells as 1. Best paired with --sparse.")
 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")
@@ -1012,7 +1006,7 @@ def main(argv):
     if diamond_params and not params.algorithm.startswith("diamond"):
         raise ValueError(f"--params only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.k, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst_knn=params.mst_knn, knn=params.knn, diamond_params=diamond_params)
+    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params)
 
 def _entrypoint():
     main(sys.argv[1:])

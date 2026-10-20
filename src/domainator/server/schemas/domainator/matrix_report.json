@@ -39,13 +39,13 @@
   ],
   "advanced_parameters": [
     {
-      "name": "Include Mst Knn",
-      "parameter": "include_mst_knn",
-      "help": "Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.",
+      "name": "kNN projection",
+      "parameter": "knn_projection",
+      "help": "Project how many edges build_ssn with MST and kNN would keep, for every threshold and K from 1 to 25, and add a K slider to the HTML report. Disabled by default to reduce memory use.",
       "type": "boolean",
       "default": false,
       "flags": [
-        "--include_mst_knn"
+        "--knn_projection"
       ]
     },
     {

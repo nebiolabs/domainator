@@ -110,7 +110,7 @@ build_tree.py -i efi_score_dist.dense.hdf5 --newick tree.nwk --xgmml tree.xgmml 
 transform_matrix.py -i scores.sparse.hdf5 --sparse efi_scores.sparse.hdf5 --mode efi_score
 
 # shows a score histogram to give you guess at where to set the --lb for the ssn. You'll probably still have to iterate a few times on build_ssn.py
-# --include_mst_knn adds projected MST_KNN edge counts, but it uses extra memory for neighbor rankings and threshold-by-k counts. Use --profile_stages to inspect those sizes for large matrices.
+# --knn_projection adds the edge counts build_ssn.py --mst --knn K would keep at each threshold, but it uses extra memory for neighbor rankings and threshold-by-k counts. Use --profile_stages to inspect those sizes for large matrices.
 matrix_report.py -i efi_scores.sparse.hdf5 -o /dev/stdout
 
 # you can open sequence_similarity_network.xgmml in Cytoscape, and apply force directed layout to get a nice visualization
@@ -118,7 +118,8 @@ matrix_report.py -i efi_scores.sparse.hdf5 -o /dev/stdout
 # --color_by can be any column from the metadata table, or SSN_cluster (if --cluster is set)
 # --color_table_out saves the color table to a tsv file.
 # To thin out a hairball, sparsify: --mst keeps just the maximum spanning tree, --knn K keeps
-# each node's K nearest neighbors, and --mst --knn K (or the shorthand --mst_knn K) keeps both.
+# each node's K nearest neighbors, and --mst --knn K keeps both. seq_dist.py, compare_contigs.py,
+# structure_dist.py, kmer_dist.py, and transform_matrix.py take the same two options.
 # Only the options that include --mst preserve the clusters of the full graph; --knn on its own
 # can break one cluster into several.
 build_ssn.py -i efi_scores.sparse.hdf5 --xgmml sequence_similarity_network.xgmml --lb 50 --cluster --cluster_tsv clusters.tsv --color_by SSN_cluster --color_table_out clusters_colors.tsv --metadata metadata.tsv
@@ -175,7 +176,7 @@ build_tree.py -i CDA_efi_score_dist.dense.hdf5 --newick tree.nwk --xgmml tree.xg
 
 transform_matrix.py -i CDA_score.sparse.hdf5 --sparse CDA_efi_score.sparse.hdf5 --mode efi_score
 # shows a score histogram to give you guess at where to set the --lb for the ssn. You'll probably still have to iterate a few times on build_ssn.py
-# --include_mst_knn adds projected MST_KNN edge counts, but it uses extra memory for neighbor rankings and threshold-by-k counts. Use --profile_stages to inspect those sizes for large matrices.
+# --knn_projection adds the edge counts build_ssn.py --mst --knn K would keep at each threshold, but it uses extra memory for neighbor rankings and threshold-by-k counts. Use --profile_stages to inspect those sizes for large matrices.
 matrix_report.py -i CDA_efi_score.sparse.hdf5 -o /dev/stdout
 
 # you can open profile_similarity_network.xgmml in Cytoscape, and apply force directed layout to get a nice visualization

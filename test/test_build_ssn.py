@@ -187,7 +187,7 @@ def test_build_ssn_mst_knn(shared_datadir):
             "--color_by", "SSN_cluster",
             "--cluster_tsv", out_clusters_mst_knn,
             "--metadata", metadata,
-            "--mst_knn", "2",
+            "--mst", "--knn", "2",
         ])
 
         compare_files(out_clusters_mst_knn, out_clusters_full)
@@ -233,7 +233,7 @@ def test_build_ssn_mst_knn_preserves_ssn_cluster_colors(shared_datadir):
             "--color_table_out", out_color_table_mst_knn,
             "--cluster_tsv", out_clusters_mst_knn,
             "--metadata", metadata,
-            "--mst_knn", "2",
+            "--mst", "--knn", "2",
         ])
 
         compare_files(out_clusters_baseline, out_clusters_mst_knn)
@@ -270,7 +270,7 @@ def _read_edges(xgmml_path):
 @pytest.mark.parametrize("extra_args,expect_non_mst", [
     ([], True),                  # full graph: MST backbone plus the rest
     (["--mst"], False),          # only MST edges are emitted, so all are marked true
-    (["--mst_knn", "2"], True),  # MST plus kNN edges around it
+    (["--mst", "--knn", "2"], True),  # MST plus kNN edges around it
 ])
 def test_build_ssn_mark_mst(extra_args, expect_non_mst, shared_datadir):
     """--mark_mst tags every edge, and finds the same MST on all three edge paths."""
@@ -442,42 +442,19 @@ def test_build_ssn_mst_knn_accepts_k_one(shared_datadir):
         build_ssn.main([
             "-i", str(shared_datadir / "FeSOD_dist.tsv"),
             "--xgmml", str(Path(output_dir) / "out.xgmml"),
-            "--mst_knn", "1",
+            "--mst", "--knn", "1",
         ])
 
 
-def test_build_ssn_mst_knn_rejects_negative_k(shared_datadir):
+@pytest.mark.parametrize("k", ["0", "-1"])
+def test_build_ssn_mst_knn_rejects_k_below_one(shared_datadir, k):
     with tempfile.TemporaryDirectory() as output_dir:
         with pytest.raises(SystemExit):
             build_ssn.main([
                 "-i", str(shared_datadir / "FeSOD_dist.tsv"),
                 "--xgmml", str(Path(output_dir) / "out.xgmml"),
-                "--mst_knn", "-1",
+                "--mst", "--knn", k,
             ])
-
-
-def test_build_ssn_mst_knn_zero_matches_mst(shared_datadir):
-    """--mst_knn 0 emits the same edges as --mst."""
-    input_file = "FeSOD_dist.tsv"
-    with tempfile.TemporaryDirectory() as output_dir:
-        out_mst = output_dir + "/out_mst.xgmml"
-        out_mst_knn_0 = output_dir + "/out_mst_knn_0.xgmml"
-
-        for out_path, sparsify_args in ((out_mst, ["--mst"]), (out_mst_knn_0, ["--mst_knn", "0"])):
-            build_ssn.main([
-                "-i", str(shared_datadir / input_file),
-                "--xgmml", out_path,
-                "--lb", "175",
-                *sparsify_args,
-            ])
-
-        def edge_lines(path):
-            with open(path) as f:
-                return sorted(line.strip() for line in f if '<edge' in line)
-
-        mst_lines = edge_lines(out_mst)
-        assert len(mst_lines) > 0
-        assert edge_lines(out_mst_knn_0) == mst_lines
 
 
 def _bridged_triangles_matrix():
@@ -504,7 +481,7 @@ def _xgmml_edge_names(path, labels):
 
 
 def test_build_ssn_knn_and_mst_combinations(shared_datadir):
-    """--mst --knn K == --mst_knn K, and --knn alone drops the connecting bridge."""
+    """--mst --knn K adds the tree to the kNN graph, and --knn alone drops the connecting bridge."""
     matrix, labels = _bridged_triangles_matrix()
 
     with tempfile.TemporaryDirectory() as output_dir:
@@ -514,8 +491,7 @@ def test_build_ssn_knn_and_mst_combinations(shared_datadir):
         outputs = {}
         clusters = {}
         for tag, args in (("full", []), ("mst", ["--mst"]), ("knn1", ["--knn", "1"]),
-                          ("knn2", ["--knn", "2"]), ("mst_knn1", ["--mst_knn", "1"]),
-                          ("mst+knn1", ["--mst", "--knn", "1"]), ("mst_knn0", ["--mst_knn", "0"])):
+                          ("knn2", ["--knn", "2"]), ("mst_knn1", ["--mst", "--knn", "1"])):
             xgmml = output_dir + f"/{tag}.xgmml"
             cluster_tsv = output_dir + f"/{tag}.tsv"
             build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--cluster_tsv", cluster_tsv] + args)
@@ -523,9 +499,9 @@ def test_build_ssn_knn_and_mst_combinations(shared_datadir):
             clusters[tag] = len({line.split("\t")[1] for line in
                                  Path(cluster_tsv).read_text().splitlines()[1:]})
 
-        # the documented equivalences
-        assert outputs["mst+knn1"] == outputs["mst_knn1"]
-        assert outputs["mst_knn0"] == outputs["mst"]
+        # the union holds both parts
+        assert set(outputs["mst"]) <= set(outputs["mst_knn1"])
+        assert set(outputs["knn1"]) <= set(outputs["mst_knn1"])
 
         # a pure kNN graph keeps neighbors but loses the bridge, so it splits the cluster
         assert ("c", "d") in outputs["full"]
@@ -570,8 +546,20 @@ def test_build_ssn_knn_rejects_invalid_combinations():
         with pytest.raises(SystemExit):
             build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "0"])
 
-        # --mst_knn is shorthand for --mst --knn, so it cannot be combined with either
+        # --mst does not lift the floor: --knn 0 would mean "add nothing"
         with pytest.raises(SystemExit):
-            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "2", "--mst_knn", "2"])
-        with pytest.raises(ValueError):
-            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--mst", "--mst_knn", "2"])
+            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--mst", "--knn", "0"])
+        # the old shorthand is gone
+        with pytest.raises(SystemExit):
+            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--mst_knn", "2"])
+
+
+@pytest.mark.parametrize("args", [["--mst"], ["--knn", "2"], ["--mst", "--knn", "2"]])
+def test_build_ssn_sparsify_rejects_distance_matrix(args):
+    matrix, labels = _bridged_triangles_matrix()
+    matrix.data_type = "score_dist"
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = output_dir + "/input.hdf5"
+        matrix.write(input_file, "dense")
+        with pytest.raises(ValueError, match="distance"):
+            build_ssn.main(["-i", input_file, "--xgmml", output_dir + "/out.xgmml"] + args)

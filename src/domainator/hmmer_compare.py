@@ -57,13 +57,13 @@ class _hmmer_compare_worker():
 
 
 
-def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_handle:TextIO, score_cutoff:float, alignments:bool, k:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
+def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_handle:TextIO, score_cutoff:float, alignments:bool, max_hits_per_query:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
     references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
     reference_alphabet = common_hmm_alphabet(reference_files, role="reference")
     query_alphabet = common_hmm_alphabet(query_files, role="input")
     check_alphabets_match(query_alphabet, reference_alphabet, ", ".join(str(f) for f in query_files), "hmmer_compare.py")
 
-    worker = _hmmer_compare_worker(references, alignments, k, score_cutoff)
+    worker = _hmmer_compare_worker(references, alignments, max_hits_per_query, score_cutoff)
 
     sep="\t"
     header = sep.join(("query", "reference", "score")) + "\n"
@@ -72,7 +72,7 @@ def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_
         projected_bytes=header_bytes,
         max_output_bytes=max_output_bytes,
         output_description=output_description,
-        mitigation_options=["-k", "--score_cutoff", "--alignments"],
+        mitigation_options=["--max_hits_per_query", "--score_cutoff", "--alignments"],
     )
     out_handle.write(header)
     written_bytes = header_bytes
@@ -89,7 +89,7 @@ def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_
                         projected_bytes=written_bytes + hit_bytes,
                         max_output_bytes=max_output_bytes,
                         output_description=output_description,
-                        mitigation_options=["-k", "--score_cutoff", "--alignments"],
+                        mitigation_options=["--max_hits_per_query", "--score_cutoff", "--alignments"],
                     )
                     out_handle.write(rendered_hit)
                     written_bytes += hit_bytes
@@ -108,7 +108,7 @@ def main(argv):
                              "half the amino acid scale, so a threshold tuned on proteins is about twice "
                              "as strict on nucleotide profiles.")
 
-    parser.add_argument('-k', type=int, required=False, default=None,
+    parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
                         help="Include at most this many of the top hits for each query. Default: Include all hits.")
 
     parser.add_argument('-o', '--output', type=str, default=None,
@@ -136,7 +136,7 @@ def main(argv):
         out = open(temp_output_path, "w")
 
     try:
-        hmmer_compare(params.input, params.reference, out, params.score_cutoff, params.alignments, params.k, params.cpu, max_output_bytes=max_output_bytes, output_description=output_description)
+        hmmer_compare(params.input, params.reference, out, params.score_cutoff, params.alignments, params.max_hits_per_query, params.cpu, max_output_bytes=max_output_bytes, output_description=output_description)
     except OutputSizeLimitExceeded as exc:
         if params.output is not None:
             out.close()

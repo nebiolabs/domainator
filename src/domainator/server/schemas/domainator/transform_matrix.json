@@ -70,7 +70,8 @@
       ]
     }
   ],
-  "advanced_parameters": [    {
+  "advanced_parameters": [
+    {
       "name": "Input Type",
       "parameter": "input_type",
       "help": "If the type of the input matrix is not specified, specify the type of input matrix. Default: None",
@@ -97,6 +98,26 @@
       "default": 25.0,
       "flags": [
         "--max_output_gb"
+      ]
+    },
+    {
+      "name": "MST",
+      "parameter": "mst",
+      "help": "Keep only the edges of the maximum spanning tree (forest). The clusters are the same as the full graph's, with the connections inside each cluster pruned to the minimum needed to keep it connected. Combine with kNN to also keep each node's nearest neighbors. Uses the post-transform values; not available for distance modes.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--mst"
+      ]
+    },
+    {
+      "name": "kNN",
+      "parameter": "knn",
+      "help": "Keep only OR-symmetric K-nearest-neighbor edges (K at least 1): an edge is kept if it is among the K best for either of its nodes. On its own this can split a cluster of the full graph into several; combine with MST to keep the clusters connected. Uses the post-transform values; not available for distance modes.",
+      "type": "integer",
+      "min": 1,
+      "flags": [
+        "--knn"
       ]
     }
   ]

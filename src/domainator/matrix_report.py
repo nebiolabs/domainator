@@ -31,8 +31,8 @@ from domainator.ssn_hierarchy import (
     threshold_slider_stops,
 )
 
-MST_KNN_MIN_K = 2
-MST_KNN_MAX_K = 25
+KNN_PROJECTION_MIN_K = 1
+KNN_PROJECTION_MAX_K = 25
 SLIDER_POSITION_SCALE = 10_000
 SLIDER_RIGHT_STOP_PADDING_FRACTION = 0.05
 SLIDER_LEFT_STOP_PADDING_FRACTION = 0.05
@@ -46,11 +46,11 @@ THRESHOLD_SLIDER_ALIGN_RIGHT = max(0, SPLIT_PLOT_MARGIN_RIGHT - SLIDER_PANEL_PAD
 
 
 def _get_mst_knn_report_config(tree):
-    max_neighbors = max(tree.n_nodes - 1, MST_KNN_MIN_K)
-    max_k = min(MST_KNN_MAX_K, max_neighbors)
+    max_neighbors = max(tree.n_nodes - 1, KNN_PROJECTION_MIN_K)
+    max_k = min(KNN_PROJECTION_MAX_K, max_neighbors)
     default_k = min(5, max_k)
     return {
-        "min_k": MST_KNN_MIN_K,
+        "min_k": KNN_PROJECTION_MIN_K,
         "max_k": max_k,
         "default_k": default_k,
     }
@@ -200,9 +200,9 @@ def _make_progress_callback(out_handle=None):
 
 
 def _estimate_mst_knn_counts_bytes(n_thresholds: int, max_k: int) -> int:
-    if max_k < MST_KNN_MIN_K:
+    if max_k < KNN_PROJECTION_MIN_K:
         return 0
-    return int(n_thresholds) * int(max_k - MST_KNN_MIN_K + 1) * np.dtype(int).itemsize
+    return int(n_thresholds) * int(max_k - KNN_PROJECTION_MIN_K + 1) * np.dtype(int).itemsize
 
 class SummaryJSONWriter():
     """Emit a compact JSON summary of the matrix/network (agent-friendly).
@@ -331,7 +331,7 @@ Max: {max_val:.1f}
 
         if mst_knn_counts is not None and len(mst_knn_counts) > 0:
             report_k = mst_knn_config["default_k"]
-            print(f"\nProjected MST_KNN edge counts (k={report_k}):", file=self.out_handle)
+            print(f"\nProjected MST + kNN edge counts (k={report_k}):", file=self.out_handle)
             show_indices = [0, 1, 2, len(mst_knn_counts)//2, -3, -2, -1]
             seen = set()
             for i in show_indices:
@@ -339,7 +339,7 @@ Max: {max_val:.1f}
                     seen.add(i)
                     threshold = edges_by_thresh[i, 1]
                     projected_edges = mst_knn_counts[i, report_k - mst_knn_config["min_k"]]
-                    print(f"  Threshold: {threshold:.2f} → MST_KNN edges: {int(projected_edges)}", file=self.out_handle)
+                    print(f"  Threshold: {threshold:.2f} → MST + kNN edges: {int(projected_edges)}", file=self.out_handle)
 
         if component_summary is not None and len(component_summary) > 1:
             merge_event_rows = _merge_event_table_rows(component_summary)
@@ -560,7 +560,7 @@ class SummaryHTMLWriter():
     
     
     def write_plots(self, tree, edge_scores, mst_knn_config, mst_knn_counts, component_summary, merge_impact_metric, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
-        include_mst_knn = mst_knn_counts is not None
+        knn_projection = mst_knn_counts is not None
         include_component_summary = component_summary is not None and len(component_summary) > 1
         payload = _interactive_report_payload(tree, mst_knn_config, mst_knn_counts, component_summary, max_merge_events=max_merge_events)
         filtered_merge_event_rows = payload["merge_event_series"]
@@ -737,15 +737,15 @@ class SummaryHTMLWriter():
                     'the cut, not necessarily a quiet one.';
             }}
         }})();"""
-        if include_mst_knn:
+        if knn_projection:
             mst_knn_controls = f"""
             <label for=\"mst-knn-k-slider\">
-                MST_KNN k: <span id=\"mst-knn-k-number\">{mst_knn_config['default_k']}</span>
+                MST + kNN k: <span id=\"mst-knn-k-number\">{mst_knn_config['default_k']}</span>
             </label>
             <input type=\"range\" id=\"mst-knn-k-slider\" min=\"{mst_knn_config['min_k']}\" max=\"{mst_knn_config['max_k']}\" value=\"{mst_knn_config['default_k']}\" step=\"1\">"""
             mst_knn_stat_box = """
             <div class=\"stat-box\">
-                <strong>Projected MST_KNN Edges</strong>
+                <strong>Projected MST + kNN Edges</strong>
                 <span id=\"mst-knn-edges\">0</span>
             </div>"""
             mst_knn_current_k_expr = "parseInt(document.getElementById('mst-knn-k-slider').value)"
@@ -1193,7 +1193,7 @@ class SummaryHTMLWriter():
     def write_footer(self):
         print("</body></html>", file=self.out_handle)
 
-def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_mst_knn: bool = False,
+def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, knn_projection: bool = False,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
                   profile_stages: bool = False, stage_timings=None, progress_callback=None,
                   max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, out_json_handle=None):
@@ -1232,9 +1232,9 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
     mst_knn_config = None
     mst_knn_counts = None
     neighbor_rankings = None
-    if include_mst_knn:
+    if knn_projection:
         if progress_callback is not None:
-            progress_callback("building MST_KNN neighbor rankings")
+            progress_callback("building kNN projection neighbor rankings")
         stage_start = perf_counter()
         mst_knn_config = _get_mst_knn_report_config(tree)
         neighbor_rankings = build_symmetric_neighbor_rankings(edge_table, max_k=mst_knn_config["max_k"])
@@ -1247,9 +1247,9 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, include_m
             estimated_counts_bytes=_estimate_mst_knn_counts_bytes(len(tree.thresholds), mst_knn_config["max_k"]),
         )
 
-    if include_mst_knn:
+    if knn_projection:
         if progress_callback is not None:
-            progress_callback("building MST_KNN threshold counts")
+            progress_callback("building kNN projection threshold counts")
         stage_start = perf_counter()
         mst_knn_counts = mst_knn_edge_counts_by_threshold(None, tree, mst_knn_config["max_k"], neighbor_rankings=neighbor_rankings)
         _record_stage_timing(
@@ -1283,8 +1283,8 @@ def main(argv):
                         help="html file to write output to.")
     parser.add_argument('--json', default=None, required=False,
                         help="Write a compact JSON summary (edge stats, connected components, split-event series) to this file. Use '-' for stdout.")
-    parser.add_argument('--include_mst_knn', action='store_true', default=False,
-                        help="Include projected MST_KNN edge counts and HTML controls. Disabled by default to reduce memory use.")
+    parser.add_argument('--knn_projection', action='store_true', default=False,
+                        help=f"Project how many edges 'build_ssn --lb T --mst --knn K' would keep, for every threshold T and K from {KNN_PROJECTION_MIN_K} to {KNN_PROJECTION_MAX_K}, and add a K slider to the HTML report. Disabled by default to reduce memory use.")
     parser.add_argument('--merge_impact_metric', choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric used for split-event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.")
     parser.add_argument('--max_merge_events', type=int, default=DEFAULT_MAX_MERGE_EVENTS,
@@ -1330,7 +1330,7 @@ def main(argv):
                 matrix,
                 out,
                 out_html_handle,
-                include_mst_knn=params.include_mst_knn,
+                knn_projection=params.knn_projection,
                 merge_impact_metric=params.merge_impact_metric,
                 profile_stages=params.profile_stages,
                 stage_timings=stage_timings,

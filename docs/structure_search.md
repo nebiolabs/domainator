@@ -170,9 +170,9 @@ dense-only.
 foldseek scores each direction of a pair separately, so the raw matrix is slightly
 asymmetric. `--symmetrize` reconciles the two directions, and the choice matters when a
 pair was found in only one direction, because the missing direction is a stored zero rather
-than a missing value: `max` keeps such a pair (the convention `build_ssn.py` and
-`--mst_knn` use), `min` deletes it, making it a mutual-hit filter, and `mean` halves it.
-`--mst_knn` and `--knn` prune the matrix as it is built and are always max-symmetric.
+than a missing value: `max` keeps such a pair (the convention `build_ssn.py`, `--mst`, and
+`--knn` use), `min` deletes it, making it a mutual-hit filter, and `mean` halves it.
+`--mst` and `--knn` prune the matrix as it is built and are always max-symmetric.
 
 ## Reusing a database
 

@@ -40,7 +40,7 @@ def test_matrix_report_1(shared_datadir, input_file):
             assert "Max" in f_txt or "max" in f_txt.lower()
             # Check that we have nodes count (20 nodes in the test data)
             assert "20" in f_txt
-        assert 'Projected MST_KNN edge counts' not in open(out_txt).read()
+        assert 'Projected MST + kNN edge counts' not in open(out_txt).read()
         assert 'mst-knn-k-slider' not in open(out_html).read()
 
 
@@ -104,7 +104,7 @@ class TestInteractiveHTML:
             matrix_report.main([
                 "-i", input_file,
                 "--html", output_file,
-                "--include_mst_knn"
+                "--knn_projection"
             ])
             
             assert os.path.exists(output_file)
@@ -120,7 +120,7 @@ class TestInteractiveHTML:
             assert 'MST_KNN_COUNTS' in content
             assert 'CLUSTER_CHECKPOINT_STRIDE' in content
             assert 'buildClusterCheckpoints' in content
-            assert 'Projected MST_KNN Edges' in content
+            assert 'Projected MST + kNN Edges' in content
 
 
 def test_mst_knn_edge_counts_by_threshold_monotonic():
@@ -137,9 +137,10 @@ def test_mst_knn_edge_counts_by_threshold_monotonic():
     counts = mst_knn_edge_counts_by_threshold(matrix, tree, 3)
 
     # One row per distinct threshold, each describing the `--lb <threshold>` cut
-    assert counts.shape == (len(tree.thresholds), 2)
+    assert counts.shape == (len(tree.thresholds), 3)
     assert np.all(counts[:, 0] >= tree.mst_edges_above_threshold)
     assert np.all(counts[:, 1] >= counts[:, 0])
+    assert np.all(counts[:, 2] >= counts[:, 1])
 
 
 def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():
@@ -157,7 +158,7 @@ def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():
     sparse_tree = MaxTree(sparse_matrix)
 
     def brute_force_counts(array, tree, max_k):
-        counts = np.zeros((len(tree.thresholds), max_k - 1), dtype=int)
+        counts = np.zeros((len(tree.thresholds), max_k), dtype=int)
 
         # `--lb threshold` semantics throughout: only scores strictly above the
         # threshold survive, for both the MST prefix and the kNN candidates.
@@ -188,7 +189,7 @@ def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():
                 if edge not in mst_prefix_edges:
                     non_mst_rank_counts[rank] += 1
 
-            counts[threshold_idx, :] = len(mst_prefix_edges) + np.cumsum(non_mst_rank_counts)[2:]
+            counts[threshold_idx, :] = len(mst_prefix_edges) + np.cumsum(non_mst_rank_counts)[1:]
 
         return counts
 
@@ -204,13 +205,13 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_html = output_dir + "/matrix_report_test.html"
         out_txt = output_dir + "/matrix_report_test.txt"
-        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html, "--include_mst_knn"])
+        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html, "--knn_projection"])
 
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
 
-        assert 'Projected MST_KNN edge counts' in text_content
-        assert 'MST_KNN edges' in text_content
+        assert 'Projected MST + kNN edge counts' in text_content
+        assert 'MST + kNN edges' in text_content
         assert 'mst-knn-k-slider' in html_content
 
 
@@ -346,8 +347,8 @@ def test_matrix_report_default_excludes_mst_knn(shared_datadir):
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
 
-        assert 'Projected MST_KNN edge counts' not in text_content
-        assert 'MST_KNN edges' not in text_content
+        assert 'Projected MST + kNN edge counts' not in text_content
+        assert 'MST + kNN edges' not in text_content
         assert 'mst-knn-k-slider' not in html_content
         payload = _embedded_report_payload(html_content)
         assert payload['has_mst_knn'] is False
@@ -596,7 +597,7 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
-            "--include_mst_knn",
+            "--knn_projection",
             "--profile_stages",
         ])
 
@@ -698,7 +699,7 @@ def test_threshold_tables_match_build_ssn_lb():
 
 
 def test_mst_knn_counts_match_build_ssn_lb_mst_knn():
-    """Projected MST_KNN counts must equal what `build_ssn --lb T --mst_knn k` emits."""
+    """Projected counts must equal what `build_ssn --lb T --mst --knn k` emits."""
     from domainator.data_matrix import mst_knn_edge_index_dict
 
     data, labels = _tie_group_matrix()
@@ -707,12 +708,12 @@ def test_mst_knn_counts_match_build_ssn_lb_mst_knn():
     max_k = 3
 
     counts = mst_knn_edge_counts_by_threshold(matrix, tree, max_k)
-    assert counts.shape == (len(tree.thresholds), max_k - 1)
+    assert counts.shape == (len(tree.thresholds), max_k)
 
     for row_idx, threshold in enumerate(tree.thresholds):
-        for k in range(2, max_k + 1):
+        for k in range(1, max_k + 1):
             expected = len(mst_knn_edge_index_dict(matrix, k, lower_bound=threshold))
-            assert counts[row_idx, k - 2] == expected, f"lb={threshold} k={k}"
+            assert counts[row_idx, k - 1] == expected, f"lb={threshold} k={k}"
 
 
 def test_slider_reaches_the_fully_merged_network():
