@@ -3,7 +3,7 @@ import pytest
 import scipy.sparse
 
 from domainator.compare_contigs import _keep_top_k_per_row
-from domainator.data_matrix import DenseDataMatrix, SparseDataMatrix
+from domainator.data_matrix import DataMatrix
 from domainator.sparsify import (
     PerQueryTopK,
     check_sparsify_data_type,
@@ -42,8 +42,8 @@ def test_check_sparsify_data_type_accepts_scores(data_type):
 def test_sparsify_matrix_requires_square_and_a_selection():
     labels = ["a", "b", "c"]
     with pytest.raises(ValueError, match="square"):
-        sparsify_matrix(DenseDataMatrix(np.ones((3, 2)), labels, labels[:2], data_type="score"), mst=True, knn=None)
-    square = DenseDataMatrix(np.ones((3, 3)), labels, labels, data_type="score")
+        sparsify_matrix(DataMatrix(np.ones((3, 2)), labels, labels[:2], data_type="score"), mst=True, knn=None)
+    square = DataMatrix(np.ones((3, 3)), labels, labels, data_type="score")
     with pytest.raises(ValueError):
         sparsify_matrix(square, mst=False, knn=None)
     with pytest.raises(ValueError):
@@ -57,7 +57,7 @@ def test_sparsify_matrix_mst_union_knn():
     data = np.zeros((6, 6))
     for (i, j), value in weights.items():
         data[i, j] = data[j, i] = value
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
 
     def pairs(out):
         return {(i, j) for i, j in zip(*np.nonzero(out.toarray())) if i < j}

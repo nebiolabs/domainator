@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import scipy
 import scipy.sparse
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix
+from domainator.data_matrix import DataMatrix
 from helpers import compare_iterables
 import pytest
 
@@ -55,24 +55,19 @@ def test_transform_matrix_1(output_mode, expected, shared_datadir):
         ])
 
         input_file = output_dir + "/input.hdf5"
-        dense_out = output_dir + "/dense_out.hdf5"
-        sparse_out = output_dir + "/sparse_out.hdf5"
+        hdf_out = output_dir + "/out.hdf5"
 
         rows =  ["a", "b", "c", "d", "e"]
         columns = ["A", "B", "C", "D", "E"]
         row_lengths = [1, 2, 3, 4, 5]
         col_lengths = [7, 8, 9, 10, 11]
 
-        matrix = DenseDataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
-        expected_matrix = DenseDataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
-        matrix.write(input_file, "dense")
-        transform_matrix.main(["-i", input_file, "--dense", dense_out, "--sparse", sparse_out, "--mode", output_mode])
-        dense_output_matrix = DataMatrix.from_file(dense_out)
-        sparse_output_matrix = DataMatrix.from_file(sparse_out)
+        matrix = DataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
+        expected_matrix = DataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
+        matrix.write(input_file, "hdf")
+        transform_matrix.main(["-i", input_file, "--hdf", hdf_out, "--mode", output_mode])
 
-        compare_data_matrix(dense_output_matrix, expected_matrix)
-        expected_matrix.convert_to_sparse()
-        compare_data_matrix(sparse_output_matrix, expected_matrix)
+        compare_data_matrix(DataMatrix.from_file(hdf_out), expected_matrix)
 
 
 def test_transform_matrix_2(shared_datadir):
@@ -101,10 +96,10 @@ def test_transform_matrix_2(shared_datadir):
         row_lengths = [1, 2, 3, 4, 5]
         col_lengths = [7, 8, 9, 10, 11]
 
-        matrix = DenseDataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
-        expected_matrix = DenseDataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
-        matrix.write(input_file, "dense")
-        transform_matrix.main(["-i", input_file, "--dense", dense_out, "--mode", output_mode])
+        matrix = DataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
+        expected_matrix = DataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
+        matrix.write(input_file, "hdf")
+        transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--mode", output_mode])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         compare_data_matrix(dense_output_matrix, expected_matrix)
@@ -124,13 +119,13 @@ def test_transform_matrix_default_mode_preserves_values():
         rows = ["a", "b", "c"]
         columns = ["A", "B", "C"]
 
-        matrix = DenseDataMatrix(input_data, rows, columns, data_type="bool")
-        matrix.write(input_file, "dense")
+        matrix = DataMatrix(input_data, rows, columns, data_type="bool")
+        matrix.write(input_file, "hdf")
 
-        transform_matrix.main(["-i", input_file, "--dense", dense_out])
+        transform_matrix.main(["-i", input_file, "--hdf", dense_out])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
-        np.testing.assert_array_equal(dense_output_matrix.data, input_data)
+        np.testing.assert_array_equal(dense_output_matrix.toarray(), input_data)
         assert dense_output_matrix.data_type == "bool"
 
 
@@ -148,10 +143,10 @@ def test_transform_matrix_lb_applied_after_mode_transform():
         rows = ["a", "b", "c"]
         columns = ["A", "B", "C"]
 
-        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
-        matrix.write(input_file, "dense")
+        matrix = DataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "hdf")
 
-        transform_matrix.main(["-i", input_file, "--dense", dense_out, "--mode", "bool", "--lb", "0.5"])
+        transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--mode", "bool", "--lb", "0.5"])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         expected = np.array([
@@ -160,7 +155,7 @@ def test_transform_matrix_lb_applied_after_mode_transform():
             [0, 0, 0],
         ], dtype=np.int8)
 
-        np.testing.assert_array_equal(dense_output_matrix.data, expected)
+        np.testing.assert_array_equal(dense_output_matrix.toarray(), expected)
         assert dense_output_matrix.data_type == "bool"
 
 
@@ -180,10 +175,10 @@ def test_transform_matrix_bool_sparsify_selects_on_scores():
         rows = ["a", "b", "c"]
         columns = ["a", "b", "c"]
 
-        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
-        matrix.write(input_file, "dense")
+        matrix = DataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "hdf")
 
-        transform_matrix.main(["-i", input_file, "--dense", dense_out, "--mode", "bool", "--knn", "1"])
+        transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--mode", "bool", "--knn", "1"])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         expected = np.array([
@@ -191,7 +186,7 @@ def test_transform_matrix_bool_sparsify_selects_on_scores():
             [1, 1, 1],
             [0, 1, 1],
         ], dtype=np.int8)
-        np.testing.assert_array_equal(dense_output_matrix.data, expected)
+        np.testing.assert_array_equal(dense_output_matrix.toarray(), expected)
         assert dense_output_matrix.data_type == "bool"
 
 
@@ -216,7 +211,7 @@ def _feed_matrix_entries(acc, data, order="forward"):
 @pytest.mark.parametrize("order", ["forward", "reversed", "chunked"])
 @pytest.mark.parametrize("buffer_cap,soft_cap", [(None, None), (1, 1), (2, 2)])
 def test_streaming_mst_knn_matches_batch(order, buffer_cap, soft_cap):
-    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     # symmetric matrix with all-distinct off-diagonal weights => unique MSF, no tie ambiguity.
@@ -231,7 +226,7 @@ def test_streaming_mst_knn_matches_batch(order, buffer_cap, soft_cap):
     labels = ["a", "b", "c", "d", "e", "f"]
     k = 2
 
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
     expected = sparsify_matrix(matrix, mst=True, knn=k, lower_bound=0)
 
     acc = StreamingMstKnnAccumulator(len(labels), mst=True, knn=k, lower_bound=0,
@@ -243,7 +238,7 @@ def test_streaming_mst_knn_matches_batch(order, buffer_cap, soft_cap):
 
 
 def test_streaming_mst_knn_respects_lower_bound():
-    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     data = np.array([
@@ -256,7 +251,7 @@ def test_streaming_mst_knn_respects_lower_bound():
     k = 2
     lb = 2.0
 
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
     expected = sparsify_matrix(matrix, mst=True, knn=k, lower_bound=lb)
 
     acc = StreamingMstKnnAccumulator(len(labels), mst=True, knn=k, lower_bound=lb)
@@ -269,7 +264,7 @@ def test_streaming_mst_knn_respects_lower_bound():
 def test_streaming_mst_knn_tie_tolerant_is_valid_forest():
     # Repeated weights => MSF edge selection may differ; assert it is still a valid
     # maximum spanning forest (same total weight + connectivity) and identical kNN edges.
-    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
     from scipy.sparse.csgraph import connected_components
 
@@ -282,7 +277,7 @@ def test_streaming_mst_knn_tie_tolerant_is_valid_forest():
     labels = ["a", "b", "c", "d"]
     k = 2
 
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
     expected = sparsify_matrix(matrix, mst=True, knn=k, lower_bound=0).toarray()
 
     acc = StreamingMstKnnAccumulator(len(labels), mst=True, knn=k, lower_bound=0)
@@ -310,11 +305,11 @@ def test_transform_matrix_max_output_gb_blocks_dense_output():
         rows = ["a", "b", "c"]
         columns = ["A", "B", "C"]
 
-        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
-        matrix.write(input_file, "dense")
+        matrix = DataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "hdf")
 
         with pytest.raises(SystemExit, match="--max_output_gb"):
-            transform_matrix.main(["-i", input_file, "--dense", dense_out, "--max_output_gb", "0.000001"])
+            transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--max_output_gb", "0.000001"])
 
 
 def test_transform_matrix_output_format_conversions():
@@ -332,13 +327,13 @@ def test_transform_matrix_output_format_conversions():
         rows = ["a", "b", "c"]
         columns = ["A", "B", "C"]
 
-        matrix = DenseDataMatrix(input_data, rows, columns, data_type="score")
-        matrix.write(input_file, "dense")
+        matrix = DataMatrix(input_data, rows, columns, data_type="score")
+        matrix.write(input_file, "hdf")
 
         transform_matrix.main([
             "-i", input_file,
             "--dense_text", dense_text_out,
-            "--sparse", sparse_out,
+            "--hdf", sparse_out,
             "--mode", "bool",
         ])
 
@@ -350,13 +345,13 @@ def test_transform_matrix_output_format_conversions():
             [0, 1, 1],
         ], dtype=np.int8)
 
-        np.testing.assert_array_equal(dense_text_matrix.data, expected)
+        np.testing.assert_array_equal(dense_text_matrix.toarray(), expected)
         np.testing.assert_array_equal(sparse_matrix.data.toarray(), expected)
         assert sparse_matrix.data_type == "bool"
 
 def test_mst_alone_is_mst_only():
     """--mst without --knn keeps exactly the MST."""
-    from domainator.data_matrix import SparseDataMatrix, MaxTree, mst_knn_edge_index_dict, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict, StreamingMstKnnAccumulator
     from domainator.ssn_edges import mst_edge_index_dict
     from domainator.sparsify import sparsify_matrix
 
@@ -369,7 +364,7 @@ def test_mst_alone_is_mst_only():
         [0.0, 0.0, 4.0, 0.0, 10.0, 5.0],
     ])
     labels = ["a", "b", "c", "d", "e", "f"]
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
 
     mst_edges = mst_edge_index_dict(MaxTree(matrix), lower_bound=0)
     assert mst_knn_edge_index_dict(matrix, 0, lower_bound=0) == mst_edges
@@ -395,9 +390,9 @@ def test_transform_matrix_sparsify_rejects_distance_matrix(args):
     data, labels = _bridged_triangles()
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        DenseDataMatrix(data, labels, labels, data_type="score").write(input_file, "dense")
+        DataMatrix(data, labels, labels, data_type="score").write(input_file, "hdf")
         with pytest.raises(ValueError, match="distance"):
-            transform_matrix.main(["-i", input_file, "--dense", output_dir + "/out.hdf5",
+            transform_matrix.main(["-i", input_file, "--hdf", output_dir + "/out.hdf5",
                                    "--mode", "score_dist"] + args)
 
 
@@ -429,14 +424,14 @@ def test_transform_matrix_knn_excludes_mst():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        DenseDataMatrix(data, labels, labels, data_type="score").write(input_file, "dense")
+        DataMatrix(data, labels, labels, data_type="score").write(input_file, "hdf")
 
         results = {}
         for tag, args in (("mst", ["--mst"]),
                           ("knn1", ["--knn", "1"]), ("mst_knn1", ["--mst", "--knn", "1"]),
                           ("knn2", ["--knn", "2"]), ("mst_knn2", ["--mst", "--knn", "2"])):
             out_file = output_dir + f"/{tag}.hdf5"
-            transform_matrix.main(["-i", input_file, "--dense", out_file] + args)
+            transform_matrix.main(["-i", input_file, "--hdf", out_file] + args)
             results[tag] = _off_diagonal_pairs(DataMatrix.from_file(out_file).toarray())
 
         # the bridge is only reachable through the spanning tree
@@ -458,8 +453,8 @@ def test_transform_matrix_knn_matches_sparsification_without_mst():
     from domainator.sparsify import sparsify_matrix
 
     data, labels = _bridged_triangles()
-    for matrix in (DenseDataMatrix(data, labels, labels, data_type="score"),
-                   SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")):
+    for matrix in (DataMatrix(data, labels, labels, data_type="score"),
+                   DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")):
         knn_only = sparsify_matrix(matrix, mst=False, knn=2, lower_bound=0)
         with_mst = sparsify_matrix(matrix, mst=True, knn=2, lower_bound=0)
         knn_array = knn_only.toarray() if scipy.sparse.issparse(knn_only) else knn_only
@@ -474,7 +469,7 @@ def test_streaming_knn_without_mst_matches_batch():
     from domainator.sparsify import sparsify_matrix
 
     data, labels = _bridged_triangles()
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
     k = 2
 
     expected = sparsify_matrix(matrix, mst=False, knn=k, lower_bound=0)
@@ -502,9 +497,9 @@ def test_transform_matrix_rejects_knn_zero():
     data, labels = _bridged_triangles()
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        DenseDataMatrix(data, labels, labels, data_type="score").write(input_file, "dense")
+        DataMatrix(data, labels, labels, data_type="score").write(input_file, "hdf")
         with pytest.raises(SystemExit):
-            transform_matrix.main(["-i", input_file, "--dense", output_dir + "/out.hdf5",
+            transform_matrix.main(["-i", input_file, "--hdf", output_dir + "/out.hdf5",
                                    "--mst", "--knn", "0"])
 
 
@@ -517,7 +512,7 @@ def test_streaming_mst_only_writes_max_direction_both_ways():
     with its max-direction weight in both cells. SSN workflows symmetrize with an
     element-wise maximum, so this agrees with the batch path where it matters, while
     dropping the per-direction detail the adjacency used to carry."""
-    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     # deliberately asymmetric off-diagonal: M[i, j] != M[j, i] for every pair
@@ -529,7 +524,7 @@ def test_streaming_mst_only_writes_max_direction_both_ways():
         [0.0, 0.0, 4.5, 9.5, 5.0],
     ])
     labels = ["a", "b", "c", "d", "e"]
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
 
     acc = StreamingMstKnnAccumulator(len(labels), mst=True, lower_bound=0)
     _feed_matrix_entries(acc, data)
@@ -576,7 +571,7 @@ def test_streaming_mst_only_is_order_independent(order):
 def test_streaming_knn_is_max_over_diagonal(k):
     """k >= 1 keeps the adjacency, and must still emit a strict max-over-diagonal matrix
     whose values agree cell-for-cell with the non-streaming reference."""
-    from domainator.data_matrix import SparseDataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     data = np.array([
@@ -587,7 +582,7 @@ def test_streaming_knn_is_max_over_diagonal(k):
         [0.0, 0.0, 4.5, 9.5, 5.0],
     ])
     labels = ["a", "b", "c", "d", "e"]
-    matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
 
     acc = StreamingMstKnnAccumulator(len(labels), mst=True, knn=k, lower_bound=0)
     _feed_matrix_entries(acc, data)
@@ -607,8 +602,8 @@ def test_streaming_knn_is_max_over_diagonal(k):
 
 @pytest.mark.parametrize("k", [None, 2])
 def test_batch_mst_knn_is_max_over_diagonal(k):
-    """Both branches of the non-streaming reference write max(M[i,j], M[j,i]) to both cells."""
-    from domainator.data_matrix import DenseDataMatrix, SparseDataMatrix
+    """The non-streaming reference writes max(M[i,j], M[j,i]) to both cells, from numpy or CSR input."""
+    from domainator.data_matrix import DataMatrix
     from domainator.sparsify import sparsify_matrix
 
     data = np.array([
@@ -620,13 +615,102 @@ def test_batch_mst_knn_is_max_over_diagonal(k):
     ])
     labels = ["a", "b", "c", "d", "e"]
     sparse_out = sparsify_matrix(
-        SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score"),
+        DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score"),
         mst=True, knn=k, lower_bound=0).toarray()
-    dense_out = np.asarray(sparsify_matrix(
-        DenseDataMatrix(data, labels, labels, None, None, "score"), mst=True, knn=k, lower_bound=0))
+    dense_out = sparsify_matrix(
+        DataMatrix(data, labels, labels, None, None, "score"), mst=True, knn=k, lower_bound=0).toarray()
 
     np.testing.assert_array_equal(sparse_out, dense_out)
     for out in (sparse_out, dense_out):
         np.testing.assert_array_equal(out, out.T)
         for i, j in _undirected_edges(out):
             assert out[i, j] == max(data[i, j], data[j, i])
+
+
+def _write_score_matrix(path, data, labels=("a", "b", "c", "d")):
+    labels = list(labels)
+    DataMatrix(np.asarray(data, dtype=float), labels, labels, data_type="score").write(str(path), "hdf")
+
+
+ASYMMETRIC_SCORES = [
+    [10.0, 8.0, 0.0, 1.0],
+    [6.0, 10.0, 3.0, 0.0],
+    [0.0, 4.0, 10.0, 2.0],
+    [0.0, 0.0, 2.0, 10.0],
+]
+
+
+@pytest.mark.parametrize("mode", ["norm_score", "row_norm_score"])
+def test_transform_matrix_normalized_modes_can_be_sparsified(tmp_path, mode):
+    # These modes used to hand a dok_array to --mst/--knn, which crashed.
+    input_file, out_file = tmp_path / "in.hdf5", tmp_path / "out.hdf5"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    transform_matrix.main(["-i", str(input_file), "--mode", mode, "--knn", "1", "--hdf", str(out_file)])
+    out = DataMatrix.from_file(out_file)
+    assert out.data_type == mode
+    assert out.exactly_symmetric
+
+
+def test_transform_matrix_symmetrize_writes_upper_triangle(tmp_path):
+    import h5py
+
+    input_file, out_file = tmp_path / "in.hdf5", tmp_path / "out.hdf5"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    transform_matrix.main(["-i", str(input_file), "--symmetrize", "max", "--hdf", str(out_file)])
+    with h5py.File(out_file, "r") as handle:
+        assert handle.attrs["ARRAY_TYPE"] == "SPARSE_CSR_UPPER_TRIANGLE"
+    data = np.asarray(ASYMMETRIC_SCORES)
+    np.testing.assert_array_equal(DataMatrix.from_file(out_file).toarray(), np.maximum(data, data.T))
+
+
+@pytest.mark.parametrize("args,message", [
+    (["--symmetrize", "max", "--mst"], "always max-symmetric"),
+    (["--mode", "score_dist", "--lb", "0.5"], "distance"),
+])
+def test_transform_matrix_rejects_invalid_symmetrize_and_lb(tmp_path, args, message):
+    input_file = tmp_path / "in.hdf5"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    with pytest.raises(ValueError, match=message):
+        transform_matrix.main(["-i", str(input_file), "--hdf", str(tmp_path / "out.hdf5")] + args)
+
+
+def test_transform_matrix_symmetrize_rejects_distance_input(tmp_path):
+    input_file = tmp_path / "in.hdf5"
+    DataMatrix(np.eye(2), ["a", "b"], ["a", "b"], data_type="score_dist").write(str(input_file), "hdf")
+    with pytest.raises(ValueError, match="distance matrix"):
+        transform_matrix.main(["-i", str(input_file), "--symmetrize", "max", "--hdf", str(tmp_path / "out.hdf5")])
+
+
+@pytest.mark.parametrize("option", ["--sparse", "--dense"])
+def test_transform_matrix_deprecated_hdf_aliases_still_write(tmp_path, option):
+    input_file, out_file = tmp_path / "in.hdf5", tmp_path / "out.hdf5"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    with pytest.warns(FutureWarning, match=f"{option} is deprecated"):
+        transform_matrix.main(["-i", str(input_file), option, str(out_file)])
+    np.testing.assert_array_equal(DataMatrix.from_file(out_file).toarray(), ASYMMETRIC_SCORES)
+
+
+def test_transform_matrix_rejects_two_hdf_outputs(tmp_path):
+    input_file = tmp_path / "in.hdf5"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    with pytest.warns(FutureWarning), pytest.raises(ValueError, match="Only one hdf5 output"):
+        transform_matrix.main(["-i", str(input_file), "--hdf", str(tmp_path / "a.hdf5"), "--sparse", str(tmp_path / "b.hdf5")])
+
+
+def test_transform_matrix_score_dist_round_trips_through_hdf(tmp_path):
+    input_file, hdf_out, text_out = tmp_path / "in.hdf5", tmp_path / "out.hdf5", tmp_path / "out.tsv"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf", str(hdf_out), "--dense_text", str(text_out)])
+    from_hdf = DataMatrix.from_file(hdf_out)
+    assert from_hdf.data_type == "score_dist"
+    # the diagonal (distance 0) is not stored, and comes back as 0
+    assert from_hdf.data.diagonal().tolist() == [0.0, 0.0, 0.0, 0.0]
+    np.testing.assert_allclose(from_hdf.toarray(), DataMatrix.from_file(text_out).toarray())
+
+
+def test_transform_matrix_max_output_gb_applies_to_distance_hdf(tmp_path):
+    input_file = tmp_path / "in.hdf5"
+    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
+    with pytest.raises(SystemExit, match="--max_output_gb"):
+        transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf", str(tmp_path / "out.hdf5"),
+                               "--max_output_gb", "0.000000001"])

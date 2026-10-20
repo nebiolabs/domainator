@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import scipy.sparse
 
-from domainator.data_matrix import SparseDataMatrix
+from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import StreamingMstKnnAccumulator
 from domainator.sparsify import sparsify_matrix
 
@@ -18,7 +18,7 @@ def _feed_dense(accumulator, data):
 
 def _as_matrix(data):
     labels = [f"s{i}" for i in range(data.shape[0])]
-    return SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
+    return DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")
 
 
 def test_streaming_knn_retains_negative_scores():

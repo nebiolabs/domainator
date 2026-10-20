@@ -64,18 +64,18 @@
       ]
     },
     {
-      "name": "Sparse",
-      "parameter": "sparse",
-      "help": "Write a sparse distance matrix hdf5 file to this path.",
+      "name": "HDF5 matrix",
+      "parameter": "hdf",
+      "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--sparse"
+        "--hdf"
       ]
     },
     {
       "name": "Dense Text",
       "parameter": "dense_text",
-      "help": "Write a dense distance matrix tsv file to this path.",
+      "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
         "--dense_text"
@@ -163,15 +163,6 @@
       "min": 0,
       "flags": [
         "--max_hits_per_query"
-      ]
-    },
-    {
-      "name": "Dense",
-      "parameter": "dense",
-      "help": "Write a dense distance matrix hdf5 file to this path.",
-      "type": "output",
-      "flags": [
-        "--dense"
       ]
     },
     {

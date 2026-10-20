@@ -32,39 +32,6 @@ except ImportError:
     nb = None
 
 
-def _build_dense_neighbor_rankings(data: np.ndarray, max_k: Optional[int] = None) -> CompactNeighborRankings:
-    offsets = [0]
-    target_parts = []
-    score_parts = []
-    for row_idx in range(data.shape[0]):
-        row_scores = np.maximum(data[row_idx, :], data[:, row_idx])
-        candidate_indices = np.flatnonzero(row_scores > 0)
-        candidate_indices = candidate_indices[candidate_indices != row_idx]
-
-        if candidate_indices.size == 0:
-            offsets.append(offsets[-1])
-            continue
-
-        candidate_scores = row_scores[candidate_indices]
-        order = np.lexsort((candidate_indices, -candidate_scores))
-        if max_k is not None:
-            order = order[:max_k]
-        row_target = candidate_indices[order].astype(np.int32, copy=False)
-        row_score = candidate_scores[order].astype(float, copy=False)
-        target_parts.append(row_target)
-        score_parts.append(row_score)
-        offsets.append(offsets[-1] + row_target.size)
-
-    if offsets[-1] == 0:
-        return _empty_compact_neighbor_rankings(data.shape[0])
-
-    return CompactNeighborRankings(
-        offsets=np.asarray(offsets, dtype=np.int64),
-        target=np.concatenate(target_parts),
-        score=np.concatenate(score_parts),
-    )
-
-
 def _build_top_k_neighbor_rankings_heap(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
     top_k_by_row = [[] for _ in range(edges.n_nodes)]
 
@@ -283,9 +250,7 @@ def build_symmetric_neighbor_rankings(matrix: Union['DataMatrix', SortedUndirect
     """Return deterministic per-row neighbor rankings using max(row,col) scores."""
     if isinstance(matrix, SortedUndirectedEdges):
         return _build_neighbor_rankings_from_sorted_edges(matrix, max_k=max_k)
-    if scipy.sparse.issparse(matrix.data):
-        return _build_sparse_neighbor_rankings(matrix, max_k=max_k)
-    return _build_dense_neighbor_rankings(matrix.data, max_k=max_k)
+    return _build_sparse_neighbor_rankings(matrix, max_k=max_k)
 
 
 def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,

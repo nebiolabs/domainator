@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from domainator import build_ssn_viewer
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, MaxTree
 from domainator import ssn_bundle
 from domainator import ssn_viewer_html as ssn_viewer_html_module
 
@@ -40,14 +40,14 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
 
         build_ssn_viewer.main([
@@ -122,14 +122,14 @@ def test_build_ssn_viewer_records_categorical_columns():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
 
         build_ssn_viewer.main([
@@ -152,12 +152,12 @@ def test_build_ssn_viewer_rejects_unknown_categorical_column():
         [10, 0],
     ], dtype=float)
     row_names = ["A", "B"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         with pytest.raises(ValueError, match="categorical column 'missing'"):
             build_ssn_viewer.main([
@@ -176,13 +176,13 @@ def test_build_ssn_viewer_omits_threshold_tables_but_still_cuts_like_maxtree():
         [0, 0, 0, 1, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D", "E"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
     tree = MaxTree(matrix)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         build_ssn_viewer.main([
             "-i", input_file,
@@ -217,12 +217,12 @@ def test_bundle_merge_events_and_slider_stops_honour_a_caller_supplied_cap():
         [0, 0, 0, 1, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D", "E"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
 
@@ -273,12 +273,12 @@ def test_bundle_cap_bites_on_a_network_large_enough_to_show_it():
             for j in range(i + 1, end):
                 data[i, j] = data[j, i] = rng.uniform(4, 12)
     row_names = [f"n{i:02d}" for i in range(node_count)]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
         bundle_file = os.path.join(output_dir, "bundle.dsnv")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
         bundle = _read_bundle(bundle_file)
         graph = bundle["graph"]
@@ -317,12 +317,12 @@ def test_uncapped_series_keeps_every_event():
         [0, 0, 0, 1, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D", "E"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
         bundle_file = os.path.join(output_dir, "bundle.dsnv")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
         bundle = _read_bundle(bundle_file)
 
@@ -339,14 +339,14 @@ def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
         [1, 1, 4, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
 
         build_ssn_viewer.main([
@@ -373,13 +373,13 @@ def test_build_ssn_viewer_writes_static_html_shell():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
         html_file = os.path.join(output_dir, "viewer.html")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         build_ssn_viewer.main([
             "-i", input_file,
@@ -778,12 +778,12 @@ def test_build_ssn_viewer_embeds_data_in_viewer_html():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         html_file = os.path.join(output_dir, "viewer.html")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         build_ssn_viewer.main([
             "-i", input_file,
@@ -812,11 +812,11 @@ def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied():
         [10, 0],
     ], dtype=float)
     row_names = ["A", "B"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         with pytest.raises(SystemExit, match="provide -o/--output or --embed_data"):
             build_ssn_viewer.main([
@@ -840,11 +840,11 @@ def test_build_ssn_viewer_rejects_embed_without_viewer_html():
         [10, 0],
     ], dtype=float)
     row_names = ["A", "B"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
 
         with pytest.raises(SystemExit, match="--embed_data requires --html"):
             build_ssn_viewer.main([
@@ -873,11 +873,11 @@ def test_load_bundle_accepts_every_supported_version():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         bundle = build_ssn_viewer.build_ssn_viewer_bundle(
             DataMatrix.from_file(input_file), name="versions"
         )
@@ -948,11 +948,11 @@ def test_lowest_slider_stop_reaches_the_fully_merged_network():
         [0, 0, 0, 8, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D", "E"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         bundle = build_ssn_viewer.build_ssn_viewer_bundle(
             DataMatrix.from_file(input_file), name="floor"
         )

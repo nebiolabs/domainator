@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, get_file_type, make_pool
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, make_pool
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 import scipy.cluster.hierarchy
@@ -18,7 +18,8 @@ from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_matrix, sparsify_requested
 from domainator.filter_domains import filter_domains
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.matrix_output import add_matrix_output_arguments, resolve_matrix_outputs, write_matrix_outputs
+from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from typing import Optional, Set
 import numpy as np
 import scipy.sparse
@@ -566,7 +567,7 @@ def _check_sort_feasible(n, leaf_ordering, check_memory=True):
         raise SortMemoryLimitExceeded(
             f"Sorting {n} contigs for genbank output (-o) needs about {format_bytes(needed)} of memory, "
             f"but only {format_bytes(available)} is available. "
-            "To avoid this, drop -o and write a matrix with --sparse instead, sort a subset of contigs with --contigs or --contigs_file, "
+            "To avoid this, drop -o and write a matrix with --hdf instead, sort a subset of contigs with --contigs or --contigs_file, "
             "or deduplicate the input first. Use --skip_sort_memory_check to try anyway."
         )
     if leaf_ordering == "optimal" and n > _OPTIMAL_LEAF_ORDERING_WARN_CONTIGS:
@@ -588,24 +589,16 @@ class DistanceReport(ABC):
         """
         pass
 
-class SparseTableOutput(DistanceReport):
+class HdfTableOutput(DistanceReport):
     def __init__(self, outpath, max_output_bytes=None):
         self.outpath = outpath
         self.max_output_bytes = max_output_bytes
     
     def write(self, recs, scores, options):
         row_names = [x.id for x in recs]
-        enforce_matrix_output_limit(
-            output_type="sparse",
-            matrix=scores,
-            row_names=row_names,
-            col_names=row_names,
-            data_type="score",
-            max_output_bytes=self.max_output_bytes,
-            output_path=self.outpath,
-            mitigation_options=["--sparse", "--max_hits_per_query", "--mst", "--knn"],
-        )
-        DataMatrix.write_sparse(scores, self.outpath, row_names, row_names, data_type="score")
+        write_matrix_outputs(scores, row_names, row_names, hdf=self.outpath, dense_text=None,
+                             max_output_bytes=self.max_output_bytes, data_type="score",
+                             mitigation_options=["--max_hits_per_query", "--mst", "--knn"])
 
 
 class ClinkerOutput(DistanceReport):
@@ -657,37 +650,9 @@ class DenseTextTableOutput(DistanceReport):
     
     def write(self, recs, scores, options):
         row_names = [x.id for x in recs]
-        enforce_matrix_output_limit(
-            output_type="dense_text",
-            matrix=scores,
-            row_names=row_names,
-            col_names=row_names,
-            data_type="score",
-            max_output_bytes=self.max_output_bytes,
-            output_path=self.outpath,
-            mitigation_options=["--sparse", "--max_hits_per_query", "--mst", "--knn"],
-        )
-        DataMatrix.write_dense_text(scores, self.outpath, row_names, row_names)
-
-class DenseTableOutput(DistanceReport):
-
-    def __init__(self, outpath, max_output_bytes=None):
-        self.outpath = outpath
-        self.max_output_bytes = max_output_bytes
-    
-    def write(self, recs, scores, options):
-        row_names = [x.id for x in recs]
-        enforce_matrix_output_limit(
-            output_type="dense",
-            matrix=scores,
-            row_names=row_names,
-            col_names=row_names,
-            data_type="score",
-            max_output_bytes=self.max_output_bytes,
-            output_path=self.outpath,
-            mitigation_options=["--sparse", "--max_hits_per_query", "--mst", "--knn"],
-        )
-        DataMatrix.write_dense(scores.toarray(), self.outpath, row_names, row_names, data_type="score")
+        write_matrix_outputs(scores, row_names, row_names, hdf=None, dense_text=self.outpath,
+                             max_output_bytes=self.max_output_bytes,
+                             mitigation_options=["--max_hits_per_query", "--mst", "--knn"])
 
 def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, name_by_order, databases:Optional[Set[str]]=None, lb: float = 0.0, progress: bool = False, cpu: int = 1, mst: bool = False, knn: Optional[int] = None, check_sort_memory: bool = True):
     sparsify = sparsify_requested(mst, knn)
@@ -767,9 +732,8 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
             results_matrix = _prune_scores_inplace(results_matrix, lb)
 
         if sparsify:
-            from domainator.data_matrix import SparseDataMatrix
             row_names = [rec.id for rec in recs]
-            wrapped = SparseDataMatrix(scipy.sparse.csr_array(results_matrix), row_names, row_names, data_type="score")
+            wrapped = DataMatrix(scipy.sparse.csr_array(results_matrix), row_names, row_names, data_type="score")
             results_matrix = sparsify_matrix(wrapped, mst=mst, knn=knn, lower_bound=lb)
 
     # write reports
@@ -812,7 +776,7 @@ def main(argv):
     parser.add_argument('--lb', default=0, type=float, required=False,
                         help="Round any final scores less than or equal to this down to zero. This is primarily useful for making sparse outputs smaller.")
 
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Best paired with --sparse.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Best paired with --hdf.")
 
     # Metrics
     parser.add_argument("--ji", default=0.5, required=False, type=float,
@@ -829,11 +793,7 @@ def main(argv):
 
     # parser.add_argument("--svg_tree", type=str, default=None, help="Write a tree graphic in svg format to this path.")
     
-    parser.add_argument("--dense", type=str, default=None, help="Write a dense distance matrix hdf5 file to this path.")
-    
-    parser.add_argument("--dense_text", type=str, default=None, help="Write a dense distance matrix tsv file to this path.")
-    
-    parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
+    add_matrix_output_arguments(parser, noun="contig similarity score matrix")
 
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="How many cpu workers to use. Default: use all available physical cores.")
@@ -866,16 +826,11 @@ def main(argv):
     #     reports.append(ClinkerOutput(params.clinker))
     # if params.svg_tree is not None:
     #     reports.append(SvgTreeOutput(params.svg_tree))
-    if params.dense is not None:
-        if get_file_type(params.dense) != "hdf5":
-            raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
-        reports.append(DenseTableOutput(params.dense, max_output_bytes=max_output_bytes))
-    if params.dense_text is not None:
-        reports.append(DenseTextTableOutput(params.dense_text, max_output_bytes=max_output_bytes))
-    if params.sparse is not None:
-        if get_file_type(params.sparse) != "hdf5":
-            raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
-        reports.append(SparseTableOutput(params.sparse, max_output_bytes=max_output_bytes))
+    hdf, dense_text = resolve_matrix_outputs(params, require_output=False)
+    if hdf is not None:
+        reports.append(HdfTableOutput(hdf, max_output_bytes=max_output_bytes))
+    if dense_text is not None:
+        reports.append(DenseTextTableOutput(dense_text, max_output_bytes=max_output_bytes))
     if params.output is not None:
         output_path = '/dev/stdout' if params.output == "-" else params.output # TODO: not cross platform, will not work on windows.
         reports.append(GenbankOutput(output_path, linkage_method=params.linkage, leaf_ordering=params.leaf_ordering))

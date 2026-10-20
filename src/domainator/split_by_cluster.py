@@ -118,6 +118,7 @@ def _load_cluster_membership(matrix_path: Union[str, PathLike], lb: float) -> Tu
     matrix = DataMatrix.from_file(matrix_path, lower_bound=lb)
     if not matrix.symmetric_labels:
         raise ValueError("Input matrix must have symmetric row and column labels.")
+    matrix.require_similarity("split_by_cluster")
 
     matrix_labels = _validate_unique_labels(matrix.rows, "Matrix rows")
     if len(matrix_labels) == 0:

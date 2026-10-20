@@ -100,34 +100,31 @@ def sparsify_matrix(matrix, *, mst: bool, knn: Optional[int], lower_bound: float
     Kept edges are written as a strict max over the diagonal: both cells of a pair get
     ``max(M[i, j], M[j, i])``, the same score the OR-symmetric kNN ranking and the maximum
     spanning tree select on. The output is therefore symmetric, matching
-    :class:`~domainator.ssn_edges.StreamingMstKnnAccumulator`. Returns the new data array
-    (sparse CSR for sparse input, dense otherwise).
+    :class:`~domainator.ssn_edges.StreamingMstKnnAccumulator`. The diagonal is copied
+    unchanged. Returns the new data as a CSR array.
     """
     if matrix.shape[0] != matrix.shape[1]:
         raise ValueError(f"{sparsify_option_label(mst, knn)} requires a square matrix.")
 
     edge_dict = sparsify_edge_index_dict(matrix, mst=mst, knn=knn, lower_bound=lower_bound)
-    diagonal_indices = np.arange(matrix.shape[0])
+    n = matrix.shape[0]
+    data = matrix.data
 
-    if scipy.sparse.issparse(matrix.data):
-        out = scipy.sparse.dok_array(matrix.shape, dtype=matrix.data.dtype)
-        for index in diagonal_indices:
-            value = matrix.data[index, index]
-            if value != 0:
-                out[index, index] = value
-        for source_idx, target_idx in edge_dict:
-            value = max(matrix.data[source_idx, target_idx], matrix.data[target_idx, source_idx])
-            if value != 0:
-                out[source_idx, target_idx] = value
-                out[target_idx, source_idx] = value
-        return scipy.sparse.csr_array(out)
+    # One (low, high) row per undirected pair, so no cell is written twice (COO input sums duplicates).
+    edges = np.sort(np.asarray(list(edge_dict.keys()), dtype=np.int64).reshape(-1, 2), axis=1)
+    edges = np.unique(edges, axis=0)
+    sources, targets = edges[:, 0], edges[:, 1]
+    edge_values = np.asarray(data.maximum(data.transpose()).tocsr()[sources, targets]).ravel()
 
-    out = np.zeros_like(matrix.data)
-    out[diagonal_indices, diagonal_indices] = matrix.data[diagonal_indices, diagonal_indices]
-    for source_idx, target_idx in edge_dict:
-        value = max(matrix.data[source_idx, target_idx], matrix.data[target_idx, source_idx])
-        out[source_idx, target_idx] = value
-        out[target_idx, source_idx] = value
+    diagonal = data.diagonal()
+    diagonal_indices = np.flatnonzero(diagonal)
+
+    rows = np.concatenate([diagonal_indices, sources, targets])
+    cols = np.concatenate([diagonal_indices, targets, sources])
+    values = np.concatenate([diagonal[diagonal_indices], edge_values, edge_values])
+    out = scipy.sparse.csr_array((values, (rows, cols)), shape=(n, n))
+    out.eliminate_zeros()
+    out.sort_indices()
     return out
 
 

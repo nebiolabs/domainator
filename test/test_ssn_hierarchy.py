@@ -8,7 +8,7 @@ the charts rely on but cannot check.
 import numpy as np
 import pytest
 
-from domainator.data_matrix import DenseDataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix, MaxTree
 from domainator.ssn_hierarchy import (
     COMPONENT_LARGEST_COL,
     MERGE_EVENT_DENSITY_BINS,
@@ -35,7 +35,7 @@ def _tie_group_tree():
     for i, j, value in [(0, 1, 10.0), (2, 3, 10.0), (4, 5, 10.0), (1, 2, 5.0), (3, 4, 3.0)]:
         data[i, j] = value
         data[j, i] = value
-    return MaxTree(DenseDataMatrix(data, labels, labels, data_type="score"))
+    return MaxTree(DataMatrix(data, labels, labels, data_type="score"))
 
 
 def _event_rows(metric=MERGE_IMPACT_MIN_CHILD, tree=None):

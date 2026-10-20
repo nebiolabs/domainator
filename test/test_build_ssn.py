@@ -1,6 +1,6 @@
 from domainator import build_ssn
 from domainator.utils import OTHER_COLOR
-from domainator.data_matrix import DenseDataMatrix, SparseDataMatrix, MaxTree, mst_knn_edge_index_dict
+from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict
 import pytest
 import tempfile
 import pandas as pd
@@ -374,7 +374,7 @@ def test_build_ssn_subset(shared_datadir, subset_mode):
 
 def test_build_ssn_mst_knn_subset_after_filtering():
     labels = ["A", "B", "C", "D", "E"]
-    matrix = DenseDataMatrix(np.array([
+    matrix = DataMatrix(np.array([
         [0, 100, 99, 98, 0],
         [100, 0, 97, 1, 96],
         [99, 97, 0, 95, 94],
@@ -410,8 +410,8 @@ def test_cluster_labels_from_tree_matches_connected_components():
     ], dtype=float)
 
     for matrix in (
-        DenseDataMatrix(array, labels, labels),
-        SparseDataMatrix(scipy.sparse.csr_array(array), labels, labels),
+        DataMatrix(array, labels, labels),
+        DataMatrix(scipy.sparse.csr_array(array), labels, labels),
     ):
         tree = MaxTree(matrix)
         expected = connected_components(matrix.data > 5, directed=False, return_labels=True)[1]
@@ -422,7 +422,7 @@ def test_cluster_labels_from_tree_matches_connected_components():
 
 def test_iter_default_ssn_edges_uses_indices_and_lexical_endpoint_order():
     labels = ["zeta", "alpha", "beta"]
-    matrix = DenseDataMatrix(np.array([
+    matrix = DataMatrix(np.array([
         [0, 10, 0],
         [10, 0, 7],
         [0, 7, 0],
@@ -467,7 +467,7 @@ def _bridged_triangles_matrix():
     for (left, right), value in weights.items():
         i, j = labels.index(left), labels.index(right)
         data[i, j] = data[j, i] = value
-    return DenseDataMatrix(data, labels, labels, data_type="score"), labels
+    return DataMatrix(data, labels, labels, data_type="score"), labels
 
 
 def _xgmml_edge_names(path, labels):
@@ -486,7 +486,7 @@ def test_build_ssn_knn_and_mst_combinations(shared_datadir):
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        matrix.write(input_file, "dense")
+        matrix.write(input_file, "hdf")
 
         outputs = {}
         clusters = {}
@@ -524,7 +524,7 @@ def test_build_ssn_knn_marks_mst_edges():
     matrix, labels = _bridged_triangles_matrix()
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        matrix.write(input_file, "dense")
+        matrix.write(input_file, "hdf")
         xgmml = output_dir + "/knn_marked.xgmml"
         build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "2", "--mark_mst"])
 
@@ -539,7 +539,7 @@ def test_build_ssn_knn_rejects_invalid_combinations():
     matrix, labels = _bridged_triangles_matrix()
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        matrix.write(input_file, "dense")
+        matrix.write(input_file, "hdf")
         xgmml = output_dir + "/out.xgmml"
 
         # k must select at least one neighbor when there is no spanning tree to fall back on
@@ -560,6 +560,17 @@ def test_build_ssn_sparsify_rejects_distance_matrix(args):
     matrix.data_type = "score_dist"
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = output_dir + "/input.hdf5"
-        matrix.write(input_file, "dense")
+        matrix.write(input_file, "hdf")
         with pytest.raises(ValueError, match="distance"):
             build_ssn.main(["-i", input_file, "--xgmml", output_dir + "/out.xgmml"] + args)
+
+
+def test_graph_tools_reject_distance_matrices(tmp_path):
+    import numpy as np
+    from domainator import build_ssn
+
+    names = ["a", "b"]
+    matrix_file = tmp_path / "dist.hdf5"
+    DataMatrix(np.array([[0.0, 0.2], [0.2, 0.0]]), names, names, data_type="score_dist").write(str(matrix_file), "hdf")
+    with pytest.raises(ValueError, match="'score_dist' distance matrix"):
+        build_ssn.main(["-i", str(matrix_file), "--xgmml", str(tmp_path / "out.xgmml")])

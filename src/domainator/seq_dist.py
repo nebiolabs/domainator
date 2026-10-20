@@ -26,9 +26,10 @@ import tqdm
 from typing import Iterator, List
 from domainator.utils import get_file_type, open_hmm_file, parse_seqfiles, make_pool, pyhmmer_decode
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
 from domainator.hmmer_search import compare_hmmer
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
+from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from domainator.transform_matrix import MODES, LOG10_2
 from domainator.sparsify import (MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_option_label,
                                  sparsify_requested)
@@ -710,7 +711,7 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_per_query, algorithm, mode, threads, dense, dense_text, sparse, lb, max_output_bytes=None, progress: bool = False, mst: bool = False, knn=None, diamond_params=None):
+def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_per_query, algorithm, mode, threads, hdf, dense_text, lb, max_output_bytes=None, progress: bool = False, mst: bool = False, knn=None, diamond_params=None, symmetrize: str = "none"):
     """
 
     """
@@ -721,15 +722,17 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
             raise ValueError(
                 f"{option} is only supported with --mode {sorted(SPARSIFY_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
-                f"For '{mode}', run 'seq_dist --mode score --sparse out.hdf5' then "
-                f"'transform_matrix -i out.hdf5 --mode {mode} {option} --sparse pruned.hdf5'."
+                f"For '{mode}', run 'seq_dist --mode score --hdf out.hdf5' then "
+                f"'transform_matrix -i out.hdf5 --mode {mode} {option} --hdf pruned.hdf5'."
             )
         if reference_path != input_path:
             raise ValueError(
                 f"{option} requires a square, symmetric comparison (reference must be the same file as input)."
             )
-    if sparse is not None and mode == "score_dist":
-        warnings.warn(f"Sparse output requested for a score_dist matrix. Distance matrices are usually not sparse. This may use more memory and have a larger output file size than expected.")
+        if symmetrize != "none":
+            raise ValueError(f"{option} output is always max-symmetric, so --symmetrize {symmetrize} cannot be applied on top of it.")
+    if symmetrize != "none" and reference_path != input_path:
+        raise ValueError("--symmetrize requires a square, symmetric comparison (reference must be the same file as input).")
 
     if input_type == "hmm" and reference_type == "hmm":
         if algorithm != "hmmer_compare":
@@ -829,7 +832,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
                 query_idx = query_name_to_idx[query_id]
                 subject_idx = db_name_to_idx[subject_id]
                 if mode == "efi_score":
-                    value = score * LOG10_2 - log_lengths[query_idx] - log_lengths[subject_idx]
+                    value = score * LOG10_2 - (log_lengths[query_idx] + log_lengths[subject_idx])
                     if value <= 0:
                         continue
                 else:  # score, bool
@@ -853,7 +856,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
                 matrix_score = 1 if mode == "bool" else score
                 result_builder.add_result(query_id, subject_id, matrix_score)
 
-            matrix = result_builder.build()
+            matrix = symmetrize_matrix(result_builder.build(), symmetrize)
 
     query_idx_to_len = np.array(query_idx_to_len)
     db_idx_to_len = np.array(db_idx_to_len)
@@ -864,48 +867,12 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
 
 
     try:
-        if dense is not None:
-            enforce_matrix_output_limit(
-                output_type="dense",
-                matrix=matrix,
-                row_names=query_idx_to_name,
-                col_names=db_idx_to_name,
-                row_lengths=query_idx_to_len,
-                col_lengths=db_idx_to_len,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=dense,
-                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
-            )
-            DataMatrix.write_dense(matrix, dense, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
-        if dense_text is not None:
-            enforce_matrix_output_limit(
-                output_type="dense_text",
-                matrix=matrix,
-                row_names=query_idx_to_name,
-                col_names=db_idx_to_name,
-                row_lengths=query_idx_to_len,
-                col_lengths=db_idx_to_len,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=dense_text,
-                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
-            )
-            DataMatrix.write_dense_text(matrix, dense_text, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
-        if sparse:
-            enforce_matrix_output_limit(
-                output_type="sparse",
-                matrix=matrix,
-                row_names=query_idx_to_name,
-                col_names=db_idx_to_name,
-                row_lengths=query_idx_to_len,
-                col_lengths=db_idx_to_len,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=sparse,
-                mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
-            )
-            DataMatrix.write_sparse(matrix, sparse, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, mode)
+        write_matrix_outputs(
+            matrix, query_idx_to_name, db_idx_to_name,
+            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+            mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
+            row_lengths=query_idx_to_len, col_lengths=db_idx_to_len, data_type=mode,
+        )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 
@@ -924,11 +891,7 @@ def main(argv):
     parser.add_argument('--reference_type', type=str, required=False, default=None, choices={"fasta", "genbank", "hmm"},
                         help="File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.")
 
-    parser.add_argument("--dense", type=str, default=None, help="Write a dense distance matrix hdf5 file to this path.")
-    
-    parser.add_argument("--dense_text", type=str, default=None, help="Write a dense distance matrix tsv file to this path.")
-    
-    parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
+    add_matrix_output_arguments(parser, noun="similarity (or, for *_dist modes, distance) matrix")
 
     parser.add_argument('--lb', default=0, type=float, required=False,
                         help="Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).")
@@ -949,7 +912,9 @@ def main(argv):
                              "Useful for large all-vs-all runs, where diamond's seed-search scratch can exceed available disk: "
                              "a smaller --block-size (-b) and/or more --index-chunks (-c) bound its peak scratch usage.")
 
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool, efi_score}; bool selects on the scores and then keeps the selected cells as 1. Best paired with --sparse.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool, efi_score}; bool selects on the scores and then keeps the selected cells as 1. Best paired with --hdf.")
+
+    add_symmetrize_argument(parser, extra_help="Applied to the raw scores, after --lb and --max_hits_per_query. Requires the reference to be the same file as the input. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")
@@ -981,24 +946,12 @@ def main(argv):
         if params.reference_type is None:
             reference_type = get_file_type(reference_path)
 
-    if params.dense is not None and get_file_type(params.dense) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
-    if params.sparse is not None and get_file_type(params.sparse) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
-    dense = params.dense
-    dense_text = params.dense_text
-    sparse = params.sparse
+    hdf, dense_text = resolve_matrix_outputs(params)
 
     if params.cpu <= 0:
         cpus = psutil.cpu_count(logical=False)
     else:
         cpus = params.cpu
-
-    if ((dense is None) and (dense_text is None) and (sparse is None)):
-        raise ValueError("No output specified! Please specify at least one of: dense, dense_text, sparse")
-
-    if sparse is not None and params.mode == "score_dist":
-        raise ValueError("Sparse distance matrices not implemented.")
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
@@ -1006,7 +959,7 @@ def main(argv):
     if diamond_params and not params.algorithm.startswith("diamond"):
         raise ValueError(f"--params only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, dense, dense_text, sparse, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params)
+    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, hdf, dense_text, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params, symmetrize=params.symmetrize)
 
 def _entrypoint():
     main(sys.argv[1:])

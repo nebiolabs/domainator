@@ -10,7 +10,7 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "pairwise distances. Format can be tab-separated text, or Domainator dense hdf5.",
+      "help": "Square matrix of pairwise distances or similarity scores. Format can be tab-separated text or Domainator hdf5.",
       "type": "file",
       "flags": [
         "-i",
@@ -69,6 +69,21 @@
     }
   ],
   "advanced_parameters": [
+    {
+      "name": "Distance",
+      "parameter": "distance",
+      "help": "How to turn matrix values into distances. precomputed: the values are distances. score_dist: the values are similarity scores, distance = 1 - (score / min(row_max, col_max)), so a pair with no score has distance 1. auto: precomputed if the matrix data type is a distance (ends in _dist) or not recorded (e.g. tab-separated text), otherwise score_dist.",
+      "type": "string",
+      "default": "auto",
+      "choices": [
+        "auto",
+        "precomputed",
+        "score_dist"
+      ],
+      "flags": [
+        "--distance"
+      ]
+    },
     {
       "name": "Quiet",
       "parameter": "quiet",

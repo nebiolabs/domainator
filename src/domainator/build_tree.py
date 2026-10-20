@@ -1,5 +1,9 @@
-"""Generates trees from distance matrices
-    
+"""Generates trees from distance or similarity matrices
+
+    Distance matrices (data types ending in _dist, or dense text with no data type) are used
+    as is. Similarity matrices (e.g. score, efi_score) are first converted to distances with
+    1 - (score / min(row_max, col_max)), so a pair with no score has distance 1.
+    The two directions of each pair are reconciled by taking the smaller distance.
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
@@ -7,14 +11,15 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from os import PathLike
 import sys
 from domainator.build_projection import write_cytoscape_xgmml
-from domainator.data_matrix import DataMatrix, SparseDataMatrix
+from domainator.data_matrix import DataMatrix, is_distance_data_type
+from domainator.transform_matrix import score_dist
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from domainator import __version__, RawAndDefaultsFormatter
 from typing import List, Union
 import warnings
 from scipy.cluster import hierarchy
-from domainator.build_projection import write_cytoscape_xgmml
 from scipy.spatial.distance import squareform
 
 
@@ -105,22 +110,53 @@ def get_newick(node, parent_dist, leaf_names, newick='') -> str: #from: https://
         return newick
 
 
-def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, quiet=False):
+DISTANCE_CONVERSIONS = ("auto", "precomputed", "score_dist")
+
+
+def condensed_distances(data_matrix: DataMatrix, distance: str = "auto") -> np.ndarray:
+    """
+        Return a scipy condensed distance vector for a square matrix.
+
+        distance:
+            precomputed: the values are distances.
+            score_dist: the values are similarity scores; distance = 1 - (score / min(row_max, col_max)).
+            auto: precomputed if the data type is a distance (ends in _dist) or not recorded
+                  (e.g. dense text), otherwise score_dist.
+
+        Each pair uses the smaller of its two directional distances (the higher similarity),
+        the same convention as the SSN tools.
+    """
+    if distance not in DISTANCE_CONVERSIONS:
+        raise ValueError(f"distance must be one of {DISTANCE_CONVERSIONS}, not {distance!r}")
+    if not data_matrix.symmetric_labels:
+        raise ValueError("Input does not have symmetric axis labels. Can only build a tree from a square matrix comparing a set of sequences to itself.")
+    if distance == "auto":
+        distance = "precomputed" if (data_matrix.data_type == "" or is_distance_data_type(data_matrix.data_type)) else "score_dist"
+
+    if distance == "precomputed":
+        dense = data_matrix.toarray().astype(np.float64, copy=False)
+    else:
+        dense = score_dist(data_matrix.data)
+        # A row or column with no scores at all gives 0/0; it is unrelated to everything.
+        dense[np.isnan(dense)] = 1.0
+    dense = np.minimum(dense, dense.T)
+    return squareform(dense, checks=False)
+
+
+def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, quiet=False, distance="auto"):
     """ 
-        Build a tree from a distance matrix.
+        Build a tree from a distance or similarity matrix.
 
         data_matrix: a DataMatrix object
         algorithm: the algorithm to use to build the tree. Currently only supports "upgma"
         metadata_files: metadata files to add to the XGMML file
         xgmml_file: path to write the XGMML file to
         newick_file: path to write the newick file to
+        distance: how to get distances from the matrix values, see condensed_distances
     """
 
-    if isinstance(data_matrix, SparseDataMatrix):
-        warnings.warn(f"Input is a sparse matrix. Distance matrices are usually not sparse. You may want to rerun seq_dist with --mode score_dist and output to --dense or --dense_text.")
-        data_matrix = data_matrix.convert_to_dense()
     if algorithm == "upgma":
-        linkage_matrix = hierarchy.average(squareform(data_matrix.data, checks=False))
+        linkage_matrix = hierarchy.average(condensed_distances(data_matrix, distance))
     
     tree = hierarchy.to_tree(linkage_matrix, False)
 
@@ -150,7 +186,10 @@ def main(argv):
     
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, required=False,
-                        help="pairwise distances. Format can be tab-separated text, or Domainator dense hdf5.")
+                        help="Square matrix of pairwise distances or similarity scores. Format can be tab-separated text or Domainator hdf5.")
+
+    parser.add_argument('--distance', type=str, required=False, default="auto", choices=DISTANCE_CONVERSIONS,
+                        help="How to turn matrix values into distances. precomputed: the values are distances. score_dist: the values are similarity scores, distance = 1 - (score / min(row_max, col_max)), so a pair with no score has distance 1. auto: precomputed if the matrix data type is a distance (ends in _dist) or not recorded (e.g. tab-separated text), otherwise score_dist.")
 
     parser.add_argument('--algorithm', type=str, required=False, default="upgma", choices={"upgma"},
                         help="Which clustering algorithm to use.")
@@ -183,7 +222,7 @@ def main(argv):
 
     # Run
     # params.metric,
-    build_tree(DataMatrix.from_file(input_file), params.algorithm, params.metadata, params.xgmml, params.newick, params.quiet)
+    build_tree(DataMatrix.from_file(input_file), params.algorithm, params.metadata, params.xgmml, params.newick, params.quiet, params.distance)
 
 def _entrypoint():
     main(sys.argv[1:])

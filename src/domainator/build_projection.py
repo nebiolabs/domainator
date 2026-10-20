@@ -1,4 +1,4 @@
-"""Generates 2d or 3d umap, tsne, or pca projections from dense or sparse matrices
+"""Generates 2d or 3d umap, tsne, or pca projections from matrices
 
     output can be images, coordinates, or Cytoscape xgmml files.
 
@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import json
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.data_matrix import DataMatrix, SparseDataMatrix
+from domainator.data_matrix import DataMatrix
 from domainator.cytoscape import write_cytoscape_xgmml
 import scipy as sp
 from domainator.color_genbank import read_color_table
@@ -27,6 +27,9 @@ from domainator.utils import get_palette
 XCOLNAME="projection_X"
 YCOLNAME="projection_Y"
 ZCOLNAME="projection_Z"
+
+DENSE_PROJECTION_MIN_FILL = 0.5
+"""Matrices with at least this fraction of non-zero cells are projected as dense arrays."""
 
 #TODO: for projections that are less overweighted toward dense regions of sequence space, learn a PCA on the reduced sequence set then apply it to the expanded sequence set.
 
@@ -60,11 +63,7 @@ def check_coords(n_components, data_matrix: DataMatrix):
         if not ((mat_columns[0] == XCOLNAME) and (mat_columns[1] == YCOLNAME) and (mat_columns[2] == ZCOLNAME)):
             raise ValueError(f"Input matrix should have columns should be (in order) {[XCOLNAME,YCOLNAME,ZCOLNAME]}, not: {mat_columns}")
     
-    data = data_matrix.data
-    if isinstance(data_matrix, SparseDataMatrix):
-        data = data.toarray()
-
-    return data
+    return data_matrix.toarray()
 
 
 
@@ -85,7 +84,9 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
         color_table_out: tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.
 
     """
-    is_sparse = isinstance(data_matrix, SparseDataMatrix)
+    # Mostly-filled matrices (e.g. profile scores, distances) are projected densely; mostly-empty
+    # ones (e.g. similarity networks) stay sparse, which changes PCA to TruncatedSVD.
+    is_sparse = data_matrix.nnz < DENSE_PROJECTION_MIN_FILL * data_matrix.size
     n_components=2
     columns=[XCOLNAME,YCOLNAME]
     if three_dee:
@@ -99,13 +100,11 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
             algorithm_parameters["learning_rate"] = 'auto'
         if 'init' not in algorithm_parameters:
             algorithm_parameters["init"] = 'pca'
-        data = data_matrix.data
-        if is_sparse:
-            if len(data_matrix.columns) > 50:
-                #TODO: maybe warn that we're doing a dimenisionality reduction
-                data = TruncatedSVD(n_components=50).fit_transform(data_matrix.data)
-            else:
-                data = data_matrix.data.toarray()
+        if is_sparse and len(data_matrix.columns) > 50:
+            #TODO: maybe warn that we're doing a dimenisionality reduction
+            data = TruncatedSVD(n_components=50).fit_transform(data_matrix.data)
+        else:
+            data = data_matrix.toarray()
         if 'perplexity' not in algorithm_parameters:
             if data.shape[0] <= 30: # 30 is the default perplexity in scikit-learn tsne.
                 algorithm_parameters["perplexity"] = data.shape[0] - 1
@@ -117,13 +116,13 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
             #TODO: maybe warn that we're doing TruncatedSVD instead of PCA
             embedded = TruncatedSVD(n_components=n_components).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
         else:
-            embedded = PCA(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.data)
+            embedded = PCA(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.toarray())
     elif algorithm == "umap":
         #doesn't matter if it's sparse or not umap will take it!
         if is_sparse:
             embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
         else:    
-            embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.data)
+            embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.toarray())
 
     elif algorithm == "coords":
         embedded = check_coords(n_components, data_matrix,  **algorithm_parameters)
@@ -170,7 +169,7 @@ def main(argv):
     
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, required=False,
-                        help="The matrix that you want to project into 2D or 3D space, rows are observations (typically gene names), columns are features (typically similarity to other genes, or hmm profile scores). If passing in a coords matrix, use this (and not --sparse).")
+                        help="The matrix that you want to project into 2D or 3D space, rows are observations (typically gene names), columns are features (typically similarity to other genes, or hmm profile scores). Format can be tab-separated text or Domainator hdf5.")
 
     #TODO: add a way to train the projection on a subset of rows and/or columns ("training rows")
     #TODO: train just on reference sequences then project on all sequences

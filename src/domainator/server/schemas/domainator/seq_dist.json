@@ -51,12 +51,12 @@
       ]
     },
     {
-      "name": "Sparse hdf5 Output",
-      "parameter": "sparse",
-      "help": "Write a sparse distance matrix hdf5 file to this path.",
+      "name": "HDF5 matrix",
+      "parameter": "hdf",
+      "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--sparse"
+        "--hdf"
       ]
     },
     {
@@ -160,18 +160,9 @@
       ]
     },
     {
-      "name": "Dense hdf5 Output",
-      "parameter": "dense",
-      "help": "Write a dense distance matrix hdf5 file to this path.",
-      "type": "output",
-      "flags": [
-        "--dense"
-      ]
-    },
-    {
       "name": "Dense Text Output",
       "parameter": "dense_text",
-      "help": "Write a dense distance matrix tsv file to this path.",
+      "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
         "--dense_text"
@@ -205,6 +196,22 @@
       "min": 1,
       "flags": [
         "--knn"
+      ]
+    },
+    {
+      "name": "Symmetrize",
+      "parameter": "symmetrize",
+      "help": "reconcile the two directions of each pair of a self-comparison (reference = input), on the raw scores. max keeps a one-directional pair, min deletes it, mean halves it. A symmetric result is stored as its upper triangle, about half the size. Cannot be combined with --mst/--knn.",
+      "type": "string",
+      "default": "none",
+      "choices": [
+        "none",
+        "min",
+        "max",
+        "mean"
+      ],
+      "flags": [
+        "--symmetrize"
       ]
     }
   ]

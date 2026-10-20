@@ -115,8 +115,12 @@ def enforce_matrix_output_limit(
     data_type: str = "",
     mitigation_options: list[str] | tuple[str, ...] | None = None,
     extra_guidance: str | None = None,
+    symmetric: bool | None = None,
 ) -> int:
-    """Estimate a matrix output and enforce the configured size limit."""
+    """Estimate a matrix output and enforce the configured size limit.
+
+    ``symmetric`` is passed to the hdf estimate (see ``DataMatrix.write_hdf``).
+    """
     from domainator.data_matrix import DataMatrix
 
     projected_bytes = DataMatrix.estimate_write_size(
@@ -127,6 +131,7 @@ def enforce_matrix_output_limit(
         row_lengths,
         col_lengths,
         data_type,
+        symmetric=symmetric,
     )
     enforce_output_limit(
         projected_bytes=projected_bytes,

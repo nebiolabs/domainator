@@ -1,6 +1,6 @@
-"""Transforms a score matrix into various kinds of normalized martices
-   
-   For matrices with any data type, can convert from dense to sparse, or sparse to dense, or change the datatype.
+"""Transforms a score matrix into various kinds of normalized matrices
+
+   For matrices with any data type, can convert between hdf5 and dense text, or change the datatype.
 """
 
 import warnings
@@ -8,62 +8,52 @@ warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
 
-from domainator.data_matrix import DataMatrix
+from domainator.data_matrix import DataMatrix, is_distance_data_type, symmetrize_matrix
 from domainator import __version__, RawAndDefaultsFormatter
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded
 import scipy.sparse
 import numpy as np
-from domainator.utils import get_file_type
-from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_matrix, sparsify_requested
+from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_matrix, sparsify_option_label, sparsify_requested
 
 PASS_THROUGH_MODE = "none"
 LOG10_2 = np.log10(2.0)
 
-def is_sparse(matrix):
+def _axis_maxes(array):
+    """Return (row_max, col_max) as 1D float arrays; absent sparse cells count as 0."""
+    if scipy.sparse.issparse(array):
+        array = scipy.sparse.csr_array(array)
+        return (array.max(axis=1).toarray().ravel().astype(np.float64),
+                array.max(axis=0).toarray().ravel().astype(np.float64))
+    array = np.asarray(array)
+    return array.max(axis=1).astype(np.float64), array.max(axis=0).astype(np.float64)
+
+
+def _scale_stored_values(array, row_divisor, col_divisor=None):
+    """Divide each stored value by ``row_divisor[row]`` (or the min of row and column divisors).
+
+    Returns a CSR array; cells that are absent in the input stay absent.
     """
-    Check if a matrix is sparse.
-    """
-    return type(matrix) is scipy.sparse.dok_array or type(matrix) is scipy.sparse.coo_array or type(matrix) is scipy.sparse.csr_array
+    array = scipy.sparse.coo_array(array)
+    divisor = row_divisor[array.row]
+    if col_divisor is not None:
+        divisor = np.minimum(divisor, col_divisor[array.col])
+    return scipy.sparse.csr_array((array.data / divisor, (array.row, array.col)), shape=array.shape)
+
 
 def norm_score(array, row_lengths=None, col_lengths=None):
     """
         score / min(row_max, col_max)
     """
-    if is_sparse(array): #sparse matrix
-        array = scipy.sparse.coo_matrix(array) 
-        rowmaxes = dict()
-        max_coo = array.max(axis=1)
-        for r,c,v in zip(max_coo.row, max_coo.col, max_coo.data):
-            rowmaxes[r] = v
-
-        colmaxes = dict()        
-        colmax_coo = array.max(axis=0)
-        for r,c,v in zip(colmax_coo.row, colmax_coo.col, colmax_coo.data):
-            colmaxes[c] = v
-
-        out = scipy.sparse.dok_array(array.shape,dtype=np.float64)
-        for r,c,v in zip(array.row, array.col, array.data):
-            out[r, c] = v / min(rowmaxes[r], colmaxes[c])
-        return out
-    else: # dense matrix
-        return array/np.minimum( array.max(axis=1)[:,np.newaxis], array.max(axis=0)[np.newaxis,:] )
+    row_max, col_max = _axis_maxes(array)
+    return _scale_stored_values(array, row_max, col_max)
 
 def row_norm_score(array, row_lengths=None, col_lengths=None):
     """
         score / row_max
     """
-    if is_sparse(array): #sparse matrix
-        array = scipy.sparse.coo_matrix(array) 
-        rowmaxes = dict()
-        max_coo = array.max(axis=1)
-        for r,c,v in zip(max_coo.row, max_coo.col, max_coo.data):
-            rowmaxes[r] = v
-        out = scipy.sparse.dok_array(array.shape,dtype=np.float64)
-        for r,c,v in zip(array.row, array.col, array.data):
-            out[r, c] = v / rowmaxes[r]
-        return out
-    else: # dense matrix
-        return array/(array.max(axis=1)[:,np.newaxis])
+    row_max, _ = _axis_maxes(array)
+    return _scale_stored_values(array, row_max)
 
 def efi_score(array, row_lengths=None, col_lengths=None):
     """
@@ -82,62 +72,36 @@ def efi_score(array, row_lengths=None, col_lengths=None):
     row_logs = np.log10(np.asarray(row_lengths, dtype=np.float64))
     col_logs = np.log10(np.asarray(col_lengths, dtype=np.float64))
 
-    if is_sparse(array): #sparse matrix
-        array = scipy.sparse.coo_array(array)
-        scores = array.data * LOG10_2 - row_logs[array.row] - col_logs[array.col]
-        keep_mask = scores > 0
-        return scipy.sparse.csr_array(
-            (scores[keep_mask], (array.row[keep_mask], array.col[keep_mask])),
-            shape=array.shape,
-        )
-    
-    else: # dense matrix
-        out = array * LOG10_2 - row_logs[:, np.newaxis] - col_logs[np.newaxis, :]
-        return out * (out > 0)
-    
+    # A cell with no score would get a negative EFI score, which is clamped to 0, so only
+    # the stored cells need computing.
+    array = scipy.sparse.coo_array(array)
+    # Sum the two length terms first: addition commutes exactly, so a symmetric score
+    # matrix gives an exactly symmetric result (and is stored as a triangle).
+    scores = array.data * LOG10_2 - (row_logs[array.row] + col_logs[array.col])
+    keep_mask = scores > 0
+    return scipy.sparse.csr_array(
+        (scores[keep_mask], (array.row[keep_mask], array.col[keep_mask])),
+        shape=array.shape,
+    )
+
 def efi_score_dist(array, row_lengths=None, col_lengths=None):
     """
         1 - (efi_score / min(row_max, col_max))
     """
-    out = efi_score(array, row_lengths=row_lengths, col_lengths=col_lengths)
-    if is_sparse(out): #sparse matrix
-            out = out.toarray()
-    return 1 - (out/(np.minimum( out.max(axis=1)[:,np.newaxis], out.max(axis=0)[np.newaxis,:] ) ) )
-        
-        
+    return score_dist(efi_score(array, row_lengths=row_lengths, col_lengths=col_lengths))
 
-def score_dist(array, row_lengths=None, col_lengths=None): 
+
+def score_dist(array, row_lengths=None, col_lengths=None):
     """
     1 - (score / min(row_max, col_max))
+
+    Returns a dense numpy array: a distance matrix has a value in (nearly) every cell.
     """
-    if is_sparse(array): #sparse matrix
-        array = array.toarray()
-        # raise ValueError("Sparse distance matrices not implemented.")
-        # array = scipy.sparse.coo_matrix(array) 
-        # rowmaxes = dict()
-        # rowmax_coo = array.max(axis=1)
-        # for r,c,v in zip(rowmax_coo.row, rowmax_coo.col, rowmax_coo.data):
-        #     rowmaxes[r] = v
-
-        # print(rowmaxes)
-        # colmaxes = dict()        
-        # colmax_coo = array.max(axis=0)
-        # for r,c,v in zip(colmax_coo.row, colmax_coo.col, colmax_coo.data):
-        #     colmaxes[c] = v
-        # print(colmaxes)
-
-        # out = scipy.sparse.dok_array(array.shape,dtype=np.float64)
-        # for r,c,v in zip(array.row, array.col, array.data):
-        #     print(r,c,v)
-        #     new_val = 1 - (v / min(rowmaxes[r], colmaxes[c]))
-        #     if new_val != 0:
-        #         out[r, c] = new_val
-        # return out
-    
-    #dense matrix
     #TODO: in https://doi.org/10.1093/nar/gkaa635, they use -ln( (score / min(row_max, col_max)) ), instead of 1 - ...
     #       unsure whether we should use the linear or log version.
-    return 1 - (array/(np.minimum( array.max(axis=1)[:,np.newaxis], array.max(axis=0)[np.newaxis,:] ) ) )
+    row_max, col_max = _axis_maxes(array)
+    array = array.toarray() if scipy.sparse.issparse(array) else np.asarray(array)
+    return 1 - (array / np.minimum(row_max[:, np.newaxis], col_max[np.newaxis, :]))
 
 
 MODES = { 
@@ -155,7 +119,7 @@ def apply_lower_bound(array, lower_bound):
         return array
 
     if scipy.sparse.issparse(array):
-        out = scipy.sparse.csr_array(array)
+        out = scipy.sparse.csr_array(array, copy=True)
         out.data[out.data <= lower_bound] = 0
         out.eliminate_zeros()
         return out
@@ -169,15 +133,14 @@ def transform_matrix(array, mode, row_lengths=None, col_lengths=None):
     """
     Transform an array to a different mode.
     """
-    if mode == "rank":
-        return scipy.stats.rankdata(array, method='min', axis=1)
-    elif mode == "score":
+    if mode == "score":
         return array
     elif mode == "bool":
         return (array > 0).astype(np.int8)
     else:
         return MODES[mode](array, row_lengths=row_lengths, col_lengths=col_lengths)
-    
+
+
 def main(argv):
     parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
 
@@ -185,11 +148,7 @@ def main(argv):
 
     parser.add_argument("--input_type", choices=set(MODES.keys()).union({None}), default=None, help="If the type of the input matrix is not specified, specify the type of input matrix. Default: None")
     
-    parser.add_argument("--dense", type=str, default=None, help="Write a dense distance matrix hdf5 file to this path.")
-    
-    parser.add_argument("--dense_text", type=str, default=None, help="Write a dense distance matrix tsv file to this path.")
-    
-    parser.add_argument("--sparse", type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
+    add_matrix_output_arguments(parser, noun="transformed matrix")
 
     parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=set(MODES.keys()).union({PASS_THROUGH_MODE}), 
                         help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: none")
@@ -197,6 +156,8 @@ def main(argv):
     parser.add_argument('--lb', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
     add_sparsify_arguments(parser, requirements="Uses the post-transform values, except that --mode bool selects on the scores and then keeps the selected cells as 1; requires a square, non-distance matrix.")
+
+    add_symmetrize_argument(parser, extra_help="Applied before --mode; requires a square matrix with the same row and column labels, holding similarity (not *_dist) values. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
     add_max_output_gb_argument(parser)
     
@@ -209,19 +170,7 @@ def main(argv):
 
 
 
-    if params.dense is not None and get_file_type(params.dense) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
-    if params.sparse is not None and get_file_type(params.sparse) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
-    dense = params.dense
-    dense_text = params.dense_text
-    sparse = params.sparse
-
-    if ((dense is None) and (dense_text is None) and (sparse is None)):
-        raise ValueError("No output specified! Please specify at least one of: dense, dense_text, sparse")
-
-    if sparse is not None and params.mode == "score_dist":
-        raise ValueError("Sparse distance matrices not implemented.")
+    hdf, dense_text = resolve_matrix_outputs(params)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
@@ -236,6 +185,17 @@ def main(argv):
 
     requested_mode = None if params.mode == PASS_THROUGH_MODE else params.mode
     sparsify = sparsify_requested(params.mst, params.knn)
+
+    if params.symmetrize != "none":
+        if sparsify:
+            raise ValueError(f"{sparsify_option_label(params.mst, params.knn)} output is always max-symmetric, "
+                             f"so --symmetrize {params.symmetrize} cannot be applied on top of it.")
+        if not matrix.symmetric_labels:
+            raise ValueError("--symmetrize requires a square matrix with the same row and column labels.")
+        if is_distance_data_type(matrix.data_type):
+            raise ValueError(f"--symmetrize reconciles similarity values; the input is a '{matrix.data_type}' distance matrix. "
+                             "Symmetrize the score matrix, then convert it.")
+        matrix.data = symmetrize_matrix(matrix.data, params.symmetrize)
 
     if requested_mode is not None:
         if matrix.data_type == "":
@@ -263,52 +223,20 @@ def main(argv):
                                       lower_bound=0 if params.lb is None else params.lb)
 
     if params.lb is not None:
+        if is_distance_data_type(matrix.data_type):
+            raise ValueError(f"--lb zeroes out low values, which in a '{matrix.data_type}' (distance) matrix are the "
+                             "closest pairs (0 means identical). Apply --lb to the score matrix instead.")
         matrix.data = apply_lower_bound(matrix.data, params.lb)
 
     ### Run
     try:
-        if dense is not None:
-            enforce_matrix_output_limit(
-                output_type="dense",
-                matrix=matrix.data,
-                row_names=matrix.rows,
-                col_names=matrix.columns,
-                row_lengths=matrix.row_lengths,
-                col_lengths=matrix.column_lengths,
-                data_type=matrix.data_type,
-                max_output_bytes=max_output_bytes,
-                output_path=dense,
-                mitigation_options=["--sparse", "--lb", "--mst", "--knn"],
-            )
-            matrix.write(dense, "dense")
-        if dense_text is not None:
-            enforce_matrix_output_limit(
-                output_type="dense_text",
-                matrix=matrix.data,
-                row_names=matrix.rows,
-                col_names=matrix.columns,
-                row_lengths=matrix.row_lengths,
-                col_lengths=matrix.column_lengths,
-                data_type=matrix.data_type,
-                max_output_bytes=max_output_bytes,
-                output_path=dense_text,
-                mitigation_options=["--sparse", "--lb", "--mst", "--knn"],
-            )
-            matrix.write(dense_text,"dense_text")
-        if sparse:
-            enforce_matrix_output_limit(
-                output_type="sparse",
-                matrix=matrix.data,
-                row_names=matrix.rows,
-                col_names=matrix.columns,
-                row_lengths=matrix.row_lengths,
-                col_lengths=matrix.column_lengths,
-                data_type=matrix.data_type,
-                max_output_bytes=max_output_bytes,
-                output_path=sparse,
-                mitigation_options=["--lb", "--mst", "--knn"],
-            )
-            matrix.write(sparse, "sparse")
+        write_matrix_outputs(
+            matrix.data, matrix.rows, matrix.columns,
+            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+            mitigation_options=["--lb", "--mst", "--knn"],
+            row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths, data_type=matrix.data_type,
+            symmetric=matrix.exactly_symmetric,
+        )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 

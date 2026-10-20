@@ -24,7 +24,7 @@ import pandas as pd
 import pytest
 
 from domainator import build_ssn_viewer
-from domainator.data_matrix import DenseDataMatrix
+from domainator.data_matrix import DataMatrix
 
 # Skip the entire module if Playwright isn't installed (it lives in the
 # optional `browser` extra, not the default `test` extra).
@@ -42,11 +42,11 @@ def _build_embedded_viewer(out_dir):
         [0, 0, 0, 5, 9, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D", "E", "F"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer.html"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
 
     build_ssn_viewer.main([
         "-i", str(input_file),
@@ -74,12 +74,12 @@ def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical
         [0, 0, 0, 5, 9, 0],
     ], dtype=float)
     row_names = ["A", "B", "C", "D", "E", "F"]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_meta.html"
     meta_file = out_dir / "meta.tsv"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
     meta_file.write_text(
         "node_id\tfamily\tscore\n"
         "A\talpha\t1\n"
@@ -113,12 +113,12 @@ def _build_embedded_viewer_many_categories(out_dir, node_count=120):
         data[i, i + 1] = 8.0
         data[i + 1, i] = 8.0
     row_names = [f"n{i:03d}" for i in range(node_count)]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_many.html"
     meta_file = out_dir / "meta.tsv"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
     # One unique family per node -> node_count distinct categorical values.
     lines = ["node_id\tfamily"]
     lines += [f"n{i:03d}\tfam_{i:03d}" for i in range(node_count)]
@@ -237,11 +237,11 @@ def _build_embedded_viewer_dense_random(out_dir, node_count=60):
     for i in range(0, node_count - 1, 17):
         data[i, i + 1] = data[i + 1, i] = 3.0
     row_names = [f"seq_{i:03d}" for i in range(node_count)]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_dense.html"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
         "--html", str(html_file),
@@ -280,11 +280,11 @@ def _build_embedded_viewer_capped(out_dir, node_count=60):
             for j in range(i + 1, end):
                 data[i, j] = data[j, i] = rng.uniform(4, 12)
     row_names = [f"seq_{i:03d}" for i in range(node_count)]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_capped.html"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
         "--html", str(html_file),
@@ -329,11 +329,11 @@ def _build_embedded_viewer_two_bead(out_dir):
                                 ("F", "G", 10.0), ("A", "B", 10.0)]:
         data[index[left], index[right]] = weight
         data[index[right], index[left]] = weight
-    matrix = DenseDataMatrix(data, names, names)
+    matrix = DataMatrix(data, names, names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_two_bead.html"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file), "--html", str(html_file), "--embed_data",
         "--name", "Two Bead Viewer",
@@ -366,11 +366,11 @@ def _build_embedded_viewer_product_metric(out_dir):
             for j in range(i + 1, end):
                 data[i, j] = data[j, i] = rng.uniform(4, 12)
     names = [f"seq_{i:03d}" for i in range(node_count)]
-    matrix = DenseDataMatrix(data, names, names)
+    matrix = DataMatrix(data, names, names)
 
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_product.html"
-    matrix.write(str(input_file), output_type="dense")
+    matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file), "--html", str(html_file), "--embed_data",
         "--name", "Product Metric Viewer", "--merge_impact_metric", "product",
@@ -2226,7 +2226,7 @@ def _set_threshold(page, threshold_value):
 def test_cluster_column_matches_build_ssn(meta_page):
     """The column the button writes is the one `build_ssn.py --cluster` writes."""
     from domainator.build_ssn import cluster_labels_from_tree
-    from domainator.data_matrix import DenseDataMatrix, MaxTree
+    from domainator.data_matrix import DataMatrix, MaxTree
 
     page = meta_page
     _set_threshold(page, 6.0)
@@ -2250,7 +2250,7 @@ def test_cluster_column_matches_build_ssn(meta_page):
         [0, 0, 0, 5, 9, 0],
     ], dtype=float)
     names = ["A", "B", "C", "D", "E", "F"]
-    expected = cluster_labels_from_tree(MaxTree(DenseDataMatrix(data, names, names)), threshold)
+    expected = cluster_labels_from_tree(MaxTree(DataMatrix(data, names, names)), threshold)
 
     assert viewer_numbers == [int(v) for v in expected]
     assert page.pageerrors == []
@@ -5693,7 +5693,7 @@ def _build_embedded_viewer_spindles(out_dir):
 
     input_file = out_dir / "spindles.hdf5"
     html_file = out_dir / "viewer_spindles.html"
-    DenseDataMatrix(data, names, names).write(str(input_file), output_type="dense")
+    DataMatrix(data, names, names).write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
         "--html", str(html_file),
@@ -6086,7 +6086,7 @@ def _build_embedded_viewer_crowded(out_dir, blob_count=10, blob_size=20):
     names = [f"n{i:03d}" for i in range(node_count)]
     input_file = out_dir / "crowded.hdf5"
     html_file = out_dir / "viewer_crowded.html"
-    DenseDataMatrix(data, names, names).write(str(input_file), output_type="dense")
+    DataMatrix(data, names, names).write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
         "--html", str(html_file),

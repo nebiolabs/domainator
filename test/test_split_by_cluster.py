@@ -6,7 +6,7 @@ import pytest
 
 from domainator import build_ssn, split_by_cluster
 from domainator.Bio import SeqIO
-from domainator.data_matrix import DenseDataMatrix
+from domainator.data_matrix import DataMatrix
 from domainator.utils import parse_seqfiles, pyhmmer_decode
 
 
@@ -17,7 +17,7 @@ def _write_test_matrix(matrix_path, labels, output_type="dense_text"):
     if len(labels) >= 4:
         data[2, 3] = data[3, 2] = 9.0
 
-    matrix = DenseDataMatrix(data, labels, labels, data_type="score")
+    matrix = DataMatrix(data, labels, labels, data_type="score")
     matrix.write(matrix_path, output_type)
     return matrix
 
@@ -57,7 +57,7 @@ def _read_cm_names(path):
 
 @pytest.mark.parametrize(
     "matrix_output_type,matrix_name",
-    [("dense_text", "matrix.tsv"), ("dense", "matrix.dense.hdf5"), ("sparse", "matrix.sparse.hdf5")],
+    [("dense_text", "matrix.tsv"), ("hdf", "matrix.hdf5")],
 )
 def test_split_by_cluster_genbank_matrix_formats(shared_datadir, tmp_path, matrix_output_type, matrix_name):
     input_path = shared_datadir / "FeSOD_20.gb"
@@ -256,7 +256,7 @@ def test_split_by_cluster_refuses_to_overwrite(shared_datadir, tmp_path):
 
 def test_split_by_cluster_reuses_build_ssn_mst_cut_logic(tmp_path):
     labels = ["A", "B", "C", "D", "E"]
-    matrix = DenseDataMatrix(
+    matrix = DataMatrix(
         np.array(
             [
                 [0, 9, 0, 0, 0],

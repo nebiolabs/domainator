@@ -141,7 +141,7 @@ Two knobs matter at scale:
 structural alignment whose output is a data matrix rather than annotations.
 
 ```bash
-structure_dist.py -i my_structures/ --mode tmscore --alignment_type 1 --dense tm.hdf5
+structure_dist.py -i my_structures/ --mode tmscore --alignment_type 1 --hdf tm.hdf5
 build_tree.py -i tm.hdf5 --newick tree.nwk
 ```
 
@@ -203,14 +203,14 @@ structure_to_genbank.py -i my_structures/ -o chains.gb
 
 domainate.py -i chains.gb -r pfam.hmm -o annotated.gb        # annotate with HMM profiles
 domain_search.py -i chains.gb -r query.hmm -o hits.gb        # search them by sequence
-seq_dist.py -i chains.gb -r chains.gb --sparse distances.hdf5   # by sequence, not fold
+seq_dist.py -i chains.gb -r chains.gb --hdf distances.hdf5   # by sequence, not fold
 deduplicate_genbank.py -i chains.gb -o nonredundant.gb
 ```
 
 The three genbank-producing structure tools write to stdout when `-o` is omitted or given
 as `-`, so they can be piped into any tool that reads genbank from stdin
-(`structure_dist.py` has no stdout mode: it writes matrix files through `--dense`,
-`--dense_text` and `--sparse`):
+(`structure_dist.py` has no stdout mode: it writes matrix files through `--hdf` and
+`--dense_text`):
 
 ```bash
 structure_to_genbank.py -i my_structures/ -o - | color_genbank.py --color_domains -o colored.gb

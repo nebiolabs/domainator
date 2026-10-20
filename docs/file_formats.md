@@ -227,15 +227,15 @@ detection is avoided for both so that a mis-named file is not mistaken for a dat
 
 ## hdf5
 
-Domainator uses hdf5 files to store data matrices in both dense and sparse formats. Code for reading, writing, and using data matrices is found in the `data_matrix.py` file (which is not executable, but imported by various other scripts).
+Domainator uses hdf5 files to store data matrices in Compressed Sparse Row (CSR) format. Code for reading, writing, and using data matrices is found in the `data_matrix.py` file (which is not executable, but imported by various other scripts). In memory, every matrix is a CSR array, whatever format it was read from.
 
-hdf5 output is generally specified using the `--dense [filename]` or `--sparse [filename]` command line arguments, for example by `seq_dist.py`. For matrix input, the data format is automatically detected.
+hdf5 output is specified using the `--hdf [filename]` command line argument, for example by `seq_dist.py`. (`--sparse` and `--dense` are deprecated aliases for `--hdf`.) For matrix input, the data format is automatically detected.
 
 Domainator data matrix hdf5 files have the following attributes:
 ```python
-ARRAY_TYPE: {DENSE, SPARSE_CSR} # indicates whether the hdf5 file describes a dense or sparse matrix. Sparse matrices are stored in Compressed Sparse Row format.
-SYMMETRIC_LABELS: {True, False} # indicates whether the x and y axis labels are the same
-MATRIX_FILE_VERSION: str # will be incremented on any backwards-compatibility-breaking changes to the matrix format.
+ARRAY_TYPE: {SPARSE_CSR, SPARSE_CSR_UPPER_TRIANGLE, DENSE} # how the values are stored, see below. DENSE is read but no longer written.
+SYMMETRIC_LABELS: {1, 0} # indicates whether the x and y axis labels (and lengths) are the same
+MATRIX_FILE_VERSION: str # "major.minor"; the major version is incremented on any backwards-compatibility-breaking changes to the matrix format. Readers reject an unknown major version.
 (optional) DATA_TYPE: str # describes the type of data in the matrix (e.g. 'score', 'norm_score', 'row_norm_score', 'score_dist', 'bool', 'efi_score')
 ```
 
@@ -243,7 +243,7 @@ Domainator data matrix hdf5 files have the following datasets:
 ```python
 ROW_LABELS: list of str
 COL_LABELS: list of str # not used if SYMMETRIC_LABELS is True
-DENSE_DATA: 2d array of float # used for dense data
+DENSE_DATA: 2d array of float # legacy dense files only
 SPARSE_VALUES: list of float # used for values for CSR sparse data
 SPARSE_CSR_INDICES: list of int # column indices for CSR sparse data
 SPARSE_CSR_INDPTR: list of int # row pointer offsets for CSR sparse data
@@ -251,7 +251,15 @@ SPARSE_CSR_INDPTR: list of int # row pointer offsets for CSR sparse data
 (optional) COL_LENGTHS: list of int # not used if SYMMETRIC LABELS is True
 ```
 
-Sparse matrices are stored as canonical CSR arrays: explicit zero values are removed and indices are sorted when written or loaded. `SPARSE_CSR_INDICES` and `SPARSE_CSR_INDPTR` are written at the narrowest width that can address the matrix (int32 unless the number of rows, columns, or non-zeros exceeds the int32 maximum), so files written by different tools may use different index widths; readers must accept either. Dense files preserve every matrix cell, including zero values, and are usually preferable when most entries are non-zero. Sparse files are usually preferable for sequence similarity graphs or other matrices where most entries are zero.
+Matrices are stored as canonical CSR arrays: explicit zero values are removed and indices are sorted when written or loaded. `SPARSE_CSR_INDICES` and `SPARSE_CSR_INDPTR` are written at the narrowest width that can address the matrix (int32 unless the number of rows, columns, or non-zeros exceeds the int32 maximum), so files written by different tools may use different index widths; readers must accept either.
+
+`ARRAY_TYPE` values:
+
+- `SPARSE_CSR`: the full matrix.
+- `SPARSE_CSR_UPPER_TRIANGLE` (version 1.1): written when the row and column labels (and lengths) are the same and every value equals its transpose exactly. Only the upper triangle, including the diagonal, is stored; readers rebuild the lower triangle by mirroring it. This roughly halves the file. Matrices that are only approximately symmetric (e.g. raw DIAMOND bit scores) are stored in full; use `--symmetrize` on `seq_dist.py`, `structure_dist.py` or `transform_matrix.py` to make them exactly symmetric. Older Domainator versions cannot read this type and fail with an error rather than misreading the file.
+- `DENSE` (version 1.0 only): every cell in `DENSE_DATA`. Still readable; the matrix is converted to CSR on load.
+
+What a missing (zero) cell means depends on `DATA_TYPE`. For similarity scores (`score`, `efi_score`, `bool`, ...) it means "no hit", and the SSN tools treat it as "no edge". For distances (any `DATA_TYPE` ending in `_dist`) it means distance 0, i.e. identical; every other cell is stored, so a distance matrix takes about 1.5 times the space of a dense array, or about 0.75 times when it is symmetric and stored as a triangle. The SSN tools (`build_ssn.py`, `build_ssn_viewer.py`, `matrix_report.py`, `split_by_cluster.py`) refuse distance matrices, and `build_tree.py` uses `DATA_TYPE` to decide whether to convert scores into distances.
 
 Threshold tables derived from a matrix (`matrix_report.py`, `build_ssn_viewer.py`) use
 one row per distinct maximum-spanning-tree edge weight, and every row describes the graph
@@ -503,6 +511,8 @@ Two rules make this section survive UI churn, and changes to it should preserve 
 
 In addition to hdf5 formatted tabular data, Domainator also supports plain text dense matrices. 
 Plain text matrix output is generally specified using the `--dense_text [filename]` command line argument, for example by `seq_dist.py`. For matrix input, the data format is automatically detected.
+
+Plain text is also the way to bring in score or distance matrices produced outside Domainator. It is converted to the same in-memory CSR representation on load. A text file records no `DATA_TYPE`, so `build_tree.py` assumes its values are distances unless told otherwise with `--distance score_dist`.
 
 Domainator plain text matrices are tab-separated and require row and column labels. For example:
 ```

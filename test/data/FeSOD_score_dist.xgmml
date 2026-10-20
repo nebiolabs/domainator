@@ -391,31 +391,31 @@
     <graphics type="ELLIPSE" x="0.0" y="0.0" w="25" h="25" z="0.0" />
   </node>
   <edge id="e0" label="e0" source="n20" target="n21">
-    <att type="real" name="TREE_DIST" value="0.09279792790039743" />
+    <att type="real" name="TREE_DIST" value="0.0929078985840287" />
   </edge>
   <edge id="e1" label="e1" source="n21" target="n22">
-    <att type="real" name="TREE_DIST" value="0.07666939447571497" />
+    <att type="real" name="TREE_DIST" value="0.07598812081074424" />
   </edge>
   <edge id="e2" label="e2" source="n22" target="n6">
-    <att type="real" name="TREE_DIST" value="0.5515717810227428" />
+    <att type="real" name="TREE_DIST" value="0.5514170434788691" />
   </edge>
   <edge id="e3" label="e3" source="n22" target="n23">
-    <att type="real" name="TREE_DIST" value="0.0413279964564387" />
+    <att type="real" name="TREE_DIST" value="0.04117325891256496" />
   </edge>
   <edge id="e4" label="e4" source="n23" target="n17">
     <att type="real" name="TREE_DIST" value="0.5102437845663041" />
   </edge>
   <edge id="e5" label="e5" source="n23" target="n24">
-    <att type="real" name="TREE_DIST" value="0.05817867308148261" />
+    <att type="real" name="TREE_DIST" value="0.059699959385730195" />
   </edge>
   <edge id="e6" label="e6" source="n24" target="n25">
-    <att type="real" name="TREE_DIST" value="0.04802402485149271" />
+    <att type="real" name="TREE_DIST" value="0.046930724311087135" />
   </edge>
   <edge id="e7" label="e7" source="n25" target="n10">
-    <att type="real" name="TREE_DIST" value="0.4040410866333288" />
+    <att type="real" name="TREE_DIST" value="0.4036131008694868" />
   </edge>
   <edge id="e8" label="e8" source="n25" target="n26">
-    <att type="real" name="TREE_DIST" value="0.047880911098496126" />
+    <att type="real" name="TREE_DIST" value="0.04745292533465412" />
   </edge>
   <edge id="e9" label="e9" source="n26" target="n4">
     <att type="real" name="TREE_DIST" value="0.3561601755348327" />
@@ -424,70 +424,70 @@
     <att type="real" name="TREE_DIST" value="0.3561601755348327" />
   </edge>
   <edge id="e11" label="e11" source="n24" target="n27">
-    <att type="real" name="TREE_DIST" value="0.008658829593450657" />
+    <att type="real" name="TREE_DIST" value="0.009518765650014971" />
   </edge>
   <edge id="e12" label="e12" source="n27" target="n2">
-    <att type="real" name="TREE_DIST" value="0.4434062818913709" />
+    <att type="real" name="TREE_DIST" value="0.441025059530559" />
   </edge>
   <edge id="e13" label="e13" source="n27" target="n14">
-    <att type="real" name="TREE_DIST" value="0.4434062818913709" />
+    <att type="real" name="TREE_DIST" value="0.441025059530559" />
   </edge>
   <edge id="e14" label="e14" source="n21" target="n28">
-    <att type="real" name="TREE_DIST" value="0.06928528791396849" />
+    <att type="real" name="TREE_DIST" value="0.06935642718538004" />
   </edge>
   <edge id="e15" label="e15" source="n28" target="n5">
-    <att type="real" name="TREE_DIST" value="0.5589558875844893" />
+    <att type="real" name="TREE_DIST" value="0.5580487371042333" />
   </edge>
   <edge id="e16" label="e16" source="n28" target="n29">
-    <att type="real" name="TREE_DIST" value="0.01625137788338815" />
+    <att type="real" name="TREE_DIST" value="0.015868611252109588" />
   </edge>
   <edge id="e17" label="e17" source="n29" target="n0">
-    <att type="real" name="TREE_DIST" value="0.5427045097011012" />
+    <att type="real" name="TREE_DIST" value="0.5421801258521237" />
   </edge>
   <edge id="e18" label="e18" source="n29" target="n30">
-    <att type="real" name="TREE_DIST" value="0.02706310726400385" />
+    <att type="real" name="TREE_DIST" value="0.027893027848383767" />
   </edge>
   <edge id="e19" label="e19" source="n30" target="n16">
-    <att type="real" name="TREE_DIST" value="0.5156414024370973" />
+    <att type="real" name="TREE_DIST" value="0.51428709800374" />
   </edge>
   <edge id="e20" label="e20" source="n30" target="n31">
-    <att type="real" name="TREE_DIST" value="0.0815796040006962" />
+    <att type="real" name="TREE_DIST" value="0.08324635856053175" />
   </edge>
   <edge id="e21" label="e21" source="n31" target="n19">
-    <att type="real" name="TREE_DIST" value="0.43406179843640114" />
+    <att type="real" name="TREE_DIST" value="0.4310407394432082" />
   </edge>
   <edge id="e22" label="e22" source="n31" target="n32">
-    <att type="real" name="TREE_DIST" value="0.09749110655844673" />
+    <att type="real" name="TREE_DIST" value="0.09532952328506472" />
   </edge>
   <edge id="e23" label="e23" source="n32" target="n3">
-    <att type="real" name="TREE_DIST" value="0.3365706918779544" />
+    <att type="real" name="TREE_DIST" value="0.3357112161581435" />
   </edge>
   <edge id="e24" label="e24" source="n32" target="n9">
-    <att type="real" name="TREE_DIST" value="0.3365706918779544" />
+    <att type="real" name="TREE_DIST" value="0.3357112161581435" />
   </edge>
   <edge id="e25" label="e25" source="n20" target="n33">
-    <att type="real" name="TREE_DIST" value="0.01744311074122662" />
+    <att type="real" name="TREE_DIST" value="0.016823962166680806" />
   </edge>
   <edge id="e26" label="e26" source="n33" target="n13">
-    <att type="real" name="TREE_DIST" value="0.7035959926576286" />
+    <att type="real" name="TREE_DIST" value="0.7034891007069612" />
   </edge>
   <edge id="e27" label="e27" source="n33" target="n34">
-    <att type="real" name="TREE_DIST" value="0.07643071826381254" />
+    <att type="real" name="TREE_DIST" value="0.07729974306374054" />
   </edge>
   <edge id="e28" label="e28" source="n34" target="n11">
-    <att type="real" name="TREE_DIST" value="0.6271652743938161" />
+    <att type="real" name="TREE_DIST" value="0.6261893576432207" />
   </edge>
   <edge id="e29" label="e29" source="n34" target="n35">
-    <att type="real" name="TREE_DIST" value="0.14038787598150326" />
+    <att type="real" name="TREE_DIST" value="0.14012428233135915" />
   </edge>
   <edge id="e30" label="e30" source="n35" target="n12">
-    <att type="real" name="TREE_DIST" value="0.4867773984123128" />
+    <att type="real" name="TREE_DIST" value="0.48606507531186155" />
   </edge>
   <edge id="e31" label="e31" source="n35" target="n36">
-    <att type="real" name="TREE_DIST" value="0.0744336236300433" />
+    <att type="real" name="TREE_DIST" value="0.07399081453864403" />
   </edge>
   <edge id="e32" label="e32" source="n36" target="n37">
-    <att type="real" name="TREE_DIST" value="0.04326694283100874" />
+    <att type="real" name="TREE_DIST" value="0.04299742882195673" />
   </edge>
   <edge id="e33" label="e33" source="n37" target="n1">
     <att type="real" name="TREE_DIST" value="0.3690768319512608" />
@@ -496,7 +496,7 @@
     <att type="real" name="TREE_DIST" value="0.3690768319512608" />
   </edge>
   <edge id="e35" label="e35" source="n36" target="n38">
-    <att type="real" name="TREE_DIST" value="0.01315039668353224" />
+    <att type="real" name="TREE_DIST" value="0.012880882674480232" />
   </edge>
   <edge id="e36" label="e36" source="n38" target="n7">
     <att type="real" name="TREE_DIST" value="0.3991933780987373" />

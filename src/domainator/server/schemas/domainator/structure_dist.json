@@ -45,21 +45,12 @@
       ]
     },
     {
-      "name": "Sparse matrix",
-      "parameter": "sparse",
-      "help": "Write a sparse matrix hdf5 file to this path. Not available for the *_dist modes.",
+      "name": "HDF5 matrix",
+      "parameter": "hdf",
+      "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--sparse"
-      ]
-    },
-    {
-      "name": "Dense matrix",
-      "parameter": "dense",
-      "help": "Write a dense matrix hdf5 file to this path.",
-      "type": "output",
-      "flags": [
-        "--dense"
+        "--hdf"
       ]
     },
     {
@@ -177,7 +168,7 @@
     {
       "name": "Dense text matrix",
       "parameter": "dense_text",
-      "help": "Write a dense matrix tsv file to this path.",
+      "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
         "--dense_text"

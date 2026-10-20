@@ -9,7 +9,7 @@ import pytest
 
 from domainator import enum_report, hmmer_report, summary_report, matrix_report
 from domainator import build_ssn_viewer, ssn_navigator
-from domainator.data_matrix import DenseDataMatrix
+from domainator.data_matrix import DataMatrix
 from domainator import ssn_bundle
 from domainator.ssn_bundle import (
     clusters_at_threshold,
@@ -101,9 +101,9 @@ def _build_bundle(output_dir):
         [0, 0, 4, 0],
     ], dtype=float)
     names = ["A", "B", "C", "D"]
-    matrix = DenseDataMatrix(data, names, names)
+    matrix = DataMatrix(data, names, names)
     matrix_file = os.path.join(output_dir, "m.hdf5")
-    matrix.write(matrix_file, output_type="dense")
+    matrix.write(matrix_file, output_type="hdf")
     meta = os.path.join(output_dir, "meta.tsv")
     pd.DataFrame(
         {"category": ["alpha", "alpha", "beta", "gamma"], "count": [1, 2, 3, 4]},
@@ -199,7 +199,7 @@ def test_node_membership_matches_the_full_partition_at_every_cut():
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         bundle_path = os.path.join(output_dir, "net.dsnv")
-        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
 
@@ -263,7 +263,7 @@ def test_clusters_at_threshold_matches_build_ssn_clustering():
 
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
-        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
         bundle_path = os.path.join(output_dir, "net.dsnv")
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
@@ -314,7 +314,7 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
 
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
-        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
         bundle_path = os.path.join(output_dir, "net.dsnv")
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
@@ -356,7 +356,7 @@ def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
 
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
-        DenseDataMatrix(data, names, names).write(matrix_file, output_type="dense")
+        DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
         bundle_path = os.path.join(output_dir, "net.dsnv")
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)

@@ -98,20 +98,20 @@ plot_contigs.py -i annotated_proteins_colored.gb --html proteins_plot.html
 ```bash
 enum_report.py -i example_files/FeSOD_20.gb --length --sequence -o metadata.tsv
 
-# --dense_text gives a nice human readable score matrix files, but it can be very large, frequently you'd prefer --sparse or --dense for more efficient files.
+# --dense_text gives a nice human readable score matrix files, but it can be very large, frequently you'd prefer --hdf for more efficient files.
 # --mode score can be later converted to various other kinds of scores, like efi_score and efi_score_dist, etc. If you only want one output, you can set --mode to that directly.
-seq_dist.py -i example_files/FeSOD_20.gb -r example_files/FeSOD_20.gb --sparse scores.sparse.hdf5 --mode score
-transform_matrix.py -i scores.sparse.hdf5 --dense efi_score_dist.dense.hdf5 --mode efi_score_dist
+seq_dist.py -i example_files/FeSOD_20.gb -r example_files/FeSOD_20.gb --hdf scores.hdf5 --mode score
+transform_matrix.py -i scores.hdf5 --hdf efi_score_dist.hdf5 --mode efi_score_dist
 
 # Domainator doesn't have a newick renderer, but the xgmml output can be opened in cytoscape, you'll need to apply a layout after opening it.
-build_tree.py -i efi_score_dist.dense.hdf5 --newick tree.nwk --xgmml tree.xgmml --metadata metadata.tsv
+build_tree.py -i efi_score_dist.hdf5 --newick tree.nwk --xgmml tree.xgmml --metadata metadata.tsv
 
 
-transform_matrix.py -i scores.sparse.hdf5 --sparse efi_scores.sparse.hdf5 --mode efi_score
+transform_matrix.py -i scores.hdf5 --hdf efi_scores.hdf5 --mode efi_score
 
 # shows a score histogram to give you guess at where to set the --lb for the ssn. You'll probably still have to iterate a few times on build_ssn.py
 # --knn_projection adds the edge counts build_ssn.py --mst --knn K would keep at each threshold, but it uses extra memory for neighbor rankings and threshold-by-k counts. Use --profile_stages to inspect those sizes for large matrices.
-matrix_report.py -i efi_scores.sparse.hdf5 -o /dev/stdout
+matrix_report.py -i efi_scores.hdf5 -o /dev/stdout
 
 # you can open sequence_similarity_network.xgmml in Cytoscape, and apply force directed layout to get a nice visualization
 # --cluster creates a new metadata column called 'SSN_cluster', following connectivity. 
@@ -167,17 +167,17 @@ nhmmer rather than against individual CDSs.
 hmmer_report.py -i example_files/full_CDA_pfam_clan.hmm --length --acc --desc --consensus -o CDS_metadata.tsv
 
 # --mode score can be later converted to various other kinds of scores, like efi_score and efi_score_dist, etc. If you only want one output, you can set --mode to that directly.
-seq_dist.py -i example_files/full_CDA_pfam_clan.hmm -r example_files/full_CDA_pfam_clan.hmm --algorithm hmmer_compare --mode score --sparse CDA_score.sparse.hdf5
-transform_matrix.py -i CDA_score.sparse.hdf5 --dense CDA_efi_score_dist.dense.hdf5 --mode efi_score_dist
+seq_dist.py -i example_files/full_CDA_pfam_clan.hmm -r example_files/full_CDA_pfam_clan.hmm --algorithm hmmer_compare --mode score --hdf CDA_score.hdf5
+transform_matrix.py -i CDA_score.hdf5 --hdf CDA_efi_score_dist.hdf5 --mode efi_score_dist
 
 # Domainator doesn't have a newick renderer, but the xgmml output can be opened in cytoscape, you'll need to apply a layout after opening it.
-build_tree.py -i CDA_efi_score_dist.dense.hdf5 --newick tree.nwk --xgmml tree.xgmml --metadata CDS_metadata.tsv
+build_tree.py -i CDA_efi_score_dist.hdf5 --newick tree.nwk --xgmml tree.xgmml --metadata CDS_metadata.tsv
 
 
-transform_matrix.py -i CDA_score.sparse.hdf5 --sparse CDA_efi_score.sparse.hdf5 --mode efi_score
+transform_matrix.py -i CDA_score.hdf5 --hdf CDA_efi_score.hdf5 --mode efi_score
 # shows a score histogram to give you guess at where to set the --lb for the ssn. You'll probably still have to iterate a few times on build_ssn.py
 # --knn_projection adds the edge counts build_ssn.py --mst --knn K would keep at each threshold, but it uses extra memory for neighbor rankings and threshold-by-k counts. Use --profile_stages to inspect those sizes for large matrices.
-matrix_report.py -i CDA_efi_score.sparse.hdf5 -o /dev/stdout
+matrix_report.py -i CDA_efi_score.hdf5 -o /dev/stdout
 
 # you can open profile_similarity_network.xgmml in Cytoscape, and apply force directed layout to get a nice visualization
 # --cluster creates a new metadata column called 'SSN_cluster', following connectivity. 

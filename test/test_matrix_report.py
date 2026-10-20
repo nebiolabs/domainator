@@ -6,7 +6,7 @@ import io
 import json
 import re
 from domainator import matrix_report
-from domainator.data_matrix import DataMatrix, DenseDataMatrix, SparseDataMatrix, mst_knn_edge_counts_by_threshold
+from domainator.data_matrix import DataMatrix, mst_knn_edge_counts_by_threshold
 from domainator.matrix_report import MaxTree
 import tempfile
 import pytest
@@ -45,7 +45,7 @@ def test_matrix_report_1(shared_datadir, input_file):
 
 
 def test_matrix_report_rejects_invalid_merge_impact_metric():
-    matrix = DenseDataMatrix(np.array([[0.0, 1.0], [1.0, 0.0]]), ['A', 'B'], ['A', 'B'])
+    matrix = DataMatrix(np.array([[0.0, 1.0], [1.0, 0.0]]), ['A', 'B'], ['A', 'B'])
 
     with pytest.raises(ValueError, match="merge_impact_metric must be one of"):
         matrix_report.matrix_report(matrix, io.StringIO(), None, merge_impact_metric="bad")
@@ -63,7 +63,7 @@ class TestInteractiveHTML:
             [5, 8, 0]
         ])
         row_names = ['A', 'B', 'C']
-        matrix = DenseDataMatrix(data, row_names, row_names)
+        matrix = DataMatrix(data, row_names, row_names)
         
         tree = MaxTree(matrix)
         viz_data = tree.export_for_interactive_viz()
@@ -92,14 +92,14 @@ class TestInteractiveHTML:
             [3, 6, 9, 0]
         ])
         row_names = ['A', 'B', 'C', 'D']
-        matrix = DenseDataMatrix(data, row_names, row_names)
+        matrix = DataMatrix(data, row_names, row_names)
         
         with tempfile.TemporaryDirectory() as output_dir:
             input_file = os.path.join(output_dir, "test_matrix.hdf5")
             output_file = os.path.join(output_dir, "interactive_test.html")
             
             # Save the matrix
-            matrix.write(input_file, output_type="dense")
+            matrix.write(input_file, output_type="hdf")
             
             matrix_report.main([
                 "-i", input_file,
@@ -131,7 +131,7 @@ def test_mst_knn_edge_counts_by_threshold_monotonic():
         [7, 5, 9, 0],
     ])
     row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
     tree = MaxTree(matrix)
 
     counts = mst_knn_edge_counts_by_threshold(matrix, tree, 3)
@@ -152,8 +152,8 @@ def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():
         [4, 0, 9, 5, 0],
     ], dtype=float)
     labels = ['A', 'B', 'C', 'D', 'E']
-    dense_matrix = DenseDataMatrix(data, labels, labels)
-    sparse_matrix = SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels)
+    dense_matrix = DataMatrix(data, labels, labels)
+    sparse_matrix = DataMatrix(scipy.sparse.csr_array(data), labels, labels)
     dense_tree = MaxTree(dense_matrix)
     sparse_tree = MaxTree(sparse_matrix)
 
@@ -223,14 +223,14 @@ def test_matrix_report_includes_merge_event_outputs():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         out_txt = os.path.join(output_dir, "matrix_report_test.txt")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "-o", out_txt,
@@ -308,14 +308,14 @@ def test_matrix_report_supports_product_merge_impact_metric():
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         out_txt = os.path.join(output_dir, "matrix_report_test.txt")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "-o", out_txt,
@@ -366,13 +366,13 @@ def test_matrix_report_max_merge_events_filters_html_payload():
         [0, 0, 0, 0, 8, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
@@ -421,12 +421,12 @@ def test_matrix_report_caps_merge_events_on_a_network_large_enough_to_bite():
             for j in range(i + 1, end):
                 data[i, j] = data[j, i] = rng.uniform(4, 12)
     row_names = [f"n{i:02d}" for i in range(node_count)]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file, "--html", out_html, "--max_merge_events", "5",
         ])
@@ -457,13 +457,13 @@ def test_matrix_report_max_merge_events_zero_includes_all_html_events():
         [0, 0, 0, 0, 8, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
@@ -491,13 +491,13 @@ def test_matrix_report_text_merge_events_limited_to_top_25():
         data[idx + 1, idx] = weight
 
     row_names = [f'N{idx}' for idx in range(n_nodes)]
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_txt = os.path.join(output_dir, "matrix_report_test.txt")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "-o", out_txt,
@@ -525,13 +525,13 @@ def test_matrix_report_text_merge_events_are_sorted_by_from_threshold():
         [0, 0, 0, 0, 8, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_txt = os.path.join(output_dir, "matrix_report_test.txt")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "-o", out_txt,
@@ -557,13 +557,13 @@ def test_matrix_report_slider_stops_are_proportionally_spaced():
         [0, 0, 0, 1, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D', 'E']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
@@ -587,13 +587,13 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
@@ -625,13 +625,13 @@ def test_matrix_report_progress_emits_live_updates(capsys):
         [0, 0, 4, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
 
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
             "--html", out_html,
@@ -672,8 +672,8 @@ def test_threshold_tables_match_build_ssn_lb():
     from domainator.build_ssn import iter_default_ssn_edges, cluster_labels_from_graph
 
     data, labels = _tie_group_matrix()
-    for matrix in (DenseDataMatrix(data, labels, labels, data_type="score"),
-                   SparseDataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")):
+    for matrix in (DataMatrix(data, labels, labels, data_type="score"),
+                   DataMatrix(scipy.sparse.csr_array(data), labels, labels, data_type="score")):
         tree = MaxTree(matrix)
 
         # a tie group is present: two MST edges share a weight, so per-MST-edge rows
@@ -703,7 +703,7 @@ def test_mst_knn_counts_match_build_ssn_lb_mst_knn():
     from domainator.data_matrix import mst_knn_edge_index_dict
 
     data, labels = _tie_group_matrix()
-    matrix = DenseDataMatrix(data, labels, labels, data_type="score")
+    matrix = DataMatrix(data, labels, labels, data_type="score")
     tree = MaxTree(matrix)
     max_k = 3
 
@@ -741,7 +741,7 @@ def test_slider_reaches_the_fully_merged_network():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
-        DenseDataMatrix(data, row_names, row_names).write(input_file, output_type="dense")
+        DataMatrix(data, row_names, row_names).write(input_file, output_type="hdf")
         matrix_report.main(["-i", input_file, "--html", out_html])
         payload = _embedded_report_payload(open(out_html).read())
         tree = MaxTree(DataMatrix.from_file(input_file))
@@ -789,7 +789,7 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         bundle_path = os.path.join(output_dir, "net.dsnv")
-        DenseDataMatrix(data, row_names, row_names).write(input_file, output_type="dense")
+        DataMatrix(data, row_names, row_names).write(input_file, output_type="hdf")
         matrix_report.main(["-i", input_file, "--html", out_html])
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_path])
         report_stops = _embedded_report_payload(open(out_html).read())['slider_stops']
@@ -822,7 +822,7 @@ def test_matrix_report_hover_labels_follow_the_merge_impact_metric():
         [0, 0, 0, 0, 8, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     expected = {
         'min_child': ('split(s) of %{y} nodes', '%{customdata[2]} nodes total',
@@ -832,7 +832,7 @@ def test_matrix_report_hover_labels_follow_the_merge_impact_metric():
     }
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         for metric, (bead, total, moving_sum) in expected.items():
             out_html = os.path.join(output_dir, f"report_{metric}.html")
             matrix_report.main([
@@ -868,12 +868,12 @@ def test_matrix_report_split_chart_offers_png_and_svg_download():
         [0, 0, 0, 0, 8, 0],
     ], dtype=float)
     row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DenseDataMatrix(data, row_names, row_names)
+    matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "report.html")
-        matrix.write(input_file, output_type="dense")
+        matrix.write(input_file, output_type="hdf")
         matrix_report.main(["-i", input_file, "--html", out_html])
         html_content = open(out_html).read()
 

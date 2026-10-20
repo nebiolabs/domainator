@@ -26,7 +26,7 @@ from domainator.compare_contigs import (
     _keep_top_k_per_row,
     _prune_scores_inplace,
 )
-from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+from domainator.data_matrix import StreamingMstKnnAccumulator
 from domainator.domainate import (
     clean_rec,
     get_prot_list,
@@ -35,9 +35,9 @@ from domainator.domainate import (
 from domainator.output_guardrails import (
     OutputSizeLimitExceeded,
     add_max_output_gb_argument,
-    enforce_matrix_output_limit,
     max_output_gb_to_bytes,
 )
+from domainator.matrix_output import add_matrix_output_arguments, resolve_matrix_outputs, write_matrix_outputs
 from domainator.sparsify import (
     MAX_HITS_PER_QUERY_SPARSIFY_NOTE,
     add_sparsify_arguments,
@@ -563,9 +563,8 @@ def kmer_dist(
     metric: str,
     mode: str,
     cpu: int,
-    dense: Optional[str],
+    hdf: Optional[str],
     dense_text: Optional[str],
-    sparse: Optional[str],
     lb: float,
     *,
     fasta_type: str,
@@ -646,72 +645,12 @@ def kmer_dist(
     )
 
     try:
-        if dense:
-            enforce_matrix_output_limit(
-                output_type="dense",
-                matrix=matrix,
-                row_names=query_representation.names,
-                col_names=reference_representation.names,
-                row_lengths=query_representation.lengths,
-                col_lengths=reference_representation.lengths,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=dense,
-                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
-            )
-            DataMatrix.write_dense(
-                matrix,
-                dense,
-                query_representation.names,
-                reference_representation.names,
-                query_representation.lengths,
-                reference_representation.lengths,
-                mode,
-            )
-        if dense_text:
-            enforce_matrix_output_limit(
-                output_type="dense_text",
-                matrix=matrix,
-                row_names=query_representation.names,
-                col_names=reference_representation.names,
-                row_lengths=query_representation.lengths,
-                col_lengths=reference_representation.lengths,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=dense_text,
-                mitigation_options=["--sparse", "--max_hits_per_query", "--lb", "--mst", "--knn"],
-            )
-            DataMatrix.write_dense_text(
-                matrix,
-                dense_text,
-                query_representation.names,
-                reference_representation.names,
-                query_representation.lengths,
-                reference_representation.lengths,
-                mode,
-            )
-        if sparse:
-            enforce_matrix_output_limit(
-                output_type="sparse",
-                matrix=matrix,
-                row_names=query_representation.names,
-                col_names=reference_representation.names,
-                row_lengths=query_representation.lengths,
-                col_lengths=reference_representation.lengths,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=sparse,
-                mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
-            )
-            DataMatrix.write_sparse(
-                matrix,
-                sparse,
-                query_representation.names,
-                reference_representation.names,
-                query_representation.lengths,
-                reference_representation.lengths,
-                mode,
-            )
+        write_matrix_outputs(
+            matrix, query_representation.names, reference_representation.names,
+            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+            mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
+            row_lengths=query_representation.lengths, col_lengths=reference_representation.lengths, data_type=mode,
+        )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 
@@ -740,14 +679,12 @@ def main(argv):
                         help="Similarity metric to compute from shared k-mer counts.")
     parser.add_argument('--mode', type=str, required=False, default="score", choices=VALID_MODES,
                         help="Output matrix values. score: raw similarity, bool: 1 if a similarity is non-zero, score_dist: 1 - (score / min(row_max, col_max)).")
-    parser.add_argument('--dense', type=str, default=None, help="Write a dense distance matrix hdf5 file to this path.")
-    parser.add_argument('--dense_text', type=str, default=None, help="Write a dense distance matrix tsv file to this path.")
-    parser.add_argument('--sparse', type=str, default=None, help="Write a sparse distance matrix hdf5 file to this path.")
+    add_matrix_output_arguments(parser, noun="similarity (or, for score_dist, distance) matrix")
     parser.add_argument('--lb', default=0, type=float, required=False,
                         help="Round any similarities lower than or equal to this down to zero before mode transforms.")
     parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
                         help="Include at most this many non-zero entries in the matrix for each input sequence, keeping the highest-valued ones. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE)
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Selects on the k-mer similarity. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool}. Best paired with --sparse.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Selects on the k-mer similarity. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool}. Best paired with --hdf.")
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="How many cpu threads to use. Default: use all physical cores.")
     parser.add_argument('--progress', action='store_true',
@@ -765,24 +702,13 @@ def main(argv):
         reference_path = params.reference
         reference_type = _resolve_sequence_file_type(reference_path, params.reference_type, "Reference")
 
-    if params.dense is not None and get_file_type(params.dense) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
-    if params.sparse is not None and get_file_type(params.sparse) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
-    if params.mode == "score_dist" and params.sparse is not None:
-        raise ValueError("Sparse distance matrices not implemented.")
+    hdf, dense_text = resolve_matrix_outputs(params)
     if not 0 <= params.lb <= 1:
         raise ValueError("--lb must be between 0 and 1 for k-mer similarities.")
     if params.max_hits_per_query is not None and params.max_hits_per_query < 0:
         raise ValueError("--max_hits_per_query must be >= 0")
     if params.gene_call is not None and params.nucleotide_kmers:
         warnings.warn("--gene_call has no effect when --nucleotide_kmers is supplied.")
-
-    dense = params.dense
-    dense_text = params.dense_text
-    sparse = params.sparse
-    if dense is None and dense_text is None and sparse is None:
-        raise ValueError("No output specified! Please specify at least one of: dense, dense_text, sparse")
 
     if params.cpu <= 0:
         cpu = psutil.cpu_count(logical=False)
@@ -799,9 +725,8 @@ def main(argv):
         params.metric,
         params.mode,
         cpu,
-        dense,
+        hdf,
         dense_text,
-        sparse,
         params.lb,
         fasta_type=params.fasta_type,
         ksize=params.ksize,

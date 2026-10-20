@@ -60,19 +60,22 @@ scores that are not exactly symmetric.
 
 Two details of the sort are load-bearing:
 
-- The dense fast path packs source, target and score into **one structured array** and
-  sorts it in place ([data_matrix.py:928](../src/domainator/data_matrix.py#L928)), rather
-  than `argsort`-ing a score array and applying the permutation. On an n² edge list the
-  separate index array is the difference between fitting in memory and not.
+- The fast path packs source, target and score into **one structured array** and
+  sorts it in place (`DataMatrix.sorted_undirected_edges` in
+  [data_matrix.py](../src/domainator/data_matrix.py)), rather than `argsort`-ing a score
+  array and applying the permutation. On an n² edge list the separate index array is the
+  difference between fitting in memory and not.
 - The sort is **stable** and the fast path is keyed on the builtin `max` object
-  identity. Any other `agg` callable — including an equivalent lambda — falls back to the
-  generic base-class path, which is correct but slower. That is intentional, not a bug.
+  identity. Any other `agg` callable — including an equivalent lambda — falls back to an
+  element-wise path, which is correct but slower. That is intentional, not a bug.
+- A matrix loaded from an upper-triangle file is known to be exactly symmetric, so the
+  `max(M, M.T)` step is skipped for it.
 
 The tree itself is textbook Kruskal with a union-find over `n` nodes, path-compressing on
 `find` and linking roots without rank. Edges are scanned in descending weight; an edge
 joining two distinct components is kept, everything else is discarded. Complexity is
 dominated by the sort: **O(E log E)** time, **O(E)** memory for the edge table, where
-E = n(n−1)/2 for a dense matrix.
+E = n(n−1)/2 for a fully connected matrix.
 
 The scan also records, per kept edge, the two counters that make the threshold tables
 cheap later:

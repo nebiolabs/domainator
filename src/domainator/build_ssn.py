@@ -225,9 +225,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
 
     if not matrix.symmetric_labels:
         raise ValueError("Input does not have symmetric axis labels. Can only build an SSN from a symmetric matrix.")
-
-    # if not matrix.symmetric_values:
-    #     raise ValueError("Input not symmetric data values. Can only build an SSN from a symmetric matrix.")
+    matrix.require_similarity("build_ssn")
 
     if cluster_tsv is not None:
         cluster = True

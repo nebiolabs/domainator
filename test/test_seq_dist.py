@@ -22,7 +22,7 @@ def test_diamond_1(shared_datadir):
 def test_seq_dist_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "-r", str(shared_datadir / "FeSOD_20.fasta"), "--dense", out, "--max_hits_per_query", "1", "--mode", "score"])
+        seq_dist.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "-r", str(shared_datadir / "FeSOD_20.fasta"), "--hdf", out, "--max_hits_per_query", "1", "--mode", "score"])
         dense_matrix = DataMatrix.from_file(out)
         out_mat = dense_matrix.toarray()
         assert (out_mat > 0).sum() == 20
@@ -33,7 +33,7 @@ def test_seq_dist_1(shared_datadir):
 def test_seq_dist_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "-r", str(shared_datadir / "FeSOD_20.fasta"), "--dense", out, "--max_hits_per_query", "3","--mode","bool" ])
+        seq_dist.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "-r", str(shared_datadir / "FeSOD_20.fasta"), "--hdf", out, "--max_hits_per_query", "3","--mode","bool" ])
 
         dense_matrix = DataMatrix.from_file(out)
         out_mat = dense_matrix.toarray()
@@ -52,11 +52,11 @@ def test_seq_dist_mst_knn_matches_batch(shared_datadir):
         stream = output_dir + "/stream.hdf5"
 
         # batch reference: full matrix, then post-hoc --mst --knn
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", full, "--mode", "score"])
-        transform_matrix.main(["-i", full, "--sparse", batch, "--mst", "--knn", "3"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", full, "--mode", "score"])
+        transform_matrix.main(["-i", full, "--hdf", batch, "--mst", "--knn", "3"])
 
         # streaming path
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", stream, "--mode", "score", "--mst", "--knn", "3"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", stream, "--mode", "score", "--mst", "--knn", "3"])
 
         batch_dm = DataMatrix.from_file(batch)
         stream_dm = DataMatrix.from_file(stream)
@@ -76,7 +76,7 @@ def test_seq_dist_mst_knn_rejects_non_streamable_mode(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(ValueError):
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "norm_score", "--mst", "--knn", "2"])
+            seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "norm_score", "--mst", "--knn", "2"])
 
 
 def test_seq_dist_mst_knn_requires_symmetric_reference(shared_datadir):
@@ -85,7 +85,7 @@ def test_seq_dist_mst_knn_requires_symmetric_reference(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(ValueError):
-            seq_dist.main(["-i", fasta, "-r", ref, "--sparse", out, "--mode", "score", "--mst", "--knn", "2"])
+            seq_dist.main(["-i", fasta, "-r", ref, "--hdf", out, "--mode", "score", "--mst", "--knn", "2"])
 
 
 def test_seq_dist_mst_knn_accepts_k_one(shared_datadir):
@@ -93,7 +93,7 @@ def test_seq_dist_mst_knn_accepts_k_one(shared_datadir):
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst", "--knn", "1"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score", "--mst", "--knn", "1"])
 
 
 def test_seq_dist_mst_only(shared_datadir):
@@ -101,7 +101,7 @@ def test_seq_dist_mst_only(shared_datadir):
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score", "--mst"])
         matrix = DataMatrix.from_file(out)
         array = matrix.toarray()
         n = len(matrix.rows)
@@ -115,7 +115,7 @@ def test_seq_dist_mst_knn_rejects_k_below_one(shared_datadir, k):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(SystemExit):
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--mst", "--knn", k])
+            seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score", "--mst", "--knn", k])
 
 
 def test_seq_hmmsearch_1(shared_datadir):
@@ -130,7 +130,7 @@ def test_seq_hmmsearch_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "tmp_out"
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "--dense", out, "--algorithm", "hmmer","--mode", "score" ])
+        seq_dist.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "--hdf", out, "--algorithm", "hmmer","--mode", "score" ])
 
         out_table = DataMatrix.from_file(out)
         compare_iterables(out_table.rows, ["pDONR201_1", "pDONR201_2", "pDONR201_3","pDONR201_4","pDONR201_5"])
@@ -148,7 +148,7 @@ def test_seq_hmmsearch_sparse_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "--sparse", out, "--algorithm", "hmmer","--mode", "score", ])
+        seq_dist.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "--hdf", out, "--algorithm", "hmmer","--mode", "score", ])
 
         out_table = DataMatrix.from_file(out)
         compare_iterables(out_table.rows, ["pDONR201_1", "pDONR201_2", "pDONR201_3","pDONR201_4","pDONR201_5"])
@@ -169,7 +169,7 @@ def test_seq_dist_max_output_gb_blocks_dense_output(shared_datadir):
             seq_dist.main([
                 "-i", str(shared_datadir / "FeSOD_20.fasta"),
                 "-r", str(shared_datadir / "FeSOD_20.fasta"),
-                "--dense", out,
+                "--hdf", out,
                 "--max_hits_per_query", "1",
                 "--mode", "score",
                 "--max_output_gb", "0.000001",
@@ -183,7 +183,7 @@ def test_seq_dist_max_output_gb_zero_disables_guardrail(shared_datadir):
         seq_dist.main([
             "-i", str(shared_datadir / "FeSOD_20.fasta"),
             "-r", str(shared_datadir / "FeSOD_20.fasta"),
-            "--dense", out,
+            "--hdf", out,
             "--max_hits_per_query", "1",
             "--mode", "score",
             "--max_output_gb", "0",
@@ -199,7 +199,7 @@ def test_seq_dist_progress_flag(shared_datadir):
         seq_dist.main([
             "-i", str(shared_datadir / "FeSOD_20.fasta"),
             "-r", str(shared_datadir / "FeSOD_20.fasta"),
-            "--dense", out,
+            "--hdf", out,
             "--max_hits_per_query", "1",
             "--mode", "score",
             "--progress",
@@ -217,7 +217,7 @@ def test_seq_hmmsearch_progress_flag(shared_datadir):
         seq_dist.main([
             "-i", str(shared_datadir / "pdonr_peptides.fasta"),
             "-r", str(shared_datadir / "pdonr_hmms.hmm"),
-            "--dense", out,
+            "--hdf", out,
             "--algorithm", "hmmer",
             "--mode", "score",
             "--progress",
@@ -233,7 +233,7 @@ def test_seq_hmmsearch_bool_lb_filters_raw_scores(shared_datadir):
         seq_dist.main([
             "-i", str(shared_datadir / "pdonr_peptides.fasta"),
             "-r", str(shared_datadir / "pdonr_hmms.hmm"),
-            "--sparse", out,
+            "--hdf", out,
             "--algorithm", "hmmer",
             "--mode", "bool",
             "--lb", "100",
@@ -369,7 +369,7 @@ def test_norm_score_mode():
     ])
     expected = -1 * (expected - 1)
     
-    assert np.allclose(seq_dist.MODES[mode](input), expected)
+    assert np.allclose(seq_dist.MODES[mode](input).toarray(), expected)
 
 def test_norm_score_mode_sparse():
     mode="norm_score"
@@ -429,7 +429,7 @@ def test_efi_score_mode():
         [13.50743174, 13.44943979, 13.39828727, 43.45552935, 28.36263688]]
     )
     
-    dense_out = seq_dist.MODES[mode](input, row_lens, col_lens)
+    dense_out = seq_dist.MODES[mode](input, row_lens, col_lens).toarray()
     sparse_out = seq_dist.MODES[mode](input_sparse, row_lens, col_lens)
     
     assert np.allclose(sparse_out.toarray(), dense_out)
@@ -518,9 +518,9 @@ def test_seq_dist_knn_matches_batch_transform(shared_datadir):
         batch = output_dir + "/batch.hdf5"
         stream = output_dir + "/stream.hdf5"
 
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", full, "--mode", "score"])
-        transform_matrix.main(["-i", full, "--sparse", batch, "--knn", "3"])
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", stream, "--mode", "score", "--knn", "3"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", full, "--mode", "score"])
+        transform_matrix.main(["-i", full, "--hdf", batch, "--knn", "3"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", stream, "--mode", "score", "--knn", "3"])
 
         batch_dm = DataMatrix.from_file(batch)
         stream_dm = DataMatrix.from_file(stream)
@@ -534,8 +534,8 @@ def test_seq_dist_knn_keeps_fewer_edges_than_mst_knn(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         knn_out = output_dir + "/knn.hdf5"
         mst_knn_out = output_dir + "/mst_knn.hdf5"
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", knn_out, "--mode", "score", "--knn", "1"])
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", mst_knn_out, "--mode", "score", "--mst", "--knn", "1"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", knn_out, "--mode", "score", "--knn", "1"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", mst_knn_out, "--mode", "score", "--mst", "--knn", "1"])
 
         def off_diagonal_pairs(path):
             array = DataMatrix.from_file(path).toarray()
@@ -553,11 +553,11 @@ def test_seq_dist_knn_rejects_invalid_use(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(SystemExit):  # k must be >= 1
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score", "--knn", "0"])
+            seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score", "--knn", "0"])
         with pytest.raises(ValueError):  # same streaming requirements as --mst
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "norm_score", "--knn", "2"])
+            seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "norm_score", "--knn", "2"])
         with pytest.raises(ValueError):
-            seq_dist.main(["-i", fasta, "-r", ref, "--sparse", out, "--mode", "score", "--knn", "2"])
+            seq_dist.main(["-i", fasta, "-r", ref, "--hdf", out, "--mode", "score", "--knn", "2"])
 
 
 def test_parse_diamond_params_accepts_flags_and_values():
@@ -633,8 +633,8 @@ def test_seq_dist_params_does_not_change_results(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         base = output_dir + "/base.hdf5"
         tuned = output_dir + "/tuned.hdf5"
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", base, "--mode", "score", "--mst", "--knn", "2"])
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", tuned, "--mode", "score", "--mst", "--knn", "2",
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", base, "--mode", "score", "--mst", "--knn", "2"])
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", tuned, "--mode", "score", "--mst", "--knn", "2",
                        "--params", '"-c":4, "-b":0.4'])
         base_data = DataMatrix.from_file(base).data.toarray()
         tuned_data = DataMatrix.from_file(tuned).data.toarray()
@@ -646,7 +646,7 @@ def test_seq_dist_params_rejects_non_diamond_algorithm(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(ValueError, match="only applies to the diamond"):
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+            seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score",
                            "--algorithm", "hmmer", "--params", '"-c":4'])
 
 
@@ -707,7 +707,7 @@ def test_seq_dist_reports_rejected_diamond_option(shared_datadir, capsys):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(SystemExit):
-            seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+            seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score",
                            "--params", '"--no-such-flag":1'])
     captured = capsys.readouterr()
     assert "rejected one of its command line options" in captured.err
@@ -757,7 +757,7 @@ def test_seq_dist_echoes_the_diamond_command(shared_datadir, capsys):
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
-        seq_dist.main(["-i", fasta, "-r", fasta, "--sparse", out, "--mode", "score",
+        seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", out, "--mode", "score",
                        "--mst", "--knn", "2", "--params", '"-c":4'])
     err = capsys.readouterr().err
     assert "Running diamond:" in err
@@ -775,11 +775,38 @@ def test_seq_dist_bool_sparsify_selects_on_scores(shared_datadir):
         score_out = output_dir + "/score.hdf5"
         bool_out = output_dir + "/bool.hdf5"
         base = ["-i", fasta, "-r", fasta, "--knn", "2"]
-        seq_dist.main(base + ["--sparse", score_out, "--mode", "score"])
-        seq_dist.main(base + ["--sparse", bool_out, "--mode", "bool"])
+        seq_dist.main(base + ["--hdf", score_out, "--mode", "score"])
+        seq_dist.main(base + ["--hdf", bool_out, "--mode", "bool"])
         score_array = DataMatrix.from_file(score_out).toarray()
         bool_matrix = DataMatrix.from_file(bool_out)
         bool_array = bool_matrix.toarray()
         assert bool_matrix.data_type == "bool"
         np.testing.assert_array_equal(bool_array != 0, score_array != 0)
         assert set(np.unique(bool_array)) <= {0, 1}
+
+
+def test_seq_dist_self_comparison_records_symmetric_labels(shared_datadir, tmp_path):
+    import h5py
+
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    raw, symmetrized = str(tmp_path / "raw.hdf5"), str(tmp_path / "max.hdf5")
+    seq_dist.main(["-i", fasta, "-r", fasta, "--hdf", raw, "--mode", "efi_score"])
+    seq_dist.main(["-i", fasta, "--hdf", symmetrized, "--mode", "efi_score", "--symmetrize", "max"])
+
+    with h5py.File(raw, "r") as handle:
+        assert handle.attrs["SYMMETRIC_LABELS"] == 1
+        assert "COL_LABELS" not in handle
+    with h5py.File(symmetrized, "r") as handle:
+        assert handle.attrs["ARRAY_TYPE"] == "SPARSE_CSR_UPPER_TRIANGLE"
+
+    raw_matrix = DataMatrix.from_file(raw)
+    symmetrized_matrix = DataMatrix.from_file(symmetrized)
+    assert symmetrized_matrix.exactly_symmetric
+    assert symmetrized_matrix.symmetric_labels
+    np.testing.assert_array_equal(symmetrized_matrix.row_lengths, raw_matrix.row_lengths)
+
+
+def test_seq_dist_symmetrize_requires_self_comparison(shared_datadir, tmp_path):
+    with pytest.raises(ValueError, match="--symmetrize requires a square"):
+        seq_dist.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "-r", str(shared_datadir / "FeSOD_20.gb"),
+                       "--hdf", str(tmp_path / "out.hdf5"), "--symmetrize", "max"])

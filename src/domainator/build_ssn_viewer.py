@@ -115,6 +115,7 @@ def build_ssn_viewer_bundle(
     matrix = subset_matrix_by_labels(matrix, subset_labels)
     if not matrix.symmetric_labels:
         raise ValueError("Input does not have symmetric axis labels. Can only build a Domainator Similarity Network Viewer bundle from a symmetric matrix.")
+    matrix.require_similarity("build_ssn_viewer")
 
     node_data = pd.DataFrame(index=matrix.rows)
     if metadata_files is not None:

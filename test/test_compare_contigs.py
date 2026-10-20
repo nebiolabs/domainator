@@ -20,9 +20,9 @@ def test_compare_contigs_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_gb = output_dir + "/sorted.gb"
-        out_dense = output_dir + "/dense.hdf5"
+        out_dense = output_dir + "/dense.tsv"
         out_sparse = output_dir + "/sparse.hdf5"
-        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--ji", "0.5", "--ai", "0.1", "--dense", out_dense, "--sparse", out_sparse, "-o", out_gb])
+        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--ji", "0.5", "--ai", "0.1", "--dense_text", out_dense, "--hdf", out_sparse, "-o", out_gb])
         
         sparse_matrix = DataMatrix.from_file(out_sparse)
         assert sparse_matrix.shape[0] == 4
@@ -38,9 +38,9 @@ def test_compare_contigs_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_gb = output_dir + "/sorted.gb"
-        out_dense = output_dir + "/dense.hdf5"
+        out_dense = output_dir + "/dense.tsv"
         out_sparse = output_dir + "/sparse.hdf5"
-        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--ji", "0.5", "--ai", "0.1", "--dense", out_dense, "--sparse", out_sparse, "-o", out_gb, "--name_by_order"])
+        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--ji", "0.5", "--ai", "0.1", "--dense_text", out_dense, "--hdf", out_sparse, "-o", out_gb, "--name_by_order"])
         sparse_matrix = DataMatrix.from_file(out_sparse)
         assert len(sparse_matrix) == 4
         assert sparse_matrix.shape[1] == 4
@@ -57,9 +57,9 @@ def test_compare_no_annotations_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_gb = output_dir + "/sorted.gb"
-        out_dense = output_dir + "/dense.hdf5"
+        out_dense = output_dir + "/dense.tsv"
         out_sparse = output_dir + "/sparse.hdf5"
-        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark.gb"), "--ji", "0.5", "--ai", "0.1", "--dense", out_dense, "--sparse", out_sparse, "-o", out_gb, "--name_by_order"])
+        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark.gb"), "--ji", "0.5", "--ai", "0.1", "--dense_text", out_dense, "--hdf", out_sparse, "-o", out_gb, "--name_by_order"])
         sparse_matrix = DataMatrix.from_file(out_sparse)
         assert len(sparse_matrix) == 4
         assert sparse_matrix.shape[1] == 4
@@ -78,11 +78,10 @@ def test_compare_contigs_database_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_gb = output_dir + "/sorted.gb"
-        out_dense = output_dir + "/dense.hdf5"
         out_dense_text = output_dir + "/dense.txt"
         out_sparse = output_dir + "/sparse.hdf5"
 
-        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "--dense_text", out_dense_text, "--ji", "0.5", "--ai", "0.5", "--dense", out_dense, "--sparse", out_sparse, "-o", out_gb, "--name_by_order", "--databases", "pdonr_hmms_1"])
+        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "--dense_text", out_dense_text, "--ji", "0.5", "--ai", "0.5", "--hdf", out_sparse, "-o", out_gb, "--name_by_order", "--databases", "pdonr_hmms_1"])
 
         sparse_matrix = DataMatrix.from_file(out_sparse)
         assert len(sparse_matrix) == 4
@@ -93,7 +92,7 @@ def test_compare_contigs_database_1(shared_datadir):
         assert sparse_matrix.data[2,2] == sparse_matrix.data[2,3]
         assert sparse_matrix.data[3,2] == sparse_matrix.data[3,3]
 
-        dense_matrix = DataMatrix.from_file(out_dense)
+        dense_matrix = DataMatrix.from_file(out_dense_text)
         assert len(dense_matrix) == 4
         assert dense_matrix.shape[1] == 4
         assert  pytest.approx(sum(dense_matrix.itervalues()),0.001) == 8.0
@@ -118,7 +117,7 @@ def test_compare_contigs_max_output_gb_blocks_dense_output(shared_datadir):
                 "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
                 "--ji", "0.5",
                 "--ai", "0.1",
-                "--dense", out_dense,
+                "--hdf", out_dense,
                 "--max_output_gb", "0.000001",
             ])
 
@@ -131,7 +130,7 @@ def test_compare_contigs_progress_flag(shared_datadir):
             "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
             "--ji", "0.5",
             "--ai", "0.1",
-            "--dense", out_dense,
+            "--hdf", out_dense,
             "--progress",
         ])
 
@@ -151,8 +150,8 @@ def test_compare_contigs_cpu_flag_matches_serial(shared_datadir):
             "--ai", "0.1",
         ]
 
-        compare_contigs.main(args + ["--dense", serial_out, "--cpu", "1"])
-        compare_contigs.main(args + ["--dense", parallel_out, "--cpu", "2"])
+        compare_contigs.main(args + ["--hdf", serial_out, "--cpu", "1"])
+        compare_contigs.main(args + ["--hdf", parallel_out, "--cpu", "2"])
 
         serial_matrix = DataMatrix.from_file(serial_out)
         parallel_matrix = DataMatrix.from_file(parallel_out)
@@ -171,8 +170,8 @@ def test_compare_contigs_cpu_flag_matches_serial_for_single_metric(shared_datadi
             "--ai", "0.0",
         ]
 
-        compare_contigs.main(args + ["--dense", serial_out, "--cpu", "1"])
-        compare_contigs.main(args + ["--dense", parallel_out, "--cpu", "2"])
+        compare_contigs.main(args + ["--hdf", serial_out, "--cpu", "1"])
+        compare_contigs.main(args + ["--hdf", parallel_out, "--cpu", "2"])
 
         serial_matrix = DataMatrix.from_file(serial_out)
         parallel_matrix = DataMatrix.from_file(parallel_out)
@@ -248,7 +247,7 @@ def test_compare_contigs_lb_thresholds_small_scores():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_path = output_dir + "/input.gb"
-        out_dense = output_dir + "/dense.hdf5"
+        out_dense = output_dir + "/dense.tsv"
         out_sparse = output_dir + "/sparse.hdf5"
 
         with open(input_path, "w") as handle:
@@ -259,8 +258,8 @@ def test_compare_contigs_lb_thresholds_small_scores():
             "--ji", "1.0",
             "--ai", "0.0",
             "--lb", "0.5",
-            "--dense", out_dense,
-            "--sparse", out_sparse,
+            "--dense_text", out_dense,
+            "--hdf", out_sparse,
         ])
 
         sparse_matrix = DataMatrix.from_file(out_sparse)
@@ -295,7 +294,7 @@ def test_compare_contigs_singleton_adjacency_scores_zero():
             "-i", input_path,
             "--ji", "0.0",
             "--ai", "1.0",
-            "--dense", out_dense,
+            "--hdf", out_dense,
         ])
 
         dense_matrix = DataMatrix.from_file(out_dense)
@@ -324,7 +323,7 @@ def test_compare_contigs_lb_preserves_pairs_that_only_clear_threshold_after_comb
             "--ji", "0.5",
             "--ai", "0.5",
             "--lb", "0.3",
-            "--dense", out_dense,
+            "--hdf", out_dense,
         ])
 
         dense_matrix = DataMatrix.from_file(out_dense)
@@ -375,12 +374,12 @@ def test_compare_contigs_mst_knn_matches_batch_transform():
         # batch reference: full matrix, then post-hoc --mst --knn
         full_sparse = output_dir + "/full.hdf5"
         batch_sparse = output_dir + "/batch.hdf5"
-        compare_contigs.main(base_args + ["--sparse", full_sparse])
-        transform_matrix.main(["-i", full_sparse, "--sparse", batch_sparse, "--mst", "--knn", "2"])
+        compare_contigs.main(base_args + ["--hdf", full_sparse])
+        transform_matrix.main(["-i", full_sparse, "--hdf", batch_sparse, "--mst", "--knn", "2"])
 
         # streaming path
         stream_sparse = output_dir + "/stream.hdf5"
-        compare_contigs.main(base_args + ["--sparse", stream_sparse, "--mst", "--knn", "2"])
+        compare_contigs.main(base_args + ["--hdf", stream_sparse, "--mst", "--knn", "2"])
 
         batch_dm = DataMatrix.from_file(batch_sparse)
         stream_dm = DataMatrix.from_file(stream_sparse)
@@ -528,9 +527,9 @@ def test_compare_contigs_knn_matches_batch_transform():
         full_sparse = output_dir + "/full.hdf5"
         batch_sparse = output_dir + "/batch.hdf5"
         stream_sparse = output_dir + "/stream.hdf5"
-        compare_contigs.main(base_args + ["--sparse", full_sparse])
-        transform_matrix.main(["-i", full_sparse, "--sparse", batch_sparse, "--knn", "2"])
-        compare_contigs.main(base_args + ["--sparse", stream_sparse, "--knn", "2"])
+        compare_contigs.main(base_args + ["--hdf", full_sparse])
+        transform_matrix.main(["-i", full_sparse, "--hdf", batch_sparse, "--knn", "2"])
+        compare_contigs.main(base_args + ["--hdf", stream_sparse, "--knn", "2"])
 
         batch_dm = DataMatrix.from_file(batch_sparse)
         stream_dm = DataMatrix.from_file(stream_sparse)
@@ -546,7 +545,7 @@ def test_compare_contigs_knn_matches_batch_transform():
         assert len(off_diagonal_pairs(stream_dm)) == len(off_diagonal_pairs(batch_dm))
 
         mst_knn_sparse = output_dir + "/mst_knn.hdf5"
-        compare_contigs.main(base_args + ["--sparse", mst_knn_sparse, "--mst", "--knn", "2"])
+        compare_contigs.main(base_args + ["--hdf", mst_knn_sparse, "--mst", "--knn", "2"])
         mst_knn_pairs = off_diagonal_pairs(DataMatrix.from_file(mst_knn_sparse))
         assert off_diagonal_pairs(stream_dm) <= mst_knn_pairs
 
@@ -560,7 +559,7 @@ def test_compare_contigs_knn_rejects_invalid_use():
         input_path = output_dir + "/input.gb"
         with open(input_path, "w") as handle:
             write_genbank(records, handle)
-        args = ["-i", input_path, "--ji", "0.5", "--ai", "0.5", "--sparse", output_dir + "/out.hdf5"]
+        args = ["-i", input_path, "--ji", "0.5", "--ai", "0.5", "--hdf", output_dir + "/out.hdf5"]
 
         with pytest.raises(SystemExit):  # k must be >= 1
             compare_contigs.main(args + ["--knn", "0"])
@@ -590,9 +589,9 @@ def test_compare_contigs_max_hits_per_query_applies_before_sparsify(sparsify_arg
         capped = output_dir + "/capped.hdf5"
         batch = output_dir + "/batch.hdf5"
         stream = output_dir + "/stream.hdf5"
-        compare_contigs.main(base_args + ["--sparse", capped])
-        transform_matrix.main(["-i", capped, "--sparse", batch] + sparsify_args)
-        compare_contigs.main(base_args + ["--sparse", stream] + sparsify_args)
+        compare_contigs.main(base_args + ["--hdf", capped])
+        transform_matrix.main(["-i", capped, "--hdf", batch] + sparsify_args)
+        compare_contigs.main(base_args + ["--hdf", stream] + sparsify_args)
 
         np.testing.assert_array_equal(DataMatrix.from_file(stream).toarray(),
                                       DataMatrix.from_file(batch).toarray())
@@ -756,12 +755,12 @@ def test_compare_contigs_sort_memory_check_fails_early(shared_datadir, monkeypat
         out_gb = output_dir + "/sorted.gb"
         out_sparse = output_dir + "/sparse.hdf5"
         with pytest.raises(SystemExit, match="--skip_sort_memory_check"):
-            compare_contigs.main(["-i", input_path, "-o", out_gb, "--sparse", out_sparse])
+            compare_contigs.main(["-i", input_path, "-o", out_gb, "--hdf", out_sparse])
         assert not os.path.exists(out_gb)
         assert not os.path.exists(out_sparse)
 
         # no genbank output, so no sort and no check
-        compare_contigs.main(["-i", input_path, "--sparse", out_sparse])
+        compare_contigs.main(["-i", input_path, "--hdf", out_sparse])
         assert os.path.exists(out_sparse)
 
         compare_contigs.main(["-i", input_path, "-o", out_gb, "--skip_sort_memory_check"])

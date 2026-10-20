@@ -47,7 +47,7 @@ def test_kmer_dist_protein_metrics(shared_datadir, metric, expected):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
-            "--dense", out,
+            "--hdf", out,
             "--metric", metric,
             "--ksize", "2",
         ])
@@ -71,7 +71,7 @@ def test_kmer_dist_protein_reference_matrix(shared_datadir):
         kmer_dist.main([
             "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
             "-r", str(shared_datadir / "kmer_dist_reference.faa"),
-            "--dense", out,
+            "--hdf", out,
             "--metric", "jaccard",
             "--ksize", "2",
         ])
@@ -86,7 +86,7 @@ def test_kmer_dist_sparse_top_k(shared_datadir):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
-            "--sparse", out,
+            "--hdf", out,
             "--metric", "jaccard",
             "--ksize", "2",
             "--max_hits_per_query", "1",
@@ -110,7 +110,7 @@ def test_kmer_dist_bool_mode_with_lb(shared_datadir):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
-            "--dense", out,
+            "--hdf", out,
             "--metric", "jaccard",
             "--mode", "bool",
             "--ksize", "2",
@@ -127,7 +127,7 @@ def test_kmer_dist_nucleotide_kmers_are_strand_invariant(shared_datadir):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "kmer_dist_dna.fna"),
-            "--dense", out,
+            "--hdf", out,
             "--metric", "jaccard",
             "--fasta_type", "nucleotide",
             "--nucleotide_kmers",
@@ -144,7 +144,7 @@ def test_kmer_dist_nucleotide_fasta_requires_gene_call_or_nucleotide_kmers(share
         with pytest.raises(ValueError, match="Nucleotide FASTA input requires either --gene_call"):
             kmer_dist.main([
                 "-i", str(shared_datadir / "pDONR201.fasta"),
-                "--dense", out,
+                "--hdf", out,
                 "--fasta_type", "nucleotide",
             ])
 
@@ -154,7 +154,7 @@ def test_kmer_dist_gene_call_all_for_nucleotide_fasta(shared_datadir):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "pDONR201.fasta"),
-            "--dense", out,
+            "--hdf", out,
             "--fasta_type", "nucleotide",
             "--gene_call", "all",
         ])
@@ -169,7 +169,7 @@ def test_kmer_dist_translated_cds_genbank_runs(shared_datadir):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "pDONR201_domainator_circular.gb"),
-            "--dense", out,
+            "--hdf", out,
         ])
 
         matrix = DataMatrix.from_file(out)
@@ -187,7 +187,7 @@ def test_kmer_dist_ignores_noncanonical_protein_kmers(shared_datadir):
 
         kmer_dist.main([
             "-i", input_fasta,
-            "--dense", out,
+            "--hdf", out,
             "--metric", "jaccard",
             "--ksize", "2",
         ])
@@ -209,7 +209,7 @@ def test_kmer_dist_max_output_gb_blocks_dense_output(shared_datadir):
         with pytest.raises(SystemExit, match="--max_output_gb"):
             kmer_dist.main([
                 "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
-                "--dense", out,
+                "--hdf", out,
                 "--metric", "jaccard",
                 "--ksize", "2",
                 "--max_output_gb", "0.000001",
@@ -221,7 +221,7 @@ def test_kmer_dist_progress_flag(shared_datadir):
         out = output_dir + "/out.hdf5"
         kmer_dist.main([
             "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
-            "--dense", out,
+            "--hdf", out,
             "--metric", "jaccard",
             "--ksize", "2",
             "--progress",
@@ -247,9 +247,9 @@ def test_kmer_dist_sparsify_matches_batch_transform(shared_datadir, sparsify_arg
         batch = output_dir + "/batch.hdf5"
         stream = output_dir + "/stream.hdf5"
         base = ["-i", fasta, "--ksize", "3", "--cpu", "1"] + cap_args
-        kmer_dist.main(base + ["--sparse", full])
-        transform_matrix.main(["-i", full, "--sparse", batch] + sparsify_args)
-        kmer_dist.main(base + ["--sparse", stream] + sparsify_args)
+        kmer_dist.main(base + ["--hdf", full])
+        transform_matrix.main(["-i", full, "--hdf", batch] + sparsify_args)
+        kmer_dist.main(base + ["--hdf", stream] + sparsify_args)
 
         batch_array = DataMatrix.from_file(batch).toarray()
         stream_array = DataMatrix.from_file(stream).toarray()
@@ -271,8 +271,8 @@ def test_kmer_dist_sparsify_bool_mode_keeps_selected_edges(shared_datadir):
         score_out = output_dir + "/score.hdf5"
         bool_out = output_dir + "/bool.hdf5"
         base = ["-i", fasta, "--ksize", "3", "--cpu", "1", "--knn", "2"]
-        kmer_dist.main(base + ["--sparse", score_out])
-        kmer_dist.main(base + ["--sparse", bool_out, "--mode", "bool"])
+        kmer_dist.main(base + ["--hdf", score_out])
+        kmer_dist.main(base + ["--hdf", bool_out, "--mode", "bool"])
         score_array = DataMatrix.from_file(score_out).toarray()
         bool_matrix = DataMatrix.from_file(bool_out)
         assert bool_matrix.data_type == "bool"
@@ -285,8 +285,8 @@ def test_kmer_dist_sparsify_rejects_invalid_use(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
         with pytest.raises(ValueError, match="square"):
-            kmer_dist.main(["-i", proteins, "-r", reference, "--sparse", out, "--mst"])
+            kmer_dist.main(["-i", proteins, "-r", reference, "--hdf", out, "--mst"])
         with pytest.raises(ValueError, match="only supported with --mode"):
-            kmer_dist.main(["-i", proteins, "--dense", out, "--mode", "score_dist", "--knn", "1"])
+            kmer_dist.main(["-i", proteins, "--hdf", out, "--mode", "score_dist", "--knn", "1"])
         with pytest.raises(SystemExit):
-            kmer_dist.main(["-i", proteins, "--sparse", out, "--knn", "0"])
+            kmer_dist.main(["-i", proteins, "--hdf", out, "--knn", "0"])

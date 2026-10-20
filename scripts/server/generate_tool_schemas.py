@@ -170,7 +170,7 @@ def guess_parameter_type(action) -> str:
         return "output"
     if any(keyword in dest_lower for keyword in ("file", "path", "dir", "input", "database")):
         return "file"
-    if any(keyword in option_lower for keyword in ("--output", "--out", "--sparse", "--dense", "--dense_text", "--html", "--xgmml")):
+    if any(keyword in option_lower for keyword in ("--output", "--out", "--hdf", "--dense_text", "--html", "--xgmml")):
         return "output"
     if any(keyword in option_lower for keyword in ("--file", "--path", "--dir", "--input")):
         return "file"

@@ -1219,6 +1219,7 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, knn_proje
     if progress_callback is not None:
         progress_callback("building edge table")
     stage_start = perf_counter()
+    matrix.require_similarity("matrix_report")
     edge_table = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
     del matrix  # free O(n²) data array; edge_table holds all we need
     _record_stage_timing(stage_timings, "build_edge_table", stage_start, n_edges=len(edge_table), n_nodes=edge_table.n_nodes)

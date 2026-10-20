@@ -146,7 +146,7 @@ architecture — filter/aggregate it with any JSON tooling.
 
 ```bash
 # 1. all-vs-all similarity -> dense matrix
-seq_dist.py -i proteins.gb -r proteins.gb --dense dist.hdf5
+seq_dist.py -i proteins.gb -r proteins.gb --hdf dist.hdf5
 
 # 2. (optional) per-node metadata to attach, e.g. domain architecture + taxonomy
 enum_report.py -i proteins.gb --by contig --architecture --taxname superkingdom -o meta.tsv
@@ -193,7 +193,7 @@ the table is currently showing, exportable as SVG, PNG or TSV.
 ## Recipe 3 — inspect a matrix's cluster structure
 
 ```bash
-seq_dist.py -i proteins.gb -r proteins.gb --dense dist.hdf5
+seq_dist.py -i proteins.gb -r proteins.gb --hdf dist.hdf5
 matrix_report.py -i dist.hdf5 --json -
 ```
 

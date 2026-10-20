@@ -39,12 +39,17 @@ from jsonargparse import ActionConfigFile, ArgumentParser
 
 from domainator import RawAndDefaultsFormatter, __version__, structure_lib
 from domainator.compare_contigs import _keep_top_k_per_row
-from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
+from domainator.matrix_output import (
+    add_matrix_output_arguments,
+    add_symmetrize_argument,
+    resolve_matrix_outputs,
+    write_matrix_outputs,
+)
 from domainator.output_guardrails import (
     OutputSizeLimitExceeded,
     add_max_output_gb_argument,
     max_output_gb_to_bytes,
-    enforce_matrix_output_limit,
 )
 from domainator.seq_dist import _SparseMaxResultBuilder
 from domainator.sparsify import (
@@ -59,7 +64,6 @@ from domainator.transform_matrix import (
     MODES,
     transform_matrix,
 )
-from domainator.utils import get_file_type
 
 
 # The seven score-based modes, taken from transform_matrix so the two tools cannot drift.
@@ -75,10 +79,6 @@ STRUCTURE_DIST_MODES = {"tmscore_dist": "tmscore", "lddt_dist": "lddt",
 
 ALL_MODES = BITSCORE_MODES | set(STRUCTURE_VALUE_FIELDS) | set(STRUCTURE_DIST_MODES)
 
-# Modes whose cells are a distance, where an absent pair means "maximally distant" rather
-# than zero. Sparse output would store that as an implicit zero and invert its meaning.
-DIST_MODES = frozenset({"score_dist", "efi_score_dist"} | set(STRUCTURE_DIST_MODES))
-
 # Per-mode structural metrics to request from the backend. The score-based and fident
 # modes need nothing extra: fident is in foldseek's base output columns, and reseek
 # derives it from pctid.
@@ -92,8 +92,6 @@ SPARSIFY_STREAMABLE_MODES = frozenset({"score", "bool", "efi_score",
 
 # efi_score reads the cell as a bit score in its 2^(-score) term, which -log10(p) is not.
 BITSCORE_ONLY_MODES = frozenset({"efi_score", "efi_score_dist"})
-
-SYMMETRIZE_CHOICES = ("none", "min", "max", "mean")
 
 # Above this many reference entries, say so before starting an uncapped all-vs-all.
 SATURATION_PREFLIGHT_THRESHOLD = 10_000
@@ -219,35 +217,6 @@ class _MetricValueReader:
             )
 
 
-def symmetrize_matrix(matrix, how: str):
-    """Reconcile the two directions of every pair.
-
-    Applied to the raw values, before the --mode transform, because it reconciles two
-    measurements of one pair rather than adjusting a normalization -- and because 1 - x
-    flips the ordering, so 'min' of a distance would be 'max' of a similarity.
-
-    A pair the aligner reported in only one direction has a stored zero in the other,
-    which means "no alignment reported", not "measured as zero". min therefore deletes
-    such a pair and mean halves it; only max treats a one-directional hit as evidence.
-    """
-    if how == "none":
-        return matrix
-    sparse = scipy.sparse.issparse(matrix)
-    transposed = matrix.T
-    if how == "max":
-        out = matrix.maximum(transposed) if sparse else np.maximum(matrix, transposed)
-    elif how == "min":
-        out = matrix.minimum(transposed) if sparse else np.minimum(matrix, transposed)
-    elif how == "mean":
-        out = (matrix + transposed) / 2.0
-    else:
-        raise ValueError(f"Unknown --symmetrize value: {how}")
-    if scipy.sparse.issparse(out):
-        out = scipy.sparse.csr_array(out)
-        out.eliminate_zeros()
-    return out
-
-
 def _apply_mode(matrix, mode: str, row_lengths, col_lengths, self_comparison: bool):
     """Turn the raw value matrix into the requested mode."""
     if mode in BITSCORE_MODES:
@@ -275,39 +244,9 @@ def _streaming_value(raw: float, mode: str, log_lengths,
     value rather than the hit, so the reader counts each alignment exactly once.
     """
     if mode == "efi_score":
-        value = raw * LOG10_2 - log_lengths[row_idx] - log_lengths[col_idx]
+        value = raw * LOG10_2 - (log_lengths[row_idx] + log_lengths[col_idx])
         return value if value > 0 else None
     return raw
-
-
-def _write_matrix_outputs(matrix, mode, row_names, col_names, row_lengths, col_lengths,
-                          dense, dense_text, sparse, max_output_bytes):
-    """The enforce-then-write pair for each requested output format."""
-    targets = (
-        ("dense", dense, DataMatrix.write_dense, ["--sparse", "--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"]),
-        ("dense_text", dense_text, DataMatrix.write_dense_text,
-         ["--sparse", "--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"]),
-        ("sparse", sparse, DataMatrix.write_sparse, ["--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"]),
-    )
-    try:
-        for output_type, path, writer, mitigations in targets:
-            if path is None:
-                continue
-            enforce_matrix_output_limit(
-                output_type=output_type,
-                matrix=matrix,
-                row_names=row_names,
-                col_names=col_names,
-                row_lengths=row_lengths,
-                col_lengths=col_lengths,
-                data_type=mode,
-                max_output_bytes=max_output_bytes,
-                output_path=path,
-                mitigation_options=mitigations,
-            )
-            writer(matrix, path, row_names, col_names, row_lengths, col_lengths, mode)
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
 
 
 def structure_dist(input_values: Sequence[str],
@@ -315,9 +254,8 @@ def structure_dist(input_values: Sequence[str],
                    aligner: structure_lib.StructureAligner,
                    mode: str = "score",
                    *,
-                   dense: Optional[str] = None,
+                   hdf: Optional[str] = None,
                    dense_text: Optional[str] = None,
-                   sparse: Optional[str] = None,
                    evalue: float = 0.001,
                    max_hits_per_query: Optional[int] = None,
                    lb: float = 0.0,
@@ -349,9 +287,6 @@ def structure_dist(input_values: Sequence[str],
         row_name_to_idx, row_names, row_lengths = _enumerate_entries(
             aligner, prepared.input_db, "input")
         if self_comparison:
-            # The same list objects, not equal copies: DataMatrix tests identity to decide
-            # whether to record SYMMETRIC_LABELS, which build_ssn and build_ssn_viewer
-            # then require.
             col_name_to_idx, col_names, col_lengths = row_name_to_idx, row_names, row_lengths
         else:
             col_name_to_idx, col_names, col_lengths = _enumerate_entries(
@@ -448,9 +383,15 @@ def structure_dist(input_values: Sequence[str],
         matrix = _apply_mode(matrix, mode, row_lengths_array, col_lengths_array,
                              self_comparison)
 
-    _write_matrix_outputs(matrix, mode, row_names, col_names,
-                          row_lengths_array, col_lengths_array,
-                          dense, dense_text, sparse, max_output_bytes)
+    try:
+        write_matrix_outputs(
+            matrix, row_names, col_names,
+            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+            mitigation_options=["--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"],
+            row_lengths=row_lengths_array, col_lengths=col_lengths_array, data_type=mode,
+        )
+    except OutputSizeLimitExceeded as exc:
+        raise SystemExit(str(exc)) from None
 
 
 def main(argv):
@@ -462,12 +403,7 @@ def main(argv):
     parser.add_argument('-r', '--reference', default=None, nargs='+', type=str,
                         help="structures to compare the input against. Same accepted forms as --input. If not supplied, the input is compared against itself, giving a square all-vs-all matrix. Rows are inputs and columns are references.")
 
-    parser.add_argument("--dense", type=str, default=None,
-                        help="Write a dense distance matrix hdf5 file to this path.")
-    parser.add_argument("--dense_text", type=str, default=None,
-                        help="Write a dense distance matrix tsv file to this path.")
-    parser.add_argument("--sparse", type=str, default=None,
-                        help="Write a sparse distance matrix hdf5 file to this path. Not available for the *_dist modes, whose absent cells are the maximum distance rather than zero.")
+    add_matrix_output_arguments(parser, noun="similarity (or, for *_dist modes, distance) matrix")
 
     parser.add_argument('-e', '--evalue', type=float, default=0.001,
                         help="only pairs with an E-value strictly below this become non-zero cells. E-values are computed against the reference set, as they are in seq_dist. Raise it to fill in weaker relationships; lower it to shrink the matrix.")
@@ -475,8 +411,7 @@ def main(argv):
     parser.add_argument('--mode', type=str, default="score", choices=sorted(ALL_MODES),
                         help="what kind of values should be in the matrix. Score-based, from the aligner's alignment score, exactly as in seq_dist: score: raw score, bool: 1 if a hit otherwise 0, norm_score: score/min(row_max, col_max), row_norm_score: score/row_max, score_dist: 1 - norm_score, efi_score: -log10[2^(-score) * (row_len * col_len)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Structural, already in [0,1] so the distance forms are just 1 - value: tmscore, lddt, fident, tmscore_dist, lddt_dist, fident_dist. tmscore and lddt require --algorithm foldseek and C-alpha coordinates in both databases; fident works with either backend. efi_score and efi_score_dist require a real bit score, so they are rejected with --algorithm reseek. Default: score")
 
-    parser.add_argument('--symmetrize', type=str, default="none", choices=list(SYMMETRIZE_CHOICES),
-                        help="reconcile the two directions of each pair before the --mode transform. Requires a square self-comparison (no -r). none: leave the matrix as the aligner reported it, which is usually slightly asymmetric. max: the better of the two directions in both cells, the OR-symmetric convention used by --mst/--knn and by build_ssn. min: the worse of the two -- note a pair found in only one direction has a stored zero in the other, so min DELETES it, making this a mutual-hit filter. mean: the average of the two -- note a pair found in only one direction is HALVED, because the missing direction contributes zero. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
+    add_symmetrize_argument(parser, extra_help="Requires a square self-comparison (no -r). Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
     parser.add_argument('--lb', type=float, default=0,
                         help="Round any values lower than or equal to this down to zero. This applies to the raw per-hit value before the --mode transform: the aligner's alignment score for the score-based modes, and the metric itself (0-1) for the tmscore/lddt/fident modes.")
@@ -484,7 +419,7 @@ def main(argv):
     parser.add_argument('--max_hits_per_query', type=int, default=None,
                         help="Include at most this many non-zero entries in the matrix for each input structure, keeping the highest-valued ones. Applied after --symmetrize. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE + " Use --max_seqs to bound the search itself.")
 
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires a square self-comparison and --mode in {score, bool, efi_score, tmscore, lddt, fident}; bool selects on the alignment scores and then keeps the selected cells as 1. Best paired with --sparse.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires a square self-comparison and --mode in {score, bool, efi_score, tmscore, lddt, fident}; bool selects on the alignment scores and then keeps the selected cells as 1. Best paired with --hdf.")
 
     parser.add_argument('--keep_db', default=None, type=str,
                         help="when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.")
@@ -510,18 +445,7 @@ def main(argv):
         raise ValueError("--evalue must be greater than 0.")
     if params.max_hits_per_query is not None and params.max_hits_per_query < 0:
         raise ValueError("--max_hits_per_query must be >= 0")
-    if params.dense is not None and get_file_type(params.dense) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --dense output, such as .h5, .hdf5, or .hdf.")
-    if params.sparse is not None and get_file_type(params.sparse) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
-    if params.dense is None and params.dense_text is None and params.sparse is None:
-        raise ValueError("No output specified! Please specify at least one of: dense, dense_text, sparse")
-    if params.sparse is not None and params.mode in DIST_MODES:
-        raise ValueError(
-            f"Sparse distance matrices not implemented. With --mode {params.mode} an "
-            "absent pair is the maximum distance, not zero, so a sparse file would "
-            "invert the meaning of every cell it omits. Use --dense or --dense_text."
-        )
+    hdf, dense_text = resolve_matrix_outputs(params)
     if params.mode in STRUCTURE_VALUE_FIELDS or params.mode in STRUCTURE_DIST_MODES:
         if not 0 <= params.lb <= 1:
             raise ValueError(f"--lb must be between 0 and 1 for --mode {params.mode}.")
@@ -542,16 +466,16 @@ def main(argv):
             raise ValueError(
                 f"{option} is only supported with --mode {sorted(SPARSIFY_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
-                f"For '{params.mode}', run 'structure_dist --mode score --sparse out.hdf5' "
+                f"For '{params.mode}', run 'structure_dist --mode score --hdf out.hdf5' "
                 f"then 'transform_matrix -i out.hdf5 --mode {params.mode} {option} "
-                f"--sparse pruned.hdf5'."
+                f"--hdf pruned.hdf5'."
             )
         if params.symmetrize != "none":
             raise ValueError(
                 f"{option} output is always max-symmetric -- the accumulator selects "
                 "edges on max(M[i,j], M[j,i]) and writes that value to both cells -- so "
                 f"--symmetrize {params.symmetrize} cannot be applied on top of it. Drop "
-                f"--symmetrize, or run 'structure_dist --mode score --sparse out.hdf5' "
+                f"--symmetrize, or run 'structure_dist --mode score --hdf out.hdf5' "
                 f"and prune with transform_matrix afterwards."
             )
     elif params.symmetrize != "none" and not self_comparison:
@@ -570,9 +494,8 @@ def main(argv):
         reference_values,
         aligner,
         params.mode,
-        dense=params.dense,
-        dense_text=params.dense_text,
-        sparse=params.sparse,
+        hdf=hdf,
+        dense_text=dense_text,
         evalue=params.evalue,
         max_hits_per_query=params.max_hits_per_query,
         lb=params.lb,
