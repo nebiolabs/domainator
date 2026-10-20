@@ -58,7 +58,7 @@ pass `inf`) for one cluster per connected component. `--top_n` bounds list sizes
 
 - **editors** — input format == output format, so they chain/stream (GenBank in,
   GenBank out): `domainate`, `domain_search`, `filter_domains`, `select_by_*`,
-  `extract_*`, `trim_contigs`, `color_genbank`, `clean_sequences`, `sort_contigs`.
+  `extract_*`, `trim_contigs`, `rotate_contigs`, `color_genbank`, `clean_sequences`, `sort_contigs`.
 - **reports** — TSV/HTML/JSON summaries: `summary_report`, `enum_report`,
   `hmmer_report`, `matrix_report`, `ssn_navigator`.
 - **comparison** — score/distance matrices: `seq_dist`, `kmer_dist`, `structure_dist`,

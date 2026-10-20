@@ -374,6 +374,29 @@ def test_pad_cds_range_top_hits(shared_datadir):
         
         compare_seqfiles(out, shared_datadir / "domain_search_test_out3.gb", skip_qualifiers={"accession"})
 
+@pytest.mark.parametrize("where", ["start", "end", "center"])
+def test_pad_where(where, shared_datadir):
+    gb = shared_datadir / "pDONR201_multi_genemark.gb"
+    hmms = shared_datadir / "pdonr_hmms.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + f"/out.gb"
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--pad_where", where, "--cpu", "1"]
+        main(args)
+        records = list(utils.parse_seqfiles([out]))
+        assert len(records) > 1
+        anchors = set()
+        lengths = set()
+        for record in records:
+            lengths.add(len(record))
+            focus = [cds for cds in utils.DomainatorCDS.list_from_contig(record) if cds.domain_search_feature is not None]
+            assert len(focus) == 1
+            location = focus[0].feature.location
+            assert location.strand == 1
+            start, end = int(location.start), int(location.end)
+            anchors.add({"start": start, "end": end, "center": start + (end - start) // 2}[where])
+        assert len(lengths) == 1
+        assert len(anchors) == 1
+
 def test_deduplicate(shared_datadir):
     gb = shared_datadir / "pDONR201_multi_genemark_domainator.gb"
     hmms = shared_datadir / "pdonr_hmms.hmm"

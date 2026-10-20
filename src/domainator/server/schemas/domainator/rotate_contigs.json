@@ -1,0 +1,234 @@
+{
+  "id": "rotate_contigs",
+  "display_name": "Rotate Contigs",
+  "category": "Editors",
+  "description": "Rotate circular contigs so that their origin is set relative to a domain annotation\n\nFor each contig, one domain is chosen from new annotations found by searching the references (-r) against the contig, and/or from pre-existing Domainator (--domains) or domain_search (--search_hits) annotations. If there are several candidates, the one with the highest score is chosen (ties broken by lowest E-value, then by position). The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--where), and reverse complemented if necessary to put the chosen domain on the forward strand (unless --keep_direction).\n\nPositions are relative to the chosen domain, in its own orientation:\nstart:  the first base of the domain becomes the first base of the contig.\nend:    the last base of the domain becomes the last base of the contig.\ncenter: the origin is placed in the middle of the domain.\n\nInputs must be nucleotide sequences. Only circular contigs are rotated. FASTA records and linear GenBank records are skipped with a warning, unless --circularize is set, in which case they are treated as circular. Contigs without a qualifying domain are skipped with a warning. Output contigs are always marked as circular.\n\nProtein references are searched against CDS translations, so contigs without CDS annotations (such as all FASTA inputs) need --gene_call to be found by protein references. Nucleotide references (nucleotide HMMs, nucleotide FASTA, and infernal CM files) are searched against the whole contig.",
+  "runner": "module",
+  "priority": 5,
+  "entry_point": "domainator.rotate_contigs",
+  "parameters": [
+    {
+      "name": "Input",
+      "parameter": "input",
+      "help": "Input nucleotide genbank or fasta files.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-i",
+        "--input"
+      ],
+      "file_types": [
+        "gb",
+        "gbk",
+        "genbank",
+        "gbff",
+        "fasta",
+        "fa",
+        "fna"
+      ]
+    },
+    {
+      "name": "Output",
+      "parameter": "output",
+      "help": "Output file name.",
+      "type": "output",
+      "flags": [
+        "-o",
+        "--output"
+      ],
+      "required": true
+    },
+    {
+      "name": "References",
+      "parameter": "references",
+      "help": "reference files to search against the input, to find new domains to rotate on. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "-r",
+        "--references"
+      ],
+      "file_types": [
+        "hmm",
+        "fasta",
+        "faa",
+        "fa",
+        "fna",
+        "cm"
+      ]
+    },
+    {
+      "name": "Domains",
+      "parameter": "domains",
+      "help": "Rotate on pre-existing domainator annotations with these names.",
+      "type": "string",
+      "multiple": true,
+      "flags": [
+        "--domains"
+      ]
+    },
+    {
+      "name": "Search Hits",
+      "parameter": "search_hits",
+      "help": "Rotate on pre-existing search hit annotations (from domain_search.py).",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--search_hits"
+      ]
+    },
+    {
+      "name": "Evalue",
+      "parameter": "evalue",
+      "help": "threshold E value for domains to rotate on. Both new and pre-existing annotations must pass this threshold. Must be <=10.",
+      "type": "number",
+      "default": 0.001,
+      "flags": [
+        "-e",
+        "--evalue"
+      ]
+    },
+    {
+      "name": "Where",
+      "parameter": "where",
+      "help": "where to put the origin, relative to the chosen domain in its own orientation (not relative to the original orientation of the contig). start: the first base of the domain becomes the first base of the contig. end: the last base of the domain becomes the last base of the contig. center: the origin is placed in the middle of the domain.",
+      "type": "string",
+      "choices": [
+        "start",
+        "end",
+        "center"
+      ],
+      "default": "start",
+      "flags": [
+        "--where"
+      ]
+    },
+    {
+      "name": "Keep Direction",
+      "parameter": "keep_direction",
+      "help": "by default, contigs are reverse complemented if necessary to put the chosen domain on the forward strand. Setting this option will keep the original orientation of the contig.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_direction"
+      ]
+    },
+    {
+      "name": "Circularize",
+      "parameter": "circularize",
+      "help": "treat fasta records and linear genbank records as circular, before searching and rotating. By default, they are skipped.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--circularize"
+      ]
+    },
+    {
+      "name": "Keep Annotation",
+      "parameter": "keep_annotation",
+      "help": "by default, new annotations from the reference search are not written to the output. Setting this option will keep the new annotation of the domain that the contig was rotated on. Has no effect if the contig was rotated on a pre-existing annotation.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_annotation"
+      ]
+    },
+    {
+      "name": "Gene Call",
+      "parameter": "gene_call",
+      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode before the search. If 'all', then any existing CDS and domainator annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. Needed to search protein references against contigs without CDS annotations, such as fasta records.",
+      "type": "string",
+      "choices": [
+        "all",
+        "unannotated"
+      ],
+      "flags": [
+        "--gene_call"
+      ]
+    },
+    {
+      "name": "Fasta Out",
+      "parameter": "fasta_out",
+      "help": "makes output a fasta file when activated",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--fasta_out"
+      ]
+    }
+  ],
+  "advanced_parameters": [
+    {
+      "name": "Z",
+      "parameter": "Z",
+      "help": "Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. Set to 0 to use the number of actual target sequences in the input files (not available when reading from stdin).",
+      "type": "integer",
+      "default": 1000,
+      "flags": [
+        "-Z"
+      ]
+    },
+    {
+      "name": "Domains File",
+      "parameter": "domains_file",
+      "help": "text file containing names of pre-existing domainator annotations to rotate on.",
+      "type": "file",
+      "flags": [
+        "--domains_file"
+      ],
+      "file_types": [
+        "txt"
+      ]
+    },
+    {
+      "name": "Databases",
+      "parameter": "databases",
+      "help": "Consider only pre-existing annotations from these databases. default: all databases.",
+      "type": "file",
+      "multiple": true,
+      "flags": [
+        "--databases"
+      ]
+    },
+    {
+      "name": "Keep Name",
+      "parameter": "keep_name",
+      "help": "by default, rotated contigs will be renamed to note the original coordinates of their first and last bases, and whether they were reverse complemented. Set this option to keep contigs with their original names.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--keep_name"
+      ]
+    },
+    {
+      "name": "Cpu",
+      "parameter": "cpu",
+      "help": "the number of cores of the cpu which are used at a time to run the search [default: use all available cores]",
+      "type": "integer",
+      "default": 0,
+      "flags": [
+        "--cpu"
+      ]
+    },
+    {
+      "name": "Max Mode",
+      "parameter": "max_mode",
+      "help": "Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--max_mode"
+      ]
+    },
+    {
+      "name": "Batch Size",
+      "parameter": "batch_size",
+      "help": "How many contigs to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.",
+      "type": "integer",
+      "default": 1000,
+      "flags": [
+        "--batch_size"
+      ]
+    }
+  ]
+}

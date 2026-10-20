@@ -193,6 +193,7 @@ color_table_to_legend.py -i clusters_colors.tsv --svg cluster_legend.svg
 
  - `select_by_cds.py` is useful for extracting gene neighborhoods or individual genes from larger annotated contigs, using advanced selection criteria.
  - `select_by_contig.py` is useful for extracting whole contigs from larger files, using advanced selection criteria.
+ - `rotate_contigs.py` sets the origin of circular contigs, such as plasmids or phages, relative to a domain, so that related contigs start at the same place and in the same orientation. For example, `rotate_contigs.py -i plasmids.gb -r CcdB.hmm --where start -o rotated.gb`.
  - `extract_domains.py`, `extract_peptides.py`, `extract_unannotated.py`, and `deduplicate_genbank.py` are also useful for their specialized functions.
 
  Check their documentation, using `-h`. And also see the advanced workflows at the [companion repository](https://github.com/nebiolabs/domainator_examples).

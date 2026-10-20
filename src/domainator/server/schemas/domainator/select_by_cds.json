@@ -218,11 +218,26 @@
     {
       "name": "Pad",
       "parameter": "pad",
-      "help": "If set, then ends of sequences will be padded so that the focus CDS aligns.",
+      "help": "If set, then ends of sequences will be padded so that the focus CDS aligns. See --pad_where.",
       "type": "boolean",
       "default": false,
       "flags": [
         "--pad"
+      ]
+    },
+    {
+      "name": "Pad Where",
+      "parameter": "pad_where",
+      "help": "Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.",
+      "type": "string",
+      "default": "start",
+      "choices": [
+        "start",
+        "end",
+        "center"
+      ],
+      "flags": [
+        "--pad_where"
       ]
     },
     {

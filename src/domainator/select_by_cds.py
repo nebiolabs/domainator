@@ -14,7 +14,7 @@ otherwise:
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
 from typing import Tuple, List, Optional, Set
 from domainator import __version__, RawAndDefaultsFormatter
 
@@ -27,10 +27,48 @@ from domainator import __version__, RawAndDefaultsFormatter
 
 #TODO: add support for selecting by qualifiers
 
-def pad_records(records, pad_char="N"):
+def pad_anchor(record, where:str="start") -> int:
+    """
+        The coordinate in record to align on when padding.
+
+        Args:
+            record: a record from get_cds_neighborhood, with dist to start, dist to end, and focus strand set
+            where: "start", "end", or "center", relative to the focus CDS in its own orientation
+
+        Returns:
+            a 0-based coordinate in record. For "end" on the forward strand, it is the position just after the last base of the focus CDS.
+    """
+    if where not in WHERE_CHOICES:
+        raise ValueError(f"where must be one of {', '.join(WHERE_CHOICES)}, not {where}")
+    left = record.get_dist_to_start()
+    right = len(record) - record.get_dist_to_end()
+    length = right - left
+    if record.get_focus_strand() == -1:
+        if where == "start":
+            return right
+        elif where == "end":
+            return left
+        return right - length // 2 # center
+    if where == "start":
+        return left
+    elif where == "end":
+        return right
+    return left + length // 2 # center
+
+def pad_records(records, pad_char="N", where:str="start"):
+    """
+        Pads the ends of records in place so that their focus CDSs align.
+
+        Args:
+            records: a list of records from get_cds_neighborhood
+            pad_char: the character to pad with
+            where: "start", "end", or "center". Where to align, relative to the focus CDS in its own orientation.
+    """
+    if where not in WHERE_CHOICES:
+        raise ValueError(f"where must be one of {', '.join(WHERE_CHOICES)}, not {where}")
     if len(records) == 0:
         return 
-    offsets = [x.get_dist_to_start() for x in records]
+    offsets = [pad_anchor(x, where) for x in records]
     lengths = [len(x) for x in records]
     max_dist = max(offsets)
     shift_amount = [max_dist - x for x in offsets]
@@ -238,6 +276,8 @@ def get_cds_neighborhood(contig, cds_list, cds_idx, cds_range: Tuple[int, int]=N
         record.id += "rc"
         
     record.set_dist_to_start(dist_to_start)
+    record.set_dist_to_end(dist_to_end)
+    record.set_focus_strand(-1 if (not normalize_direction and strand == -1) else 1)
     return record, slice_location
 
 def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,
@@ -492,7 +532,10 @@ def main(argv):
     #                     help="a comparator and a number, to specify a desired number of domains. Example: '> 2' would mean to return contigs with more than 2 domains.")
 
     parser.add_argument('--pad', action='store_true', default=False,
-                        help="If set, then ends of sequences will be padded so that the focus CDS aligns.")
+                        help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --pad_where.")
+    parser.add_argument('--pad_where', type=str, default="start", choices=WHERE_CHOICES,
+                        help="Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. "
+                        "start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.")
 
     parser.add_argument('--keep_direction', action='store_true', default=False,
                         help="by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.")
@@ -592,7 +635,7 @@ def main(argv):
             seen.add(record.id)
 
     if pad:
-        pad_records(records)
+        pad_records(records, where=params.pad_where)
         write_genbank(records, output_handle)
 
     if params.output is not None:

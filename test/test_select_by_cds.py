@@ -9,6 +9,9 @@ import pytest
 from io import StringIO
 import sys
 import subprocess
+from domainator.Bio.Seq import Seq
+from domainator.Bio.SeqRecord import SeqRecord
+from helpers import compare_seqfiles
 
 
 def test_select_by_cds_1(shared_datadir):
@@ -145,6 +148,78 @@ def test_select_by_cds_align_2(shared_datadir):
         assert len(new_file) == 4
         for record in new_file:
             assert len(record) == len(new_file[0])
+
+def _cds_anchor(location, where):
+    """The coordinate of the start, end, or center of a CDS, in the CDS's own orientation."""
+    start, end = int(location.start), int(location.end)
+    if location.strand == -1:
+        return {"start": end, "end": start, "center": end - (end - start) // 2}[where]
+    return {"start": start, "end": end, "center": start + (end - start) // 2}[where]
+
+@pytest.mark.parametrize("where", ["start", "end", "center"])
+@pytest.mark.parametrize("keep_direction", [False, True])
+def test_select_by_cds_pad_where(where, keep_direction, shared_datadir):
+    # CAT and CcdB CDSs have different lengths, so start, end, and center alignments give different paddings.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/extraction.gb"
+        args = ["-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), "-o", out, "--domains", "CAT", "CcdB", "--pad", "--pad_where", where]
+        if keep_direction:
+            args.append("--keep_direction")
+        select_by_cds.main(args)
+        new_file = list(parse_seqfiles([out]))
+        assert len(new_file) == 8
+        anchors = set()
+        strands = set()
+        for record in new_file:
+            assert len(record) == len(new_file[0])
+            cdss = DomainatorCDS.list_from_contig(record)
+            assert len(cdss) == 1
+            location = cdss[0].feature.location
+            strands.add(location.strand)
+            anchors.add(_cds_anchor(location, where))
+        assert len(anchors) == 1
+        assert strands == ({1, -1} if keep_direction else {1})
+
+def test_select_by_cds_pad_where_start_is_default(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_default = output_dir + "/default.gb"
+        out_start = output_dir + "/start.gb"
+        args = ["-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), "--cds_range", "1", "--domains", "CAT", "CcdB", "--pad"]
+        select_by_cds.main(args + ["-o", out_default])
+        select_by_cds.main(args + ["-o", out_start, "--pad_where", "start"])
+        compare_seqfiles(out_default, out_start)
+
+def _padding_record(id, dist_to_start, focus_length, dist_to_end, focus_strand):
+    record = SeqRecord(Seq("A" * (dist_to_start + focus_length + dist_to_end)), id=id)
+    record.set_dist_to_start(dist_to_start)
+    record.set_dist_to_end(dist_to_end)
+    record.set_focus_strand(focus_strand)
+    return record
+
+@pytest.mark.parametrize("where,expected", [
+    # (left pad, right pad) for each of the three records
+    ("start", [(7, 0), (7, 5), (0, 4)]),
+    ("end", [(2, 5), (12, 0), (0, 4)]),
+    ("center", [(5, 0), (9, 1), (0, 2)]),
+])
+def test_pad_records_where(where, expected):
+    # a: forward, focus 5..12 (length 7, center 8, rounded down).
+    # b: reverse, focus 2..5 (length 3, start 5, end 2, center 4).
+    # c: forward, focus 12..14 (length 2, center 13).
+    records = [
+        _padding_record("a", 5, 7, 3, 1),
+        _padding_record("b", 2, 3, 5, -1),
+        _padding_record("c", 12, 2, 4, 1),
+    ]
+    lengths = [len(x) for x in records]
+    select_by_cds.pad_records(records, where=where)
+    assert len({len(x) for x in records}) == 1
+    for record, length, (left, right) in zip(records, lengths, expected):
+        assert str(record.seq) == "N" * left + "A" * length + "N" * right
+
+def test_pad_records_bad_where():
+    with pytest.raises(ValueError):
+        select_by_cds.pad_records([_padding_record("a", 1, 1, 1, 1)], where="middle")
 
 def test_select_by_cds_domain_expr_1(shared_datadir):
     

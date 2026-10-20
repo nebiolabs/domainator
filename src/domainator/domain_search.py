@@ -19,7 +19,7 @@ import sys
 import os
 import tempfile
 from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available, PARTIAL_CHOICES, sequence_hashes
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available, PARTIAL_CHOICES, WHERE_CHOICES, sequence_hashes
 from domainator import __version__
 from domainator import select_by_cds
 import psutil
@@ -440,7 +440,10 @@ def main(argv):
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract regions around CDSs on the specified strand.")
 
     parser.add_argument('--pad', action='store_true', default=False,
-                       help="If set, then ends of sequences will be padded so that the focus CDS aligns.")
+                       help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --pad_where.")
+    parser.add_argument('--pad_where', type=str, default="start", choices=WHERE_CHOICES,
+                       help="Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. "
+                       "start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.")
 
     parser.add_argument('--keep_direction', action='store_true', default=False,
                        help="by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.")
@@ -614,7 +617,7 @@ def main(argv):
                 seen.add(record.id)
         if pad:
             records.sort(reverse=True)
-            select_by_cds.pad_records(records)
+            select_by_cds.pad_records(records, where=params.pad_where)
             current_output_bytes = write_records_with_limit(
                 records,
                 out,

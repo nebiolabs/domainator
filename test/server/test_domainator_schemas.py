@@ -157,6 +157,17 @@ SCHEMA_CASES = [
             "trimmed.gb": _check_trimmed_contig(1000, {"pDONR201_1", "pDONR201_1_1266:2265"}),
         },
     ),
+    SchemaIntegrationCase(
+        tool_id="rotate_contigs",
+        parameters=lambda data_dir: {
+            "input": [str(data_dir / "bacillus_phage_SPR_with_annotations.gb")],
+            "output": "rotated.gb",
+            "domains": ["DHFR_1"],
+        },
+        expected_outputs={
+            "rotated.gb": _check_trimmed_contig(2552, {"OM236515mod_1843:1844rc"}),
+        },
+    ),
 ]
 
 

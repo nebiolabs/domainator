@@ -149,6 +149,7 @@ version = {attr = "domainator.__version__"}
 "hmmer_select.py" = "domainator:hmmer_select._entrypoint"
 "matrix_report.py" = "domainator:matrix_report._entrypoint"
 "partition_seqfile.py" = "domainator:partition_seqfile._entrypoint"
+"rotate_contigs.py" = "domainator:rotate_contigs._entrypoint"
 "select_by_cds.py" = "domainator:select_by_cds._entrypoint"
 "select_by_coord.py" = "domainator:select_by_coord._entrypoint"
 "select_by_contig.py" = "domainator:select_by_contig._entrypoint"

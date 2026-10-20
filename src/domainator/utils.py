@@ -2130,6 +2130,8 @@ FRAGMENT_FLAGS_PREFIX = "Flags:"
 # UniProt marks a missing terminus with a NON_TER feature on the first or last residue.
 NON_TERMINAL_FEATURE_NAME = "NON_TER"
 PARTIAL_CHOICES = ("include", "exclude", "only")
+# Positions relative to a feature in its own orientation, e.g. for rotate_contigs.py --where and --pad_where.
+WHERE_CHOICES = ("start", "end", "center")
 
 def partial_help(what:str) -> str:
     """

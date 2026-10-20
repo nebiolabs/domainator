@@ -20,6 +20,8 @@ from domainator.Bio.Seq import UndefinedSequenceError
 _NO_SEQRECORD_COMPARISON = "SeqRecord comparison is deliberately not implemented. Explicitly compare the attributes of interest."
 
 DOMAINATOR_DIST_TO_START_ANNOTATION="dist_to_start"
+DOMAINATOR_DIST_TO_END_ANNOTATION="dist_to_end"
+DOMAINATOR_FOCUS_STRAND_ANNOTATION="focus_strand"
 DOMAINATOR_HIT_SCORES_ANNOTATION="hit_scores"
 DOMAINATOR_HIT_NAMES_ANNOTATION = "hit_names"
 DOMAINATOR_HIT_BEST_SCORE_ANNOTATION="hit_best_score"
@@ -1256,12 +1258,42 @@ class SeqRecord:
 
     def get_dist_to_start(self):
         """
-            sets the dist to start annotation
+            gets the dist to start annotation
         """
         try:
             return self.annotations[DOMAINATOR_DIST_TO_START_ANNOTATION]
         except KeyError:
-            raise f"dist to start not set for {self.id}"
+            raise KeyError(f"dist to start not set for {self.id}")
+
+    def set_dist_to_end(self, dist: int):
+        """
+            sets the dist to end annotation: the distance from the end of the focus feature to the end of the record
+        """
+        self.annotations[DOMAINATOR_DIST_TO_END_ANNOTATION] = dist
+
+    def get_dist_to_end(self):
+        """
+            gets the dist to end annotation
+        """
+        try:
+            return self.annotations[DOMAINATOR_DIST_TO_END_ANNOTATION]
+        except KeyError:
+            raise KeyError(f"dist to end not set for {self.id}")
+
+    def set_focus_strand(self, strand: int):
+        """
+            sets the focus strand annotation: the strand of the focus feature in record coordinates (1 or -1)
+        """
+        self.annotations[DOMAINATOR_FOCUS_STRAND_ANNOTATION] = strand
+
+    def get_focus_strand(self):
+        """
+            gets the focus strand annotation
+        """
+        try:
+            return self.annotations[DOMAINATOR_FOCUS_STRAND_ANNOTATION]
+        except KeyError:
+            raise KeyError(f"focus strand not set for {self.id}")
 
     def set_hit_names(self, hit_name):
         """
