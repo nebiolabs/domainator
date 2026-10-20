@@ -1,4 +1,6 @@
 from domainator import compare_contigs, utils
+import os
+import warnings
 import tempfile
 import pandas as pd
 import numpy as np
@@ -233,9 +235,9 @@ def test_compare_contigs_name_by_order_reorders_clustered_records():
         stripped_ids = [record.id.split("_", 1)[1] for record in ordered_records]
 
         _assert_name_by_order_prefixes(ordered_records)
-        assert stripped_ids != [record.id for record in records]
-        assert set(stripped_ids[:2]) == {"similar_1", "similar_2"}
-        assert stripped_ids[2] == "different"
+        # dendrogram orientation is arbitrary, so only adjacency of the similar records is guaranteed
+        assert sorted(stripped_ids) == sorted(record.id for record in records)
+        assert abs(stripped_ids.index("similar_1") - stripped_ids.index("similar_2")) == 1
 
 
 def test_compare_contigs_lb_thresholds_small_scores():
@@ -594,3 +596,185 @@ def test_compare_contigs_max_hits_per_query_applies_before_sparsify(sparsify_arg
 
         np.testing.assert_array_equal(DataMatrix.from_file(stream).toarray(),
                                       DataMatrix.from_file(batch).toarray())
+
+
+def _block_scores(block_ids, rng=None):
+    """Symmetric score matrix: 1.0 on the diagonal, high within a block, low (or noisy) between blocks."""
+    n = len(block_ids)
+    scores = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                scores[i, j] = 1.0
+            elif block_ids[i] == block_ids[j]:
+                scores[i, j] = 0.8 if rng is None else 0.6 + 0.3 * rng.random()
+            elif rng is not None:
+                scores[i, j] = 0.2 * rng.random()
+    scores = np.maximum(scores, scores.T)
+    return scipy.sparse.csr_array(scores)
+
+
+def _adjacent_distance(order, scores):
+    dense = 1 - scores.toarray() / scores.max()
+    return sum(dense[a, b] for a, b in zip(order[:-1], order[1:]))
+
+
+@pytest.mark.parametrize("linkage_method", compare_contigs.LINKAGE_METHODS)
+@pytest.mark.parametrize("leaf_ordering", compare_contigs.LEAF_ORDERINGS)
+def test_hierarchical_order_keeps_blocks_contiguous(linkage_method, leaf_ordering):
+    # interleaved input order; the old row-walk order extraction did not keep blocks together
+    block_ids = [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
+    order = compare_contigs._hierarchical_order(_block_scores(block_ids), linkage_method=linkage_method, leaf_ordering=leaf_ordering)
+    assert sorted(order) == list(range(len(block_ids)))
+    ordered_blocks = [block_ids[i] for i in order]
+    for block in set(block_ids):
+        positions = [pos for pos, b in enumerate(ordered_blocks) if b == block]
+        assert positions == list(range(positions[0], positions[0] + len(positions)))
+
+
+@pytest.mark.parametrize("linkage_method", ["average", "ward"])
+def test_hierarchical_order_greedy_and_optimal_beat_plain_dendrogram_order(linkage_method):
+    rng = np.random.default_rng(0)
+    scores = _block_scores(rng.integers(0, 6, 60).tolist(), rng=rng)
+    costs = {
+        ordering: _adjacent_distance(compare_contigs._hierarchical_order(scores, linkage_method=linkage_method, leaf_ordering=ordering), scores)
+        for ordering in compare_contigs.LEAF_ORDERINGS
+    }
+    assert costs["greedy"] <= costs["none"] + 1e-9
+    assert costs["optimal"] <= costs["none"] + 1e-9
+
+
+@pytest.mark.parametrize("n", [0, 1, 2, 3])
+def test_hierarchical_order_small_inputs_are_permutations(n):
+    scores = scipy.sparse.csr_array(np.ones((n, n)) * 0.5 + np.eye(n) * 0.5)
+    assert sorted(compare_contigs._hierarchical_order(scores)) == list(range(n))
+
+
+def test_hierarchical_order_all_zero_scores_keeps_input_order():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert compare_contigs._hierarchical_order(scipy.sparse.csr_array((5, 5))) == [0, 1, 2, 3, 4]
+        assert compare_contigs._hierarchical_order(scipy.sparse.csr_array(np.zeros((5, 5)))) == [0, 1, 2, 3, 4]
+
+
+def test_hierarchical_order_rejects_negative_scores():
+    scores = _block_scores([0, 0, 1, 1]).toarray()
+    scores[0, 2] = scores[2, 0] = -0.1
+    with pytest.raises(ValueError, match="non-negative"):
+        compare_contigs._hierarchical_order(scipy.sparse.csr_array(scores))
+
+
+def test_hierarchical_order_rejects_unknown_methods():
+    scores = _block_scores([0, 0, 1])
+    with pytest.raises(ValueError, match="linkage"):
+        compare_contigs._hierarchical_order(scores, linkage_method="centroid")
+    with pytest.raises(ValueError, match="leaf ordering"):
+        compare_contigs._hierarchical_order(scores, leaf_ordering="random")
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_sparse_scores_to_condensed_distances_matches_dense(seed):
+    from scipy.spatial.distance import squareform
+    rng = np.random.default_rng(seed)
+    n = 40
+    dense = rng.random((n, n)) * (rng.random((n, n)) < 0.2)
+    dense[5, :] = 0 # an empty row
+    dense[:, 5] = 0
+    dense = np.maximum(dense, dense.T)
+    np.fill_diagonal(dense, 1.0)
+    scores = scipy.sparse.csr_array(dense)
+
+    expected = 1 - dense / dense.max()
+    np.fill_diagonal(expected, 0)
+    actual = compare_contigs._sparse_scores_to_condensed_distances(scores, dense.max())
+    np.testing.assert_allclose(actual, squareform(expected))
+
+
+def test_sparse_scores_to_condensed_distances_uses_higher_score_when_asymmetric(monkeypatch):
+    from scipy.spatial.distance import squareform
+    rng = np.random.default_rng(3)
+    n = 30
+    dense = rng.random((n, n)) * (rng.random((n, n)) < 0.3)
+    np.fill_diagonal(dense, 1.0)
+    # small blocks, so pairs straddle block boundaries
+    monkeypatch.setattr(compare_contigs, "_CONDENSED_BLOCK_NNZ", 7)
+    actual = compare_contigs._sparse_scores_to_condensed_distances(scipy.sparse.csr_array(dense), 1.0)
+    expected = 1 - np.maximum(dense, dense.T)
+    np.fill_diagonal(expected, 0)
+    np.testing.assert_allclose(actual, squareform(expected))
+
+
+def test_compare_contigs_sorts_with_max_hits_per_query():
+    # --max_hits_per_query makes the score matrix asymmetric, which used to crash the genbank sort
+    records = [_make_compare_contig_record(f"rec{i}", doms) for i, doms in enumerate(
+        [["A", "B"], ["C", "D"], ["A", "B", "E"], ["C", "D", "F"], ["A", "E"], ["C", "F"]])]
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = output_dir + "/input.gb"
+        out_gb = output_dir + "/sorted.gb"
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+        compare_contigs.main(["-i", input_path, "--ji", "1.0", "--ai", "0", "--max_hits_per_query", "2", "-o", out_gb])
+        ordered_ids = [rec.id for rec in utils.parse_seqfiles([out_gb])]
+        assert sorted(ordered_ids) == sorted(rec.id for rec in records)
+        ab_group = {"rec0", "rec2", "rec4"}
+        positions = sorted(ordered_ids.index(x) for x in ab_group)
+        assert positions == list(range(positions[0], positions[0] + 3))
+
+
+@pytest.mark.parametrize("linkage_method", ["ward", "single"])
+@pytest.mark.parametrize("leaf_ordering", ["optimal", "none"])
+def test_compare_contigs_linkage_and_leaf_ordering_options(shared_datadir, linkage_method, leaf_ordering):
+    input_path = str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_gb = output_dir + "/sorted.gb"
+        compare_contigs.main(["-i", input_path, "-o", out_gb, "--linkage", linkage_method, "--leaf_ordering", leaf_ordering])
+        out_ids = sorted(rec.id for rec in utils.parse_seqfiles([out_gb]))
+        assert out_ids == sorted(rec.id for rec in utils.parse_seqfiles([input_path]))
+
+
+def test_compare_contigs_name_by_order_does_not_rename_input_records():
+    records = [_make_compare_contig_record(f"rec{i}", doms) for i, doms in enumerate([["A"], ["B"], ["A", "B"]])]
+    report = compare_contigs.GenbankOutput("/dev/null")
+    scores = scipy.sparse.csr_array(np.eye(3))
+    report.write(records, scores, {"name_by_order": True})
+    assert [rec.id for rec in records] == ["rec0", "rec1", "rec2"]
+
+
+def test_compare_contigs_rejects_negative_weights(shared_datadir):
+    with pytest.raises(ValueError, match="non-negative"):
+        compare_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--ji", "-0.5"])
+
+
+class _FakeVirtualMemory:
+    available = 10
+
+
+def test_compare_contigs_sort_memory_check_fails_early(shared_datadir, monkeypatch):
+    monkeypatch.setattr(compare_contigs.psutil, "virtual_memory", lambda: _FakeVirtualMemory())
+    input_path = str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_gb = output_dir + "/sorted.gb"
+        out_sparse = output_dir + "/sparse.hdf5"
+        with pytest.raises(SystemExit, match="--skip_sort_memory_check"):
+            compare_contigs.main(["-i", input_path, "-o", out_gb, "--sparse", out_sparse])
+        assert not os.path.exists(out_gb)
+        assert not os.path.exists(out_sparse)
+
+        # no genbank output, so no sort and no check
+        compare_contigs.main(["-i", input_path, "--sparse", out_sparse])
+        assert os.path.exists(out_sparse)
+
+        compare_contigs.main(["-i", input_path, "-o", out_gb, "--skip_sort_memory_check"])
+        assert len(list(utils.parse_seqfiles([out_gb]))) == 4
+
+
+def test_compare_contigs_warns_for_slow_optimal_leaf_ordering(shared_datadir, monkeypatch):
+    monkeypatch.setattr(compare_contigs, "_OPTIMAL_LEAF_ORDERING_WARN_CONTIGS", 2)
+    input_path = str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_gb = output_dir + "/sorted.gb"
+        with pytest.warns(UserWarning, match="leaf_ordering greedy"):
+            compare_contigs.main(["-i", input_path, "-o", out_gb, "--leaf_ordering", "optimal"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            compare_contigs.main(["-i", input_path, "-o", out_gb, "--leaf_ordering", "greedy"])

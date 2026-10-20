@@ -114,6 +114,48 @@
       ]
     },
     {
+      "name": "Linkage",
+      "parameter": "linkage",
+      "help": "Hierarchical clustering linkage method used to sort contigs for the genbank output. Distances are 1 - score/max(score); pairs with no score have distance 1.",
+      "type": "string",
+      "choices": [
+        "average",
+        "ward",
+        "complete",
+        "single",
+        "weighted"
+      ],
+      "default": "average",
+      "flags": [
+        "--linkage"
+      ]
+    },
+    {
+      "name": "Leaf Ordering",
+      "parameter": "leaf_ordering",
+      "help": "How to order the leaves of the clustering tree for the genbank output. greedy: fast and usually about as good as optimal. optimal: very slow (minutes to hours) beyond a few thousand contigs. none: plain dendrogram order.",
+      "type": "string",
+      "choices": [
+        "greedy",
+        "optimal",
+        "none"
+      ],
+      "default": "greedy",
+      "flags": [
+        "--leaf_ordering"
+      ]
+    },
+    {
+      "name": "Skip Sort Memory Check",
+      "parameter": "skip_sort_memory_check",
+      "help": "Don't fail early when sorting the contigs for the genbank output is estimated to need more memory than is available.",
+      "type": "boolean",
+      "default": false,
+      "flags": [
+        "--skip_sort_memory_check"
+      ]
+    },
+    {
       "name": "Max hits per query",
       "parameter": "max_hits_per_query",
       "help": "After combining all metric scores, keep this many of the top hits for each query. Applied before MST and kNN pruning.",

@@ -12,14 +12,13 @@ from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, get_file_type, make_pool
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-import scipy.spatial
-import scipy.cluster
+import scipy.cluster.hierarchy
 import math
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
 from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_matrix, sparsify_requested
 from domainator.filter_domains import filter_domains
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_matrix_output_limit, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
 from typing import Optional, Set
 import numpy as np
 import scipy.sparse
@@ -446,8 +445,139 @@ class DomainSequenceSimilarity(ContigMetric):
     pass
 
 
+LINKAGE_METHODS = ("average", "ward", "complete", "single", "weighted")
+LEAF_ORDERINGS = ("greedy", "optimal", "none")
+_OPTIMAL_LEAF_ORDERING_WARN_CONTIGS = 5000
+_CONDENSED_BLOCK_NNZ = 1 << 20
+
+
+class SortMemoryLimitExceeded(RuntimeError):
+    """Raised when sorting the contigs for genbank output would need more memory than is available."""
+
+
+def estimate_sort_memory_bytes(n):
+    """Peak memory for hierarchical sorting: the condensed distance vector plus the copy made by scipy's linkage."""
+    return (n * (n - 1) // 2) * np.dtype(np.float64).itemsize * 2
+
+
+def _condensed_index(n, i, j):
+    """Index of the pair (i, j), with i < j, in a scipy condensed distance vector. Works elementwise on int64 arrays."""
+    return n * i - i * (i + 1) // 2 + (j - i - 1)
+
+
+def _sparse_scores_to_condensed_distances(scores, max_score):
+    """
+        Converts a sparse score matrix to a scipy condensed distance vector, distance = 1 - score/max_score,
+        without building a dense n x n matrix. Pairs with no score have distance 1.
+        If the matrix is not symmetric (e.g. after --max_hits_per_query), each pair uses the higher of its two scores.
+    """
+    n = scores.shape[0]
+    scores = scipy.sparse.csr_array(scores, dtype=np.float64)
+    scores.sum_duplicates()
+    condensed = np.ones(n * (n - 1) // 2, dtype=np.float64)
+    indptr = scores.indptr
+    # Rows are processed in order, so a pair's upper-triangle entry (from row min(i, j)) is always written
+    # before its lower-triangle entry (from row max(i, j)) is merged in.
+    start = 0
+    while start < n:
+        end = int(np.searchsorted(indptr, indptr[start] + _CONDENSED_BLOCK_NNZ, side="right")) - 1
+        end = min(max(end, start + 1), n)
+        lo, hi = indptr[start], indptr[end]
+        rows = np.repeat(np.arange(start, end, dtype=np.int64), np.diff(indptr[start:end + 1]))
+        cols = scores.indices[lo:hi].astype(np.int64)
+        distances = 1.0 - scores.data[lo:hi] / max_score
+
+        upper = cols > rows
+        condensed[_condensed_index(n, rows[upper], cols[upper])] = distances[upper]
+        lower = cols < rows
+        lower_idx = _condensed_index(n, cols[lower], rows[lower])
+        condensed[lower_idx] = np.minimum(condensed[lower_idx], distances[lower])
+        start = end
+    np.clip(condensed, 0.0, 1.0, out=condensed)
+    return condensed
+
+
+def _greedy_leaf_order(linkage_matrix, condensed, n):
+    """
+        Orders the leaves of a dendrogram by flipping subtrees: at each merge, the two child leaf orders are oriented
+        so that the leaves meeting at the junction are as close as possible (Gruvaeus & Wainer, 1972).
+        Linear time, and on contig data about as good as scipy's optimal_leaf_ordering.
+    """
+    def dist(i, j):
+        if i > j:
+            i, j = j, i
+        return condensed[_condensed_index(n, i, j)]
+
+    clusters = {i: [i] for i in range(n)}
+    for merge_idx, (left, right, _height, _size) in enumerate(linkage_matrix):
+        a = clusters.pop(int(left))
+        b = clusters.pop(int(right))
+        # orientations: a+b, a+rev(b), rev(a)+b, rev(a)+rev(b). Ties keep the earliest, so results are deterministic.
+        options = (dist(a[-1], b[0]), dist(a[-1], b[-1]), dist(a[0], b[0]), dist(a[0], b[-1]))
+        best = options.index(min(options))
+        if best in (2, 3):
+            a.reverse()
+        if best in (1, 3):
+            b.reverse()
+        a.extend(b)
+        clusters[n + merge_idx] = a
+    return clusters[2 * n - 2]
+
+
+def _hierarchical_order(scores, linkage_method="average", leaf_ordering="greedy"):
+    """
+        Runs hierarchical clustering on a square score matrix (higher is more similar) and
+        returns a list of record indices ordered so that similar records are adjacent.
+    """
+    if linkage_method not in LINKAGE_METHODS:
+        raise ValueError(f"Unknown linkage method {linkage_method!r}, expected one of {LINKAGE_METHODS}")
+    if leaf_ordering not in LEAF_ORDERINGS:
+        raise ValueError(f"Unknown leaf ordering {leaf_ordering!r}, expected one of {LEAF_ORDERINGS}")
+    n = scores.shape[0]
+    if n <= 2:
+        return list(range(n))
+    scores = scipy.sparse.csr_array(scores, dtype=np.float64)
+    if scores.nnz == 0:
+        return list(range(n))
+    min_score = scores.data.min()
+    if min_score < 0:
+        raise ValueError(f"compare_contigs scores must be non-negative to sort contigs, but the minimum score is {min_score}.")
+    max_score = scores.data.max()
+    if max_score <= 0: # if all scores are zero, just return the original order
+        return list(range(n))
+
+    condensed = _sparse_scores_to_condensed_distances(scores, max_score)
+    if not condensed.any(): # if all distances are zero, just return the original order
+        return list(range(n))
+    linkage_matrix = scipy.cluster.hierarchy.linkage(condensed, method=linkage_method)
+    if leaf_ordering == "optimal":
+        linkage_matrix = scipy.cluster.hierarchy.optimal_leaf_ordering(linkage_matrix, condensed)
+        return scipy.cluster.hierarchy.leaves_list(linkage_matrix).tolist()
+    if leaf_ordering == "greedy":
+        return _greedy_leaf_order(linkage_matrix, condensed, n)
+    return scipy.cluster.hierarchy.leaves_list(linkage_matrix).tolist()
+
+
+def _check_sort_feasible(n, leaf_ordering, check_memory=True):
+    """Fails early if sorting n contigs would not fit in available memory, and warns if it will be very slow."""
+    needed = estimate_sort_memory_bytes(n)
+    available = psutil.virtual_memory().available if check_memory else None
+    if check_memory and needed > available:
+        raise SortMemoryLimitExceeded(
+            f"Sorting {n} contigs for genbank output (-o) needs about {format_bytes(needed)} of memory, "
+            f"but only {format_bytes(available)} is available. "
+            "To avoid this, drop -o and write a matrix with --sparse instead, sort a subset of contigs with --contigs or --contigs_file, "
+            "or deduplicate the input first. Use --skip_sort_memory_check to try anyway."
+        )
+    if leaf_ordering == "optimal" and n > _OPTIMAL_LEAF_ORDERING_WARN_CONTIGS:
+        warnings.warn(
+            f"--leaf_ordering optimal on {n} contigs may take many minutes to hours. "
+            "Consider --leaf_ordering greedy, which is much faster and usually about as good."
+        )
+
+
 class DistanceReport(ABC):
-    outpath: str 
+    outpath: str
 
     @abstractmethod
     def write(self, recs, scores, options):
@@ -496,40 +626,21 @@ class SvgTreeOutput(DistanceReport):
 
 class GenbankOutput(DistanceReport):
 
-    def __init__(self, outpath):
+    def __init__(self, outpath, linkage_method="average", leaf_ordering="greedy"):
         self.outpath = outpath
-    
-    def hierarchical_cluster(self, scores):
-        """
-            runs hierarchical clustering on score matrix, returns a list of record indices optimally ordered by similarity
-        """
-        
-        #TODO: for really large datasets it might be good to find a way to cluster on sparse matrices.
-        dense = scores.toarray()
-        dense = 1 - (dense/np.max(dense)) #convert scores to distances, #TODO: could also cluster on the euclidean distance of score matrix?
-        np.fill_diagonal(dense,0)
-        if np.max(dense) == 0: #if all scores are zero, just return the original order
-            return list(range(dense.shape[0]))
-        dense = scipy.spatial.distance.squareform(dense)
-        linkage_matrix = scipy.cluster.hierarchy.linkage(dense, method='ward',  optimal_ordering=True)
-        out = list()
-        for r in range(len(linkage_matrix)):
-            if linkage_matrix[r,0] < scores.shape[0]:
-                out.append(int(linkage_matrix[r,0]))
-            if linkage_matrix[r,1] < scores.shape[0]:
-                out.append(int(linkage_matrix[r,1]))
-        return out
+        self.linkage_method = linkage_method
+        self.leaf_ordering = leaf_ordering
 
     def write(self, recs, scores, options):
         if len(recs) > 0:
-            order = self.hierarchical_cluster(scores)
+            order = _hierarchical_order(scores, linkage_method=self.linkage_method, leaf_ordering=self.leaf_ordering)
             digits = math.ceil(math.log10(len(order)+1))
             with open(self.outpath, "w") as outfile:
                 print_i = 0
                 for i in order:
                     rec = recs[i]
                     if "name_by_order" in options:
-                        copy_SeqRecord(rec)
+                        rec = copy_SeqRecord(rec)
                         rec.id = str(print_i).zfill(digits) + "_" + rec.id
                         print_i += 1
                     write_genbank([rec], outfile)
@@ -578,7 +689,7 @@ class DenseTableOutput(DistanceReport):
         )
         DataMatrix.write_dense(scores.toarray(), self.outpath, row_names, row_names, data_type="score")
 
-def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, name_by_order, databases:Optional[Set[str]]=None, lb: float = 0.0, progress: bool = False, cpu: int = 1, mst: bool = False, knn: Optional[int] = None):
+def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, name_by_order, databases:Optional[Set[str]]=None, lb: float = 0.0, progress: bool = False, cpu: int = 1, mst: bool = False, knn: Optional[int] = None, check_sort_memory: bool = True):
     sparsify = sparsify_requested(mst, knn)
 
     report_options = dict()
@@ -597,7 +708,12 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
             recs.append(rec)
         else:
             warnings.warn(f"Duplicate contig names !!! :{rec.id}")
-            
+
+    # fail before scoring if the genbank output can't be sorted
+    for report in reports:
+        if isinstance(report, GenbankOutput):
+            _check_sort_feasible(len(recs), report.leaf_ordering, check_memory=check_sort_memory)
+
     matrix_shape = (len(recs), len(recs))
     if max_hits_per_query == 0:
         results_matrix = scipy.sparse.csr_array(matrix_shape, dtype=np.float64)
@@ -669,8 +785,20 @@ def main(argv):
     parser.add_argument('-o', '--output', default=None, required=False,
                         help="Name of genbank output, contigs will be sorted hierarchically within the output genbank. If not supplied then no genbank output will be generated. To write to stdout, use '-'. default: None")
     
-    parser.add_argument("--name_by_order", action="store_true", 
+    parser.add_argument("--name_by_order", action="store_true",
                         help="Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order.")
+
+    parser.add_argument("--linkage", default="average", choices=LINKAGE_METHODS,
+                        help="Hierarchical clustering linkage method used to sort contigs for the genbank output (-o). Distances are 1 - score/max(score); pairs with no score have distance 1.")
+
+    parser.add_argument("--leaf_ordering", default="greedy", choices=LEAF_ORDERINGS,
+                        help="How to order the leaves of the clustering tree for the genbank output (-o). "
+                        "greedy: flip subtrees so that the most similar contigs meet at each junction; fast and usually about as good as optimal. "
+                        "optimal: scipy's optimal leaf ordering; very slow (minutes to hours) beyond a few thousand contigs. "
+                        "none: plain dendrogram order.")
+
+    parser.add_argument("--skip_sort_memory_check", action="store_true",
+                        help="Don't fail early when sorting the contigs for the genbank output (-o) is estimated to need more memory than is available.")
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only annotate contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -749,15 +877,15 @@ def main(argv):
             raise ValueError("Please use an hdf5 related extension for the --sparse output, such as .h5, .hdf5, or .hdf.")
         reports.append(SparseTableOutput(params.sparse, max_output_bytes=max_output_bytes))
     if params.output is not None:
-        if params.output == "-":
-            reports.append(GenbankOutput('/dev/stdout')) # TODO: not cross platform, will not work on windows.
-        else:
-            reports.append(GenbankOutput(params.output))
+        output_path = '/dev/stdout' if params.output == "-" else params.output # TODO: not cross platform, will not work on windows.
+        reports.append(GenbankOutput(output_path, linkage_method=params.linkage, leaf_ordering=params.leaf_ordering))
 
     databases=None
     if params.databases is not None:
         databases = set(params.databases)
 
+    if params.ji < 0 or params.ai < 0:
+        raise ValueError("Metric weights (--ji, --ai) must be non-negative.")
     metrics = list()
     if params.ji != 0.0:
         metrics.append(JaccardIndex(params.ji, databases=databases))
@@ -775,8 +903,8 @@ def main(argv):
     
     # Run
     try:
-        compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.lb, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn)
-    except OutputSizeLimitExceeded as exc:
+        compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.lb, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn, check_sort_memory=not params.skip_sort_memory_check)
+    except (OutputSizeLimitExceeded, SortMemoryLimitExceeded) as exc:
         raise SystemExit(str(exc)) from None
 
 def _entrypoint():
