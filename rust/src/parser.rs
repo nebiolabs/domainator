@@ -310,12 +310,17 @@ fn partial_allowed(is_fragment: bool, partial: &str) -> bool {
 
 /// UniProt FASTA headers flag partial proteins with one of these tokens (utils.FRAGMENT_TOKENS).
 const FRAGMENT_TOKENS: [&str; 2] = [" (Fragment)", " (Fragments)"];
+/// MGnify protein FASTA headers flag them with an FL=0 token (utils.MGNIFY_FRAGMENT_TOKEN).
+const MGNIFY_FRAGMENT_TOKEN: &str = "FL=0";
 /// UniProt text entries flag them in a "Flags:" list (utils.FRAGMENT_FLAGS_PREFIX).
 const FRAGMENT_FLAGS_PREFIX: &str = "Flags:";
 
 /// utils.description_is_fragment
 fn description_is_fragment(desc: &str) -> bool {
     if FRAGMENT_TOKENS.iter().any(|t| desc.contains(t)) {
+        return true;
+    }
+    if desc.split_whitespace().any(|t| t == MGNIFY_FRAGMENT_TOKEN) {
         return true;
     }
     match desc.find(FRAGMENT_FLAGS_PREFIX) {

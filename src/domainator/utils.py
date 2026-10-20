@@ -2127,6 +2127,8 @@ FRAGMENT_TOKENS = (" (Fragment)", " (Fragments)")
 # UniProt text (.dat) entries flag them with a "Flags:" DE line, e.g. "Flags: Fragment;" or "Flags: Precursor; Fragments;",
 # which the swiss parser appends to the description (and so to the DEFINITION of a converted GenBank file).
 FRAGMENT_FLAGS_PREFIX = "Flags:"
+# MGnify protein FASTA headers say whether a protein is full length with an FL= token: FL=0 is a fragment, FL=1 full length.
+MGNIFY_FRAGMENT_TOKEN = "FL=0"
 # UniProt marks a missing terminus with a NON_TER feature on the first or last residue.
 NON_TERMINAL_FEATURE_NAME = "NON_TER"
 PARTIAL_CHOICES = ("include", "exclude", "only")
@@ -2138,7 +2140,7 @@ def partial_help(what:str) -> str:
         Help text for a --partial argument. what: what is selected, e.g. "Which CDSs/proteins to search".
     """
     return (f"{what}, by fragment status. include: all. exclude: skip fragments. only: only fragments. "
-            "A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' header, "
+            "A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, "
             "a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it.")
 
 def location_partial_ends(location) -> Tuple[bool, bool]:
@@ -2220,7 +2222,7 @@ def get_fragment_status(record_or_feature:Union[SeqRecord, SeqFeature]) -> Optio
             "N": missing the N-terminus (5' partial)
             "C": missing the C-terminus (3' partial)
             "NC": missing both ends
-            "?": a fragment with unknown missing ends (UniProt " (Fragment)" header, or a CDS with a /partial qualifier without a value)
+            "?": a fragment with unknown missing ends (UniProt " (Fragment)" or MGnify "FL=0" header, or a CDS with a /partial qualifier without a value)
 
         For a protein record, a CDS or Protein feature spanning the record (e.g. from domain_search --translate, or GenPept)
         decides. Otherwise UniProt NON_TER features on the first or last residue (UniProt text entries) decide,
@@ -2260,10 +2262,12 @@ def get_fragment_status(record_or_feature:Union[SeqRecord, SeqFeature]) -> Optio
 
 def description_is_fragment(description:str) -> bool:
     """
-        True if a description carries a UniProt fragment token: " (Fragment)" or " (Fragments)" (FASTA headers),
-        or a "Flags:" list containing Fragment or Fragments (text entries).
+        True if a description carries a fragment token: UniProt " (Fragment)" or " (Fragments)" (FASTA headers),
+        a UniProt "Flags:" list containing Fragment or Fragments (text entries), or an MGnify FL=0 token (FASTA headers).
     """
     if any(token in description for token in FRAGMENT_TOKENS):
+        return True
+    if MGNIFY_FRAGMENT_TOKEN in description.split():
         return True
     flags_start = description.find(FRAGMENT_FLAGS_PREFIX)
     return flags_start != -1 and "Fragment" in description[flags_start:]

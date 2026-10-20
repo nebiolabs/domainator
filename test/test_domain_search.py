@@ -1023,3 +1023,23 @@ def test_domain_search_uniprot_fragment_filter(shared_datadir):
         assert fragment_name in hit_ids["include"]
         assert fragment_name not in hit_ids["exclude"]
         assert hit_ids["only"] == {fragment_name}
+
+
+def test_domain_search_mgnify_fragment_filter(shared_datadir):
+    """MGnify FL=0 headers are fragments for --partial (through the native FASTA parser)."""
+    with tempfile.TemporaryDirectory() as output_dir:
+        records = list(SeqIO.parse(str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "fasta"))[:3]
+        fasta = output_dir + "/mgnify.fasta"
+        with open(fasta, "w") as handle:
+            for i, (record, flag) in enumerate(zip(records, ["FL=0 CR=1", "FL=1", "CR=0"])):
+                handle.write(f">MGYP00000000000{i} {flag}\n{str(record.seq)}\n")
+        hmm = output_dir + "/sod.hmm"
+        _write_hmm(str(records[0].seq), hmm)
+        hits = dict()
+        for partial in ("include", "exclude", "only"):
+            out = output_dir + f"/out_{partial}.gb"
+            main(["-i", fasta, "-r", hmm, "-o", out, "--partial", partial, "-e", "10"])
+            hits[partial] = {r.name for r in SeqIO.parse(out, "genbank")}
+        assert "MGYP000000000000" in hits["include"]
+        assert hits["only"] == {"MGYP000000000000"}
+        assert "MGYP000000000000" not in hits["exclude"]

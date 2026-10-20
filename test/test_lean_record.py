@@ -334,10 +334,13 @@ def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
         ">a protein one OS=Escherichia coli OX=562\nMKRFSLAILALV\n"
         ">b protein two (Fragment) OS=Escherichia coli OX=562\nMKRFSLAILALV\n"
         ">c protein three (Fragments) OS=Escherichia coli OX=562\nMKRFSLAILALV\n"
+        ">MGYP003477041764 FL=0 CR=1\nMKRFSLAILALV\n"
+        ">MGYP003477041765 FL=1\nMKRFSLAILALV\n"
+        ">MGYP003477041766 CR=0 FL=0\nMKRFSLAILALV\n"
     )
     native, _, _ = _gbfast.parse_fasta_search(str(fasta), 0, -1, "protein", False)
     python = list(utils.parse_seqfiles([str(fasta)], default_molecule_type="protein", genbank_parser="biopython"))
-    assert [r.fragment() for r in native] == [utils.get_fragment_status(r) for r in python] == [None, "?", "?"]
+    assert [r.fragment() for r in native] == [utils.get_fragment_status(r) for r in python] == [None, "?", "?", "?", None, "?"]
 
     native, _, _ = _gbfast.parse_lean_search(str(shared_datadir / "JABFVH010000506_extraction.gb"), 0, -1, None, False)
     assert [i for i, _ in native[0].cds_peptides(set(), "exclude")] != [i for i, _ in native[0].cds_peptides(set(), "only")]

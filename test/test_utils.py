@@ -819,3 +819,19 @@ def test_bare_partial_qualifier_is_a_fragment(shared_datadir, tmp_path, parser):
         record = lean_record.lean_to_seqrecord(lean_record.materialize_lean_search(record, None))
     cdss = [f for f in record.features if f.type == "CDS"]
     assert [utils.get_fragment_status(f) for f in cdss] == ["?", "N"]
+
+
+@pytest.mark.parametrize("description,is_fragment", [
+    ("MGYP003477041764 FL=0 CR=1", True),
+    ("MGYP003477041765 CR=0 FL=0", True),
+    ("MGYP003477041765 FL=1", False),
+    ("MGYP003477041765 CR=1", False),
+    ("MGYP003477041765 XFL=0", False), # only the whole token
+    ("MGYP003477041765 FL=00", False),
+])
+def test_mgnify_full_length_token(description, is_fragment):
+    """MGnify protein FASTA headers: FL=0 is a fragment, FL=1 full length."""
+    assert utils.description_is_fragment(description) == is_fragment
+    record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILA"), id=description.split()[0], description=description)
+    record.annotations["molecule_type"] = "protein"
+    assert utils.get_fragment_status(record) == ("?" if is_fragment else None)

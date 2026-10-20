@@ -680,7 +680,7 @@ def fragment_factory():
 FRAGMENT_STATUS_ANNOTATION = "_fragment_status" # set on each row's record by process_record
 PARTIAL_COUNT_ANNOTATION = "_partial_count" # set on each row's record by process_record
 FRAGMENT_HELP = ("Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), "
-                 "or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' header). Only for rows that are a single protein or CDS "
+                 "or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' or MGnify 'FL=0' header). Only for rows that are a single protein or CDS "
                  "(protein records, CDSs, and the domains of protein records); otherwise empty, with a warning. See also --partial_count.")
 
 def partial_count_factory():

@@ -548,7 +548,7 @@
     {
       "name": "Fragment",
       "parameter": "output_cols__fragment",
-      "help": "Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' header). Only for rows that are a single protein or CDS (protein records, CDSs, and the domains of protein records); otherwise empty, with a warning. See also --partial_count.",
+      "help": "Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' or MGnify 'FL=0' header). Only for rows that are a single protein or CDS (protein records, CDSs, and the domains of protein records); otherwise empty, with a warning. See also --partial_count.",
       "type": "boolean",
       "flags": [
         "--fragment"
@@ -658,7 +658,7 @@
     {
       "name": "Partial",
       "parameter": "partial",
-      "help": "Which rows to report, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.",
+      "help": "Which rows to report, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.",
       "type": "string",
       "choices": [
         "include",
