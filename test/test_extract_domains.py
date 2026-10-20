@@ -1,9 +1,8 @@
-import functools
-import io
+import pytest
 from domainator.Bio import SeqIO
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from domainator import extract_domains
 import tempfile
 from domainator import DOMAIN_FEATURE_NAME
@@ -298,15 +297,54 @@ def test_extract_domains_splice_reverse_strand_marks_rc():
     )
     assert len(results) == 1
     stitched = results[0]
-    assert stitched.id.endswith("rc")
-    parts = [FeatureLocation(start, end, strand=-1).extract(record.seq) for start, end in spans]
-    expected = functools.reduce(lambda x, y: x + y, parts)
-    assert str(stitched.seq) == str(expected)
+    # read from right to left, like the reverse strand join complement(join(3..6,13..16))
+    assert str(stitched.seq) == str((record.seq[2:6] + record.seq[12:16]).reverse_complement())
+    assert str(stitched.seq) == str(CompoundLocation([FeatureLocation(12, 16, -1), FeatureLocation(2, 6, -1)]).extract(record.seq))
+    assert stitched.id == "test_rec_16:3rc"
+
+
+def test_extract_domains_splice_reverse_strand_keep_direction():
+    record = _build_test_record("ACGT" * 10, [(2, 6), (12, 16)], strand=-1)
+    results = list(extract_domains.extract_domains([record], domains={"foo"}, splice=True, keep_direction=True))
+    assert len(results) == 1
+    assert str(results[0].seq) == str(record.seq[2:6] + record.seq[12:16])
+    assert results[0].id == "test_rec_3:16"
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+def test_extract_domains_splice_ignores_feature_order(strand):
+    in_order = _build_test_record("ACGTTGCAAC" * 4, [(2, 6), (12, 16), (22, 26)], strand=strand)
+    shuffled = _build_test_record("ACGTTGCAAC" * 4, [(12, 16), (22, 26), (2, 6)], strand=strand)
+    expected = list(extract_domains.extract_domains([in_order], domains={"foo"}, splice=True))
+    results = list(extract_domains.extract_domains([shuffled], domains={"foo"}, splice=True))
+    assert [(rec.id, str(rec.seq)) for rec in results] == [(rec.id, str(rec.seq)) for rec in expected]
+
+
+def test_extract_domains_splice_keep_direction_split_reverse_domain():
+    # a reverse strand domain in two parts, stored in reading order (right to left), as parsed from complement(join(3..6,13..16))
+    record = _build_test_record("ACGTTGCAAC" * 4, [])
+    location = CompoundLocation([FeatureLocation(12, 16, -1), FeatureLocation(2, 6, -1)])
+    record.features.append(SeqFeature(location, type=DOMAIN_FEATURE_NAME, qualifiers={"name": ["foo"], "database": ["dummy"], "evalue": ["1e-20"], "score": ["100"]}))
+    results = list(extract_domains.extract_domains([record], domains={"foo"}, splice=True, keep_direction=True))
+    assert str(results[0].seq) == str(record.seq[2:6] + record.seq[12:16])
+    assert results[0].id == "test_rec_3:16"
+    results = list(extract_domains.extract_domains([record], domains={"foo"}, splice=True))
+    assert str(results[0].seq) == str(location.extract(record.seq))
+    assert results[0].id == "test_rec_16:3rc"
+
+
+def test_extract_domains_splice_keeps_origin_spanning_domain_intact():
+    record = _build_test_record("ACGTTGCAAC" * 4, [(10, 15)])
+    record.annotations["topology"] = "circular"
+    location = CompoundLocation([FeatureLocation(36, 40, 1), FeatureLocation(0, 3, 1)])
+    record.features.append(SeqFeature(location, type=DOMAIN_FEATURE_NAME, qualifiers={"name": ["foo"], "database": ["dummy"], "evalue": ["1e-20"], "score": ["100"]}))
+    results = list(extract_domains.extract_domains([record], domains={"foo"}, splice=True))
+    assert str(results[0].seq) == str(record.seq[10:15] + record.seq[36:40] + record.seq[0:3])
+    assert results[0].id == "test_rec_11:3"
 
 
 # --- --partial ---
 
-import pytest
 import helpers as _helpers
 
 

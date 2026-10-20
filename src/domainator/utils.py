@@ -2081,6 +2081,36 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
 
     return answer
 
+def region_id(parent:SeqRecord, location:Union[FeatureLocation,CompoundLocation], flip:bool=False) -> str:
+    """The id of a region of parent, extracted with slice_record_from_location(parent, location), then reverse complemented if flip.
+
+        All tools that extract regions of contigs name them this way:
+            {parent.id}_{first}:{last}, followed by 'rc' if the region is reverse complemented relative to the parent.
+            first and last are the 1-based coordinates on the parent of the first and last bases of the region, as written.
+            So first > last means either that the region is reverse complemented, or that it wraps around the origin of a circular contig.
+        If the region is the whole contig, starting at the original origin, then the coordinates are omitted:
+            {parent.id} for the forward strand, and {parent.id}_rc for the reverse strand.
+        Protein regions are never reverse complemented.
+
+        Args:
+            parent: the record the region was extracted from
+            location: the location passed to slice_record_from_location
+            flip: True if the extracted region was then reverse complemented (e.g. to keep the original direction of a reverse strand location)
+
+        Returns:
+            str: the id of the region
+    """
+    first = location.stranded_start_human_readable
+    last = location.stranded_end_human_readable
+    reverse = parent.annotations.get("molecule_type") != "protein" and location.parts[0].strand == -1
+    if flip:
+        first, last = last, first
+        reverse = not reverse
+    contig_length = len(parent)
+    if len(location) == contig_length and (first, last) == ((contig_length, 1) if reverse else (1, contig_length)):
+        return f"{parent.id}_rc" if reverse else parent.id
+    return f"{parent.id}_{first}:{last}" + ("rc" if reverse else "")
+
 def get_sources(rec:SeqRecord):
     """
         returns a list of all source features in a SeqRecord

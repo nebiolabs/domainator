@@ -327,7 +327,7 @@ def test_domain_search_whole_contig_circular_centered_on_hit(shared_datadir, kee
         upstream = int(hit.start) if hit.strand == 1 else len(rec) - int(hit.end)
         downstream = len(rec) - len(hit) - upstream
         assert abs(upstream - downstream) <= 1
-    assert {rec.id for rec in recs} == ({"OM236515mod_980:981", "OM236515mod_315:316"} if keep_direction else {"OM236515mod_980:981rc", "OM236515mod_315:316rc"})
+    assert {rec.id for rec in recs} == ({"OM236515mod_981:980", "OM236515mod_316:315"} if keep_direction else {"OM236515mod_980:981rc", "OM236515mod_315:316rc"})
 
 
 def test_domain_search_whole_contig_circular_pad_aligns_cds(shared_datadir):

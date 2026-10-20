@@ -14,6 +14,12 @@ Coordinates are 1-based and inclusive.
 If end < start, the region is assumed to wrap around the origin of a circular
 contig. The same coordinates on a linear contig raise an exception.
 
+Extracted regions are named like those of the other Domainator tools
+(see utils.region_id): contig_first:last, where first and last are the
+coordinates of the first and last bases of the region as written, followed by
+'rc' for reverse-strand regions. For example, start 10, end 20, strand - is
+named contig_20:10rc. Whole contigs keep their names (contig_rc if reverse).
+
 If a file column is supplied, it must contain basenames only (with extension).
 Rows without a file value match any input file.
 """
@@ -28,7 +34,7 @@ from jsonargparse import ActionConfigFile, ArgumentParser
 
 from domainator import __version__, RawAndDefaultsFormatter
 from domainator.Bio.SeqFeature import CompoundLocation, FeatureLocation
-from domainator.utils import parse_seqfiles, slice_record_from_location, write_genbank
+from domainator.utils import parse_seqfiles, region_id, slice_record_from_location, write_genbank
 
 
 ALLOWED_COLUMNS = {"contig", "start", "end", "strand", "file"}
@@ -178,10 +184,7 @@ def _build_location(contig, selection):
 def extract_coordinate_region(contig, selection):
     location = _build_location(contig, selection)
     record = slice_record_from_location(contig, location)
-    record.id = f"{record.id}_{selection.start}:{selection.end}"
-    if selection.strand == -1:
-        record.id += "rc"
-    record.name = record.id
+    record.id = region_id(contig, location)
     return record
 
 

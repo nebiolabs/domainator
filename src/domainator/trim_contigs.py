@@ -8,10 +8,10 @@ Typically used for nucleotide sequences, but can be used for protein sequences a
 
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
-from domainator.utils import parse_seqfiles, slice_record, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, get_sources, copy_feature, pad_location, slice_record_from_location, FeatureLocation, CompoundLocation, get_non_domainator_features, circular_dist
+from domainator.utils import parse_seqfiles, slice_record, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, FeatureLocation, region_id
 from domainator.Bio.SeqRecord import SeqRecord
 from typing import Tuple, List, Optional, Set, Iterable, Union
-from domainator import __version__, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import __version__, RawAndDefaultsFormatter
 from domainator.select_by_cds import validate_range
 
 class StripDomainsError(Exception):
@@ -109,10 +109,9 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
         return None
 
     if left > 0 or right < len(record):
+        new_id = region_id(record, FeatureLocation(left, right))
         record = slice_record(record, left, right)
-        record.id = record.id + f"_{left+1}:{right}"
-    else:
-        record = record #TODO: should this be a copy?
+        record.id = new_id
     
     return record
 
@@ -198,7 +197,6 @@ def main(argv):
 
     ### Run
     #TODO: resolve code duplication with domain_search.py
-    records = list()
     for record in trim_contigs(
         parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override),
         kb_truncation,

@@ -14,8 +14,8 @@ otherwise:
 """
 from jsonargparse import ArgumentParser, ActionConfigFile
 import sys
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
-from typing import Tuple, List, Optional, Set
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, region_id, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
+from typing import Tuple, Optional, Set
 from domainator import __version__, RawAndDefaultsFormatter
 
 #TODO: account for different domain databases
@@ -180,7 +180,6 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
         _from_domain_search: if True, then remove DOMAIN_SEARCH_BEST_HIT_NAME records from CDSs other than the focus CDS.
     """
    
-    contig_id = contig.id
     focus_cds = cds_list[cds_idx]
 
     strand = focus_cds.feature.location.parts[0].strand
@@ -278,8 +277,6 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
         record = slice_record_from_location(contig, slice_location, features)
         if contig.annotations.get("topology") == "circular" and len(slice_location) == len(contig): # the whole circular contig, rotated
             record.annotations["topology"] = "circular"
-        start = int(slice_location.stranded_start)
-        end = int(slice_location.stranded_end)
     except Exception as e:
         print(f"contig: {contig.id}", file=sys.stderr)
         print(f"slice_location: {slice_location}", file=sys.stderr)
@@ -288,26 +285,18 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
         raise e
 
 
-    # we need to add coordinates to the name any time we are making a subset of the record or changing the origin.
-    if (start == 0) and end == len(contig) and strand != -1: #forward strand whole contig starting at the origin, so don't rename
-        pass    
-    elif (end == 0) and start == len(contig) and strand == -1: #reverse strand whole contig
-        pass
-    else:
-        record.id = record.id + f"_{slice_location.stranded_start_human_readable}:{slice_location.stranded_end_human_readable}"
-
     # slice_from_location will flip the strand if the domain is on the reverse strand, so we need to flip it back if we want to keep the direction.
-    if not normalize_direction and strand == -1: 
+    flip = not normalize_direction and strand == -1
+    if flip:
         record = record.reverse_complement(id=record.id, name=True, description=True, annotations=True)
         tmp = dist_to_start
         dist_to_start = dist_to_end
         dist_to_end = tmp
-    elif strand == -1: # if strand of the location is -1, then slice_record_from_location will have flipped the strand, so we need to mark that in the name.
-        record.id += "rc"
-        
+    record.id = region_id(contig, slice_location, flip=flip)
+
     record.set_dist_to_start(dist_to_start)
     record.set_dist_to_end(dist_to_end)
-    record.set_focus_strand(-1 if (not normalize_direction and strand == -1) else 1)
+    record.set_focus_strand(-1 if flip else 1)
     return record, slice_location
 
 def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,

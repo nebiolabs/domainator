@@ -128,7 +128,7 @@
     {
       "name": "Splice",
       "parameter": "splice",
-      "help": "if set, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together. Cannot be used together with --combine.",
+      "help": "if set, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together, in the order they are read on the strand of the domain with the lowest start coordinate. Cannot be used together with --combine.",
       "type": "boolean",
       "default": false,
       "flags": [
@@ -138,7 +138,7 @@
     {
       "name": "Keep Direction",
       "parameter": "keep_direction",
-      "help": "by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine is active) is on the forward strand. Set this option to not reverse complement anything. In the rare case of a split domain with parts on different strands, the strand of the first part will be considered.",
+      "help": "by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything. In the rare case of a split domain with parts on different strands, the strand of the first part will be considered.",
       "type": "boolean",
       "default": false,
       "flags": [

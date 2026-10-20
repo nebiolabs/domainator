@@ -85,7 +85,8 @@ def _check_trimmed_contig(expected_length: int, expected_ids: set[str]) -> Calla
         record = records[0]
         assert len(record) == expected_length
         if expected_ids:
-            assert record.id in expected_ids
+            # Domainator writes record ids as the LOCUS, which Biopython reads as the name. The ACCESSION keeps the parent contig id.
+            assert record.name in expected_ids
 
     return _checker
 
@@ -154,7 +155,7 @@ SCHEMA_CASES = [
             "cds_both": 2,
         },
         expected_outputs={
-            "trimmed.gb": _check_trimmed_contig(1000, {"pDONR201_1", "pDONR201_1_1266:2265"}),
+            "trimmed.gb": _check_trimmed_contig(1000, {"pDONR201_1_1266:2265"}),
         },
     ),
     SchemaIntegrationCase(

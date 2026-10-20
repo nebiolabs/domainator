@@ -10,7 +10,7 @@ can write a fasta or a genbank file
 import sys
 from jsonargparse import ArgumentParser, ActionConfigFile
 from domainator.Bio import SeqIO
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, slice_record, get_sources, pad_location, DomainatorCDS
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, region_id
 from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.Bio.SeqFeature import FeatureLocation
 
@@ -23,8 +23,8 @@ def extract_unannotated(records, evalue=None, score=None, keep_direction=False, 
         records: iterator of SeqRecords
         evalue: if not None then only select domains with evalue <= this parameter
         score: if not None then only select domains with score >= this parameter
-        keep_direction: by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine is active) is on the forawd strand. Set this option to not reverse complement anything.
-        keep_name: by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
+        keep_direction: has no effect, because only protein sequences are supported. Kept for compatibility with extract_domains.
+        keep_name: by default, extracted regions will be renamed to note their original coordinates (see utils.region_id). set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
         search_hits: if True, then only select domains that are marked as search hits (from domain_search.py).
         databases: if not None, then only select domains from these databases. default: all databases.
         largest: if True, then only select the largest unannotated region from each protein, providing it passes the length cutoff specified by '--lb'
@@ -33,7 +33,6 @@ def extract_unannotated(records, evalue=None, score=None, keep_direction=False, 
       yields the extracted regions as SeqRecord objects
     """
     databases = set(databases) if databases is not None else None
-    #TODO: ensure naming consistency with select_by_cds.
     for rec in records:
         hit_domains = list() #list of SeqFeatures
         if rec.annotations['molecule_type'] != "protein":
@@ -79,21 +78,9 @@ def extract_unannotated(records, evalue=None, score=None, keep_direction=False, 
 
             contig_sections = list()
             for location in unannotated_regions:
-                strand = location.strand # strand of the first part.
-                
                 contig_sections.append(slice_record_from_location(rec, location)) # slice_record_from_location handles maintaining source and taxonomy annotations.
-
-                new_id = rec.id
-                if len(contig_sections[-1]) != len(rec):
-                    new_id = contig_sections[-1].id + f"_{location.stranded_start_human_readable}:{location.stranded_end_human_readable}"
-                # slice_from_location will flip the strand if the domain is on the reverse strand, so we need to flip it back if we want to keep the direction.
-                if rec.annotations['molecule_type'] != "protein" and keep_direction and strand == -1: 
-                    contig_sections[-1] = contig_sections[-1].reverse_complement(id=rec.id, name=True, description=True, annotations=True) 
-                elif rec.annotations['molecule_type'] != "protein" and strand == -1: # if strand of the location is -1, then slice_record_from_location will have flipped the strand, so we need to mark that in the name.
-                    new_id += "rc"
-                    
                 if not keep_name:
-                    contig_sections[-1].id = new_id
+                    contig_sections[-1].id = region_id(rec, location)
 
             for out_rec in contig_sections:
                 yield out_rec 

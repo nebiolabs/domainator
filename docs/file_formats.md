@@ -112,6 +112,33 @@ These tools take `--partial {include,exclude,only}` (default `include`) to selec
 
 FASTA output (`--fasta_out`, `genbank_to_fasta.py`) carries no locations, so a fragment's status survives only if its header already says ` (Fragment)`.
 
+### Names of extracted regions
+
+Tools that extract part of a contig (`select_by_cds.py`, `domain_search.py`, `split_by_cluster.py --pad_on_search_hits`, `extract_domains.py`, `extract_unannotated.py`, `select_by_coord.py`, `trim_contigs.py`, `rotate_contigs.py`) rename the region in the same way (`domainator.utils.region_id`):
+
+```
+<contig id>_<first>:<last>[rc]
+```
+
+- `first` and `last` are the 1-based coordinates, on the original contig, of the first and last bases of the region **as written**.
+- `rc` is added when the region is the reverse complement of the original contig.
+- So `first > last` means either that the region is reverse complemented or that it wraps around the origin of a circular contig.
+- When the region is the whole contig and starts at the original origin, the coordinates are left out: forward is `<contig id>`, reverse is `<contig id>_rc`.
+- The record's GenBank ACCESSION keeps the original contig name, so you can still tell where the region came from.
+- Tools with `--keep_name` skip the renaming.
+
+| Region of a 100 bp contig `c` | Name |
+|---|---|
+| bases 11–20 | `c_11:20` |
+| bases 11–20, reverse complemented | `c_20:11rc` |
+| bases 11–20 of a reverse-strand feature, kept in the original direction (`--keep_direction`) | `c_11:20` |
+| bases 91–100 then 1–10 (circular) | `c_91:10` |
+| the same, reverse complemented | `c_10:91rc` |
+| whole contig rotated to start at base 11 | `c_11:10` |
+| whole contig, reverse complemented | `c_rc` |
+
+`extract_domains.py --splice` drops the sequence between domains, so its names give only the first and last bases.
+
 
 ### Differences from BioPython in internal storing of Genbank records
 

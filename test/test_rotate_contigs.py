@@ -7,13 +7,13 @@ import warnings
 import pytest
 
 from domainator import rotate_contigs, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.rotate_contigs import origin_cut, rotation_location, rotated_name, rotate_record
+from domainator.rotate_contigs import origin_cut, rotation_location, rotate_record
 from domainator.domain_search import main as domain_search_main
 from domainator.Bio import SeqIO
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
-from domainator.utils import parse_seqfiles
+from domainator.utils import parse_seqfiles, region_id
 
 SPR = "bacillus_phage_SPR_with_annotations.gb" # circular, 2552 bp, all features on the reverse strand
 SPR_REVERSED = "bacillus_phage_SPR_with_annotations_reversed.gb" # the same contig, reverse complemented
@@ -115,10 +115,12 @@ def test_rotate_on_feature(where, strand, keep_direction):
 
 
 def test_rotated_name():
-    assert rotated_name("c", 0, 100, False) == "c"
-    assert rotated_name("c", 10, 100, False) == "c_11:10"
-    assert rotated_name("c", 0, 100, True) == "crc"
-    assert rotated_name("c", 10, 100, True) == "c_10:11rc"
+    rec = _circular_record("A" * 100)
+    rec.id = "c"
+    assert region_id(rec, rotation_location(0, 100, False)) == "c"
+    assert region_id(rec, rotation_location(10, 100, False)) == "c_11:10"
+    assert region_id(rec, rotation_location(0, 100, True)) == "c_rc"
+    assert region_id(rec, rotation_location(10, 100, True)) == "c_10:11rc"
 
 
 @pytest.mark.parametrize("where,expected_interval,cut", [

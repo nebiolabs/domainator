@@ -34,7 +34,7 @@ from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeat
 from domainator.Bio.SeqRecord import SeqRecord, DOMAINATOR_DIST_TO_START_ANNOTATION, DOMAINATOR_DIST_TO_END_ANNOTATION, DOMAINATOR_FOCUS_STRAND_ANNOTATION, DOMAINATOR_HIT_SCORES_ANNOTATION, DOMAINATOR_HIT_NAMES_ANNOTATION, DOMAINATOR_HIT_BEST_SCORE_ANNOTATION
 from domainator.domainate import domainate, read_references
 from domainator.lean_record import LeanContig, lean_to_seqrecord, LEAN_SEARCH_TYPES, materialize_lean_search
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, slice_record_from_location, WHERE_CHOICES
+from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, slice_record_from_location, region_id, WHERE_CHOICES
 
 _NUCLEOTIDE_LETTERS = set("ACGTURYSWKMBDHVN-.")
 
@@ -120,20 +120,6 @@ def rotation_location(cut:int, contig_length:int, reverse:bool) -> Union[Feature
     return CompoundLocation(parts, "join")
 
 
-def rotated_name(contig_id:str, cut:int, contig_length:int, reverse:bool) -> str:
-    """
-        The name of a rotated contig, in the select_by_cds style: id_first:last, with 1-based coordinates of the
-        first and last bases of the rotated contig on the original contig, and 'rc' if reverse complemented.
-        Contigs that start at the old origin get no coordinate suffix.
-    """
-    if reverse:
-        name = contig_id if cut == 0 else f"{contig_id}_{cut}:{cut + 1}"
-        return name + "rc"
-    if cut == 0:
-        return contig_id
-    return f"{contig_id}_{cut + 1}:{cut}"
-
-
 def rotate_record(rec:SeqRecord, cut:int, reverse:bool, features:Optional[Iterable[SeqFeature]]=None, keep_name:bool=False) -> SeqRecord:
     """
         Rotate a circular contig to a new origin, keeping its annotations and features (features crossing the new origin become joins).
@@ -145,13 +131,12 @@ def rotate_record(rec:SeqRecord, cut:int, reverse:bool, features:Optional[Iterab
             features: the features to keep. If None, keep all features.
             keep_name: if False, rename the contig to note how it was rotated.
     """
-    contig_length = len(rec)
-    rotated = slice_record_from_location(rec, rotation_location(cut, contig_length, reverse), features)
+    location = rotation_location(cut, len(rec), reverse)
+    rotated = slice_record_from_location(rec, location, features)
     rotated.annotations = {key: value for key, value in rec.annotations.items() if key not in _SEARCH_ANNOTATIONS}
     rotated.annotations["topology"] = "circular"
     if not keep_name:
-        rotated.id = rotated_name(rec.id, cut, contig_length, reverse)
-        rotated.name = rotated.id
+        rotated.id = region_id(rec, location)
     return rotated
 
 

@@ -56,7 +56,7 @@ def test_select_by_coord_reverse_strand_1(shared_datadir):
         source = next(record for record in SeqIO.parse(str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "genbank") if record.id == "pDONR201_3")
         records = list(parse_seqfiles([out]))
         assert len(records) == 1
-        assert records[0].id == "pDONR201_3_1:6rc"
+        assert records[0].id == "pDONR201_3_6:1rc"
         assert str(records[0].seq) == str(source.seq[:6].reverse_complement())
 
 
@@ -89,7 +89,7 @@ def test_select_by_coord_circular_origin_span_reverse_1(shared_datadir):
         expected = str((source.seq[4467:] + source.seq[:3]).reverse_complement())
         records = list(parse_seqfiles([out]))
         assert len(records) == 1
-        assert records[0].id == "pDONR201_4468:3rc"
+        assert records[0].id == "pDONR201_3:4468rc"
         assert str(records[0].seq) == expected
 
 
