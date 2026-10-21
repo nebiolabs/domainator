@@ -7,7 +7,7 @@ import pytest
 from domainator import build_ssn, split_by_cluster
 from domainator.Bio import SeqIO
 from domainator.data_matrix import DataMatrix
-from domainator.utils import parse_seqfiles, pyhmmer_decode
+from domainator.seqio import parse_seqfiles
 
 
 def _write_test_matrix(matrix_path, labels, output_type="dense_text"):
@@ -48,7 +48,7 @@ def _read_seq_ids(path, file_type):
 
 def _read_hmm_names(path):
     with pyhmmer.plan7.HMMFile(path) as hmm_file:
-        return [pyhmmer_decode(model.name) for model in hmm_file]
+        return [model.name for model in hmm_file]
 
 
 def _read_cm_names(path):
@@ -282,7 +282,8 @@ def test_split_by_cluster_reuses_build_ssn_mst_cut_logic(tmp_path):
 def test_split_by_cluster_hmm_gzip(shared_datadir, tmp_path):
     """A .hmm.gz input yields .hmm.gz outputs, not ".gz" files holding plain text."""
     import helpers
-    from domainator.utils import detect_compression, open_hmm_file
+    from domainator.seqio import detect_compression
+    from domainator.hmmio import open_hmm_file
 
     plain = shared_datadir / "pdonr_hmms.hmm"
     input_path = helpers.gzip_file(plain, tmp_path / "clusters.hmm.gz")
@@ -306,9 +307,9 @@ def test_split_by_cluster_hmm_gzip(shared_datadir, tmp_path):
         assert out.exists(), f"expected {out.name}, got {sorted(p.name for p in outdir.iterdir())}"
         assert detect_compression(out) == "gzip"
         with open_hmm_file(out) as handle:
-            assert [pyhmmer_decode(m.name) for m in handle] == members
+            assert [m.name for m in handle] == members
     with open_hmm_file(outdir / "small_clusters.hmm.gz") as handle:
-        assert [pyhmmer_decode(m.name) for m in handle] == expected_small
+        assert [m.name for m in handle] == expected_small
 
 
 def test_split_by_cluster_rejects_compressed_cm(shared_datadir, tmp_path):
@@ -331,7 +332,7 @@ def test_split_by_cluster_genbank_bgzf(shared_datadir, tmp_path):
     uncompressed text.
     """
     import helpers
-    from domainator.utils import detect_compression
+    from domainator.seqio import detect_compression
 
     plain = shared_datadir / "FeSOD_20.gb"
     input_path = helpers.bgzip_file(plain, tmp_path / "in.gb.bgz")

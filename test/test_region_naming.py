@@ -15,7 +15,9 @@ from domainator import domain_search, extract_domains, extract_unannotated, rota
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import CompoundLocation, FeatureLocation
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.utils import parse_seqfiles, region_id, slice_record_from_location
+from domainator.seqio import parse_seqfiles
+from domainator.model import region_id
+from domainator.locations import slice_record_from_location
 
 LINEAR = "pDONR201_multi_genemark_domainator.gb" # CAT, CcdA, CcdB on the reverse strand, APH on the forward strand
 CIRCULAR = "pDONR201_domainator_circular.gb" # circular, 4470 bp, same domains as LINEAR

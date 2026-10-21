@@ -122,7 +122,6 @@ def component_size_summary_by_threshold(tree, merge_impact_metric=MERGE_IMPACT_M
         return root
 
     def record(row_idx, threshold, merge_impact=0.0):
-        nonlocal non_singleton_count, non_singleton_sum
         avg_non_singleton = float(non_singleton_sum) / non_singleton_count if non_singleton_count > 0 else 0.0
 
         summary[row_idx, COMPONENT_THRESHOLD_COL] = threshold

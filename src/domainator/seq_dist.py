@@ -7,7 +7,6 @@ An hmm file can also be used as both input and reference to compare profile simi
 """
 import logging
 import warnings
-warnings.filterwarnings("ignore", module='numpy')
 
 from jsonargparse import ActionConfigFile
 import heapq
@@ -21,13 +20,15 @@ from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_par
 from domainator.Bio import SeqIO
 from collections import OrderedDict,namedtuple, defaultdict
 import numpy as np
-import scipy.stats
 import scipy.sparse
 import pyhmmer
 import tqdm
 from typing import Iterator
-from domainator.utils import get_file_type, open_hmm_file, parse_seqfiles, make_pool, pyhmmer_decode
-from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
+from domainator.seqio import get_file_type, parse_seqfiles
+from domainator.hmmio import open_hmm_file
+from domainator._mp import make_pool
+from domainator.ssn_edges import StreamingMstKnnAccumulator
+from domainator.data_matrix import DataMatrix, symmetrize_matrix
 from domainator.hmmer_search import compare_hmmer
 from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
 from domainator.errors import ExternalToolError
@@ -591,7 +592,7 @@ def make_hmm_name_to_idx_dict_from_path(hmm_path):
 
     idx = 0
     for rec in open_hmm_file(hmm_path):
-        name = pyhmmer_decode(rec.name)
+        name = rec.name
         if name in name_to_idx:  
             warnings.warn(f"Warning: duplicate hmm name found: {name}")
         else:
@@ -609,7 +610,7 @@ def make_hmm_name_to_idx_dict(hmm_list):
 
     idx = 0
     for rec in hmm_list:
-        name = pyhmmer_decode(rec.name)
+        name = rec.name
         if name in name_to_idx:  
             warnings.warn(f"Warning: duplicate hmm name found: {name}")
         else:
@@ -632,8 +633,8 @@ def run_hmmsearch(hmmer_seqs, hmmer_models, k, threads, search_type, min_score: 
     top_k_by_input = defaultdict(list)
     for top_hits in query_hits:
         for hit in top_hits:
-            name = pyhmmer_decode(hit.name)
-            domain = pyhmmer_decode(hit.best_domain.alignment.hmm_name)
+            name = hit.name
+            domain = hit.best_domain.alignment.hmm_name
             score = round(hit.score,2)
             if score <= min_score:
                 continue
@@ -672,7 +673,7 @@ class _run_hmmer_compare_worker():
             score = round(score,2)
             if score <= self.min_score:
                 continue
-            result = CmpResult(score, pyhmmer_decode(input_profile.name), pyhmmer_decode(target_profile.name))
+            result = CmpResult(score, input_profile.name, target_profile.name)
             if (self.k is None) or (len(out_heap) < self.k):
                 heapq.heappush(out_heap, result)
             else:
@@ -720,9 +721,13 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_per_query, algorithm, mode, threads, hdf, dense_text, lb, max_output_bytes=None, progress: bool = False, mst: bool = False, knn=None, diamond_params=None, symmetrize: str = "none", diamond_path=None):
-    """
+def seq_dist(input_path, *, input_format, reference, reference_format, max_hits_per_query, algorithm, mode, cpu, threshold, progress: bool = False, mst: bool = False, knn=None, diamond_args=None, symmetrize: str = "none", diamond_path=None) -> DataMatrix:
+    """Compare every sequence or profile in ``input_path`` with every one in ``reference``.
 
+    Returns a DataMatrix of ``mode`` values with a row per input and a column per reference;
+    pass the same path as ``input_path`` and ``reference`` for a self-comparison. The options
+    mean the same as the ``domainator seq_dist`` options with the same names; ``diamond_args``
+    is the parsed form of ``--diamond_args`` (see :func:`parse_diamond_args`).
     """
     sparsify = sparsify_requested(mst, knn)
     if sparsify:
@@ -734,16 +739,16 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
                 f"For '{mode}', run 'seq_dist --mode score --hdf_out out.hdf5' then "
                 f"'transform_matrix -i out.hdf5 --mode {mode} {option} --hdf_out pruned.hdf5'."
             )
-        if reference_path != input_path:
+        if reference != input_path:
             raise ValueError(
                 f"{option} requires a square, symmetric comparison (reference must be the same file as input)."
             )
         if symmetrize != "none":
             raise ValueError(f"{option} output is always max-symmetric, so --symmetrize {symmetrize} cannot be applied on top of it.")
-    if symmetrize != "none" and reference_path != input_path:
+    if symmetrize != "none" and reference != input_path:
         raise ValueError("--symmetrize requires a square, symmetric comparison (reference must be the same file as input).")
 
-    if input_type == "hmm" and reference_type == "hmm":
+    if input_format == "hmm" and reference_format == "hmm":
         if algorithm != "hmmer_compare":
             algorithm = "hmmer_compare"
             warnings.warn(f"Input and reference are both hmm files, but algorithm is not hmmer_compare. Changing algorithm to hmmer_compare.")
@@ -756,35 +761,35 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
 
             # convert input and db to fasta if not fasta
             dmnd_input = input_path
-            if input_type != "fasta":
+            if input_format != "fasta":
                 dmnd_input = tmpdir + "/input.fasta"
                 convert_to_fasta(input_path, dmnd_input) #TODO: better error message when supplied with hmmer file
             query_name_to_idx, query_idx_to_name, query_idx_to_len = make_seq_name_to_idx_dict(dmnd_input) #name to index
             db_name_to_idx, db_idx_to_name, db_idx_to_len = query_name_to_idx, query_idx_to_name, query_idx_to_len
-            if input_path == reference_path:
+            if input_path == reference:
                 dmnd_ref = dmnd_input
             else:
-                dmnd_ref = reference_path
-                if reference_type != "fasta":
+                dmnd_ref = reference
+                if reference_format != "fasta":
                     dmnd_ref = tmpdir + "/ref.fasta"
-                    convert_to_fasta(reference_path, dmnd_ref)
+                    convert_to_fasta(reference, dmnd_ref)
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_seq_name_to_idx_dict(dmnd_ref) #name to index
             preflight = build_diamond_preflight_warning(
                 parts[1], len(query_name_to_idx), int(sum(query_idx_to_len)),
-                square=(input_path == reference_path),
-                tmpdir=tmpdir, diamond_params=diamond_params,
+                square=(input_path == reference),
+                tmpdir=tmpdir, diamond_params=diamond_args,
             )
             if preflight is not None:
                 logger.warning(preflight)
 
             # call diamond
             
-            results_iter = diamond(dmnd_input, dmnd_ref, max_hits_per_query, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params, diamond_path=diamond_path)
+            results_iter = diamond(dmnd_input, dmnd_ref, max_hits_per_query, cpu, tmpdir, parts[1], min_score=threshold, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_args, diamond_path=diamond_path)
             score_progress = False
         
         elif algorithm == "hmmer":
             hmmer_seqfile = input_path
-            if input_type != "fasta": #might be possible to just go from 
+            if input_format != "fasta": #might be possible to just go from 
                 hmmer_seqfile = tmpdir + "/input.fasta"
                 convert_to_fasta(input_path, hmmer_seqfile)
 
@@ -793,32 +798,32 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
             query_name_to_idx, query_idx_to_name, query_idx_to_len = make_seq_name_to_idx_dict(hmmer_seqfile) #name to index
 
 
-            if reference_type == "hmm":
-                db_data = list(open_hmm_file(reference_path))
+            if reference_format == "hmm":
+                db_data = list(open_hmm_file(reference))
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_hmm_name_to_idx_dict(db_data)
                 search_type = "hmmsearch"
             else: # a sequence type
                 search_type = "phmmer"
-                hmmer_dbfile = reference_path
-                if reference_type != "fasta":  
+                hmmer_dbfile = reference
+                if reference_format != "fasta":  
                     hmmer_dbfile = tmpdir + "/ref.fasta"
-                    convert_to_fasta(reference_path, hmmer_dbfile)
+                    convert_to_fasta(reference, hmmer_dbfile)
                 with pyhmmer.easel.SequenceFile(hmmer_dbfile, digital=True) as seq_file:
                     db_data = list(seq_file)
                 db_name_to_idx, db_idx_to_name, db_idx_to_len = make_seq_name_to_idx_dict(hmmer_dbfile)
                 
             #TODO: do easel and biopython split names and descriptions in the same way?
                        
-            results_iter = run_hmmsearch(hmmer_seqs, db_data, max_hits_per_query, threads, search_type, min_score=lb, progress=progress, query_count=len(db_data))
+            results_iter = run_hmmsearch(hmmer_seqs, db_data, max_hits_per_query, cpu, search_type, min_score=threshold, progress=progress, query_count=len(db_data))
             score_progress = False
         
         
         elif algorithm == "hmmer_compare":
             query_name_to_idx, query_idx_to_name, query_idx_to_len = make_hmm_name_to_idx_dict_from_path(input_path)
             db_name_to_idx, db_idx_to_name, db_idx_to_len = query_name_to_idx, query_idx_to_name, query_idx_to_len
-            if input_path != reference_path:
-                db_name_to_idx, db_idx_to_name, db_idx_to_len = make_hmm_name_to_idx_dict_from_path(reference_path)
-            results_iter = run_hmmer_compare(input_path, reference_path, max_hits_per_query, threads, min_score=lb, progress=progress, query_count=len(query_name_to_idx))
+            if input_path != reference:
+                db_name_to_idx, db_idx_to_name, db_idx_to_len = make_hmm_name_to_idx_dict_from_path(reference)
+            results_iter = run_hmmer_compare(input_path, reference, max_hits_per_query, cpu, min_score=threshold, progress=progress, query_count=len(query_name_to_idx))
             score_progress = False
 
         else: 
@@ -836,7 +841,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
             log_lengths = np.log10(np.asarray(query_idx_to_len, dtype=np.float64)) if mode == "efi_score" else None
             accumulator = StreamingMstKnnAccumulator(len(query_name_to_idx), mst=mst, knn=knn, lower_bound=0)
             for (score, query_id, subject_id) in _progress(results_iter, score_progress, desc="Scoring pairs"):
-                if score <= lb:
+                if score <= threshold:
                     continue
                 query_idx = query_name_to_idx[query_id]
                 subject_idx = db_name_to_idx[subject_id]
@@ -860,7 +865,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
             )
 
             for (score, query_id, subject_id) in _progress(results_iter, score_progress, desc="Scoring pairs"):
-                if score <= lb:
+                if score <= threshold:
                     continue
                 matrix_score = 1 if mode == "bool" else score
                 result_builder.add_result(query_id, subject_id, matrix_score)
@@ -875,12 +880,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
         matrix = MODES[mode](matrix, query_idx_to_len, db_idx_to_len)
 
 
-    write_matrix_outputs(
-        matrix, query_idx_to_name, db_idx_to_name,
-        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-        mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
-        row_lengths=query_idx_to_len, col_lengths=db_idx_to_len, data_type=mode,
-    )
+    return DataMatrix(matrix, query_idx_to_name, db_idx_to_name, query_idx_to_len, db_idx_to_len, data_type=mode, copy_data=False)
 
 def build_parser():
     parser = tool_parser(__doc__)
@@ -969,4 +969,9 @@ def main(argv):
     if diamond_params and not params.algorithm.startswith("diamond"):
         raise ValueError(f"--diamond_args only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, hdf, dense_text, params.threshold, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params, symmetrize=params.symmetrize, diamond_path=params.diamond_path)
+    matrix = seq_dist(params.input, input_format=input_type, reference=reference_path, reference_format=reference_type,
+                      max_hits_per_query=params.max_hits_per_query, algorithm=params.algorithm, mode=params.mode, cpu=cpus,
+                      threshold=params.threshold, progress=params.progress, mst=params.mst, knn=params.knn,
+                      diamond_args=diamond_params, symmetrize=params.symmetrize, diamond_path=params.diamond_path)
+    write_matrix_outputs(matrix, hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+                         mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"])

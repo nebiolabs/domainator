@@ -10,7 +10,8 @@ import pandas as pd
 import pytest
 
 from domainator import build_ssn_viewer
-from domainator.data_matrix import DataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree
 from domainator import ssn_bundle
 from domainator import ssn_viewer_html as ssn_viewer_html_module
 

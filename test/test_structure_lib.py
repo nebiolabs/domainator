@@ -71,22 +71,22 @@ def test_structure_is_a_recognized_file_type():
     """Structure extensions are in the shared extension map so callers can tell a structure
     file apart from an unrecognized one. No sequence reader accepts the type: every
     consumer of get_file_type whitelists what it handles."""
-    from domainator import utils
+    from domainator.seqio import get_file_type
 
     for name in ("x.pdb", "x.pdb1", "x.ent", "x.cif", "x.mmcif", "x.bcif", "x.cif.gz"):
-        assert utils.get_file_type(name) == "structure", name
-    assert utils.get_file_type("x.gb") == "genbank"
-    assert utils.get_file_type("x.fasta") == "fasta"
+        assert get_file_type(name) == "structure", name
+    assert get_file_type("x.gb") == "genbank"
+    assert get_file_type("x.fasta") == "fasta"
     # reseek databases are identified by their magic bytes, not by extension, so a
     # mis-named .bcb must not be mistaken for a structure file
-    assert utils.get_file_type("x.bcb") is None
+    assert get_file_type("x.bcb") is None
 
 
 def test_structure_extensions_come_from_the_shared_map():
-    from domainator import utils
+    from domainator.seqio import EXTENSION_TO_TYPE
 
     assert structure_lib.STRUCTURE_EXTENSIONS == frozenset(
-        extension for extension, file_type in utils.EXTENSION_TO_TYPE.items()
+        extension for extension, file_type in EXTENSION_TO_TYPE.items()
         if file_type == "structure"
     )
     assert "pdb" in structure_lib.STRUCTURE_EXTENSIONS
@@ -95,11 +95,12 @@ def test_structure_extensions_come_from_the_shared_map():
 def test_sequence_tools_reject_structures_with_actionable_errors(shared_datadir):
     """A structure handed to a sequence tool should say what to do about it, rather than
     'file extension not recognized'."""
-    from domainator import domainate, utils
+    from domainator import domainate
+    from domainator.seqio import parse_seqfiles
 
     structure = str(shared_datadir / "structures" / "inputs" / "1UBQ.pdb.gz")
     with pytest.raises(ValueError, match="structure_to_genbank"):
-        list(utils.parse_seqfiles((structure,), default_molecule_type="protein"))
+        list(parse_seqfiles((structure,), default_molecule_type="protein"))
     with pytest.raises(RuntimeError, match="structure_domainate"):
         domainate.read_references([structure], None)
 

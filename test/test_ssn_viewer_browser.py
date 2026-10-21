@@ -801,7 +801,7 @@ def test_named_palette_matches_get_palette(meta_page):
     colors and picking it from the menu only writes them down -- which is why this
     checks the color table before and after, and not the canvas (it cannot change).
     """
-    from domainator.utils import get_palette
+    from domainator.colors import get_palette
 
     page = meta_page
     _open_color_picker(page)
@@ -825,7 +825,7 @@ def test_named_palette_matches_get_palette(meta_page):
 
 def test_named_palette_orders_numeric_values_numerically(meta_page):
     """A numeric column colored as categories matches get_palette's sorted assignment."""
-    from domainator.utils import get_palette
+    from domainator.colors import get_palette
 
     page = meta_page
     page.select_option("#color-by", "score")
@@ -2226,7 +2226,8 @@ def _set_threshold(page, threshold_value):
 def test_cluster_column_matches_build_ssn(meta_page):
     """The column the button writes is the one `build_ssn.py --cluster` writes."""
     from domainator.build_ssn import cluster_labels_from_tree
-    from domainator.data_matrix import DataMatrix, MaxTree
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import MaxTree
 
     page = meta_page
     _set_threshold(page, 6.0)
@@ -4633,7 +4634,7 @@ def test_select_by_value_menu_follows_a_column_rename(meta_page):
 
 def test_an_untouched_column_is_already_on_the_default_palette(meta_page):
     """No stored palette, yet every value has a get_palette color."""
-    from domainator.utils import NAMED_CATEGORICAL_PALETTES
+    from domainator.colors import NAMED_CATEGORICAL_PALETTES
 
     page = meta_page
     distinct_colors = next(

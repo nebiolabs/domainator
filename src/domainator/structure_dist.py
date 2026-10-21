@@ -40,8 +40,9 @@ from jsonargparse.typing import PositiveFloat
 
 from domainator.cli.common import add_input, tool_parser
 from domainator import structure_lib
-from domainator.compare_contigs import _keep_top_k_per_row
-from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
+from domainator.sparse_scores import keep_top_k_per_row
+from domainator.ssn_edges import StreamingMstKnnAccumulator
+from domainator.data_matrix import DataMatrix, symmetrize_matrix
 from domainator.matrix_output import (
     add_matrix_output_arguments,
     add_symmetrize_argument,
@@ -223,7 +224,7 @@ class _MetricValueReader:
 def _apply_mode(matrix, mode: str, row_lengths, col_lengths, self_comparison: bool):
     """Turn the raw value matrix into the requested mode."""
     if mode in BITSCORE_MODES:
-        return transform_matrix(matrix, mode, row_lengths=row_lengths,
+        return transform_matrix(matrix, mode=mode, row_lengths=row_lengths,
                                 col_lengths=col_lengths)
     if mode in STRUCTURE_VALUE_FIELDS:
         return matrix  # the cell already holds the metric
@@ -253,37 +254,36 @@ def _streaming_value(raw: float, mode: str, log_lengths,
 
 
 def structure_dist(input_values: Sequence[str],
-                   reference_values: Optional[Sequence[str]],
+                   *,
+                   references: Optional[Sequence[str]],
                    aligner: structure_lib.StructureAligner,
                    mode: str = "score",
-                   *,
-                   hdf: Optional[str] = None,
-                   dense_text: Optional[str] = None,
                    evalue: float = 0.001,
                    max_hits_per_query: Optional[int] = None,
-                   lb: float = 0.0,
+                   threshold: float = 0.0,
                    symmetrize: str = "none",
                    mst: bool = False,
                    knn: Optional[int] = None,
                    alignment_type: Optional[int] = None,
                    max_seqs: Optional[int] = None,
                    tmp_dir: Optional[str] = None,
-                   keep_db: Optional[str] = None,
-                   hits_tsv: Optional[str] = None,
-                   max_output_bytes: Optional[int] = None,
-                   progress: bool = False) -> None:
-    """Align every input structure against every reference structure, and write a matrix.
+                   db_out: Optional[str] = None,
+                   hits_tsv_out: Optional[str] = None,
+                   progress: bool = False) -> DataMatrix:
+    """Align every input structure against every reference structure.
 
-    reference_values of None compares the input against itself.
+    Returns a DataMatrix of ``mode`` values with a row per input and a column per reference.
+    references of None compares the input against itself. ``db_out`` and ``hits_tsv_out``
+    keep the aligner database and the raw hits table.
     """
     sparsify = sparsify_requested(mst, knn)
 
-    self_comparison = reference_values is None
+    self_comparison = references is None
     metrics = _mode_metrics(mode)
     field = _mode_value_field(mode)
 
-    with structure_lib.prepared_databases(aligner, input_values, reference_values,
-                                          tmp_dir=tmp_dir, keep_db=keep_db) as prepared:
+    with structure_lib.prepared_databases(aligner, input_values, references,
+                                          tmp_dir=tmp_dir, keep_db=db_out) as prepared:
         aligner.check_capabilities(alignment_type, metrics,
                                    [prepared.input_db, prepared.reference_db])
 
@@ -329,14 +329,14 @@ def structure_dist(input_values: Sequence[str],
                 if value is not None:
                     accumulator.add_edge(row_idx, col_idx, value)
 
-            # The per-query cap ranks raw values, as _keep_top_k_per_row does on the
+            # The per-query cap ranks raw values, as keep_top_k_per_row does on the
             # non-streaming path, and has to see a query's every hit before it can choose.
             top_hits = (PerQueryTopK(len(row_names), max_hits_per_query)
                         if max_hits_per_query is not None else None)
             for hit in _progress(hits, progress, desc="Scoring pairs"):
                 hit_counts[hit.query] = hit_counts.get(hit.query, 0) + 1
                 raw = reader.value(hit)
-                if raw is None or raw <= lb:
+                if raw is None or raw <= threshold:
                     continue
                 row_idx = row_name_to_idx[hit.query]
                 col_idx = col_name_to_idx[hit.target]
@@ -358,7 +358,7 @@ def structure_dist(input_values: Sequence[str],
             for hit in _progress(hits, progress, desc="Scoring pairs"):
                 hit_counts[hit.query] = hit_counts.get(hit.query, 0) + 1
                 value = reader.value(hit)
-                if value is None or value <= lb:
+                if value is None or value <= threshold:
                     continue
                 builder.add_result(hit.query, hit.target, value)
             matrix = builder.build()
@@ -367,15 +367,15 @@ def structure_dist(input_values: Sequence[str],
         # Only a cap the user actually asked for can be "saturated"; the derived default
         # is exactly the column count, which a fully-connected row reaches legitimately.
         structure_lib.warn_on_saturation(hit_counts, max_seqs, subject="input record")
-        if hits_tsv is not None:
+        if hits_tsv_out is not None:
             # The work directory goes away when this context exits.
-            structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv, aligner)
+            structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv_out, aligner)
 
     if not sparsify:
         # The streaming accumulator has already reconciled both directions itself, and
         # applied the per-query cap before pruning.
         matrix = symmetrize_matrix(matrix, symmetrize)
-        matrix = _keep_top_k_per_row(matrix, max_hits_per_query)  # a no-op when None
+        matrix = keep_top_k_per_row(matrix, max_hits_per_query)  # a no-op when None
 
     row_lengths_array = np.array(row_lengths)
     col_lengths_array = (row_lengths_array if self_comparison else np.array(col_lengths))
@@ -384,12 +384,7 @@ def structure_dist(input_values: Sequence[str],
         matrix = _apply_mode(matrix, mode, row_lengths_array, col_lengths_array,
                              self_comparison)
 
-    write_matrix_outputs(
-        matrix, row_names, col_names,
-        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-        mitigation_options=["--max_hits_per_query", "--threshold", "-e/--evalue", "--mst", "--knn"],
-        row_lengths=row_lengths_array, col_lengths=col_lengths_array, data_type=mode,
-    )
+    return DataMatrix(matrix, row_names, col_names, row_lengths_array, col_lengths_array, data_type=mode, copy_data=False)
 
 
 def build_parser():
@@ -487,24 +482,23 @@ def main(argv):
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
-    structure_dist(
+    matrix = structure_dist(
         params.input,
-        reference_values,
-        aligner,
-        params.mode,
-        hdf=hdf,
-        dense_text=dense_text,
+        references=reference_values,
+        aligner=aligner,
+        mode=params.mode,
         evalue=params.evalue,
         max_hits_per_query=params.max_hits_per_query,
-        lb=params.threshold,
+        threshold=params.threshold,
         symmetrize=params.symmetrize,
         mst=params.mst,
         knn=params.knn,
         alignment_type=params.alignment_type,
         max_seqs=params.max_seqs,
         tmp_dir=params.tmp_dir,
-        keep_db=params.db_out,
-        hits_tsv=params.hits_tsv_out,
-        max_output_bytes=max_output_bytes,
+        db_out=params.db_out,
+        hits_tsv_out=params.hits_tsv_out,
         progress=params.progress,
     )
+    write_matrix_outputs(matrix, hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+                         mitigation_options=["--max_hits_per_query", "--threshold", "-e/--evalue", "--mst", "--knn"])

@@ -29,16 +29,16 @@ from domainator.output_guardrails import add_max_output_gb_argument, max_output_
 from domainator import structure_lib
 
 
-def structure_to_genbank(inputs, aligner, keep_db=None, store_3di=False, tmp_dir=None):
+def structure_to_genbank(inputs, *, aligner, db_out=None, store_3di=False, tmp_dir=None):
     """Yield one protein SeqRecord per structure chain.
 
     Args:
         inputs: list of -i values (structure files, globs, directories, or one database
             prefix).
         aligner: a structure_lib.StructureAligner.
-        keep_db: if not None, build the database at this prefix and leave it in place.
+        db_out: if not None, build the database at this prefix and leave it in place.
         store_3di: store each chain's 3Di string in a /threedi qualifier.
-        tmp_dir: parent directory for the temporary database, when keep_db is None.
+        tmp_dir: parent directory for the temporary database, when db_out is None.
 
     Yields:
         SeqRecord objects with molecule_type "protein".
@@ -46,7 +46,7 @@ def structure_to_genbank(inputs, aligner, keep_db=None, store_3di=False, tmp_dir
     kind, resolved = structure_lib.resolve_structure_inputs(inputs)
 
     if kind == "db":
-        if keep_db is not None:
+        if db_out is not None:
             raise RuntimeError(
                 "--db_out builds a database from structure files; the input is already "
                 f"a database ('{resolved[0]}')."
@@ -54,8 +54,8 @@ def structure_to_genbank(inputs, aligner, keep_db=None, store_3di=False, tmp_dir
         yield from _records(aligner, structure_lib.StructureDB(prefix=resolved[0]), store_3di)
         return
 
-    if keep_db is not None:
-        db = aligner.build_db(resolved, keep_db)
+    if db_out is not None:
+        db = aligner.build_db(resolved, db_out)
         yield from _records(aligner, db, store_3di)
         return
 
@@ -104,8 +104,8 @@ def main(argv):
 
     records = structure_to_genbank(
         params.input,
-        aligner,
-        keep_db=params.db_out,
+        aligner=aligner,
+        db_out=params.db_out,
         store_3di=params.store_3di,
         tmp_dir=params.tmp_dir,
     )

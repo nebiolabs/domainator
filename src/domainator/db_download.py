@@ -30,19 +30,24 @@ from jsonargparse import ActionConfigFile
 import logging
 import gzip
 import os
-import shutil
 import subprocess
 import time
 import requests
 from domainator.cli.common import add_output, add_switch, check_outputs, resolve_cpu, tool_parser
 from domainator.Bio import SeqIO
-from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
-from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager, compile_taxonomy_allowed, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
+from domainator.seqio import write_genbank, parse_seqfiles
+from domainator.taxonomy.records import filter_by_taxonomy, compile_taxonomy_allowed
+from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator._mp import make_pool, make_manager
+from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import __version__
 from typing import Dict, Set, Optional, Iterator
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
+from domainator.errors import ExternalToolError
+from domainator.external import resolve_binary
 import tqdm
 import datetime
 import tempfile
@@ -106,7 +111,7 @@ def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_
         output_handle (file-like object): The file handle to which the downloaded GenBank data will be written.
         include_taxa (list, optional): A list of NCBI taxids of clades to download. If supplied, only assemblies with at least one taxid from this list in their lineage will be downloaded.
         exclude_taxa (list, optional): A list of NCBI taxids of clades to exclude from downloading. Assemblies with any taxid from this list in their lineage will not be downloaded.
-        taxonomy_database (object, optional): A domainator.Taxonomy.NCBITaxonomy object. If None, both include_taxids and exclude_taxids must be None.
+        taxonomy_database (object, optional): A domainator.taxonomy.NCBITaxonomy object. If None, both include_taxids and exclude_taxids must be None.
         filter_by_uniqueness (bool, optional): If True, only one genome per taxid will be downloaded, except for metagenomes and prokaryotic environmental samples, where all genomes will be downloaded. Defaults to True.
         filter_by_complete_genome: If True, only genomes with assembly_level == "Complete Genome" will be downloaded. Defaults to False.
         no_na (bool, optional): If True, only genomes without 'na' in the 'refseq_category' column of the assembly_summary_genbank.txt file will be downloaded. Defaults to False.
@@ -226,7 +231,7 @@ def filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, excl
         genbank_accessions (list): A list of dictionaries containing GenBank accession information.
         include_taxa (list): A list of NCBI taxids of clades to include in the filtered list.
         exclude_taxa (list): A list of NCBI taxids of clades to exclude from the filtered list.
-        taxonomy_database (object): A domainator.Taxonomy.NCBITaxonomy object.
+        taxonomy_database (object): A domainator.taxonomy.NCBITaxonomy object.
         taxonomy_expr (str, optional): A boolean expression over taxids (operators & | ~ and parentheses). Mutually exclusive with include_taxa/exclude_taxa.
 
     Returns:
@@ -247,7 +252,7 @@ def filter_by_unique_taxid(genbank_accessions, taxonomy_database):
 
     Args:
         genbank_accessions (list): A list of dictionaries containing GenBank accession information.
-        taxonomy_database (object): A domainator.Taxonomy.NCBITaxonomy object.
+        taxonomy_database (object): A domainator.taxonomy.NCBITaxonomy object.
 
     Returns:
         list: A filtered list of GenBank accessions containing unique taxids, with an exception for metagenomes and prokaryotic environmental samples.
@@ -514,16 +519,12 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     Returns:
         dict: {"appended": int, "failed": int, "missing": int} counts for reporting.
     """
-    datasets_bin = datasets_path or shutil.which("datasets")
-    if datasets_bin is None:
-        raise RuntimeError("Could not find 'datasets' (NCBI Datasets CLI) on PATH. Install it (e.g. `conda install -c conda-forge ncbi-datasets-cli`) or pass --datasets_path.")
+    datasets_bin = resolve_binary("datasets", datasets_path, install_hint="Install the NCBI Datasets CLI (e.g. `conda install -c conda-forge ncbi-datasets-cli`).")
 
     if datasets_workdir is None:
         raise RuntimeError("--datasets_workdir is required when --download_backend is 'datasets'.")
 
-    unzip_bin = shutil.which("unzip")
-    if unzip_bin is None:
-        raise RuntimeError("Could not find 'unzip' on PATH; it is required to extract the NCBI Datasets package.")
+    unzip_bin = resolve_binary("unzip", install_hint="It is required to extract the NCBI Datasets package.")
 
     workdir = Path(datasets_workdir)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -562,7 +563,7 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
                       f"(attempt {attempt}/{retries - 1} of retries used)")
                 time.sleep(wait)
         if check:
-            raise RuntimeError(f"command failed (rc={last_rc}) after {retries} attempt(s): "
+            raise ExternalToolError(f"command failed (rc={last_rc}) after {retries} attempt(s): "
                                f"{' '.join(str(c) for c in cmd)}")
         logger.warning(f"command failed (rc={last_rc}) after {retries} attempt(s): "
               f"{' '.join(str(c) for c in cmd)}")
@@ -697,7 +698,7 @@ FASTA_DBS = {"swissprot", "trembl", "uniprot"}
 GENBANK_DBS = (UNIPROT_DBS - FASTA_DBS) | {"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks",
                                         "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all"}
 
-def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None, partial="include"):
+def db_download(ncbi_taxonomy, *, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpu:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None, partial="include"):
 
     if taxonomy_expr and (include_taxids or exclude_taxids):
         raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
@@ -794,7 +795,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
-            cpus=cpus,
+            cpus=cpu,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=prok_expr,
@@ -814,7 +815,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
                 ncbi_summary=ncbi_summary,
                 before=before,
                 after=after,
-                cpus=cpus,
+                cpus=cpu,
                 success_rec_log=success_rec_log,
                 exclude_accessions=exclude_accessions,
                 taxonomy_expr=prok_expr,
@@ -834,7 +835,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
-            cpus=cpus,
+            cpus=cpu,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=prok_expr,
@@ -853,7 +854,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
-            cpus=cpus,
+            cpus=cpu,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=taxonomy_expr,
@@ -872,7 +873,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
-            cpus=cpus,
+            cpus=cpu,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=prok_expr,
@@ -891,7 +892,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
-            cpus=cpus,
+            cpus=cpu,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=taxonomy_expr,
@@ -910,7 +911,7 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
-            cpus=cpus,
+            cpus=cpu,
             success_rec_log=success_rec_log,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=taxonomy_expr,
@@ -1002,10 +1003,7 @@ def main(argv):
         if not Path(output).is_file():
             parser.error(f"{output} is not a file, so you cannot append to it.")
     else: # overwrite the output file with a blank file
-        with open(output, "w") as output_handle:
-            pass
-    
-        
+        open(output, "w").close()
 
     exclude_accessions = list_and_file_to_dict_keys(params.exclude_accessions, params.exclude_accessions_file, as_set=True)
 
@@ -1042,7 +1040,7 @@ def main(argv):
     api_key = params.ncbi_api_key or os.environ.get("NCBI_API_KEY")
     user_agent = f"domainator/{__version__}" + (f" ({email})" if email else "")
 
-    domainator_db_download(ncbi_taxonomy, output, params.include_taxids, params.exclude_taxids, params.db, params.gene_call, params.max_records, params.ncbi_summary, before, after, cpus, success_rec_log=params.success_log_out, exclude_accessions=exclude_accessions,
+    db_download(ncbi_taxonomy, output_file_path=output, include_taxids=params.include_taxids, exclude_taxids=params.exclude_taxids, db=params.db, gene_call=params.gene_call, num_recs=params.max_records, ncbi_summary=params.ncbi_summary, before=before, after=after, cpu=cpus, success_rec_log=params.success_log_out, exclude_accessions=exclude_accessions,
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
                            datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,

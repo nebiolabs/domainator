@@ -1,17 +1,10 @@
-try:
-    from esmologs.ESM2_to_3Di import ESM2_to_3Di
-    from esmologs.predict_from_ESM2_to_3Di import convert_batch
-    from esmologs.fasta2foldseek import fasta2foldseek
-    import torch
-except ImportError: 
-    pass 
-
+import importlib
 import os
-import shutil
 import tempfile
-import subprocess
-from typing import List, Iterable, Tuple, Union, Iterator
+from typing import Iterable
 from collections import namedtuple
+from domainator.errors import ExternalToolError
+from domainator.external import resolve_binary, run_command
 
 # define a named tuple for hits with fields "query,target,qheader,theader,fident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits"
 FoldseekHit = namedtuple("Hit", ["query","target","qheader","theader","pident","alnlen","mismatch","gapopen","qstart","qend","tstart","tend","evalue","bits", "qlen", "tlen"])
@@ -19,33 +12,16 @@ FoldseekHit = namedtuple("Hit", ["query","target","qheader","theader","pident","
 MAX_PROTEIN_SIZE = 2500
 
 
-def resolve_foldseek_path(foldseek_path=None) -> str:
-    """Resolve the foldseek executable, raising a descriptive error if it is missing."""
-    if foldseek_path is not None:
-        return foldseek_path
-    resolved = shutil.which("foldseek")
-    if resolved is None:
-        raise RuntimeError(
-            "Could not find 'foldseek' on PATH. Install foldseek "
-            "(for example 'conda install -c conda-forge -c bioconda foldseek') "
-            "or pass an explicit path."
-        )
-    return resolved
+def _import_optional(module: str):
+    """Import one of the structure-prediction packages (esmologs, torch), which are optional."""
+    try:
+        return importlib.import_module(module)
+    except ImportError as exc:
+        raise ExternalToolError(
+            f"This needs the optional package '{module.split('.')[0]}', which could not be imported ({exc}). "
+            "See docs/esm_3b_foldseek.md for how to install the structure-search dependencies."
+        ) from exc
 
-
-def _run(argv, description, env=None):
-    """Run a foldseek subcommand, raising RuntimeError with stderr on failure.
-
-    Uses subprocess.run rather than Popen+wait: the previous form read stderr only
-    after the process exited, which deadlocks once stderr fills the pipe buffer.
-    """
-    completed = subprocess.run(argv, capture_output=True, env=env)
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"{description} exited with code {completed.returncode}:\n"
-            + completed.stderr.decode("utf-8", errors="replace")
-        )
-    return completed
 
 def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path=None) -> Iterable[FoldseekHit]:
     """
@@ -57,7 +33,7 @@ def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path
             enable GPU-accelerated search. For a GPU search the target database must have
             been built in a GPU-compatible (padded) format (see `foldseek makepaddedseqdb`).
     """
-    foldseek_bin = resolve_foldseek_path(foldseek_path)
+    foldseek_bin = resolve_binary("foldseek", foldseek_path, install_hint="Install foldseek (for example 'conda install -c conda-forge -c bioconda foldseek').")
     with tempfile.TemporaryDirectory() as tmpdirname:
         out_base_name = tmpdirname + "/output"
         protein_fasta_name = tmpdirname + "/protein.fasta"
@@ -82,7 +58,7 @@ def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path
         if num_seqs == 0:
             return # no sequences to search, yield nothing
         
-        fasta2foldseek(protein_fasta_name, threedi_fasta_name, out_base_name)
+        _import_optional("esmologs.fasta2foldseek").fasta2foldseek(protein_fasta_name, threedi_fasta_name, out_base_name)
         foldseek_options = [foldseek_bin, "search", out_base_name, database_path, aln_path, foldseek_tmpfolder, "-e", str(E)]
         if cpu > 0 and cpu is not None:
             foldseek_options += ["--threads", str(cpu)]
@@ -95,9 +71,9 @@ def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path
             if ":" in device:
                 foldseek_env = os.environ.copy()
                 foldseek_env["CUDA_VISIBLE_DEVICES"] = device.split(":", 1)[1]
-        _run(foldseek_options, "foldseek", env=foldseek_env)
+        run_command(foldseek_options, "foldseek search", env=foldseek_env)
 
-        _run(
+        run_command(
             [foldseek_bin, "convertalis", "--format-output",
              "query,target,qheader,theader,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qlen,tlen",
              out_base_name, database_path, aln_path, foldseek_tmpfolder + "/results.tsv"],
@@ -111,11 +87,12 @@ def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path
 
 class foldseekBuilder():
     def __init__(self, device="cuda:0", checkpoint=None):
+        torch = _import_optional("torch")
+        ESM2_to_3Di = _import_optional("esmologs.ESM2_to_3Di").ESM2_to_3Di
+        self._convert_batch = _import_optional("esmologs.predict_from_ESM2_to_3Di").convert_batch
         self.device = device
         self.checkpoint = checkpoint
         self.model = ESM2_to_3Di("esm2_t36_3B_UR50D", torch.load(checkpoint, map_location=device))
-        self.checkpoint=checkpoint
-        self.device=device
         self.model.to(self.device)
         self.model.eval()
 
@@ -125,5 +102,5 @@ class foldseekBuilder():
         # skip if contains non-amino acid characters
         if prot.strip("ACDEFGHIKLMNPQRSTVWY") != "": #TODO: maybe warn?
             return None
-        predicted_seqs = convert_batch(self.model, [prot], device=self.device)
+        predicted_seqs = self._convert_batch(self.model, [prot], device=self.device)
         return f">{name}\n{predicted_seqs[0]}"

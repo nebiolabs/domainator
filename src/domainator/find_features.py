@@ -15,7 +15,6 @@ import re
 import math
 import warnings
 from pathlib import Path
-warnings.filterwarnings("ignore", module='numpy')
 
 from typing import List, Dict, Tuple, Optional, NamedTuple, Iterator
 from jsonargparse import ActionConfigFile
@@ -24,9 +23,13 @@ from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, chec
 from domainator.outputs import write_seq_outputs
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
-from domainator import utils, DOMAIN_FEATURE_NAME
-from domainator.utils import parse_seqfiles, BooleanEvaluator, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
-from domainator.domainate import clean_rec, prodigal_CDS_annotate
+from domainator import DOMAIN_FEATURE_NAME
+from domainator.partial import codon_offset
+from domainator.seqio import parse_seqfiles
+from domainator.expr import BooleanEvaluator
+from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
+from domainator.cli.common import partial_help
+from domainator.domainate import SearchResult, clean_rec, domain_feature_qualifiers, prodigal_CDS_annotate
 
 # TMbed prediction class labels
 # From TMbed format 3 (undirected):
@@ -509,7 +512,7 @@ def add_feature_annotations(
             # Map protein coordinates to nucleotide coordinates
             annot_length = (feat.end - feat.start) * 3
             try:
-                location = cds_feature.location.overlay(utils.codon_offset(cds_feature) + feat.start * 3, annot_length)
+                location = cds_feature.location.overlay(codon_offset(cds_feature) + feat.start * 3, annot_length)
             except Exception as e:
                 warnings.warn(
                     f"Could not overlay location for {feat.name} on {contig.id}. "
@@ -518,22 +521,12 @@ def add_feature_annotations(
                 continue
             cds_id = cds_feature.qualifiers.get('cds_id', ['.'])[0]
         
-        # Build qualifiers
-        qualifiers = {
-            'program': [feat.program],
-            'database': [feat.program],  # For these algorithms, database = program
-            'description': [feat.desc],
-            'accession': ['.'],
-            'evalue': [f"{feat.evalue:.1e}"],
-            'score': [f"{feat.score:.1f}"],
-            'name': [feat.name],
-            'identity': [f"{feat.identity:.1f}"],
-            'cds_id': [cds_id],
-            'rstart': ['.'],
-            'rend': ['.'],
-            'rlen': ['.'],
-        }
-        
+        # For these algorithms, database = program, and there is no reference profile to align to.
+        hit = SearchResult(name=feat.name, desc=feat.desc, acc="", evalue=feat.evalue, score=feat.score,
+                           start=feat.start, end=feat.end, database=feat.program, identity=feat.identity,
+                           rstart=".", rend=".", rlen=".", program=feat.program)
+        qualifiers = domain_feature_qualifiers(hit, cds_id)
+
         f = SeqFeature(
             location=location,
             type=DOMAIN_FEATURE_NAME,
@@ -543,9 +536,10 @@ def add_feature_annotations(
 
 
 def find_features(
-    seq_iterator: Iterator[SeqRecord],
+    records: Iterator[SeqRecord],
+    *,
     tmbed: bool = False,
-    gpu_device: Optional[str] = "cuda:0",
+    device: Optional[str] = "cuda:0",
     cpu: int = 0,
     batch_size: int = 4000,
     gene_call: Optional[str] = None,
@@ -560,9 +554,9 @@ def find_features(
     Yields annotated SeqRecords.
     
     Args:
-        seq_iterator: Iterator yielding SeqRecord objects
+        records: Iterator yielding SeqRecord objects
         tmbed: Whether to run TMbed prediction
-        gpu_device: GPU device to use (None or "None" for CPU only)
+        device: GPU device to use (None or "None" for CPU only)
         cpu: Number of CPU threads (0 = use all available)
         batch_size: Batch size for processing
         gene_call: Gene calling mode ("all", "unannotated", or None)
@@ -603,7 +597,7 @@ def find_features(
             else:
                 effective_tmbed_model_dir = None
                 
-            tmbed_components = get_tmbed_predictor(gpu_device, cpu, effective_tmbed_model_dir)
+            tmbed_components = get_tmbed_predictor(device, cpu, effective_tmbed_model_dir)
             from tmbed.utils import get_md5
         except ImportError as e:
             warnings.warn(str(e))
@@ -620,7 +614,7 @@ def find_features(
         def get_md5(s):
             return md5(s.encode()).hexdigest()
     
-    for rec in seq_iterator:
+    for rec in records:
         CDS_count = clean_rec(rec, clear_CDS_annotations=clear_CDS_annotations)
         
         # Gene calling if needed
@@ -683,7 +677,6 @@ def _process_batch(
         # Add motif annotations to contigs
         for contig_idx, contig in enumerate(batch_contigs):
             if contig_idx in contig_motif_features:
-                is_protein = contig.annotations.get('molecule_type') == "protein"
                 
                 for cds_idx, features in contig_motif_features[contig_idx].items():
                     if cds_idx == -1:  # Protein contig
@@ -722,8 +715,6 @@ def _process_batch(
         # Add annotations to contigs
         for contig_idx, contig in enumerate(batch_contigs):
             if contig_idx in contig_features:
-                is_protein = contig.annotations.get('molecule_type') == "protein"
-                
                 for cds_idx, features in contig_features[contig_idx].items():
                     if cds_idx == -1:  # Protein contig
                         add_feature_annotations(contig, features, is_protein=True)
@@ -835,7 +826,7 @@ def main(argv):
                 default_molecule_type=params.alphabet
             ),
             tmbed=params.tmbed,
-            gpu_device=gpu_device,
+            device=gpu_device,
             cpu=params.cpu,
             batch_size=params.batch_size,
             gene_call=params.gene_call,

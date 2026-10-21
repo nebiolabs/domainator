@@ -7,7 +7,8 @@ import pytest
 import scipy.sparse
 import scipy.sparse.csgraph
 
-from domainator import structure_dist, structure_to_genbank, transform_matrix, utils
+from domainator import structure_dist, structure_to_genbank, transform_matrix
+from domainator.seqio import parse_seqfiles
 from domainator.data_matrix import DataMatrix
 
 
@@ -213,7 +214,7 @@ def test_labels_match_structure_to_genbank_record_ids(inputs, tmp_path):
 
     matrix = DataMatrix.from_file(str(matrix_path))
     record_ids = [record.id for record in
-                  utils.parse_seqfiles((str(genbank_path),), default_molecule_type="protein")]
+                  parse_seqfiles((str(genbank_path),), default_molecule_type="protein")]
     assert sorted(matrix.rows) == sorted(record_ids)
 
 

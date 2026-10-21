@@ -16,7 +16,13 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, add_switch, check_outputs, tool_parser
 from domainator.outputs import SeqOutputs
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, region_id, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
+from domainator.seqio import parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator.expr import BooleanEvaluator
+from domainator.model import DomainatorCDS, get_non_domainator_features, region_id, check_annotation_type
+from domainator.locations import pad_location, slice_record_from_location, circular_dist, WHERE_CHOICES
+from domainator.Bio.SeqFeature import FeatureLocation
+from domainator.partial import fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES
 from typing import Tuple, Optional, Set
 #TODO: account for different domain databases
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
@@ -82,6 +88,29 @@ def pad_records(records, pad_char="N", where:str="start"):
         records[i] = (pad_char * shift_amount[i]) + records[i] + (pad_char * right_pad_amount[i])
         if records[i].annotations.get("topology") == "circular":
             records[i].annotations["topology"] = "linear"
+
+def deduplicate_and_pad(regions, *, deduplicate=False, pad=False, anchor="start", best_first=False):
+    """Yield ``regions``, dropping any whose id was already seen (with ``deduplicate``), and padded
+    with N so that their focus CDSs line up (with ``pad``, which reads every region first).
+
+    ``best_first`` sorts padded domain_search hits best first, as their unpadded order would be.
+    """
+    seen = set()
+    kept = list()
+    for region in regions:
+        if deduplicate:
+            if region.id in seen:
+                continue
+            seen.add(region.id)
+        if pad:
+            kept.append(region)
+        else:
+            yield region
+    if pad:
+        if best_first:
+            kept.sort(reverse=True)
+        pad_records(kept, where=anchor)
+        yield from kept
 
 def pad_circular_cds(center:int, size:int, left_pad:int, right_pad:int) -> Tuple[int,int]:
     """
@@ -296,22 +325,22 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
     record.set_focus_strand(-1 if flip else 1)
     return record, slice_location
 
-def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,
+def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,
                   kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, evalue=float("inf"),
-                  invert=False, search_hits=False, max_region_overlap=1.0, strand=None, _from_domain_search=False,
+                  invert=False, annotation_type:str="domainator", max_region_overlap=1.0, strand=None, _from_domain_search=False,
                   _domain_search_negatives:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, unannotated=False,
                   include_nucleic_acids:bool = False, partial:str = "include",
                   ):
     """
 
         Args:
-            contigs: an interator over SeqRecord objects
+            records: an interator over SeqRecord objects
 
             target_contigs: only extract regions from contigs with these names
 
-            target_cdss: extract CDSs with these names
+            cds_ids: extract CDSs with these names
 
-            target_domains: Select all CDSs containing domains with these names
+            domains: Select all CDSs containing domains with these names
 
             domain_expr: Use boolean expressions for domain names to select CDSs
             
@@ -319,21 +348,21 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
 
             kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends; partially enclosed domain annotations are dropped.
 
-            whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
+            whole_contig: extract the whole contigs containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
 
             normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
 
             evalue: ignore domains with evalue higher than this.
 
-            invert: if True then invert the target_cdss, target_domains, and domain_expr selection criteria (contigs, and ranges are still selected normally, only CDS selection is inverted)
+            invert: if True then invert the cds_ids, domains, and domain_expr selection criteria (contigs and ranges are still selected normally, only CDS selection is inverted)
 
-            search_hits: Select CDSs that are marked as search hits. This activates include_nucleic_acids.
+            annotation_type: "domainator", or "domain_search" to also select CDSs marked as domain_search hits. "domain_search" activates include_nucleic_acids.
 
             max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done.
 
             strand: only extract regions around CDSs on the specified strand. If None, then extract regions around CDSs on both strands. forward strand is "f", reverse strand is "r".
 
-            _from_domain_search: if True then read target_cdss from rec.get_hit_scores
+            _from_domain_search: if True then read cds_ids from rec.get_hit_scores
 
             _domain_search_negatives (Optional[Set[str]]): if _from_domain_search is True, then this is a set of domain names to negatively select on.
 
@@ -347,18 +376,19 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
         Yields:
             SeqRecords of the selected regions
     """ 
+    search_hits = check_annotation_type(annotation_type) == "domain_search"
     databases = set(databases) if databases is not None else None
 
-    if target_cdss is not None:
-        target_cdss = set(target_cdss)
+    if cds_ids is not None:
+        cds_ids = set(cds_ids)
 
-    if target_domains is not None:
-        target_domains = set(target_domains)
+    if domains is not None:
+        domains = set(domains)
 
     if domain_expr is not None:
         expression_evaluator = BooleanEvaluator(domain_expr)
 
-    for rec in contigs:
+    for rec in records:
         # First make a list of all the focus CDSs, by index
         cdss = DomainatorCDS.list_from_contig(rec, evalue, include_nucleic_acid_annotations=True) # _from_domain_search
         cdss.sort(key=lambda x: x.feature.location.stranded_start) #TODO: why is this stranded_start, not start?
@@ -375,7 +405,7 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
             if cds.is_nucleic_acid and not search_hits and not _from_domain_search and not include_nucleic_acids: # ignore 
                 continue
             #If no selectors then keep every cds
-            if target_cdss is None and target_domains is None and domain_expr is None and not search_hits and (not _from_domain_search) and (not unannotated):
+            if cds_ids is None and domains is None and domain_expr is None and not search_hits and (not _from_domain_search) and (not unannotated):
                 keep = True
             elif _from_domain_search:
                 if cds.index in hit_scores:
@@ -384,11 +414,11 @@ def select_by_cds(contigs, target_cdss=None, target_domains=None, domain_expr=No
                         keep = True
                         best_score = hit_scores[cds.index]
             else:
-                if target_cdss is not None: # if target_cdss then update based on cds name
-                    if cds.name in target_cdss:
+                if cds_ids is not None: # if cds_ids then update based on cds name
+                    if cds.name in cds_ids:
                         keep = True
-                if target_domains is not None: # if target_domains, then update based on domain names
-                    if len(cds.get_domain_names(databases).intersection(target_domains)):
+                if domains is not None: # if target_domains, then update based on domain names
+                    if len(cds.get_domain_names(databases).intersection(domains)):
                         keep = True
                 if domain_expr is not None: # if target_domains, then update based on domain names
                     if expression_evaluator.check_expression(cds.get_domain_names(databases)):
@@ -542,8 +572,6 @@ def build_parser():
 
     add_annotation_type(parser, help="Which annotations to select CDSs by.")
     #TODO: 
-    # parser.add_argument('--domain_count_expr', type=str, default=None,
-    #                     help="a comparator and a number, to specify a desired number of domains. Example: '> 2' would mean to return contigs with more than 2 domains.")
 
     parser.add_argument('--pad', action='store_true', default=False,
                         help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor.")
@@ -574,17 +602,6 @@ def build_parser():
     parser.add_argument('--config', action=ActionConfigFile)
     
 
-    # parser.add_argument(, '--architecture', type=str, default=None,
-    #                    help="space separated list of domains")
-    # parser.add_argument(, '--architecture_file', type=str, default=None,
-    #                    help="space separated lists of domains, one architecture per line")
-    # parser.add_argument(, '--subarchitecture', type=str, default=None,
-    #                    help="space separated list of domains")
-    # parser.add_argument(, '--subarchitecture_file', type=str, default=None,
-    #                    help="space separated lists of domains, one architecture per line")
-
-    # parser.add_argument('-d', '--database', type=str, default=None,
-    #                    help="the name of the database which you want to filter annotations from.") #TODO: see todo above.
     return parser
 
 
@@ -602,8 +619,6 @@ def main(argv):
 
     whole_contig = params.whole_contig
     normalize_direction = not params.keep_direction
-    deduplicate = params.deduplicate
-    pad = params.pad
 
     target_contigs = list_and_file_to_dict_keys(params.contigs, params.contigs_file, as_set=True)
     selected_cdss = list_and_file_to_dict_keys(params.cds, params.cds_file, as_set=True)
@@ -612,20 +627,17 @@ def main(argv):
 
 
     ### Run
-    #TODO: resolve code duplication with domainator domain_search
-    seen = set()
-    records = list()
     selected = select_by_cds(
         parse_seqfiles(params.input, target_contigs), 
-        selected_cdss, 
-        selected_domains, 
-        domain_expr, 
-        cds_range, 
-        kb_range, 
-        whole_contig, 
-        normalize_direction,
-        float("inf") if params.evalue is None else params.evalue,
-        search_hits = params.annotation_type == "domain_search",
+        cds_ids=selected_cdss, 
+        domains=selected_domains, 
+        domain_expr=domain_expr, 
+        cds_range=cds_range, 
+        kb_range=kb_range, 
+        whole_contig=whole_contig, 
+        normalize_direction=normalize_direction,
+        evalue=float("inf") if params.evalue is None else params.evalue,
+        annotation_type = params.annotation_type,
         invert = params.invert,
         max_region_overlap = params.max_region_overlap,
         strand = params.strand,
@@ -635,15 +647,4 @@ def main(argv):
         partial = params.partial,
         )
     with SeqOutputs(params.genbank_out, params.fasta_out) as outputs:
-        for record in selected:
-            if deduplicate and record.id in seen:
-                continue
-            if deduplicate:
-                seen.add(record.id)
-            if pad:
-                records.append(record)
-            else:
-                outputs.write(record)
-        if pad:
-            pad_records(records, where=params.anchor)
-            outputs.write_all(records)
+        outputs.write_all(deduplicate_and_pad(selected, deduplicate=params.deduplicate, pad=params.pad, anchor=params.anchor))

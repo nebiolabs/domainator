@@ -1,7 +1,7 @@
 import tempfile
 
 from domainator import clean_sequences
-from domainator import utils
+from domainator.seqio import parse_seqfiles
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -86,7 +86,7 @@ def test_clean_sequences_clean_name(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/clean_out.gb"
         clean_sequences.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--clean_name"])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         # Check that no names have problematic characters
         for seq in seqs:
             assert " " not in seq.id
@@ -134,7 +134,7 @@ def test_clean_sequences_strip_preserves_feature_coordinates():
         SeqFeature(FeatureLocation(2, 6), type="CDS", qualifiers={"cds_id": ["cds1"]}),
     ]
 
-    result = list(clean_sequences.clean_sequences([record], fasta_type="nucleotide", strip=True))
+    result = list(clean_sequences.clean_sequences([record], alphabet="nucleotide", strip=True))
 
     assert len(result) == 1
     assert str(result[0].seq) == "ATGC"
@@ -196,7 +196,7 @@ def test_clean_sequences_nucleotide():
         SeqRecord(Seq("ATGC"), id="seq2", name="seq2", description="test2"),
     ]
     
-    result = list(clean_sequences.clean_sequences(records, fasta_type="nucleotide", strip=True))
+    result = list(clean_sequences.clean_sequences(records, alphabet="nucleotide", strip=True))
     
     assert str(result[0].seq) == "ATGC"
     assert str(result[1].seq) == "ATGC"
@@ -208,7 +208,7 @@ def test_clean_sequences_fasta_output(shared_datadir):
         out = output_dir + "/clean_out.fasta"
         clean_sequences.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--fasta_out", out])
         # Just verify the file exists and can be read
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) > 0
 
 

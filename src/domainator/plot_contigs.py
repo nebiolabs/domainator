@@ -13,15 +13,16 @@ from os import PathLike
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.utils import parse_seqfiles, get_cds_name, open_if_is_name
+from domainator.seqio import parse_seqfiles, open_if_is_name
+from domainator.model import get_cds_name
 from domainator.Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
 from domainator.Bio.SeqRecord import SeqRecord
 from collections import defaultdict
 import html
 import json
-from domainator.color_genbank import normalize_color_hex, read_color_table
+from domainator.colors import normalize_color_hex, read_color_table
 import pandas as pd
-from domainator.utils import get_palette
+from domainator.colors import get_palette
 
 def normalize_strand(strand:int) -> str:
     if strand is None:
@@ -110,12 +111,13 @@ def feature_to_dict(feature: SeqFeature, default_color:Optional[Union[str, Dict[
     if default_color is None:
         default_color = defaultdict(lambda: "#CCCCCC", {"CDS": "#CCCCCC", "exon": "#CCCCCC", "repeat_region": "#0000FF", DOMAIN_FEATURE_NAME: "#00FFFF", DOMAIN_SEARCH_BEST_HIT_NAME: "#06FF0D", "source": "#2626FF"})
     elif isinstance(default_color, defaultdict):
-        default_color = default_color
+        pass
     elif isinstance(default_color, dict):
         default_color = {k: normalize_color_hex(v) for k, v in default_color.items()}
         default_color = defaultdict(lambda: "#CCCCCC", default_color)
     else: # assume it's a hex string
-        default_color = defaultdict(normalize_color_hex(default_color))
+        color = normalize_color_hex(default_color)
+        default_color = defaultdict(lambda: color)
 
     if "color" in feature.qualifiers:
         color = normalize_color_hex(feature.qualifiers["color"][0])
@@ -181,91 +183,96 @@ def add_z_order(features:List[Dict[str, Union[int, str]]],
         current_feature["z_order"] = current_level
         z_orders.append((current_feature, current_level))
 
-def create_d3_html(output_file, contigs:List[SeqRecord],
-                   metadata_files:List[Union[str, PathLike]]=None,
-                   color_by:str=None,
-                   color_table:Optional[Dict[str, str]]=None,
-                   window_height=2400, window_width=1200,
-                   feature_types:Optional[List[str]] = None,
-                   arrow_height=50, arrow_width=20,
-                   contig_thickness=20,
-                   contig_label_font="sans-serif", contig_label_px=32,
-                   feature_label_font="sans-serif", feature_label_px=26,
-                   details_height=100, details_width=None
-                   ):
-    
+def plot_contigs(records:List[SeqRecord], *,
+                 html_out,
+                 metadata:List[Union[str, PathLike]]=None,
+                 color_by:str=None,
+                 color_table:Optional[Dict[str, str]]=None,
+                 height=2400, width=1200,
+                 types:Optional[List[str]] = None,
+                 feature_height=50, arrow_width=20,
+                 contig_thickness=20,
+                 contig_label_font="sans-serif", contig_label_px=32,
+                 feature_label_font="sans-serif", feature_font_size=26,
+                 details_height=100, details_width=None
+                 ):
+    """Write an interactive HTML plot of ``records`` to ``html_out`` (a path or a text handle).
+
+    The options mean the same as the ``domainator plot_contigs`` options with the same names;
+    ``types`` is the feature types to draw.
+    """
     # Convert input to correct types
-    arrow_height = int(arrow_height)
+    feature_height = int(feature_height)
     arrow_width = int(arrow_width)
     contig_label_font = html.escape(contig_label_font)
     feature_label_font = html.escape(feature_label_font)
     contig_label_px = int(contig_label_px)
-    feature_label_px = int(feature_label_px)
-    window_height = int(window_height)
-    window_width = int(window_width)
+    feature_font_size = int(feature_font_size)
+    height = int(height)
+    width = int(width)
     details_height = int(details_height)
     if details_width is None:
-        details_width = window_width
+        details_width = width
     else:
         details_width = int(details_width)
 
-    if feature_types is None:
-        feature_types = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
+    if types is None:
+        types = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
 
     offset_padding = contig_label_px + (contig_thickness / 2) + 5 # Adjust this value as needed
 
-    metadata = pd.DataFrame()
-    metadata.index = [rec.id for rec in contigs]
-    if metadata_files is not None:
-        for file in metadata_files:
+    metadata_table = pd.DataFrame()
+    metadata_table.index = [rec.id for rec in records]
+    if metadata is not None:
+        for file in metadata:
             df = pd.read_csv(file, sep="\t", index_col=0)
-            metadata = metadata.merge(df,how="left", left_index=True, right_index=True)
+            metadata_table = metadata_table.merge(df,how="left", left_index=True, right_index=True)
         # drop duplicate indexes
-        metadata = metadata[~metadata.index.duplicated(keep='first')]
+        metadata_table = metadata_table[~metadata_table.index.duplicated(keep='first')]
 
     palette = None
     if color_by is not None:
         if color_table is None:
-            palette = get_palette(metadata[color_by].unique())
+            palette = get_palette(metadata_table[color_by].unique())
         else:  # values missing from the table keep the default contig color
-            palette = {value: color_table.get(str(value), "#000000") for value in metadata[color_by].unique()}
+            palette = {value: color_table.get(str(value), "#000000") for value in metadata_table[color_by].unique()}
 
     # Preparing data for D3
     contigs_data = []
     current_offset = 0  # Start with the initial offset for the first contig
     
-    for contig in contigs:
-        features = [feature_to_dict(feature) for feature in contig.features if feature.type in feature_types]
-        add_z_order(features, feature_types)
+    for contig in records:
+        features = [feature_to_dict(feature) for feature in contig.features if feature.type in types]
+        add_z_order(features, types)
         max_z_order = max([feature["z_order"] for feature in features], default=0)
         for feature in features:
             del feature["location"]  # Remove the location attribute, which is not JSON serializable
 
-        current_offset += (max_z_order + 1) * arrow_height + offset_padding
+        current_offset += (max_z_order + 1) * feature_height + offset_padding
         contigs_data.append({
             'name': contig.id,
             'length': len(contig),
             'features': features,
             'offset': current_offset,  # Add an offset for each contig based on its content
-            'mouseover': get_contig_mouseover(contig, metadata=metadata, color_by=color_by, palette=palette),
+            'mouseover': get_contig_mouseover(contig, metadata=metadata_table, color_by=color_by, palette=palette),
             'color': "#000000",
         })
         if color_by is not None:
-            contigs_data[-1]["color"] = palette[metadata.loc[contig.id, color_by]]
+            contigs_data[-1]["color"] = palette[metadata_table.loc[contig.id, color_by]]
 
         # Update current_offset for the next contig, accounting for the maximum z_order of the current contig's features
         # current_offset += (max_z_order + 1) * arrow_height + offset_padding  # Adjust padding as needed for additional spacing
     
     widest_contig_length = max(contig['length'] for contig in contigs_data)
-    scale_factor = min(1, window_width / widest_contig_length)
+    scale_factor = min(1, width / widest_contig_length)
     if scale_factor < 0.1:
         scale_factor = 0.1
 
 
     arrow_width = int(arrow_width)
-    arrow_height = int(arrow_height)
+    feature_height = int(feature_height)
     # Write to file
-    outfile_handle, file_type = open_if_is_name(output_file, "w")
+    outfile_handle, file_type = open_if_is_name(html_out, "w")
     outfile_handle.write(f"""
     <html>
     <head>
@@ -287,7 +294,7 @@ def create_d3_html(output_file, contigs:List[SeqRecord],
                 font: {contig_label_px}px {contig_label_font};
             }}
             .feature-label {{
-                font: {feature_label_px}px {feature_label_font};
+                font: {feature_font_size}px {feature_label_font};
             }}
         </style>
     </head>
@@ -296,7 +303,7 @@ def create_d3_html(output_file, contigs:List[SeqRecord],
         <div> Zoom with mousewheel, left-click to move annotations to the upper box, left-click and drag to pan </div>
         <div id="tooltip" class="tooltip"></div>
         <div>
-        <svg width="{window_width}" height="{window_height}" style="padding: 5px; border: 1px solid #ccc; margin-top: 2px; overflow: scroll;"></svg>
+        <svg width="{width}" height="{height}" style="padding: 5px; border: 1px solid #ccc; margin-top: 2px; overflow: scroll;"></svg>
         </div>
         <script>
             var svg = d3.select("svg");
@@ -354,7 +361,7 @@ def create_d3_html(output_file, contigs:List[SeqRecord],
                 .enter()
                 .append("g")
                 .attr("class", "feature")
-                .attr("transform", function(d) {{ return "translate(" + d.start + "," + (-{arrow_height} * d.z_order) + ")"; }});
+                .attr("transform", function(d) {{ return "translate(" + d.start + "," + (-{feature_height} * d.z_order) + ")"; }});
     
             featureGroup.each(function(featureData) {{
                 d3.select(this).selectAll(".part")
@@ -363,7 +370,7 @@ def create_d3_html(output_file, contigs:List[SeqRecord],
                     .attr("d", function(d) {{
                         var length = d.end - d.start;
                         var arrow_width = {arrow_width};  // Width of the arrow part
-                        var arrow_height = {arrow_height};  // Height of the arrow part
+                        var arrow_height = {feature_height};  // Height of the arrow part
                         if (d.strand === "-") {{
                             return `M${{arrow_width}},0 L${{length}},0 L${{length}},${{-arrow_height}} L${{arrow_width}},${{-arrow_height}} L0,${{-arrow_height/2}} Z`;
                         }} else {{
@@ -450,10 +457,10 @@ def show_contigs(recs:Union[str,List[SeqRecord]], window_height=600, window_widt
               they will be of the form "domainator_contig_plot_*.html"
         NOTE 2: seems to work in-line in Jupyter lab, but not in vscode notebooks or in Colab.
                 For those platforms, you can open the created html file in a web browser,
-                or use the create_d3_html function to create the html file with a specified name.
+                or use the plot_contigs function to create the html file with a specified name.
     """
     from IPython.display import IFrame, display
-    # capture the output of create_d3_html as a string
+    # capture the output of plot_contigs as a string
     import tempfile
     import os
     
@@ -461,7 +468,7 @@ def show_contigs(recs:Union[str,List[SeqRecord]], window_height=600, window_widt
         recs = list(parse_seqfiles([recs]))
     
     with tempfile.NamedTemporaryFile(mode="w", prefix="domainator_contig_plot_", suffix=".html", dir=os.getcwd(), delete=False) as s:
-        create_d3_html(s.name, recs, window_height=window_height, window_width=window_width, **kwargs)
+        plot_contigs(recs, html_out=s.name, height=window_height, width=window_width, **kwargs)
         print(os.path.basename(s.name))
         display(IFrame(os.path.basename(s.name), width=window_width, height=window_height))
 
@@ -522,7 +529,6 @@ def main(argv):
     recs = list(parse_seqfiles(params.input))
     
     with output_file(params.html_out) as html_handle:
-        create_d3_html(html_handle, recs, metadata_files=params.metadata, color_by=params.color_by, color_table=color_table,
-                       arrow_height=params.feature_height,
-                       feature_label_px=params.feature_font_size,
-                       window_height=params.height, window_width=params.width, feature_types=feature_types)
+        plot_contigs(recs, html_out=html_handle, metadata=params.metadata, color_by=params.color_by, color_table=color_table,
+                     feature_height=params.feature_height, feature_font_size=params.feature_font_size,
+                     height=params.height, width=params.width, types=feature_types)

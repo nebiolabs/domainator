@@ -11,28 +11,32 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id
+from domainator.seqio import parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.locations import slice_record_from_location
+from domainator.model import region_id, check_annotation_type, feature_score, evalue_passes
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.Bio.SeqFeature import FeatureLocation
 
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
-def extract_unannotated(records, evalue=None, score=None, keep_direction=False, keep_name=False, search_hits=False, databases=None, largest=False, lb=0):
+def extract_unannotated(records, *, evalue=None, min_score=None, keep_direction=False, keep_name=False, annotation_type:str="domainator", databases=None, largest=False, min_length=0):
     """
 
       input: 
         records: iterator of SeqRecords
         evalue: if not None then only select domains with evalue <= this parameter
-        score: if not None then only select domains with score >= this parameter
+        min_score: if not None then only select domains with min_score >= this parameter
         keep_direction: has no effect, because only protein sequences are supported. Kept for compatibility with extract_domains.
         keep_name: by default, extracted regions will be renamed to note their original coordinates (see utils.region_id). set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
-        search_hits: if True, then only select domains that are marked as search hits (from domainator domain_search).
+        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best hits written by domain_search).
         databases: if not None, then only select domains from these databases. default: all databases.
         largest: if True, then only select the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_length
-        lb: if largest is True, then only select unannotated regions of at least this length from each protein. default: no cutoff.
+        min_length: if largest is True, then only select unannotated regions of at least this length from each protein. default: no cutoff.
 
       yields the extracted regions as SeqRecord objects
     """
+    search_hits = check_annotation_type(annotation_type) == "domain_search"
     databases = set(databases) if databases is not None else None
     for rec in records:
         hit_domains = list() #list of SeqFeatures
@@ -44,9 +48,9 @@ def extract_unannotated(records, evalue=None, score=None, keep_direction=False, 
                 if databases is not None and feature.qualifiers["database"][0] not in databases:
                     continue
                 keep = True
-                if evalue is not None and float(feature.qualifiers["evalue"][0]) > evalue:
+                if not evalue_passes(feature, evalue):
                     keep = False
-                elif score is not None and float(feature.qualifiers["score"][0]) < score:
+                elif min_score is not None and feature_score(feature) < min_score:
                     keep = False
                 if keep:
                     hit_domains.append(feature)
@@ -69,8 +73,8 @@ def extract_unannotated(records, evalue=None, score=None, keep_direction=False, 
         
         unannotated_regions = unannotated_regions.parts
         # filter by size
-        if lb is not None:
-            unannotated_regions = [region for region in unannotated_regions if len(region) >= lb]
+        if min_length is not None:
+            unannotated_regions = [region for region in unannotated_regions if len(region) >= min_length]
 
         if len(unannotated_regions) > 0:
             if largest:
@@ -144,13 +148,13 @@ def main(argv):
     extracted_domains_iterator = extract_unannotated(
         parse_seqfiles(genbanks, target_contigs), 
         evalue = params.evalue,
-        score = params.min_score,
+        min_score = params.min_score,
         keep_direction = params.keep_direction, 
         keep_name = params.keep_name,
-        search_hits=params.annotation_type == "domain_search",
+        annotation_type=params.annotation_type,
         databases=params.databases,
         largest=params.largest,
-        lb=params.min_length,
+        min_length=params.min_length,
         )
 
     write_seq_outputs(extracted_domains_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

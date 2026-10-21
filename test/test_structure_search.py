@@ -4,7 +4,8 @@ import shutil
 
 import pytest
 
-from domainator import structure_search, utils
+from domainator import structure_search
+from domainator.seqio import parse_seqfiles
 
 
 pytestmark = pytest.mark.skipif(shutil.which("foldseek") is None, reason="foldseek is not installed")
@@ -14,7 +15,7 @@ EXPECTED_HITS = {"1UBQ_A", "1NDD_A"}
 
 
 def _read(path):
-    return list(utils.parse_seqfiles((str(path),), default_molecule_type="protein"))
+    return list(parse_seqfiles((str(path),), default_molecule_type="protein"))
 
 
 def _features(record, feature_type):

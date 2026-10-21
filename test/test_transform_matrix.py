@@ -212,7 +212,8 @@ def _feed_matrix_entries(acc, data, order="forward"):
 @pytest.mark.parametrize("order", ["forward", "reversed", "chunked"])
 @pytest.mark.parametrize("buffer_cap,soft_cap", [(None, None), (1, 1), (2, 2)])
 def test_streaming_mst_knn_matches_batch(order, buffer_cap, soft_cap):
-    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     # symmetric matrix with all-distinct off-diagonal weights => unique MSF, no tie ambiguity.
@@ -239,7 +240,8 @@ def test_streaming_mst_knn_matches_batch(order, buffer_cap, soft_cap):
 
 
 def test_streaming_mst_knn_respects_lower_bound():
-    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     data = np.array([
@@ -265,7 +267,8 @@ def test_streaming_mst_knn_respects_lower_bound():
 def test_streaming_mst_knn_tie_tolerant_is_valid_forest():
     # Repeated weights => MSF edge selection may differ; assert it is still a valid
     # maximum spanning forest (same total weight + connectivity) and identical kNN edges.
-    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
     from scipy.sparse.csgraph import connected_components
 
@@ -352,7 +355,8 @@ def test_transform_matrix_output_format_conversions():
 
 def test_mst_alone_is_mst_only():
     """--mst without --knn keeps exactly the MST."""
-    from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import MaxTree, mst_knn_edge_index_dict, StreamingMstKnnAccumulator
     from domainator.ssn_edges import mst_edge_index_dict
     from domainator.sparsify import sparsify_matrix
 
@@ -466,7 +470,7 @@ def test_transform_matrix_knn_matches_sparsification_without_mst():
 
 
 def test_streaming_knn_without_mst_matches_batch():
-    from domainator.data_matrix import StreamingMstKnnAccumulator
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     data, labels = _bridged_triangles()
@@ -482,7 +486,7 @@ def test_streaming_knn_without_mst_matches_batch():
 
 def test_knn_arg_requires_at_least_one():
     from domainator.sparsify import knn_arg
-    from domainator.data_matrix import StreamingMstKnnAccumulator
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
 
     assert knn_arg("1") == 1
     with pytest.raises(ValueError):
@@ -513,7 +517,8 @@ def test_streaming_mst_only_writes_max_direction_both_ways():
     with its max-direction weight in both cells. SSN workflows symmetrize with an
     element-wise maximum, so this agrees with the batch path where it matters, while
     dropping the per-direction detail the adjacency used to carry."""
-    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     # deliberately asymmetric off-diagonal: M[i, j] != M[j, i] for every pair
@@ -552,7 +557,7 @@ def test_streaming_mst_only_writes_max_direction_both_ways():
 @pytest.mark.parametrize("order", ["forward", "reversed", "chunked"])
 def test_streaming_mst_only_is_order_independent(order):
     """The --mst-only fast path must not depend on the order edges arrive in."""
-    from domainator.data_matrix import StreamingMstKnnAccumulator
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
 
     data = np.array([
         [5.0, 9.0, 1.0, 0.0, 0.0],
@@ -572,7 +577,8 @@ def test_streaming_mst_only_is_order_independent(order):
 def test_streaming_knn_is_max_over_diagonal(k):
     """k >= 1 keeps the adjacency, and must still emit a strict max-over-diagonal matrix
     whose values agree cell-for-cell with the non-streaming reference."""
-    from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import StreamingMstKnnAccumulator
     from domainator.sparsify import sparsify_matrix
 
     data = np.array([

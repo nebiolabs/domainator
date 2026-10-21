@@ -7,7 +7,8 @@ from array import array
 
 import pytest
 
-from domainator import utils, db_index
+from domainator import db_index
+from domainator.offsets import get_fasta_offsets, get_genbank_offsets, get_offsets, i_get_offsets, index_total_cds
 from domainator.Bio import bgzf
 
 GB_FILES = ["pDONR201.gb", "MT_nbs.gb", "206.gb"]
@@ -24,7 +25,7 @@ def test_index_roundtrip_genbank(shared_datadir, tmp_path):
     for fn in GB_FILES:
         f = tmp_path / fn
         shutil.copy(shared_datadir / fn, f)
-        off, npr = utils.get_genbank_offsets(str(f))
+        off, npr = get_genbank_offsets(str(f))
         db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
         roff, rnpr = db_index.read_index(str(f), filetype="genbank", compression=None)
         assert isinstance(roff, array) and roff.typecode == "Q"
@@ -38,7 +39,7 @@ def test_index_roundtrip_fasta(shared_datadir, tmp_path):
     for fn in FASTA_FILES:
         f = tmp_path / fn
         shutil.copy(shared_datadir / fn, f)
-        off, npr = utils.get_fasta_offsets(str(f))
+        off, npr = get_fasta_offsets(str(f))
         db_index.write_index(str(f), off, npr, filetype="fasta", compression=None)
         roff, rnpr = db_index.read_index(str(f), filetype="fasta", compression=None)
         assert list(roff) == list(off) and list(rnpr) == list(npr)
@@ -49,10 +50,10 @@ def test_read_total_cds_from_header(shared_datadir, tmp_path):
     sum, and is None when there is no usable/fresh index."""
     f = tmp_path / "MT_nbs.gb"
     shutil.copy(shared_datadir / "MT_nbs.gb", f)
-    off, npr = utils.get_offsets(str(f))
+    off, npr = get_offsets(str(f))
     db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
     assert db_index.read_total_cds(str(f), filetype="genbank", compression=None) == sum(npr)
-    assert utils.index_total_cds(str(f)) == sum(npr)
+    assert index_total_cds(str(f)) == sum(npr)
     # stale source -> None (no count trusted)
     with open(f, "ab") as fh:
         fh.write(b"\n")
@@ -61,7 +62,7 @@ def test_read_total_cds_from_header(shared_datadir, tmp_path):
         warnings.simplefilter("ignore")
         assert db_index.read_total_cds(str(f), filetype="genbank", compression=None) is None
     # no index at all
-    assert utils.index_total_cds(str(tmp_path / "absent.gb")) is None
+    assert index_total_cds(str(tmp_path / "absent.gb")) is None
 
 
 def test_get_offsets_uses_index(shared_datadir, tmp_path):
@@ -69,17 +70,17 @@ def test_get_offsets_uses_index(shared_datadir, tmp_path):
     same arrays/tuples as a fresh scan."""
     f = tmp_path / "pDONR201.gb"
     shutil.copy(shared_datadir / "pDONR201.gb", f)
-    off, npr = utils.get_offsets(str(f))               # fresh scan
+    off, npr = get_offsets(str(f))               # fresh scan
     db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
-    off2, npr2 = utils.get_offsets(str(f))             # via index
+    off2, npr2 = get_offsets(str(f))             # via index
     assert list(off2) == list(off) and list(npr2) == list(npr)
-    assert list(utils.i_get_offsets(str(f))) == list(zip(off, npr))
+    assert list(i_get_offsets(str(f))) == list(zip(off, npr))
 
 
 def test_index_bgzf_virtual_offsets(shared_datadir, tmp_path):
     """BGZF index offsets are virtual offsets that seek to record boundaries."""
     bgz = _bgzip(shared_datadir / "MT_nbs.gb", tmp_path / "MT_nbs.gb.bgz")
-    off, npr = utils.get_offsets(bgz)                  # BGZF scan (Rust or Python)
+    off, npr = get_offsets(bgz)                  # BGZF scan (Rust or Python)
     db_index.write_index(bgz, off, npr, filetype="genbank", compression="bgzf")
     roff, rnpr = db_index.read_index(bgz, filetype="genbank", compression="bgzf")
     assert list(roff) == list(off) and list(rnpr) == list(npr)
@@ -95,7 +96,7 @@ def test_index_bgzf_virtual_offsets(shared_datadir, tmp_path):
 def test_index_stale_on_append(shared_datadir, tmp_path):
     f = tmp_path / "stale_append.gb"
     shutil.copy(shared_datadir / "MT_nbs.gb", f)
-    off, npr = utils.get_offsets(str(f))
+    off, npr = get_offsets(str(f))
     db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
     with open(f, "ab") as fh:                          # changes size + mtime
         fh.write(b"\n")
@@ -103,14 +104,14 @@ def test_index_stale_on_append(shared_datadir, tmp_path):
     with pytest.warns(RuntimeWarning, match="stale index"):
         assert db_index.read_index(str(f), filetype="genbank", compression=None) is None
     # get_offsets must transparently recompute correct (current) offsets.
-    off2, npr2 = utils.get_offsets(str(f))
+    off2, npr2 = get_offsets(str(f))
     assert len(off2) == len(off)
 
 
 def test_index_corrupt_returns_none(shared_datadir, tmp_path):
     f = tmp_path / "corrupt.gb"
     shutil.copy(shared_datadir / "pDONR201.gb", f)
-    off, npr = utils.get_offsets(str(f))
+    off, npr = get_offsets(str(f))
     idx = db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
 
     # truncated body
@@ -147,7 +148,7 @@ def test_index_missing_returns_none_silently(shared_datadir, tmp_path):
 def test_write_index_rejects_gzip(shared_datadir, tmp_path):
     f = tmp_path / "x.gb"
     shutil.copy(shared_datadir / "pDONR201.gb", f)
-    off, npr = utils.get_offsets(str(f))
+    off, npr = get_offsets(str(f))
     with pytest.raises(ValueError):
         db_index.write_index(str(f), off, npr, filetype="genbank", compression="gzip")
 

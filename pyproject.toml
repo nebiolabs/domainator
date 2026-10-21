@@ -61,7 +61,6 @@ dependencies = [
     "jsonargparse >=4.18.0",
     "Flask >=2.3",
     "Werkzeug >=2.3",
-    "jsonschema >=4.0",
     "psutil >=5.9.6",
     "tqdm >=4.65.0",
     "pyrodigal >=3.0.1",

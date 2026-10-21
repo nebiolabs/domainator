@@ -1,5 +1,4 @@
 from domainator.hmmer_select import main, hmmer_select
-from domainator.utils import pyhmmer_decode
 import tempfile
 import pyhmmer
 import os
@@ -79,7 +78,7 @@ def _profile_names(path):
     # Reading the whole file back is itself the assertion that the output is valid:
     # a mixed-alphabet .hmm raises AlphabetMismatch past its first profile.
     with pyhmmer.plan7.HMMFile(path) as hmm_file:
-        return [pyhmmer_decode(hmm.name) for hmm in hmm_file]
+        return [hmm.name for hmm in hmm_file]
 
 
 def test_hmmer_select_alphabet_splits_mixed_file_set(shared_datadir):
@@ -134,7 +133,8 @@ def test_hmmer_select_gzip_roundtrip(shared_datadir, tmp_path):
     """gz in, gz out: the profiles must match the uncompressed run exactly."""
     import gzip
     import helpers
-    from domainator.utils import detect_compression, open_hmm_file
+    from domainator.seqio import detect_compression
+    from domainator.hmmio import open_hmm_file
 
     plain_out = tmp_path / "plain.hmm"
     gz_out = tmp_path / "out.hmm.gz"

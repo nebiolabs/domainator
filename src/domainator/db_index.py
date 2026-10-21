@@ -207,7 +207,6 @@ def i_read_index(source_path, *, filetype, compression):
     def _gen():
         try:
             chunk_pairs = 1 << 16
-            chunk_bytes = chunk_pairs * _PAIR_STRUCT.size
             remaining = n
             while remaining > 0:
                 want = min(remaining, chunk_pairs) * _PAIR_STRUCT.size

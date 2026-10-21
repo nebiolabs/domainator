@@ -1,15 +1,12 @@
-import warnings
-warnings.filterwarnings("ignore", module='numpy')
 import numpy as np
 import html
-import seaborn as sns
 import pandas as pd
 from itertools import chain
 from pandas.api.types import is_bool_dtype, is_integer_dtype, is_float_dtype
 import xml.etree.ElementTree as ET
 from typing import Dict, Iterable, Iterator, Optional, Sequence, Tuple
 
-from domainator.utils import OTHER_COLOR
+from domainator.colors import OTHER_COLOR
 from domainator.output_guardrails import build_output_limit_message, OutputSizeLimitExceeded
 
 MAX_DOUBLE = np.finfo(np.float64).max

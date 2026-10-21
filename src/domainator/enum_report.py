@@ -11,18 +11,23 @@ import argparse
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import output_file
-from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status, cds_fragment_status, contig_has_fragment, fragment_status_allowed, PARTIAL_CHOICES, partial_help
+from domainator.model import get_sources, DomainatorCDS, feature_score
+from domainator.seqio import parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator.locations import slice_record_from_location
+from domainator.taxonomy.records import TaxonomyData
+from domainator.partial import get_fragment_status, cds_fragment_status, contig_has_fragment, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.find_features import search_motif
 from domainator.Bio.SeqUtils.ProtParam import ProteinAnalysis
 from domainator.Bio.SeqUtils import molecular_weight
 from pathlib import Path
 from typing import List, Tuple, Union, Dict, Any
-import json
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.filter_domains import filter_domains
+from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
 import re
 
 SELECT_CATEGORIES = {"contig", "cds", "domain"}
@@ -110,7 +115,7 @@ def get_domain_scores_sum(rec:SeqRecord)->float:
     score = 0.0
     for feature in rec.features:
         if feature.type == DOMAIN_FEATURE_NAME:
-            score += float(feature.qualifiers["score"][0])
+            score += feature_score(feature)
     return score
 
 def get_domain_identities_sum(rec:SeqRecord)->float:
@@ -167,171 +172,11 @@ def domain_search(rec:SeqRecord) -> Tuple[str, str, int, int, int, int, int, str
             search_match_start = feature.location.stranded_start_human_readable
             search_match_end = feature.location.stranded_end_human_readable
             search_match_strand = get_strand(feature.location)
-            search_match_score = float(feature.qualifiers["score"][0])
+            search_match_score = feature_score(feature)
             search_match_identity = float(feature.qualifiers.get("identity",(0,))[0])
             break
     
     return (search_best_query, best_search_query_description, query_start, query_end, query_len, search_match_start, search_match_end, search_match_strand, search_match_score, search_match_identity)
-
-class EnumTSVWriter():
-    def __init__(self, columns, column_types, out_handle): #TODO: consolidate with HTMLWriter with a super class?
-        self.columns = columns
-        self.column_types = column_types
-        self.out_handle = out_handle
-    
-    def write_header(self):
-        print("\t".join(self.columns), file=self.out_handle)
-
-    def write_row(self, values):
-        out_vals = list()
-        try:
-            for i, v in enumerate(values):
-                if v is None:
-                    out_vals.append("")
-                    continue
-                data_type = self.column_types[i]
-                if data_type == "str":
-                    if v is None:
-                        v = ""
-                    v = v.replace("\t", " ")
-                    out_vals.append(v)
-                if data_type == "int":
-                    if v is None:
-                        v = ""
-                    else:
-                        v = str(int(v))
-                    out_vals.append(v)
-                if data_type == "float":
-                    out_vals.append(f"%0.1f" % float(v))
-        except TypeError as exc:
-            exc.add_note(f"while writing column {self.columns[i]!r} of {self.columns} (types {self.column_types}) from values {values}")
-            raise
-        print("\t".join(out_vals), file=self.out_handle)
-
-    def write_footer(self):
-        pass
-
-class EnumJSONWriter():
-    """Streaming NDJSON writer: one compact JSON object per record, keyed by column name.
-
-    NDJSON keeps the writer streaming (no need to buffer every row) while staying
-    trivially parseable by agents. Values are coerced by column type; missing
-    values are emitted as null so the schema is stable across rows.
-    """
-    def __init__(self, columns, column_types, out_handle):
-        self.columns = columns
-        self.column_types = column_types
-        self.out_handle = out_handle
-
-    def write_header(self):
-        pass
-
-    def _coerce(self, value, data_type):
-        if value is None:
-            return None
-        if data_type == "int":
-            return int(value)
-        if data_type == "float":
-            return float(value)
-        return str(value)
-
-    def write_row(self, values):
-        record = {
-            column: self._coerce(value, self.column_types[i])
-            for i, (column, value) in enumerate(zip(self.columns, values))
-        }
-        print(json.dumps(record, separators=(",", ":")), file=self.out_handle)
-
-    def write_footer(self):
-        pass
-
-class EnumHTMLWriter():
-    sorters = {"str": "string", "int": "number", "float": "number"}
-    def __init__(self, columns, column_types, out_handle, max_height): #TODO: consolidate with TSVWriter with a super class?
-        self.columns = columns
-        self.column_types = column_types
-        self.out_handle = out_handle
-        self.max_height = max_height
-        self.id_counter = 0
-
-    def _format_cell(self, value, data_type):
-        if data_type == "str":
-            return json.dumps("" if value is None else value)
-        if value is None:
-            return "null"
-        if data_type == "int":
-            return str(int(value))
-        if data_type == "float":
-            return f"%0.1f" % float(value)
-        raise ValueError(f"Unsupported column type: {data_type}")
-    
-    def write_header(self):
-        print("""<!doctype html><html lang='en'>
-<head>
-<meta charset="UTF-8" />
-<title>Enum Report</title>
-<link href="https://unpkg.com/tabulator-tables@5.4.3/dist/css/tabulator.min.css" rel="stylesheet">
-<script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.4.3/dist/js/tabulator.min.js"></script>
-</head>
-
-<body>
-<div>
-    <button id="download-csv">Download CSV</button>
-    <button id="download-html">Download HTML</button>
-    <button id="download-json">Download JSON</button>
-</div>
-<div id="enum_report_table"></div>
-<script>
-var tabledata = [""",
-        file=self.out_handle)
-        self.id_counter = 0
-        
-
-    def write_row(self, values):
-        out_vals = list()
-        for i, v in enumerate(values):
-            data_type = self.column_types[i]
-            out_vals.append(self._format_cell(v, data_type))
-        self.out_handle.write("{id:" + str(self.id_counter) + ",")
-        for i,c in enumerate(out_vals):
-            self.out_handle.write(f"""{json.dumps(self.columns[i])}:{c}, """)
-        self.out_handle.write("},\n")
-        self.id_counter += 1
-
-    def write_footer(self):
-        print("""];
-    var table = new Tabulator("#enum_report_table", {
-    data:tabledata,
-    pagination:"local",
-    paginationSize:25,
-    paginationSizeSelector:[25, 50, 100, 1000],
-    movableColumns:true,
-    paginationCounter:"rows",""", file=self.out_handle)
-        if self.max_height is not None:
-            print(f"    maxHeight:{self.max_height},", file=self.out_handle)
-        print("    columns:[", file=self.out_handle)
-        for i, column in enumerate(self.columns):
-            print(json.dumps({"title":column, "field":column, "width":150, "sorter": self.sorters[self.column_types[i]], "tooltip":True}) + ",", file=self.out_handle)
-        print("    ],", file=self.out_handle)
-        print("""});
-
-//trigger download of data.csv file
-document.getElementById("download-csv").addEventListener("click", function(){
-    table.download("csv", "data.csv");
-});
-
-//trigger download of data.json file
-document.getElementById("download-json").addEventListener("click", function(){
-    table.download("json", "data.json");
-});
-
-//trigger download of data.html file
-document.getElementById("download-html").addEventListener("click", function(){
-    table.download("html", "data.html", {style:true});
-});
-
-</script>
-</body></html>""", file=self.out_handle)
 
 def taxid_factory(ranks):
     
@@ -839,7 +684,7 @@ def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None
             rec.annotations["_source_filename"] = filename
             yield rec
 
-def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None, json_out_handle=None, partial="include"):
+def enum_report(records, *, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None, json_out_handle=None, partial="include"):
     """
       input:
         records: an iterator of SeqRecords
@@ -918,11 +763,11 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
 
     writers = list()
     if tsv_out_handle is not None:
-        writers.append(EnumTSVWriter(headers, column_types, tsv_out_handle))
+        writers.append(TSVTableWriter(headers, column_types, tsv_out_handle))
     if html_out_handle is not None:
-        writers.append(EnumHTMLWriter(headers, column_types, html_out_handle, html_max_height))
+        writers.append(HTMLTableWriter(headers, column_types, html_out_handle, html_max_height))
     if json_out_handle is not None:
-        writers.append(EnumJSONWriter(headers, column_types, json_out_handle))
+        writers.append(JSONTableWriter(headers, column_types, json_out_handle))
 
     for writer in writers:
         writer.write_header()
@@ -930,7 +775,7 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
 
     for rec in records:
         if databases is not None:
-            rec = tuple(filter_domains((rec,), evalue=float("inf"), max_overlap=1, databases_keep=databases))[0]
+            rec = tuple(filter_domains((rec,), evalue=float("inf"), max_overlap=1, keep_databases=databases))[0]
         for out_line in process_record(rec, by, analyses_to_run, ncbi_taxonomy, partial=partial):
             for writer in writers:
                 writer.write_row(out_line)
@@ -1028,8 +873,6 @@ def build_parser():
                         help="Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'.")
     parser.add_argument('--feature_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="feature_count",
                         help="Reports the number of features of this type.")
-    # parser.add_argument('--qualifier_count', type=str, nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, #TODO: implement this using DynamicArg
-    #                     help="Supply two strings, an feature type and a qualifier name. Report the number of instances of this feature-qualifier combination.")
     
     parser.add_argument('--motif_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="motif_count",
                         help="Report the number of the given PROSITE motif present in the sequence. If nucleotide sequences are provided, then nucleotide motifs are counted. If protein sequences are provided, then protein motifs are counted. More information about PROSITE specification can be found: https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html")
@@ -1110,12 +953,12 @@ def main(argv):
         def open_output(path):
             return None if path is None else outputs.enter_context(output_file(path))
         enum_report(records_iter,
-                    params.by,
-                    analyses,
-                    open_output(params.tsv_out),
-                    open_output(params.html_out),
-                    params.column_names,
-                    params.html_max_height,
+                    by=params.by,
+                    analyses=analyses,
+                    tsv_out_handle=open_output(params.tsv_out),
+                    html_out_handle=open_output(params.html_out),
+                    column_names=params.column_names,
+                    html_max_height=params.html_max_height,
                     ncbi_taxonomy=ncbi_taxonomy,
                     databases=databases,
                     json_out_handle=open_output(params.json_out),

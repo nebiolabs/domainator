@@ -35,7 +35,6 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import tempfile
 import warnings
 from abc import ABC, abstractmethod
@@ -45,14 +44,16 @@ from typing import Dict, FrozenSet, Iterable, Iterator, List, NamedTuple, Option
 from domainator.errors import InputError
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator import utils
+from domainator.external import append_extra_args
+from domainator.seqio import COMPRESSION_EXTENSIONS, EXTENSION_TO_TYPE, get_file_type
 from domainator.domainate import SearchResult
+from domainator.external import resolve_binary, run_command
 
 # Structure file extensions, taken from the shared extension map so there is one source of
 # truth. All of these are accepted by foldseek; reseek documents pdb/cif/mmcif/ent, and
 # reports its own error for anything else.
 STRUCTURE_EXTENSIONS = frozenset(
-    extension for extension, file_type in utils.EXTENSION_TO_TYPE.items()
+    extension for extension, file_type in EXTENSION_TO_TYPE.items()
     if file_type == "structure"
 )
 
@@ -90,7 +91,7 @@ def is_structure_path(path) -> bool:
     Delegates to utils.get_file_type, which already strips a trailing compression suffix,
     so 'x.cif.gz' is recognized.
     """
-    return utils.get_file_type(path) == "structure"
+    return get_file_type(path) == "structure"
 
 
 def is_aligner_db(value) -> bool:
@@ -222,7 +223,7 @@ def database_label(prefix) -> str:
     name = Path(prefix).name
     # Strip a compression suffix then one structure suffix, so 'ref.pdb.gz' -> 'ref'.
     for _ in range(2):
-        if is_structure_path(name) or Path(name).suffix[1:].lower() in utils.COMPRESSION_EXTENSIONS:
+        if is_structure_path(name) or Path(name).suffix[1:].lower() in COMPRESSION_EXTENSIONS:
             name = Path(name).stem
     return name
 
@@ -323,50 +324,6 @@ def _neg_log10(value: float) -> float:
     return -math.log10(value)
 
 
-def resolve_binary(name: str, override: Optional[str] = None, install_hint: str = "") -> str:
-    """Resolve an external executable, raising a descriptive error when it is missing."""
-    if override is not None:
-        if not (os.path.isfile(override) and os.access(override, os.X_OK)) and shutil.which(override) is None:
-            raise RuntimeError(f"'{override}' is not an executable file.")
-        return override
-    resolved = shutil.which(name)
-    if resolved is None:
-        hint = f" {install_hint}" if install_hint else ""
-        raise RuntimeError(
-            f"Could not find '{name}' on PATH.{hint} "
-            f"Alternatively pass an explicit path with --{name}_path."
-        )
-    return resolved
-
-
-def run_command(argv: Sequence[str], description: str, expect: Optional[str] = None, env=None,
-                capture: bool = False):
-    """Run an external command, raising RuntimeError with stderr on failure.
-
-    A nonzero exit code alone is not treated as failure when `expect` names an artifact
-    that was produced: foldseek's multi-step workflows exit nonzero during their cleanup
-    phase even when the run succeeded.
-
-    subprocess.run rather than Popen followed by stderr.read(), which deadlocks once the
-    child writes more than the pipe buffer.
-
-    Returns the CompletedProcess when capture is set, for callers that need to inspect the
-    command's own output (reseek reports how many chains it skipped, for example).
-    """
-    argv = [str(a) for a in argv]
-    completed = subprocess.run(argv, capture_output=True, env=env)
-    if completed.returncode == 0:
-        return completed if capture else None
-    if expect is not None and Path(expect).exists():
-        return completed if capture else None
-    stderr = completed.stderr.decode("utf-8", errors="replace")
-    tail = "\n".join(stderr.strip().split("\n")[-25:])
-    raise RuntimeError(
-        f"{description} failed with exit code {completed.returncode}.\n"
-        f"Command: {' '.join(argv)}\n{tail}"
-    )
-
-
 class StructureAligner(ABC):
     """A structural aligner backend.
 
@@ -418,7 +375,7 @@ class StructureAligner(ABC):
 
     def _append_extra_args(self, argv: List[str]) -> List[str]:
         """Return ``argv`` followed by the user's extra arguments, refusing any option Domainator already sets."""
-        return utils.append_extra_args(argv, self.extra_args, f"--{self.name}_args")
+        return append_extra_args(argv, self.extra_args, f"--{self.name}_args")
 
     def resolve_alignment_type(self, alignment_type: Optional[int]) -> Optional[int]:
         """Fill in the backend's default when the caller did not ask for a specific type."""
@@ -606,7 +563,7 @@ class FoldseekAligner(StructureAligner):
         than the entry naming in .lookup, which keeps 'some.long.name'.)
         """
         name = Path(path).name
-        if Path(name).suffix[1:].lower() in utils.COMPRESSION_EXTENSIONS:
+        if Path(name).suffix[1:].lower() in COMPRESSION_EXTENSIONS:
             name = Path(name).stem
         for _ in range(2):
             name = Path(name).stem

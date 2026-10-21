@@ -214,9 +214,103 @@ Options not listed are unchanged.
 | | `--compress` / `--bgzf` | `--compress` |
 | | `--cpu` (default 1) | `--cpu` (default 0: all physical cores) |
 
+## Behavior changes
+
+- `-e/--evalue` keeps annotations with an e-value *at or below* the cutoff in every program.
+  select_by_contig, select_by_cds and extract_peptides used to drop an annotation whose
+  e-value equaled the cutoff.
+- domainate `--max_overlap` rejects a hit only when it overlaps a better hit by *more* than the
+  allowed fraction, as filter_domains `--max_overlap` does. A hit overlapping by exactly that
+  fraction used to be rejected.
+- `--domain_expr` and `--taxonomy_expr` are checked when the program starts: a malformed
+  expression is an error. `~` binds tighter than `&`, which binds tighter than `|`.
+  Expressions like `A~B` or `A(B`, which used to be split into the wrong names, are errors.
+- The `DOMAINATOR_GB_PARSER` environment variable no longer exists.
+- Missing external programs (foldseek, cmbuild, cd-hit, usearch, diamond, datasets) give one
+  error message that names the `--<program>_path` option.
+
 ## File formats
 
 - Matrix hdf5 files are now version 2.0. Domainator 1.0 reads 0.x matrix files. 0.x reads 1.0
   files unless they store a symmetric matrix as its upper triangle, which 0.x rejects with an
   error.
 - `DataMatrix.write()` no longer accepts the `"sparse"` and `"dense"` output types; use `"hdf"`.
+
+## Python API
+
+The library functions changed along with the command line, so that a function's parameters
+have the same names as its command's options.
+
+**Imports.** The package root exports the shared pieces:
+`from domainator import parse_seqfiles, write_genbank, DataMatrix, DomainatorError`.
+Each command's function is `from domainator.<command> import <command>`. Everything else is
+internal; see `docs/stability.md`.
+
+| 0.x | 1.0 |
+|---|---|
+| `domainator.utils` | split by topic; see the next table |
+| `domainator.Taxonomy` | `domainator.taxonomy` (record-level helpers in `domainator.taxonomy.records`) |
+| `domainator.domainator_db_download.domainator_db_download` | `domainator.db_download.db_download` |
+| `domainator.domainator_format_db` | `domainator.format_db` |
+| `domainator.plot_contigs.create_d3_html(output_file, contigs, ...)` | `domainator.plot_contigs.plot_contigs(records, html_out=..., ...)` |
+| `DeduplicateGenbank().deduplicate_genbank(...)` and `.cluster_members` | `deduplicate_genbank(inputs, identity=..., clusters=[])`, which appends the clusters to the list |
+| `MaxTree` and the edge functions imported from `domainator.data_matrix` | import them from `domainator.ssn_edges` (`SortedUndirectedEdges`, `CompactNeighborRankings` from `domainator.edge_types`) |
+| `utils.pyhmmer_decode(x)` | `x` (pyhmmer 0.12 returns `str`) |
+
+Where `domainator.utils` went:
+
+| Module | Contents |
+|---|---|
+| `domainator.seqio` | `parse_seqfiles`, `write_genbank`, `get_file_type`, `detect_compression`, `open_seqfile`, `open_writable_seqfile`, `copy_SeqRecord`, ... |
+| `domainator.hmmio` | `read_hmms`, `iter_hmms`, `open_hmm_file`, alphabets, `read_pyhmmer_fastas`, `read_infernal_cms`, ... |
+| `domainator.model` | `DomainatorCDS`, `get_cds_unique_name`, `get_cds_name`, `region_id`, `copy_feature`, `sequence_hashes`, ... |
+| `domainator.locations` | `slice_record`, `slice_record_from_location`, `pad_location`, `regions_overlap`, ... |
+| `domainator.partial` | `get_fragment_status`, `filter_by_partial`, `PARTIAL_CHOICES`, ... |
+| `domainator.taxonomy.records` | `get_taxid`, `filter_by_taxonomy`, `TaxonomyData`, ... |
+| `domainator.expr` | `BooleanEvaluator` |
+| `domainator.colors` | `get_palette`, `DISTINCT_COLORS`, ... |
+| `domainator.offsets` | `get_offsets`, `partition_seqfile`, `count_peptides`, ... |
+| `domainator.cli.common` | `list_and_file_to_dict_keys`, `partial_help` |
+
+**Signatures.** Each command's function takes its main input as the only positional argument;
+every other argument is keyword-only. Parameters were renamed to match the options:
+
+| Function | 0.x | 1.0 |
+|---|---|---|
+| all record editors | `seq_iterator`, `sequence_iterator`, `contigs` (the input records) | `records` |
+| all | `fasta_type` | `alphabet` |
+| all | `threads`, `cpus` | `cpu` |
+| all matrix tools | `lb` | `threshold` |
+| extract_domains, extract_peptides, extract_unannotated, rotate_contigs, select_by_cds | `search_hits=True` | `annotation_type="domain_search"` |
+| select_by_contig | `domain_type="domain"/"search"/"both"` | `annotation_type="domainator"/"domain_search"/"all"` |
+| select_by_contig | `target_domains`, `target_contigs`, `domain_evalue`, `first`, `length_lb/ub`, `cds_count_lb/ub`, `search_score_lb/ub` | `domains`, `contigs`, `evalue`, `max_records`, `min_length`/`max_length`, `min_cds`/`max_cds`, `min_search_score`/`max_search_score` |
+| select_by_cds, extract_peptides | `target_cdss`, `target_domains` | `cds_ids`, `domains` |
+| filter_domains | `databases_keep`, `databases_filter`, `selected_domains` | `keep_databases`, `databases`, `domains` |
+| extract_domains | `score`, `pad_up`, `pad_down` | `min_score`, `extend_up`, `extend_down` |
+| extract_unannotated | `score`, `lb` | `min_score`, `min_length` |
+| trim_contigs | `strip_domains`, `no_domain` | `domains`, `unannotated` |
+| rotate_contigs | `where` | `anchor` |
+| domainate | `max_hits`, `esm2_3Di_weights`, `esm2_3Di_device` | `max_hits_per_cds`, `esm2_3di_weights`, `esm2_3di_device` |
+| domain_search | `decoy_names`, `dedup_both_strands` | `decoys`, `both_strands` |
+| find_features | `gpu_device` | `device` |
+| hmmer_search, hmmer_compare | `reference_files`, `score_cutoff` | `references`, `min_score` |
+| hmmer_select | `query_regex`, `query_exact`, `query_contains` | `regex`, `exact`, `contains` |
+| seq_dist, kmer_dist | `input_type`, `reference_path`, `reference_type` | `input_format`, `reference`, `reference_format` |
+| seq_dist | `diamond_params` | `diamond_args` |
+| structure_* | `reference_values`, `keep_db`, `hits_tsv` | `references`, `db_out`, `hits_tsv_out` |
+| structure_domainate | `max_domains` | `max_hits_per_cds` |
+| build_ssn, build_tree, build_projection | `metadata_files`, `xgmml`/`xgmml_file`, `newick_file`, `cluster_tsv`, `three_dee` | `metadata`, `xgmml_out`, `newick_out`, `cluster_tsv_out`, `three_d` |
+| split_by_cluster | `outdir` | `output_dir` |
+| color_genbank | `color_targets` | `targets` |
+| color_table_to_legend | `svg` | `svg_out` |
+
+**Matrices.** `seq_dist`, `kmer_dist`, `structure_dist` and `compare_contigs` return a
+`DataMatrix` instead of writing files, so they no longer take `hdf`, `dense_text` or
+`max_output_bytes`. Write the result with `matrix.write(path, "hdf")`.
+`compare_contigs` takes records instead of file names, and no longer takes `reports`,
+`contigs`, `name_by_order` or `databases` (give the metrics `databases`); its sorted GenBank
+output is `compare_contigs.write_sorted_genbank(records, matrix, path, ...)`.
+
+**Warnings and errors.** Importing Domainator no longer hides numpy's warnings for the whole
+process. Missing optional structure-search packages (torch, esmologs) raise
+`ExternalToolError` when they are needed, instead of a `NameError` later.

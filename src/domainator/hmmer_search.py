@@ -19,8 +19,6 @@ on the scale of whichever alphabet is in use, so the default --min_score differs
 between amino acid and nucleotide profiles.
 """
 import logging
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module='numpy') # suppress "UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero."
 from jsonargparse import ActionConfigFile
 from dataclasses import dataclass
 import io
@@ -30,10 +28,19 @@ import pyhmmer
 from typing import Iterable, Tuple, Optional, BinaryIO
 import heapq
 from domainator.cli.common import STDOUT_PATHS, add_input, add_output, check_outputs, resolve_cpu, tool_parser
-from domainator.utils import make_pool, pyhmmer_decode, read_hmms, alphabet_name, alphabet_score_scale, common_hmm_alphabet, iter_hmms_with_alphabet, open_writable_hmm_file, is_compressed_path, check_writable_hmm_path, OUTPUT_COMPRESSION_HELP
+from domainator._mp import make_pool
+from domainator.hmmio import (
+    read_hmms,
+    alphabet_name,
+    alphabet_score_scale,
+    common_hmm_alphabet,
+    iter_hmms_with_alphabet,
+    open_writable_hmm_file,
+    check_writable_hmm_path,
+)
+from domainator.seqio import is_compressed_path
+from domainator.cli.common import OUTPUT_COMPRESSION_HELP
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, make_temporary_output_path
-from numba import jit
-import numba as nb
 
 logger = logging.getLogger(__name__)
 
@@ -103,168 +110,6 @@ _TRACEBACK_DTYPE=np.uint64
 _STOP_FLAG = 100000000000000000 #np.iinfo(_TRACEBACK_DTYPE).max
 #             18446744073709551615
 
-@jit(nb.types.Tuple((nb.float32,nb.uint64))(nb.float32, nb.float32, nb.uint64, nb.uint64),cache=True, nopython=True)
-def max2(sMM:float, sXY:float, layer1:int, layer2:int) -> Tuple[float, int]:
-    if sMM > sXY:
-        score = sMM
-        bt = layer1
-    else:
-        score = sXY
-        bt = layer2
-    return score, bt
-
-@jit(nb.types.Tuple((nb.float32, nb.uint64))(nb.float32, nb.float32, nb.float32, nb.float32, nb.float32, nb.int64),cache=True, nopython=True)
-def max6(sMM: float, sMI: float, sIM: float, sDG: float, sGD: float, global_mode:int = 0) -> Tuple[float, int]:
-    """
-
-    Args:
-        sMM (float): 
-        sMI (float): 
-        sIM (float): 
-        sDG (float): 
-        sGD (float):         
-
-        sSTOP (float, optional): Minimum possible alignment score. 0 for local alignment, -inf for global alignment. Defaults to 0. 
-
-    Returns:
-        Tuple[float, int]: score, backtrace_layer
-
-    """
-    score = -1000000000000000000.0
-    bt = None
-    sSTOP = 0 #if global_mode == 0 else float("-inf")
-    
-    if sSTOP > sMM and global_mode == 0:
-        score = sSTOP
-        bt = _STOP_FLAG
-    else:
-        score = sMM
-        bt = _SMM
-    
-    if sIM > score:
-        score = sIM
-        bt = _SIM
-    if sMI > score:
-        score = sMI
-        bt = _SMI
-    if sDG > score:
-        score = sDG
-        bt = _SDG
-    if sGD > score:
-        score = sGD
-        bt = _SGD
-    
-    return  score, bt
-    
-@jit(nb.float32(nb.float32[:], nb.float32[:], nb.float32[:]),cache=True, nopython=True)
-def Saa(q:np.array, r:np.array, background:np.array) -> float: #TODO: test
-    """calculate a similarity score for two residue distributions
-
-    Alphabet agnostic: the numba signature leaves the dimension open, so the
-    arrays are length alphabet.K, which is 20 for amino acids and 4 for DNA and RNA.
-
-    Args:
-        q (np.array): array size K, query residue probabilities
-        r (np.array): array size K, reference residue probabilities
-        background (np.array): array size K, background residue probabilities
-
-    Returns:
-        float: natural-log-odds score for the column pair. Bounded above by
-            log(1/min(background)), which is about log(4)=1.39 for a nucleotide
-            alphabet against about 3 for amino acids, so scores from different
-            alphabets are not comparable. See utils.alphabet_score_scale.
-    """
-
-    return np.log(np.sum(np.divide(np.multiply(q, r), background)))
-
-@jit(nb.void(nb.float32[:,:], nb.float32[:,:], nb.float32[:,:], nb.float32[:], nb.float32[:,:], nb.float32[:,:,:], nb.uint64[:,:,:], nb.float32[:,:], nb.int64),cache=True, nopython=True)
-def compare_hmmer_inner(query_transitions:np.array, query_match_emissions:np.array, reference_transitions:np.array, background:np.array, reference_match_emissions:np.array, scores:np.array, backtrace:np.array, match_scores:np.array, global_mode=0) -> None:
-    TMM=0
-    TMI=1
-    TMD=2
-    TIM=3
-    TII=4
-    TDM=5
-    TDD=6
-    # 0: Mn -> Mn+1 
-    # 1: Mn -> In+1 
-    # 2: Mn -> Dn+1 
-    # 3: In -> Mn+1 
-    # 4: In -> In+1 
-    # 5: Dn -> Mn+1 
-    # 6: Dn -> Dn+1 
-
-
-    backtrace[:,0,:] = _STOP_FLAG # stop backtrace at the left column
-    backtrace[0,:,:] = _STOP_FLAG # stop backtrace at the top row
-    # SMM = 0
-    # SMI = 1
-    # SIM = 2
-    # SDG = 3
-    # SGD = 4
-
-    for qi in range(1,query_match_emissions.shape[0]):
-        for ri in range(1,reference_match_emissions.shape[0]):
-
-            # SMM
-            scores[qi,ri,_SMM], tb_layer = \
-                max6( # find the best previous state
-                    scores[qi-1,ri-1,_SMM] - query_transitions[qi-1, TMM] - reference_transitions[ri-1, TMM], # subtracting negative logs is the same as adding logs, which is the same as multiplying unlogs
-                    scores[qi-1,ri-1,_SMI] - query_transitions[qi-1, TMM] - reference_transitions[ri-1, TIM],
-                    scores[qi-1,ri-1,_SIM] - query_transitions[qi-1, TIM] - reference_transitions[ri-1, TMM], 
-                    scores[qi-1,ri-1,_SDG] - query_transitions[qi-1, TDM] - reference_transitions[ri-1, TMM], 
-                    scores[qi-1,ri-1,_SGD] - query_transitions[qi-1, TMM] - reference_transitions[ri-1, TDM],
-                    0 # global alignment
-                 ) 
-            backtrace[qi,ri,_SMM] = tb_layer
-            #Saa_score = Saa(query_match_emissions[qi,:], reference_match_emissions[ri,:], background)
-            #print(Saa_score)
-            match_score = Saa(query_match_emissions[qi,:], reference_match_emissions[ri,:], background)
-            match_scores[qi,ri] = match_score
-            scores[qi,ri,_SMM] += match_score
-            # could add a secondary structure term here if available
-            
-            # SGD
-            scores[qi,ri,_SGD], tb_layer = \
-                max2(
-                    scores[qi,ri-1,_SMM] - reference_transitions[ri-1, TMD],
-                    scores[qi,ri-1,_SGD] - reference_transitions[ri-1, TDD],
-                    _SMM,
-                    _SGD
-                )
-            backtrace[qi,ri,_SGD] = tb_layer
-
-            # SIM
-            scores[qi,ri,_SIM], tb_layer = \
-                max2(
-                    scores[qi,ri-1,_SMM] - query_transitions[qi, TMI] - reference_transitions[ri-1, TMM],
-                    scores[qi,ri-1,_SIM] - query_transitions[qi, TII] - reference_transitions[ri-1, TMM],
-                    _SMM,
-                    _SIM
-                )
-            backtrace[qi,ri,_SIM] = tb_layer
-
-
-            # SDG
-            scores[qi,ri,_SDG], tb_layer = \
-                max2(
-                    scores[qi-1,ri,_SMM] - query_transitions[qi-1, TMD],
-                    scores[qi-1,ri,_SDG] - query_transitions[qi-1, TDD],
-                    _SMM,
-                    _SDG
-                )
-            backtrace[qi,ri,_SDG] = tb_layer
-
-            # SMI
-            scores[qi,ri,_SMI], tb_layer = \
-                max2(
-                    scores[qi-1,ri,_SMM] - query_transitions[qi-1, TMM] - reference_transitions[ri, TMI],
-                    scores[qi-1,ri,_SMI] - query_transitions[qi-1, TMM] - reference_transitions[ri, TII],
-                    _SMM,
-                    _SMI
-                )
-            backtrace[qi,ri,_SMI] = tb_layer
-
 def compare_hmmer(qhmm:pyhmmer.plan7.HMM, rhmm:pyhmmer.plan7.HMM) -> Tuple[float, np.array, Tuple[int,int,int]]:
     """Run the viterbi alignment algorithm to compare two plan7 HMM profiles
 
@@ -281,8 +126,8 @@ def compare_hmmer(qhmm:pyhmmer.plan7.HMM, rhmm:pyhmmer.plan7.HMM) -> Tuple[float
     if qhmm.alphabet != rhmm.alphabet:
         raise ValueError(
             f"Error, cannot compare hmms with different alphabets: query "
-            f"'{pyhmmer_decode(qhmm.name)}' is {alphabet_name(qhmm.alphabet)}, but reference "
-            f"'{pyhmmer_decode(rhmm.name)}' is {alphabet_name(rhmm.alphabet)}. Note that DNA "
+            f"'{qhmm.name}' is {alphabet_name(qhmm.alphabet)}, but reference "
+            f"'{rhmm.name}' is {alphabet_name(rhmm.alphabet)}. Note that DNA "
             f"and RNA are distinct alphabets."
         )
     background = np.asarray(pyhmmer.plan7.Background(qhmm.alphabet).residue_frequencies) #TODO: could just store this as a constant
@@ -306,6 +151,7 @@ def compare_hmmer(qhmm:pyhmmer.plan7.HMM, rhmm:pyhmmer.plan7.HMM) -> Tuple[float
     # values are flags to the previous state type. There is only one direction from each previous state, so directionality is implied in the state type
 
 
+    from domainator._hmm_kernels import compare_hmmer_inner  # numba compiles these; load them only when needed
     compare_hmmer_inner(query_transitions, query_match_emissions, reference_transitions, background, reference_match_emissions, scores, backtrace, match_scores, 0)
 
     max_index = np.unravel_index(np.argmax(scores),scores.shape)  
@@ -452,22 +298,22 @@ class _hmmer_search_worker():
                 score, _, _, _ = compare_hmmer(input_profile, target_profile)
                 if score >= self.score_cutoff:
                     alignment = None
-                    new_result = HmmerHit(score, pyhmmer_decode(input_profile.name), pyhmmer_decode(target_profile.name), alignment, input_profile)
+                    new_result = HmmerHit(score, input_profile.name, target_profile.name, alignment, input_profile)
                     if best_result is None or new_result > best_result:
                         best_result = new_result
         return best_result
 
 
-def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer_handle:BinaryIO, score_cutoff:Optional[float], max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output"):
-    references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
-    reference_alphabet = common_hmm_alphabet(reference_files, role="reference")
+def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmmer_handle:BinaryIO, min_score:Optional[float], max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output"):
+    reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
+    reference_alphabet = common_hmm_alphabet(references, role="reference")
 
-    if score_cutoff is None:
-        score_cutoff = default_score_cutoff(reference_alphabet)
+    if min_score is None:
+        min_score = default_score_cutoff(reference_alphabet)
         alphabet_label = alphabet_name(reference_alphabet) if reference_alphabet is not None else "amino"
-        logger.info(f"Using --min_score {score_cutoff:g} (the default for {alphabet_label} profiles).")
+        logger.info(f"Using --min_score {min_score:g} (the default for {alphabet_label} profiles).")
 
-    worker = _hmmer_search_worker(references, score_cutoff)
+    worker = _hmmer_search_worker(reference_hmms, min_score)
 
     
     def run_comparison():
@@ -566,8 +412,8 @@ def main(argv):
         out = open_writable_hmm_file(temp_output_path, compressed=is_compressed_path(params.hmm_out))
 
     try:
-        hmmer_search(params.input, params.reference, out, params.min_score, params.max_hits, cpus, max_output_bytes=max_output_bytes, output_description=output_description)
-    except BaseException as exc:
+        hmmer_search(params.input, references=params.reference, hmmer_handle=out, min_score=params.min_score, max_hits=params.max_hits, cpu=cpus, max_output_bytes=max_output_bytes, output_description=output_description)
+    except BaseException:
         out.close()
         if temp_output_path is not None and os.path.exists(temp_output_path):
             os.remove(temp_output_path)

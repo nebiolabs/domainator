@@ -7,7 +7,11 @@ from glob import glob
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio import SeqIO
-from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.model import DomainatorCDS
+from domainator.offsets import count_peptides_in_record
+from domainator.partial import get_fragment_status
+from domainator.seqio import parse_seqfiles, write_genbank
 import pytest
 from helpers import compare_seqfiles, compare_seqrecords
 
@@ -25,7 +29,7 @@ def test_domain_search_one_file(shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
         compare_seqfiles(out, shared_datadir / "ccdb.gb", skip_qualifiers={"accession"})
 
 def test_domain_search_fasta_query(shared_datadir):
@@ -40,9 +44,9 @@ def test_domain_search_fasta_query(shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 3
-        assert utils.count_peptides_in_record(new_file[0]) == 1
-        assert utils.count_peptides_in_record(new_file[1]) == 1
-        assert utils.count_peptides_in_record(new_file[2]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[1]) == 1
+        assert count_peptides_in_record(new_file[2]) == 1
         #compare_seqfiles(out, shared_datadir / "ccdb.gb")
 
 
@@ -315,7 +319,7 @@ def test_domain_search_whole_contig_circular_centered_on_hit(shared_datadir, kee
         if keep_direction:
             args.append("--keep_direction")
         main(args)
-        recs = list(utils.parse_seqfiles([out]))
+        recs = list(parse_seqfiles([out]))
     assert len(recs) == 2
     for rec in recs:
         assert rec.annotations["topology"] == "circular"
@@ -336,7 +340,7 @@ def test_domain_search_whole_contig_circular_pad_aligns_cds(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "out.gb")
         main(["-i", str(shared_datadir / "bacillus_phage_SPR.gb"), "-r", str(shared_datadir / "SPR.hmm"), "--whole_contig", "--pad", "-Z", "1000", "--cpu", "1", "-o", out])
-        recs = list(utils.parse_seqfiles([out]))
+        recs = list(parse_seqfiles([out]))
     assert len(recs) == 2
     focus_cds_starts = set()
     for rec in recs:
@@ -363,7 +367,7 @@ def test_domain_search_one_file_no_z(shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
 
 @pytest.mark.parametrize("max_hits,expected_hits",
 [(1,1),
@@ -383,7 +387,7 @@ def test_domain_search_max_hits(max_hits, expected_hits, shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == expected_hits
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
 
 def test_no_annotations_whole_contig_keep_direction(shared_datadir):
     gb = shared_datadir / "pDONR201_multi_genemark.gb"
@@ -429,13 +433,13 @@ def test_pad_where(where, shared_datadir):
         out = output_dir + f"/out.gb"
         args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--anchor", where, "--cpu", "1"]
         main(args)
-        records = list(utils.parse_seqfiles([out]))
+        records = list(parse_seqfiles([out]))
         assert len(records) > 1
         anchors = set()
         lengths = set()
         for record in records:
             lengths.add(len(record))
-            focus = [cds for cds in utils.DomainatorCDS.list_from_contig(record) if cds.domain_search_feature is not None]
+            focus = [cds for cds in DomainatorCDS.list_from_contig(record) if cds.domain_search_feature is not None]
             assert len(focus) == 1
             location = focus[0].feature.location
             assert location.strand == 1
@@ -485,10 +489,10 @@ def test_deduplicate_by_sequence_both_strands(shared_datadir):
     gb = shared_datadir / "pDONR201_multi_genemark_domainator.gb"
     hmms = shared_datadir / "pdonr_hmms.hmm"
     with tempfile.TemporaryDirectory() as output_dir:
-        fwd = next(iter(utils.parse_seqfiles([str(gb)])))
+        fwd = next(iter(parse_seqfiles([str(gb)])))
         rev = fwd.reverse_complement(id="pDONR201_rc", name="pDONR201_rc", description="", annotations=True)
         in_gb = output_dir + "/in.gb"
-        utils.write_genbank([fwd, rev], in_gb)
+        write_genbank([fwd, rev], in_gb)
         out = output_dir + "/out.gb"
         base_args = ['--input', in_gb, "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--whole_contig", "--cpu", "1", "--keep_direction", "--deduplicate_by_sequence"]
         main(base_args)
@@ -504,7 +508,7 @@ def test_deduplicate_by_sequence_both_strands(shared_datadir):
 ])
 def test_deduplicate_by_sequence_protein(shared_datadir, extra_args):
     hmms = shared_datadir / "pdonr_hmms.hmm"
-    orig = list(utils.parse_seqfiles([str(shared_datadir / "pdonr_peptides.fasta")]))
+    orig = list(parse_seqfiles([str(shared_datadir / "pdonr_peptides.fasta")]))
     with tempfile.TemporaryDirectory() as output_dir:
         # each protein three times: as-is, under a new name, and with an extra trailing stop
         dup_fasta = output_dir + "/dup.fasta"
@@ -553,8 +557,8 @@ def test_domain_search_peptides(shared_datadir):
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 2
-        assert utils.count_peptides_in_record(new_file[0]) == 1
-        assert utils.count_peptides_in_record(new_file[1]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[1]) == 1
 
 def test_domain_search_one_file_translate(shared_datadir):
     gb = shared_datadir / "pDONR201.gb"
@@ -620,8 +624,8 @@ def test_domain_search_gene_annotate_2(shared_datadir):
         out1 = list(SeqIO.parse(out1, "genbank"))
         out2 = list(SeqIO.parse(out2, "genbank"))
         compare_seqrecords(out1[0], out2[0], skip_attrs={"id", "description", "name"})
-        out1_CDSs = utils.DomainatorCDS.list_from_contig(out1[0])
-        out2_CDSs = utils.DomainatorCDS.list_from_contig(out2[1])
+        out1_CDSs = DomainatorCDS.list_from_contig(out1[0])
+        out2_CDSs = DomainatorCDS.list_from_contig(out2[1])
         assert len(out1_CDSs) == len(out2_CDSs) == 1
         assert 'gene_id' in out1_CDSs[0].feature.qualifiers
         assert 'gene_id' not in out2_CDSs[0].feature.qualifiers
@@ -653,7 +657,7 @@ def test_domain_search_taxonomy_1(shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
         assert new_file[0].id == "sp|O31851|YOJM_BACSU"
 
 
@@ -670,7 +674,7 @@ def test_domain_search_taxonomy_expr(shared_datadir):
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
         assert new_file[0].id == "sp|O31851|YOJM_BACSU"
 
 
@@ -752,7 +756,7 @@ def test_domain_search_strand_f_1(shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
         #compare_seqfiles(out, shared_datadir / "ccdb.gb")
 
 def test_domain_search_strand_r_1(shared_datadir):
@@ -767,7 +771,7 @@ def test_domain_search_strand_r_1(shared_datadir):
         #assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 2
-        assert utils.count_peptides_in_record(new_file[0]) == 1
+        assert count_peptides_in_record(new_file[0]) == 1
         #compare_seqfiles(out, shared_datadir / "ccdb.gb")
 
 def test_decoys_nucleotide_1(shared_datadir):
@@ -906,7 +910,7 @@ def test_domain_search_gzip_input_matches_uncompressed(shared_datadir):
 def test_domain_search_bgzf_output(shared_datadir):
     """-o foo.gb.gz must write BGZF that round-trips to the same records as plain
     output and is re-usable as a compressed input (R1)."""
-    from domainator import utils
+    from domainator.seqio import detect_compression, parse_seqfiles
     gb = shared_datadir / "pDONR201.gb"
     hmms = shared_datadir / "CcdB.hmm"
     with tempfile.TemporaryDirectory() as output_dir:
@@ -916,10 +920,10 @@ def test_domain_search_bgzf_output(shared_datadir):
         main(["--input", str(gb), "-o", out_plain] + common)
         main(["--input", str(gb), "-o", out_comp] + common)
 
-        assert utils.detect_compression(out_comp) == "bgzf"
+        assert detect_compression(out_comp) == "bgzf"
 
-        plain_recs = list(utils.parse_seqfiles([out_plain], genbank_parser="biopython"))
-        comp_recs = list(utils.parse_seqfiles([out_comp], genbank_parser="biopython"))
+        plain_recs = list(parse_seqfiles([out_plain], genbank_parser="biopython"))
+        comp_recs = list(parse_seqfiles([out_comp], genbank_parser="biopython"))
         assert len(plain_recs) == len(comp_recs) > 0
         for a, b in zip(plain_recs, comp_recs):
             compare_seqrecords(a, b)
@@ -930,7 +934,7 @@ def test_domain_search_bgzf_output(shared_datadir):
         out_rt = output_dir + "/roundtrip.gb"
         with pytest.warns(RuntimeWarning, match="native .* parser could not fully parse"):
             main(["--input", str(out_comp), "-o", out_rt] + common)
-        assert len(list(utils.parse_seqfiles([out_rt], genbank_parser="biopython"))) == len(plain_recs)
+        assert len(list(parse_seqfiles([out_rt], genbank_parser="biopython"))) == len(plain_recs)
 
 
 # --- partial CDSs: '<' / '>' markers survive extraction, cut neighbors are kept, and the --partial filter ---
@@ -970,7 +974,7 @@ def test_domain_search_keeps_partial_markers(shared_datadir, extra_args, expecte
         cds = [f for f in records[0].features if f.type == "CDS"]
         assert len(cds) == 1
         assert str(cds[0].location) == expected_cds
-        assert utils.get_fragment_status(cds[0] if "--translate" not in extra_args else records[0]) == "N"
+        assert get_fragment_status(cds[0] if "--translate" not in extra_args else records[0]) == "N"
         hit = [f for f in records[0].features if f.type == DOMAIN_SEARCH_BEST_HIT_NAME]
         assert str(hit[0].location) == expected_hit
         if "--translate" in extra_args:
@@ -992,7 +996,7 @@ def test_domain_search_kb_range_keeps_cut_neighbors(shared_datadir):
         # the neighbor complement(280..780) is cut by the window, which ends 100 bp past the hit CDS (803), at 703:
         # the low end of a minus-strand CDS is its 3' end
         neighbor = [f for f in cdss if f.qualifiers.get("locus_tag") != [_PARTIAL_CDS_LOCUS_TAG]][0]
-        assert utils.get_fragment_status(neighbor) == "C"
+        assert get_fragment_status(neighbor) == "C"
         # the translation is trimmed to the kept codons (the first residue differs: the GTG start codon is translated as M in GenBank)
         assert neighbor.qualifiers["translation"][0][1:] == str(neighbor.translate(records[0].seq, cds=False))[1:]
 

@@ -86,7 +86,7 @@ The `runner` field determines how the server launches the tool. Supported values
 
 1. Accept configuration via JSON:
    - The server writes the collected parameters to a JSON file and passes `--config=/path/to/file` when launching the tool.
-   - Domainator CLIs typically use `jsonargparse` or `domainator.utils.configure_cli` to load this config automatically.
+   - Domainator CLIs use `jsonargparse`, which loads this config automatically.
 
 2. Emit outputs into the working directory:
    - The executor creates a per-job workspace (`$DATA_DIR/outputs/<job-id>`). Write derived files there.

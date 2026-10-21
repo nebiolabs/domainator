@@ -9,7 +9,7 @@ import os
 import getpass
 import fcntl
 from contextlib import contextmanager
-from typing import Iterator, Union, TextIO
+from typing import Iterator, TextIO
 
 
 def default_ncbi_taxonomy_path() -> str:
@@ -385,7 +385,7 @@ class NCBITaxonomy:
         '''
             "Compile" a boolean taxonomy expression into an O(1) lookup set.
 
-            The expression uses the same operators as utils.BooleanEvaluator
+            The expression uses the same operators as domainator.expr.BooleanEvaluator
             (& AND, | OR, ~ NOT, with parentheses) over taxids. A taxid token is
             True for a node when that taxid is in the node's lineage (i.e. the node
             is that taxon or one of its descendants). For example "2 & ~1224"
@@ -403,14 +403,12 @@ class NCBITaxonomy:
         if expression is None or str(expression).strip() == "":
             return None
 
-        # Imported lazily: utils imports this module at top level, so a top-level
-        # import here would be circular.
-        from domainator.utils import BooleanEvaluator
+        from domainator.expr import BooleanEvaluator
 
         evaluator = BooleanEvaluator(expression)
         # Expression tokens are taxids; a token is "present" for a node when it is
         # an ancestor (or self) of that node.
-        marker_taxids = {int(tax) for tax in evaluator.tok_to_domain.values()}
+        marker_taxids = {int(tax) for tax in evaluator.names}
 
         # present[t]: frozenset of marker taxids in t's lineage (self..root),
         # propagated downward in a single memoized O(N) pass.

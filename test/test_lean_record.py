@@ -9,7 +9,8 @@ import warnings
 
 import pytest
 
-from domainator import utils
+from domainator.partial import get_fragment_status
+from domainator.seqio import native_parser_available, parse_seqfiles, swap_name_id
 from domainator import lean_record
 from domainator.lean_record import (
     LeanContig,
@@ -70,7 +71,7 @@ def test_native_lean_matches_biopython(shared_datadir):
     checked = 0
     for fn in sorted(glob.glob(str(shared_datadir / "*.gb"))):
         try:
-            bp = list(utils.parse_seqfiles([fn], default_molecule_type="protein", genbank_parser="biopython"))
+            bp = list(parse_seqfiles([fn], default_molecule_type="protein", genbank_parser="biopython"))
         except Exception:
             continue
         native = _native_lean_seqrecords(fn)
@@ -90,7 +91,7 @@ def test_seqrecord_lean_roundtrip(shared_datadir):
     warnings.simplefilter("ignore")
     for fn in sorted(glob.glob(str(shared_datadir / "*.gb"))):
         try:
-            recs = list(utils.parse_seqfiles([fn], genbank_parser="biopython"))
+            recs = list(parse_seqfiles([fn], genbank_parser="biopython"))
         except Exception:
             continue
         for r in recs:
@@ -110,7 +111,7 @@ def test_lean_feature_len_and_span():
 
 def test_swap_name_id_on_lean():
     c = LeanContig("ACC.1", "LOCUSNAME", "d", "ACGT", {"molecule_type": "DNA"}, [])
-    utils.swap_name_id(c)
+    swap_name_id(c)
     assert c.id == "LOCUSNAME" and c.name == "ACC.1"
 
 
@@ -146,7 +147,7 @@ def test_native_lean_location_matches_biopython(loc, tmp_path):
     gb_path = tmp_path / "loc.gb"
     gb_path.write_text(template)
 
-    bp = list(utils.parse_seqfiles([io.StringIO(template)], filetype_override="genbank", genbank_parser="biopython"))[0]
+    bp = list(parse_seqfiles([io.StringIO(template)], filetype_override="genbank", genbank_parser="biopython"))[0]
     native = _native_lean_seqrecords(gb_path)
     assert native, "native parser unexpectedly fell back on this location case"
     bpf = [f for f in bp.features if f.type == "misc_feature"][0]
@@ -188,7 +189,7 @@ def test_native_translation_matches_biopython(shared_datadir):
     for fn in ("pDONR201.gb",):
         path = str(shared_datadir / fn)
         search = _collect_partial(lean_record.iter_lean_search_native(path, 0, -1, "nucleotide"))
-        bp = list(utils.parse_seqfiles([path], genbank_parser="biopython"))
+        bp = list(parse_seqfiles([path], genbank_parser="biopython"))
         for sc, rec in zip(search, bp):
             rust_peps = dict(sc.cds_peptides(set()))
             for j, f in enumerate(rec.features):
@@ -208,7 +209,7 @@ def test_native_fasta_matches_biopython(shared_datadir):
     annotations == {molecule_type})."""
     for fn, mt in [("FeSOD_20.fasta", "protein"), ("simple_dna_target.fna", "nucleotide")]:
         path = str(shared_datadir / fn)
-        bp = list(utils.parse_seqfiles([path], default_molecule_type=mt, genbank_parser="biopython"))
+        bp = list(parse_seqfiles([path], default_molecule_type=mt, genbank_parser="biopython"))
         native = list(lean_record.iter_lean_fasta_native(path, 0, -1, mt))
         assert len(native) == len(bp) > 0
         for sc, b in zip(native, bp):
@@ -246,15 +247,17 @@ def test_native_per_cds_taxid_matches_python(shared_datadir):
     """The Rust per-CDS taxid (longest covering source) must equal the Python
     location_taxid on the materialized record, on a gappy multi-source genome
     (Staph_phages.gb: a host `order(...)` source + several prophage sources)."""
-    from domainator import utils
+    from domainator.locations import feature_intervals
+    from domainator.model import get_sources
+    from domainator.taxonomy.records import location_taxid
     sc = list(lean_record.iter_lean_search_native(str(shared_datadir / "Staph_phages.gb"), 0, -1, "nucleotide"))[0]
     rust = {idx: (32644 if t is None else t) for idx, _, t in sc.cds_peptides_with_taxid(set())}
     rec = lean_record.lean_to_seqrecord(lean_record.materialize_lean_search(sc, None))
-    sources = utils.get_sources(rec)
+    sources = get_sources(rec)
     checked = 0
     for j, f in enumerate(rec.features):
         if f.type == "CDS" and "pseudo" not in f.qualifiers and "pseudogene" not in f.qualifiers and j in rust:
-            py = utils.location_taxid(utils.feature_intervals(f), sources)
+            py = location_taxid(feature_intervals(f), sources)
             assert (32644 if py is None else py) == rust[j]
             checked += 1
     assert checked > 100
@@ -277,13 +280,13 @@ def test_native_whole_contig_taxid_single_source(shared_datadir):
 @native_only
 def test_native_fasta_taxid(shared_datadir):
     """LeanFastaContig.taxid parses ` OX=` from the description, matching get_taxid."""
-    from domainator import utils
+    from domainator.taxonomy.records import get_taxid
     recs = list(lean_record.iter_lean_fasta_native(str(shared_datadir / "swissprot_CuSOD_subset.fasta"), 0, -1, "protein"))
     assert recs
     assert any(r.taxid() is not None for r in recs)
     for r in recs:
         got = r.taxid()
-        assert (32644 if got is None else got) == utils.get_taxid(r)
+        assert (32644 if got is None else got) == get_taxid(r)
 
 
 @native_only
@@ -324,7 +327,7 @@ def test_nucleotide_contig_searchable_bypass(shared_datadir):
     assert not _nucleotide_contig_searchable(s206, frozenset({whole + 1}))
 
 
-@pytest.mark.skipif(not utils.native_parser_available(), reason="native parser not built")
+@pytest.mark.skipif(not native_parser_available(), reason="native parser not built")
 def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
     """LeanFastaContig.fragment() agrees with utils.get_fragment_status, and LeanSearchContig.cds_peptides filters partial CDSs.
     (Protein GenBank records always fall back to the Biopython parser, so their fragment status comes from utils.)"""
@@ -339,9 +342,35 @@ def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
         ">MGYP003477041766 CR=0 FL=0\nMKRFSLAILALV\n"
     )
     native, _, _ = _gbfast.parse_fasta_search(str(fasta), 0, -1, "protein", False)
-    python = list(utils.parse_seqfiles([str(fasta)], default_molecule_type="protein", genbank_parser="biopython"))
-    assert [r.fragment() for r in native] == [utils.get_fragment_status(r) for r in python] == [None, "?", "?", "?", None, "?"]
+    python = list(parse_seqfiles([str(fasta)], default_molecule_type="protein", genbank_parser="biopython"))
+    assert [r.fragment() for r in native] == [get_fragment_status(r) for r in python] == [None, "?", "?", "?", None, "?"]
 
     native, _, _ = _gbfast.parse_lean_search(str(shared_datadir / "JABFVH010000506_extraction.gb"), 0, -1, None, False)
     assert [i for i, _ in native[0].cds_peptides(set(), "exclude")] != [i for i, _ in native[0].cds_peptides(set(), "only")]
 
+
+
+@native_only
+@pytest.mark.parametrize("table", [1, 2, 4, 6, 11, 25])
+def test_native_search_peptides_use_transl_table(tmp_path, table):
+    """A CDS without a /translation is translated with its /transl_table, as Biopython does."""
+    from domainator.Bio.Seq import Seq
+    from domainator.Bio.SeqRecord import SeqRecord
+    from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+    from domainator.seqio import write_genbank
+    record = SeqRecord(Seq("ATGTGAAAATGAAGATAGTAA" + "A" * 30), id="c1", name="c1", annotations={"molecule_type": "DNA"})
+    record.features = [SeqFeature(FeatureLocation(0, 21, 1), type="CDS", qualifiers={"transl_table": [str(table)], "locus_tag": ["x"]})]
+    path = str(tmp_path / "table.gb")
+    write_genbank([record], path)
+    native = next(parse_seqfiles([path], genbank_parser="lean"))
+    expected = str(record.features[0].translate(record.seq, cds=False)).replace("*", "")
+    assert native.cds_peptides(set(), "include") == [(0, expected)]
+
+
+@native_only
+def test_native_fasta_whitespace_matches_biopython(tmp_path):
+    path = tmp_path / "spaces.fasta"
+    path.write_text(">p1 desc here  \r\nMKV LL\tAA \r\nGG\t\n>p2\tx\nmkvA*\n> p3\nMK\n")
+    def summary(backend):
+        return [(r.id, r.description, str(r.seq)) for r in parse_seqfiles([str(path)], genbank_parser=backend)]
+    assert summary("lean") == summary("biopython")

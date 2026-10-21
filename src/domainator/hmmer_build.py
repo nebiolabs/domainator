@@ -6,7 +6,8 @@
 from jsonargparse import ActionConfigFile
 from pyhmmer.easel import MSAFile
 from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
-from domainator.utils import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name, open_writable_hmm_file, OUTPUT_COMPRESSION_HELP
+from domainator.hmmio import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name, open_writable_hmm_file
+from domainator.cli.common import OUTPUT_COMPRESSION_HELP
 import os
 import sys
 import pyhmmer
@@ -39,7 +40,7 @@ def _reject_empty_input(file) -> None:
         if empty:
             raise ValueError("The input MSA is empty.")
 
-def hmmer_build(file:Union[str,BinaryIO], alphabet:Optional[pyhmmer.easel.Alphabet]=None, name:Optional[str]=None, acc:Optional[str]=None, desc:Optional[str]=None, window_length:Optional[int]=None, window_beta:Optional[float]=None) -> pyhmmer.plan7.HMM:
+def hmmer_build(file:Union[str,BinaryIO], *, alphabet:Optional[pyhmmer.easel.Alphabet]=None, name:Optional[str]=None, acc:Optional[str]=None, desc:Optional[str]=None, window_length:Optional[int]=None, window_beta:Optional[float]=None) -> pyhmmer.plan7.HMM:
     """Build a single plan7 profile from an MSA.
 
     Args:

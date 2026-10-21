@@ -1,3 +1,4 @@
+from domainator import table_writers
 from pathlib import Path
 import tempfile
 from io import StringIO
@@ -479,7 +480,7 @@ def test_enum_report_html_quote_escape_1(shared_datadir):
 
 def test_enum_html_writer_missing_values_are_valid_javascript():
     out = StringIO()
-    writer = enum_report.EnumHTMLWriter(
+    writer = table_writers.HTMLTableWriter(
         ["taxname_superkingdom", "taxid_superkingdom", "taxname_domain"],
         ["str", "int", "str"],
         out,

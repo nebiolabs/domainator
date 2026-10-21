@@ -20,7 +20,9 @@ from domainator import build_ssn
 from domainator.Bio import SeqIO
 from domainator.data_matrix import DataMatrix
 from domainator import select_by_cds
-from domainator.utils import COMPRESSION_EXTENSIONS, DomainatorCDS, get_file_type, is_compressed_path, open_hmm_file, open_writable_hmm_file, open_writable_seqfile, parse_seqfiles, pyhmmer_decode, write_genbank
+from domainator.seqio import COMPRESSION_EXTENSIONS, get_file_type, is_compressed_path, open_writable_seqfile, parse_seqfiles, write_genbank
+from domainator.model import DomainatorCDS
+from domainator.hmmio import open_hmm_file, open_writable_hmm_file
 
 
 SUPPORTED_INPUT_TYPES = {"genbank", "fasta", "hmm", "cm"}
@@ -76,7 +78,7 @@ def _validate_unique_labels(labels: Iterable[str], label_source: str) -> List[st
 def _iter_hmm_models(input_path: Union[str, PathLike]) -> Iterator[Tuple[str, pyhmmer.plan7.HMM]]:
     with open_hmm_file(input_path) as hmm_file:
         for model in hmm_file:
-            yield pyhmmer_decode(model.name), model
+            yield model.name, model
 
 
 def _iter_cm_blocks(input_path: Union[str, PathLike]) -> Iterator[Tuple[str, str]]:
@@ -205,9 +207,10 @@ def _center_record_on_search_hit(record):
 
 def split_by_cluster(
     input_path: Union[str, PathLike],
+    *,
     matrix_path: Union[str, PathLike],
-    outdir: Union[str, PathLike],
-    lb: float = 0,
+    output_dir: Union[str, PathLike],
+    threshold: float = 0,
     min_cluster_size: int = 1,
     write_small_clusters: bool = False,
     pad_on_search_hits: bool = False,
@@ -224,12 +227,12 @@ def split_by_cluster(
     if pad_on_search_hits and input_type != "genbank":
         raise ValueError("--pad_on_search_hits is only supported for GenBank inputs.")
 
-    matrix, label_to_cluster, cluster_sizes = _load_cluster_membership(matrix_path, lb)
+    matrix, label_to_cluster, cluster_sizes = _load_cluster_membership(matrix_path, threshold)
     input_labels = _read_input_labels(input_path, input_type)
     _validate_label_reconciliation(matrix.rows, input_labels)
 
     cluster_paths, small_clusters_path = _plan_output_paths(
-        outdir,
+        output_dir,
         extension,
         cluster_sizes,
         min_cluster_size,
@@ -353,8 +356,8 @@ def main(argv):
     split_by_cluster(
         input_path=params.input,
         matrix_path=params.matrix,
-        outdir=params.output_dir,
-        lb=params.threshold,
+        output_dir=params.output_dir,
+        threshold=params.threshold,
         min_cluster_size=params.min_cluster_size,
         write_small_clusters=params.write_small_clusters,
         pad_on_search_hits=params.pad_on_search_hits,

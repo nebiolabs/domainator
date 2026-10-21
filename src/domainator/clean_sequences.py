@@ -13,7 +13,8 @@ import sys
 
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import parse_seqfiles, slice_record
+from domainator.seqio import parse_seqfiles
+from domainator.locations import slice_record
 from domainator.Bio.Data import IUPACData
 
 
@@ -122,14 +123,14 @@ def has_non_canonical(sequence, canonical_chars):
     return False
 
 
-def clean_sequences(contigs, fasta_type="protein", clean_name=False, deduplicate_names=False, 
+def clean_sequences(records, *, alphabet="protein", clean_name=False, deduplicate_names=False, 
                     strip=False, filter_by_aa=False, stats=None):
     """
     Clean and filter sequences based on specified criteria.
     
     Args:
-        contigs: An iterable/iterator of SeqRecords
-        fasta_type: "protein" or "nucleotide" - determines which canonical character set to use
+        records: An iterable/iterator of SeqRecords
+        alphabet: "protein" or "nucleotide" - determines which canonical character set to use
         clean_name: If True, make names compatible with newick format
         deduplicate_names: If True, ensure all sequence names are unique
         strip: If True, strip non-canonical residues from sequence ends
@@ -139,14 +140,14 @@ def clean_sequences(contigs, fasta_type="protein", clean_name=False, deduplicate
     Yields:
         Cleaned/filtered SeqRecords
     """
-    if fasta_type == "protein":
+    if alphabet == "protein":
         canonical_chars = CANONICAL_PROTEIN
     else:
         canonical_chars = CANONICAL_NUCLEOTIDE
     
     seen_names = dict()
     
-    for contig in contigs:
+    for contig in records:
         if stats is not None:
             stats.input_count += 1
         
@@ -236,7 +237,7 @@ def main(argv):
     # Run
     cleaned_contigs_iterator = clean_sequences(
         parse_seqfiles(params.input, default_molecule_type=params.alphabet),
-        fasta_type=params.alphabet,
+        alphabet=params.alphabet,
         clean_name=params.clean_name,
         deduplicate_names=params.deduplicate_names,
         strip=params.strip,

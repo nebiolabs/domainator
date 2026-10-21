@@ -35,20 +35,20 @@ from domainator.output_guardrails import add_max_output_gb_argument, max_output_
 MITIGATION_OPTIONS = ["--hits_only", "--max_hits_per_cds", "-e/--evalue", "--no_annotations"]
 
 
-def structure_domainate(input_values, reference_values, aligner, evalue=0.001, min_evalue=0.0,
-                        max_domains=sys.maxsize, max_overlap=1.0, overlap_by_db=False,
+def structure_domainate(input_values, *, references, aligner, evalue=0.001, min_evalue=0.0,
+                        max_hits_per_cds=sys.maxsize, max_overlap=1.0, overlap_by_db=False,
                         hits_only=False, no_annotations=False, alignment_type=2, metrics=None,
                         max_seqs=None, tmp_dir=None, keep_db=None, database_name=None,
-                        hits_tsv=None):
+                        hits_tsv_out=None):
     """Yield annotated protein SeqRecords, one per input structure chain.
 
     Args:
         input_values: -i values: structure files, globs, directories, or a database prefix.
-        reference_values: -r values, same forms as input_values.
+        references: -r values, same forms as input_values.
         aligner: a structure_lib.StructureAligner.
         evalue: keep hits with E-value strictly below this.
         min_evalue: keep hits with E-value at or above this.
-        max_domains: maximum annotations to add per record.
+        max_hits_per_cds: maximum annotations to add per record.
         max_overlap: maximum fractional overlap between kept annotations. >= 1 disables
             overlap filtering.
         overlap_by_db: filter overlaps within each database rather than across all.
@@ -60,14 +60,14 @@ def structure_domainate(input_values, reference_values, aligner, evalue=0.001, m
         tmp_dir: parent directory for temporary databases and scratch files.
         keep_db: persist the database built from the input structures at this prefix.
         database_name: value for the /database qualifier. Defaults to the reference name.
-        hits_tsv: copy the backend's raw hit table here, for cross-checking.
+        hits_tsv_out: copy the backend's raw hit table here, for cross-checking.
 
     Yields:
         SeqRecord objects with molecule_type "protein".
     """
     metrics = list(metrics or [])
 
-    with structure_lib.prepared_databases(aligner, input_values, reference_values,
+    with structure_lib.prepared_databases(aligner, input_values, references,
                                           tmp_dir=tmp_dir, keep_db=keep_db) as prepared:
         input_db = prepared.input_db
         reference_db = prepared.reference_db
@@ -87,8 +87,8 @@ def structure_domainate(input_values, reference_values, aligner, evalue=0.001, m
             hit_counts[hit.query] = hit_counts.get(hit.query, 0) + 1
             materialized.append(hit)
         structure_lib.warn_on_saturation(hit_counts, aligner.effective_max_seqs(max_seqs))
-        if hits_tsv is not None:
-            structure_lib.copy_hits_tsv(work_dir, hits_tsv, aligner)
+        if hits_tsv_out is not None:
+            structure_lib.copy_hits_tsv(work_dir, hits_tsv_out, aligner)
 
         by_target = structure_lib.structure_hits_to_search_results(
             materialized, db_name, evalue, min_evalue, aligner.name)
@@ -100,7 +100,7 @@ def structure_domainate(input_values, reference_values, aligner, evalue=0.001, m
             record = structure_lib.build_protein_record(name, sequence, source_path)
             if record_hits:
                 domainate.add_protein_annotations(
-                    record, record_hits, max_domains, max_overlap,
+                    record, record_hits, max_hits_per_cds, max_overlap,
                     no_annotations, False, overlap_by_db)
             yield record
 
@@ -159,13 +159,13 @@ def main(argv):
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
     records = structure_domainate(
-        params.input, params.reference, aligner,
-        evalue=params.evalue, min_evalue=params.min_evalue, max_domains=max_domains,
+        params.input, references=params.reference, aligner=aligner,
+        evalue=params.evalue, min_evalue=params.min_evalue, max_hits_per_cds=max_domains,
         max_overlap=params.max_overlap, overlap_by_db=params.overlap_by_db,
         hits_only=params.hits_only, no_annotations=params.no_annotations,
         alignment_type=params.alignment_type, metrics=params.metrics,
         max_seqs=params.max_seqs, tmp_dir=params.tmp_dir, keep_db=params.db_out,
-        database_name=params.database_name, hits_tsv=params.hits_tsv_out,
+        database_name=params.database_name, hits_tsv_out=params.hits_tsv_out,
     )
 
     structure_lib.write_records(records, params.genbank_out, params.fasta_out, max_output_bytes, MITIGATION_OPTIONS)

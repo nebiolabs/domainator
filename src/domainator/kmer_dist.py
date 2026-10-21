@@ -6,7 +6,6 @@ or strand-invariant nucleotide k-mers when --nucleotide_kmers is supplied.
 """
 
 import warnings
-warnings.filterwarnings("ignore", module='numpy')
 
 from dataclasses import dataclass
 from typing import Dict, Iterator, List, Optional, Set, Tuple
@@ -17,14 +16,15 @@ import tqdm
 from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_alphabet, add_input, reject_stdin, resolve_cpu, tool_parser
-from domainator.compare_contigs import (
-    _StreamingCSRChunkBuilder,
-    _feed_chunk_to_accumulator,
-    _iter_query_chunks,
-    _keep_top_k_per_row,
-    _prune_scores_inplace,
+from domainator.sparse_scores import (
+    StreamingCSRChunkBuilder,
+    feed_chunk_to_accumulator,
+    iter_query_chunks,
+    keep_top_k_per_row,
+    prune_scores_inplace,
 )
-from domainator.data_matrix import StreamingMstKnnAccumulator, mirror_upper_triangle
+from domainator.ssn_edges import StreamingMstKnnAccumulator
+from domainator.data_matrix import DataMatrix, mirror_upper_triangle
 from domainator.domainate import (
     clean_rec,
     get_prot_list,
@@ -42,7 +42,8 @@ from domainator.sparsify import (
     sparsify_requested,
 )
 from domainator.transform_matrix import transform_matrix
-from domainator.utils import get_file_type, get_multiprocessing_context, parse_seqfiles
+from domainator.seqio import get_file_type, parse_seqfiles
+from domainator._mp import get_multiprocessing_context
 
 
 DEFAULT_PROTEIN_KSIZE = 5
@@ -406,9 +407,9 @@ def _compute_metric_chunk(
             shape=chunk_shape,
         )
 
-    chunk_matrix = _keep_top_k_per_row(chunk_matrix, k)
+    chunk_matrix = keep_top_k_per_row(chunk_matrix, k)
     if lb > 0:
-        chunk_matrix = _prune_scores_inplace(chunk_matrix, lb)
+        chunk_matrix = prune_scores_inplace(chunk_matrix, lb)
     return chunk_matrix
 
 
@@ -481,16 +482,16 @@ def _compute_sparse_metric_matrix(
     # Every metric is symmetric: a self-comparison without a per-row cap only needs the upper
     # triangle. The accumulator keeps one slot per unordered pair, so it needs no mirroring.
     upper_only = self_comparison and k is None
-    query_chunks = [(start, end, k, lb, upper_only) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
+    query_chunks = [(start, end, k, lb, upper_only) for start, end in iter_query_chunks(matrix_shape[0], cpu)]
     if sparsify_requested(mst, knn):
         accumulator = StreamingMstKnnAccumulator(matrix_shape[0], mst=mst, knn=knn, lower_bound=lb)
 
         def append_chunk(start, end, chunk_matrix):
-            _feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
+            feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
 
         build = accumulator.to_csr
     else:
-        chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
+        chunk_builder = StreamingCSRChunkBuilder(matrix_shape)
         append_chunk = chunk_builder.append_chunk
 
         def build():
@@ -570,32 +571,35 @@ def _resolve_ksize(molecule_type: str, nucleotide_kmers: bool, ksize: Optional[i
 
 def kmer_dist(
     input_path: str,
-    input_type: str,
-    reference_path: str,
-    reference_type: str,
+    *,
+    input_format: str,
+    reference: str,
+    reference_format: str,
     max_hits_per_query: Optional[int],
     metric: str,
     mode: str,
     cpu: int,
-    hdf: Optional[str],
-    dense_text: Optional[str],
-    lb: float,
-    *,
-    fasta_type: str,
+    threshold: float,
+    alphabet: str,
     ksize: Optional[int],
     nucleotide_kmers: bool,
     gene_call: Optional[str],
-    max_output_bytes: Optional[int],
     progress: bool,
     mst: bool = False,
     knn: Optional[int] = None,
-) -> None:
-    input_molecule_type = _resolve_molecule_type(input_path, input_type, fasta_type)
-    reference_molecule_type = _resolve_molecule_type(reference_path, reference_type, fasta_type)
+) -> DataMatrix:
+    """Compare the k-mer content of every input sequence with every reference sequence.
+
+    Returns a DataMatrix of ``mode`` values with a row per input and a column per reference;
+    pass the same path as ``input_path`` and ``reference`` for a self-comparison. The options
+    mean the same as the ``domainator kmer_dist`` options with the same names.
+    """
+    input_molecule_type = _resolve_molecule_type(input_path, input_format, alphabet)
+    reference_molecule_type = _resolve_molecule_type(reference, reference_format, alphabet)
     if input_molecule_type != reference_molecule_type:
         raise ValueError("Input and reference must have the same molecule type.")
 
-    self_comparison = input_path == reference_path and input_type == reference_type
+    self_comparison = input_path == reference and input_format == reference_format
     if sparsify_requested(mst, knn):
         option = sparsify_option_label(mst, knn)
         if not self_comparison:
@@ -608,9 +612,9 @@ def kmer_dist(
     feature_to_idx: Dict[int, int] = dict()
     query_representation = _load_sequence_representation(
         input_path,
-        input_type,
+        input_format,
         feature_to_idx=feature_to_idx,
-        fasta_type=fasta_type,
+        fasta_type=alphabet,
         gene_call=gene_call,
         nucleotide_kmers=nucleotide_kmers,
         ksize=resolved_ksize,
@@ -621,10 +625,10 @@ def kmer_dist(
         reference_representation = query_representation
     else:
         reference_representation = _load_sequence_representation(
-            reference_path,
-            reference_type,
+            reference,
+            reference_format,
             feature_to_idx=feature_to_idx,
-            fasta_type=fasta_type,
+            fasta_type=alphabet,
             gene_call=gene_call,
             nucleotide_kmers=nucleotide_kmers,
             ksize=resolved_ksize,
@@ -644,7 +648,7 @@ def kmer_dist(
         reference_feature_matrix,
         metric,
         max_hits_per_query,
-        lb,
+        threshold,
         cpu,
         progress,
         self_comparison=self_comparison,
@@ -653,17 +657,12 @@ def kmer_dist(
     )
     matrix = transform_matrix(
         matrix,
-        mode,
+        mode=mode,
         row_lengths=query_representation.lengths,
         col_lengths=reference_representation.lengths,
     )
 
-    write_matrix_outputs(
-        matrix, query_representation.names, reference_representation.names,
-        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-        mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
-        row_lengths=query_representation.lengths, col_lengths=reference_representation.lengths, data_type=mode,
-    )
+    return DataMatrix(matrix, query_representation.names, reference_representation.names, query_representation.lengths, reference_representation.lengths, data_type=mode, copy_data=False)
 
 
 def build_parser():
@@ -727,24 +726,23 @@ def main(argv):
     cpu = resolve_cpu(params.cpu)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    kmer_dist(
+    matrix = kmer_dist(
         params.input,
-        input_type,
-        reference_path,
-        reference_type,
-        params.max_hits_per_query,
-        params.metric,
-        params.mode,
-        cpu,
-        hdf,
-        dense_text,
-        params.threshold,
-        fasta_type=params.alphabet,
+        input_format=input_type,
+        reference=reference_path,
+        reference_format=reference_type,
+        max_hits_per_query=params.max_hits_per_query,
+        metric=params.metric,
+        mode=params.mode,
+        cpu=cpu,
+        threshold=params.threshold,
+        alphabet=params.alphabet,
         ksize=params.ksize,
         nucleotide_kmers=params.nucleotide_kmers,
         gene_call=params.gene_call,
-        max_output_bytes=max_output_bytes,
         progress=params.progress,
         mst=params.mst,
         knn=params.knn,
     )
+    write_matrix_outputs(matrix, hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+                         mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"])

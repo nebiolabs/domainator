@@ -13,12 +13,11 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, open_if_is_name
-import re
-import seaborn as sns
-from collections import OrderedDict
-import random
+from domainator.colors import AutoColormap, normalize_color_hex, read_color_table
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.seqio import parse_seqfiles
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.model import feature_score
 
 #TODO: color gradient based on bit score
 
@@ -28,47 +27,6 @@ COLOR_MODES = {
     "domains_and_cdss": {"domains", "cdss"},
 }
 
-def normalize_color_hex(color_hex):
-    '''
-        takes in a string of the format:
-            (#?)([a-fA-F0-9]{6})
-        raises an exception if string is not of expected format
-        otherwise, returns string in format #[A-F0-9]{6}
-    '''
-    color_hex = color_hex.strip().upper()
-    matches = re.match(r'^(#?)([A-F0-9]{6})$',color_hex)
-    if not matches:
-        raise RuntimeError(f"Color code not recognized: {color_hex}")
-    else:
-        return "#" + matches.group(2)
-    
-def read_color_table(color_table):
-    """
-        input: path or handle to a tsv with two columns and no header
-                columns are: domain id, hex color. For example: CCDB   cc0000
-        output:
-            a dict of domain: hex color
-                for example: {"CCDB": "#CC0000"}
-    """
-    
-    file_handle, input_type = open_if_is_name(color_table)
-    out = dict()
-
-    for line in file_handle:
-        line = line.strip()
-        if len(line) >0:
-            parts = line.split("\t")
-            if len(parts) != 2:
-                raise RuntimeError(f"badly formatted line in color table: {line}")
-            if parts[0] not in out:
-                out[parts[0]] = normalize_color_hex(parts[1])
-            else:
-                raise RuntimeError(f"domain specified multiple times in color table: {parts[0]}")
-
-    if input_type == "name":
-        file_handle.close()
-    
-    return out
 
 def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings=False, search_hit_color=None, clear=False, databases=None, color_feature="name"):
     """
@@ -103,7 +61,7 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
                 if "domains" in color_targets:
                     feature.qualifiers['Color'] = [ color_map[color_key] ]
 
-                score = float(feature.qualifiers['score'][0])
+                score = feature_score(feature)
                 if "cdss" in color_targets:
                     cds_id = feature.qualifiers['cds_id'][0]
                     
@@ -129,49 +87,13 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
                 if feature.qualifiers['cds_id'][0] in new_cds_colors:
                     feature.qualifiers['Color'] = [new_cds_colors[feature.qualifiers['cds_id'][0]]]
 
-def auto_color_map(genbanks, contigs):
-    domains = OrderedDict()
-
-    for rec in parse_seqfiles(genbanks, contigs):
-        for feature in rec.features:
-            if feature.type == DOMAIN_FEATURE_NAME:
-                domains[feature.qualifiers['name'][0]] = None
-
-    colors = sns.color_palette('husl', n_colors=len(domains)).as_hex()
-    random.Random(12).shuffle(colors)
-    for index, domain in enumerate(domains.keys()):
-        domains[domain] = colors[index].upper()
-    
-    return domains
-
-class AutoColormap:
-    def __init__(self, num_colors=30):
-        self.next_color = 0
-        self.num_colors = num_colors
-        self.color_list = [x.upper() for x in sns.color_palette('husl', n_colors=self.num_colors).as_hex()]
-
-        self.color_map = dict()
-        random.Random(12).shuffle(self.color_list)
-    def __getitem__(self, key: str) -> str:
-        if key not in self.color_map:
-            self.color_map[key] = self.color_list[self.next_color]
-            self.next_color = (self.next_color + 1)  % self.num_colors
-        return self.color_map[key]
-    def __contains__(self, key: str) -> bool:
-        x = self[key]
-        return True
-    def items(self):
-        return self.color_map.items()
-
-        
-
-def color_genbank(records, color_table, color_targets, search_hit_color=None, clear=False, color_table_out=None, databases=None, color_feature="name"):
+def color_genbank(records, *, color_table, targets, search_hit_color=None, clear=False, color_table_out=None, databases=None, color_feature="name"):
     """
       input: 
         records: an iterator of SeqRecords
         contigs: collection if not None, then only . if None then don't filter out any contigs (most common).
         color_table: a dict mapping domain names or database ids to color hex.
-        color_targets: a set or list containing "domains", "cdss", or both. Specifying which type of feature to color.
+        targets: a set or list containing "domains", "cdss", or both. Specifying which type of feature to color.
         search_hit_color: if not None, then color search_hit annotations with this color.
         clear: if True, then remove all color annotations from the genbank file before adding any new ones.
         color_table_out: if not None, then write the updated color table to this file.
@@ -186,7 +108,7 @@ def color_genbank(records, color_table, color_targets, search_hit_color=None, cl
         color_map = AutoColormap()
 
     for rec in records:
-        color_seqrecord_by_domain(rec, color_map, color_targets, disable_multiple_colors_warning, search_hit_color=search_hit_color, clear=clear, databases=databases, color_feature=color_feature)
+        color_seqrecord_by_domain(rec, color_map, targets, disable_multiple_colors_warning, search_hit_color=search_hit_color, clear=clear, databases=databases, color_feature=color_feature)
         yield rec
     
     if color_table_out is not None:
@@ -260,10 +182,10 @@ def main(argv):
     # Run
     write_seq_outputs(color_genbank(
             parse_seqfiles(genbanks, target_contigs),
-            color_table, 
-            color_targets,
-            search_hit_color,
-            params.clear,
+            color_table=color_table, 
+            targets=color_targets,
+            search_hit_color=search_hit_color,
+            clear=params.clear,
             color_table_out=params.color_table_out,
             databases=databases,
             color_feature=color_feature

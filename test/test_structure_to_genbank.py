@@ -3,7 +3,8 @@ import shutil
 
 import pytest
 
-from domainator import structure_to_genbank, domainate, utils
+from domainator import structure_to_genbank, domainate
+from domainator.seqio import parse_seqfiles
 
 
 pytestmark = pytest.mark.skipif(shutil.which("foldseek") is None, reason="foldseek is not installed")
@@ -14,7 +15,7 @@ EXPECTED_NAMES = ["1CRN_A", "1IGD_A", "1NDD_A", "1UBQ_A",
 
 
 def _read(path):
-    return list(utils.parse_seqfiles((str(path),), default_molecule_type="protein"))
+    return list(parse_seqfiles((str(path),), default_molecule_type="protein"))
 
 
 def test_one_record_per_chain(shared_datadir, tmp_path):

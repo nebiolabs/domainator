@@ -1,5 +1,6 @@
 from domainator.errors import OutputSizeLimitExceeded
-from domainator import compare_contigs, utils
+from domainator import compare_contigs, sparse_scores
+from domainator.seqio import parse_seqfiles
 import os
 import warnings
 import tempfile
@@ -12,7 +13,7 @@ from domainator import DOMAIN_FEATURE_NAME
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator.Bio.SeqRecord import SeqRecord
-from domainator.utils import write_genbank
+from domainator.seqio import write_genbank
 
 #import filecmp
 
@@ -51,7 +52,7 @@ def test_compare_contigs_2(shared_datadir):
         assert dense_matrix.shape[1] == 4
         assert all([x == 0.6 for x in dense_matrix.itervalues()])
         
-        _assert_name_by_order_prefixes(list(utils.parse_seqfiles([out_gb])))
+        _assert_name_by_order_prefixes(list(parse_seqfiles([out_gb])))
 
 def test_compare_no_annotations_1(shared_datadir):
     
@@ -72,7 +73,7 @@ def test_compare_no_annotations_1(shared_datadir):
         assert pytest.approx(sum(dense_matrix.itervalues()),0.001) == (0.6 * 4)
         assert (dense_matrix.toarray() == np.eye(4) * 0.6).all()
         
-        _assert_name_by_order_prefixes(list(utils.parse_seqfiles([out_gb])))
+        _assert_name_by_order_prefixes(list(parse_seqfiles([out_gb])))
 
 def test_compare_contigs_database_1(shared_datadir):
     
@@ -106,7 +107,7 @@ def test_compare_contigs_database_1(shared_datadir):
         assert "pdonr_hmms_1" in gb_out_text
         assert "pdonr_hmms_2" in gb_out_text
         
-        _assert_name_by_order_prefixes(list(utils.parse_seqfiles([out_gb])))
+        _assert_name_by_order_prefixes(list(parse_seqfiles([out_gb])))
 
 
 def test_compare_contigs_max_output_gb_blocks_dense_output(shared_datadir):
@@ -231,7 +232,7 @@ def test_compare_contigs_name_by_order_reorders_clustered_records():
             "--name_by_order",
         ])
 
-        ordered_records = list(utils.parse_seqfiles([out_gb]))
+        ordered_records = list(parse_seqfiles([out_gb]))
         stripped_ids = [record.id.split("_", 1)[1] for record in ordered_records]
 
         _assert_name_by_order_prefixes(ordered_records)
@@ -343,14 +344,6 @@ class _FixedMatrixMetric(compare_contigs.ContigMetric):
         return self.matrix
 
 
-class _CaptureScoresReport(compare_contigs.DistanceReport):
-    def __init__(self):
-        self.scores = None
-
-    def write(self, recs, scores, options):
-        self.scores = scipy.sparse.csr_array(scores)
-
-
 def test_compare_contigs_mst_knn_matches_batch_transform():
     from domainator import transform_matrix
     from scipy.sparse.csgraph import connected_components
@@ -430,24 +423,8 @@ def test_compare_contigs_k_applies_to_combined_scores():
         ]),
     )
 
-    capture = _CaptureScoresReport()
-
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_path = output_dir + "/input.gb"
-
-        with open(input_path, "w") as handle:
-            write_genbank(records, handle)
-
-        compare_contigs.compare_contigs(
-            [input_path],
-            [metric_1, metric_2],
-            [capture],
-            max_hits_per_query=2,
-            contigs=[record.id for record in records],
-            name_by_order=False,
-        )
-
-    out = capture.scores.toarray()
+    matrix = compare_contigs.compare_contigs(records, metrics=[metric_1, metric_2], max_hits_per_query=2)
+    out = matrix.toarray()
 
     assert np.count_nonzero(out[0]) == 2
     assert out[0, 0] == pytest.approx(1.0)
@@ -457,14 +434,14 @@ def test_compare_contigs_k_applies_to_combined_scores():
 
 
 def test_streaming_csr_chunk_builder_rejects_out_of_order_chunks():
-    builder = compare_contigs._StreamingCSRChunkBuilder((3, 3))
+    builder = sparse_scores.StreamingCSRChunkBuilder((3, 3))
 
     with pytest.raises(RuntimeError, match="out of order"):
         builder.append_chunk(1, 2, scipy.sparse.csr_array([[1.0, 0.0, 0.0]]))
 
 
 def test_iter_query_chunks_caps_max_rows_per_chunk():
-    chunks = compare_contigs._iter_query_chunks(100, cpu=1, chunks_per_worker=1, max_rows_per_chunk=15)
+    chunks = sparse_scores.iter_query_chunks(100, cpu=1, chunks_per_worker=1, max_rows_per_chunk=15)
 
     assert max(end - start for start, end in chunks) == 15
     assert chunks[0] == (0, 15)
@@ -483,7 +460,7 @@ def test_compare_contigs_combined_sparse_metric_path_matches_fallback():
         with open(input_path, "w") as handle:
             write_genbank(records, handle)
 
-        recs = list(utils.parse_seqfiles([input_path]))
+        recs = list(parse_seqfiles([input_path]))
         prepared_metrics = [
             compare_contigs.JaccardIndex(0.5).prepare_sparse_metric(recs),
             compare_contigs.AdjacencyIndex(0.5).prepare_sparse_metric(recs),
@@ -499,8 +476,8 @@ def test_compare_contigs_combined_sparse_metric_path_matches_fallback():
         fallback = scipy.sparse.csr_array((len(recs), len(recs)), dtype=np.float64)
         for metric in [compare_contigs.JaccardIndex(0.5), compare_contigs.AdjacencyIndex(0.5)]:
             fallback = fallback + (metric.weight * metric.compute(recs, cpu=1, progress=False))
-        fallback = compare_contigs._keep_top_k_per_row(fallback, 2)
-        fallback = compare_contigs._prune_scores_inplace(fallback, 0.2)
+        fallback = sparse_scores.keep_top_k_per_row(fallback, 2)
+        fallback = sparse_scores.prune_scores_inplace(fallback, 0.2)
 
         assert np.allclose(combined.toarray(), fallback.toarray())
 
@@ -714,7 +691,7 @@ def test_compare_contigs_sorts_with_max_hits_per_query():
         with open(input_path, "w") as handle:
             write_genbank(records, handle)
         compare_contigs.main(["-i", input_path, "--ji", "1.0", "--ai", "0", "--max_hits_per_query", "2", "--genbank_out", out_gb])
-        ordered_ids = [rec.id for rec in utils.parse_seqfiles([out_gb])]
+        ordered_ids = [rec.id for rec in parse_seqfiles([out_gb])]
         assert sorted(ordered_ids) == sorted(rec.id for rec in records)
         ab_group = {"rec0", "rec2", "rec4"}
         positions = sorted(ordered_ids.index(x) for x in ab_group)
@@ -728,15 +705,14 @@ def test_compare_contigs_linkage_and_leaf_ordering_options(shared_datadir, linka
     with tempfile.TemporaryDirectory() as output_dir:
         out_gb = output_dir + "/sorted.gb"
         compare_contigs.main(["-i", input_path, "--genbank_out", out_gb, "--linkage", linkage_method, "--leaf_ordering", leaf_ordering])
-        out_ids = sorted(rec.id for rec in utils.parse_seqfiles([out_gb]))
-        assert out_ids == sorted(rec.id for rec in utils.parse_seqfiles([input_path]))
+        out_ids = sorted(rec.id for rec in parse_seqfiles([out_gb]))
+        assert out_ids == sorted(rec.id for rec in parse_seqfiles([input_path]))
 
 
 def test_compare_contigs_name_by_order_does_not_rename_input_records():
     records = [_make_compare_contig_record(f"rec{i}", doms) for i, doms in enumerate([["A"], ["B"], ["A", "B"]])]
-    report = compare_contigs.GenbankOutput("/dev/null")
     scores = scipy.sparse.csr_array(np.eye(3))
-    report.write(records, scores, {"name_by_order": True})
+    compare_contigs.write_sorted_genbank(records, scores, "/dev/null", name_by_order=True)
     assert [rec.id for rec in records] == ["rec0", "rec1", "rec2"]
 
 
@@ -765,7 +741,7 @@ def test_compare_contigs_sort_memory_check_fails_early(shared_datadir, monkeypat
         assert os.path.exists(out_sparse)
 
         compare_contigs.main(["-i", input_path, "--genbank_out", out_gb, "--skip_sort_memory_check"])
-        assert len(list(utils.parse_seqfiles([out_gb]))) == 4
+        assert len(list(parse_seqfiles([out_gb]))) == 4
 
 
 def test_compare_contigs_warns_for_slow_optimal_leaf_ordering(shared_datadir, monkeypatch):
@@ -797,7 +773,7 @@ def test_compare_contigs_upper_triangle_scoring_matches_full_rows(lb):
         with open(input_path, "w") as handle:
             write_genbank(records, handle)
 
-        recs = list(utils.parse_seqfiles([input_path]))
+        recs = list(parse_seqfiles([input_path]))
         prepared_metrics = [
             compare_contigs.JaccardIndex(0.5).prepare_sparse_metric(recs),
             compare_contigs.AdjacencyIndex(0.25).prepare_sparse_metric(recs),

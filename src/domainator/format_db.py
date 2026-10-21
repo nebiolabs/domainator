@@ -26,7 +26,10 @@ from collections import namedtuple
 from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
-from domainator import utils, db_index, bgzf_compress
+from domainator import db_index, bgzf_compress
+from domainator._mp import make_pool
+from domainator.offsets import get_offsets
+from domainator.seqio import detect_compression, get_file_type, open_seqfile
 from domainator.output_guardrails import make_temporary_output_path
 
 _COPY_CHUNK = 1 << 20
@@ -55,7 +58,7 @@ def _copy_byte_range(src, dst, start, end):
 
 def _decompress_to_temp(input_path, tmp_path):
     """Decompress a BGZF/gzip input to an uncompressed temp file (streamed)."""
-    handle, input_type = utils.open_seqfile(input_path, binary=True)
+    handle, input_type = open_seqfile(input_path, binary=True)
     try:
         with open(tmp_path, "wb") as out:
             while True:
@@ -109,7 +112,7 @@ def _format_shard_task(task):
                 os.remove(plain_tmp)
 
     if task.do_index:
-        offsets, num_proteins = utils.get_offsets(task.final_path)
+        offsets, num_proteins = get_offsets(task.final_path)
         compression = "bgzf" if task.out_bgzf else None
         db_index.write_index(task.final_path, offsets, num_proteins,
                              filetype=task.filetype, compression=compression)
@@ -120,10 +123,10 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, name, level,
     """Plan the output tasks for one input. Returns ``(tasks, working_temp_or_None)``.
     Performs the per-input serial work (decompress + offset scan) up front so the
     returned tasks can be parallelized."""
-    filetype = utils.get_file_type(input_path)
+    filetype = get_file_type(input_path)
     if filetype not in ("genbank", "fasta"):
         raise ValueError(f"Input '{input_path}' is not a GenBank or FASTA file (got type {filetype!r}).")
-    in_comp = utils.detect_compression(input_path)
+    in_comp = detect_compression(input_path)
     out_dir = output_dir or (os.path.dirname(input_path) or ".")
     os.makedirs(out_dir, exist_ok=True)
     if name is not None:
@@ -168,7 +171,7 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, name, level,
     else:
         if shards < 1:
             raise ValueError("--shards must be >= 1")
-        offsets, _num_proteins = utils.get_offsets(working)   # only needed for shard boundaries
+        offsets, _num_proteins = get_offsets(working)   # only needed for shard boundaries
         num_records = len(offsets)
         if num_records == 0:
             if working_temp and os.path.exists(working_temp):
@@ -237,7 +240,7 @@ def format_db(inputs, *, shards=None, compress=False, index=False, output_dir=No
         tasks = [t._replace(threads=(cpu if single else 1)) for t in all_tasks]
 
         if cpu > 1 and len(tasks) > 1:
-            with utils.make_pool(processes=min(cpu, len(tasks))) as pool:
+            with make_pool(processes=min(cpu, len(tasks))) as pool:
                 results = pool.map(_format_shard_task, tasks)
         else:
             results = [_format_shard_task(t) for t in tasks]

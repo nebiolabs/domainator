@@ -4,22 +4,16 @@
 
 """
 import warnings
-warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ActionConfigFile
 from pathlib import Path
 import pandas as pd
-import seaborn as sns
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA, TruncatedSVD
-import umap
-from matplotlib import pyplot as plt
 import numpy as np
 from domainator.cli.common import add_input, add_output, check_outputs, parse_keyword_args, tool_parser
 from domainator.data_matrix import DataMatrix
 from domainator.cytoscape import write_cytoscape_xgmml
 import scipy as sp
-from domainator.color_genbank import read_color_table
-from domainator.utils import get_palette
+from domainator.colors import read_color_table
+from domainator.colors import get_palette
 
 
 XCOLNAME="projection_X"
@@ -66,17 +60,17 @@ def check_coords(n_components, data_matrix: DataMatrix):
 
 
 
-def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_by, png_out, coords_out, xgmml, scale, three_dee=False, algorithm_parameters=None, color_table=None, color_table_out=None):
+def build_projection(data_matrix: DataMatrix, *, algorithm, metadata, color_by, png_out, coords_out, xgmml_out, scale, three_d=False, algorithm_parameters=None, color_table=None, color_table_out=None):
     """
 
         algorithm:
-        metadata_files:
+        metadata:
         color_by:
         png_out:
         coords_out:
-        xgmml:
+        xgmml_out:
         scale:
-        three_dee:
+        three_d:
         algorithm_parameters: extra parameters to pass to the dimensionality reduction algorithm.
         color_table: dictionary mapping values in the color_by column to colors.
         color_table_out: tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.
@@ -87,13 +81,15 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
     is_sparse = data_matrix.nnz < DENSE_PROJECTION_MIN_FILL * data_matrix.size
     n_components=2
     columns=[XCOLNAME,YCOLNAME]
-    if three_dee:
+    if three_d:
         n_components=3
         columns += [ZCOLNAME]
     
     if algorithm_parameters is None:
         algorithm_parameters = dict()
     if algorithm == "tsne":
+        from sklearn.decomposition import TruncatedSVD
+        from sklearn.manifold import TSNE
         if 'learning_rate' not in algorithm_parameters:
             algorithm_parameters["learning_rate"] = 'auto'
         if 'init' not in algorithm_parameters:
@@ -110,12 +106,14 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
                 algorithm_parameters["perplexity"] = 30 # TODO: what should the default be?
         embedded = TSNE(n_components=n_components, **algorithm_parameters).fit_transform(data)
     elif algorithm == "pca":
+        from sklearn.decomposition import PCA, TruncatedSVD
         if is_sparse:
             #TODO: maybe warn that we're doing TruncatedSVD instead of PCA
             embedded = TruncatedSVD(n_components=n_components).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
         else:
             embedded = PCA(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.toarray())
     elif algorithm == "umap":
+        import umap
         #doesn't matter if it's sparse or not umap will take it!
         if is_sparse:
             embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
@@ -133,19 +131,21 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
     if coords_out is not None:
         projection.to_csv(coords_out,sep="\t")
 
-    if metadata_files is not None:
-        for file in metadata_files:
-            metadata = pd.read_csv(file, sep="\t", index_col=0)
-            projection = projection.merge(metadata,how="left", left_index=True, right_index=True)
+    if metadata is not None:
+        for file in metadata:
+            metadata_table = pd.read_csv(file, sep="\t", index_col=0)
+            projection = projection.merge(metadata_table,how="left", left_index=True, right_index=True)
 
     if color_by is not None:
         if color_table is None:
-            color_table = get_palette(metadata[color_by].unique())
+            color_table = get_palette(projection[color_by].unique())
 
     if png_out is not None:
-        if three_dee:
+        if three_d:
             warnings.warn("png output for 3d graphs not supported yet.")
         else:
+            import seaborn as sns
+            from matplotlib import pyplot as plt
             # change matplotlib backend
             old_backend = plt.get_backend()
             plt.switch_backend('agg') # this is necessary to run on a headless server
@@ -155,8 +155,8 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
             plt.clf()
             plt.switch_backend(old_backend)
 
-    if xgmml is not None:
-        write_cytoscape_xgmml(xgmml, projection, name=Path(xgmml).stem, x_col=XCOLNAME, y_col=YCOLNAME, z_col=ZCOLNAME, color_by=color_by, color_table=color_table)
+    if xgmml_out is not None:
+        write_cytoscape_xgmml(xgmml_out, projection, name=Path(xgmml_out).stem, x_col=XCOLNAME, y_col=YCOLNAME, z_col=ZCOLNAME, color_by=color_by, color_table=color_table)
     
     if color_table_out is not None:
         with open(color_table_out, "w") as out:
@@ -189,9 +189,6 @@ def build_parser():
     add_output(parser, "xgmml", "Write the projection to this Cytoscape xgmml file.", primary=True, stdout=False)
     add_output(parser, "png", "Write a picture of the projection to this png file.", stdout=False)
     add_output(parser, "coords", "Write the projected coordinates to this tab-separated file.", stdout=False)
-
-    # parser.add_argument('--gradient', type=str, required=False, default=None,
-    #                     help="Color nodes based on a gradient instead of discrete value mapping.")
 
     for algorithm in ("pca", "tsne", "umap"):
         parser.add_argument(f'--{algorithm}_args', type=str, required=False, default=None,
@@ -229,7 +226,7 @@ def main(argv):
 
     # Run
     # def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_by, png_out, coords_out, xgmml, scale, three_dee=False, algorithm_parameters=None)
-    build_projection(data_matrix=DataMatrix.from_file(input_file), algorithm=params.algorithm, metadata_files=params.metadata, color_by=params.color_by, 
-                     png_out=params.png_out, coords_out=params.coords_out, xgmml=params.xgmml_out, scale=params.scale, three_dee=params.three_d, 
+    build_projection(data_matrix=DataMatrix.from_file(input_file), algorithm=params.algorithm, metadata=params.metadata, color_by=params.color_by, 
+                     png_out=params.png_out, coords_out=params.coords_out, xgmml_out=params.xgmml_out, scale=params.scale, three_d=params.three_d, 
                      algorithm_parameters=algorithm_parameters,
                      color_table=color_table, color_table_out=params.color_table_out)

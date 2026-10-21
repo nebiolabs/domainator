@@ -18,7 +18,8 @@ import heapq
 from domainator.cli.common import add_input, add_output, check_outputs, resolve_cpu, tool_parser
 from domainator.outputs import output_file
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit, check_alphabets_match
-from domainator.utils import make_pool, pyhmmer_decode, common_hmm_alphabet, iter_hmms_with_alphabet
+from domainator._mp import make_pool
+from domainator.hmmio import common_hmm_alphabet, iter_hmms_with_alphabet
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes
 
 
@@ -46,7 +47,7 @@ class _hmmer_compare_worker():
                     else:
                         alignment = None
                     
-                    result = HmmerHit(score, pyhmmer_decode(input_profile.name), pyhmmer_decode(target_profile.name), alignment)
+                    result = HmmerHit(score, input_profile.name, target_profile.name, alignment)
                     if (self.k is None) or (len(out_heap) < self.k):
                         heapq.heappush(out_heap, result)
                     else:
@@ -56,11 +57,11 @@ class _hmmer_compare_worker():
 
 
 
-def hmmer_compare(query_files:Iterable[str], reference_files:Iterable[str], out_handle:TextIO, score_cutoff:float, alignments:bool, max_hits_per_query:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
-    references = read_hmms(hmm_files=reference_files) # list of lists of pyhmmer hmm objects
-    reference_alphabet = common_hmm_alphabet(reference_files, role="reference")
+def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], out_handle:TextIO, min_score:float, alignments:bool, max_hits_per_query:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
+    reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
+    reference_alphabet = common_hmm_alphabet(references, role="reference")
 
-    worker = _hmmer_compare_worker(references, alignments, max_hits_per_query, score_cutoff)
+    worker = _hmmer_compare_worker(reference_hmms, alignments, max_hits_per_query, min_score)
 
     sep="\t"
     header = sep.join(("query", "reference", "score")) + "\n"
@@ -133,5 +134,5 @@ def main(argv):
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     output_description = f"hmmer_compare TSV output '{params.tsv_out}'"
     with output_file(params.tsv_out) as out:
-        hmmer_compare(params.input, params.reference, out, params.min_score, params.alignments, params.max_hits_per_query,
-                      resolve_cpu(params.cpu), max_output_bytes=max_output_bytes, output_description=output_description)
+        hmmer_compare(params.input, references=params.reference, out_handle=out, min_score=params.min_score, alignments=params.alignments, max_hits_per_query=params.max_hits_per_query,
+                      cpu=resolve_cpu(params.cpu), max_output_bytes=max_output_bytes, output_description=output_description)

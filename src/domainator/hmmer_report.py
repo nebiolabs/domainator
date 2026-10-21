@@ -8,9 +8,11 @@ import contextlib
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import output_file
-from domainator.utils import pyhmmer_decode, alphabet_name, iter_hmms_with_alphabet, db_name_from_path
+from domainator.hmmio import alphabet_name, iter_hmms_with_alphabet
+from domainator.seqio import db_name_from_path
 from typing import Tuple, Union, Iterable
-from domainator.enum_report import DynamicArg, COLS_ARG_NAME, EnumTSVWriter, EnumHTMLWriter, EnumJSONWriter
+from domainator.enum_report import DynamicArg, COLS_ARG_NAME
+from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
 import pyhmmer
 import os
 from io import IOBase
@@ -54,7 +56,7 @@ def append_factory(spec):
     }
 
 
-def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, json_out_handle=None):
+def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], *, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, json_out_handle=None):
     """
       input:
         records: a list of tuples of tuple of (database_name, iterator of pyhmmer.plan7.HMM)
@@ -68,9 +70,9 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
     """
     
     STATIC_ANALYSES = {"source": {"columns": ["source"], "column_types": ["str"], "function": lambda source,rec: source},
-                "name": {"columns": ["name"], "column_types": ["str"], "function": lambda source,rec: "" if rec.name is None else pyhmmer_decode(rec.name)},
-                "acc": {"columns": ["acc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.accession is None else pyhmmer_decode(rec.accession)},
-                "desc": {"columns": ["desc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.description is None else pyhmmer_decode(rec.description)},
+                "name": {"columns": ["name"], "column_types": ["str"], "function": lambda source,rec: "" if rec.name is None else rec.name},
+                "acc": {"columns": ["acc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.accession is None else rec.accession},
+                "desc": {"columns": ["desc"], "column_types": ["str"], "function": lambda source,rec: "" if rec.description is None else rec.description},
                 "length": {"columns": ["length"], "column_types": ["int"], "function": lambda source,rec: rec.M},
                 "consensus": {"columns": ["consensus"], "column_types": ["str"], "function": lambda source,rec: "" if rec.consensus is None else rec.consensus},
                 "alphabet": {"columns": ["alphabet"], "column_types": ["str"], "function": lambda source,rec: alphabet_name(rec.alphabet)},
@@ -101,11 +103,11 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
 
     writers = list()
     if tsv_out_handle is not None:
-        writers.append(EnumTSVWriter(headers, column_types, tsv_out_handle))
+        writers.append(TSVTableWriter(headers, column_types, tsv_out_handle))
     if html_out_handle is not None:
-        writers.append(EnumHTMLWriter(headers, column_types, html_out_handle, html_max_height))
+        writers.append(HTMLTableWriter(headers, column_types, html_out_handle, html_max_height))
     if json_out_handle is not None:
-        writers.append(EnumJSONWriter(headers, column_types, json_out_handle))
+        writers.append(JSONTableWriter(headers, column_types, json_out_handle))
 
     for writer in writers:
         writer.write_header()
@@ -113,7 +115,7 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
 
     for source, records in records:
         for rec in records:
-            name = "" if rec.name is None else pyhmmer_decode(rec.name)
+            name = "" if rec.name is None else rec.name
             out_line = [name]
             for analysis in analyses_to_run:
                 analysis_result = analysis["function"](source, rec)
@@ -181,5 +183,5 @@ def main(argv):
     with contextlib.ExitStack() as outputs:
         def open_output(path):
             return None if path is None else outputs.enter_context(output_file(path))
-        hmmer_report(read_hmms_to_iterators(params.input), analyses, open_output(params.tsv_out), open_output(params.html_out),
-                     params.column_names, params.html_max_height, json_out_handle=open_output(params.json_out))
+        hmmer_report(read_hmms_to_iterators(params.input), analyses=analyses, tsv_out_handle=open_output(params.tsv_out), html_out_handle=open_output(params.html_out),
+                     column_names=params.column_names, html_max_height=params.html_max_height, json_out_handle=open_output(params.json_out))

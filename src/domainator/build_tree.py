@@ -6,16 +6,14 @@
     The two directions of each pair are reconciled by taking the smaller distance.
 """
 import warnings
-warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
-from domainator.build_projection import write_cytoscape_xgmml
+from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix, is_distance_data_type
 from domainator.transform_matrix import score_dist
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import warnings
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 
@@ -140,15 +138,15 @@ def condensed_distances(data_matrix: DataMatrix, distance: str = "auto") -> np.n
     return squareform(dense, checks=False)
 
 
-def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, quiet=False, distance="auto"):
+def build_tree(data_matrix, *, algorithm, metadata, xgmml_out, newick_out, quiet=False, distance="auto"):
     """ 
         Build a tree from a distance or similarity matrix.
 
         data_matrix: a DataMatrix object
         algorithm: the algorithm to use to build the tree. Currently only supports "upgma"
-        metadata_files: metadata files to add to the XGMML file
-        xgmml_file: path to write the XGMML file to
-        newick_file: path to write the newick file to
+        metadata: metadata files to add to the XGMML file
+        xgmml_out: path to write the XGMML file to
+        newick_out: path to write the newick file to
         distance: how to get distances from the matrix values, see condensed_distances
     """
 
@@ -157,25 +155,25 @@ def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, 
     
     tree = hierarchy.to_tree(linkage_matrix, False)
 
-    if newick_file is not None:
+    if newick_out is not None:
         names = list(map(lambda x: clean_name_for_newick(x, quiet), data_matrix.rows))
 
         newick_string = get_newick(tree, tree.dist, names)
 
-        with open(newick_file, "w") as outfile:
+        with open(newick_out, "w") as outfile:
             print(newick_string, file=outfile)
 
-    if xgmml_file is not None:
+    if xgmml_out is not None:
         edge_data, internal_nodes = get_tree_edges(tree, tree.dist, data_matrix.rows)
         edge_data = pd.DataFrame.from_dict(edge_data, orient="index", columns=[SCORE_COLUMN])
 
         node_data = pd.DataFrame()
         node_data.index = data_matrix.rows + internal_nodes
-        if metadata_files is not None:
-            for file in metadata_files:
-                metadata = pd.read_csv(file, sep="\t", index_col=0)
-                node_data = node_data.merge(metadata,how="left", left_index=True, right_index=True)
-        write_cytoscape_xgmml(xgmml_file, node_data, edge_data, name=Path(xgmml_file).stem)
+        if metadata is not None:
+            for file in metadata:
+                metadata_table = pd.read_csv(file, sep="\t", index_col=0)
+                node_data = node_data.merge(metadata_table,how="left", left_index=True, right_index=True)
+        write_cytoscape_xgmml(xgmml_out, node_data, edge_data, name=Path(xgmml_out).stem)
 
 
 def build_parser():
@@ -203,4 +201,4 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
     check_outputs(parser, params, ["newick_out", "xgmml_out"])
-    build_tree(DataMatrix.from_file(params.input), params.algorithm, params.metadata, params.xgmml_out, params.newick_out, params.quiet, params.distance)
+    build_tree(DataMatrix.from_file(params.input), algorithm=params.algorithm, metadata=params.metadata, xgmml_out=params.xgmml_out, newick_out=params.newick_out, quiet=params.quiet, distance=params.distance)

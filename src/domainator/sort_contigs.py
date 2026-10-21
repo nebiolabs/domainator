@@ -14,12 +14,14 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.seqio import parse_seqfiles
+from domainator.model import feature_score
 
 
 def _get_feature_score(feature, record_id: str) -> float:
     try:
-        return float(feature.qualifiers["score"][0])
+        return feature_score(feature)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise ValueError(
             f"Record {record_id} has a {feature.type} feature without a valid score qualifier."
@@ -74,7 +76,7 @@ def set_record_best_score(record, domains: Optional[Set[str]] = None, databases:
     record.set_hit_best_score(best_score)
 
 
-def sort_contigs(records: Iterable, max_hits: Optional[int] = None, domains: Optional[Set[str]] = None, databases: Optional[Set[str]] = None):
+def sort_contigs(records: Iterable, *, max_hits: Optional[int] = None, domains: Optional[Set[str]] = None, databases: Optional[Set[str]] = None):
     out_heap = []
 
     for record in records:

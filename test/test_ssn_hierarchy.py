@@ -8,7 +8,8 @@ the charts rely on but cannot check.
 import numpy as np
 import pytest
 
-from domainator.data_matrix import DataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree
 from domainator.ssn_hierarchy import (
     COMPONENT_LARGEST_COL,
     MERGE_EVENT_DENSITY_BINS,

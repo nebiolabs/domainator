@@ -34,7 +34,9 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.Bio.SeqFeature import CompoundLocation, FeatureLocation
-from domainator.utils import parse_seqfiles, region_id, slice_record_from_location
+from domainator.seqio import parse_seqfiles
+from domainator.model import region_id
+from domainator.locations import slice_record_from_location
 
 
 ALLOWED_COLUMNS = {"contig", "start", "end", "strand", "file"}
@@ -188,7 +190,7 @@ def extract_coordinate_region(contig, selection):
     return record
 
 
-def select_by_coord(records, coordinate_selections):
+def select_by_coord(records, *, coordinate_selections):
     selections_by_contig = defaultdict(list)
     for selection in coordinate_selections:
         selections_by_contig[selection.contig].append(selection)
@@ -224,6 +226,6 @@ def main(argv):
 
     extracted_regions = select_by_coord(
         parse_seqfiles_with_basename(genbanks, contigs=target_contigs),
-        coordinate_selections,
+        coordinate_selections=coordinate_selections,
     )
     write_seq_outputs(extracted_regions, genbank=params.genbank_out, fasta=params.fasta_out)

@@ -1,4 +1,14 @@
-from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.colors import DISTINCT_COLORS, OTHER_COLOR, get_palette, sort_palette_values
+from domainator.expr import BooleanEvaluator
+from domainator.hmmio import alphabet_name, alphabet_score_scale, common_hmm_alphabet, get_alphabet, is_nucleic_acid_alphabet, iter_hmm_names, iter_hmms, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file, peek_hmm_alphabet, read_hmms
+from domainator.locations import location_covers, regions_overlap, slice_record_from_location
+from domainator.model import DomainatorCDS, get_domain_cds_annotation_strings
+from domainator.offsets import get_offsets
+from domainator.partial import cds_fragment_status, contig_has_fragment, description_is_fragment, filter_by_partial, fragment_status_allowed, get_fragment_status, normalize_partial_codes, on_contig_translation
+from domainator.seqio import db_name_from_path, detect_compression, parse_seqfiles, write_genbank
+from domainator.taxonomy.records import location_taxid
 import tempfile
 from domainator.Bio import SeqIO, SeqRecord, Seq
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
@@ -13,16 +23,16 @@ from pyhmmer import easel
 
 
 def test_location_covers():
-    assert utils.location_covers([(0, 100)], [(10, 20)])
-    assert utils.location_covers([(0, 100)], [(0, 100)])
-    assert not utils.location_covers([(0, 50)], [(10, 60)])
+    assert location_covers([(0, 100)], [(10, 20)])
+    assert location_covers([(0, 100)], [(0, 100)])
+    assert not location_covers([(0, 50)], [(10, 60)])
     # gappy outer (order with a gap 50..60): a region in a part is covered, one spanning the gap isn't
-    assert utils.location_covers([(0, 50), (60, 100)], [(10, 20)])
-    assert not utils.location_covers([(0, 50), (60, 100)], [(40, 70)])
+    assert location_covers([(0, 50), (60, 100)], [(10, 20)])
+    assert not location_covers([(0, 50), (60, 100)], [(40, 70)])
     # origin-spanning region expressed as two parts, both inside outer
-    assert utils.location_covers([(0, 100)], [(90, 100), (0, 10)])
+    assert location_covers([(0, 100)], [(90, 100), (0, 10)])
     # adjacent outer parts merge
-    assert utils.location_covers([(0, 50), (50, 100)], [(40, 60)])
+    assert location_covers([(0, 50), (50, 100)], [(40, 60)])
 
 
 def _source_feature(taxid, parts, operator=None):
@@ -39,18 +49,18 @@ def test_location_taxid_longest_covering():
     host = _source_feature(100, [(0, 400), (600, 1000)], operator="order")
     phage = _source_feature(200, [(400, 600)])
     sources = [host, phage]
-    assert utils.location_taxid([(100, 200)], sources) == 100   # in a host part
-    assert utils.location_taxid([(450, 550)], sources) == 200   # in the prophage gap
-    assert utils.location_taxid([(0, 1000)], sources) is None   # no single source covers the whole contig
+    assert location_taxid([(100, 200)], sources) == 100   # in a host part
+    assert location_taxid([(450, 550)], sources) == 200   # in the prophage gap
+    assert location_taxid([(0, 1000)], sources) is None   # no single source covers the whole contig
     # Nested: a full-genome host source covers everything, so it wins as the longest covering.
     host_full = _source_feature(100, [(0, 1000)])
-    assert utils.location_taxid([(450, 550)], [host_full, phage]) == 100
-    assert utils.location_taxid([(0, 1000)], [host_full, phage]) == 100  # whole-contig source exists
+    assert location_taxid([(450, 550)], [host_full, phage]) == 100
+    assert location_taxid([(0, 1000)], [host_full, phage]) == 100  # whole-contig source exists
     # Covered by a source with no taxon -> unidentified (32644), not None.
     notax = SeqFeature(location=FeatureLocation(0, 1000), type="source", qualifiers={})
-    assert utils.location_taxid([(10, 20)], [notax]) == 32644
+    assert location_taxid([(10, 20)], [notax]) == 32644
     # Uncovered region -> None.
-    assert utils.location_taxid([(5000, 5001)], sources) is None
+    assert location_taxid([(5000, 5001)], sources) is None
 
 
 def test_circular_wrapped_contig_hit_taxid():
@@ -66,14 +76,7 @@ def test_circular_wrapped_contig_hit_taxid():
     loc = build_contig_hit_location(contig, hit)
     region = [(int(p.start), int(p.end)) for p in loc.parts]
     assert region == [(90, 100), (0, 10)]
-    assert utils.location_taxid(region, [src]) == 42
-
-def test_split_string_list():
-    data=["abcde   asdfasdf   asdf", " abcdef::GACAF", ""]
-    out = utils.split_string_list(data)
-    assert out[0] == ["abcde   asdfasdf   asdf"]
-    assert out[1] == ["abcdef", "GACAF"]
-    assert out[2] == [""]
+    assert location_taxid(region, [src]) == 42
 
 
 def test_write_genbank_1(shared_datadir):
@@ -82,7 +85,7 @@ def test_write_genbank_1(shared_datadir):
     description="BIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAME",
     )
     buf = io.StringIO()
-    utils.write_genbank([rec], buf)
+    write_genbank([rec], buf)
 
 def test_write_genbank_space_name(shared_datadir):
     rec = SeqRecord.SeqRecord(Seq.Seq("GACT"),id="BIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAME with_space",
@@ -90,11 +93,11 @@ def test_write_genbank_space_name(shared_datadir):
     description="BIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAMEBIGNAME with_space",
     )
     buf = io.StringIO()
-    utils.write_genbank([rec], buf)
+    write_genbank([rec], buf)
 
 
 def test_list_and_file_to_dict_keys(shared_datadir):
-    keys = utils.list_and_file_to_dict_keys(None, str(shared_datadir / "CcdB.hmm"))
+    keys = list_and_file_to_dict_keys(None, str(shared_datadir / "CcdB.hmm"))
     print(keys)
     assert 'CcdB' in keys
 
@@ -145,7 +148,7 @@ def test_domainator_cds_creates_one_pseudo_cds_per_nucleic_acid_annotation():
         ),
     ]
 
-    cdss = utils.DomainatorCDS.list_from_contig(record, include_nucleic_acid_annotations=True)
+    cdss = DomainatorCDS.list_from_contig(record, include_nucleic_acid_annotations=True)
 
     assert len(cdss) == 3
     assert all(cds.is_nucleic_acid for cds in cdss)
@@ -167,7 +170,7 @@ def test_domainator_cds_creates_one_pseudo_cds_per_nucleic_acid_annotation():
 ])
 def test_regions_overlap(region1, region2, min_overlap_fraction, expected):
 
-    assert utils.regions_overlap(region1, region2, min_overlap_fraction) == expected
+    assert regions_overlap(region1, region2, min_overlap_fraction) == expected
 
 @pytest.mark.parametrize("files,offset,read_count,expected_record_ct,rec0_name",
 [(["pDONR201.gb"],0,1,1,"pDONR201"),
@@ -178,7 +181,7 @@ def test_regions_overlap(region1, region2, min_overlap_fraction, expected):
 ])
 def test_parse_seqfiles(files,offset,read_count,expected_record_ct,rec0_name,shared_datadir):
     files = [str(shared_datadir / x) for x in files]
-    recs = list( utils.parse_seqfiles(files,None,None,offset,read_count) )
+    recs = list( parse_seqfiles(files,None,None,offset,read_count) )
     assert len(recs) == expected_record_ct
     if len(recs) > 0:
         assert recs[0].id == rec0_name
@@ -191,14 +194,14 @@ def test_parse_seqfiles(files,offset,read_count,expected_record_ct,rec0_name,sha
 ("simple_genpept.gb",[0,296,987,1620,3904],[1,1,1,1,1]),
 ])
 def test_get_offsets(file,offsets,num_proteins,shared_datadir):
-    new_offsets, new_num_proteins = utils.get_offsets(str(shared_datadir / file))
+    new_offsets, new_num_proteins = get_offsets(str(shared_datadir / file))
     assert len(new_offsets) == len(new_num_proteins)
     assert new_offsets == array('Q', offsets)
     assert new_num_proteins == array('Q',num_proteins)
 
 
 def test_get_palette_1():
-    palette = utils.get_palette(["A","B","C"])
+    palette = get_palette(["A","B","C"])
     assert set(palette.keys()) == {"A","B","C"}
     assert len(palette) == 3
     assert len(set(palette.values())) == 3
@@ -207,41 +210,41 @@ def test_get_palette_1():
 
 def test_get_palette_cycles_over_full_palette():
     """More groups than colors cycles, but adjacent numbers never collide."""
-    palette = utils.get_palette(list(range(1, 201)))
-    assert len(set(palette.values())) == len(utils.DISTINCT_COLORS)
+    palette = get_palette(list(range(1, 201)))
+    assert len(set(palette.values())) == len(DISTINCT_COLORS)
     assert all(palette[i] != palette[i + 1] for i in range(1, 200))
     # the only collisions are a full palette apart
-    assert palette[1] == palette[1 + len(utils.DISTINCT_COLORS)]
+    assert palette[1] == palette[1 + len(DISTINCT_COLORS)]
 
 
 def test_get_palette_assignment_is_sorted():
     """Colors follow the values, not the order they happen to appear in."""
-    assert utils.get_palette([3, 1, 2]) == utils.get_palette([1, 2, 3])
-    assert utils.get_palette([3, 1, 2])[1] == utils.DISTINCT_COLORS[0]
+    assert get_palette([3, 1, 2]) == get_palette([1, 2, 3])
+    assert get_palette([3, 1, 2])[1] == DISTINCT_COLORS[0]
     # numeric-looking strings sort numerically, not lexically
-    assert utils.get_palette(["10", "2", "1"])["2"] == utils.DISTINCT_COLORS[1]
+    assert get_palette(["10", "2", "1"])["2"] == DISTINCT_COLORS[1]
 
 
 def test_get_palette_max_groups():
     values = pd.Series(["a"] * 10 + ["b"] * 5 + ["c"] * 2 + ["d"])
-    palette = utils.get_palette(values, max_groups=2)
+    palette = get_palette(values, max_groups=2)
     assert len(palette) == 4
     assert len({palette["a"], palette["b"]}) == 2
-    assert palette["c"] == palette["d"] == utils.OTHER_COLOR
+    assert palette["c"] == palette["d"] == OTHER_COLOR
     # max_groups at or above the group count changes nothing
-    assert utils.get_palette(values, max_groups=4) == utils.get_palette(values)
+    assert get_palette(values, max_groups=4) == get_palette(values)
 
 
 def test_get_palette_missing_values():
     """NaN gets the neutral color under key None, without consuming a palette slot."""
-    palette = utils.get_palette(pd.Series(["A", "B", None]))
-    assert palette == {"A": utils.DISTINCT_COLORS[0], "B": utils.DISTINCT_COLORS[1],
-                       None: utils.OTHER_COLOR}
+    palette = get_palette(pd.Series(["A", "B", None]))
+    assert palette == {"A": DISTINCT_COLORS[0], "B": DISTINCT_COLORS[1],
+                       None: OTHER_COLOR}
 
 
 def test_sort_palette_values():
     """Mixed-type columns sort without raising: numbers, then strings, then missing."""
-    assert utils.sort_palette_values(["10", "2", "zed", "1", None, "apple"]) == \
+    assert sort_palette_values(["10", "2", "zed", "1", None, "apple"]) == \
         ["1", "2", "10", "apple", "zed", None]
 
 
@@ -250,7 +253,7 @@ class TestBooleanEvaluatorSanitizeIdentifier:
     
     def test_special_characters_replaced(self):
         """Test that BooleanEvaluator special characters are replaced."""
-        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        sanitize = BooleanEvaluator.sanitize_identifier
         
         # Parentheses (grouping)
         assert "(" not in sanitize("x(2)")
@@ -266,7 +269,7 @@ class TestBooleanEvaluatorSanitizeIdentifier:
     
     def test_prosite_patterns(self):
         """Test sanitization of PROSITE-style patterns."""
-        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        sanitize = BooleanEvaluator.sanitize_identifier
         
         # Dashes should be replaced
         assert "-" not in sanitize("A-G-C")
@@ -281,7 +284,7 @@ class TestBooleanEvaluatorSanitizeIdentifier:
     
     def test_complex_pattern(self):
         """Test sanitization of complex patterns."""
-        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        sanitize = BooleanEvaluator.sanitize_identifier
         
         pattern = "[DE](2)HS{P}"
         result = sanitize(pattern)
@@ -295,7 +298,7 @@ class TestBooleanEvaluatorSanitizeIdentifier:
     
     def test_round_trip_uniqueness(self):
         """Test that different patterns produce different sanitized names."""
-        sanitize = utils.BooleanEvaluator.sanitize_identifier
+        sanitize = BooleanEvaluator.sanitize_identifier
         
         patterns = ["A(2)", "A(3)", "[DE]", "[EF]", "A-B", "A-C"]
         sanitized = [sanitize(p) for p in patterns]
@@ -310,34 +313,34 @@ def test_alphabet_score_scale_amino_is_exactly_one():
     # Every committed protein fixture (e.g. pDONR_201_hmm_scores.tsv, which
     # test_hmmer_compare_1 byte-compares) depends on the amino scale being an
     # exact no-op, so assert exactly rather than approximately.
-    assert utils.alphabet_score_scale(easel.Alphabet.amino()) == 1.0
+    assert alphabet_score_scale(easel.Alphabet.amino()) == 1.0
 
 
 def test_alphabet_score_scale_nucleotide():
     expected = math.log(4) / math.log(20)
-    assert utils.alphabet_score_scale(easel.Alphabet.dna()) == pytest.approx(expected)
-    assert utils.alphabet_score_scale(easel.Alphabet.rna()) == pytest.approx(expected)
+    assert alphabet_score_scale(easel.Alphabet.dna()) == pytest.approx(expected)
+    assert alphabet_score_scale(easel.Alphabet.rna()) == pytest.approx(expected)
 
 
 def test_alphabet_name():
-    assert utils.alphabet_name(easel.Alphabet.amino()) == "amino"
-    assert utils.alphabet_name(easel.Alphabet.dna()) == "DNA"
-    assert utils.alphabet_name(easel.Alphabet.rna()) == "RNA"
+    assert alphabet_name(easel.Alphabet.amino()) == "amino"
+    assert alphabet_name(easel.Alphabet.dna()) == "DNA"
+    assert alphabet_name(easel.Alphabet.rna()) == "RNA"
 
 
 def test_is_nucleic_acid_alphabet():
-    assert not utils.is_nucleic_acid_alphabet(easel.Alphabet.amino())
-    assert utils.is_nucleic_acid_alphabet(easel.Alphabet.dna())
-    assert utils.is_nucleic_acid_alphabet(easel.Alphabet.rna())
+    assert not is_nucleic_acid_alphabet(easel.Alphabet.amino())
+    assert is_nucleic_acid_alphabet(easel.Alphabet.dna())
+    assert is_nucleic_acid_alphabet(easel.Alphabet.rna())
 
 
 def test_get_alphabet():
-    assert utils.get_alphabet(None) is None
-    assert utils.get_alphabet("DNA") == easel.Alphabet.dna()
-    assert utils.get_alphabet("rna") == easel.Alphabet.rna()
-    assert utils.get_alphabet("amino") == easel.Alphabet.amino()
+    assert get_alphabet(None) is None
+    assert get_alphabet("DNA") == easel.Alphabet.dna()
+    assert get_alphabet("rna") == easel.Alphabet.rna()
+    assert get_alphabet("amino") == easel.Alphabet.amino()
     with pytest.raises(ValueError, match="Unknown alphabet"):
-        utils.get_alphabet("protein")
+        get_alphabet("protein")
 
 
 def test_pyhmmer_alphabet_is_unhashable():
@@ -348,25 +351,25 @@ def test_pyhmmer_alphabet_is_unhashable():
 
 
 def test_peek_hmm_alphabet(shared_datadir):
-    assert utils.peek_hmm_alphabet(shared_datadir / "CcdB.hmm").is_amino()
-    assert utils.peek_hmm_alphabet(shared_datadir / "dna_profiles.hmm").is_dna()
-    assert utils.peek_hmm_alphabet(shared_datadir / "rna_profiles.hmm").is_rna()
+    assert peek_hmm_alphabet(shared_datadir / "CcdB.hmm").is_amino()
+    assert peek_hmm_alphabet(shared_datadir / "dna_profiles.hmm").is_dna()
+    assert peek_hmm_alphabet(shared_datadir / "rna_profiles.hmm").is_rna()
 
 
 def test_peek_hmm_alphabet_rejects_streams(shared_datadir):
     with open(shared_datadir / "CcdB.hmm", "rb") as handle:
         with pytest.raises(TypeError, match="file paths"):
-            utils.peek_hmm_alphabet(handle)
+            peek_hmm_alphabet(handle)
 
 
 def test_common_hmm_alphabet(shared_datadir):
-    alphabet = utils.common_hmm_alphabet([shared_datadir / "CcdB.hmm", shared_datadir / "pdonr_hmms.hmm"])
+    alphabet = common_hmm_alphabet([shared_datadir / "CcdB.hmm", shared_datadir / "pdonr_hmms.hmm"])
     assert alphabet.is_amino()
 
 
 def test_common_hmm_alphabet_raises_on_disagreement(shared_datadir):
     with pytest.raises(ValueError, match="Mismatched alphabets among the reference hmm files"):
-        utils.common_hmm_alphabet(
+        common_hmm_alphabet(
             [shared_datadir / "CcdB.hmm", shared_datadir / "dna_profiles.hmm"],
             role="reference",
         )
@@ -375,9 +378,9 @@ def test_common_hmm_alphabet_raises_on_disagreement(shared_datadir):
 def test_iter_hmms_with_alphabet_yields_every_profile(shared_datadir):
     # The first profile is read eagerly to learn the alphabet, then chained back on,
     # so guard against it being dropped or duplicated.
-    alphabet, profiles = utils.iter_hmms_with_alphabet(shared_datadir / "pdonr_hmms.hmm")
+    alphabet, profiles = iter_hmms_with_alphabet(shared_datadir / "pdonr_hmms.hmm")
     assert alphabet.is_amino()
-    names = [utils.pyhmmer_decode(hmm.name) for hmm in profiles]
+    names = [hmm.name for hmm in profiles]
     assert len(names) == len(set(names)) == 7
 
 
@@ -386,7 +389,7 @@ def test_iter_hmms_with_alphabet_empty_file(tmp_path):
     empty = tmp_path / "empty.hmm"
     empty.write_bytes(b"")
     with pytest.raises(EOFError):
-        utils.iter_hmms_with_alphabet(empty)
+        iter_hmms_with_alphabet(empty)
 
 
 def test_iter_hmms_reports_mixed_alphabet_file(shared_datadir, tmp_path):
@@ -398,9 +401,9 @@ def test_iter_hmms_reports_mixed_alphabet_file(shared_datadir, tmp_path):
         + (shared_datadir / "CcdB.hmm").read_bytes()
     )
     with pytest.raises(ValueError, match="more than one alphabet"):
-        list(utils.iter_hmms(mixed))
+        list(iter_hmms(mixed))
 
-    _alphabet, profiles = utils.iter_hmms_with_alphabet(mixed)
+    _alphabet, profiles = iter_hmms_with_alphabet(mixed)
     with pytest.raises(ValueError, match="mixed.hmm"):
         list(profiles)
 
@@ -411,43 +414,43 @@ def test_iter_hmms_reports_mixed_alphabet_file(shared_datadir, tmp_path):
 
 def _names(hmm_file):
     with hmm_file as handle:
-        return [utils.pyhmmer_decode(h.name) for h in handle]
+        return [h.name for h in handle]
 
 
 def test_open_hmm_file_reads_gzip_and_bgzf(shared_datadir, tmp_path):
     src = shared_datadir / "FeSOD_pfam.hmm"
-    plain = _names(utils.open_hmm_file(src))
+    plain = _names(open_hmm_file(src))
     assert plain  # sanity
-    assert _names(utils.open_hmm_file(helpers.gzip_file(src, tmp_path / "r.hmm.gz"))) == plain
+    assert _names(open_hmm_file(helpers.gzip_file(src, tmp_path / "r.hmm.gz"))) == plain
     # BGZF used to raise "format not recognized by HMMER": easel rejects the
     # FEXTRA header, so it has to be read through gzip.open rather than by path.
-    assert _names(utils.open_hmm_file(helpers.bgzip_file(src, tmp_path / "r.hmm.bgz"))) == plain
+    assert _names(open_hmm_file(helpers.bgzip_file(src, tmp_path / "r.hmm.bgz"))) == plain
 
 
 def test_open_hmm_file_detects_compression_by_content_not_extension(shared_datadir, tmp_path):
     # easel dispatches on the extension and would fail on both of these.
     src = shared_datadir / "FeSOD_pfam.hmm"
-    plain = _names(utils.open_hmm_file(src))
+    plain = _names(open_hmm_file(src))
     misnamed_gz = helpers.gzip_file(src, tmp_path / "compressed.hmm")   # gzip content, no .gz
-    assert _names(utils.open_hmm_file(misnamed_gz)) == plain
+    assert _names(open_hmm_file(misnamed_gz)) == plain
     uncompressed_but_named_gz = tmp_path / "plain.hmm.gz"
     uncompressed_but_named_gz.write_bytes(src.read_bytes())
-    assert _names(utils.open_hmm_file(uncompressed_but_named_gz)) == plain
+    assert _names(open_hmm_file(uncompressed_but_named_gz)) == plain
 
 
 def test_open_hmm_file_rewind_and_close_compressed(shared_datadir, tmp_path):
     gz = helpers.gzip_file(shared_datadir / "FeSOD_pfam.hmm", tmp_path / "r.hmm.gz")
-    handle = utils.open_hmm_file(gz)
-    first = [utils.pyhmmer_decode(h.name) for h in handle]
+    handle = open_hmm_file(gz)
+    first = [h.name for h in handle]
     handle.rewind()
-    assert [utils.pyhmmer_decode(h.name) for h in handle] == first
+    assert [h.name for h in handle] == first
     handle.close()
     handle.close()  # must be idempotent: pyhmmer 0.12 double-frees on a second close
 
 
 def test_open_hmm_file_closes_underlying_handle(shared_datadir, tmp_path):
     gz = helpers.gzip_file(shared_datadir / "FeSOD_pfam.hmm", tmp_path / "r.hmm.gz")
-    with utils.open_hmm_file(gz) as handle:
+    with open_hmm_file(gz) as handle:
         inner = handle._handle
         assert not inner.closed
     assert inner.closed
@@ -455,7 +458,7 @@ def test_open_hmm_file_closes_underlying_handle(shared_datadir, tmp_path):
 
 def test_open_hmm_file_passes_handles_through(shared_datadir):
     with open(shared_datadir / "FeSOD_pfam.hmm", "rb") as fh:
-        assert _names(utils.open_hmm_file(fh))
+        assert _names(open_hmm_file(fh))
 
 
 def test_pressed_sidecars_are_ignored(shared_datadir, tmp_path):
@@ -463,14 +466,14 @@ def test_pressed_sidecars_are_ignored(shared_datadir, tmp_path):
     import pyhmmer
     target = tmp_path / "ref.hmm"
     target.write_bytes((shared_datadir / "FeSOD_pfam.hmm").read_bytes())
-    pyhmmer.hmmer.hmmpress(list(utils.open_hmm_file(target)), str(target))
+    pyhmmer.hmmer.hmmpress(list(open_hmm_file(target)), str(target))
     assert (tmp_path / "ref.hmm.h3m").exists()
 
     # Replace the contents entirely; the sidecars now describe the old profiles.
     target.write_bytes((shared_datadir / "pdonr_hmms.hmm").read_bytes())
-    expected = [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(shared_datadir / "pdonr_hmms.hmm")]
-    assert _names(utils.open_hmm_file(target)) == expected
-    assert list(utils.iter_hmm_names(target)) == expected
+    expected = [h.name for h in iter_hmms(shared_datadir / "pdonr_hmms.hmm")]
+    assert _names(open_hmm_file(target)) == expected
+    assert list(iter_hmm_names(target)) == expected
 
 
 @pytest.mark.parametrize("path,expected", [
@@ -483,31 +486,31 @@ def test_pressed_sidecars_are_ignored(shared_datadir, tmp_path):
     ("plain", "plain"),
 ])
 def test_db_name_from_path(path, expected):
-    assert utils.db_name_from_path(path) == expected
+    assert db_name_from_path(path) == expected
 
 
 def test_read_hmms_db_name_ignores_compression_suffix(shared_datadir, tmp_path):
     gz = helpers.gzip_file(shared_datadir / "FeSOD_pfam.hmm", tmp_path / "FeSOD_pfam.hmm.gz")
-    assert set(utils.read_hmms([gz])) == {"FeSOD_pfam"}
+    assert set(read_hmms([gz])) == {"FeSOD_pfam"}
 
 
 def test_open_writable_hmm_file_rejects_bgzf(tmp_path):
     with pytest.raises(ValueError, match="BGZF"):
-        utils.open_writable_hmm_file(tmp_path / "out.hmm.bgz")
+        open_writable_hmm_file(tmp_path / "out.hmm.bgz")
 
 
 def test_open_writable_hmm_file_writes_plain_gzip(shared_datadir, tmp_path):
     out = tmp_path / "out.hmm.gz"
-    with utils.open_writable_hmm_file(out) as handle:
-        for hmm in utils.iter_hmms(shared_datadir / "FeSOD_pfam.hmm"):
+    with open_writable_hmm_file(out) as handle:
+        for hmm in iter_hmms(shared_datadir / "FeSOD_pfam.hmm"):
             hmm.write(handle)
     # Plain gzip, deliberately not BGZF: easel cannot open BGZF by path, so a
     # BGZF .hmm would be unreadable by hmmsearch and by Domainator itself.
-    assert utils.detect_compression(out) == "gzip"
+    assert detect_compression(out) == "gzip"
     import pyhmmer
     with pyhmmer.plan7.HMMFile(str(out)) as handle:  # the HMMER interop proof
-        assert [utils.pyhmmer_decode(h.name) for h in handle] == \
-            [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(shared_datadir / "FeSOD_pfam.hmm")]
+        assert [h.name for h in handle] == \
+            [h.name for h in iter_hmms(shared_datadir / "FeSOD_pfam.hmm")]
 
 
 @pytest.mark.parametrize("fixture", [
@@ -516,8 +519,8 @@ def test_open_writable_hmm_file_writes_plain_gzip(shared_datadir, tmp_path):
 ])
 def test_iter_hmm_names_matches_parsed_names(shared_datadir, fixture):
     path = shared_datadir / fixture
-    scanned = list(utils.iter_hmm_names(path))
-    parsed = [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(path)]
+    scanned = list(iter_hmm_names(path))
+    parsed = [h.name for h in iter_hmms(path)]
     assert scanned == parsed
 
 
@@ -536,10 +539,10 @@ def test_committed_fixtures_with_sidecars_read_as_text(shared_datadir, fixture):
     assert (shared_datadir / (fixture + ".h3m")).exists(), "fixture lost its sidecars"
     with pyhmmer.plan7.HMMFile(path) as stock:
         assert stock.is_pressed(), "fixture no longer pressed; this test is meaningless"
-    with utils.open_hmm_file(path) as handle:
+    with open_hmm_file(path) as handle:
         assert not handle.is_pressed()
-    assert [utils.pyhmmer_decode(h.name) for h in utils.iter_hmms(path)] == \
-        [utils.pyhmmer_decode(h.name) for h in pyhmmer.plan7.HMMFile(path, db=False)]
+    assert [h.name for h in iter_hmms(path)] == \
+        [h.name for h in pyhmmer.plan7.HMMFile(path, db=False)]
 
 
 # --- partial ('<' / '>') locations, cut features, and fragment status ---
@@ -567,30 +570,30 @@ def _sliced_cds(record):
 @pytest.mark.parametrize("strand", [1, -1])
 def test_slice_keeps_existing_partial_markers(strand):
     record = _partial_test_record(FeatureLocation(BeforePosition(5), AfterPosition(71), strand=1))
-    sliced = utils.slice_record_from_location(record, FeatureLocation(2, 74, strand))
+    sliced = slice_record_from_location(record, FeatureLocation(2, 74, strand))
     cds = _sliced_cds(sliced)[0]
     if strand == 1:
         assert str(cds.location) == "[<3:>69](+)"
     else: # reverse complemented, so '<' and '>' swap ends
         assert str(cds.location) == "[<3:>69](-)"
-    assert utils.get_fragment_status(cds) == "NC"
+    assert get_fragment_status(cds) == "NC"
     assert cds.qualifiers["translation"] == record.features[1].qualifiers["translation"]
 
 
 def test_slice_marks_cut_ends():
     record = _partial_test_record(FeatureLocation(5, 71, strand=1))
-    cds = _sliced_cds(utils.slice_record_from_location(record, FeatureLocation(20, 74, 1)))[0]
+    cds = _sliced_cds(slice_record_from_location(record, FeatureLocation(20, 74, 1)))[0]
     assert str(cds.location) == "[<0:51](+)"
-    assert utils.get_fragment_status(cds) == "N"
-    cds = _sliced_cds(utils.slice_record_from_location(record, FeatureLocation(0, 40, 1)))[0]
+    assert get_fragment_status(cds) == "N"
+    cds = _sliced_cds(slice_record_from_location(record, FeatureLocation(0, 40, 1)))[0]
     assert str(cds.location) == "[5:>40](+)"
-    assert utils.get_fragment_status(cds) == "C"
+    assert get_fragment_status(cds) == "C"
     # reverse slice: the cut 5' end of a forward CDS becomes the high coordinate, '>'
-    cds = _sliced_cds(utils.slice_record_from_location(record, FeatureLocation(20, 74, -1)))[0]
+    cds = _sliced_cds(slice_record_from_location(record, FeatureLocation(20, 74, -1)))[0]
     assert str(cds.location) == "[3:>54](-)"
-    assert utils.get_fragment_status(cds) == "N"
+    assert get_fragment_status(cds) == "N"
     # source features don't get new markers
-    source = utils.slice_record_from_location(record, FeatureLocation(20, 74, 1)).features[0]
+    source = slice_record_from_location(record, FeatureLocation(20, 74, 1)).features[0]
     assert str(source.location) == "[0:54](+)"
 
 
@@ -606,9 +609,9 @@ def test_slice_cut_cds_codon_start_and_translation(cut, cds_strand, slice_strand
         slice_location = FeatureLocation(cut, len(record), slice_strand)
     else:
         slice_location = FeatureLocation(0, 71 + 5 - cut, slice_strand) # removes the same number of bases from the 5' end
-    sliced = utils.slice_record_from_location(record, slice_location)
+    sliced = slice_record_from_location(record, slice_location)
     cds = _sliced_cds(sliced)[0]
-    assert utils.get_fragment_status(cds) == "N"
+    assert get_fragment_status(cds) == "N"
     removed = cut - 5
     assert cds.qualifiers["codon_start"] == [str(((codon_start - 1 - removed) % 3) + 1)]
     # the trimmed translation matches translating the cut CDS in its new frame
@@ -623,9 +626,9 @@ def test_slice_cut_cds_3_prime():
     record = _partial_test_record(FeatureLocation(5, 71, strand=1))
     original_translation = record.features[1].qualifiers["translation"][0]
     for end in range(40, 46):
-        sliced = utils.slice_record_from_location(record, FeatureLocation(0, end, 1))
+        sliced = slice_record_from_location(record, FeatureLocation(0, end, 1))
         cds = _sliced_cds(sliced)[0]
-        assert utils.get_fragment_status(cds) == "C"
+        assert get_fragment_status(cds) == "C"
         assert "codon_start" not in cds.qualifiers
         assert cds.qualifiers["translation"][0] == original_translation[:(end - 5) // 3]
 
@@ -634,7 +637,7 @@ def test_slice_cut_cds_interior_removed_drops_translation():
     location = CompoundLocation([FeatureLocation(5, 20, 1), FeatureLocation(30, 50, 1), FeatureLocation(60, 71, 1)], operator="join")
     record = _partial_test_record(location)
     slice_location = CompoundLocation([FeatureLocation(0, 25, 1), FeatureLocation(55, 75, 1)], operator="join")
-    cds = _sliced_cds(utils.slice_record_from_location(record, slice_location))[0]
+    cds = _sliced_cds(slice_record_from_location(record, slice_location))[0]
     assert "translation" not in cds.qualifiers
 
 
@@ -642,9 +645,9 @@ def test_slice_drops_cut_domain_features():
     domain = SeqFeature(FeatureLocation(10, 40, 1), type=DOMAIN_FEATURE_NAME, qualifiers={"name": ["d"], "cds_id": ["x"]})
     best_hit = SeqFeature(FeatureLocation(30, 50, 1), type=DOMAIN_SEARCH_BEST_HIT_NAME, qualifiers={"name": ["d"], "cds_id": ["x"]})
     record = _partial_test_record(FeatureLocation(5, 71, strand=1), extra_features=[domain, best_hit])
-    sliced = utils.slice_record_from_location(record, FeatureLocation(20, 75, 1))
+    sliced = slice_record_from_location(record, FeatureLocation(20, 75, 1))
     assert [f.type for f in sliced.features] == ["source", "CDS", DOMAIN_SEARCH_BEST_HIT_NAME]
-    sliced = utils.slice_record_from_location(record, FeatureLocation(20, 75, 1), truncate_features=False)
+    sliced = slice_record_from_location(record, FeatureLocation(20, 75, 1), truncate_features=False)
     assert [f.type for f in sliced.features] == ["source", DOMAIN_SEARCH_BEST_HIT_NAME]
 
 
@@ -665,7 +668,7 @@ def test_merge_parts_keeps_partial_markers():
     (CompoundLocation([FeatureLocation(30, AfterPosition(71), -1), FeatureLocation(BeforePosition(5), 20, -1)]), "NC"),
 ])
 def test_get_fragment_status_feature(location, status):
-    assert utils.get_fragment_status(SeqFeature(location, type="CDS")) == status
+    assert get_fragment_status(SeqFeature(location, type="CDS")) == status
 
 
 @pytest.mark.parametrize("description,status", [
@@ -676,16 +679,16 @@ def test_get_fragment_status_feature(location, status):
 def test_get_fragment_status_protein_description(description, status):
     record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILALV"), id="p", description=description)
     record.annotations["molecule_type"] = "protein"
-    assert utils.get_fragment_status(record) == status
+    assert get_fragment_status(record) == status
     record.annotations["molecule_type"] = "DNA" # nucleotide records have per-CDS fragment status
-    assert utils.get_fragment_status(record) is None
+    assert get_fragment_status(record) is None
 
 
 def test_get_fragment_status_protein_cds_feature():
     record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILALV"), id="p", description="p (Fragment)")
     record.annotations["molecule_type"] = "protein"
     record.features.append(SeqFeature(FeatureLocation(BeforePosition(0), 13, 1), type="CDS"))
-    assert utils.get_fragment_status(record) == "N" # the spanning CDS feature takes precedence over the description
+    assert get_fragment_status(record) == "N" # the spanning CDS feature takes precedence over the description
 
 
 @pytest.mark.parametrize("translation,five_prime,three_prime,expected", [
@@ -698,7 +701,7 @@ def test_get_fragment_status_protein_cds_feature():
     ("MAK", True, True, "MAK"), # shorter than the location, left as is
 ])
 def test_on_contig_translation(translation, five_prime, three_prime, expected):
-    assert utils.on_contig_translation(translation, 14, 2, five_prime, three_prime) == expected # 4 codons
+    assert on_contig_translation(translation, 14, 2, five_prime, three_prime) == expected # 4 codons
 
 
 @pytest.mark.parametrize("status,include,exclude,only", [
@@ -707,9 +710,9 @@ def test_on_contig_translation(translation, five_prime, three_prime, expected):
     ("?", True, False, True),
 ])
 def test_fragment_status_allowed(status, include, exclude, only):
-    assert utils.fragment_status_allowed(status, "include") == include
-    assert utils.fragment_status_allowed(status, "exclude") == exclude
-    assert utils.fragment_status_allowed(status, "only") == only
+    assert fragment_status_allowed(status, "include") == include
+    assert fragment_status_allowed(status, "exclude") == exclude
+    assert fragment_status_allowed(status, "only") == only
 
 
 def test_get_fragment_status_uniprot_text_entries():
@@ -719,13 +722,13 @@ def test_get_fragment_status_uniprot_text_entries():
         rec.annotations["molecule_type"] = "protein"
         rec.features = [SeqFeature(FeatureLocation(s, s + 1), type="NON_TER") for s in non_ter]
         return rec
-    assert utils.get_fragment_status(record("SubName: Full=SOD;")) is None
-    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;")) == "?"
-    assert utils.get_fragment_status(record("RecName: Full=SOD; Flags: Precursor; Fragments;")) == "?"
-    assert utils.get_fragment_status(record("RecName: Full=SOD; Flags: Precursor;")) is None
-    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[0])) == "N"
-    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[9])) == "C"
-    assert utils.get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[0, 9])) == "NC"
+    assert get_fragment_status(record("SubName: Full=SOD;")) is None
+    assert get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;")) == "?"
+    assert get_fragment_status(record("RecName: Full=SOD; Flags: Precursor; Fragments;")) == "?"
+    assert get_fragment_status(record("RecName: Full=SOD; Flags: Precursor;")) is None
+    assert get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[0])) == "N"
+    assert get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[9])) == "C"
+    assert get_fragment_status(record("SubName: Full=SOD; Flags: Fragment;", non_ter=[0, 9])) == "NC"
 
 
 def test_contig_has_fragment_and_filter_by_partial():
@@ -733,15 +736,15 @@ def test_contig_has_fragment_and_filter_by_partial():
     partial = _partial_test_record(FeatureLocation(BeforePosition(5), 71, strand=1))
     protein = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILA"), id="p", description="p (Fragment) OS=x")
     protein.annotations["molecule_type"] = "protein"
-    assert not utils.contig_has_fragment(complete)
-    assert utils.contig_has_fragment(partial)
-    assert utils.contig_has_fragment(protein)
+    assert not contig_has_fragment(complete)
+    assert contig_has_fragment(partial)
+    assert contig_has_fragment(protein)
     records = [complete, partial, protein]
-    assert list(utils.filter_by_partial(records, "include")) == records
-    assert list(utils.filter_by_partial(records, "exclude")) == [complete]
-    assert list(utils.filter_by_partial(records, "only")) == [partial, protein]
-    assert utils.cds_fragment_status(partial, partial.features[1]) == "N"
-    assert utils.cds_fragment_status(protein, None) == "?"
+    assert list(filter_by_partial(records, "include")) == records
+    assert list(filter_by_partial(records, "exclude")) == [complete]
+    assert list(filter_by_partial(records, "only")) == [partial, protein]
+    assert cds_fragment_status(partial, partial.features[1]) == "N"
+    assert cds_fragment_status(protein, None) == "?"
 
 
 # --- prodigal-style /partial="10" codes ---
@@ -768,7 +771,7 @@ def _coded_record(location, code, extra_qualifiers=None):
 ])
 def test_normalize_partial_codes(location, code, expected_location, expected_codon_start):
     record = _coded_record(location, code)
-    utils.normalize_partial_codes(record)
+    normalize_partial_codes(record)
     feature = record.features[0]
     assert str(feature.location) == expected_location
     assert feature.qualifiers.get("codon_start") == expected_codon_start
@@ -777,13 +780,13 @@ def test_normalize_partial_codes(location, code, expected_location, expected_cod
 
 def test_normalize_partial_codes_keeps_bare_partial_and_combines_codon_start():
     record = _coded_record(FeatureLocation(1, 30, 1), "")
-    utils.normalize_partial_codes(record)
+    normalize_partial_codes(record)
     assert record.features[0].qualifiers["partial"] == [""] # legacy INSDC /partial: no end information
     assert str(record.features[0].location) == "[1:30](+)"
-    assert utils.get_fragment_status(record.features[0]) == "?" # a fragment, missing end unknown
-    assert utils.contig_has_fragment(record)
+    assert get_fragment_status(record.features[0]) == "?" # a fragment, missing end unknown
+    assert contig_has_fragment(record)
     record = _coded_record(FeatureLocation(1, 30, 1), "10", {"codon_start": ["2"]})
-    utils.normalize_partial_codes(record)
+    normalize_partial_codes(record)
     assert record.features[0].qualifiers["codon_start"] == ["3"]
 
 
@@ -791,7 +794,7 @@ def test_normalize_partial_codes_keeps_bare_partial_and_combines_codon_start():
 def test_parse_seqfiles_converts_partial_codes(shared_datadir, parser):
     """Both GenBank parsers convert GeneMark's /partial codes in pDONR201_multi_genemark.gb, and the native search agrees."""
     from domainator import lean_record
-    records = list(utils.parse_seqfiles([str(shared_datadir / "pDONR201_multi_genemark.gb")], genbank_parser=parser))
+    records = list(parse_seqfiles([str(shared_datadir / "pDONR201_multi_genemark.gb")], genbank_parser=parser))
     for record in records:
         if lean_record.LEAN_SEARCH_TYPES and isinstance(record, lean_record.LEAN_SEARCH_TYPES):
             assert [i for i, _ in record.cds_peptides(set(), "only")] == [1, 6] # feature indexes of the coded CDSs
@@ -812,13 +815,13 @@ def test_bare_partial_qualifier_is_a_fragment(shared_datadir, tmp_path, parser):
     text = text.replace("     CDS             complement(280..780)\n", "     CDS             complement(280..780)\n                     /partial\n", 1)
     path = tmp_path / "bare_partial.gb"
     path.write_text(text)
-    record = next(utils.parse_seqfiles([str(path)], genbank_parser=parser))
+    record = next(parse_seqfiles([str(path)], genbank_parser=parser))
     for partial, expected in (("include", 2), ("exclude", 0), ("only", 2)): # the other CDS is '>'-partial
         assert len(list(domainate.get_prot_list(record, 0, partial=partial))) == expected
     if lean_record.LEAN_SEARCH_TYPES and isinstance(record, lean_record.LEAN_SEARCH_TYPES):
         record = lean_record.lean_to_seqrecord(lean_record.materialize_lean_search(record, None))
     cdss = [f for f in record.features if f.type == "CDS"]
-    assert [utils.get_fragment_status(f) for f in cdss] == ["?", "N"]
+    assert [get_fragment_status(f) for f in cdss] == ["?", "N"]
 
 
 @pytest.mark.parametrize("description,is_fragment", [
@@ -831,10 +834,10 @@ def test_bare_partial_qualifier_is_a_fragment(shared_datadir, tmp_path, parser):
 ])
 def test_mgnify_full_length_token(description, is_fragment):
     """MGnify protein FASTA headers: FL=0 is a fragment, FL=1 full length."""
-    assert utils.description_is_fragment(description) == is_fragment
+    assert description_is_fragment(description) == is_fragment
     record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILA"), id=description.split()[0], description=description)
     record.annotations["molecule_type"] = "protein"
-    assert utils.get_fragment_status(record) == ("?" if is_fragment else None)
+    assert get_fragment_status(record) == ("?" if is_fragment else None)
 
 
 @pytest.mark.parametrize("expression,domains,expected", [
@@ -845,13 +848,13 @@ def test_mgnify_full_length_token(description, is_fragment):
     ("~(A | B)", set(), True),
 ])
 def test_boolean_evaluator_nested_parentheses(expression, domains, expected):
-    assert utils.BooleanEvaluator(expression).check_expression(domains) == expected
+    assert BooleanEvaluator(expression).check_expression(domains) == expected
 
 
 def test_get_domain_names_keeps_hits_at_or_below_evalue(shared_datadir):
-    rec = next(utils.parse_seqfiles([str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")]))
+    rec = next(parse_seqfiles([str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")]))
     checked = 0
-    for cds in utils.DomainatorCDS.list_from_contig(rec):
+    for cds in DomainatorCDS.list_from_contig(rec):
         expected = {f.qualifiers["name"][0] for f in cds.domain_features if float(f.qualifiers["evalue"][0]) <= 1e-10}
         assert cds.get_domain_names(evalue=1e-10) == expected
         checked += len(expected)
@@ -863,5 +866,43 @@ def test_get_domain_cds_annotation_strings_reports_missing_qualifier(capsys):
     rec.features.append(SeqFeature(FeatureLocation(0, 9, 1), type=DOMAIN_FEATURE_NAME,
                                    qualifiers={"cds_id": ["c1"], "database": ["db"], "name": ["d"], "evalue": ["1e-5"]}))
     with pytest.raises(KeyError, match="rec1"):
-        utils.get_domain_cds_annotation_strings(rec)
+        get_domain_cds_annotation_strings(rec)
     assert capsys.readouterr().out == ""
+
+
+def test_domainate_and_filter_domains_agree_on_the_overlap_boundary():
+    # A hit overlapping a better one by exactly max_overlap is kept by both.
+    from types import SimpleNamespace
+    from domainator.domainate import filter_by_overlap
+    from domainator.filter_domains import domain_overlap
+    best = SimpleNamespace(start=0, end=100, score=50, database="db")
+    half = SimpleNamespace(start=50, end=150, score=40, database="db")
+    assert len(filter_by_overlap([best, half], 0.5)) == 2
+    assert len(filter_by_overlap([best, half], 0.49)) == 1
+    features = [SeqFeature(FeatureLocation(r.start, r.end, 1), type=DOMAIN_FEATURE_NAME, qualifiers={"score": [str(r.score)]}) for r in (best, half)]
+    hits = {id(f): f for f in features}
+    assert len(domain_overlap(hits, 0.5)) == 2
+    assert len(domain_overlap(hits, 0.49)) == 1
+
+
+@pytest.mark.parametrize("expression,domains,expected", [
+    ("A | B & C", {"A"}, True),          # & binds tighter than |
+    ("(A | B) & C", {"A"}, False),
+    ("~A & B", {"B"}, True),             # ~ binds tightest
+    ("A&B", {"A", "B"}, True),           # no spaces needed
+    ("~~A", {"A"}, True),
+    ("PF00001.2 | x-y_z", {"x-y_z"}, True),
+])
+def test_boolean_evaluator_precedence_and_names(expression, domains, expected):
+    assert BooleanEvaluator(expression).check_expression(domains) == expected
+
+
+@pytest.mark.parametrize("expression", ["", "A &", "& A", "(A | B", "A | B)", "A ~B", "A B", "()"])
+def test_boolean_evaluator_rejects_malformed_expressions(expression):
+    from domainator.errors import InputError
+    with pytest.raises(InputError, match="boolean expression"):
+        BooleanEvaluator(expression)
+
+
+def test_boolean_evaluator_names():
+    assert BooleanEvaluator("(A & ~B) | A").names == {"A", "B"}

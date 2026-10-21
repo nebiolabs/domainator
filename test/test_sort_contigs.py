@@ -7,7 +7,7 @@ from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.domain_search import main as domain_search_main
 from domainator.sort_contigs import main as sort_contigs_main
-from domainator.utils import write_genbank
+from domainator.seqio import write_genbank
 
 from helpers import compare_seqfiles
 import pytest

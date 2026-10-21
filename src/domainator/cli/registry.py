@@ -81,6 +81,6 @@ TOOLS: Dict[str, Tool] = {
     "plot_contigs": Tool("plot_contigs", "plot", "Draw contigs and their annotations as an interactive HTML page."),
     "color_table_to_legend": Tool("color_table_to_legend", "plot", "Draw an SVG legend from a color table."),
     # database
-    "db_download": Tool("domainator_db_download", "database", "Download sequence databases in formats Domainator reads."),
-    "format_db": Tool("domainator_format_db", "database", "Shard, compress, and index a database for domain_search."),
+    "db_download": Tool("db_download", "database", "Download sequence databases in formats Domainator reads."),
+    "format_db": Tool("format_db", "database", "Shard, compress, and index a database for domain_search."),
 }

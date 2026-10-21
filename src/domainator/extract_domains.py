@@ -14,24 +14,28 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id, pad_location, get_cds_unique_name, cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
+from domainator.seqio import parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator.locations import slice_record_from_location, pad_location
+from domainator.model import region_id, get_cds_unique_name, check_annotation_type, feature_score, evalue_passes
+from domainator.partial import cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 
-def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pad_down=0, combine=False, keep_direction=False, keep_name=False, search_hits=False, databases=None, splice=False, partial="include"):
+def extract_domains(records, *, evalue=None, min_score=None, domains=None, extend_up=0, extend_down=0, combine=False, keep_direction=False, keep_name=False, annotation_type:str="domainator", databases=None, splice=False, partial="include"):
     """
 
       input: 
         records: iterator of SeqRecords
         evalue: if not None then only select domains with evalue <= this parameter
-        score: if not None then only select domains with score >= this parameter
+        min_score: if not None then only select domains with min_score >= this parameter
         domains: collection if not None then only select domains with names in this list.
-        pad_up: extract this many additional residues (or bases) upstream of the hit region.
-        pad_down: extract this many additional residues (or bases) downstream of the hit region.
+        extend_up: extract this many additional residues (or bases) upstream of the hit region.
+        extend_down: extract this many additional residues (or bases) downstream of the hit region.
         combine: if True, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. Will raise an error if the contig is circular, because the envelope cannot be determined.
         keep_direction: by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything.
         keep_name: by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
-        search_hits: if True, then only select domains that are marked as search hits (from domainator domain_search).
+        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best hits written by domain_search).
         databases: if not None, then only select domains from these databases. default: all databases.
         splice: if True, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together, in the order they are read on the strand of the domain with the lowest start coordinate.
         partial: select domains by the fragment status of the CDS (or protein record) they are on: "include" (default, all), "exclude" (skip domains on fragments), or "only" (only domains on fragments).
@@ -39,6 +43,7 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
     
       yields the extracted regions as SeqRecord objects
     """
+    search_hits = check_annotation_type(annotation_type) == "domain_search"
 
     if splice and combine:
         raise ValueError("Cannot use --splice and --combine at the same time.")
@@ -58,9 +63,9 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                     keep = False
                 elif (search_hits and feature.type == DOMAIN_FEATURE_NAME) and domains is None:
                     keep = False
-                elif evalue is not None and float(feature.qualifiers["evalue"][0]) > evalue:
+                elif not evalue_passes(feature, evalue):
                     keep = False
-                elif score is not None and float(feature.qualifiers["score"][0]) < score:
+                elif min_score is not None and feature_score(feature) < min_score:
                     keep = False
                 elif partial != "include":
                     cds_id = feature.qualifiers.get("cds_id", ["."])[0]
@@ -82,11 +87,11 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                 start_i = min(list(range(len(hit_domains))), key = lambda x: int(hit_domains[x].location.start)) # find start coordinate of the domain with the lowest start coordinate
                 end_i   = max(list(range(len(hit_domains))), key = lambda x: int(hit_domains[x].location.end)  ) # find end coordinate of the domain with the highest end coordinate
                 if hit_domains[start_i].location.parts[0].strand == -1: # if the domain is on the reverse strand, then we pad down from start and up from end.
-                    start = hit_domains[start_i].location.start - pad_down
-                    end = hit_domains[end_i].location.end + pad_up
+                    start = hit_domains[start_i].location.start - extend_down
+                    end = hit_domains[end_i].location.end + extend_up
                 else: # if the domain is on the forward strand, then we pad up from start and down from end.
-                    start = hit_domains[start_i].location.start - pad_up
-                    end = hit_domains[end_i].location.end + pad_down
+                    start = hit_domains[start_i].location.start - extend_up
+                    end = hit_domains[end_i].location.end + extend_down
     
                 if keep_direction:
                     new_strand = 1
@@ -117,7 +122,7 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                     ordered_domains = sorted(hit_domains, key=lambda x: int(x.location.parts[0].start))
                 splice_parts = list()
                 for domain in ordered_domains:
-                    parts = pad_location(rec, domain.location, pad_up, pad_down).parts
+                    parts = pad_location(rec, domain.location, extend_up, extend_down).parts
                     if keep_direction:
                         if parts[0].strand == -1: # reverse strand parts are read from right to left, so read them from left to right on the forward strand.
                             parts = parts[::-1]
@@ -148,7 +153,7 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
                 for domain in hit_domains:
                     strand = domain.location.parts[0].strand # strand of the first part.
                     
-                    location = pad_location(rec, domain.location, pad_up, pad_down)
+                    location = pad_location(rec, domain.location, extend_up, extend_down)
 
                     contig_sections.append(slice_record_from_location(rec, location)) # slice_record_from_location handles maintaining source and taxonomy annotations.
 
@@ -233,15 +238,15 @@ def main(argv):
     # Run
     extracted_domains_iterator = extract_domains(
         parse_seqfiles(genbanks, target_contigs), 
-        params.evalue, 
-        params.min_score, 
-        selected_domains, 
-        extend_up,
-        extend_down,
-        params.combine, 
-        params.keep_direction, 
-        params.keep_name,
-        search_hits=params.annotation_type == "domain_search",
+        evalue=params.evalue, 
+        min_score=params.min_score, 
+        domains=selected_domains, 
+        extend_up=extend_up,
+        extend_down=extend_down,
+        combine=params.combine, 
+        keep_direction=params.keep_direction, 
+        keep_name=params.keep_name,
+        annotation_type=params.annotation_type,
         databases=params.databases,
         splice=params.splice,
         partial=params.partial,

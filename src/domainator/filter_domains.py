@@ -9,10 +9,12 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.seqio import parse_seqfiles
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from typing import Optional, Set, Dict
 from domainator.Bio.SeqFeature import SeqFeature
+from domainator.model import feature_evalue, feature_score
 
 #TODO: parallelize input parsing
 #TODO: the logic of this program is a bit confusing, in terms of interplay between different filters.
@@ -31,7 +33,7 @@ def domain_overlap(hits:Dict[int, SeqFeature], allowed_fraction_overlap):
         with the highest bitscores
     """
     no_overlap_hits = []
-    hits = sorted(hits.values(), key=lambda x: float(x.qualifiers['score'][0]),reverse=True)  # sort by bitscore
+    hits = sorted(hits.values(), key=lambda x: feature_score(x),reverse=True)  # sort by bitscore
     # Add the first hit as this is the one with the highest bitscore
     no_overlap_hits.append(hits[0])
     for i in range(1, len(hits)):
@@ -86,7 +88,7 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
         if databases_keep is not None and db not in databases_keep:
             continue
 
-        annot_evalue = float(feature.qualifiers['evalue'][0])
+        annot_evalue = feature_evalue(feature)
         if cds_id not in kept_annotations:
             kept_annotations[cds_id] = {}
  
@@ -123,19 +125,19 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
             kept_annotations[cds_id][feature_id] = overlap_annotations[cds_id][feature_id]
     return kept_annotations
 
-def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Optional[Set[str]]=None, databases_filter:Optional[Set[str]]=None, selected_domains=None, annotation_type="all"):
+def filter_domains(records, *, evalue, max_overlap, keep_databases:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, domains=None, annotation_type="all"):
     """
     The main function which iterates through genbank files to find the domainator annotations
     to be removed
     Args:
-        sequence_iterator: list of lists of SeqRecords
+        records: list of lists of SeqRecords
         evalue: float
             The new upper limit for evalues on domainator annotations
         max_overlap: float
             The new upper limit for max overlap between domainator annotations
         database: 
             database to filter from, if None, then filter all databases together
-        selected_domains: set of strings or None. If not None, then only keep domains with names in this set.
+        domains: set of strings or None. If not None, then only keep domains with names in this set.
     """
     feature_types = set()
     if annotation_type == "domain_search":
@@ -148,9 +150,9 @@ def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Option
     else:
         raise ValueError(f"Invalid annotation type: {annotation_type}")
 
-    for rec in sequence_iterator:
+    for rec in records:
         keep = find_kept_annotations(
-            evalue, max_overlap, rec, databases_keep, databases_filter, selected_domains, feature_types)
+            evalue, max_overlap, rec, keep_databases, databases, domains, feature_types)
 
         new_features = []
         for feature in rec.features:
@@ -228,8 +230,8 @@ def main(argv):
                 parse_seqfiles(genbanks, target_contigs), 
                 evalue=evalue,
                 max_overlap=max_overlap,
-                databases_keep=databases_keep,
-                databases_filter=databases_filter,
-                selected_domains=selected_domains,
+                keep_databases=databases_keep,
+                databases=databases_filter,
+                domains=selected_domains,
                 annotation_type=params.annotation_type
                 ), genbank=params.genbank_out, fasta=params.fasta_out)

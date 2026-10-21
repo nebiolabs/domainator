@@ -114,7 +114,7 @@ FASTA output (`--fasta_out`, `domainator genbank_to_fasta`) carries no locations
 
 ### Names of extracted regions
 
-Tools that extract part of a contig (`domainator select_by_cds`, `domainator domain_search`, `domainator split_by_cluster --pad_on_search_hits`, `domainator extract_domains`, `domainator extract_unannotated`, `domainator select_by_coord`, `domainator trim_contigs`, `domainator rotate_contigs`) rename the region in the same way (`domainator.utils.region_id`):
+Tools that extract part of a contig (`domainator select_by_cds`, `domainator domain_search`, `domainator split_by_cluster --pad_on_search_hits`, `domainator extract_domains`, `domainator extract_unannotated`, `domainator select_by_coord`, `domainator trim_contigs`, `domainator rotate_contigs`) rename the region in the same way (`domainator.model.region_id`):
 
 ```
 <contig id>_<first>:<last>[rc]
@@ -142,7 +142,7 @@ Tools that extract part of a contig (`domainator select_by_cds`, `domainator dom
 
 ### Differences from BioPython in internal storing of Genbank records
 
-`domainator.utils.parse_seqfiles` always assigns a `molecule_type` attribute to sequence records. For genbank files, it also swaps the `record.name` field and `record.id` field before returning the record. The `write_genbank` function swaps them back before writing. There are also some bugfixes in the parser relative to the Biopython parser to handle weird edge-case genbank files we've run into.
+`domainator.parse_seqfiles` always assigns a `molecule_type` attribute to sequence records. For genbank files, it also swaps the `record.name` field and `record.id` field before returning the record. The `write_genbank` function swaps them back before writing. There are also some bugfixes in the parser relative to the Biopython parser to handle weird edge-case genbank files we've run into.
 
 ```python 
     id = record.id
@@ -213,7 +213,7 @@ The `structure_*` tools read protein structure files: `.pdb`, `.pdb1`, `.ent`, `
 structural aligner does, which is also what splits multi-chain structures into one record
 per chain and names them `<file basename>_<chain>`.
 
-These extensions are recognized by `domainator.utils.get_file_type`, which reports them as
+These extensions are recognized by `domainator.seqio.get_file_type`, which reports them as
 type `structure`. That type is deliberately not readable by any sequence reader: every
 consumer of `get_file_type` whitelists the types it accepts, so a structure file handed to
 `domainator domainate`, `domainator domain_search` or any other sequence tool is rejected with a message
@@ -602,7 +602,7 @@ layout change; a newer minor with the same major stays readable.
 
 On every run `domain_search` turns each input database into **partitions** —
 `(file, offset, n_records)` tuples that worker processes seek to and parse
-independently. The offsets come from `utils.get_offsets`/`i_get_offsets`, which read a
+independently. The offsets come from `domainator.offsets.get_offsets`/`i_get_offsets`, which read a
 valid, fresh `.didx` when one exists and otherwise scan the file (Rust scanner, or
 Biopython fallback). Two facts about this drive the layout choices below:
 

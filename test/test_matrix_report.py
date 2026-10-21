@@ -6,7 +6,8 @@ import io
 import json
 import re
 from domainator import matrix_report
-from domainator.data_matrix import DataMatrix, mst_knn_edge_counts_by_threshold
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import mst_knn_edge_counts_by_threshold
 from domainator.matrix_report import MaxTree
 import tempfile
 import pytest
@@ -48,7 +49,7 @@ def test_matrix_report_rejects_invalid_merge_impact_metric():
     matrix = DataMatrix(np.array([[0.0, 1.0], [1.0, 0.0]]), ['A', 'B'], ['A', 'B'])
 
     with pytest.raises(ValueError, match="merge_impact_metric must be one of"):
-        matrix_report.matrix_report(matrix, io.StringIO(), None, merge_impact_metric="bad")
+        matrix_report.matrix_report(matrix, out_text_handle=io.StringIO(), out_html_handle=None, merge_impact_metric="bad")
 
 
 
@@ -700,7 +701,7 @@ def test_threshold_tables_match_build_ssn_lb():
 
 def test_mst_knn_counts_match_build_ssn_lb_mst_knn():
     """Projected counts must equal what `build_ssn --lb T --mst --knn k` emits."""
-    from domainator.data_matrix import mst_knn_edge_index_dict
+    from domainator.ssn_edges import mst_knn_edge_index_dict
 
     data, labels = _tie_group_matrix()
     matrix = DataMatrix(data, labels, labels, data_type="score")
@@ -726,7 +727,8 @@ def test_slider_reaches_the_fully_merged_network():
     """
     from domainator.ssn_bundle import clusters_at_threshold
     from domainator.ssn_hierarchy import build_mst_component_hierarchy
-    from domainator.data_matrix import DataMatrix, MaxTree
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import MaxTree
 
     # Two components: A-B-C and D-E.
     data = np.array([

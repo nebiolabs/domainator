@@ -21,7 +21,9 @@ from typing import Iterable, Optional, Sequence
 from jsonargparse import ArgumentParser
 
 from domainator import __version__
-from domainator.utils import STDIN_PATHS, STDOUT_PATHS
+from domainator.hmmio import iter_hmm_names, read_hmms
+from domainator.model import ANNOTATION_TYPES
+from domainator.seqio import STDIN_PATHS, STDOUT_PATHS, get_file_type, parse_seqfiles
 
 
 LOGGER_NAME = "domainator"
@@ -146,8 +148,6 @@ def add_switch(parser, name: str, help: str, *, default: bool, negative_help: st
     parser.add_argument(f"--no_{name}", dest=name, action="store_false", default=default, help=negative_help)
 
 
-ANNOTATION_TYPES = ("domainator", "domain_search", "all")
-
 
 def add_annotation_type(parser, *, choices: Sequence[str] = ANNOTATION_TYPES[:2], default: str = "domainator", help: str = ""):
     """Add ``--annotation_type``: which annotations a command reads.
@@ -242,3 +242,68 @@ def _action_for(parser, dest: str):
 def _option_for(parser, dest: str) -> str:
     action = _action_for(parser, dest)
     return max(action.option_strings, key=len) if action is not None else dest
+
+
+OUTPUT_COMPRESSION_HELP = (
+    " Writes gzip-compressed output if the path ends in '.gz'; '.bgz' is refused because "
+    "HMMER cannot read BGZF. Output to stdout is never compressed."
+)
+
+def list_and_file_to_dict_keys(input_list=None, input_file=None, as_set=False):
+    """
+        args:
+            input_list: a list of items to add, in order, as keys to the output dict.
+
+            input_file: The path to a text file, either simple list of strings, a fasta file, a genbank file, or an hmm file. 
+                        If a sequence file is passed, then return the sequence ids,
+                        If an hmm file is passed then return the hmm profile names
+                        If any other kind of file is passed, then just read the lines and pass the lines individually
+
+        output:
+            None if input_list and input_file are both None.
+            else, a dict where keys are values read from input_list and input_file, and values are None.
+    """
+
+    out = None  # dict() we're treating this as an ordered set where values = None
+    if input_list is not None and len(input_list) > 0:
+        out = dict()
+        for c in input_list:
+            out[c] = None
+    if input_file is not None:
+        if out is None:
+            out = dict()
+        input_file_type = get_file_type(input_file)
+        if input_file_type not in {"hmm", "fasta", "genbank"}: #if it's not an hmm file, a fasta file, or a genbank file, we assume it is a text file with one value per line
+            with open(input_file, "r") as input_file_handle:
+                for line in input_file_handle:
+                    line = line.strip()
+                    if len(line) != 0:
+                        out[line] = None
+        elif input_file_type == "hmm":
+            # Only the names are wanted, so scan the NAME lines rather than
+            # building (and discarding) every profile in the file.
+            names = list(iter_hmm_names(input_file))
+            if not names and os.path.getsize(input_file) > 0:
+                # Not recognizable as hmm text after all; fall back to parsing so
+                # that any real format error surfaces from pyhmmer, not silently
+                # as an empty selection.
+                for hmmdb in read_hmms([input_file]).values():
+                    names = list(hmmdb)
+            for hmm_name in names:
+                out[hmm_name] = None
+        elif input_file_type in {"fasta","genbank"}:
+            for rec in parse_seqfiles([input_file]):
+                out[rec.id] = None
+
+    if as_set and out is not None:
+        return set(out.keys())
+
+    return out
+
+def partial_help(what:str) -> str:
+    """
+        Help text for a --partial argument. what: what is selected, e.g. "Which CDSs/proteins to search".
+    """
+    return (f"{what}, by fragment status. include: all. exclude: skip fragments. only: only fragments. "
+            "A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, "
+            "a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it.")

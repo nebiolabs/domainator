@@ -1,9 +1,10 @@
-from domainator import domainator_db_download
+from domainator import db_download
 import tempfile
 import gzip
 import shutil
 import pytest
-from domainator import utils
+from domainator.partial import get_fragment_status
+from domainator.seqio import parse_seqfiles
 from pathlib import Path
 
 
@@ -14,17 +15,17 @@ def test_gbff_is_valid(shared_datadir):
         good = Path(output_dir) / "good.gb.gz"
         with open(src_gb, "rb") as src, gzip.open(good, "wb") as dst:
             shutil.copyfileobj(src, dst)
-        assert domainator_db_download.gbff_is_valid(good) is True
+        assert db_download.gbff_is_valid(good) is True
 
         # valid uncompressed (NCBI Datasets style: genomic.gbff)
         plain = Path(output_dir) / "genomic.gbff"
         shutil.copyfile(src_gb, plain)
-        assert domainator_db_download.gbff_is_valid(plain) is True
+        assert db_download.gbff_is_valid(plain) is True
 
         # truncated / corrupt gzip
         truncated = Path(output_dir) / "bad.gb.gz"
         truncated.write_bytes(good.read_bytes()[: good.stat().st_size // 2])
-        assert domainator_db_download.gbff_is_valid(truncated) is False
+        assert db_download.gbff_is_valid(truncated) is False
 
 
 def test_is_gzip_and_open_maybe_gzip(shared_datadir):
@@ -37,13 +38,13 @@ def test_is_gzip_and_open_maybe_gzip(shared_datadir):
         plain = Path(output_dir) / "genomic.gbff"
         shutil.copyfile(src_gb, plain)
 
-        assert domainator_db_download._is_gzip(gz) is True
-        assert domainator_db_download._is_gzip(plain) is False
+        assert db_download._is_gzip(gz) is True
+        assert db_download._is_gzip(plain) is False
 
         # both open transparently to the same text content
-        with domainator_db_download._open_maybe_gzip(gz, "rt") as fh:
+        with db_download._open_maybe_gzip(gz, "rt") as fh:
             assert fh.read() == expected
-        with domainator_db_download._open_maybe_gzip(plain, "rt") as fh:
+        with db_download._open_maybe_gzip(plain, "rt") as fh:
             assert fh.read() == expected
 
 
@@ -55,9 +56,9 @@ def test_process_local_gbff_no_gene_call(shared_datadir):
         outfile = Path(output_dir) / "out.gb"
         outfile.touch()
 
-        ok = domainator_db_download.process_local_gbff(str(gbff_gz), str(outfile), gene_call=None)
+        ok = db_download.process_local_gbff(str(gbff_gz), str(outfile), gene_call=None)
         assert ok is True
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 1
         assert any(f.type == "CDS" for f in recs[0].features)
 
@@ -68,7 +69,7 @@ def test_process_local_gbff_skips_corrupt_gzip(shared_datadir):
         bad.write_bytes(b"not really gzip")
         outfile = Path(output_dir) / "out.gb"
         outfile.touch()
-        ok = domainator_db_download.process_local_gbff(str(bad), str(outfile), gene_call=None)
+        ok = db_download.process_local_gbff(str(bad), str(outfile), gene_call=None)
         assert ok is False
         assert outfile.stat().st_size == 0
 
@@ -79,10 +80,10 @@ def test_uniprot_download_fasta(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "uniprot_sprot.fasta"
-        domainator_db_download.main(["--db", "swissprot", "--max_records", "2", "--fasta_out", str(outfile)])
+        db_download.main(["--db", "swissprot", "--max_records", "2", "--fasta_out", str(outfile)])
         assert outfile.exists()
         assert outfile.stat().st_size > 0
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
 @pytest.mark.network
@@ -90,10 +91,10 @@ def test_uniprot_download_genbank(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "uniprot_sprot.gb"
-        domainator_db_download.main(["--db", "swissprot_gb", "--max_records", "2", "--genbank_out", str(outfile)])
+        db_download.main(["--db", "swissprot_gb", "--max_records", "2", "--genbank_out", str(outfile)])
         assert outfile.exists()
         assert outfile.stat().st_size > 0
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
 
@@ -104,10 +105,10 @@ def test_genbank_download_genbank_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "gb.gb"
-        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=1, download_workers=3)
+        db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=1, download_workers=3)
         assert outfile.exists()
         # read output file
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 1
 
 @pytest.mark.network
@@ -116,10 +117,10 @@ def test_genbank_download_genbank_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "gb.gb"
-        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=None, download_workers=3)
+        db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call=None, num_recs=None, download_workers=3)
         assert outfile.exists()
         # read output file
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
 @pytest.mark.network
@@ -128,10 +129,10 @@ def test_genbank_download_genbank_3(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         outfile = Path(output_dir) / "gb.gb"
-        domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call="all", num_recs=None, download_workers=2)
+        db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call="all", num_recs=None, download_workers=2)
         assert outfile.exists()
         # read output file
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
         outfile_text = outfile.read_text()
         assert "CDS" in outfile_text
@@ -143,7 +144,7 @@ def test_genbank_download_genbank_3(shared_datadir):
 #         #output_dir = "test_out"
 #         outfile = Path(output_dir) / "gb.gb"
 #         skipped_record_log = Path(output_dir) / "skipped_record_log.txt"
-#         domainator_db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call="all", num_recs=None, cpus=2, skipped_record_log=skipped_record_log)
+#         db_download.process_genbank_accessions([{'ftp_path':small_genbank} for small_genbank in small_genbanks], outfile, gene_call="all", num_recs=None, cpus=2, skipped_record_log=skipped_record_log)
 #         assert outfile.exists()
 #         # read output file
 #         recs = list(utils.parse_seqfiles([str(outfile)]))
@@ -167,9 +168,9 @@ def test_process_local_gbff_uncompressed(shared_datadir):
         outfile.touch()
 
         # fast path (no gene calling): records copied through verbatim
-        ok = domainator_db_download.process_local_gbff(str(plain), str(outfile), gene_call=None)
+        ok = db_download.process_local_gbff(str(plain), str(outfile), gene_call=None)
         assert ok is True
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 1
         assert any(f.type == "CDS" for f in recs[0].features)
 
@@ -182,9 +183,9 @@ def test_process_local_gbff_uncompressed_gene_call(shared_datadir):
         shutil.copyfile(src_gb, plain)
         outfile = Path(output_dir) / "out.gb"
         outfile.touch()
-        ok = domainator_db_download.process_local_gbff(str(plain), str(outfile), gene_call="unannotated")
+        ok = db_download.process_local_gbff(str(plain), str(outfile), gene_call="unannotated")
         assert ok is True
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 1
         assert any(f.type == "CDS" for f in recs[0].features)
 
@@ -203,12 +204,12 @@ def _make_fake_rehydrated_tree(workdir, src_gb, accessions):
 def _mock_datasets_cli(monkeypatch):
     """Make the datasets/unzip subprocess calls no-op successes so process_via_datasets can be
     exercised offline against a pre-populated rehydrated tree."""
-    monkeypatch.setattr(domainator_db_download.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(db_download, "resolve_binary", lambda name, path=None, **kwargs: path or "/usr/bin/" + name)
 
     class _Result:
         returncode = 0
 
-    monkeypatch.setattr(domainator_db_download.subprocess, "run", lambda *a, **k: _Result())
+    monkeypatch.setattr(db_download.subprocess, "run", lambda *a, **k: _Result())
 
 
 def test_process_via_datasets_offline(shared_datadir, monkeypatch):
@@ -229,7 +230,7 @@ def test_process_via_datasets_offline(shared_datadir, monkeypatch):
         success_log = Path(td) / "success_new.txt"
         genbank_accessions = [{"assembly_accession": a} for a in accs]
 
-        summary = domainator_db_download.process_via_datasets(
+        summary = db_download.process_via_datasets(
             genbank_accessions, str(outfile), gene_call=None, num_recs=None, cpus=1,
             success_rec_log=str(success_log), datasets_workdir=str(workdir),
             datasets_include="gbff", datasets_max_workers=1, api_key=None,
@@ -240,7 +241,7 @@ def test_process_via_datasets_offline(shared_datadir, monkeypatch):
         assert summary["failed"] == 0
         assert summary["missing"] == 0
 
-        recs = list(utils.parse_seqfiles([str(outfile)]))
+        recs = list(parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
         logged = set(success_log.read_text().split())
@@ -263,7 +264,7 @@ def test_process_via_datasets_num_recs_slices_download(shared_datadir, monkeypat
         success_log = Path(td) / "success_new.txt"
         genbank_accessions = [{"assembly_accession": a} for a in accs]
 
-        summary = domainator_db_download.process_via_datasets(
+        summary = db_download.process_via_datasets(
             genbank_accessions, str(outfile), gene_call=None, num_recs=1, cpus=1,
             success_rec_log=str(success_log), datasets_workdir=str(workdir),
             datasets_include="gbff", datasets_max_workers=1, api_key=None,
@@ -284,7 +285,7 @@ def test_success_log_equals_exclude_file_raises(capsys):
         out = Path(td) / "out.fasta"
         log = Path(td) / "log.txt"
         with pytest.raises(SystemExit):
-            domainator_db_download.main([
+            db_download.main([
                 "--db", "swissprot", "--fasta_out", str(out),
                 "--success_log_out", str(log),
                 "--exclude_accessions_file", str(log),
@@ -307,8 +308,8 @@ def test_process_via_datasets_gzip_flag(shared_datadir, monkeypatch):
         calls.append(list(cmd))
         return _Result()
 
-    monkeypatch.setattr(domainator_db_download.shutil, "which", lambda name: "/usr/bin/" + name)
-    monkeypatch.setattr(domainator_db_download.subprocess, "run", _record)
+    monkeypatch.setattr(db_download, "resolve_binary", lambda name, path=None, **kwargs: path or "/usr/bin/" + name)
+    monkeypatch.setattr(db_download.subprocess, "run", _record)
 
     def _run(datasets_gzip):
         calls.clear()
@@ -316,7 +317,7 @@ def test_process_via_datasets_gzip_flag(shared_datadir, monkeypatch):
             workdir = Path(td) / "workdir"
             workdir.mkdir(parents=True, exist_ok=True)
             _make_fake_rehydrated_tree(workdir, src_gb, accs)
-            domainator_db_download.process_via_datasets(
+            db_download.process_via_datasets(
                 [{"assembly_accession": a} for a in accs], str(Path(td) / "out.gb"),
                 gene_call=None, num_recs=None, cpus=1, success_rec_log=None,
                 datasets_workdir=str(workdir), datasets_include="gbff", datasets_max_workers=10,
@@ -384,15 +385,15 @@ class _FakeResponse:
 @pytest.mark.parametrize("db,payload", [("swissprot", _UNIPROT_FASTA), ("swissprot_gb", _UNIPROT_DAT)])
 @pytest.mark.parametrize("partial,expected", [("include", {"A0A001", "A0A002"}), ("exclude", {"A0A001"}), ("only", {"A0A002"})])
 def test_uniprot_download_partial(monkeypatch, tmp_path, db, payload, partial, expected):
-    monkeypatch.setattr(domainator_db_download.requests, "get", lambda url, stream=True: _FakeResponse(payload))
+    monkeypatch.setattr(db_download.requests, "get", lambda url, stream=True: _FakeResponse(payload))
     outfile = tmp_path / ("out.gb" if db.endswith("_gb") else "out.fasta")
-    domainator_db_download.main(["--db", db, "--genbank_out" if db.endswith("_gb") else "--fasta_out", str(outfile), "--partial", partial, "--no_taxonomy_update"])
-    records = list(utils.parse_seqfiles([str(outfile)]))
+    db_download.main(["--db", db, "--genbank_out" if db.endswith("_gb") else "--fasta_out", str(outfile), "--partial", partial, "--no_taxonomy_update"])
+    records = list(parse_seqfiles([str(outfile)]))
     assert {accession for accession in ("A0A001", "A0A002") if any(accession in r.id + r.name for r in records)} == expected
     if db == "swissprot_gb" and partial == "only":
-        assert utils.get_fragment_status(records[0]) == "N" # NON_TER on residue 1 survives the conversion to GenBank
+        assert get_fragment_status(records[0]) == "N" # NON_TER on residue 1 survives the conversion to GenBank
 
 
 def test_uniprot_download_partial_rejects_ncbi(tmp_path):
     with pytest.raises(ValueError, match="UniProt"):
-        domainator_db_download.domainator_db_download(None, str(tmp_path / "out.gb"), None, None, "ncbi_all", None, None, None, None, None, partial="exclude")
+        db_download.db_download(None, output_file_path=str(tmp_path / "out.gb"), include_taxids=None, exclude_taxids=None, db="ncbi_all", gene_call=None, num_recs=None, ncbi_summary=None, before=None, after=None, partial="exclude")

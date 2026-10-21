@@ -28,12 +28,9 @@ Usage:
 """
 import contextlib
 import sys
-import warnings
-warnings.filterwarnings("ignore", module='numpy')
 import csv
 from os import PathLike
 from pathlib import Path
-import pandas as pd
 import scipy.sparse
 import numpy as np
 import h5py
@@ -41,9 +38,7 @@ import h5py
 from domainator.errors import FormatVersionError
 from typing import Dict, List, Tuple, Union, Optional, Iterator
 
-# SortedUndirectedEdges / CompactNeighborRankings live in edge_types to avoid an
-# import cycle with ssn_edges (MaxTree + the edge/neighbor-ranking functions).
-from .edge_types import SortedUndirectedEdges, CompactNeighborRankings
+from .edge_types import SortedUndirectedEdges
 
 
 _HDF5_FILE_OVERHEAD_ESTIMATE = 8 * 1024
@@ -551,6 +546,7 @@ class DataMatrix:
         except UnicodeDecodeError:
             raise ValueError(f"Expecting utf-8 encoded matrix file, but found invalid unicode byte.")
 
+        import pandas as pd  # only dense text matrices need it
         try:
             mat_file = pd.read_csv(matrix_file, sep="\t", index_col=0)
         except UnicodeDecodeError:
@@ -1008,18 +1004,3 @@ class DataMatrix:
             return cls.estimate_dense_text_size(matrix, row_names, col_names, row_lengths, col_lengths, data_type)
         raise ValueError(f"Unrecognized output type: {output_type}")
 
-
-# Backward-compatible re-exports. MaxTree and the edge/neighbor-ranking functions live
-# in ssn_edges; importing here (after DataMatrix is defined) keeps existing
-# `from domainator.data_matrix import MaxTree, ...` call sites working and avoids an
-# import cycle (ssn_edges imports DataMatrix lazily).
-from .ssn_edges import (  # noqa: E402
-    MaxTree,
-    build_symmetric_neighbor_rankings,
-    symmetric_knn_edge_index_dict,
-    mst_edge_index_dict,
-    mst_knn_edge_index_dict,
-    sorted_edges_from_edge_index_dict,
-    mst_knn_edge_counts_by_threshold,
-    StreamingMstKnnAccumulator,
-)

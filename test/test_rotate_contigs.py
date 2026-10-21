@@ -13,7 +13,8 @@ from domainator.Bio import SeqIO
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
-from domainator.utils import parse_seqfiles, region_id
+from domainator.seqio import parse_seqfiles
+from domainator.model import region_id
 
 SPR = "bacillus_phage_SPR_with_annotations.gb" # circular, 2552 bp, all features on the reverse strand
 SPR_REVERSED = "bacillus_phage_SPR_with_annotations_reversed.gb" # the same contig, reverse complemented
@@ -97,7 +98,7 @@ def test_rotate_on_feature(where, strand, keep_direction):
     length = len(CIRCULAR_SEQUENCE)
     domain = SeqFeature(FeatureLocation(20, 30, strand), type=DOMAIN_FEATURE_NAME, qualifiers={"name": ["dom"], "evalue": ["1e-10"], "score": ["50"]})
     rec = _circular_record(CIRCULAR_SEQUENCE, [domain])
-    rotated = next(rotate_contigs.rotate_contigs([rec], domains=["dom"], where=where, keep_direction=keep_direction))
+    rotated = next(rotate_contigs.rotate_contigs([rec], domains=["dom"], anchor=where, keep_direction=keep_direction))
     feature = _domains(rotated, "dom")[0]
     reverse = strand == -1 and not keep_direction
     domain_seq = str(domain.location.extract(rec.seq))
@@ -367,7 +368,7 @@ def test_rotate_config_file(shared_datadir):
 
 
 @pytest.mark.parametrize("args,match", [
-    ([], "Specify references, domains, or search_hits"),
+    ([], "Specify references, domains, or annotation_type"),
     (["--domains", "DHFR_1", "--gene_call", "unannotated"], "gene_call only applies"),
     (["--domains", "DHFR_1", "-r", "SPR.hmm", "--gene_call", "all"], "gene_call 'all'"),
 ])

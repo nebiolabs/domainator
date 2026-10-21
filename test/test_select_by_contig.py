@@ -1,7 +1,7 @@
 import tempfile
 
 from domainator import select_by_contig
-from domainator import utils
+from domainator.seqio import parse_seqfiles
 import subprocess
 import sys
 
@@ -11,7 +11,7 @@ def test_select_by_contig_1(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--domains", "CAT", ])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "pDONR201_4"
 
@@ -21,7 +21,7 @@ def test_select_by_contig_2(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--max_records", "1"])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
 
 def test_select_by_contig_3(shared_datadir):
@@ -30,7 +30,7 @@ def test_select_by_contig_3(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--max_records", "3"])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 3
 
 
@@ -40,7 +40,7 @@ def test_select_by_contig_4(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 5
 
 def test_select_by_contig_5(shared_datadir):
@@ -49,7 +49,7 @@ def test_select_by_contig_5(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--contigs_file", str(shared_datadir / "simple_genpept_contigs.txt"), "-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
 
 def test_select_by_contig_6(shared_datadir):
@@ -58,7 +58,7 @@ def test_select_by_contig_6(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--min_length", "210", "--max_length", "230","-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
 
 def test_select_by_contig_cds_count_lb_1(shared_datadir):
@@ -66,7 +66,7 @@ def test_select_by_contig_cds_count_lb_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--min_cds", "6", "-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 4
 
 def test_select_by_contig_cds_count_ub_1(shared_datadir):
@@ -74,7 +74,7 @@ def test_select_by_contig_cds_count_ub_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--max_cds", "5", "-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 0
 
 def test_select_by_conting_domain_expression_1(shared_datadir):
@@ -83,7 +83,7 @@ def test_select_by_conting_domain_expression_1(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--domain_expr", "(CcdB) | (CAT & Condensation)", "-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
 
 def test_select_by_contig_definition_regex_1(shared_datadir):
@@ -92,7 +92,7 @@ def test_select_by_contig_definition_regex_1(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main( ["-i", str(shared_datadir / "FeSOD_20.gb"), "--definition_regex", "A0A1.*", "-o", out] )
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 3
 
 
@@ -105,7 +105,7 @@ def test_select_by_conting_domain_expression_config_file(shared_datadir):
         with open(config_file, "w") as fh:
             subprocess.run([sys.executable, "-m", "domainator", "select_by_contig", "-i", str(shared_datadir / "simple_genpept.gb"), "--domain_expr", "(CcdB) | (CAT & Condensation)", "-o", out, '--print_config'], stdout=fh, stderr=fh, check=True)
         select_by_contig.main(["--config", config_file])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
 
 def test_select_by_contig_evalue_filter_1(shared_datadir):
@@ -118,7 +118,7 @@ def test_select_by_contig_evalue_filter_1(shared_datadir):
             "--evalue", "1e-200",
         ])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 0
 
 
@@ -132,7 +132,7 @@ def test_select_by_contig_invert_1(shared_datadir):
             "--invert",
         ])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 4
         assert [seq.id for seq in seqs] == ["pDONR201_1", "pDONR201_2", "pDONR201_3", "pDONR201_5"]
 
@@ -147,7 +147,7 @@ def test_select_by_contig_phylogeny_filter_1(shared_datadir):
             "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"),
         ])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "sp|P0AGD1|SODC_ECOLI"
 
@@ -163,7 +163,7 @@ def test_select_by_contig_taxonomy_expr(shared_datadir):
             "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"),
         ])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "sp|P0AGD1|SODC_ECOLI"
 
@@ -172,7 +172,7 @@ def test_select_by_contig_unannotated_1(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--unannotated", "-o", out])
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "pDONR201_1"
 
@@ -182,7 +182,7 @@ def test_select_by_contig_database_1(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main( ["-i", str(shared_datadir /  "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--databases", "pdonr_hmms_1", "--domains", "APH"] )
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
         assert seqs[0].id == "pDONR201_3"
         assert seqs[1].id == "pDONR201_4"
@@ -194,7 +194,7 @@ def test_select_by_contig_fasta_io_1(shared_datadir):
         out = output_dir + "/extraction_pept.fasta"
         select_by_contig.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "--fasta_out", out, "--contigs", "pDONR201_3", "pDONR201_5"])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
         assert seqs[0].id == "pDONR201_3"
         assert seqs[1].id == "pDONR201_5"
@@ -207,7 +207,7 @@ def test_select_by_contig_name_regex_1(shared_datadir):
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-o", out, "--contigs_regex", "pDONR201_(3|5)"])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
         assert seqs[0].id == "pDONR201_3"
         assert seqs[1].id == "pDONR201_5"
@@ -228,7 +228,7 @@ def test_select_by_contig_search_score_1(shared_datadir):
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "CuSOD_enum_report_test.gb"), "-o", out, "--min_search_score", "400", "--max_search_score", "500"])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "sp|O31851|YOJM_BACSU"
 
@@ -239,7 +239,7 @@ def test_select_by_contig_search_name_1(shared_datadir):
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "CuSOD_enum_report_test.gb"), "-o", out, "--annotation_type", "domain_search", "--domains", "sp|O31851|YOJM_BACSU"])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 1
         assert seqs[0].id == "sp|O31851|YOJM_BACSU"
 
@@ -250,7 +250,7 @@ def test_select_by_contig_search_name_2(shared_datadir):
         out = output_dir + "/extraction_pept.gb"
         select_by_contig.main(["-i", str(shared_datadir / "CuSOD_enum_report_test.gb"), "-o", out, "--annotation_type", "domainator", "--domains", "sp|O31851|YOJM_BACSU"])
 
-        seqs = list(utils.parse_seqfiles([out]))
+        seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2
 
 
@@ -267,14 +267,14 @@ def test_select_by_contig_partial(shared_datadir):
         for partial in ("include", "exclude", "only"):
             out = output_dir + f"/{partial}.gb"
             select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", partial])
-            ids[partial] = [r.id for r in utils.parse_seqfiles([out])]
+            ids[partial] = [r.id for r in parse_seqfiles([out])]
         assert ids["only"] == ["JABFVH010000506_extraction", "pDONR201_1", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
         assert ids["exclude"] == ["pDONR201"]
         assert sorted(ids["include"]) == sorted(ids["only"] + ids["exclude"])
         # --invert doesn't apply to --partial
         out = output_dir + "/invert.gb"
         select_by_contig.main(["-i"] + inputs + ["-o", out, "--partial", "only", "--contigs", "pDONR201_1", "--invert"])
-        assert [r.id for r in utils.parse_seqfiles([out])] == ["JABFVH010000506_extraction", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
+        assert [r.id for r in parse_seqfiles([out])] == ["JABFVH010000506_extraction", "pDONR201_2", "pDONR201_3", "pDONR201_4"]
 
 
 def test_select_by_contig_partial_uniprot_fasta(shared_datadir):
@@ -283,4 +283,4 @@ def test_select_by_contig_partial_uniprot_fasta(shared_datadir):
         fragment_id = _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
         out = output_dir + "/only.gb"
         select_by_contig.main(["-i", fasta, "-o", out, "--partial", "only"])
-        assert [r.id for r in utils.parse_seqfiles([out])] == [fragment_id]
+        assert [r.id for r in parse_seqfiles([out])] == [fragment_id]

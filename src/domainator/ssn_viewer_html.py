@@ -16,7 +16,7 @@ from domainator.ssn_hierarchy import (
     MERGE_IMPACT_MIN_CHILD,
     merge_impact_axis_labels,
 )
-from domainator.utils import NAMED_CATEGORICAL_PALETTES, OTHER_COLOR
+from domainator.colors import NAMED_CATEGORICAL_PALETTES, OTHER_COLOR
 
 
 VIEWER_APP_NAME = "Domainator Similarity Network Viewer"

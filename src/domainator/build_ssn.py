@@ -3,15 +3,14 @@
 Build a sequence similarity network and do analysis related to that.
 """
 
-import warnings
-warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ActionConfigFile
 from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 import os
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.cytoscape import write_cytoscape_xgmml
-from domainator.data_matrix import DataMatrix, MaxTree, mst_edge_index_dict
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree, mst_edge_index_dict
 from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_edge_index_dict
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, make_temporary_output_path
 import scipy.sparse
@@ -20,8 +19,9 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Union, Dict
 import numpy as np
-from domainator.utils import get_palette, sort_palette_values, list_and_file_to_dict_keys
-from domainator.color_genbank import read_color_table
+from domainator.colors import get_palette, sort_palette_values
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.colors import read_color_table
 
 SCORE_COLUMN="SSN_SCORE"
 CLUSTER_COLUMN="SSN_cluster"
@@ -193,18 +193,18 @@ def iter_edge_dict_ssn_edges(edge_dict, rows, mst_edges=None):
             yield source, target, score, _normalized_pair(source_idx, target_idx) in mst_edges
 
 
-def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, knn: int = None, subset_labels=None, max_output_bytes=None, max_color_groups:int=None, mark_mst:bool=False):
+def build_ssn(matrix: DataMatrix, *, threshold:float=0, metadata:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
+              xgmml_out:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv_out:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, knn: int = None, subset_labels=None, max_output_bytes=None, max_color_groups:int=None, mark_mst:bool=False):
     """build a sequence similarity network from a matrix
 
     Args:
         matrix (DataMatrix): symmetric matrix of edge values
-        lb (float, optional): ignore scores lower than or equal to this. Defaults to 0.
-        metadata_files (List[Union[str, PathLike]], optional): tab separated text files containg node annotations. Defaults to None.
+        threshold (float, optional): ignore scores lower than or equal to this. Defaults to 0.
+        metadata (List[Union[str, PathLike]], optional): tab separated text files containg node annotations. Defaults to None.
         color_by (str, optional): color the nodes based on their value in this metadata field. Set to SSN_cluster to color by cluster. Defaults to None.
-        xgmml (Union[str, PathLike], optional): write a Cytoscape xgmml file to this path. Defaults to None.
+        xgmml_out (Union[str, PathLike], optional): write a Cytoscape XGMML file to this path. Defaults to None.
         cluster (bool, optional): If True, then add new annotations with connected cluster IDs. Defaults to False.
-        cluster_tsv (Union[str, PathLike], optional): write a metadata tab-separated file with the cluster ids to this path. Defaults to None.
+        cluster_tsv_out (Union[str, PathLike], optional): write a metadata tab-separated file with the cluster ids to this path. Defaults to None.
         no_cluster_header (bool, optional): If True, then the cluster tsv file will not have a header. Defaults to False.
         color_table_out (str, optional): write a color table to this path. Defaults to None.
         mst (bool, optional): If True, emit only maximum spanning tree edges, which preserves the input's connected components. Defaults to False.
@@ -226,7 +226,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         raise ValueError("Input does not have symmetric axis labels. Can only build an SSN from a symmetric matrix.")
     matrix.require_similarity("build_ssn")
 
-    if cluster_tsv is not None:
+    if cluster_tsv_out is not None:
         cluster = True
     # --mst (with or without --knn) changes which edges are emitted while preserving the
     # input's components, so its clusters are read off the tree. --mark_mst only annotates
@@ -239,16 +239,16 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
     # selected edges -- computed here, while matrix.data is still around.
     knn_edge_dict = None
     if knn is not None and not mst:
-        knn_edge_dict = sparsify_edge_index_dict(matrix, mst=False, knn=knn, lower_bound=lb)
+        knn_edge_dict = sparsify_edge_index_dict(matrix, mst=False, knn=knn, lower_bound=threshold)
 
     node_data = pd.DataFrame(index=matrix.rows)
     if cluster:
         if mst:
-            node_data[CLUSTER_COLUMN] = cluster_labels_from_tree(tree, lb)
+            node_data[CLUSTER_COLUMN] = cluster_labels_from_tree(tree, threshold)
         elif knn_edge_dict is not None:
             node_data[CLUSTER_COLUMN] = cluster_labels_from_edge_dict(knn_edge_dict, len(matrix.rows))
         else:
-            node_data[CLUSTER_COLUMN] = cluster_labels_from_graph(matrix, lb)
+            node_data[CLUSTER_COLUMN] = cluster_labels_from_graph(matrix, threshold)
 
     # Determine the edge source for the XGMML write.  For --mst/--knn we free
     # the large matrix.data as soon as it is no longer needed.
@@ -262,7 +262,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         rows = matrix.rows
         del matrix  # free O(n²) data array; rows is a plain list
         # every edge on this path is an MST edge
-        xgmml_edge_rows = iter_mst_ssn_edges(tree, rows, lb, mark_mst=mark_mst)
+        xgmml_edge_rows = iter_mst_ssn_edges(tree, rows, threshold, mark_mst=mark_mst)
         xgmml_edge_kwargs = dict(
             edge_rows=xgmml_edge_rows,
             edge_column_names=edge_column_names,
@@ -271,9 +271,9 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         )
     elif knn is not None:
         # mst + knn is the union of the two; knn on its own was selected above.
-        edge_dict = (sparsify_edge_index_dict(matrix, mst=True, knn=knn, lower_bound=lb, tree=tree)
+        edge_dict = (sparsify_edge_index_dict(matrix, mst=True, knn=knn, lower_bound=threshold, tree=tree)
                      if mst else knn_edge_dict)
-        mst_edges = set(mst_edge_index_dict(tree, lower_bound=lb)) if mark_mst else None
+        mst_edges = set(mst_edge_index_dict(tree, lower_bound=threshold)) if mark_mst else None
         rows = matrix.rows
         del matrix  # free O(n²) data array
         xgmml_edge_rows = iter_edge_dict_ssn_edges(edge_dict, rows, mst_edges=mst_edges)
@@ -284,17 +284,17 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
             edge_endpoint_style="name",
         )
     else:
-        mst_edges = set(mst_edge_index_dict(tree, lower_bound=lb)) if mark_mst else None
+        mst_edges = set(mst_edge_index_dict(tree, lower_bound=threshold)) if mark_mst else None
         xgmml_edge_kwargs = dict(
-            edge_rows=iter_default_ssn_edges(matrix, lb, mst_edges=mst_edges),
+            edge_rows=iter_default_ssn_edges(matrix, threshold, mst_edges=mst_edges),
             edge_column_names=edge_column_names,
             edge_metadata_types=edge_metadata_types,
             edge_endpoint_style="index",
         )
 
-    if metadata_files is not None:
+    if metadata is not None:
         with ThreadPoolExecutor() as exe:
-            dfs = list(exe.map(lambda f: pd.read_csv(f, sep="\t", index_col=0), metadata_files))
+            dfs = list(exe.map(lambda f: pd.read_csv(f, sep="\t", index_col=0), metadata))
         for df in dfs:
             node_data = node_data.merge(df, how="left", left_index=True, right_index=True)
 
@@ -302,34 +302,34 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
         if color_table is None:
             color_table = get_palette(node_data[color_by], max_groups=max_color_groups)
 
-    if xgmml is not None:
-        temp_xgmml_path = make_temporary_output_path(xgmml)
+    if xgmml_out is not None:
+        temp_xgmml_path = make_temporary_output_path(xgmml_out)
         try:
             write_cytoscape_xgmml(
                 temp_xgmml_path,
                 node_data,
                 **xgmml_edge_kwargs,
-                name=Path(xgmml).stem,
+                name=Path(xgmml_out).stem,
                 color_by=color_by,
                 color_table=color_table,
                 max_output_bytes=max_output_bytes,
-                output_description=f"XGMML network output '{xgmml}'",
+                output_description=f"XGMML network output '{xgmml_out}'",
                 mitigation_options=["--threshold", "--mst", "--knn", "--subset"],
             )
-            os.replace(temp_xgmml_path, xgmml)
+            os.replace(temp_xgmml_path, xgmml_out)
             temp_xgmml_path = None
         finally:
             if temp_xgmml_path is not None and Path(temp_xgmml_path).exists():
                 os.unlink(temp_xgmml_path)
 
-    if cluster_tsv:
+    if cluster_tsv_out:
         index_label = None
         header = None
         if not no_cluster_header:
             header = ["cluster"]
             index_label = "contig"
 
-        node_data[CLUSTER_COLUMN].to_csv(cluster_tsv, index_label=index_label, header=header, sep="\t")
+        node_data[CLUSTER_COLUMN].to_csv(cluster_tsv_out, index_label=index_label, header=header, sep="\t")
     
     if color_table_out is not None:
         if color_table is None:
@@ -346,9 +346,6 @@ def build_parser():
 
     parser.add_argument('--threshold', type=float, default=0, required=False,
                         help="keep only edges with weights strictly above this value. This should be >= 0.")
-
-    # parser.add_argument('--metric', type=str, default="score", required=False,
-    #                     help="what to call the metric in the edge annotations") #TODO: reactivate this? or add "value" annotation in DataMatrix
 
     parser.add_argument('--metadata', type=str, nargs="+", required=False, default=None, 
                         help="tab separated files of sequence metadata.")
@@ -387,8 +384,6 @@ def build_parser():
     # TODO: generate MSAs for connected clusters (write to files and make a cytoscape column with the alinged sequences)
     # TODO: generate hmms for connected clusters (write to files)
     # TODO: 
-    # parser.add_argument('--gradient', type=str, required=False, default=None,
-    #                     help="Color nodes based on a gradient instead of discrete value mapping.")
     return parser
 
 
@@ -418,7 +413,7 @@ def main(argv):
     # The MST paths need the unthresholded matrix; --threshold is applied later by the tree
     # walk. Pure --knn and the default path can prune on load and save the memory.
     load_lower_bound = None if params.mst else params.threshold
-    build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.threshold, params.metadata, params.color_by, color_table,
-              params.xgmml_out, cluster, params.cluster_tsv_out, params.no_cluster_header, params.color_table_out,
-              params.mst, params.knn, subset_labels, max_output_bytes=max_output_bytes,
+    build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), threshold=params.threshold, metadata=params.metadata, color_by=params.color_by, color_table=color_table,
+              xgmml_out=params.xgmml_out, cluster=cluster, cluster_tsv_out=params.cluster_tsv_out, no_cluster_header=params.no_cluster_header, color_table_out=params.color_table_out,
+              mst=params.mst, knn=params.knn, subset_labels=subset_labels, max_output_bytes=max_output_bytes,
               max_color_groups=params.max_color_groups, mark_mst=params.mark_mst)

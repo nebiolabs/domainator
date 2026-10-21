@@ -6,22 +6,24 @@ ji, ai, and dss metrics are similar to and inspired by the metrics used in the B
 Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. "A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data." Nature Chemical Biology 16, no. 1 (January 2020): 60–68. https://doi.org/10.1038/s41589-019-0400-9.
 """
 import warnings
-warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, resolve_cpu, tool_parser
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, make_pool, open_writable_seqfile
-from abc import ABC, abstractmethod
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.seqio import parse_seqfiles, write_genbank, copy_SeqRecord, open_writable_seqfile
+from domainator._mp import make_pool
 from collections import OrderedDict
 import scipy.cluster.hierarchy
 import math
 from domainator import DOMAIN_FEATURE_NAME
-from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator, mirror_upper_triangle
+from domainator.data_matrix import DataMatrix, mirror_upper_triangle
+from domainator.sparse_scores import StreamingCSRChunkBuilder, feed_chunk_to_accumulator, iter_query_chunks, keep_top_k_per_row, prune_scores_inplace
+from domainator.ssn_edges import StreamingMstKnnAccumulator
 from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_matrix, sparsify_requested
-from domainator.filter_domains import filter_domains
 from domainator.matrix_output import add_matrix_output_arguments, resolve_matrix_outputs, write_matrix_outputs
 from domainator.errors import DomainatorError
 from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes
-from typing import Optional, Set
+from typing import Optional
+from abc import ABC, abstractmethod
 import numpy as np
 import scipy.sparse
 import psutil
@@ -30,8 +32,6 @@ import tqdm
 _SIMILARITY_FEATURE_MATRIX = None
 _SIMILARITY_ROW_COUNTS = None
 _PREPARED_SIMILARITY_METRICS = None
-_DEFAULT_CHUNKS_PER_WORKER = 16
-_MAX_QUERY_ROWS_PER_CHUNK = 1024
 
 
 def _progress(iterable, enabled, **kwargs):
@@ -73,17 +73,6 @@ class _PreparedSimilarityMetric:
         self.label = label
 
 
-def _iter_query_chunks(n_rows, cpu, chunks_per_worker=_DEFAULT_CHUNKS_PER_WORKER, max_rows_per_chunk=_MAX_QUERY_ROWS_PER_CHUNK):
-    if n_rows == 0:
-        return []
-
-    requested_workers = max(cpu, 1)
-    chunk_size = max(1, math.ceil(n_rows / (requested_workers * chunks_per_worker)))
-    if max_rows_per_chunk is not None:
-        chunk_size = min(chunk_size, max_rows_per_chunk)
-    return [(start, min(start + chunk_size, n_rows)) for start in range(0, n_rows, chunk_size)]
-
-
 def _init_similarity_chunk_worker(feature_matrix, row_counts):
     global _SIMILARITY_FEATURE_MATRIX, _SIMILARITY_ROW_COUNTS
     _SIMILARITY_FEATURE_MATRIX = feature_matrix
@@ -93,55 +82,6 @@ def _init_similarity_chunk_worker(feature_matrix, row_counts):
 def _init_combined_similarity_chunk_worker(prepared_metrics):
     global _PREPARED_SIMILARITY_METRICS
     _PREPARED_SIMILARITY_METRICS = prepared_metrics
-
-
-class _StreamingCSRChunkBuilder:
-    def __init__(self, shape, dtype=np.float64):
-        self.shape = shape
-        self.dtype = np.dtype(dtype)
-        self._row_count = 0
-        self._nnz = 0
-        self._indices_chunks = list()
-        self._data_chunks = list()
-        self._indptr = [0]
-
-    def append_chunk(self, start, end, chunk_matrix):
-        if start != self._row_count:
-            raise RuntimeError(
-                f"Similarity chunks arrived out of order: expected row {self._row_count}, got {start}."
-            )
-
-        chunk_matrix = scipy.sparse.csr_array(chunk_matrix, dtype=self.dtype)
-        expected_shape = (end - start, self.shape[1])
-        if chunk_matrix.shape != expected_shape:
-            raise RuntimeError(
-                f"Similarity chunk shape mismatch for rows {start}:{end}: expected {expected_shape}, got {chunk_matrix.shape}."
-            )
-
-        if chunk_matrix.nnz > 0:
-            self._indices_chunks.append(chunk_matrix.indices.astype(np.int32, copy=False))
-            self._data_chunks.append(chunk_matrix.data.astype(self.dtype, copy=False))
-        self._indptr.extend((chunk_matrix.indptr[1:] + self._nnz).tolist())
-        self._nnz += chunk_matrix.nnz
-        self._row_count = end
-
-    def build(self):
-        if self._row_count != self.shape[0]:
-            raise RuntimeError(
-                f"Similarity chunk assembly incomplete: expected {self.shape[0]} rows, assembled {self._row_count}."
-            )
-
-        if self._nnz == 0:
-            return scipy.sparse.csr_array(self.shape, dtype=self.dtype)
-
-        return scipy.sparse.csr_array(
-            (
-                np.concatenate(self._data_chunks),
-                np.concatenate(self._indices_chunks),
-                np.asarray(self._indptr, dtype=np.int64),
-            ),
-            shape=self.shape,
-        )
 
 
 def _compute_similarity_chunk(feature_matrix, row_counts, start, end, upper_only=False):
@@ -195,15 +135,6 @@ def _compute_similarity_chunk(feature_matrix, row_counts, start, end, upper_only
     )
 
 
-def _prune_scores_inplace(scores, threshold):
-    if threshold <= 0 or scores.nnz == 0:
-        return scores
-    scores = scipy.sparse.csr_array(scores)
-    scores.data[scores.data <= threshold] = 0
-    scores.eliminate_zeros()
-    return scores
-
-
 def _compute_combined_similarity_chunk(prepared_metrics, start, end, k, lb, upper_only=False):
     if upper_only and k is not None:
         raise ValueError("A per-row hit cap needs whole rows, so it cannot be combined with upper_only.")
@@ -216,11 +147,11 @@ def _compute_combined_similarity_chunk(prepared_metrics, start, end, k, lb, uppe
         combined_chunk = combined_chunk + (metric.weight * metric_chunk)
         remaining_weight -= metric.weight
         if lb > 0:
-            combined_chunk = _prune_scores_inplace(combined_chunk, lb - remaining_weight)
+            combined_chunk = prune_scores_inplace(combined_chunk, lb - remaining_weight)
 
-    combined_chunk = _keep_top_k_per_row(combined_chunk, k)
+    combined_chunk = keep_top_k_per_row(combined_chunk, k)
     if lb > 0:
-        combined_chunk = _prune_scores_inplace(combined_chunk, lb)
+        combined_chunk = prune_scores_inplace(combined_chunk, lb)
     return combined_chunk
 
 
@@ -242,8 +173,8 @@ def _compute_sparse_similarity_matrix(contig_data, cpu=1, progress=False, desc=N
         return scipy.sparse.identity(matrix_shape[0], dtype=np.float64, format="csr")
 
     row_counts = np.diff(feature_matrix.indptr)
-    query_chunks = list(_iter_query_chunks(matrix_shape[0], cpu))
-    chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
+    query_chunks = list(iter_query_chunks(matrix_shape[0], cpu))
+    chunk_builder = StreamingCSRChunkBuilder(matrix_shape)
 
     if cpu > 1 and len(query_chunks) > 1:
         with make_pool(
@@ -276,8 +207,8 @@ def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, p
     if k == 0:
         return scipy.sparse.csr_array(matrix_shape, dtype=np.float64)
 
-    query_chunks = [(start, end, k, lb, upper_only) for start, end in _iter_query_chunks(matrix_shape[0], cpu)]
-    chunk_builder = _StreamingCSRChunkBuilder(matrix_shape)
+    query_chunks = [(start, end, k, lb, upper_only) for start, end in iter_query_chunks(matrix_shape[0], cpu)]
+    chunk_builder = StreamingCSRChunkBuilder(matrix_shape)
 
     if cpu > 1 and len(query_chunks) > 1:
         with make_pool(
@@ -295,13 +226,6 @@ def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, p
     return mirror_upper_triangle(scores) if upper_only else scores
 
 
-def _feed_chunk_to_accumulator(accumulator, start, chunk_matrix):
-    """Feed the nonzero entries of a per-row chunk into a StreamingMstKnnAccumulator."""
-    coo = scipy.sparse.coo_array(chunk_matrix)
-    for local_row, col, value in zip(coo.row, coo.col, coo.data):
-        accumulator.add_edge(int(start) + int(local_row), int(col), float(value))
-
-
 def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, cpu=1, progress=False, desc=None, upper_only=False):
     """Stream per-row similarity chunks into an MST and/or kNN accumulator.
 
@@ -314,7 +238,7 @@ def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, 
     n = prepared_metrics[0].feature_matrix.shape[0]
     accumulator = StreamingMstKnnAccumulator(n, mst=mst, knn=knn, lower_bound=lb)
 
-    query_chunks = [(start, end, k, lb, upper_only) for start, end in _iter_query_chunks(n, cpu)]
+    query_chunks = [(start, end, k, lb, upper_only) for start, end in iter_query_chunks(n, cpu)]
 
     if cpu > 1 and len(query_chunks) > 1:
         with make_pool(
@@ -323,52 +247,13 @@ def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, 
             initargs=(prepared_metrics,),
         ) as pool:
             for start, end, chunk_matrix in _progress(pool.imap(_compute_combined_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
-                _feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
+                feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
     else:
         for chunk_args in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
-            _feed_chunk_to_accumulator(accumulator, chunk_args[0], _compute_combined_similarity_chunk(prepared_metrics, *chunk_args))
+            feed_chunk_to_accumulator(accumulator, chunk_args[0], _compute_combined_similarity_chunk(prepared_metrics, *chunk_args))
 
     return accumulator.to_csr()
 
-
-def _keep_top_k_per_row(scores, k):
-    if k is None:
-        return scores
-
-    matrix = scipy.sparse.csr_array(scores)
-    if k == 0 or matrix.nnz == 0:
-        return scipy.sparse.csr_array(matrix.shape, dtype=matrix.dtype)
-
-    row_idx = list()
-    col_idx = list()
-    data = list()
-
-    for query_idx in range(matrix.shape[0]):
-        row_start = matrix.indptr[query_idx]
-        row_end = matrix.indptr[query_idx + 1]
-        target_indices = matrix.indices[row_start:row_end]
-        row_scores = matrix.data[row_start:row_end]
-
-        if row_scores.size == 0:
-            continue
-
-        if row_scores.size > k:
-            top_order = np.lexsort((target_indices, -row_scores))[:k]
-            target_indices = target_indices[top_order]
-            row_scores = row_scores[top_order]
-
-        column_order = np.argsort(target_indices)
-        target_indices = target_indices[column_order]
-        row_scores = row_scores[column_order]
-
-        row_idx.extend([query_idx] * target_indices.size)
-        col_idx.extend(target_indices.tolist())
-        data.extend(row_scores.tolist())
-
-    if len(data) == 0:
-        return scipy.sparse.csr_array(matrix.shape, dtype=matrix.dtype)
-
-    return scipy.sparse.csr_array((np.asarray(data), (np.asarray(row_idx), np.asarray(col_idx))), shape=matrix.shape)
 
 class ContigMetric(ABC):
     weight: float = 0.0
@@ -593,113 +478,69 @@ def _check_sort_feasible(n, leaf_ordering, check_memory=True):
         )
 
 
-class DistanceReport(ABC):
-    outpath: str
+def write_sorted_genbank(records, scores, path, *, linkage_method="average", leaf_ordering="greedy", name_by_order=False):
+    """Write ``records`` to a GenBank file, ordered by hierarchical clustering of their ``scores``.
 
-    @abstractmethod
-    def write(self, recs, scores, options):
-        """
-            recs: a list of SeqRecords
-            scores: a dok_sparse matrix of scores representing how similar each pair of contigs are
-            options: a dict of additional options
-        """
-        pass
-
-class HdfTableOutput(DistanceReport):
-    def __init__(self, outpath, max_output_bytes=None):
-        self.outpath = outpath
-        self.max_output_bytes = max_output_bytes
-    
-    def write(self, recs, scores, options):
-        row_names = [x.id for x in recs]
-        write_matrix_outputs(scores, row_names, row_names, hdf=self.outpath, dense_text=None,
-                             max_output_bytes=self.max_output_bytes, data_type="score",
-                             mitigation_options=["--max_hits_per_query", "--mst", "--knn"])
-
-
-class ClinkerOutput(DistanceReport):
-
-    def __init__(self, outpath):
-        self.outpath = outpath
-    
-    def write(self, recs, scores, options):
-        warnings.warn("Clinker output not implemented")
-
-class SvgTreeOutput(DistanceReport):
-
-    def __init__(self, outpath):
-        self.outpath = outpath
-    
-    def write(self, recs, scores, options):
-        warnings.warn("SVG Tree output not implemented")
-
-class GenbankOutput(DistanceReport):
-
-    def __init__(self, outpath, linkage_method="average", leaf_ordering="greedy"):
-        self.outpath = outpath
-        self.linkage_method = linkage_method
-        self.leaf_ordering = leaf_ordering
-
-    def write(self, recs, scores, options):
-        if len(recs) > 0:
-            order = _hierarchical_order(scores, linkage_method=self.linkage_method, leaf_ordering=self.leaf_ordering)
-            digits = math.ceil(math.log10(len(order)+1))
-            with open_writable_seqfile(self.outpath) as outfile:
-                print_i = 0
-                for i in order:
-                    rec = recs[i]
-                    if "name_by_order" in options:
-                        rec = copy_SeqRecord(rec)
-                        rec.id = str(print_i).zfill(digits) + "_" + rec.id
-                        print_i += 1
-                    write_genbank([rec], outfile)
-        else:
-            open_writable_seqfile(self.outpath).close()
+    ``scores`` is a square similarity matrix (an array, a scipy sparse array or a DataMatrix)
+    whose rows are ``records`` in order. With ``name_by_order``, written copies get a numeric
+    prefix that sorts back into the clustered order; ``records`` are not modified.
+    """
+    if isinstance(scores, DataMatrix):
+        scores = scores.data
+    if len(records) == 0:
+        open_writable_seqfile(path).close()
+        return
+    order = _hierarchical_order(scores, linkage_method=linkage_method, leaf_ordering=leaf_ordering)
+    digits = math.ceil(math.log10(len(order) + 1))
+    with open_writable_seqfile(path) as outfile:
+        for print_i, i in enumerate(order):
+            rec = records[i]
+            if name_by_order:
+                rec = copy_SeqRecord(rec)
+                rec.id = str(print_i).zfill(digits) + "_" + rec.id
+            write_genbank([rec], outfile)
 
 
-class DenseTextTableOutput(DistanceReport):
-
-    def __init__(self, outpath, max_output_bytes=None):
-        self.outpath = outpath
-        self.max_output_bytes = max_output_bytes
-    
-    def write(self, recs, scores, options):
-        row_names = [x.id for x in recs]
-        write_matrix_outputs(scores, row_names, row_names, hdf=None, dense_text=self.outpath,
-                             max_output_bytes=self.max_output_bytes,
-                             mitigation_options=["--max_hits_per_query", "--mst", "--knn"])
-
-def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, name_by_order, databases:Optional[Set[str]]=None, lb: float = 0.0, progress: bool = False, cpu: int = 1, mst: bool = False, knn: Optional[int] = None, check_sort_memory: bool = True):
-    sparsify = sparsify_requested(mst, knn)
-
-    report_options = dict()
-    if name_by_order:
-        report_options["name_by_order"] = True
-
-
-    name_to_idx = dict()
-    recs = list()
-    #collect data needed for the metrics
-    for rec in _progress(parse_seqfiles(genbanks, contigs), progress, desc="Loading contigs"):
-        if rec.id not in name_to_idx:
-            name_to_idx[rec.id] = len(recs)
-            if databases is not None:
-                rec = tuple(filter_domains((rec,), evalue=float("inf"), max_overlap=1, databases_keep=databases))[0]
-            recs.append(rec)
-        else:
+def unique_records(records, progress=False):
+    """Return ``records`` as a list, keeping the first of any records with the same id (with a warning)."""
+    seen = set()
+    out = list()
+    for rec in _progress(records, progress, desc="Loading contigs"):
+        if rec.id in seen:
             warnings.warn(f"Duplicate contig names !!! :{rec.id}")
+            continue
+        seen.add(rec.id)
+        out.append(rec)
+    return out
 
-    # fail before scoring if the genbank output can't be sorted
-    for report in reports:
-        if isinstance(report, GenbankOutput):
-            _check_sort_feasible(len(recs), report.leaf_ordering, check_memory=check_sort_memory)
+
+def compare_contigs(records, *, metrics, max_hits_per_query=None, threshold: float = 0.0, progress: bool = False,
+                    cpu: int = 1, mst: bool = False, knn: Optional[int] = None) -> DataMatrix:
+    """Score every pair of contigs by their domain content.
+
+    Args:
+        records: the contigs (SeqRecords). Of records with the same id, only the first is scored.
+        metrics: JaccardIndex and/or AdjacencyIndex objects; their weighted scores are summed.
+        max_hits_per_query: keep this many of the top combined scores per contig (None: all).
+        threshold: round combined scores less than or equal to this down to zero.
+        progress: show progress bars.
+        cpu: number of worker processes.
+        mst, knn: keep only the maximum spanning tree and/or k-nearest-neighbor edges,
+            computed while streaming (see ``domainator compare_contigs --mst/--knn``).
+
+    Returns:
+        A square DataMatrix of "score" values, with a row and column per unique contig id.
+    """
+    sparsify = sparsify_requested(mst, knn)
+    recs = unique_records(records, progress)
+    row_names = [rec.id for rec in recs]
+
+    def result(scores):
+        return DataMatrix(scipy.sparse.csr_array(scores), row_names, row_names, data_type="score", copy_data=False)
 
     matrix_shape = (len(recs), len(recs))
     if max_hits_per_query == 0:
-        results_matrix = scipy.sparse.csr_array(matrix_shape, dtype=np.float64)
-        for report in reports:
-            report.write(recs, results_matrix, report_options)
-        return
+        return result(scipy.sparse.csr_array(matrix_shape, dtype=np.float64))
 
     prepared_metrics = list()
     for metric in metrics:
@@ -718,7 +559,7 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
                 mst=mst,
                 knn=knn,
                 k=max_hits_per_query,
-                lb=lb,
+                lb=threshold,
                 cpu=cpu,
                 progress=progress,
                 desc="Scoring combined metrics (sparsified)",
@@ -728,7 +569,7 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
             results_matrix = _compute_combined_sparse_similarity_matrix(
                 prepared_metrics,
                 k=max_hits_per_query,
-                lb=lb,
+                lb=threshold,
                 cpu=cpu,
                 progress=progress,
                 desc="Scoring combined metrics",
@@ -743,21 +584,17 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
             results_matrix = results_matrix + (metric.weight * metric_matrix)
             remaining_weight -= metric.weight
 
-            if lb > 0:
-                results_matrix = _prune_scores_inplace(results_matrix, lb - remaining_weight)
+            if threshold > 0:
+                results_matrix = prune_scores_inplace(results_matrix, threshold - remaining_weight)
 
-        results_matrix = _keep_top_k_per_row(results_matrix, max_hits_per_query)
-        if lb > 0:
-            results_matrix = _prune_scores_inplace(results_matrix, lb)
+        results_matrix = keep_top_k_per_row(results_matrix, max_hits_per_query)
+        if threshold > 0:
+            results_matrix = prune_scores_inplace(results_matrix, threshold)
 
         if sparsify:
-            row_names = [rec.id for rec in recs]
-            wrapped = DataMatrix(scipy.sparse.csr_array(results_matrix), row_names, row_names, data_type="score")
-            results_matrix = sparsify_matrix(wrapped, mst=mst, knn=knn, lower_bound=lb)
+            results_matrix = sparsify_matrix(result(results_matrix), mst=mst, knn=knn, lower_bound=threshold)
 
-    # write reports
-    for report in reports:
-        report.write(recs, results_matrix, report_options)
+    return result(results_matrix)
 
 
 def build_parser():
@@ -801,16 +638,9 @@ def build_parser():
                         help="weighting for jaccard index metric, a comparison of all distinct types of domains in the contigs. When two contigs have no domains, their ji is 0.0.")
     parser.add_argument("--ai", default=0.5, required=False, type=float,
                         help="weighting for adjacency index metric, a comparison of shared domain pairs in the contigs. When two contigs have 0 or 1 domains, their ai is 0.0.")
-#   parser.add_argument("--dss", default=0.0, required=False,
-#                        help="weighting for domain sequence similarity, a comparison of shared domain pairs in the contigs.")
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Domain databases to use for domain content comparison. default: all databases.")
 
-    # Output
-    # parser.add_argument("--clinker", type=str, default=None, help="Write an interactive html in clinker format to this path.")
-
-    # parser.add_argument("--svg_tree", type=str, default=None, help="Write a tree graphic in svg format to this path.")
-    
     add_matrix_output_arguments(parser, noun="contig similarity score matrix")
 
     parser.add_argument('--cpu', type=int, default=0, required=False,
@@ -836,14 +666,7 @@ def main(argv):
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     cpus = resolve_cpu(params.cpu)
 
-    reports = list()
     hdf, dense_text = resolve_matrix_outputs(params, require_output=False)
-    if hdf is not None:
-        reports.append(HdfTableOutput(hdf, max_output_bytes=max_output_bytes))
-    if dense_text is not None:
-        reports.append(DenseTextTableOutput(dense_text, max_output_bytes=max_output_bytes))
-    if params.genbank_out is not None:
-        reports.append(GenbankOutput(params.genbank_out, linkage_method=params.linkage, leaf_ordering=params.leaf_ordering))
 
     databases=None
     if params.databases is not None:
@@ -856,15 +679,19 @@ def main(argv):
         metrics.append(JaccardIndex(params.ji, databases=databases))
     if params.ai != 0.0:
         metrics.append(AdjacencyIndex(params.ai, databases=databases))
-    # if params.dss != 0.0:
-    #     reports["dss"] = params.dss
     if len(metrics) == 0:
         raise ValueError("Please specify a non-zero weight for at least one metric.")
 
-
-        
-    ## figure out if we are using every contig or just certain, named contigs ##
     contigs_needed = list_and_file_to_dict_keys(params.contigs, params.contigs_file)
-    
-    # Run
-    compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.threshold, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn, check_sort_memory=not params.skip_sort_memory_check)
+    recs = unique_records(parse_seqfiles(genbanks, contigs_needed), params.progress)
+    if params.genbank_out is not None:
+        # fail before scoring if the genbank output can't be sorted
+        _check_sort_feasible(len(recs), params.leaf_ordering, check_memory=not params.skip_sort_memory_check)
+
+    matrix = compare_contigs(recs, metrics=metrics, max_hits_per_query=params.max_hits_per_query, threshold=params.threshold,
+                             progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn)
+    write_matrix_outputs(matrix, hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+                         mitigation_options=["--max_hits_per_query", "--mst", "--knn"])
+    if params.genbank_out is not None:
+        write_sorted_genbank(recs, matrix, params.genbank_out, linkage_method=params.linkage,
+                             leaf_ordering=params.leaf_ordering, name_by_order=params.name_by_order)

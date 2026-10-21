@@ -5,7 +5,6 @@ from io import BytesIO, StringIO
 from pyhmmer import easel
 from pyhmmer.plan7 import HMM
 from domainator.hmmer_build import hmmer_build, main
-from domainator.utils import pyhmmer_decode
 from pathlib import Path
 
 
@@ -31,7 +30,7 @@ def test_hmmer_build_with_required_params():
     with open(msa_file, "rb") as file:
         hmm = hmmer_build(file, name="test_profile")
         assert isinstance(hmm, HMM)
-        assert pyhmmer_decode(hmm.name) == "test_profile"
+        assert hmm.name == "test_profile"
 
     os.unlink(msa_file)
 
@@ -42,9 +41,9 @@ def test_hmmer_build_with_optional_params():
     with open(msa_file, "rb") as file:
         hmm = hmmer_build(file, name="test_profile", acc="P12345", desc="Test profile description", alphabet=easel.Alphabet.dna())
         assert isinstance(hmm, HMM)
-        assert pyhmmer_decode(hmm.name) == "test_profile"
-        assert pyhmmer_decode(hmm.accession) == "P12345"
-        assert pyhmmer_decode(hmm.description) == "Test profile description"
+        assert hmm.name == "test_profile"
+        assert hmm.accession == "P12345"
+        assert hmm.description == "Test profile description"
 
     os.unlink(msa_file)
 
@@ -54,9 +53,9 @@ def test_hmmer_build_with_binaryio():
 
     hmm = hmmer_build(msa_file, name="test_profile", acc="P12345", desc="Test profile description", alphabet=easel.Alphabet.dna())
     assert isinstance(hmm, HMM)
-    assert pyhmmer_decode(hmm.name) == "test_profile"
-    assert pyhmmer_decode(hmm.accession) == "P12345"
-    assert pyhmmer_decode(hmm.description) == "Test profile description"
+    assert hmm.name == "test_profile"
+    assert hmm.accession == "P12345"
+    assert hmm.description == "Test profile description"
 
 
 def test_main_with_required_params(msa_file, capsys):
@@ -151,13 +150,14 @@ def test_hmmer_build_unnamed_msa_raises():
 
 
 def test_hmmer_build_gzip_output(msa_file, tmp_path):
-    from domainator.utils import detect_compression, open_hmm_file, pyhmmer_decode
+    from domainator.seqio import detect_compression
+    from domainator.hmmio import open_hmm_file
     out = tmp_path / "out.hmm.gz"
     main(["--name", "test_profile", "--input", msa_file, "-o", str(out)])
     assert detect_compression(out) == "gzip"
     with open_hmm_file(out) as handle:
         profiles = list(handle)
-    assert [pyhmmer_decode(h.name) for h in profiles] == ["test_profile"]
+    assert [h.name for h in profiles] == ["test_profile"]
 
 
 def test_hmmer_build_rejects_bgzf_output(msa_file, tmp_path):

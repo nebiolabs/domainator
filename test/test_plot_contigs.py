@@ -78,3 +78,10 @@ def test_plot_contigs_color_table_requires_color_by(shared_datadir, tmp_path, ca
         plot_contigs.main(["-i", str(shared_datadir / "MT_nbs.gb"), "--html_out", str(tmp_path / "out.html"),
                            "--color_table", str(color_table)])
     assert "--color_table requires --color_by" in capsys.readouterr().err
+
+
+def test_feature_to_dict_accepts_one_hex_default_color():
+    from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+    from domainator.plot_contigs import feature_to_dict
+    feature = SeqFeature(FeatureLocation(0, 30, 1), type="misc_feature")
+    assert feature_to_dict(feature, default_color="CC00CC")["color"] == "#CC00CC"

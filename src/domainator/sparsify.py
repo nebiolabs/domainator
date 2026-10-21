@@ -14,7 +14,7 @@ from typing import Dict, Iterator, Optional, Tuple
 import numpy as np
 import scipy.sparse
 
-from domainator.data_matrix import MaxTree, mst_edge_index_dict, mst_knn_edge_index_dict, symmetric_knn_edge_index_dict
+from domainator.ssn_edges import MaxTree, mst_edge_index_dict, mst_knn_edge_index_dict, symmetric_knn_edge_index_dict
 
 
 MAX_HITS_PER_QUERY_SPARSIFY_NOTE = (
@@ -131,7 +131,7 @@ def sparsify_matrix(matrix, *, mst: bool, knn: Optional[int], lower_bound: float
 class PerQueryTopK:
     """Keep each row's ``cap`` highest-valued columns from a stream of (row, col, value) hits.
 
-    The streaming equivalent of ``compare_contigs._keep_top_k_per_row`` for hits that arrive
+    The streaming equivalent of ``sparse_scores.keep_top_k_per_row`` for hits that arrive
     in no particular order: duplicate (row, col) pairs keep their maximum value, and ties
     are broken toward the lower column index. Memory is bounded at O(rows * cap).
     """

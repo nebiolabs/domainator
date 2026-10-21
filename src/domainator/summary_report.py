@@ -18,40 +18,40 @@
 ### TODO: maybe make the histograms selective, like skip if there is only one of the other domain.
 
 ### TODO: maybe make the output just a single html file instead of a directory?
-import warnings
-warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ActionConfigFile
 import contextlib
 from pathlib import Path
-import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
 from io import BytesIO
 import base64
 import html
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import output_file
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, TaxonomyData, get_taxid, get_fragment_status, fragment_status_allowed, get_cds_unique_name, PARTIAL_CHOICES, partial_help
+from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator.seqio import parse_seqfiles
+from domainator.taxonomy.records import TaxonomyData, get_taxid
+from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
+from domainator.model import get_cds_unique_name, feature_score
 from domainator.data_matrix import DataMatrix
 from domainator import DOMAIN_FEATURE_NAME
 import numpy as np
 from typing import Dict
-from bashplotlib.histogram import plot_hist
 import io
 from contextlib import redirect_stdout
-from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
 
 
 class SummaryTextWriter():
-    def __init__(self, out_handle): #TODO: consolidate with HTMLWriter with a super class?
+    def __init__(self, out_handle):
         # self.columns = columns
         # self.column_types = column_types
         self.out_handle = out_handle
     
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         if len(lengths) != 0:
+            from bashplotlib.histogram import plot_hist
             hist_str = io.StringIO()
             with redirect_stdout(hist_str):
                 plot_hist(lengths, bincount=50, title="Contig Lengths", height=20.0, xlab=True, regular=True, showSummary=False)
@@ -153,7 +153,7 @@ class SummaryJSONWriter():
         self.out_handle.write("\n")
 
 class SummaryHTMLWriter():
-    def __init__(self, out_handle): #TODO: consolidate with TSVWriter with a super class?
+    def __init__(self, out_handle):
         self.out_handle = out_handle
     
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
@@ -324,6 +324,7 @@ document.getElementById("taxonomy_chart").append(svg.node());
 
 #TODO: only print correlation table for focus domains. Otherwise it ends up being a huge, sparse table, and the output files are enormous.
 def plt_to_base64_png():
+    import matplotlib.pyplot as plt
     bytes = BytesIO()
     plt.savefig(bytes, format='png')
     bytes.seek(0)
@@ -340,8 +341,10 @@ def histplot_base64(items_list, zero_center=False):
     if len(items_list) == 1:
         binwidth = None
     
+    import matplotlib.pyplot as plt
+    import seaborn as sns
     old_backend = plt.get_backend()
-    plt.switch_backend('agg') # this is necessary to run on a headless server        
+    plt.switch_backend('agg') # this is necessary to run on a headless server
     sns.histplot(items_list, binwidth=binwidth)
     
     if zero_center:
@@ -470,7 +473,7 @@ def tax_data_to_hierarchy(tax_data):
 
     
 
-def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurrence_fraction_outfile=None, co_occurrence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None, partial="include"):
+def summary_report(records, *, out_text_handle, out_html_handle, focus_domains=None, co_occurrence_fraction_outfile=None, co_occurrence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None, partial="include"):
     """
 
         Args:
@@ -507,7 +510,7 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
 
     for contig in records:
         if databases is not None:
-            contig = tuple(filter_domains((contig,), evalue=float("inf"), max_overlap=1, databases_keep=databases))[0]
+            contig = tuple(filter_domains((contig,), evalue=float("inf"), max_overlap=1, keep_databases=databases))[0]
 
         excluded_cds_ids = set() # cds_ids of CDSs filtered out by partial
         if partial != "include":
@@ -540,7 +543,7 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
                 db = feature.qualifiers['database'][0]
                 name = feature.qualifiers['name'][0]
                 description = feature.qualifiers['description'][0]
-                score = float(feature.qualifiers['score'][0])
+                score = feature_score(feature)
                 location = (feature.location.start, feature.location.end, feature.strand)
                 id = name # TODO: someday distinguish different databases
                 
@@ -559,10 +562,6 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
                 # compute online avg score
                 inv_count = 1/domains[id]['count']
                 domains[id]['avg score'] = (inv_count * score) + ((1 - inv_count)*domains[id]['avg score'])
-                
-                # # domains[id]['locations'].add(location)
-                # if description != domains[id]['description']:
-                #     warnings.warn(f"Domain {id} has two different descriptions")
         
         # calculate correlations
         for domain1 in contig_domains:
@@ -641,9 +640,6 @@ def build_parser():
     parser.add_argument('--contigs_file', type=str, default=None,
                         help="text file containing names of contigs to select.")
     
-    # parser.add_argument('--domain_dist', action="store_true", default=False,
-    #                     help="If set, then domain distance plots will be generated.")
-
     parser.add_argument('--domains', type=str, default=None, nargs='+',
                         help="calculate distance graphs for domains with these names")  # TODO: add some way to specify the database of a domain
     parser.add_argument('--domains_file', type=str, default=None,
@@ -690,11 +686,11 @@ def main(argv):
             return None if path is None else outputs.enter_context(output_file(path))
         summary_report(
             parse_seqfiles(params.input, target_contigs),
-            open_output(params.text_out),
-            open_output(params.html_out),
-            selected_domains,
-            params.co_occurrence_fraction_out,
-            params.co_occurrence_count_out,
+            out_text_handle=open_output(params.text_out),
+            out_html_handle=open_output(params.html_out),
+            focus_domains=selected_domains,
+            co_occurrence_fraction_outfile=params.co_occurrence_fraction_out,
+            co_occurrence_count_outfile=params.co_occurrence_count_out,
             report_taxonomy=params.taxonomy,
             ncbi_taxonomy=ncbi_taxonomy,
             domains_table=params.domains_tsv_out,

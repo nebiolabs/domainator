@@ -14,7 +14,8 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator import __version__
 from domainator.build_ssn import subset_matrix_by_labels
-from domainator.data_matrix import DataMatrix, MaxTree
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree
 from domainator.output_guardrails import (
     add_max_output_gb_argument,
     enforce_output_limit,
@@ -31,7 +32,7 @@ from domainator.ssn_hierarchy import (
     build_mst_component_hierarchy,
 )
 from domainator.ssn_viewer_html import VIEWER_APP_NAME, write_ssn_viewer_html
-from domainator.utils import list_and_file_to_dict_keys
+from domainator.cli.common import list_and_file_to_dict_keys
 
 
 def _infer_metadata_type(series: pd.Series) -> str:

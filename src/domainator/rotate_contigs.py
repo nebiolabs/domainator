@@ -30,12 +30,15 @@ from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import STDIN_PATHS, add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator import utils
+from domainator.offsets import count_peptides
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
 from domainator.Bio.SeqRecord import SeqRecord, DOMAINATOR_DIST_TO_START_ANNOTATION, DOMAINATOR_DIST_TO_END_ANNOTATION, DOMAINATOR_FOCUS_STRAND_ANNOTATION, DOMAINATOR_HIT_SCORES_ANNOTATION, DOMAINATOR_HIT_NAMES_ANNOTATION, DOMAINATOR_HIT_BEST_SCORE_ANNOTATION
 from domainator.domainate import domainate, read_references
 from domainator.lean_record import LeanContig, lean_to_seqrecord, LEAN_SEARCH_TYPES, materialize_lean_search
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id, WHERE_CHOICES
+from domainator.seqio import parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.locations import slice_record_from_location, WHERE_CHOICES
+from domainator.model import region_id, check_annotation_type
 
 _NUCLEOTIDE_LETTERS = set("ACGTURYSWKMBDHVN-.")
 
@@ -178,7 +181,7 @@ def _search(records:Iterator[SeqRecord], reference_groups, z, evalue, cpu, gene_
             break
         # domainate yields the same record objects, keeps their existing features, and appends new hits.
         existing = {id(rec): {id(f) for f in rec.features} for rec in chunk}
-        for rec in domainate(chunk, None, z, evalue=evalue, cpu=cpu, pre_parsed_references=reference_groups, gene_call=gene_call, max_mode=max_mode):
+        for rec in domainate(chunk, references=None, z=z, evalue=evalue, cpu=cpu, pre_parsed_references=reference_groups, gene_call=gene_call, max_mode=max_mode):
             new_hit_ids = {id(f) for f in rec.features if f.type == DOMAIN_FEATURE_NAME and id(f) not in existing[id(rec)]}
             yield rec, new_hit_ids
 
@@ -215,8 +218,8 @@ def _pick_anchor(candidates:List[SeqFeature]) -> SeqFeature:
     return min(candidates, key=lambda f: (-_qualifier_float(f, "score", float("-inf")), _qualifier_float(f, "evalue", float("inf")), int(f.location.start)))
 
 
-def rotate_contigs(records:Iterable, references:Optional[List[str]]=None, pre_parsed_references=None, z:int=1000, evalue:float=0.001,
-                   domains:Optional[Iterable[str]]=None, databases:Optional[Iterable[str]]=None, search_hits:bool=False, where:str="start",
+def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre_parsed_references=None, z:int=1000, evalue:float=0.001,
+                   domains:Optional[Iterable[str]]=None, databases:Optional[Iterable[str]]=None, annotation_type:str="domainator", anchor:str="start",
                    keep_direction:bool=False, circularize:bool=False, keep_name:bool=False, keep_annotation:bool=False,
                    gene_call:Optional[str]=None, cpu:int=0, max_mode:bool=False, batch_size:int=1000) -> Iterator[SeqRecord]:
     """
@@ -233,8 +236,8 @@ def rotate_contigs(records:Iterable, references:Optional[List[str]]=None, pre_pa
             evalue: the maximum evalue of new and pre-existing domains to rotate on.
             domains: names of pre-existing Domainator annotations to rotate on.
             databases: only consider pre-existing annotations from these databases. If None, consider all databases.
-            search_hits: if True, rotate on pre-existing domain_search annotations.
-            where: "start", "end", or "center". Where to put the origin, relative to the domain in its own orientation.
+            annotation_type: "domainator", or "domain_search" to rotate on pre-existing domain_search annotations.
+            anchor: "start", "end", or "center". Where to put the origin, relative to the domain in its own orientation.
             keep_direction: if True, don't reverse complement contigs with the domain on the reverse strand.
             circularize: if True, rotate linear contigs and fasta records as though they were circular. If False, skip them.
             keep_name: if True, keep the original contig names. If False, rename contigs to note how they were rotated.
@@ -245,8 +248,9 @@ def rotate_contigs(records:Iterable, references:Optional[List[str]]=None, pre_pa
             max_mode: run the search in maximum sensitivity mode.
             batch_size: number of contigs to search at a time.
     """
-    if where not in WHERE_CHOICES:
-        raise ValueError(f"where must be one of {', '.join(WHERE_CHOICES)}, not {where}")
+    search_hits = check_annotation_type(annotation_type) == "domain_search"
+    if anchor not in WHERE_CHOICES:
+        raise ValueError(f"where must be one of {', '.join(WHERE_CHOICES)}, not {anchor}")
     if gene_call not in (None, "all", "unannotated"):
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
     if batch_size < 1:
@@ -258,13 +262,13 @@ def rotate_contigs(records:Iterable, references:Optional[List[str]]=None, pre_pa
     if references is not None:
         reference_groups = read_references(references, None)
     if reference_groups is None and domains is None and not search_hits:
-        raise ValueError("Specify references, domains, or search_hits to choose domains to rotate on.")
+        raise ValueError("Specify references, domains, or annotation_type=\"domain_search\" to choose domains to rotate on.")
     if reference_groups is None and gene_call is not None:
         raise ValueError("gene_call only applies when searching references.")
     if gene_call == "all" and (domains is not None or search_hits):
-        raise ValueError("gene_call 'all' deletes pre-existing annotations, so it can't be combined with domains or search_hits.")
+        raise ValueError("gene_call 'all' deletes pre-existing annotations, so it can't be combined with domains or annotation_type=\"domain_search\".")
 
-    return _rotate_contigs(records, reference_groups, z, evalue, domains, databases, search_hits, where, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size)
+    return _rotate_contigs(records, reference_groups, z, evalue, domains, databases, search_hits, anchor, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size)
 
 
 def _rotate_contigs(records, reference_groups, z, evalue, domains, databases, search_hits, where, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size):
@@ -344,7 +348,7 @@ def main(argv):
     if z == 0:
         if any(path in STDIN_PATHS for path in params.input):
             parser.error("-Z 0 counts the sequences in the input files, so it can't be used when reading from stdin.")
-        z = sum(utils.count_peptides(file_path) for file_path in params.input)
+        z = sum(count_peptides(file_path) for file_path in params.input)
 
     rotated = rotate_contigs(
         parse_seqfiles(input_files, None, default_molecule_type="DNA"),
@@ -353,8 +357,8 @@ def main(argv):
         evalue=params.evalue,
         domains=domains,
         databases=params.databases,
-        search_hits=params.annotation_type == "domain_search",
-        where=params.anchor,
+        annotation_type=params.annotation_type,
+        anchor=params.anchor,
         keep_direction=params.keep_direction,
         circularize=params.circularize,
         keep_name=params.keep_name,

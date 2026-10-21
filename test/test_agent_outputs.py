@@ -224,7 +224,7 @@ def test_node_membership_matches_the_full_partition_at_every_cut():
             assert _cluster_for_node(hierarchy, node_index, cut) == expected, (cut, node_index)
 
     # ...and the same through the CLI-level entry point.
-    result = ssn_navigator.ssn_navigator(bundle, "node", node=names[n // 2], max_merge_events=0)
+    result = ssn_navigator.ssn_navigator(bundle, mode="node", node=names[n // 2], max_merge_events=0)
     for membership in result["memberships"]:
         active = clusters_at_threshold(hierarchy, membership["threshold_value"])
         assert membership["cluster_id"] in active
@@ -250,7 +250,8 @@ def test_clusters_at_threshold_matches_build_ssn_clustering():
     reported one cluster fewer than the viewer showed at the same stop.
     """
     from domainator.build_ssn import cluster_labels_from_tree
-    from domainator.data_matrix import DataMatrix, MaxTree
+    from domainator.data_matrix import DataMatrix
+    from domainator.ssn_edges import MaxTree
 
     data = np.array([
         [0, 10, 6, 0, 0],
@@ -319,7 +320,7 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
         build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
         bundle = load_bundle(bundle_path)
 
-    finest = ssn_navigator.ssn_navigator(bundle, "clusters", threshold="inf")
+    finest = ssn_navigator.ssn_navigator(bundle, mode="clusters", threshold="inf")
     assert finest["clusters"] == 5                  # every node alone
     # ∞ serializes as null, as it does in the bundle's own slider_stops, so the
     # output stays strict JSON (json.dumps(inf) would emit `Infinity`).
@@ -329,13 +330,13 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
         parse_constant=lambda constant: pytest.fail(f"non-strict JSON: {constant}"),
     )
 
-    coarsest = ssn_navigator.ssn_navigator(bundle, "clusters")
+    coarsest = ssn_navigator.ssn_navigator(bundle, mode="clusters")
     assert coarsest["clusters"] == 2                # the two components
     weakest = min(edge[2] for edge in bundle["graph"]["mst_edges"])
     assert coarsest["threshold"] < weakest
 
     # The threshold table runs monotonically from the ∞ stop down to the floor.
-    counts = [row["clusters"] for row in ssn_navigator.ssn_navigator(bundle, "thresholds")["thresholds"]]
+    counts = [row["clusters"] for row in ssn_navigator.ssn_navigator(bundle, mode="thresholds")["thresholds"]]
     assert counts == sorted(counts, reverse=True)
     assert counts[0] == 5 and counts[-1] == 2
 
@@ -363,17 +364,17 @@ def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
 
     # The cap is the caller's, not the file's: the same bundle answers for any of them.
     for mode in ("overview", "thresholds"):
-        result = ssn_navigator.ssn_navigator(bundle, mode, max_merge_events=5)
+        result = ssn_navigator.ssn_navigator(bundle, mode=mode, max_merge_events=5)
         assert result["max_merge_events"] == 5
         assert 5 <= result["merge_events"] <= 5 + MERGE_EVENT_DENSITY_BINS
         assert result["merge_events"] < result["merge_event_total"]
 
     # ...and the stops are one per selected event, plus the infinity and floor cuts.
-    capped = ssn_navigator.ssn_navigator(bundle, "thresholds", max_merge_events=5)
+    capped = ssn_navigator.ssn_navigator(bundle, mode="thresholds", max_merge_events=5)
     assert len(capped["thresholds"]) == capped["merge_events"] + 2
 
     # Uncapped, every split event gets a cut-point off that very same file.
-    uncapped = ssn_navigator.ssn_navigator(bundle, "thresholds", max_merge_events=0)
+    uncapped = ssn_navigator.ssn_navigator(bundle, mode="thresholds", max_merge_events=0)
     assert uncapped["merge_events"] == uncapped["merge_event_total"] == capped["merge_event_total"]
     assert len(uncapped["thresholds"]) == uncapped["merge_event_total"] + 2
 
@@ -382,5 +383,5 @@ def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
     stale = dict(bundle, graph=dict(bundle["graph"], merge_event_series=[],
                                     merge_event_total=0, max_merge_events=1,
                                     slider_stops=[]))
-    result = ssn_navigator.ssn_navigator(stale, "overview", max_merge_events=0)
+    result = ssn_navigator.ssn_navigator(stale, mode="overview", max_merge_events=0)
     assert result["merge_event_total"] == uncapped["merge_event_total"]

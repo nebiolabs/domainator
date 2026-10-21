@@ -1,7 +1,8 @@
 import tempfile
 from domainator.Bio import SeqIO
 from domainator import extract_unannotated
-from domainator.utils import parse_seqfiles, DomainatorCDS
+from domainator.seqio import parse_seqfiles
+from domainator.model import DomainatorCDS
 import pytest
 from io import StringIO
 import sys

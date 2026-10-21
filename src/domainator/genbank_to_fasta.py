@@ -5,7 +5,7 @@ from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import parse_seqfiles
+from domainator.seqio import parse_seqfiles
 
 
 def build_parser():

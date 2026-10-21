@@ -1,4 +1,4 @@
-from domainator.Taxonomy import NCBITaxonomy
+from domainator.taxonomy import NCBITaxonomy
 import pytest
 import shutil
 

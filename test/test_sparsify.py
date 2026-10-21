@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import scipy.sparse
 
-from domainator.compare_contigs import _keep_top_k_per_row
+from domainator.sparse_scores import keep_top_k_per_row
 from domainator.data_matrix import DataMatrix
 from domainator.sparsify import (
     PerQueryTopK,
@@ -88,5 +88,5 @@ def test_per_query_top_k_matches_batch(cap):
     for i, j, value in top.iter_edges():
         streamed[i, j] = value
 
-    expected = _keep_top_k_per_row(scipy.sparse.csr_array(data), cap).toarray()
+    expected = keep_top_k_per_row(scipy.sparse.csr_array(data), cap).toarray()
     np.testing.assert_array_equal(streamed, expected)

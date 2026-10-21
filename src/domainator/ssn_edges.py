@@ -3,10 +3,6 @@
 This module contains the maximum-spanning-tree (:class:`MaxTree`) and the neighbor
 ranking / edge-selection functions used to build sequence similarity networks. It is
 split out of ``data_matrix`` to keep that module focused on the matrix abstraction.
-
-To avoid an import cycle, the concrete :class:`~domainator.data_matrix.DataMatrix` class
-is imported lazily inside :meth:`MaxTree.__init__`; everything else references it only via
-string type annotations (enabled by ``from __future__ import annotations``).
 """
 from __future__ import annotations
 
@@ -17,6 +13,7 @@ from typing import Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import scipy.sparse
 
+from .data_matrix import DataMatrix
 from .edge_types import (
     CompactNeighborRankings,
     NeighborRankings,
@@ -241,19 +238,19 @@ def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max
     )
 
 
-def _build_sparse_neighbor_rankings(matrix: 'DataMatrix', max_k: Optional[int] = None) -> CompactNeighborRankings:
+def _build_sparse_neighbor_rankings(matrix: DataMatrix, max_k: Optional[int] = None) -> CompactNeighborRankings:
     edges = matrix.sorted_undirected_edges(skip_zeros=True, agg=max)
     return _build_neighbor_rankings_from_sorted_edges(edges, max_k=max_k)
 
 
-def build_symmetric_neighbor_rankings(matrix: Union['DataMatrix', SortedUndirectedEdges], max_k: Optional[int] = None) -> CompactNeighborRankings:
+def build_symmetric_neighbor_rankings(matrix: Union[DataMatrix, SortedUndirectedEdges], max_k: Optional[int] = None) -> CompactNeighborRankings:
     """Return deterministic per-row neighbor rankings using max(row,col) scores."""
     if isinstance(matrix, SortedUndirectedEdges):
         return _build_neighbor_rankings_from_sorted_edges(matrix, max_k=max_k)
     return _build_sparse_neighbor_rankings(matrix, max_k=max_k)
 
 
-def symmetric_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
+def symmetric_knn_edge_index_dict(matrix: DataMatrix, k: int, lower_bound: float = 0, include_equal: bool = False,
                                   neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return OR-symmetric kNN edges keyed by undirected index pairs."""
     if k < 0:
@@ -288,7 +285,7 @@ def mst_edge_index_dict(tree: 'MaxTree', lower_bound: float = 0, include_equal: 
     return edge_dict
 
 
-def mst_knn_edge_index_dict(matrix: 'DataMatrix', k: int, lower_bound: float = 0, include_equal: bool = False,
+def mst_knn_edge_index_dict(matrix: DataMatrix, k: int, lower_bound: float = 0, include_equal: bool = False,
                             tree: Optional['MaxTree'] = None,
                             neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return the union of MST and OR-symmetric kNN edges keyed by undirected index pair.
@@ -517,7 +514,7 @@ class StreamingMstKnnAccumulator:
         return scipy.sparse.csr_array(out)
 
 
-def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_k: int,
+def mst_knn_edge_counts_by_threshold(matrix: DataMatrix, tree: 'MaxTree', max_k: int,
                                      include_equal: bool = False,
                                      neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:
     """Return exact MST + kNN edge counts for each threshold of ``tree`` and k in [1, max_k].
@@ -670,9 +667,7 @@ class MaxTree():
         connected component.
     """
 
-    def __init__(self, matrix: Union['DataMatrix', SortedUndirectedEdges], skip_zeros=True):
-        from .data_matrix import DataMatrix  # local import to avoid an import cycle
-
+    def __init__(self, matrix: Union[DataMatrix, SortedUndirectedEdges], skip_zeros=True):
         if isinstance(matrix, DataMatrix):
             sorted_edges = matrix.sorted_undirected_edges(skip_zeros=skip_zeros, agg=max)
         else:

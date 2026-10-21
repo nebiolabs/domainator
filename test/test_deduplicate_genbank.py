@@ -1,7 +1,7 @@
 import os
 import pytest
 import shutil
-from domainator import utils
+from domainator.seqio import parse_seqfiles
 from pathlib import Path
 import tempfile
 from domainator import deduplicate_genbank
@@ -18,7 +18,7 @@ def test_deduplicate_genbank_1(shared_datadir):
 
         deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--identity", "0.99", "-o", out, "--cdhit_args=-s 0.9", "--prefix_count", "--cluster_tsv_out", cluster_table_out])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         for rec in recs:
             assert rec.id[:2] == "4-"
         assert len(recs) == 6
@@ -50,7 +50,7 @@ def test_deduplicate_genbank_cdhit_low_id_1(shared_datadir):
         
         deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--identity", "0.4", "--cpu", "1", "-o", out, "--prefix_count"])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         assert recs[0].id[:3] == "10-"
         assert len(recs) == 4
 
@@ -63,7 +63,7 @@ def test_deduplicate_genbank_cdhit_low_id_2(shared_datadir):
         
         deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--algorithm", "usearch", "--identity", "0.4", "--cpu", "1", "-o", out, "--prefix_count"])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         assert recs[0].id[:2] == "6-"
         assert len(recs) == 5
 
@@ -78,7 +78,7 @@ def test_deduplicate_genbank_usearch(shared_datadir):
 
         deduplicate_genbank.main( ["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--algorithm", "usearch", "--identity", "0.3", "-o", out, "--cpu", "1", "--suffix_count", "--log_out", log, "--cluster_tsv_out", cluster_table_out] )
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         for rec in recs:
             assert rec.id[-2:] == "-4"
         assert len(recs) == 6
@@ -113,7 +113,7 @@ def test_deduplicate_genbank_hash(shared_datadir):
         
         deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--identity", "1", "--algorithm", "hash", "-o", out, "--prefix_count", "--log_out", log, "--cluster_tsv_out", cluster_table_out])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         for rec in recs:
             assert rec.id[:2] == "4-"
         assert len(recs) == 6
@@ -164,7 +164,7 @@ def test_deduplicate_genbank_hash_both_strands(shared_datadir):
         ])
 
         assert Path(out).is_file()
-        recs = list(utils.parse_seqfiles([out]))
+        recs = list(parse_seqfiles([out]))
         assert len(recs) == 1
         assert recs[0].id[:2] == "2-"
 
@@ -186,16 +186,15 @@ def test_deduplicate_genbank_usearch_both_strands_sets_flag():
         original_run_clustering = deduplicate_genbank.run_clustering
         deduplicate_genbank.run_clustering = fake_run_clustering
         try:
-            dedup = deduplicate_genbank.DeduplicateGenbank()
-            recs = list(dedup.deduplicate_genbank(
+            recs = list(deduplicate_genbank.deduplicate_genbank(
                 [input_fasta],
-                "usearch",
-                [],
-                1,
-                None,
-                None,
-                1,
-                "nucleotide",
+                algorithm="usearch",
+                extra_args=[],
+                identity=1,
+                bin_paths=None,
+                add_count=None,
+                cpu=1,
+                alphabet="nucleotide",
                 both_strands=True,
             ))
         finally:
@@ -243,17 +242,16 @@ def test_deduplicate_genbank_diamond_rejects_nucleotide_input():
         input_fasta = Path(output_dir) / "input.fasta"
         input_fasta.write_text(">seq1\nACGTAAGT\n", encoding="utf-8")
 
-        dedup = deduplicate_genbank.DeduplicateGenbank()
         with pytest.raises(ValueError, match="diamond deduplication is only supported for protein input"):
-            list(dedup.deduplicate_genbank(
+            list(deduplicate_genbank.deduplicate_genbank(
                 [str(input_fasta)],
-                "diamond",
-                [],
-                0.99,
-                None,
-                None,
-                1,
-                "nucleotide",
+                algorithm="diamond",
+                extra_args=[],
+                identity=0.99,
+                bin_paths=None,
+                add_count=None,
+                cpu=1,
+                alphabet="nucleotide",
             ))
 
 
@@ -285,7 +283,7 @@ def test_deduplicate_genbank_diamond():
         ])
 
         assert out.is_file()
-        recs = list(utils.parse_seqfiles([str(out)]))
+        recs = list(parse_seqfiles([str(out)]))
         assert len(recs) == 2
         assert any(rec.id.startswith("2-") for rec in recs)
         assert any(rec.id.startswith("1-") for rec in recs)
@@ -328,7 +326,7 @@ def test_deduplicate_genbank_diamond_single_centroid():
         ])
 
         assert out.is_file()
-        recs = list(utils.parse_seqfiles([str(out)]))
+        recs = list(parse_seqfiles([str(out)]))
         assert len(recs) == 1
         assert recs[0].id in {"2-seq1", "2-seq2"}
 
@@ -358,16 +356,15 @@ def test_deduplicate_genbank_cdhit_est_both_strands_sets_flag():
         original_run_clustering = deduplicate_genbank.run_clustering
         deduplicate_genbank.run_clustering = fake_run_clustering
         try:
-            dedup = deduplicate_genbank.DeduplicateGenbank()
-            recs = list(dedup.deduplicate_genbank(
+            recs = list(deduplicate_genbank.deduplicate_genbank(
                 [input_fasta],
-                "cd-hit",
-                [],
-                0.8,
-                None,
-                None,
-                1,
-                "nucleotide",
+                algorithm="cd-hit",
+                extra_args=[],
+                identity=0.8,
+                bin_paths=None,
+                add_count=None,
+                cpu=1,
+                alphabet="nucleotide",
                 both_strands=True,
             ))
         finally:
@@ -387,7 +384,7 @@ def test_deduplicate_genbank_cdhit_low_id_nt(shared_datadir):
         
         deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark.gb"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "-o", out, "--prefix_count"])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         assert recs[0].id[:2] == "4-"
         assert len(recs) == 1
 
@@ -401,7 +398,7 @@ def test_deduplicate_genbank_cdhit_fasta_input(shared_datadir):
         
         deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "-o", out, "--prefix_count", "--log_out", log])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         assert recs[0].id[:2] == "1-"
         assert len(recs) == 20
 
@@ -418,7 +415,7 @@ def test_deduplicate_genbank_cdhit_fasta_input_2(shared_datadir):
         
         deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi.fasta"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "--fasta_out", out, "--prefix_count", "--alphabet", "nucleotide", "--log_out", log])
         assert Path(out).is_file()
-        recs  = list(utils.parse_seqfiles([out]))
+        recs  = list(parse_seqfiles([out]))
         assert recs[0].id[:2] == "4-"
         assert len(recs) == 1
 

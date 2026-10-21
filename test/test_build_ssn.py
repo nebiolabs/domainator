@@ -1,7 +1,8 @@
 from domainator.errors import OutputSizeLimitExceeded
 from domainator import build_ssn
-from domainator.utils import OTHER_COLOR
-from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict
+from domainator.colors import OTHER_COLOR
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree, mst_knn_edge_index_dict
 import pytest
 import tempfile
 import pandas as pd

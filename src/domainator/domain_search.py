@@ -19,16 +19,22 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import SeqOutputs
-from domainator.utils import parse_seqfiles, partition_seqfile, i_partition_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, index_total_cds, native_parser_available, PARTIAL_CHOICES, WHERE_CHOICES, sequence_hashes
+from domainator.seqio import parse_seqfiles, native_parser_available
+from domainator.offsets import partition_seqfile, i_partition_seqfiles, index_total_cds
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator._mp import make_pool
+from domainator.taxonomy.records import compile_taxonomy_allowed
+from domainator.partial import PARTIAL_CHOICES
+from domainator.locations import WHERE_CHOICES
+from domainator.model import sequence_hashes
 from domainator import select_by_cds
 from domainator import db_index
 from domainator import domainate
 import heapq
 from typing import List, Tuple, Set, Optional
 from domainator import extract_peptides
-import warnings
 from pathlib import Path
-from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 
 
@@ -176,8 +182,8 @@ class _domain_search_worker():
                     if not self.translate: 
                         for region in select_by_cds.select_by_cds(
                             (rec,),
-                            target_cdss=None,
-                            target_domains=None,
+                            cds_ids=None,
+                            domains=None,
                             domain_expr=None,
                             cds_range=self.cds_range,
                             kb_range=self.kb_range,
@@ -193,8 +199,8 @@ class _domain_search_worker():
                         for peptide in extract_peptides.extract_peptides(
                             (rec,),
                             evalue=100000000,
-                            target_domains=None,
-                            target_cdss=None,
+                            domains=None,
+                            cds_ids=None,
                             keep_cds_feature=True,
                             strand=self.strand,
                             _from_domain_search=True,
@@ -203,8 +209,8 @@ class _domain_search_worker():
                             rec.set_dist_to_start(0)
                             _emit(peptide)
             except Exception as e:
-                warnings.warn(f"Error processing {rec.id}.")
-                raise e
+                e.add_note(f"while processing {rec.id}")
+                raise
         return out
  
 class _partition_seqfile_worker():
@@ -215,7 +221,7 @@ class _partition_seqfile_worker():
         return partition_seqfile(input_file, self.cdss_per_partition)
     
 
-def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None, partial="include", deduplicate_by_sequence=False, dedup_both_strands=False):
+def domain_search(partitions, *, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, alphabet="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoys=None, max_hits_per_contig=None, partial="include", deduplicate_by_sequence=False, both_strands=False):
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 
@@ -237,17 +243,17 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         include_taxids: only keep contigs with a taxonomy id in this list
         exclude_taxids: only keep contigs with a taxonomy id not in this list
         taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses) used to filter contigs by lineage, e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
-        fasta_type: "protein" or "nucleotide", the type of fasta file to be searched.
+        alphabet: "protein" or "nucleotide", the type of fasta file to be searched.
         max_mode: if True, then only the best hit for each hmm will be returned, otherwise all hits will be returned
         max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. [default 1]
         strand: only extract regions around CDSs on the specified strand. If None, then extract regions around CDSs on both strands.
-        decoy_names: a set of names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.
+        decoys: a set of names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.
         max_hits_per_contig: the maximum number of independent hits per contig. If None, then all hits will be returned. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit.
         partial: which proteins/CDSs to search, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments). See domainate.domainate.
         deduplicate_by_sequence: if True, drop hits whose output sequence is identical (case-insensitive, ignoring terminal '*') to an earlier hit.
             The first copy to arrive is kept; partitions finish in arbitrary order, so which of several identical copies is kept is arbitrary.
             Only a set of 32-byte hashes is held, not the duplicate records.
-        dedup_both_strands: with deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.
+        both_strands: with deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.
     yields:
         SeqRecords of the selected regions
     """
@@ -278,7 +284,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
 
     out_heap = []
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=fasta_type, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoy_names, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=dedup_both_strands)
+    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=alphabet, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoys, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=both_strands)
     seen = set() if deduplicate_by_sequence else None
 
     # Pool tuning notes (speed_up_plan.md Q4):
@@ -298,7 +304,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
         for hits in pool.imap_unordered(worker, partitions):
 
             for rec in hits:
-                if seen is not None and not _is_new_sequence(rec, seen, dedup_both_strands):
+                if seen is not None and not _is_new_sequence(rec, seen, both_strands):
                     continue
                 if max_hits is None:
                     yield rec
@@ -551,8 +557,6 @@ def main(argv):
     decoy_names = list_and_file_to_dict_keys(params.decoys, params.decoys_file, as_set=True)
 
     ### Run
-    seen = set()
-    records = list()
     outputs = SeqOutputs(params.genbank_out, params.fasta_out, max_output_bytes=max_output_bytes,
                          mitigation_options=mitigation_options, extra_guidance=extra_guidance)
     with outputs:
@@ -576,26 +580,14 @@ def main(argv):
         include_taxids=params.include_taxids,
         exclude_taxids=params.exclude_taxids,
         taxonomy_expr=params.taxonomy_expr,
-        fasta_type=params.alphabet,
+        alphabet=params.alphabet,
         max_mode=params.max_mode,
         max_region_overlap=params.max_region_overlap,
         strand=params.strand,
-        decoy_names=decoy_names,
+        decoys=decoy_names,
         max_hits_per_contig=params.max_hits_per_contig,
         partial=params.partial,
         deduplicate_by_sequence=params.deduplicate_by_sequence,
-        dedup_both_strands=params.both_strands,
+        both_strands=params.both_strands,
         )
-        for record in hits:
-            if deduplicate and record.id in seen:
-                continue
-            if deduplicate:
-                seen.add(record.id)
-            if pad:
-                records.append(record)
-            else:
-                outputs.write(record)
-        if pad:
-            records.sort(reverse=True)
-            select_by_cds.pad_records(records, where=params.anchor)
-            outputs.write_all(records)
+        outputs.write_all(select_by_cds.deduplicate_and_pad(hits, deduplicate=deduplicate, pad=pad, anchor=params.anchor, best_first=True))

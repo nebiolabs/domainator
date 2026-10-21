@@ -30,33 +30,26 @@ def resolve_matrix_outputs(params, *, require_output: bool = True) -> Tuple[Opti
     return hdf, params.dense_text_out
 
 
-def write_matrix_outputs(matrix, row_names, col_names, *, hdf: Optional[str], dense_text: Optional[str],
-                         max_output_bytes: Optional[int], mitigation_options: Sequence[str] = (),
-                         row_lengths=None, col_lengths=None, data_type: str = "",
-                         symmetric: Optional[bool] = None) -> None:
-    """Check the size guardrail for, then write, each requested matrix output.
+def write_matrix_outputs(matrix: DataMatrix, *, hdf: Optional[str], dense_text: Optional[str],
+                         max_output_bytes: Optional[int], mitigation_options: Sequence[str] = ()) -> None:
+    """Check the size guardrail for, then write, each requested output of ``matrix``.
 
-    ``matrix`` is a numpy or scipy array. ``symmetric`` is passed to
-    :meth:`DataMatrix.write_hdf`. Raises ``OutputSizeLimitExceeded`` before writing an
-    output that would exceed ``max_output_bytes``.
+    Raises ``OutputSizeLimitExceeded`` before writing an output that would exceed
+    ``max_output_bytes``.
     """
     mitigation_options = list(mitigation_options)
+    common = dict(matrix=matrix.data, row_names=matrix.rows, col_names=matrix.columns,
+                  row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths,
+                  data_type=matrix.data_type, max_output_bytes=max_output_bytes)
     if hdf is not None:
-        enforce_matrix_output_limit(
-            output_type="hdf", matrix=matrix, row_names=row_names, col_names=col_names,
-            row_lengths=row_lengths, col_lengths=col_lengths, data_type=data_type,
-            max_output_bytes=max_output_bytes, output_path=hdf, mitigation_options=mitigation_options,
-            symmetric=symmetric,
-        )
-        DataMatrix.write_hdf(matrix, hdf, row_names, col_names, row_lengths, col_lengths, data_type, symmetric=symmetric)
+        symmetric = matrix.exactly_symmetric
+        enforce_matrix_output_limit(output_type="hdf", output_path=hdf, mitigation_options=mitigation_options,
+                                    symmetric=symmetric, **common)
+        matrix.write(hdf, "hdf")
     if dense_text is not None:
-        enforce_matrix_output_limit(
-            output_type="dense_text", matrix=matrix, row_names=row_names, col_names=col_names,
-            row_lengths=row_lengths, col_lengths=col_lengths, data_type=data_type,
-            max_output_bytes=max_output_bytes, output_path=dense_text,
-            mitigation_options=["--hdf_out"] + mitigation_options,
-        )
-        DataMatrix.write_dense_text(matrix, dense_text, row_names, col_names, row_lengths, col_lengths, data_type)
+        enforce_matrix_output_limit(output_type="dense_text", output_path=dense_text,
+                                    mitigation_options=["--hdf_out"] + mitigation_options, **common)
+        matrix.write(dense_text, "dense_text")
 
 
 def add_symmetrize_argument(parser, *, extra_help: str = "") -> None:

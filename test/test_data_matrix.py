@@ -1,13 +1,9 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import pytest
-from domainator.data_matrix import (
-    CompactNeighborRankings,
-    DataMatrix,
-    MaxTree,
-    SortedUndirectedEdges,
-    build_symmetric_neighbor_rankings,
-)
+from domainator.edge_types import CompactNeighborRankings, SortedUndirectedEdges
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree, build_symmetric_neighbor_rankings
 import scipy.sparse
 import numpy as np
 import pytest_datadir

@@ -7,7 +7,8 @@ from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.utils import DomainatorCDS, count_peptides_in_record
+from domainator.model import DomainatorCDS
+from domainator.offsets import count_peptides_in_record
 from domainator.domainate import read_references
 import pyhmmer
 import pytest
@@ -100,7 +101,7 @@ def test_domainator_multi_hmm(shared_datadir):
         # The reference's cds_id for the /partial="10" CDS was generated from its old location (2..106); new runs generate it from <1..106.
         ref_records = list(SeqIO.parse(str(ref_file), "genbank"))
         for record in ref_records:
-            _utils.normalize_partial_codes(record)
+            normalize_partial_codes(record)
             for feature in record.features:
                 if feature.qualifiers.get("cds_id") == ["2_1_106"]:
                     feature.qualifiers["cds_id"] = ["1_1_106"]
@@ -714,10 +715,10 @@ def test_annotate_with_compressed_references(shared_datadir, tmp_path, compresso
 
 def test_annotate_ignores_stale_pressed_sidecars(shared_datadir, tmp_path):
     """hmmpress sidecars left next to an edited .hmm must not be used."""
-    from domainator import utils
+    from domainator.hmmio import open_hmm_file
     ref = tmp_path / "ref.hmm"
     ref.write_bytes((shared_datadir / "FeSOD_pfam.hmm").read_bytes())
-    pyhmmer.hmmer.hmmpress(list(utils.open_hmm_file(ref)), str(ref))
+    pyhmmer.hmmer.hmmpress(list(open_hmm_file(ref)), str(ref))
     # Replace the profiles; the sidecars still describe the FeSOD ones.
     ref.write_bytes((shared_datadir / "pdonr_hmms.hmm").read_bytes())
 
@@ -731,7 +732,8 @@ def test_annotate_ignores_stale_pressed_sidecars(shared_datadir, tmp_path):
 
 # --- partial CDSs: '<' / '>' markers, codon_start, and the --partial filter ---
 
-from domainator import utils as _utils
+from domainator.partial import normalize_partial_codes
+from domainator.seqio import parse_seqfiles
 
 _PARTIAL_CDS_LOCUS_TAG = "HOV79_30125" # complement(803..>2688), /codon_start=3, translation of the on-contig part
 
@@ -747,13 +749,21 @@ def _write_partial_cds_hmm(shared_datadir, path):
         hmm.write(handle)
 
 
+def _use_parser(monkeypatch, parser):
+    """Make domainate's main() read its input with the given GenBank parser backend."""
+    import functools
+    from domainator import domainate as domainate_module
+    from domainator.seqio import parse_seqfiles as real_parse_seqfiles
+    monkeypatch.setattr(domainate_module, "parse_seqfiles", functools.partial(real_parse_seqfiles, genbank_parser=parser))
+
+
 def _domainator_features(record):
     return [f for f in record.features if f.type == DOMAIN_FEATURE_NAME]
 
 
 @pytest.mark.parametrize("parser", ["biopython", "lean"])
 def test_domainate_partial_cds_codon_start(shared_datadir, monkeypatch, parser):
-    monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+    _use_parser(monkeypatch, parser)
     with tempfile.TemporaryDirectory() as output_dir:
         hmm = output_dir + "/partial.hmm"
         _write_partial_cds_hmm(shared_datadir, hmm)
@@ -774,7 +784,7 @@ def test_domainate_partial_cds_codon_start(shared_datadir, monkeypatch, parser):
 @pytest.mark.parametrize("partial,expected_hits", [("include", 1), ("exclude", 0), ("only", 1)])
 @pytest.mark.parametrize("parser", ["biopython", "lean"])
 def test_domainate_partial_filter(shared_datadir, monkeypatch, parser, partial, expected_hits):
-    monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+    _use_parser(monkeypatch, parser)
     with tempfile.TemporaryDirectory() as output_dir:
         hmm = output_dir + "/partial.hmm"
         _write_partial_cds_hmm(shared_datadir, hmm)
@@ -788,7 +798,7 @@ def test_domainate_partial_filter(shared_datadir, monkeypatch, parser, partial, 
 def test_domainate_partial_filter_excludes_complete_with_only(shared_datadir):
     # the complete CDS in the fixture is not searched with --partial only
     with tempfile.TemporaryDirectory() as output_dir:
-        record = next(_utils.parse_seqfiles([str(shared_datadir / "JABFVH010000506_extraction.gb")]))
+        record = next(parse_seqfiles([str(shared_datadir / "JABFVH010000506_extraction.gb")]))
         cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") != [_PARTIAL_CDS_LOCUS_TAG]][0]
         alphabet = pyhmmer.easel.Alphabet.amino()
         sequence = pyhmmer.easel.TextSequence(name=b"complete_cds", sequence=cds.qualifiers["translation"][0]).digitize(alphabet)
@@ -799,13 +809,13 @@ def test_domainate_partial_filter_excludes_complete_with_only(shared_datadir):
         for partial, expected_hits in (("include", 1), ("exclude", 1), ("only", 0)):
             out = output_dir + f"/out_{partial}.gb"
             main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-r", hmm_path, "-o", out, "--partial", partial])
-            assert len(_domainator_features(next(_utils.parse_seqfiles([out])))) == expected_hits
+            assert len(_domainator_features(next(parse_seqfiles([out])))) == expected_hits
 
 
 @pytest.mark.parametrize("parser", ["biopython", "lean"])
 def test_domainate_trims_overlong_partial_translation(shared_datadir, monkeypatch, parser):
     """A 5'-partial CDS whose translation includes residues off the edge of the contig is trimmed to the on-contig residues."""
-    monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+    _use_parser(monkeypatch, parser)
     with tempfile.TemporaryDirectory() as output_dir:
         record = next(SeqIO.parse(str(shared_datadir / "JABFVH010000506_extraction.gb"), "genbank"))
         cds = [f for f in record.features if f.type == "CDS" and f.qualifiers.get("locus_tag") == [_PARTIAL_CDS_LOCUS_TAG]][0]
@@ -827,7 +837,7 @@ def test_domainate_trims_overlong_partial_translation(shared_datadir, monkeypatc
 
 def test_domainate_uniprot_fragment_filter(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        records = list(_utils.parse_seqfiles([str(shared_datadir / "swissprot_CuSOD_subset.fasta")]))
+        records = list(parse_seqfiles([str(shared_datadir / "swissprot_CuSOD_subset.fasta")]))
         fragment_id = records[0].id
         fasta = output_dir + "/fragments.fasta"
         with open(fasta, "w") as handle:
@@ -846,7 +856,7 @@ def test_domainate_uniprot_fragment_filter(shared_datadir):
         for partial in ("include", "exclude", "only"):
             out = output_dir + f"/out_{partial}.gb"
             main(["-i", fasta, "-r", hmm_path, "-o", out, "--partial", partial, "--hits_only"])
-            hit_ids[partial] = {r.id for r in _utils.parse_seqfiles([out])}
+            hit_ids[partial] = {r.id for r in parse_seqfiles([out])}
         assert fragment_id in hit_ids["include"]
         assert fragment_id not in hit_ids["exclude"]
         assert hit_ids["only"] == {fragment_id}
@@ -859,10 +869,9 @@ def test_domainate_lean_parser_writes_contigs_without_hits(shared_datadir, monke
     with tempfile.TemporaryDirectory() as output_dir:
         outputs = dict()
         for parser in ("biopython", "lean"):
-            monkeypatch.setenv("DOMAINATOR_GB_PARSER", parser)
+            _use_parser(monkeypatch, parser)
             outputs[parser] = output_dir + f"/{parser}.gb"
             main(["-i", str(shared_datadir / input_file), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", outputs[parser]])
-        monkeypatch.delenv("DOMAINATOR_GB_PARSER")
         # Biopython output first: the lean parser adds topology="linear" when the LOCUS line has none, which is ignored here.
         compare_seqfiles(outputs["biopython"], outputs["lean"])
         assert len(list(SeqIO.parse(outputs["lean"], "genbank"))) == len(list(SeqIO.parse(str(shared_datadir / input_file), "genbank" if input_file.endswith(".gb") else "fasta")))
@@ -871,7 +880,7 @@ def test_domainate_lean_parser_writes_contigs_without_hits(shared_datadir, monke
 def test_prodigal_partial_genes(shared_datadir):
     """Gene calling keeps genes that run off the edge of a linear contig, annotated like GenBank partial CDSs."""
     from domainator.domainate import prodigal_CDS_annotate
-    record = next(_utils.parse_seqfiles([str(shared_datadir / "JABFVH010000506_extraction.gb")]))
+    record = next(parse_seqfiles([str(shared_datadir / "JABFVH010000506_extraction.gb")]))
     ncbi = [(str(f.location), f.qualifiers.get("codon_start", ["1"])) for f in record.features if f.type == "CDS"]
     record.features = [f for f in record.features if f.type != "CDS"]
     prodigal_CDS_annotate(record)
@@ -906,7 +915,7 @@ def test_domainate_gene_call_partial_filter(shared_datadir, partial, expected_hi
 def test_prodigal_circular_origin_genes(shared_datadir):
     """On circular contigs, genes crossing the origin are called and annotated as joins across it."""
     from domainator.domainate import prodigal_CDS_annotate
-    record = next(_utils.parse_seqfiles([str(shared_datadir / "bacillus_phage_SPR.gb")]))
+    record = next(parse_seqfiles([str(shared_datadir / "bacillus_phage_SPR.gb")]))
     assert record.annotations["topology"] == "circular"
     annotated = [str(f.location) for f in record.features if f.type == "CDS"]
     assert "join{[1842:2552](-), [0:130](-)}" in annotated or "join{[0:130](-), [1842:2552](-)}" in annotated

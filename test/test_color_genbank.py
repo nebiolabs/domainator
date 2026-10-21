@@ -1,4 +1,5 @@
-from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.seqio import parse_seqfiles
 from pathlib import Path
 import tempfile
 
@@ -15,7 +16,7 @@ def test_color_genbank_1(shared_datadir):
         cds_colors = {"1264_-1_959": "#FF0000", "2916_1_3677": "#00FF00", "2265_-1_1606": "#0000FF"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF"}
         seen = 0
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == "CDS":
                     if feature.qualifiers['cds_id'][0] in cds_colors:
@@ -38,7 +39,7 @@ def test_color_genbank_2(shared_datadir):
         cds_colors = {"1264_-1_959": "#3BA3EC", "2916_1_3677": "#B287F4", "2265_-1_1606": "#F77468"}
         domain_colors = {"CcdB": "#3BA3EC", "APH": "#B287F4", "CAT": "#F77468"}
         seen = 0
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == "CDS":
                     if feature.qualifiers['cds_id'][0] in cds_colors:
@@ -60,7 +61,7 @@ def test_color_genbank_3(shared_datadir):
         cds_colors = {"1605_-1_2265": "#0000FF"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF", "Condensation":	"#FF00FF", "2-oxoacid_dh":	"#FFFFFF"}
         seen = 0
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == "CDS":
                     if feature.qualifiers['cds_id'][0] in cds_colors:
@@ -91,7 +92,7 @@ def test_color_genbank_domain_search_1(shared_datadir):
         assert Path(out).is_file()
         cds_colors = {"1605_-1_2265": "#0000FF", "2265_-1_1606": "#555500", "1264_-1_959":"#555500"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF", "Condensation":	"#FF00FF", "2-oxoacid_dh":	"#FFFFFF"}
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == "CDS":
                     if feature.qualifiers['cds_id'][0] in cds_colors:
@@ -110,7 +111,7 @@ def test_color_genbank_clear_1(shared_datadir):
         
         color_genbank.main(["-i", str(shared_datadir / "MT_nbs.gb"), "-o", out, "--clear", "--target", "domains"])
         assert Path(out).is_file()
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == "CDS":
                         assert not ('Color' in feature.qualifiers)
@@ -164,7 +165,7 @@ def test_color_genbank_databases_1(shared_datadir):
         cds_colors = {"1264_-1_959": "#FF0000", "2916_1_3677": "#00FF00", "2265_-1_1606": "#0000FF"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF"}
         seen = 0
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == DOMAIN_FEATURE_NAME:
                     if feature.qualifiers['database'][0] == "pdonr_hmms_1":
@@ -184,7 +185,7 @@ def test_color_genbank_mode_domains_and_cdss(shared_datadir):
 
         saw_domain_color = False
         saw_cds_color = False
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type == DOMAIN_FEATURE_NAME and 'Color' in feature.qualifiers:
                     saw_domain_color = True
@@ -209,7 +210,7 @@ def test_color_genbank_domain_database_1(shared_datadir):
         assert Path(out).is_file()
 
         database_colors = {}
-        for rec in utils.parse_seqfiles([out]):
+        for rec in parse_seqfiles([out]):
             for feature in rec.features:
                 if feature.type != DOMAIN_FEATURE_NAME:
                     continue

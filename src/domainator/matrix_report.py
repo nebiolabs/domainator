@@ -9,7 +9,8 @@ import gzip
 
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import output_file
-from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
+from domainator.data_matrix import DataMatrix
+from domainator.ssn_edges import MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
 from bashplotlib.histogram import plot_hist
 import io
 from contextlib import ExitStack, redirect_stdout
@@ -1192,7 +1193,7 @@ class SummaryHTMLWriter():
     def write_footer(self):
         print("</body></html>", file=self.out_handle)
 
-def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, knn_projection: bool = False,
+def matrix_report(matrix:DataMatrix, *, out_text_handle, out_html_handle, knn_projection: bool = False,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
                   profile_stages: bool = False, stage_timings=None, progress_callback=None,
                   max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, out_json_handle=None):
@@ -1324,8 +1325,8 @@ def main(argv):
             stage_start = perf_counter()
             matrix_report(
                 matrix,
-                out,
-                out_html_handle,
+                out_text_handle=out,
+                out_html_handle=out_html_handle,
                 knn_projection=params.knn_projection,
                 merge_impact_metric=params.merge_impact_metric,
                 profile_stages=params.profile_stages,

@@ -4,7 +4,8 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator import select_by_cds
 from domainator.domainate import main as domainate_main
 from domainator.domain_search import main as domain_search_main
-from domainator.utils import parse_seqfiles, DomainatorCDS
+from domainator.seqio import parse_seqfiles
+from domainator.model import DomainatorCDS
 import pytest
 from io import StringIO
 import sys

@@ -16,17 +16,18 @@ from jsonargparse import ActionConfigFile
 import logging
 import re
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
-from domainator.utils import pyhmmer_decode, ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file, OUTPUT_COMPRESSION_HELP
+from domainator.hmmio import ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file
+from domainator.cli.common import OUTPUT_COMPRESSION_HELP
 from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
-def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exact:Optional[List[str]]=None, query_contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False, match_all=False):
+def hmmer_select(hmm_path=None, *, regex:Optional[List[str]]=None, exact:Optional[List[str]]=None, contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False, match_all=False):
     """
         hmm_path: path to an hmmer file
-        query_regex: regular expression to try to find in the hmmer profiles
-        query_exact: exact string to try to find in the hmmer profiles
-        query_contains: string to try to find in the hmmer profiles
+        regex: regular expression to try to find in the hmmer profiles
+        exact: exact string to try to find in the hmmer profiles
+        contains: string to try to find in the hmmer profiles
         hmm_iterator: instead of an hmm file path, you can supply an iterator over pyhmmer HMM objects
         search_name: If True then search in the NAME field of the hmm profiles
         search_description: If True then search in the DESC field of the hmm profiles
@@ -48,20 +49,20 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
     #     raise RuntimeError("Exactly one of query_regex or query_exact or query_contains must be specified.")
 
     if not case_sensitive:
-        if query_exact is not None:
-            for i in range(len(query_exact)):
-                query_exact[i] = query_exact[i].lower()
-        if query_contains is not None:
-            for i in range(len(query_contains)):
-                query_contains[i] = query_contains[i].lower()
+        if exact is not None:
+            for i in range(len(exact)):
+                exact[i] = exact[i].lower()
+        if contains is not None:
+            for i in range(len(contains)):
+                contains[i] = contains[i].lower()
 
-    if query_regex is not None:
+    if regex is not None:
         regexes = []
-        for i in range(len(query_regex)):
+        for i in range(len(regex)):
             if case_sensitive:
-                regexes.append(re.compile(query_regex[i]))
+                regexes.append(re.compile(regex[i]))
             else:
-                regexes.append(re.compile(query_regex[i], re.IGNORECASE))
+                regexes.append(re.compile(regex[i], re.IGNORECASE))
 
     inputs_specified = 0 
     if hmm_path is not None:
@@ -76,18 +77,9 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
     
     def inner(hmm_iterator):
         for model in hmm_iterator:
-            model_name = pyhmmer_decode(model.name)
-            model_description = model.description
-            model_accession = model.accession
-  
-            if model_description == None:
-                model_description = ""
-            else:
-                model_description = pyhmmer_decode(model_description)
-            if model_accession == None:
-                model_accession = ""
-            else:
-                model_accession = pyhmmer_decode(model_accession)
+            model_name = model.name
+            model_description = "" if model.description is None else model.description
+            model_accession = "" if model.accession is None else model.accession
 
             if not case_sensitive:
                 model_name = model_name.lower()
@@ -96,29 +88,29 @@ def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exac
 
 
             found = match_all
-            if query_regex is not None:
-                for regex in regexes:
-                    if (search_name and regex.search(model_name)):
+            if regex is not None:
+                for pattern in regexes:
+                    if (search_name and pattern.search(model_name)):
                         found = True
-                    elif (search_description and regex.search(model_description)):
+                    elif (search_description and pattern.search(model_description)):
                         found = True
-                    elif (search_accession and regex.search(model_accession)):
+                    elif (search_accession and pattern.search(model_accession)):
                         found = True
-            if query_exact is not None:
-                for exact in query_exact:
-                    if (search_name and model_name == exact):
+            if exact is not None:
+                for text in exact:
+                    if (search_name and model_name == text):
                         found = True
-                    elif (search_description and model_description == exact):
+                    elif (search_description and model_description == text):
                         found = True
-                    elif (search_accession and model_accession == exact):
+                    elif (search_accession and model_accession == text):
                         found = True
-            if query_contains is not None:
-                for contains in query_contains:
-                    if (search_name and contains in model_name):
+            if contains is not None:
+                for text in contains:
+                    if (search_name and text in model_name):
                         found = True
-                    elif (search_description and contains in model_description):
+                    elif (search_description and text in model_description):
                         found = True
-                    elif (search_accession and contains in model_accession):
+                    elif (search_accession and text in model_accession):
                         found = True
 
             if found:
@@ -227,7 +219,7 @@ def main(argv):
                     f"profile. Pass --alphabet to keep only one alphabet, or run domainator hmmer_select "
                     f"once per alphabet."
                 )
-            for found_profile in hmmer_select(query_regex=params.regex, query_exact=params.exact, query_contains=params.contains, hmm_iterator=hmm_iterator, search_name=search_name, search_description=search_description, search_accession=search_accession, case_sensitive=params.case_sensitive, match_all=match_all):
+            for found_profile in hmmer_select(regex=params.regex, exact=params.exact, contains=params.contains, hmm_iterator=hmm_iterator, search_name=search_name, search_description=search_description, search_accession=search_accession, case_sensitive=params.case_sensitive, match_all=match_all):
                 found_profile.write(output_handle)
                 found_count += 1
     finally:

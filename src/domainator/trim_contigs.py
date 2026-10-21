@@ -11,7 +11,12 @@ from jsonargparse.typing import PositiveFloat
 import logging
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import parse_seqfiles, slice_record, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, FeatureLocation, region_id
+from domainator.seqio import parse_seqfiles
+from domainator.locations import slice_record
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.expr import BooleanEvaluator
+from domainator.model import DomainatorCDS, region_id
+from domainator.Bio.SeqFeature import FeatureLocation
 from domainator.Bio.SeqRecord import SeqRecord
 from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 from domainator.select_by_cds import validate_range
@@ -121,15 +126,15 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
     return record
 
 
-def trim_contigs(records: Iterable[SeqRecord], kb_truncation: Optional[Tuple[float, float]], cds_truncation: Optional[Tuple[int, int]], strip_domains: Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
-    if strip_domains is not None:
-        strip_domains = set(strip_domains)
+def trim_contigs(records: Iterable[SeqRecord], *, kb_truncation: Optional[Tuple[float, float]], cds_truncation: Optional[Tuple[int, int]], domains: Optional[Set[str]], domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
+    if domains is not None:
+        domains = set(domains)
 
     if domain_expr is not None:
         domain_expr = BooleanEvaluator(domain_expr)
 
     for record in records:
-        trimmed = trim_contig(record, kb_truncation, cds_truncation, strip_domains, domain_expr, no_domain, evalue, databases)
+        trimmed = trim_contig(record, kb_truncation, cds_truncation, domains, domain_expr, unannotated, evalue, databases)
         if trimmed is not None:
             yield trimmed
 
@@ -200,11 +205,11 @@ def main(argv):
     #TODO: resolve code duplication with domainator domain_search
     write_seq_outputs(trim_contigs(
         parse_seqfiles(params.input, target_contigs),
-        kb_truncation,
-        cds_truncation,
-        selected_domains,
-        domain_expr,
-        params.unannotated,
-        params.evalue,
-        set(params.databases) if params.databases is not None else None,
+        kb_truncation=kb_truncation,
+        cds_truncation=cds_truncation,
+        domains=selected_domains,
+        domain_expr=domain_expr,
+        unannotated=params.unannotated,
+        evalue=params.evalue,
+        databases=set(params.databases) if params.databases is not None else None,
         ), genbank=params.genbank_out, fasta=params.fasta_out)

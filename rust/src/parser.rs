@@ -118,12 +118,59 @@ fn lean_location(loc: &Location, strand: i32) -> Option<(Option<&'static str>, b
     }
 }
 
-/// Translate one codon with the NCBI standard table (table 1). Any codon with an
+/// The NCBI genetic codes, as the amino acid for each codon in TCAG order (generated from
+/// Biopython's CodonTable, so a translation matches Biopython's SeqFeature.translate).
+const CODON_TABLES: &[(u32, &[u8; 64])] = &[
+    (1, b"FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (2, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSS**VVVVAAAADDEEGGGG"),
+    (3, b"FFLLSSSSYY**CCWWTTTTPPPPHHQQRRRRIIMMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (4, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (5, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSSSSVVVVAAAADDEEGGGG"),
+    (6, b"FFLLSSSSYYQQCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (9, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNNKSSSSVVVVAAAADDEEGGGG"),
+    (10, b"FFLLSSSSYY**CCCWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (11, b"FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (12, b"FFLLSSSSYY**CC*WLLLSPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (13, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSSGGVVVVAAAADDEEGGGG"),
+    (14, b"FFLLSSSSYYY*CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNNKSSSSVVVVAAAADDEEGGGG"),
+    (15, b"FFLLSSSSYY*QCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (16, b"FFLLSSSSYY*LCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (21, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNNKSSSSVVVVAAAADDEEGGGG"),
+    (22, b"FFLLSS*SYY*LCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (23, b"FF*LSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (24, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSSKVVVVAAAADDEEGGGG"),
+    (25, b"FFLLSSSSYY**CCGWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (26, b"FFLLSSSSYY**CC*WLLLAPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (27, b"FFLLSSSSYYQQCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (28, b"FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (29, b"FFLLSSSSYYYYCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (30, b"FFLLSSSSYYEECC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (31, b"FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (32, b"FFLLSSSSYY*WCC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"),
+    (33, b"FFLLSSSSYYY*CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSSKVVVVAAAADDEEGGGG"),
+];
+
+/// The genetic code for a feature's /transl_table (table 1 if absent or unknown).
+fn codon_table(feature: &gb_io::seq::Feature) -> &'static [u8; 64] {
+    let id = feature
+        .qualifiers
+        .iter()
+        .find(|(k, _)| k == "transl_table")
+        .and_then(|(_, v)| v.as_deref())
+        .and_then(|v| v.trim_matches('"').trim().parse::<u32>().ok())
+        .unwrap_or(1);
+    CODON_TABLES
+        .iter()
+        .find(|(table_id, _)| *table_id == id)
+        .map_or(CODON_TABLES[0].1, |(_, table)| *table)
+}
+
+/// Translate one codon with a genetic code from CODON_TABLES. Any codon with an
 /// ambiguous/unknown base -> 'X'; '*' is a stop. Used only to produce SEARCH
 /// peptides for pyhmmer (the materialized record's /translation comes from the
 /// file or, when absent, from Biopython at hit time). Codon-by-codon so the
 /// peptide length matches Biopython's, which keeps hit coordinates consistent.
-fn translate_codon(c0: u8, c1: u8, c2: u8) -> u8 {
+fn translate_codon(table: &[u8; 64], c0: u8, c1: u8, c2: u8) -> u8 {
     fn idx(b: u8) -> Option<usize> {
         match b.to_ascii_uppercase() {
             b'T' | b'U' => Some(0),
@@ -133,10 +180,8 @@ fn translate_codon(c0: u8, c1: u8, c2: u8) -> u8 {
             _ => None,
         }
     }
-    // TCAG-ordered standard genetic code.
-    const TABLE: &[u8; 64] = b"FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG";
     match (idx(c0), idx(c1), idx(c2)) {
-        (Some(a), Some(b), Some(c)) => TABLE[a * 16 + b * 4 + c],
+        (Some(a), Some(b), Some(c)) => table[a * 16 + b * 4 + c],
         _ => b'X',
     }
 }
@@ -158,11 +203,11 @@ fn revcomp(seq: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-fn translate_dna(seq: &[u8]) -> String {
+fn translate_dna(seq: &[u8], table: &[u8; 64]) -> String {
     let mut out = Vec::with_capacity(seq.len() / 3);
     let mut i = 0;
     while i + 3 <= seq.len() {
-        out.push(translate_codon(seq[i], seq[i + 1], seq[i + 2]));
+        out.push(translate_codon(table, seq[i], seq[i + 1], seq[i + 2]));
         i += 3;
     }
     String::from_utf8_lossy(&out).into_owned()
@@ -351,11 +396,11 @@ fn on_contig_translation(tr: &str, loc_len: i64, offset: usize, five: bool, thre
     None
 }
 
-/// Translate a feature from the contig, starting at its /codon_start frame
-/// (Biopython's SeqFeature.translate, as used by clean_rec).
+/// Translate a feature from the contig with its /transl_table, starting at its /codon_start
+/// frame (Biopython's SeqFeature.translate, as used by clean_rec).
 fn translate_feature(feature: &gb_io::seq::Feature, seq: &[u8]) -> String {
     match extract_location_seq(&feature.location, seq) {
-        Some(nt) => translate_dna(&nt[codon_offset(feature).min(nt.len())..]),
+        Some(nt) => translate_dna(&nt[codon_offset(feature).min(nt.len())..], codon_table(feature)),
         None => String::new(),
     }
 }
@@ -935,13 +980,14 @@ pub fn parse_fasta_search<'py>(
         }
         if line.first() == Some(&b'>') {
             flush!();
-            // title = everything after '>', trailing newline/CR stripped.
-            let raw = &line[1..];
-            let end = raw.iter().rposition(|&b| b != b'\n' && b != b'\r').map_or(0, |i| i + 1);
-            title = Some(String::from_utf8_lossy(&raw[..end]).into_owned());
+            // title = everything after '>', trailing whitespace stripped (Biopython's line[1:].rstrip()).
+            let raw = String::from_utf8_lossy(&line[1..]).into_owned();
+            title = Some(raw.trim_end().to_string());
         } else if title.is_some() {
-            for &b in &line[..] {
-                if b != b'\n' && b != b'\r' {
+            // Like Biopython: strip trailing whitespace, then drop spaces and stray CRs (internal tabs stay).
+            let end = line.iter().rposition(|b| !b.is_ascii_whitespace()).map_or(0, |i| i + 1);
+            for &b in &line[..end] {
+                if b != b'\r' && b != b' ' {
                     seq.push(b as char);
                 }
             }

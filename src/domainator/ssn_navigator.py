@@ -155,7 +155,7 @@ def _cluster_for_node(hierarchy, node_index, threshold):
         current = parent
 
 
-def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
+def ssn_navigator(bundle, *, mode, threshold=None, cluster_id=None, node=None,
                   min_size=1, top_n=50, members=False,
                   max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
     """Answer a single navigation query against a loaded ``.dsnv`` bundle dict.

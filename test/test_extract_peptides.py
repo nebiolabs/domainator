@@ -7,7 +7,7 @@ from domainator import DOMAIN_FEATURE_NAME
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
-from domainator.utils import parse_seqfiles
+from domainator.seqio import parse_seqfiles
 
 def compare_files(f1,f2):
     with open(f1,"r") as newfile:
@@ -146,7 +146,7 @@ def test_extract_peptides_end_of_contig(shared_datadir):
                             "AEAAAAAAADALAAQQSVAAAAQSAAVAAQEAARASAAAARTAQLNAQAQQDAALAAQYAAEAANEAAAAVAAADEAERDAAAARQAAQQAEDAAAAARAAADQAERDAAAAEEAAQHALADAQQAQDAAALAQENADAQARAALGTSSPTGEAGVQALPRVNAEVVSRTVIQCPPLTDSDYCEFTVTYRITGSIDYVLVTCPDFNDLYCPGEQITDHLKSQPVDMTHEQLVQLTREDINDLLKRLATSLISDYVDCAKGLGILDGKAGETPDNWGVSCAWVAADLVLPAVAAVIARSIKALRIAMRTGDGIVEAYTALKATEISAGTLAKIGDDVYRTVLNFCLGHSFAADTPVLMADHSFKPIGEVVPGDAVLAFDPASGQSVAGTVTRQFVNKDTRLTDVTVRGDNGDLAVLNTTPTHPFWVEGTVSGWVAAQDLDPGDPLRTADGQRATVVSERTFDGAQTMYDLTVEDAHTYYVGVGDAGVLVHNATCPTWVYNALSALRTKALTSGRLFAPNGTELYTEIRSGTDASTSAIDTYLKTVPGWPSNADGFWVATHAETKYAWWMRNNGVKDADIVINNVDGPCAGQYSCPMAVQAILPEGSKVRIWWPGRTTPMEVIGTGVLP"}
         
 
-def test_domain_search_hit_1(shared_datadir):
+def test_extract_peptides_domains_filter_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
@@ -270,7 +270,7 @@ def test_extract_peptides_long_protein_id_is_preserved():
         )
     )
 
-    peptides = list(extract_peptides.extract_peptides([record], 1e9, None, None, extract_all=True))
+    peptides = list(extract_peptides.extract_peptides([record], evalue=1e9, domains=None, cds_ids=None, extract_all=True))
 
     assert len(peptides) == 1
     assert peptides[0].id == long_name
@@ -278,7 +278,7 @@ def test_extract_peptides_long_protein_id_is_preserved():
 
 
 def test_extract_peptides_translates_domain_locations_on_both_strands():
-    peptides = list(extract_peptides.extract_peptides([_make_extract_peptide_record()], 1e9, None, None, extract_all=True))
+    peptides = list(extract_peptides.extract_peptides([_make_extract_peptide_record()], evalue=1e9, domains=None, cds_ids=None, extract_all=True))
     peptides_by_id = {record.id: record for record in peptides}
 
     assert peptides_by_id["forward_protein"].features[0].location == FeatureLocation(1, 3, strand=1)
@@ -313,7 +313,7 @@ def test_extract_peptides_source_compound_locations_are_translated():
         )
     )
 
-    peptide = list(extract_peptides.extract_peptides([record], 1e9, None, None, extract_all=True))[0]
+    peptide = list(extract_peptides.extract_peptides([record], evalue=1e9, domains=None, cds_ids=None, extract_all=True))[0]
     source_feature = peptide.features[0]
 
     assert isinstance(source_feature.location, CompoundLocation)

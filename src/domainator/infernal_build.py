@@ -10,11 +10,10 @@ FASTA, generally require --noss.
 """
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
-from domainator.utils import open_writable_seqfile
+from domainator.seqio import open_writable_seqfile
+from domainator.external import resolve_binary, run_command
 import os
 import re
-import shutil
-import subprocess
 import sys
 import tempfile
 from typing import BinaryIO, Optional, Union
@@ -83,18 +82,9 @@ def _patch_cm_header(cm_text: str, name: Optional[str], acc: Optional[str], desc
     return "".join(header_lines + body_lines)
 
 
-def _resolve_cmbuild_path(cmbuild_path: Optional[str]) -> str:
-    if cmbuild_path is not None:
-        return cmbuild_path
-
-    resolved = shutil.which("cmbuild")
-    if resolved is None:
-        raise RuntimeError("Could not find 'cmbuild' on PATH. Install Infernal or pass --cmbuild_path.")
-    return resolved
-
-
 def infernal_build(
     file: Union[str, os.PathLike, BinaryIO],
+    *,
     name: str,
     acc: Optional[str] = None,
     desc: Optional[str] = None,
@@ -104,7 +94,7 @@ def infernal_build(
     hand: bool = False,
     symfrac: Optional[float] = None,
 ) -> str:
-    cmbuild = _resolve_cmbuild_path(cmbuild_path)
+    cmbuild = resolve_binary("cmbuild", cmbuild_path, install_hint="Install Infernal.")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         raw_output_path = os.path.join(tmpdir, "output.cm")
@@ -131,11 +121,7 @@ def infernal_build(
             args.extend(["--symfrac", str(symfrac)])
         args.extend([raw_output_path, input_path])
 
-        result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"cmbuild failed for input {input_path}:\n{result.stdout}\n{result.stderr}".strip()
-            )
+        run_command(args, f"cmbuild on {input_path}")
 
         with open(summary_path, "r", encoding="utf-8") as summary_handle:
             summary_text = summary_handle.read()

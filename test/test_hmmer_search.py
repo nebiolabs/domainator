@@ -133,7 +133,7 @@ def test_hmmer_search_gzip_output(shared_datadir, tmp_path):
     """-o *.hmm.gz writes plain gzip that HMMER itself can still open by path."""
     import gzip
     import pyhmmer
-    from domainator import utils
+    from domainator.seqio import detect_compression
 
     plain = str(tmp_path / "out.hmm")
     gz = str(tmp_path / "out.hmm.gz")
@@ -144,7 +144,7 @@ def test_hmmer_search_gzip_output(shared_datadir, tmp_path):
 
     # Plain gzip, deliberately NOT bgzf: easel cannot open BGZF by path, so a
     # BGZF .hmm would be unreadable by hmmsearch and by domainator itself.
-    assert utils.detect_compression(gz) == "gzip"
+    assert detect_compression(gz) == "gzip"
     assert gzip.open(gz, "rb").read() == Path(plain).read_bytes()
 
     contents = gzip.open(gz, "rt").read()
@@ -153,7 +153,7 @@ def test_hmmer_search_gzip_output(shared_datadir, tmp_path):
     assert "NAME  CcdB" not in contents
 
     with pyhmmer.plan7.HMMFile(gz) as handle:   # the HMMER interop proof
-        assert [utils.pyhmmer_decode(h.name) for h in handle]
+        assert [h.name for h in handle]
 
 
 def test_hmmer_search_rejects_bgzf_output(shared_datadir, tmp_path):

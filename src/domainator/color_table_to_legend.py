@@ -10,13 +10,13 @@ import sys
 from typing import Dict
 from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
 from domainator.outputs import output_file
-from domainator.color_genbank import read_color_table
+from domainator.colors import read_color_table
 from collections import OrderedDict
 import html
 
 
-def color_table_to_legend(table: Dict[str, str], svg: str, title: str):
-    """Write an SVG legend of ``table`` (annotation -> hex color) to ``svg``, a path (``-`` for stdout)."""
+def color_table_to_legend(table: Dict[str, str], *, svg_out: str, title: str):
+    """Write an SVG legend of ``table`` (annotation -> hex color) to ``svg_out``, a path (``-`` for stdout)."""
     # Constants for layout and styling
     title_font_size = 24
     item_font_size = 20
@@ -35,7 +35,7 @@ def color_table_to_legend(table: Dict[str, str], svg: str, title: str):
     total_width = max(box_width + padding*3 + (longest_key * item_font_size)/2, padding*3 + (len(title) * title_font_size) /2) # Assumed extra space for text
     
 
-    with output_file(svg) as f:
+    with output_file(svg_out) as f:
         f.write(f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">
     <g font-family="Arial, sans-serif">
@@ -84,4 +84,4 @@ def main(argv):
 
     ### Run
     
-    color_table_to_legend(table, params.svg_out, params.title)
+    color_table_to_legend(table, svg_out=params.svg_out, title=params.title)

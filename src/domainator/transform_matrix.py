@@ -4,7 +4,6 @@
 """
 
 import warnings
-warnings.filterwarnings("ignore", module='numpy')
 from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_input, tool_parser
@@ -128,7 +127,7 @@ def apply_lower_bound(array, lower_bound):
     return out
 
 
-def transform_matrix(array, mode, row_lengths=None, col_lengths=None):
+def transform_matrix(array, *, mode, row_lengths=None, col_lengths=None):
     """
     Transform an array to a different mode.
     """
@@ -217,7 +216,7 @@ def main(argv):
             sparsify = False
 
         if matrix.data_type == "score" and matrix.data_type != requested_mode:
-            matrix.data = transform_matrix(matrix.data, requested_mode, matrix.row_lengths, matrix.column_lengths)
+            matrix.data = transform_matrix(matrix.data, mode=requested_mode, row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths)
 
         matrix.data_type = requested_mode
 
@@ -233,10 +232,5 @@ def main(argv):
         matrix.data = apply_lower_bound(matrix.data, params.threshold)
 
     ### Run
-    write_matrix_outputs(
-        matrix.data, matrix.rows, matrix.columns,
-        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-        mitigation_options=["--threshold", "--mst", "--knn"],
-        row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths, data_type=matrix.data_type,
-        symmetric=matrix.exactly_symmetric,
-    )
+    write_matrix_outputs(matrix, hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+                         mitigation_options=["--threshold", "--mst", "--knn"])

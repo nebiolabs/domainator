@@ -161,7 +161,7 @@ def test_warnings_are_logged_with_a_prefix(tmp_path, capsys):
     from domainator.Bio.Seq import Seq
     from domainator.Bio.SeqRecord import SeqRecord
     from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
-    from domainator.utils import write_genbank
+    from domainator.seqio import write_genbank
     # Every CDS is unannotated, so --unannotated would strip them all: trim_contigs warns and skips the contig.
     record = SeqRecord(Seq("ATG" * 200), id="rec", annotations={"molecule_type": "DNA"})
     record.features = [SeqFeature(FeatureLocation(0, 300, 1), type="CDS"), SeqFeature(FeatureLocation(400, 600, 1), type="CDS")]

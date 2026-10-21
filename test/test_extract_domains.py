@@ -6,7 +6,7 @@ from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocat
 from domainator import extract_domains
 import tempfile
 from domainator import DOMAIN_FEATURE_NAME
-from domainator.utils import parse_seqfiles
+from domainator.seqio import parse_seqfiles
 
 def test_extract_domains_1(shared_datadir):
     """
@@ -244,8 +244,8 @@ def test_extract_domains_splice_merges_overlaps():
         extract_domains.extract_domains(
             [record],
             domains={"foo"},
-            pad_up=2,
-            pad_down=2,
+            extend_up=2,
+            extend_down=2,
             splice=True,
         )
     )

@@ -7,7 +7,7 @@ from typing import Iterable, Optional, Sequence
 
 from domainator.Bio import SeqIO
 from domainator.output_guardrails import enforce_output_limit, make_temporary_output_path
-from domainator.utils import STDOUT_PATHS, is_compressed_path, open_writable_seqfile, write_genbank
+from domainator.seqio import STDOUT_PATHS, is_compressed_path, open_writable_seqfile, write_genbank
 
 
 class _Output:

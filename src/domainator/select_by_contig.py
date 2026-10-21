@@ -34,12 +34,17 @@ import sys
 
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, BooleanEvaluator, filter_by_taxonomy, filter_by_partial, PARTIAL_CHOICES
+from domainator.seqio import parse_seqfiles
+from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.expr import BooleanEvaluator
+from domainator.taxonomy.records import filter_by_taxonomy
+from domainator.partial import filter_by_partial, PARTIAL_CHOICES
 from typing import Set, Optional
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from pathlib import Path
-from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.model import feature_evalue, feature_score
 
 # TODO: account for different domain databases
 # TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
@@ -89,69 +94,69 @@ def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
 
 
 
-def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unannotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain", partial="include"):
+def select_by_contig(records, *, domains: Set[str] = None, domain_expr: str =None, evalue=float("inf"), max_records=None, min_length=None, max_length=None, min_cds=None, max_cds=None, definition_regex=None, sequence_regex=None, contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unannotated=False, min_search_score=None, max_search_score=None, annotation_type="domainator", partial="include"):
     """
 
         Args:
-            contigs: an iterable/iterator of SeqRecords
+            records: an iterable/iterator of SeqRecords
 
-            target_domains: Select all contigs containing domains with these names
+            domains: Select all records containing domains with these names
 
             domain_expr: Use boolean expressions for domain names to select CDSs
 
-            definition_regex: only keep contigs with a definition that matches this regex.
+            definition_regex: only keep records with a definition that matches this regex.
 
-            sequence_regex: only keep contigs with a sequence that matches this regex.
+            sequence_regex: only keep records with a sequence that matches this regex.
 
-            target_contigs: only keep contigs with these names
+            contigs: only keep records with these names
 
-            contigs_regex: only keep contigs with names matching this regex.
+            contigs_regex: only keep records with names matching this regex.
 
-            domain_evalue: consider only domains with evalues less than this
+            evalue: consider only domains with evalues less than this
 
-            first: only keep the first n contigs
+            max_records: only keep the first max_records records
 
-            length_lb: only keep contigs with length greater than this
+            min_length: only keep records with length greater than this
 
-            length_ub: only keep contigs with length less than this
+            max_length: only keep records with length less than this
 
-            cds_count_lb: only keep contigs with CDS count greater than or equal to this
+            min_cds: only keep records with CDS count greater than or equal to this
 
-            cds_count_ub: only keep contigs with CDS count less than or equal to this
+            max_cds: only keep records with CDS count less than or equal to this
 
             invert: invert the selection criteria
 
             ncbi_taxonomy: an NCBITaxonomy object (needed for filtering by taxonomy, otherwise not needed)
 
-            include_taxids: only keep contigs with a taxonomy id in this list
+            include_taxids: only keep records with a taxonomy id in this list
 
-            exclude_taxids: only keep contigs with a taxonomy id not in this list
+            exclude_taxids: only keep records with a taxonomy id not in this list
 
             taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
 
             databases: only consider domains from these databases
 
-            unannotated: keep contigs with no domain annotations
+            unannotated: keep records with no domain annotations
 
-            search_score_lb: only keep contigs with a domain_search annotation score greater than this
+            min_search_score: only keep records with a domain_search annotation score greater than this
 
-            search_score_ub: only keep contigs with a domain_search annotation score less than this
+            max_search_score: only keep records with a domain_search annotation score less than this
 
-            domain_type: the type of domain to consider, domain, search, both. Default: domain
-            partial: "include" (default) keeps all contigs, "exclude" drops fragments, "only" keeps only fragments.
+            annotation_type: which annotations to consider: "domainator", "domain_search", or "all".
+            partial: "include" (default) keeps all records, "exclude" drops fragments, "only" keeps only fragments.
                 A protein record is a fragment if utils.get_fragment_status says so (e.g. a UniProt " (Fragment)" header);
                 a nucleotide contig is a fragment if it contains a CDS with '<' or '>' in its location.
 
         Yields:
-            SeqRecords of the selected contigs
+            SeqRecords of the selected records
 
     """
 
     databases = set(databases) if databases is not None else None
     returned = 0
 
-    if target_domains is not None:
-        target_domains = set(target_domains)
+    if domains is not None:
+        domains = set(domains)
 
     if domain_expr is not None:
         expression_evaluator = BooleanEvaluator(domain_expr)
@@ -171,29 +176,29 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
         exclude_taxids = set(exclude_taxids)
 
     if include_taxids or exclude_taxids or taxonomy_expr:
-        contigs = filter_by_taxonomy(contigs, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
+        records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
     
     if partial != "include":
-        contigs = filter_by_partial(contigs, partial)
+        records = filter_by_partial(records, partial)
 
-    if length_lb is not None or length_ub is not None:
-        contigs = length_filter(contigs, length_lb, length_ub)
+    if min_length is not None or max_length is not None:
+        records = length_filter(records, min_length, max_length)
 
-    if cds_count_lb is not None or cds_count_ub is not None:
-        contigs = cds_count_filter(contigs, cds_count_lb, cds_count_ub)
+    if min_cds is not None or max_cds is not None:
+        records = cds_count_filter(records, min_cds, max_cds)
 
-    if search_score_lb is not None or search_score_ub is not None:
-        if search_score_lb is None:
-            search_score_lb = float("-inf")
-        if search_score_ub is None:
-            search_score_ub = float("inf")
+    if min_search_score is not None or max_search_score is not None:
+        if min_search_score is None:
+            min_search_score = float("-inf")
+        if max_search_score is None:
+            max_search_score = float("inf")
 
-    for contig in contigs:
+    for contig in records:
         selected = False
         at_least_one_test = False # TODO: make this more modular, so we don't need this variable.
-        if target_contigs is not None:
+        if contigs is not None:
             at_least_one_test = True
-            if contig.id in target_contigs:
+            if contig.id in contigs:
                 selected = True
 
         if contigs_regex is not None:
@@ -211,31 +216,31 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             if sequence_regex.search(str(contig.seq)): # select the contig if the sequence matches the regex
                 selected = True
                 
-        if target_domains is not None or domain_expr is not None or unannotated or search_score_lb is not None or search_score_ub is not None:
-            domains = set()
+        if domains is not None or domain_expr is not None or unannotated or min_search_score is not None or max_search_score is not None:
+            contig_domains = set()
             domain_search_feature = None
             at_least_one_test = True
             for feature in contig.features:
-                if feature.type == DOMAIN_FEATURE_NAME and float(feature.qualifiers['evalue'][0]) < domain_evalue and (databases is None or feature.qualifiers["database"][0] in databases):
-                    if domain_type == "domain" or domain_type == "both":
-                        domains.add(feature.qualifiers["name"][0])
-                if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME and float(feature.qualifiers['evalue'][0]) < domain_evalue and (databases is None or feature.qualifiers["database"][0] in databases):
+                if feature.type == DOMAIN_FEATURE_NAME and feature_evalue(feature) <= evalue and (databases is None or feature.qualifiers["database"][0] in databases):
+                    if annotation_type in ("domainator", "all"):
+                        contig_domains.add(feature.qualifiers["name"][0])
+                if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME and feature_evalue(feature) <= evalue and (databases is None or feature.qualifiers["database"][0] in databases):
                     domain_search_feature = feature
-                    if domain_type == "search" or domain_type == "both":
-                        domains.add(feature.qualifiers["name"][0])
+                    if annotation_type in ("domain_search", "all"):
+                        contig_domains.add(feature.qualifiers["name"][0])
 
-            if search_score_lb is not None and domain_search_feature is not None:
-                score = float(domain_search_feature.qualifiers["score"][0])
-                if score >= search_score_lb and score <= search_score_ub:
+            if min_search_score is not None and domain_search_feature is not None:
+                score = feature_score(domain_search_feature)
+                if score >= min_search_score and score <= max_search_score:
                     selected = True
             
-            if target_domains is not None and len(target_domains.intersection(domains)) > 0: # select the contig if it contains any of the target domains
+            if domains is not None and len(domains.intersection(contig_domains)) > 0: # select the contig if it contains any of the target domains
                 selected = True
             
-            if domain_expr is not None and expression_evaluator.check_expression(domains): # select the contig if it contains the specified combination of domains
+            if domain_expr is not None and expression_evaluator.check_expression(contig_domains): # select the contig if it contains the specified combination of domains
                 selected = True
             
-            if unannotated and len(domains) == 0: # select the contig if it contains no domains
+            if unannotated and len(contig_domains) == 0: # select the contig if it contains no domains
                 selected = True
         if not at_least_one_test: # if no selection criteria are specified, select the contig
             selected = True
@@ -244,12 +249,12 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             selected = not selected
         
         if selected:
-            if first is None:
+            if max_records is None:
                 yield contig
             else:
                 yield contig
                 returned += 1
-                if returned == first:
+                if returned == max_records:
                     break
 
 def build_parser():
@@ -299,12 +304,7 @@ def build_parser():
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
-    # parser.add_argument('--taxid', default=None, type=int, nargs="+",  #TODO: implement this. Probably need another argument to point to the ncbi taxonomy database files.
-    #                     help="Exclude contigs based on the /db_xref='taxon:' qualifier of the source annotation. "
-    #                     "A contig will be excluded iff the contig taxid is not a sub taxon of a supplied taxon, or if the contig lacks a taxon annotation. More than one taxid can be supplied.")
     #
-    # parser.add_argument('--qualifier_regex', type=str, nargs=3, required=False, action=CustomAction, #TODO: implement this
-    #                     help="Supply three strings, an feature type and a qualifier name and a regex. Keep only contigs that match.")
 
     parser.add_argument('--max_records', default=None, type=int,
                         help="If set then stop after returning this many contigs.")
@@ -333,9 +333,6 @@ def build_parser():
     
 
     
-    # parser.add_argument('-d', '--database', type=str, default=None,
-    #                    help="the name of the database which you want to filter annotations from.") #TODO: see todo above.
-
     #TODO: error when evalue is defined but no domains are defined.
     return parser
 
@@ -370,28 +367,28 @@ def main(argv):
    
     extracted_contigs_iterator = select_by_contig(
                     parse_seqfiles(genbanks), 
-                    selected_domains, 
-                    domain_expr, 
-                    float("inf") if params.evalue is None else params.evalue,
-                    params.max_records,
-                    params.min_length,
-                    params.max_length,
-                    params.min_cds,
-                    params.max_cds,
-                    params.definition_regex,
-                    params.sequence_regex,
-                    target_contigs,
-                    params.contigs_regex,
-                    params.invert,
-                    ncbi_taxonomy,
-                    params.include_taxids,
-                    params.exclude_taxids,
+                    domains=selected_domains, 
+                    domain_expr=domain_expr, 
+                    evalue=float("inf") if params.evalue is None else params.evalue,
+                    max_records=params.max_records,
+                    min_length=params.min_length,
+                    max_length=params.max_length,
+                    min_cds=params.min_cds,
+                    max_cds=params.max_cds,
+                    definition_regex=params.definition_regex,
+                    sequence_regex=params.sequence_regex,
+                    contigs=target_contigs,
+                    contigs_regex=params.contigs_regex,
+                    invert=params.invert,
+                    ncbi_taxonomy=ncbi_taxonomy,
+                    include_taxids=params.include_taxids,
+                    exclude_taxids=params.exclude_taxids,
                     taxonomy_expr=params.taxonomy_expr,
                     databases=params.databases,
                     unannotated=params.unannotated,
-                    search_score_lb=params.min_search_score,
-                    search_score_ub=params.max_search_score,
-                    domain_type={"domainator": "domain", "domain_search": "search", "all": "both"}[params.annotation_type],
+                    min_search_score=params.min_search_score,
+                    max_search_score=params.max_search_score,
+                    annotation_type=params.annotation_type,
                     partial=params.partial
     )
 

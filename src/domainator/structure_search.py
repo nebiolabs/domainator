@@ -38,16 +38,16 @@ from domainator.output_guardrails import add_max_output_gb_argument, max_output_
 MITIGATION_OPTIONS = ["--max_hits", "-e/--evalue", "--no_annotations"]
 
 
-def structure_search(input_values, reference_values, aligner, evalue=0.001, min_evalue=0.0,
+def structure_search(input_values, *, references, aligner, evalue=0.001, min_evalue=0.0,
                      max_hits=None, max_overlap=1.0, overlap_by_db=False,
                      add_annotations=False, alignment_type=2, metrics=None, max_seqs=None,
-                     tmp_dir=None, keep_db=None, database_name=None, hits_tsv=None):
+                     tmp_dir=None, keep_db=None, database_name=None, hits_tsv_out=None):
     """Yield protein SeqRecords for database records that matched a reference.
 
     Args:
         input_values: -i values: the database to search. Structure files, globs,
             directories, or a prebuilt database prefix.
-        reference_values: -r values: the reference structures to search with.
+        references: -r values: the reference structures to search with.
         aligner: a structure_lib.StructureAligner.
         evalue: keep hits with E-value strictly below this.
         min_evalue: keep hits with E-value at or above this. Useful for excluding a
@@ -63,7 +63,7 @@ def structure_search(input_values, reference_values, aligner, evalue=0.001, min_
         tmp_dir: parent directory for temporary databases and scratch files.
         keep_db: persist the database built from input structures at this prefix.
         database_name: value for the /database qualifier. Defaults to the reference name.
-        hits_tsv: copy the backend's raw hit table here, for cross-checking.
+        hits_tsv_out: copy the backend's raw hit table here, for cross-checking.
 
     Yields:
         SeqRecord objects with molecule_type "protein". Sorted best-first when max_hits is
@@ -71,7 +71,7 @@ def structure_search(input_values, reference_values, aligner, evalue=0.001, min_
     """
     metrics = list(metrics or [])
 
-    with structure_lib.prepared_databases(aligner, input_values, reference_values,
+    with structure_lib.prepared_databases(aligner, input_values, references,
                                           tmp_dir=tmp_dir, keep_db=keep_db) as prepared:
         aligner.check_capabilities(alignment_type, metrics,
                                    [prepared.input_db, prepared.reference_db])
@@ -110,8 +110,8 @@ def structure_search(input_values, reference_values, aligner, evalue=0.001, min_
             yield record
 
         structure_lib.warn_on_saturation(hit_counts, aligner.effective_max_seqs(max_seqs))
-        if hits_tsv is not None:
-            structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv, aligner)
+        if hits_tsv_out is not None:
+            structure_lib.copy_hits_tsv(prepared.work_dir, hits_tsv_out, aligner)
 
 
 def _build_record(target, record_hits, sequence, max_overlap, overlap_by_db, add_annotations):
@@ -264,13 +264,13 @@ def main(argv):
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
     records = structure_search(
-        params.input, params.reference, aligner,
+        params.input, references=params.reference, aligner=aligner,
         evalue=params.evalue, min_evalue=params.min_evalue, max_hits=params.max_hits,
         max_overlap=params.max_overlap, overlap_by_db=params.overlap_by_db,
         add_annotations=params.add_annotations, alignment_type=params.alignment_type,
         metrics=params.metrics, max_seqs=params.max_seqs, tmp_dir=params.tmp_dir,
         keep_db=params.db_out, database_name=params.database_name,
-        hits_tsv=params.hits_tsv_out,
+        hits_tsv_out=params.hits_tsv_out,
     )
 
     structure_lib.write_records(records, params.genbank_out, params.fasta_out, max_output_bytes, MITIGATION_OPTIONS)

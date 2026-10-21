@@ -38,7 +38,7 @@ def test_evalue_filtering():
     assert list(result["cds1"].values())[0].qualifiers['name'][0] == "domain1"
 
 # Example test: Check for domain overlap
-def test_domain_overlap_1():
+def test_find_kept_annotations_overlap_1():
     features = [
         mock_seq_feature(100, 200, 50, 0.001, "db1", "domain1", "cds1"),
         mock_seq_feature(180, 280, 70, 0.001, "db1", "domain2", "cds1")  # Overlapping domain
@@ -77,7 +77,7 @@ def test_filter_domains_high_evalue_1():
     ]
     record = mock_seq_record(features)
     sequence_iterator = [record]
-    result = list(filter_domains(sequence_iterator, 0.05, 1.0, None, None, None))
+    result = list(filter_domains(sequence_iterator, evalue=0.05, max_overlap=1.0, keep_databases=None, databases=None, domains=None))
     assert len(result[0].features) == 1  # Only one feature should be kept due to evalue filtering
 
 
