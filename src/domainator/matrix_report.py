@@ -15,6 +15,7 @@ from contextlib import ExitStack
 from domainator.text_plot import text_histogram
 import numpy as np
 import json
+from domainator import web_libs
 from domainator.ssn_hierarchy import (
     DEFAULT_MAX_MERGE_EVENTS,
     MERGE_EVENT_DENSITY_BINS,
@@ -374,8 +375,8 @@ class SummaryHTMLWriter():
         max_val    = float(non_zero_values[0])  if n > 0 else 0
 
         print(f"""<!doctype html><html><head><meta charset="UTF-8" /><title>Matrix Report</title>
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+{web_libs.PLOTLY}
+{web_libs.D3}
 <style>
     body {{
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;

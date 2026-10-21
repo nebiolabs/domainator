@@ -382,7 +382,7 @@ its members. Children are ordered by minimum leaf index so the layout is determi
 
 Cutting is then a descent from the roots: recurse into a cluster whose `threshold ≤ cut`,
 otherwise keep it whole (`activeClustersAtThreshold`,
-[ssn_viewer_html.py:7116](../src/domainator/ssn_viewer_html.py#L7116)). The `≤` is the
+[ssn_viewer/js/viewer.js](../src/domainator/ssn_viewer/js/viewer.js)). The `≤` is the
 strictly-above `--threshold` convention again — a component that merged exactly *at* the
 threshold is split back apart. Membership needs no traversal at all, just the
 `leaf_order` slice. This is what lets the `.dsnv` bundle scale with the node count rather
@@ -406,8 +406,8 @@ partitioning: on that network the per-cut-point work is 0.6 ms instead of 296 ms
 
 ## Ports that must stay in step
 
-Most of this section's algorithms exist twice: once in Python, once in JavaScript embedded
-in `ssn_viewer_html.py`. The JS side began as an extraction-only port and is now the
+Most of this section's algorithms exist twice: once in Python, once in the viewer's
+JavaScript (`src/domainator/ssn_viewer/js/`). The JS side began as an extraction-only port and is now the
 viewer's primary path — since the `.dsnv` bundle stores nothing derived, the JS *is* what
 produces the split chart and the slider every time a bundle is opened. The Python side
 serves `matrix_report`, `ssn_navigator` and `ssn_bundle`. The pairs are:

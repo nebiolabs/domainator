@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{title}}</title>
+<style>
+{{css}}
+</style>
+</head>
+<body>
+<div class="shell">
+    <section class="hero">
+        <div class="hero-title">
+            <h1 id="viewer-title" title="Double-click to rename this network">{{heading}}</h1>
+            <button id="rename-network" type="button" class="title-edit" disabled aria-label="Rename this network" title="Rename this network. The name appears in the heading and the browser tab, is stored in the bundle, and names every file saved from here. You can also double-click the heading.">&#9998;</button>
+        </div>
+        <div class="loader">
+            <input id="bundle-file" type="file" accept=".dsnv,.ssnv,.gz,.json,.ssnview" />
+            <div id="bundle-status" class="status">No bundle loaded.</div>
+            <div id="browser-warning" class="status"></div>
+        </div>
+    </section>
+    <div class="grid">
+        <section class="panel wide">
+            <h2>Cluster Splits vs Threshold</h2>
+            <div class="panel-body">
+                <div class="split-topline">
+                    <div class="stats">
+                        <div class="stat"><strong>Clusters</strong><span id="stat-clusters">0</span></div>
+                        <div class="stat"><strong>Split Links</strong><span id="stat-links">0</span></div>
+                        <div class="stat"><strong>Shown Nodes</strong><span id="stat-shown-nodes">0</span></div>
+                        <div class="stat"><strong>Hidden Nodes</strong><span id="stat-hidden-nodes">0</span></div>
+                    </div>
+                </div>
+                <div class="canvas-wrap"><canvas id="split-chart" width="1100" height="320"></canvas></div>
+                <!-- aria-hidden: a pointer affordance duplicating data the chart's own
+                     caption, the metadata table and the TSV exports already carry. -->
+                <div id="split-chart-tip" class="split-tip" aria-hidden="true" hidden></div>
+                <div class="split-legend">
+                    <div class="split-legend-items">
+                        <span class="legend-line">Largest single split</span>
+                        <span class="legend-sum">Moving sum (5% window)</span>
+                        <span class="legend-dot legend-threshold-readout">Current threshold <span id="threshold-label" class="legend-threshold-value">∞</span></span>
+                    </div>
+                    <div class="threshold-jump">
+                        <button id="threshold-step-down" type="button" class="threshold-step" title="Previous split threshold (lower)" aria-label="Previous split threshold" disabled>&larr;</button>
+                        <button id="threshold-step-up" type="button" class="threshold-step" title="Next split threshold (higher)" aria-label="Next split threshold" disabled>&rarr;</button>
+                        <label for="threshold-input">Jump to threshold</label>
+                        <!-- Deliberately type="text": a number input's spinner steps by a
+                             fixed amount, which is meaningless on an axis whose splits can
+                             be 0.001 or 30 apart. The buttons above and the arrow keys step
+                             stop to stop instead. -->
+                        <input id="threshold-input" type="text" inputmode="decimal" placeholder="Nearest split" disabled />
+                    </div>
+                </div>
+                <div class="split-event-note">
+                    <div class="note" id="split-event-count"></div>
+                    <div class="split-event-cap">
+                        <label for="split-event-cap">Split events</label>
+                        <!-- The cap used to be domainator build_ssn_viewer --max_merge_events,
+                             baked into the bundle. The series is derived on load now, so
+                             it is a control here instead: raising it costs one replay of
+                             the merge order, not a rebuild of the file. -->
+                        <input id="split-event-cap" type="number" min="0" step="50"
+                               title="How many split events the chart plots and the slider offers stops for: the strongest this many by impact, plus a few so no 5% band of the axis with an event to show is left empty. 0 plots every event."
+                               disabled />
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <button id="split-chart-reset-zoom" type="button" disabled title="Show the whole threshold range again (or double-click the chart)">Reset zoom</button>
+                    <button id="export-split-png" type="button" disabled title="Download this chart as a PNG at the resolution chosen in View Settings">Export chart PNG</button>
+                    <button id="export-split-svg" type="button" disabled title="Download this chart as an editable SVG">Export chart SVG</button>
+                    <!-- Teaches the gestures before one is used, and reads out the window
+                         after one is; see updateSplitChartZoomControls. -->
+                    <span id="split-chart-zoom-hint" class="note split-zoom-hint">Scroll to zoom · drag to pan</span>
+                </div>
+                <div class="slider-stack">
+                    <div class="slider-track-wrap">
+                        <div class="slider-row">
+                            <input id="threshold-slider" type="range" min="0" max="0" value="0" step="1" disabled />
+                        </div>
+                        <div class="slider-extents">
+                            <span id="threshold-min-label">min</span>
+                            <span id="threshold-max-label">∞</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="panel wide">
+            <!-- <h2>Hierarchy View</h2> -->
+            <div class="panel-body">
+                <div class="network-summary">
+                    <div id="preset-slots" class="preset-slots" role="group" aria-label="Selection presets">
+                        <span class="preset-slots-label">Presets</span>
+                        <button type="button" class="preset-slot" data-preset-slot="0" disabled>0</button>
+                        <button type="button" class="preset-slot" data-preset-slot="1" disabled>1</button>
+                        <button type="button" class="preset-slot" data-preset-slot="2" disabled>2</button>
+                        <button type="button" class="preset-slot" data-preset-slot="3" disabled>3</button>
+                        <button type="button" class="preset-slot" data-preset-slot="4" disabled>4</button>
+                        <button type="button" class="preset-slot" data-preset-slot="5" disabled>5</button>
+                        <button type="button" class="preset-slot" data-preset-slot="6" disabled>6</button>
+                        <button type="button" class="preset-slot" data-preset-slot="7" disabled>7</button>
+                        <button type="button" class="preset-slot" data-preset-slot="8" disabled>8</button>
+                        <button type="button" class="preset-slot" data-preset-slot="9" disabled>9</button>
+                    </div>
+                    <div id="hidden-summary" class="pill">0 nodes hidden</div>
+                    <div id="selection-summary" class="pill">0 nodes selected</div>
+                </div>
+                <div class="canvas-wrap"><canvas id="cluster-view" width="1100" height="700"></canvas></div>
+                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Hold Ctrl while Shift-dragging a box to select individual nodes within it. Hold Alt while Shift-dragging to deselect instead (combine with Ctrl to deselect individual nodes). Click a cluster bubble to toggle every node inside it. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its nodes in gray. Shift-click a preset button to add it to the current selection, or Alt+Shift-click to subtract it.</div>
+            </div>
+        </section>
+        <section class="panel sidebar">
+            <h2>View Settings</h2>
+            <div class="panel-body tight">
+                <div class="controls">
+                    <div class="control">
+                        <label for="layout-algorithm">Layout algorithm</label>
+                        <select id="layout-algorithm">
+                            <option value="tree">Tree</option>
+                            <option value="force">Force-directed</option>
+                            <option value="grid">Grid (no edges)</option>
+                            <option value="packed" selected>Packed (no edges)</option>
+                            <option value="treemap">Treemap (no edges)</option>
+                        </select>
+                    </div>
+                    <div class="control">
+                        <label for="min-cluster-size">Minimum cluster size</label>
+                        <input id="min-cluster-size" type="number" min="1" value="1" step="1" />
+                    </div>
+                    <div class="control">
+                        <label for="color-by">Color by</label>
+                        <select id="color-by"></select>
+                    </div>
+                    <div class="control">
+                        <label for="label-by">Label by</label>
+                        <select id="label-by"></select>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="show-node-counts" type="checkbox" checked />
+                        <label for="show-node-counts">Show node count labels</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="show-edge-scores" type="checkbox" />
+                        <label for="show-edge-scores">Show edge score labels</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="render-cluster-bounds" type="checkbox" checked />
+                        <label for="render-cluster-bounds">Render cluster bounds</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="render-nodes" type="checkbox" checked />
+                        <label for="render-nodes">Render nodes</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="reduce-elongation" type="checkbox" />
+                        <label for="reduce-elongation">Reduce subcluster elongation</label>
+                    </div>
+                    <div class="control checkbox">
+                        <input id="leaf-pruning-only" type="checkbox" />
+                        <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
+                    </div>
+                    <div class="control checkbox sub-option" title="Contract a chain of small clusters that only passes through into a single dashed edge carrying the chain's weakest link">
+                        <input id="collapse-long-paths" type="checkbox" disabled />
+                        <label for="collapse-long-paths">Collapse long paths</label>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <button id="sort-components-by-size" type="button" aria-pressed="true" disabled>Sort clusters by size: On</button>
+                    <button id="focus-largest-cluster" type="button" disabled>Focus largest cluster</button>
+                    <button id="focus-selection" type="button" disabled title="Center the view on the selected nodes, zooming out only if they do not already fit">Focus selection</button>
+                    <button id="reset-view" disabled>Reset view</button>
+                    <button id="clear-selection" disabled>Clear selection</button>
+                    <button id="export-png" type="button" disabled>Export view PNG</button>
+                    <select id="export-png-scale" title="PNG resolution" disabled>
+                        <option value="1">1× (screen)</option>
+                        <option value="2" selected>2×</option>
+                        <option value="4">4×</option>
+                        <option value="8">8×</option>
+                    </select>
+                    <button id="export-svg" type="button" disabled>Export view SVG</button>
+                    <button id="customize-colors" type="button" disabled>Customize colors…</button>
+                    <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .dsnv session file">Save session…</button>
+                    <button id="save-extraction" type="button" disabled title="Download a new .dsnv bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
+                </div>
+                <div class="note" id="selection-note">Load a bundle to begin exploring metadata.</div>
+            </div>
+        </section>
+        <section class="panel full-width">
+            <h2>Node Metadata</h2>
+            <div class="panel-body">
+                <div class="toolbar">
+                    <button id="metadata-panel-add" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-add-panel" data-edit-panel="add" disabled>Add column</button>
+                    <button id="metadata-panel-set" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-set-panel" data-edit-panel="set" disabled>Set column</button>
+                    <button id="metadata-panel-rename" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-rename-panel" data-edit-panel="rename" disabled>Rename column</button>
+                    <button id="metadata-panel-delete" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-delete-panel" data-edit-panel="delete" disabled>Delete column</button>
+                    <button id="metadata-panel-select" type="button" class="metadata-edit-toggle" aria-expanded="false" aria-controls="metadata-select-panel" data-edit-panel="select" disabled>Select by value</button>
+                </div>
+                <div id="metadata-add-panel" class="metadata-edit-panel" hidden>
+                    <label for="metadata-new-column-name" class="metadata-edit-label">Name</label>
+                    <input id="metadata-new-column-name" type="text" placeholder="new column name" />
+                    <select id="metadata-new-column-type">
+                        <option value="text" selected>Text</option>
+                        <option value="number">Number</option>
+                    </select>
+                    <button id="metadata-add-column" type="button">Add</button>
+                    <span class="metadata-edit-label">or</span>
+                    <button id="metadata-add-cluster-column" type="button" title="Number every node by the cluster it belongs to at the current threshold, largest cluster first — the same column domainator build_ssn --cluster writes. Defaults to the name SSN_cluster.">Fill with cluster numbers</button>
+                </div>
+                <div id="metadata-set-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-fill-column"></select>
+                    <span class="metadata-edit-label">=</span>
+                    <input id="metadata-fill-value" type="text" placeholder="value (blank clears)" />
+                    <label for="metadata-fill-target" class="metadata-edit-label">for</label>
+                    <select id="metadata-fill-target">
+                        <option value="selection" selected>Selected nodes</option>
+                        <option value="rows">Staged table rows</option>
+                        <option value="page">Rows on this page</option>
+                        <option value="all">All nodes</option>
+                    </select>
+                    <button id="metadata-fill-apply" type="button">Apply</button>
+                    <button id="metadata-paste-open" type="button">Paste column…</button>
+                </div>
+                <div id="metadata-rename-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-rename-column"></select>
+                    <span class="metadata-edit-label">&rarr;</span>
+                    <input id="metadata-rename-value" type="text" placeholder="new column name" />
+                    <button id="metadata-rename-apply" type="button">Rename</button>
+                </div>
+                <div id="metadata-delete-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-delete-column"></select>
+                    <button id="metadata-delete-column-apply" type="button">Delete</button>
+                    <span class="metadata-edit-label" id="metadata-delete-note"></span>
+                </div>
+                <div id="metadata-select-panel" class="metadata-edit-panel" hidden>
+                    <select id="metadata-select-column" aria-label="Column to compare"></select>
+                    <select id="metadata-select-op" aria-label="Comparison"></select>
+                    <input id="metadata-select-value" type="text" placeholder="value" aria-label="Value to compare against" />
+                    <span class="metadata-edit-label" id="metadata-select-and" hidden>and</span>
+                    <input id="metadata-select-value2" type="text" placeholder="upper bound" aria-label="Upper bound" hidden />
+                    <button id="metadata-select-add" type="button" title="Search every node in the network and add the matches to the selection.">Add to selection</button>
+                    <button id="metadata-select-remove" type="button" title="Search the selected nodes and drop the matches from the selection." disabled>Remove from selection</button>
+                    <button id="metadata-select-subset" type="button" title="Search the selected nodes and keep only the matches." disabled>Subset selection</button>
+                    <!-- The note is the only channel for "that regex is malformed", so it
+                         announces itself rather than waiting to be read. -->
+                    <span class="metadata-edit-label" id="metadata-select-note" role="status"></span>
+                </div>
+                <div class="toolbar">
+                    <button id="export-selected" disabled>Export table TSV</button>
+                    <button id="metadata-select-nodes" type="button" disabled>Select nodes</button>
+                    <button id="metadata-deselect-rows" type="button" disabled>Deselect rows</button>
+                    <button id="metadata-reset-sort" type="button" disabled>Reset table sort</button>
+                    <input id="metadata-filter" type="search" placeholder="Search node_id and metadata" disabled />
+                    <select id="metadata-null-order" disabled>
+                        <option value="last" selected>Nulls last</option>
+                        <option value="first">Nulls first</option>
+                    </select>
+                </div>
+                <div class="note">Double-click any metadata cell to edit it. node_id is read-only.</div>
+                <div class="table-wrap">
+                    <table id="metadata-table">
+                        <colgroup></colgroup>
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="metadata-pager">
+                    <div id="metadata-page-status" class="metadata-pager-status">Load a bundle to page through metadata.</div>
+                    <div class="metadata-pager-controls">
+                        <label for="metadata-rows-per-page">Rows per page
+                            <select id="metadata-rows-per-page" disabled>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="250" selected>250</option>
+                                <option value="500">500</option>
+                                <option value="1000">1000</option>
+                                <option value="2500">2500</option>
+                                <option value="5000">5000</option>
+                                <option value="all">All rows</option>
+                            </select>
+                        </label>
+                        <button id="metadata-prev-page" type="button" disabled>Previous page</button>
+                        <button id="metadata-next-page" type="button" disabled>Next page</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+<div id="name-overlay" class="cp-overlay" hidden>
+    <div class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="name-dialog-title">
+        <div class="cp-head">
+            <h3 id="name-dialog-title">Rename network</h3>
+            <button id="name-cancel" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <div class="control">
+                <label for="name-value" id="name-dialog-label">Network name</label>
+                <input id="name-value" type="text" />
+            </div>
+            <p class="note" id="name-dialog-note"></p>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="name-apply" type="button">Apply</button>
+        </div>
+    </div>
+</div>
+<div id="metadata-paste-overlay" class="cp-overlay" hidden>
+    <div class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="metadata-paste-title">
+        <div class="cp-head">
+            <h3 id="metadata-paste-title">Paste a column of values</h3>
+            <button id="metadata-paste-cancel" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <div class="control">
+                <label for="metadata-paste-column">Paste into column</label>
+                <select id="metadata-paste-column"></select>
+            </div>
+            <p class="note">One value per line, applied to the rows on this page in the order they are displayed — the inverse of a column's Copy button. This page shows <span id="metadata-paste-count">0</span> rows, and the paste must have exactly that many lines.</p>
+            <textarea id="metadata-paste-values" rows="10" class="metadata-paste-values" placeholder="one value per line"></textarea>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="metadata-paste-apply" type="button">Apply</button>
+        </div>
+    </div>
+</div>
+<div id="color-picker-overlay" class="cp-overlay" hidden>
+    <div id="color-picker-dialog" class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="color-picker-title">
+        <div class="cp-head">
+            <h3 id="color-picker-title">Customize colors</h3>
+            <button id="color-picker-close" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <p class="note" id="color-picker-empty-note" hidden>Choose a column in “Color by” to customize its colors.</p>
+            <div class="control checkbox" id="color-categorical-control" hidden>
+                <input id="color-as-categorical" type="checkbox" />
+                <label for="color-as-categorical">Treat values as categories (discrete colors)</label>
+            </div>
+            <p class="note" id="color-categorical-note" hidden></p>
+            <div id="color-picker-discrete" hidden>
+                <div class="control">
+                    <label for="color-palette">Color palette</label>
+                    <select id="color-palette"></select>
+                </div>
+                <p class="note" id="color-palette-note"></p>
+                <div class="cp-pager" id="color-picker-pager" hidden>
+                    <button id="color-picker-prev" type="button">‹ Prev</button>
+                    <span id="color-picker-page-status" class="cp-page-status"></span>
+                    <button id="color-picker-next" type="button">Next ›</button>
+                </div>
+                <div id="color-picker-swatch-list" class="cp-swatches"></div>
+            </div>
+            <div id="color-picker-continuous" hidden>
+                <div id="color-histogram-wrap" class="cp-ramp">
+                    <canvas id="color-histogram" class="cp-histogram" width="1040" height="180"></canvas>
+                    <div class="cp-gradient" id="color-gradient-preview"></div>
+                    <div class="cp-range" id="color-range-slider">
+                        <div class="cp-range-track"></div>
+                        <div class="cp-range-span" id="color-range-span"></div>
+                    </div>
+                    <div class="cp-extent"><span id="color-min-label"></span><span id="color-max-label"></span></div>
+                    <p class="note cp-histogram-note" id="color-histogram-note"></p>
+                </div>
+                <div id="color-stop-list" class="cp-stop-list"></div>
+                <div class="cp-stop-actions">
+                    <button id="color-add-stop" type="button">Add stop</button>
+                    <button id="color-reset-values" type="button">Reset values to data range</button>
+                </div>
+            </div>
+            <div class="control" id="color-null-control" hidden><label for="color-null">No-value color</label><input id="color-null" type="color" /></div>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="color-picker-reset" type="button">Reset to defaults</button>
+            <input id="color-table-file" type="file" accept=".tsv,.txt" class="cp-hidden-file" />
+            <button id="load-color-table" type="button">Load color table…</button>
+            <button id="save-color-table" type="button">Save color table</button>
+            <button id="export-legend-svg" type="button">Export legend SVG</button>
+            <button id="export-legend-png" type="button">Export legend PNG</button>
+        </div>
+    </div>
+</div>
+<div id="column-chart-menu" class="cc-menu" role="menu" aria-label="Charts and tables for this column" hidden></div>
+<div id="column-chart-overlay" class="cp-overlay" hidden>
+    <div id="column-chart-dialog" class="cp-dialog cc-dialog" role="dialog" aria-modal="true" aria-labelledby="column-chart-title">
+        <div class="cp-head">
+            <h3 id="column-chart-title">Column chart</h3>
+            <button id="column-chart-close" type="button" class="cp-close" aria-label="Close">×</button>
+        </div>
+        <div class="cp-body">
+            <div class="toolbar cc-controls">
+                <label for="column-chart-kind">Chart</label>
+                <select id="column-chart-kind"></select>
+            </div>
+            <div id="column-chart-preview" class="cc-preview"></div>
+            <p class="note" id="column-chart-note"></p>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="column-chart-copy-tsv" type="button">Copy TSV</button>
+            <button id="column-chart-download-tsv" type="button">Download TSV</button>
+            <button id="column-chart-export-svg" type="button">Export SVG</button>
+            <button id="column-chart-export-png" type="button">Export PNG</button>
+        </div>
+    </div>
+</div>
+<script type="application/json" id="dsnv-config">{{config}}</script>
+<script>
+{{script}}
+</script>
+</body>
+</html>

@@ -40,6 +40,7 @@ from domainator.text_plot import text_histogram
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
+from domainator import web_libs
 
 
 class SummaryTextWriter():
@@ -155,7 +156,7 @@ class SummaryHTMLWriter():
         self.out_handle = out_handle
     
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
-        print(f"""<!doctype html><html lang="en"><head><meta charset="utf-8" name="viewport" content="width=device-width"/><title>Summary Report</title></head><body>
+        print(f"""<!doctype html><html lang="en"><head><meta charset="utf-8" name="viewport" content="width=device-width"/><title>Summary Report</title>{web_libs.D3}</head><body>
 <div>
 <h1>Contig Stats</h1>
 <table>
@@ -217,7 +218,6 @@ class SummaryHTMLWriter():
 // purpose with or without fee is hereby granted, provided that the above
 // copyright notice and this permission notice appear in all copies.
 
-import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 function chart(data) {
 // Specify the chart’s dimensions.
 const width = 928;

@@ -40,7 +40,7 @@ OTHER_COLOR = "#BFBFBF"
 #: uses, so applying it to a column reproduces the colors domainator build_ssn,
 #: domainator build_projection and domainator plot_contigs write for that column; the rest are
 #: smaller, well-known qualitative palettes for networks with few groups.
-#: Consumed by the Domainator Similarity Network Viewer (ssn_viewer_html.py injects this into the page).
+#: Consumed by the Domainator Similarity Network Viewer (ssn_viewer_html.py passes this to the page in its dsnv-config block).
 NAMED_CATEGORICAL_PALETTES = (
     {
         "name": "domainator",

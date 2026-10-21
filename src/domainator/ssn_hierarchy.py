@@ -293,7 +293,7 @@ def summarize_merge_events(component_summary, max_items=5):
 def merge_event_rank_key(row):
     """Strongest first. Shared by the cap and the density back-fill so both agree.
 
-    Ported to JavaScript in `ssn_viewer_html.py` (`compareExtractionMergeEventRank`)
+    Ported to JavaScript in `ssn_viewer/js/extraction.js` (`compareMergeEventRank`)
     for viewer-built extractions; the two must stay in step or an extraction's plot
     will not match the plot it was extracted from.
     """

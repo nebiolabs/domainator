@@ -24,6 +24,7 @@ from domainator.colors import normalize_color_hex, read_color_table
 import pandas as pd
 from domainator.colors import get_palette
 from domainator.location_ops import overlaps
+from domainator import web_libs
 
 def normalize_strand(strand:int) -> str:
     if strand is None:
@@ -278,7 +279,7 @@ def plot_contigs(records:List[SeqRecord], *,
     <html>
     <head>
         <title>Domainator Contigs Plot</title>
-        <script src="https://d3js.org/d3.v7.min.js"></script>
+        {web_libs.D3}
         <style>
             .tooltip {{
                 position: absolute;

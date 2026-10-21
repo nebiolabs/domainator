@@ -549,7 +549,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function currentSplitWindow()' in html_content
         assert 'const DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50;' in html_content
         assert 'function originalComponentByNode()' in html_content
-        assert 'const SUPPORTED_BUNDLE_VERSIONS = [3, 4, 5, 6];' in html_content
+        assert _viewer_config(html_content)['supportedBundleVersions'] == [3, 4, 5, 6]
 
         # The split chart draws a capped selection of the split events, so it has to
         # say how much of the series that is.
@@ -767,8 +767,15 @@ def test_build_ssn_viewer_writes_static_html_without_input():
         # The tab keeps the bare name; the heading spells out the app.
         assert ('>Domainator Similarity Network Viewer: Viewer Only</h1>'
                 in html_content)
-        assert 'const EMBEDDED_BUNDLE_BASE64 = null;' in html_content
+        assert _viewer_config(html_content)["embeddedBundleBase64"] is None
         assert 'No bundle loaded.' in html_content
+
+
+def _viewer_config(html_content):
+    """The values the viewer page was built with (its dsnv-config block)."""
+    match = re.search(r'<script type="application/json" id="dsnv-config">(.*?)</script>', html_content, re.S)
+    assert match is not None
+    return json.loads(match.group(1))
 
 
 def test_build_ssn_viewer_embeds_data_in_viewer_html():
@@ -795,14 +802,11 @@ def test_build_ssn_viewer_embeds_data_in_viewer_html():
 
         html_content = open(html_file, "r", encoding="utf-8").read()
 
-        assert 'const EMBEDDED_BUNDLE_BASE64 = ' in html_content
         assert 'Loading bundled data...' in html_content
         assert 'autoloadEmbeddedBundle()' in html_content
 
-        match = re.search(r"const EMBEDDED_BUNDLE_BASE64 = \"([^\"]+)\";", html_content)
-        assert match is not None
-
-        embedded_bundle = json.loads(gzip.decompress(base64.b64decode(match.group(1))).decode("utf-8"))
+        embedded = _viewer_config(html_content)["embeddedBundleBase64"]
+        embedded_bundle = json.loads(gzip.decompress(base64.b64decode(embedded)).decode("utf-8"))
         assert embedded_bundle["name"] == "Embedded Viewer"
         assert embedded_bundle["graph"]["nodes"] == row_names
 

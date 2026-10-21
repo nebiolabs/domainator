@@ -146,7 +146,7 @@ def build_ssn_viewer_bundle(
         # Only what cannot be derived from the merge order itself. The split-event
         # series, its moving sum and the threshold slider's stops are all a pure
         # function of (nodes, mst_edges, merge_impact_metric), so readers compute them
-        # rather than carrying a copy: the viewer via ssn_viewer_html's ports, other
+        # rather than carrying a copy: the viewer via its JavaScript ports (ssn_viewer/js/), other
         # readers via ssn_bundle.merge_event_rows / slider_stops. That keeps the file a
         # function of the network alone -- no selection baked in at build time -- and
         # keeps it O(nodes) on a network with hundreds of thousands of split events.

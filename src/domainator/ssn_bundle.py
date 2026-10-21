@@ -56,7 +56,7 @@ SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
 #     max_merge_events, merge_moving_sum and slider_stops (with its threshold_index)
 #     are all a pure function of (nodes, mst_edges, merge_impact_metric), so readers
 #     derive them instead -- see merge_event_rows / slider_stops below, and their
-#     JavaScript counterparts in ssn_viewer_html.py. This removes the build-time
+#     JavaScript counterparts in ssn_viewer/js/. This removes the build-time
 #     --max_merge_events cap: the selection is now made where it is displayed.
 #     A REMOVAL, not an addition, so a v3/v4/v5 reader would find keys missing from a
 #     v6 file. This build reads all of them, because everything v6 needs has been in

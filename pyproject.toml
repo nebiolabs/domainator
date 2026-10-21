@@ -119,6 +119,10 @@ Paper = "https://doi.org/10.1093/nar/gkae1175"
 package-dir = {"" = "src"}
 include-package-data = true
 
+[tool.setuptools.package-data]
+# The SSN viewer's page sources (read by ssn_viewer_html.py).
+domainator = ["ssn_viewer/*.html", "ssn_viewer/*.css", "ssn_viewer/js/*.js"]
+
 [tool.setuptools.dynamic]
 version = {attr = "domainator.__version__"}
 

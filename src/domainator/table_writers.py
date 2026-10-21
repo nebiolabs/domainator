@@ -1,6 +1,8 @@
 """Writers for the tabular reports (enum_report, hmmer_report): TSV, NDJSON and HTML."""
 import json
 
+from domainator import web_libs
+
 
 class TableWriter:
     """Writes rows of a table with named, typed ("str", "int" or "float") columns to a text handle."""
@@ -92,8 +94,7 @@ class HTMLTableWriter(TableWriter):
 <head>
 <meta charset="UTF-8" />
 <title>Enum Report</title>
-<link href="https://unpkg.com/tabulator-tables@5.4.3/dist/css/tabulator.min.css" rel="stylesheet">
-<script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.4.3/dist/js/tabulator.min.js"></script>
+""" + web_libs.TABULATOR + """
 </head>
 
 <body>

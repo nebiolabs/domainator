@@ -366,7 +366,7 @@ graph: {
 That is the whole section. The split-event series, its moving sum and the threshold
 slider's stops are a pure function of these four keys, so **readers derive them rather
 than read them** — `ssn_bundle.merge_event_rows` / `merge_event_series` / `moving_sum` /
-`slider_stops` in Python, and the ports in `ssn_viewer_html.py` in the browser. See
+`slider_stops` in Python, and the ports in the viewer's JavaScript (`src/domainator/ssn_viewer/js/`) in the browser. See
 [Key algorithms](algorithms.md#split-event-scanning) for what that derivation does.
 
 Deriving costs one pass over `mst_edges` and scales with the node count, so the file
@@ -524,7 +524,7 @@ app_state: {
 
 The viewer can also write an **extraction**: a bundle over a chosen subset of nodes,
 rebuilt from the induced MST edges rather than re-derived from the source matrix.
-`ssn_viewer_html.py` ports `ssn_hierarchy.py`'s hierarchy and merge-series maths into
+The viewer's `js/extraction.js` ports `ssn_hierarchy.py`'s hierarchy and merge-series maths into
 JavaScript to do this, so the two must be changed together; the browser tests assert the
 port reproduces `domainator build_ssn_viewer`'s output field-for-field when the whole network is
 selected.
@@ -545,7 +545,7 @@ is one of the keys v6 dropped.)
 Two rules make this section survive UI churn, and changes to it should preserve both:
 
 - **Every field is optional and independently skippable.** The viewer defines one registry
-  entry (`VIEW_STATE_FIELDS` in `ssn_viewer_html.py`) per persisted control and looks each
+  entry (`VIEW_STATE_FIELDS` in the viewer's `js/session_state.js`) per persisted control and looks each
   saved key up in it. A key the current build does not recognize, or one whose value it
   cannot apply, is skipped and reported in the load status rather than aborting the load; a
   key the file omits keeps its default. So a session written by a different version of the
