@@ -30,6 +30,7 @@ def test_build_projection_1(input_file, shared_datadir):
     "scorefull.dense.hdf5"
 ])
 def test_build_projection_umap(input_file, shared_datadir):
+    pytest.importorskip("umap", reason="needs the projection extra (umap-learn)")
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "tmp_out"
         out_coords = output_dir + "/out.tsv"
@@ -78,6 +79,7 @@ def test_build_projection_sparse_pca(shared_datadir):
         assert out_mat.shape == (20,2)
 
 def test_build_projection_sparse_umap(shared_datadir):
+    pytest.importorskip("umap", reason="needs the projection extra (umap-learn)")
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "tmp_out"
         out_sparse = output_dir + "/out_sparse.tsv"

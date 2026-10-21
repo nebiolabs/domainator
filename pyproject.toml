@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "packaging>=24.2", "wheel", "setuptools-rust>=1.7"]
+requires = ["setuptools>=77", "packaging>=24.2", "wheel", "setuptools-rust>=1.7"]
 build-backend = "setuptools.build_meta"
 
 # Optional native acceleration (domainator._gbfast). `optional = true` means a
@@ -12,10 +12,16 @@ binding = "PyO3"
 optional = true
 # Always build optimized (release), including for editable installs.
 debug = false
+# Built against the stable ABI (see rust/Cargo.toml), so one wheel per platform serves every
+# Python from 3.12 on.
+py-limited-api = "cp312"
+
+[tool.distutils.bdist_wheel]
+py-limited-api = "cp312"
 
 [tool.cibuildwheel]
-# Build CPython wheels for the supported versions; skip 32-bit and musl.
-build = "cp310-* cp311-* cp312-* cp313-*"
+# One abi3 wheel per platform (see py-limited-api above); skip 32-bit and musl.
+build = "cp312-*"
 skip = "*_i686 *-musllinux_*"
 # Verify the native extension actually compiled into the wheel. domainator's
 # __init__ is lightweight, so importing _gbfast does not pull the heavy runtime
@@ -34,75 +40,81 @@ environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 before-all = "rustup target add x86_64-apple-darwin aarch64-apple-darwin || true"
 
 [project]
-name="domainator"
+name = "domainator"
 authors = [
     {name = "Sean Johnson", email = "sjohnson@neb.com"},
     {name = "Andrew Ge"},
     {name = "Yu-Cheng Lin"},
     {name = "Zhiyi Sun"}
 ]
-description="A flexible and modular software suite for domain-based gene neighborhood and protein search, extraction, and clustering."
+description = "A flexible and modular software suite for domain-based gene neighborhood and protein search, extraction, and clustering."
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
-
-classifiers=[
-    "Programming Language :: Python :: 3",
-]
+requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE.txt"]
+keywords = ["bioinformatics", "protein domains", "HMMER", "genome neighborhoods", "sequence similarity networks", "GenBank"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Rust",
+]
 dynamic = ["version"]
+# The floors are the first releases with Python 3.12 support (or that Domainator needs).
 dependencies = [
     # domainator.genbank subclasses private parts of Biopython's GenBank parser and writer;
     # test_genbank.py round-trips every fixture, so raise the upper bound after it passes.
     "biopython >=1.85,<1.89",
-    "pandas >=2.1.0",
-    "seaborn >=0.13.0",
+    "numpy >=1.26",
     "scipy >=1.11.2",
-    "pyhmmer>=0.12.0,<0.13.0",
-    "pyinfernal >=0.1.0, <0.2.0",
-    "umap-learn >=0.5.4",
-    "h5py >=3.9.0",
-    "jsonargparse >=4.18.0",
+    "pandas >=2.1.1",
+    "matplotlib >=3.8",
+    "seaborn >=0.13",
+    "scikit-learn >=1.3.1",
+    "numba >=0.59",
+    "h5py >=3.10",
+    "pyhmmer >=0.12.0,<0.13",
+    "pyinfernal >=0.1.0,<0.2",
+    "pyrodigal >=3.0.1",
+    "jsonargparse >=4.49",
+    "shtab >=1.7",
+    "psutil >=5.9.6",
+    "tqdm >=4.65",
+    "requests >=2.31",
+    "urllib3 >=2.0",
     "Flask >=2.3",
     "Werkzeug >=2.3",
-    "psutil >=5.9.6",
-    "tqdm >=4.65.0",
-    "pyrodigal >=3.0.1",
-    "bashplotlib >=0.6.5",
-    "requests >=2.31.0",
-    "urllib3 >=2.0",
-    "shtab >=1.7"
 ]
 
 [project.optional-dependencies]
-core = [
-    "pandas >=2.1.0",
-    "seaborn >=0.13.0",
-    "scipy >=1.11.2",
-    "pyhmmer>=0.12.0,<0.13.0",
-    "pyinfernal >=0.1.0, <0.2.0",
-    "umap-learn >=0.5.4",
-    "h5py >=3.9.0",
-    "jsonargparse >=4.18.0",
-    "psutil >=5.9.6",
-    "tqdm >=4.65.0",
-    "pyrodigal >=3.0.1",
-    "bashplotlib >=0.6.5",
-    "requests >=2.31.0",
-    "urllib3 >=2.0",
-    "shtab >=1.7"
-]
-test = ["pytest >=7.4.2",
-        "pytest-datadir~=1.4.1"]
+# build_projection --algorithm umap
+projection = ["umap-learn >=0.5.4"]
+# domainate --foldseek and find_features --tmbed. They also need packages that are not on PyPI:
+# esmologs (see docs/esm_3b_foldseek.md) and TMbed (pip install git+https://github.com/BernhoferM/TMbed.git).
+structure = ["torch >=2.0"]
+test = ["pytest >=7.4",
+        "pytest-datadir >=1.4.1"]
 # Browser-driven regression tests for the Domainator Similarity Network Viewer HTML. Not part of `test`
 # because Playwright also needs a one-time browser download:
 #   pip install -e ".[test,browser]" && playwright install chromium
 # The tests in test/test_ssn_viewer_browser.py skip automatically when the
 # `playwright` package is not importable.
 browser = ["pytest-playwright >=0.4.0"]
-# add dependency for Foldseek/ESM2 related stuff.
+dev = ["domainator[test,browser,projection]", "coverage"]
 
 [project.urls]
-Bug_Tracker = "https://github.com/nebiolabs/domainator/issues"
+Homepage = "https://github.com/nebiolabs/domainator"
+Documentation = "https://github.com/nebiolabs/domainator/tree/main/docs"
+Changelog = "https://github.com/nebiolabs/domainator/blob/main/CHANGELOG.md"
+Issues = "https://github.com/nebiolabs/domainator/issues"
+Paper = "https://doi.org/10.1093/nar/gkae1175"
 
 
 [tool.setuptools]

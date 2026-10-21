@@ -3,15 +3,16 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python>=3.10,<3.14
+  - python>=3.12
   - pip>=23.3
-  - setuptools>=61.0.0
+  - setuptools>=77
   - rust>=1.83  # PyO3 0.29 requires Rust >= 1.83
   - cd-hit>=4.8.1,<5.0
   - diamond>=2.2.5,<3.0
   - foldseek>=10.941cd33
-  - hmmer>=3.3.2,<4.0
+  - infernal>=1.1.5  # cmbuild, for domainator infernal_build
   - ncbi-datasets-cli
   - pip:
-    - -e .[test]
-    - git+https://github.com/BernhoferM/TMbed.git
+    - -e .[test,projection]
+    # find_features --tmbed; not on PyPI, so pinned to a commit
+    - git+https://github.com/BernhoferM/TMbed.git@8cee893523eb655bc9485c00c65336d27a236191

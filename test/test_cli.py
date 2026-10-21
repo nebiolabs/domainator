@@ -172,3 +172,14 @@ def test_warnings_are_logged_with_a_prefix(tmp_path, capsys):
     assert "warning: All CDSs in contig rec are composed of domains to be stripped" in capsys.readouterr().err
     assert cli.main(args[:1] + ["-q"] + args[1:]) == 0
     assert capsys.readouterr().err == ""
+
+
+def test_doctor_lists_every_optional_requirement(capsys, monkeypatch):
+    from domainator.cli import doctor
+    monkeypatch.setattr(doctor, "_program_found", lambda name: "/bin/" + name if name == "diamond" else None)
+    assert cli.main(["doctor"]) == 0
+    out = capsys.readouterr().out
+    assert "diamond   found (/bin/diamond)" in out
+    assert "cmbuild   missing; install: conda install -c bioconda infernal" in out
+    for requirement in doctor.EXTERNAL_PROGRAMS + doctor.OPTIONAL_PACKAGES:
+        assert f"  {requirement.name} " in out

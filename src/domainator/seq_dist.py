@@ -909,7 +909,7 @@ def build_parser():
     parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
                         help="Keep at most this many hits for each input sequence, the highest-scoring ones. This caps the search itself (diamond --max-target-seqs, or the hmmer hit list). " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE + " Default: keep all hits.")
 
-    parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices={"diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"},
+    parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices=["diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"],
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
 
     parser.add_argument("--diamond_args", default=None,

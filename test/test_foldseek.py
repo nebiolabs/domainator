@@ -32,7 +32,14 @@ def _has_cuda_gpu():
         return False
 
 
-pytestmark = pytest.mark.skipif(not _has_foldseek(), reason="foldseek is not installed")
+def _has_esmologs():
+    import importlib.util
+    return importlib.util.find_spec("esmologs") is not None
+
+
+# foldseek.search builds its query database with esmologs (an optional package, not on PyPI).
+pytestmark = [pytest.mark.skipif(not _has_foldseek(), reason="foldseek is not installed"),
+              pytest.mark.skipif(not _has_esmologs(), reason="esmologs is not installed")]
 
 
 def _read_fasta(path):

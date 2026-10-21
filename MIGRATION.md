@@ -4,6 +4,16 @@ Domainator 1.0 makes the command line consistent across all programs. Old option
 **not** kept as aliases: a script that uses one fails with an "unrecognized arguments" error
 that names it, so nothing changes silently. This guide lists every change.
 
+## Installation
+
+- Python 3.12 or newer is required. Recreate the conda environment (`conda env create --yes -f
+  conda_env.yml`), which now also installs Infernal and no longer installs HMMER.
+- UMAP is an optional extra: `pip install "domainator[projection]"` for
+  `build_projection --algorithm umap`. `torch` (for the ESM-2 and TMbed features) is the
+  `structure` extra. The `core` extra is gone (its packages are ordinary dependencies), and so is
+  the `bashplotlib` dependency.
+- `domainator doctor` lists the optional programs and packages and which of them are installed.
+
 ## Running programs
 
 | 0.x | 1.0 |
@@ -17,8 +27,8 @@ that names it, so nothing changes silently. This guide lists every change.
 `domainator --help` lists all commands. `domainator completion bash` prints a tab-completion
 script (see the README).
 
-Options must be spelled out in full. 0.x accepted any unambiguous prefix (`--alignment` for
-`--alignments`); 1.0 does not.
+Options must be spelled out in full. 0.x accepted any unambiguous prefix (`--max_hits_per` for
+`--max_hits_per_query`); 1.0 does not.
 
 Every program takes `-v/--verbose` (debug output) and `-q/--quiet` (errors only: no progress
 messages or warnings). `build_tree --quiet` is now this shared option.

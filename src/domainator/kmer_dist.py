@@ -675,7 +675,7 @@ def build_parser():
     parser.add_argument('--reference_format', type=str, required=False, default=None, choices=["fasta", "genbank"],
                         help="File format of the reference, if it cannot be told from the file extension.")
     add_alphabet(parser)
-    parser.add_argument('--gene_call', type=str, default=None, choices={"all", "unannotated"}, required=False,
+    parser.add_argument('--gene_call', type=str, default=None, choices=["all", "unannotated"], required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode before translated-CDS k-mer extraction. "
                         "If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. "
                         "If 'unannotated', then only contigs without CDS annotations will be annotated.")

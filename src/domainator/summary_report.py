@@ -36,8 +36,7 @@ from domainator.data_matrix import DataMatrix
 from domainator import DOMAIN_FEATURE_NAME
 import numpy as np
 from typing import Dict
-import io
-from contextlib import redirect_stdout
+from domainator.text_plot import text_histogram
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
@@ -51,12 +50,7 @@ class SummaryTextWriter():
     
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         if len(lengths) != 0:
-            from bashplotlib.histogram import plot_hist
-            hist_str = io.StringIO()
-            with redirect_stdout(hist_str):
-                plot_hist(lengths, bincount=50, title="Contig Lengths", height=20.0, xlab=True, regular=True, showSummary=False)
-            hist_str = hist_str.getvalue() # get the string
-            hist_str = hist_str.replace('[39m', '') # remove color codes
+            hist_str = text_histogram(lengths, title="Contig Lengths")
         else:
             hist_str = ""
         print(f"""Contig Stats
@@ -656,7 +650,6 @@ def build_parser():
 
     parser.add_argument('--config', action=ActionConfigFile)
 
-    # TODO: domain scores histogram #for command line, maybe use bashplotlib
     # TODO: domain_search scores histogram
     return parser
 

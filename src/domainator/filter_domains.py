@@ -196,7 +196,7 @@ def build_parser():
     parser.add_argument('--databases', type=str, default=None, nargs="+",
                        help="Only filter annotations from these databases, according to evalue, domains, and max_overlap; annotations from other databases are left as they are. By default, annotations from all databases are filtered.")
     
-    parser.add_argument('--annotation_type', type=str, default="all", choices={"domainator", "domain_search", "all"},
+    parser.add_argument('--annotation_type', type=str, default="all", choices=["domainator", "domain_search", "all"],
                        help="Which type of annotations to filter (domainator, domain_search, all).")
     
     parser.add_argument('--config', action=ActionConfigFile)

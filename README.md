@@ -1,8 +1,5 @@
 ![Domainator logo of the word 'Domainator' where the D and I are styled as DNA, and the M is styled as two otters holding hands](docs/media/Domainator_logo.svg)
 # Domainator
-Version 0.12.0
-
-[//]: # (remember to update version in domainator/__init__.py also)
 
 A flexible and modular software suite for domain-based gene neighborhood and protein search, extraction, and clustering.
 
@@ -147,7 +144,22 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 
 # Requirements
 
-Domainator is developed on Linux, and has been tested on Mac. It probably won't work on Windows, except through WSL.
+Domainator is developed on Linux, and has been tested on Mac. It probably won't work on Windows, except through WSL. It needs Python 3.12 or newer.
+
+A few commands also need an external program or an optional Python package. The conda environment below installs all of them; `domainator doctor` lists which ones your installation has.
+
+| Program or package | Needed by | Install |
+|---|---|---|
+| diamond | `seq_dist` (default algorithm), `deduplicate_genbank --algorithm diamond` | `conda install -c bioconda diamond` |
+| cd-hit | `deduplicate_genbank` (default algorithm) | `conda install -c bioconda cd-hit` |
+| usearch | `deduplicate_genbank --algorithm usearch` | `conda install -c bioconda usearch` |
+| foldseek | `domainate --foldseek`, the `structure_*` commands (default aligner) | `conda install -c conda-forge -c bioconda foldseek` |
+| reseek | `structure_* --aligner reseek` | build from https://github.com/rcedgar/reseek |
+| cmbuild (Infernal) | `infernal_build` | `conda install -c bioconda infernal` |
+| datasets | `db_download` of NCBI genomes | `conda install -c conda-forge ncbi-datasets-cli` |
+| umap-learn | `build_projection --algorithm umap` | `pip install "domainator[projection]"` |
+| torch, esmologs | `domainate --foldseek` on sequences (ESM-2 to 3Di) | `pip install "domainator[structure]"`; esmologs: see [docs/esm_3b_foldseek.md](docs/esm_3b_foldseek.md) |
+| torch, TMbed | `find_features --tmbed` | `pip install "domainator[structure]" git+https://github.com/BernhoferM/TMbed.git` |
 
 Domainator ships an optional native (Rust) extension that greatly speeds up GenBank/FASTA parsing and offset scanning. Building it requires a **Rust toolchain (≥ 1.83)** — which the conda environment installs for you — and a **C compiler/linker** (`gcc`/`clang`). If either is unavailable the extension is skipped and Domainator falls back to a slower pure-Python parser; results are identical either way. See [Native (Rust) acceleration](#native-rust-acceleration) below.
 

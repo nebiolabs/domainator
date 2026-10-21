@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from domainator.cli.common import add_input, add_output, check_outputs, parse_keyword_args, tool_parser
 from domainator.data_matrix import DataMatrix
+from domainator.external import import_optional
 from domainator.cytoscape import write_cytoscape_xgmml
 import scipy as sp
 from domainator.colors import read_color_table
@@ -113,7 +114,7 @@ def build_projection(data_matrix: DataMatrix, *, algorithm, metadata, color_by, 
         else:
             embedded = PCA(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.toarray())
     elif algorithm == "umap":
-        import umap
+        umap = import_optional("umap", 'Install it with: pip install "domainator[projection]" (or pip install umap-learn).')
         #doesn't matter if it's sparse or not umap will take it!
         if is_sparse:
             embedded = umap.UMAP(n_components=n_components, **algorithm_parameters).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
@@ -175,7 +176,7 @@ def build_parser():
     #TODO: tree output (or as a separate script, or as part of the ssn script?), in the ssn 
     #TODO: auto-generate MSAs and hmms and logos and stuff from clusters
 
-    parser.add_argument('--algorithm', type=str, required=False, default="pca", choices={"pca","tsne","umap", "coords"},
+    parser.add_argument('--algorithm', type=str, required=False, default="pca", choices=["pca", "tsne", "umap", "coords"],
                         help="Which projection algorithm to use.")
 
     parser.add_argument('--metadata', type=str, nargs="+", required=False, default=None, 

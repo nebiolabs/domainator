@@ -1,9 +1,10 @@
-"""Running external programs (diamond, cd-hit, foldseek, ...).
+"""Running external programs (diamond, cd-hit, foldseek, ...), and importing optional packages.
 
 Every tool finds a program with :func:`resolve_binary` and runs it with :func:`run_command`,
 so a missing or failing program is always an ``ExternalToolError`` that names the program,
 the ``--<program>_path`` option, and the end of the program's error output.
 """
+import importlib
 import os
 import shutil
 import subprocess
@@ -77,3 +78,14 @@ def append_extra_args(argv: List[str], extra_args: Optional[Sequence[str]], opti
         raise ValueError(f"{option} cannot set {', '.join(conflicts)}: Domainator sets "
                          f"{'it' if len(conflicts) == 1 else 'them'} itself.")
     return list(argv) + extra_args
+
+
+def import_optional(module: str, install_hint: str):
+    """Import ``module``, one of Domainator's optional packages, or raise an ExternalToolError
+    saying how to install it."""
+    try:
+        return importlib.import_module(module)
+    except ImportError as exc:
+        raise ExternalToolError(
+            f"This needs the optional package '{module.split('.')[0]}', which could not be imported ({exc}). {install_hint}"
+        ) from exc

@@ -319,7 +319,7 @@ def build_parser():
     parser.add_argument("--keep_annotation", action="store_true", default=False,
                         help="by default, new annotations from the reference search are not written to the output. Setting this option will keep the new annotation of the domain that the contig was rotated on. Has no effect if the contig was rotated on a pre-existing annotation.")
 
-    parser.add_argument("--gene_call", type=str, default=None, choices={"all", "unannotated"}, required=False,
+    parser.add_argument("--gene_call", type=str, default=None, choices=["all", "unannotated"], required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode before the search. If 'all', then any existing CDS and domainator annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. "
                         "Needed to search protein references against contigs without CDS annotations, such as fasta records.")
     parser.add_argument("--cpu", type=int, default=0,

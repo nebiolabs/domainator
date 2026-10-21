@@ -344,7 +344,7 @@ def build_parser():
 
     add_alphabet(parser)
 
-    parser.add_argument("--algorithm", type=str, default="cd-hit", choices={"cd-hit", "usearch", "hash", "diamond"},
+    parser.add_argument("--algorithm", type=str, default="cd-hit", choices=["cd-hit", "usearch", "hash", "diamond"],
                         help="Which clustering algorithm to use.")
 
     for option, program in (("cdhit", "cd-hit"), ("cdhit_est", "cd-hit-est"), ("usearch", "usearch"), ("diamond", "diamond")):

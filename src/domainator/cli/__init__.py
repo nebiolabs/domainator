@@ -17,6 +17,7 @@ from domainator.errors import DomainatorError
 
 BUILTIN_COMMANDS = {
     "completion": "Print a shell completion script: domainator completion {bash,zsh,tcsh}.",
+    "doctor": "List the optional programs and packages, and which of them are installed.",
 }
 """Commands of the dispatcher itself, rather than tools."""
 
@@ -76,6 +77,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if command == "completion":
         from domainator.cli.completion import main as completion_main
         return completion_main(args)
+    if command == "doctor":
+        from domainator.cli.doctor import main as doctor_main
+        return doctor_main(args)
     if command not in TOOLS:
         message = f"domainator: unknown command '{command}'."
         close = difflib.get_close_matches(command.removesuffix(".py"), list(TOOLS) + list(BUILTIN_COMMANDS), n=3)

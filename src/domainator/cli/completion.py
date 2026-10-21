@@ -27,6 +27,7 @@ def build_completion_parser() -> argparse.ArgumentParser:
     completion = tool_parser(__doc__)
     completion.add_argument("shell", choices=SHELLS)
     commands.add_subcommand("completion", completion, help="Print a shell completion script.")
+    commands.add_subcommand("doctor", tool_parser("List the optional programs and packages."), help="List the optional programs and packages.")
     for name, tool in TOOLS.items():
         parser = importlib.import_module(f"domainator.{tool.module}").build_parser()
         for action in parser._actions:

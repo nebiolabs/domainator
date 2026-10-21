@@ -138,7 +138,7 @@ def build_parser():
     parser.add_argument("--contains", default=None, required=False, type=str, nargs="+",
                             help="What string(s) to search. Target must contain this as a substring.")
     
-    parser.add_argument("--field", default="all", required=False, type=str.lower, choices={"name", "desc", "acc", "all"},
+    parser.add_argument("--field", default="all", required=False, type=str.lower, choices=["name", "desc", "acc", "all"],
                         help="whether to search the NAME field, the DESC field, the ACC field, or all three.")
     
     parser.add_argument("--case_sensitive", default=False, required=False, action="store_true",

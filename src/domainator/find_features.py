@@ -21,6 +21,7 @@ from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
+from domainator.external import import_optional
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import DOMAIN_FEATURE_NAME
@@ -268,15 +269,11 @@ def get_tmbed_predictor(gpu_device: Optional[str] = "cuda:0", cpu_threads: int =
     Returns:
         Tuple of (encoder, models, decoder, device, use_gpu)
     """
-    try:
-        import torch
-        from tmbed.tmbed import load_models, load_encoder, init
-        from tmbed.viterbi import Decoder
-    except ImportError:
-        raise ImportError(
-            "TMbed is required for transmembrane prediction. "
-            "Install it with: pip install git+https://github.com/BernhoferM/TMbed.git"
-        )
+    hint = 'Install it with: pip install "domainator[structure]" git+https://github.com/BernhoferM/TMbed.git'
+    torch = import_optional("torch", hint)
+    tmbed = import_optional("tmbed.tmbed", hint)
+    load_models, load_encoder, init = tmbed.load_models, tmbed.load_encoder, tmbed.init
+    Decoder = import_optional("tmbed.viterbi", hint).Decoder
     
     # Determine if we should use GPU
     use_gpu = False
@@ -748,7 +745,7 @@ def build_parser():
     
     parser.add_argument(
         '--gene_call', type=str, default=None,
-        choices={"all", "unannotated"}, required=False,
+        choices=["all", "unannotated"], required=False,
         help="When activated, new CDS annotations will be added with Prodigal in "
              "Metagenomic mode. If 'all', then any existing CDS annotations will be "
              "deleted and all contigs will be re-annotated. If 'unannotated', then "

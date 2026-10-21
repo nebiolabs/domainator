@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use Domainator, please cite the paper below."
+title: Domainator
+type: software
+license: MIT
+repository-code: "https://github.com/nebiolabs/domainator"
+authors:
+  - family-names: Johnson
+    given-names: Sean R.
+  - family-names: Ge
+    given-names: Andrew
+  - family-names: Lin
+    given-names: Yu-Cheng
+  - family-names: Sun
+    given-names: Zhiyi
+preferred-citation:
+  type: article
+  title: "Domainator, a Flexible Software Suite for Domain-Based Annotation and Neighborhood Analysis, Identifies Proteins Involved in Antiviral Systems"
+  journal: Nucleic Acids Research
+  year: 2024
+  doi: 10.1093/nar/gkae1175
+  authors:
+    - family-names: Johnson
+      given-names: Sean R.
+    - family-names: Weigele
+      given-names: Peter
+    - family-names: Fomenkov
+      given-names: Alexey
+    - family-names: Ge
+      given-names: Andrew
+    - family-names: Vincze
+      given-names: Anna
+    - family-names: Eaglesham
+      given-names: James B.
+    - family-names: Roberts
+      given-names: Richard J.
+    - family-names: Sun
+      given-names: Zhiyi

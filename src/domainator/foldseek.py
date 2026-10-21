@@ -1,10 +1,8 @@
-import importlib
 import os
 import tempfile
 from typing import Iterable
 from collections import namedtuple
-from domainator.errors import ExternalToolError
-from domainator.external import resolve_binary, run_command
+from domainator.external import import_optional, resolve_binary, run_command
 
 # define a named tuple for hits with fields "query,target,qheader,theader,fident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits"
 FoldseekHit = namedtuple("Hit", ["query","target","qheader","theader","pident","alnlen","mismatch","gapopen","qstart","qend","tstart","tend","evalue","bits", "qlen", "tlen"])
@@ -14,13 +12,7 @@ MAX_PROTEIN_SIZE = 2500
 
 def _import_optional(module: str):
     """Import one of the structure-prediction packages (esmologs, torch), which are optional."""
-    try:
-        return importlib.import_module(module)
-    except ImportError as exc:
-        raise ExternalToolError(
-            f"This needs the optional package '{module.split('.')[0]}', which could not be imported ({exc}). "
-            "See docs/esm_3b_foldseek.md for how to install the structure-search dependencies."
-        ) from exc
+    return import_optional(module, "See docs/esm_3b_foldseek.md for how to install the structure-search dependencies.")
 
 
 def search(database_path, proteins, foldseek, cpu, E, device=None, foldseek_path=None) -> Iterable[FoldseekHit]:

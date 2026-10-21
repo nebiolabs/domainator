@@ -186,7 +186,7 @@ def build_parser():
     parser.add_argument('--distance', type=str, required=False, default="auto", choices=DISTANCE_CONVERSIONS,
                         help="How to turn matrix values into distances. precomputed: the values are distances. score_dist: the values are similarity scores, distance = 1 - (score / min(row_max, col_max)), so a pair with no score has distance 1. auto: precomputed if the matrix data type is a distance (ends in _dist) or not recorded (e.g. tab-separated text), otherwise score_dist.")
 
-    parser.add_argument('--algorithm', type=str, required=False, default="upgma", choices={"upgma"},
+    parser.add_argument('--algorithm', type=str, required=False, default="upgma", choices=["upgma"],
                         help="Which clustering algorithm to use.")
 
     parser.add_argument('--metadata', type=str, nargs="+", required=False, default=None, 

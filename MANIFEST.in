@@ -4,3 +4,5 @@ include rust/Cargo.toml
 recursive-include rust/src *.rs
 exclude rust/.gitignore
 prune rust/target
+include rust/Cargo.lock
+include CHANGELOG.md MIGRATION.md CITATION.cff

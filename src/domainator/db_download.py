@@ -943,7 +943,7 @@ def build_parser():
 
 
     parser.add_argument("--ncbi_summary", type=str, default=None, help="Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt.")
-    parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
+    parser.add_argument('--gene_call', type=str, default=None, choices=["all", "unannotated"], required=False,
                         help="When activated, for nucleotide databases, such as Genbank, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated.")
     parser.add_argument("--max_records", type=int, default=None, help="Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.")
     parser.add_argument("--append", action="store_true", help="Append to existing file") 
@@ -952,7 +952,7 @@ def build_parser():
     parser.add_argument('--cpu', type=int, default=0,
                         help="the number of cores of the cpu which are used at a time to download ncbi records. 0: one per physical core.")
 
-    parser.add_argument('--download_backend', type=str.lower, default="datasets", choices={"direct", "datasets"},
+    parser.add_argument('--download_backend', type=str.lower, default="datasets", choices=["direct", "datasets"],
                         help="Network backend for ncbi genome downloads. 'datasets' uses the NCBI Datasets CLI dehydrate/rehydrate workflow (recommended for large jobs; NCBI's own bulk tool handles throttling). 'direct' downloads .gbff.gz files over HTTPS directly.")
     parser.add_argument('--download_workers', type=int, default=3,
                         help="For the 'direct' backend: number of simultaneous HTTPS connections to the NCBI genomes server. NCBI rate-limits by concurrency, so keep this low (~3). 0 = use --cpu. With --gene_call set, prodigal runs inside these workers.")

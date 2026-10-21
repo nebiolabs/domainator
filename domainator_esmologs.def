@@ -22,6 +22,7 @@ apt-get update && apt-get install -y --no-install-recommends build-essential && 
 
 git clone https://github.com/seanrjohnson/esmologs.git
 cd esmologs
+git checkout 0e937758ebb68983a3049b64e62307e524c10ac4
 
 conda env update --solver=libmamba --name base --file conda_env.yml
 

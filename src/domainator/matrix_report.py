@@ -11,9 +11,8 @@ from domainator.cli.common import add_input, add_output, check_outputs, tool_par
 from domainator.outputs import output_file
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
-from bashplotlib.histogram import plot_hist
-import io
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack
+from domainator.text_plot import text_histogram
 import numpy as np
 import json
 from domainator.ssn_hierarchy import (
@@ -284,11 +283,7 @@ Max: {max_val:.1f}
         
         # Histogram of all triangular values
         if len(non_zero_values) > 0:
-            hist_str = io.StringIO()
-            with redirect_stdout(hist_str):
-                plot_hist(non_zero_values, bincount=50, title="Edge counts by score", height=20.0, xlab=True, regular=True, showSummary=False)
-            hist_str = hist_str.getvalue()
-            hist_str = hist_str.replace('[39m', '')
+            hist_str = text_histogram(non_zero_values, title="Edge counts by score")
 
         else:
             hist_str = ""
