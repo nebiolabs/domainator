@@ -311,7 +311,7 @@ The general way to access these functions is `from domainator.[script_name] impo
 
 ## Interoperability with BioPython
 
-Domainator is not directly intercompatible with BioPython. It uses `SeqRecord` objects derived from BioPython `SeqRecords`, but with some changes and extensions. A modified and extended subset of BioPython is included with Domainator as `domainator.Bio`. For reading and writing domainator-compatible sequence files we strongly recommend using the `domainator.parse_seqfiles` and `domainator.write_genbank` functions, respectively.
+Domainator's records are ordinary Biopython `SeqRecord` objects. For reading and writing Domainator-compatible sequence files, use `domainator.parse_seqfiles` and `domainator.write_genbank`: they keep qualifier values intact (Biopython's own GenBank writer wraps long values, which inserts spaces into them) and add Domainator's per-CDS annotation qualifiers.
 
 # Credits
 

@@ -10,7 +10,7 @@ from jsonargparse import ActionConfigFile
 from typing import List
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.Bio import SeqIO, Seq
+from Bio import SeqIO, Seq
 from domainator.external import append_extra_args, resolve_binary, run_command
 from domainator.seqio import parse_seqfiles
 from domainator.model import sequence_hashes

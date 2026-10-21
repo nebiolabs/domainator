@@ -9,7 +9,7 @@ import pytest
 
 from domainator import db_index
 from domainator.offsets import get_fasta_offsets, get_genbank_offsets, get_offsets, i_get_offsets, index_total_cds
-from domainator.Bio import bgzf
+from Bio import bgzf
 
 GB_FILES = ["pDONR201.gb", "MT_nbs.gb", "206.gb"]
 FASTA_FILES = ["FeSOD_20.fasta"]

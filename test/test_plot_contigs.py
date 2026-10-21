@@ -81,7 +81,7 @@ def test_plot_contigs_color_table_requires_color_by(shared_datadir, tmp_path, ca
 
 
 def test_feature_to_dict_accepts_one_hex_default_color():
-    from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+    from Bio.SeqFeature import SeqFeature, FeatureLocation
     from domainator.plot_contigs import feature_to_dict
     feature = SeqFeature(FeatureLocation(0, 30, 1), type="misc_feature")
     assert feature_to_dict(feature, default_color="CC00CC")["color"] == "#CC00CC"

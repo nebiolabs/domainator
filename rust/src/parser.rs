@@ -984,10 +984,9 @@ pub fn parse_fasta_search<'py>(
             let raw = String::from_utf8_lossy(&line[1..]).into_owned();
             title = Some(raw.trim_end().to_string());
         } else if title.is_some() {
-            // Like Biopython: strip trailing whitespace, then drop spaces and stray CRs (internal tabs stay).
-            let end = line.iter().rposition(|b| !b.is_ascii_whitespace()).map_or(0, |i| i + 1);
-            for &b in &line[..end] {
-                if b != b'\r' && b != b' ' {
+            // Like Biopython's FastaIterator: drop spaces, tabs and line endings.
+            for &b in &line[..] {
+                if !matches!(b, b' ' | b'\t' | b'\r' | b'\n') {
                     seq.push(b as char);
                 }
             }

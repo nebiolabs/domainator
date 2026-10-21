@@ -5,7 +5,7 @@ import pyhmmer
 import pytest
 
 from domainator import build_ssn, split_by_cluster
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator.data_matrix import DataMatrix
 from domainator.seqio import parse_seqfiles
 

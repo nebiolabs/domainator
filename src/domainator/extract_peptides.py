@@ -18,12 +18,12 @@ from jsonargparse.typing import PositiveFloat
 from typing import Optional, Set
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
+from Bio.SeqRecord import SeqRecord
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.seqio import parse_seqfiles
-from domainator.model import DomainatorCDS, get_sources, copy_feature, check_annotation_type
+from domainator.model import DomainatorCDS, get_sources, copy_feature, check_annotation_type, get_hit_names, get_hit_scores, set_hit_best_score
 from domainator.locations import slice_record_from_location
 from domainator.partial import codon_offset, fragment_status_allowed, get_fragment_status, PARTIAL_CHOICES
 import warnings
@@ -95,8 +95,8 @@ def extract_peptides(records, *, evalue, domains:Optional[Set], cds_ids, keep_cd
         cdss = DomainatorCDS.list_from_contig(contig, evalue, skip_pseudo=True, name_precedence=name_precedence)
         source_features = get_sources(contig)
         if _from_domain_search:
-            hit_scores = contig.get_hit_scores()
-            hit_names = contig.get_hit_names()
+            hit_scores = get_hit_scores(contig)
+            hit_names = get_hit_names(contig)
         for cds in cdss:
             keep = False
             target_cds_id = cds.name if cds_id_type == "name" else cds.num
@@ -170,7 +170,7 @@ def extract_peptides(records, *, evalue, domains:Optional[Set], cds_ids, keep_cd
                     rec.features.append(feature)
 
                 if _from_domain_search:
-                    rec.set_hit_best_score(best_score)
+                    set_hit_best_score(rec, best_score)
 
                 yield rec
 

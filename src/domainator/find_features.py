@@ -21,8 +21,8 @@ from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import DOMAIN_FEATURE_NAME
 from domainator.partial import codon_offset
 from domainator.seqio import parse_seqfiles
@@ -30,6 +30,7 @@ from domainator.expr import BooleanEvaluator
 from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator.cli.common import partial_help
 from domainator.domainate import SearchResult, clean_rec, domain_feature_qualifiers, prodigal_CDS_annotate
+from domainator.location_ops import overlay
 
 # TMbed prediction class labels
 # From TMbed format 3 (undirected):
@@ -512,7 +513,7 @@ def add_feature_annotations(
             # Map protein coordinates to nucleotide coordinates
             annot_length = (feat.end - feat.start) * 3
             try:
-                location = cds_feature.location.overlay(codon_offset(cds_feature) + feat.start * 3, annot_length)
+                location = overlay(cds_feature.location, codon_offset(cds_feature) + feat.start * 3, annot_length)
             except Exception as e:
                 warnings.warn(
                     f"Could not overlay location for {feat.name} on {contig.id}. "

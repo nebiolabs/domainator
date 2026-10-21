@@ -226,6 +226,9 @@ Options not listed are unchanged.
   expression is an error. `~` binds tighter than `&`, which binds tighter than `|`.
   Expressions like `A~B` or `A(B`, which used to be split into the wrong names, are errors.
 - The `DOMAINATOR_GB_PARSER` environment variable no longer exists.
+- Tabs inside FASTA sequence lines are dropped, like spaces (Biopython's FASTA reader does this).
+- domain_search `--max_hits` and sort_contigs order records with equal scores by their input
+  order (it was arbitrary).
 - Missing external programs (foldseek, cmbuild, cd-hit, usearch, diamond, datasets) give one
   error message that names the `--<program>_path` option.
 
@@ -314,3 +317,17 @@ output is `compare_contigs.write_sorted_genbank(records, matrix, path, ...)`.
 **Warnings and errors.** Importing Domainator no longer hides numpy's warnings for the whole
 process. Missing optional structure-search packages (torch, esmologs) raise
 `ExternalToolError` when they are needed, instead of a `NameError` later.
+
+**Biopython.** Domainator now uses upstream Biopython (1.85 to 1.88) instead of its own copy,
+`domainator.Bio`, which is gone. Import `SeqRecord`, `Seq`, `SeqFeature` and so on from `Bio`.
+Domainator's records are ordinary Biopython records, so they work with other Biopython code.
+What the copy added is now in functions:
+
+| 0.x | 1.0 |
+|---|---|
+| `loc.stranded_start`, `loc.stranded_end`, `loc.stranded_start_human_readable`, `loc.stranded_end_human_readable` | `stranded_start(loc)`, ... in `domainator.location_ops` |
+| `loc.overlay(offset, length)`, `loc.circular_envelope(n, strand)`, `loc.inverted(n)`, `loc.overlaps(other)`, `loc.overlap_size(other)`, `loc.contains(other)`, `loc.touches(other)`, `loc.copy()`, `CompoundLocation.merge_parts(parts)` | `overlay(loc, offset, length)`, ... in `domainator.location_ops` (`copy_location(loc)`) |
+| `record.set_hit_best_score(x)`, `record.get_hit_scores()`, `record.set_dist_to_start(x)`, ... | `set_hit_best_score(record, x)`, `get_hit_scores(record)`, ... in `domainator.model` |
+| comparing records with `<` (by best hit score) | `sorted(records, key=get_hit_best_score)` |
+| `feature.strand` | `feature.location.strand` |
+

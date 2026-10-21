@@ -51,6 +51,9 @@ classifiers=[
 license = "MIT"
 dynamic = ["version"]
 dependencies = [
+    # domainator.genbank subclasses private parts of Biopython's GenBank parser and writer;
+    # test_genbank.py round-trips every fixture, so raise the upper bound after it passes.
+    "biopython >=1.85,<1.89",
     "pandas >=2.1.0",
     "seaborn >=0.13.0",
     "scipy >=1.11.2",

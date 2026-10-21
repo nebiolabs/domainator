@@ -4,8 +4,8 @@ from typing import Optional, Tuple, Union
 import warnings
 
 from domainator import lean_record
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
+from Bio.SeqRecord import SeqRecord
 from domainator.model import get_cds_unique_name
 
 

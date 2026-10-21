@@ -10,7 +10,7 @@ import pytest
 from domainator.server.app import create_app
 from domainator.server.config import ServerConfig
 from domainator.server.tool_executor import JobStatus, ToolExecutor
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "test" / "data"

@@ -15,14 +15,15 @@ from domainator.outputs import output_file
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.seqio import parse_seqfiles, open_if_is_name
 from domainator.model import get_cds_name
-from domainator.Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
+from Bio.SeqRecord import SeqRecord
 from collections import defaultdict
 import html
 import json
 from domainator.colors import normalize_color_hex, read_color_table
 import pandas as pd
 from domainator.colors import get_palette
+from domainator.location_ops import overlaps
 
 def normalize_strand(strand:int) -> str:
     if strand is None:
@@ -171,7 +172,7 @@ def add_z_order(features:List[Dict[str, Union[int, str]]],
                 if other_feature["type"] in squash:
                     level_override = other_level
                     break
-            if current_feature["location"].overlaps(other_feature["location"]):
+            if overlaps(current_feature["location"], other_feature["location"]):
                 occupied_levels.add(other_level)
 
         if level_override is not None:

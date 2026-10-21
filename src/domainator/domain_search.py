@@ -26,7 +26,7 @@ from domainator._mp import make_pool
 from domainator.taxonomy.records import compile_taxonomy_allowed
 from domainator.partial import PARTIAL_CHOICES
 from domainator.locations import WHERE_CHOICES
-from domainator.model import sequence_hashes
+from domainator.model import sequence_hashes, get_hit_best_score, get_hit_names, set_dist_to_start
 from domainator import select_by_cds
 from domainator import db_index
 from domainator import domainate
@@ -138,20 +138,24 @@ class _domain_search_worker():
         out = list()
         max_hits = self.max_hits
         seen = set() if self.deduplicate_by_sequence else None
+        arrivals = []
 
         def _emit(record):
             if seen is not None and not _is_new_sequence(record, seen, self.dedup_both_strands):
                 return
             # Bounded min-heap over this worker's own hits: with max_hits set the
-            # worker never holds (or returns) more than max_hits records. Domainator
-            # SeqRecords compare by DOMAINATOR_HIT_BEST_SCORE_ANNOTATION, so the heap
-            # root is always this partition's weakest kept hit.
+            # worker never holds (or returns) more than max_hits records. Entries are
+            # (best score, -arrival, record), so the heap root is always this partition's
+            # weakest kept hit, and of equal scores the earlier hit ranks higher.
             if max_hits is None:
                 out.append(record)
-            elif len(out) < max_hits:
-                heapq.heappush(out, record)
+                return
+            entry = (get_hit_best_score(record), -len(arrivals), record)
+            arrivals.append(None)
+            if len(out) < max_hits:
+                heapq.heappush(out, entry)
             else:
-                heapq.heappushpop(out, record)
+                heapq.heappushpop(out, entry)
 
         for rec in domainate.domainate(
                 parse_seqfiles((partition[0],), None, filetype_override=None, seek_to=partition[1], max_recs=partition[2], default_molecule_type=self.fasta_type, genbank_parser="lean"), #TODO: clear best_domain_hit ?
@@ -174,9 +178,9 @@ class _domain_search_worker():
             ):
             try:
                 if rec.annotations['molecule_type'] == "protein":
-                    if self.decoy_names is not None and rec.get_hit_names()[0] in self.decoy_names:
+                    if self.decoy_names is not None and get_hit_names(rec)[0] in self.decoy_names:
                         continue
-                    rec.set_dist_to_start(0)
+                    set_dist_to_start(rec, 0)
                     _emit(rec)
                 else: # it's a nucleotide, so pass it through select_by_cds
                     if not self.translate: 
@@ -206,12 +210,14 @@ class _domain_search_worker():
                             _from_domain_search=True,
                             _domain_search_negatives=self.decoy_names
                         ):
-                            rec.set_dist_to_start(0)
+                            set_dist_to_start(rec, 0)
                             _emit(peptide)
             except Exception as e:
                 e.add_note(f"while processing {rec.id}")
                 raise
-        return out
+        if max_hits is None:
+            return out
+        return [record for _, _, record in sorted(out, reverse=True)]  # best first, then in input order
  
 class _partition_seqfile_worker():
     def __init__(self, cdss_per_partition):
@@ -284,6 +290,7 @@ def domain_search(partitions, *, references, z, evalue, max_hits, max_overlap, c
     pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
 
     out_heap = []
+    arrivals = 0
     worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=alphabet, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoys, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=both_strands)
     seen = set() if deduplicate_by_sequence else None
 
@@ -309,15 +316,17 @@ def domain_search(partitions, *, references, z, evalue, max_hits, max_overlap, c
                 if max_hits is None:
                     yield rec
                 else:
+                    # (best score, -arrival, record): the root is the weakest kept hit
+                    entry = (get_hit_best_score(rec), -arrivals, rec)
+                    arrivals += 1
                     if len(out_heap) < max_hits:
-                        heapq.heappush(out_heap, rec) # Domainator seqrecs compare based on DOMAINATOR_HIT_BEST_SCORE_ANNOTATION.
+                        heapq.heappush(out_heap, entry)
                     else:
-                        heapq.heappushpop(out_heap, rec)
-    
-    if len(out_heap) > 0:
-        out_heap.sort(reverse=True)
-        for rec in out_heap:
-            yield rec
+                        heapq.heappushpop(out_heap, entry)
+
+    out_heap.sort(reverse=True)
+    for _, _, rec in out_heap:
+        yield rec
 
 def get_input_molecule_types(input_files: List[str], default_molecule_type="protein") -> Set[str]:
     """reads the first record from each input file and gets the 'molecule_type' annotation

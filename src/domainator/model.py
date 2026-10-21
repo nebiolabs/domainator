@@ -7,9 +7,10 @@ import hashlib
 import warnings
 
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
+from Bio.SeqRecord import SeqRecord
+from domainator.location_ops import copy_location, stranded_end_human_readable, stranded_start_human_readable
 
 
 def feature_evalue(feature) -> float:
@@ -25,6 +26,78 @@ def feature_score(feature) -> float:
 def evalue_passes(feature, evalue: Optional[float]) -> bool:
     """True if the annotation's e-value is at most ``evalue`` (None: no cutoff). Every ``-e/--evalue`` filter uses this."""
     return evalue is None or feature_evalue(feature) <= evalue
+
+
+# Record annotations that domainate, domain_search and select_by_cds set on the records they yield.
+DIST_TO_START_ANNOTATION = "dist_to_start"
+"""Distance from the start of a region to the start of its focus feature."""
+DIST_TO_END_ANNOTATION = "dist_to_end"
+"""Distance from the end of the focus feature to the end of the region."""
+FOCUS_STRAND_ANNOTATION = "focus_strand"
+"""Strand of the focus feature in region coordinates (1 or -1)."""
+HIT_SCORES_ANNOTATION = "hit_scores"
+"""{CDS index: best domain score} of a searched contig."""
+HIT_NAMES_ANNOTATION = "hit_names"
+"""{CDS index: best domain name} of a searched contig."""
+HIT_BEST_SCORE_ANNOTATION = "hit_best_score"
+"""The best domain score of a searched contig or region."""
+SEARCH_ANNOTATIONS = frozenset({DIST_TO_START_ANNOTATION, DIST_TO_END_ANNOTATION, FOCUS_STRAND_ANNOTATION,
+                                HIT_SCORES_ANNOTATION, HIT_NAMES_ANNOTATION, HIT_BEST_SCORE_ANNOTATION})
+
+
+def _get_annotation(record, key, what):
+    try:
+        return record.annotations[key]
+    except KeyError:
+        raise KeyError(f"{what} not set for {record.id}") from None
+
+
+def set_dist_to_start(record, dist: int) -> None:
+    record.annotations[DIST_TO_START_ANNOTATION] = dist
+
+
+def get_dist_to_start(record) -> int:
+    return _get_annotation(record, DIST_TO_START_ANNOTATION, "dist to start")
+
+
+def set_dist_to_end(record, dist: int) -> None:
+    record.annotations[DIST_TO_END_ANNOTATION] = dist
+
+
+def get_dist_to_end(record) -> int:
+    return _get_annotation(record, DIST_TO_END_ANNOTATION, "dist to end")
+
+
+def set_focus_strand(record, strand: int) -> None:
+    record.annotations[FOCUS_STRAND_ANNOTATION] = strand
+
+
+def get_focus_strand(record) -> int:
+    return _get_annotation(record, FOCUS_STRAND_ANNOTATION, "focus strand")
+
+
+def set_hit_names(record, hit_names: Dict[int, str]) -> None:
+    record.annotations[HIT_NAMES_ANNOTATION] = hit_names
+
+
+def get_hit_names(record) -> Dict[int, str]:
+    return _get_annotation(record, HIT_NAMES_ANNOTATION, "hit names")
+
+
+def set_hit_scores(record, hit_scores: Dict[int, float]) -> None:
+    record.annotations[HIT_SCORES_ANNOTATION] = hit_scores
+
+
+def get_hit_scores(record) -> Dict[int, float]:
+    return _get_annotation(record, HIT_SCORES_ANNOTATION, "hit scores")
+
+
+def set_hit_best_score(record, score: float) -> None:
+    record.annotations[HIT_BEST_SCORE_ANNOTATION] = score
+
+
+def get_hit_best_score(record) -> float:
+    return _get_annotation(record, HIT_BEST_SCORE_ANNOTATION, "hit best score")
 
 
 ANNOTATION_TYPES = ("domainator", "domain_search", "all")
@@ -48,7 +121,7 @@ def get_cds_unique_name(feature):
         return feature.qualifiers["cds_id"][0]
     else:
         # need the strand information to account for circular contigs.
-        name_parts = ["_".join( (str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable)) ) for p in feature.location.parts]
+        name_parts = ["_".join( (str(stranded_start_human_readable(p)), str(p.strand), str(stranded_end_human_readable(p))) ) for p in feature.location.parts]
         return " ".join(name_parts) # space so it can be split into multiple lines when writing genbank files
 
 def get_cds_name(feature, precedence=None): #(contig_id, feature):
@@ -83,7 +156,7 @@ class DomainatorCDS():
         nuc_idx:int = 0 # nucleotide annotation index, used for naming nucleotide annotations that don't have cds_id qualifiers based on their position on the contig.
 
         def location_key(feature: SeqFeature) -> str:
-            name_parts = ["_".join((str(p.stranded_start_human_readable), str(p.strand), str(p.stranded_end_human_readable))) for p in feature.location.parts]
+            name_parts = ["_".join((str(stranded_start_human_readable(p)), str(p.strand), str(stranded_end_human_readable(p)))) for p in feature.location.parts]
             return " ".join(name_parts)
 
         for i, feature in enumerate(contig.features): #get the CDS features
@@ -182,8 +255,8 @@ def region_id(parent:SeqRecord, location:Union[FeatureLocation,CompoundLocation]
         Returns:
             str: the id of the region
     """
-    first = location.stranded_start_human_readable
-    last = location.stranded_end_human_readable
+    first = stranded_start_human_readable(location)
+    last = stranded_end_human_readable(location)
     reverse = parent.annotations.get("molecule_type") != "protein" and location.parts[0].strand == -1
     if flip:
         first, last = last, first
@@ -225,7 +298,7 @@ def copy_feature(feature:SeqFeature, location:Union[FeatureLocation,CompoundLoca
 
     #   https://www.insdc.org/submitting-standards/feature-table/
     if location is None:
-        location = feature.location.copy()
+        location = copy_location(feature.location)
     return SeqFeature(
                 location=location,
                 type=feature.type,

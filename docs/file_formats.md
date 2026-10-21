@@ -142,7 +142,7 @@ Tools that extract part of a contig (`domainator select_by_cds`, `domainator dom
 
 ### Differences from BioPython in internal storing of Genbank records
 
-`domainator.parse_seqfiles` always assigns a `molecule_type` attribute to sequence records. For genbank files, it also swaps the `record.name` field and `record.id` field before returning the record. The `write_genbank` function swaps them back before writing. There are also some bugfixes in the parser relative to the Biopython parser to handle weird edge-case genbank files we've run into.
+`domainator.parse_seqfiles` always assigns a `molecule_type` attribute to sequence records. For genbank files, it also swaps the `record.name` field and `record.id` field before returning the record. The `write_genbank` function swaps them back before writing. Domainator reads and writes GenBank through `domainator.genbank`, a thin layer over Biopython's parser and writer: it reads protein LOCUS lines whose name is too long for its column, and it writes qualifier values on one line (Biopython wraps them at 80 columns, inserting spaces), except `/translation`.
 
 ```python 
     id = record.id

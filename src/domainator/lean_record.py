@@ -29,9 +29,9 @@ Records are produced in the *pre-(name/id)-swap* convention (``id`` = VERSION,
 ``swap_name_id`` step applies uniformly.
 """
 
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import (
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import (
     SeqFeature,
     FeatureLocation,
     CompoundLocation,

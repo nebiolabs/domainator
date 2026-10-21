@@ -1,5 +1,6 @@
 import os
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, SimpleLocation
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, SimpleLocation
+from domainator.location_ops import overlaps, overlay, stranded_end, stranded_end_human_readable, stranded_start, stranded_start_human_readable
 import tempfile
 from glob import glob
 import pytest
@@ -17,7 +18,7 @@ def test_overlay_1():
     loc6 = FeatureLocation(100, 110)
 
     cloc1 = CompoundLocation([loc1, loc2, loc3, loc4, loc5, loc6])
-    cloc3 = cloc1.overlay(4, 40)
+    cloc3 = overlay(cloc1, 4, 40)
     assert len(cloc3.parts) == 5
     assert cloc3.parts[0].start == 5
     assert cloc3.parts[0].end == 10
@@ -50,21 +51,21 @@ def test_overlaps():
     cloc6 = CompoundLocation([loc2, loc3, loc5])
     cloc7 = CompoundLocation([loc1, loc6])
 
-    assert cloc1.overlaps(cloc2) == True
-    assert cloc1.overlaps(cloc3) == True
-    assert cloc2.overlaps(cloc3) == False
-    assert cloc2.overlaps(cloc4) == True
-    assert cloc3.overlaps(cloc4) == True
-    assert cloc3.overlaps(cloc5) == True
-    assert cloc4.overlaps(cloc5) == True
-    assert cloc4.overlaps(cloc6) == True
-    assert cloc5.overlaps(cloc6) == True
-    assert cloc1.overlaps(cloc7) == True
-    assert cloc2.overlaps(cloc7) == True
-    assert cloc3.overlaps(cloc7) == True
-    assert cloc4.overlaps(cloc7) == False
-    assert cloc5.overlaps(cloc7) == False
-    assert cloc6.overlaps(cloc7) == False
+    assert overlaps(cloc1, cloc2) == True
+    assert overlaps(cloc1, cloc3) == True
+    assert overlaps(cloc2, cloc3) == False
+    assert overlaps(cloc2, cloc4) == True
+    assert overlaps(cloc3, cloc4) == True
+    assert overlaps(cloc3, cloc5) == True
+    assert overlaps(cloc4, cloc5) == True
+    assert overlaps(cloc4, cloc6) == True
+    assert overlaps(cloc5, cloc6) == True
+    assert overlaps(cloc1, cloc7) == True
+    assert overlaps(cloc2, cloc7) == True
+    assert overlaps(cloc3, cloc7) == True
+    assert overlaps(cloc4, cloc7) == False
+    assert overlaps(cloc5, cloc7) == False
+    assert overlaps(cloc6, cloc7) == False
 
 
 def _assert_stranded_human_readable_consistency(loc):
@@ -73,14 +74,14 @@ def _assert_stranded_human_readable_consistency(loc):
     counterparts, adding one only to the coordinate that is a 0-based start.
     """
     if loc.parts[0].strand == -1:
-        assert loc.stranded_start_human_readable == int(loc.stranded_start)
+        assert stranded_start_human_readable(loc) == int(stranded_start(loc))
     else:
-        assert loc.stranded_start_human_readable == int(loc.stranded_start) + 1
+        assert stranded_start_human_readable(loc) == int(stranded_start(loc)) + 1
 
     if loc.parts[-1].strand == -1:
-        assert loc.stranded_end_human_readable == int(loc.stranded_end) + 1
+        assert stranded_end_human_readable(loc) == int(stranded_end(loc)) + 1
     else:
-        assert loc.stranded_end_human_readable == int(loc.stranded_end)
+        assert stranded_end_human_readable(loc) == int(stranded_end(loc))
 
 
 def test_stranded_coordinates_origin_spanning_forward():
@@ -90,10 +91,10 @@ def test_stranded_coordinates_origin_spanning_forward():
     """
     loc = CompoundLocation([SimpleLocation(2437, 2552, 1), SimpleLocation(0, 707, 1)])
 
-    assert loc.stranded_start == 2437
-    assert loc.stranded_end == 707
-    assert loc.stranded_start_human_readable == 2438
-    assert loc.stranded_end_human_readable == 707
+    assert stranded_start(loc) == 2437
+    assert stranded_end(loc) == 707
+    assert stranded_start_human_readable(loc) == 2438
+    assert stranded_end_human_readable(loc) == 707
     _assert_stranded_human_readable_consistency(loc)
 
 
@@ -104,10 +105,10 @@ def test_stranded_coordinates_origin_spanning_reverse():
     """
     loc = CompoundLocation([SimpleLocation(0, 707, -1), SimpleLocation(2437, 2552, -1)])
 
-    assert loc.stranded_start == 707
-    assert loc.stranded_end == 2437
-    assert loc.stranded_start_human_readable == 707
-    assert loc.stranded_end_human_readable == 2438
+    assert stranded_start(loc) == 707
+    assert stranded_end(loc) == 2437
+    assert stranded_start_human_readable(loc) == 707
+    assert stranded_end_human_readable(loc) == 2438
     _assert_stranded_human_readable_consistency(loc)
 
 
@@ -116,17 +117,17 @@ def test_stranded_coordinates_non_wrapping_join():
     An intron style join that does not cross the origin, on both strands.
     """
     fwd = CompoundLocation([SimpleLocation(100, 200, 1), SimpleLocation(300, 400, 1)])
-    assert fwd.stranded_start == 100
-    assert fwd.stranded_end == 400
-    assert fwd.stranded_start_human_readable == 101
-    assert fwd.stranded_end_human_readable == 400
+    assert stranded_start(fwd) == 100
+    assert stranded_end(fwd) == 400
+    assert stranded_start_human_readable(fwd) == 101
+    assert stranded_end_human_readable(fwd) == 400
     _assert_stranded_human_readable_consistency(fwd)
 
     rev = CompoundLocation([SimpleLocation(300, 400, -1), SimpleLocation(100, 200, -1)])
-    assert rev.stranded_start == 400
-    assert rev.stranded_end == 100
-    assert rev.stranded_start_human_readable == 400
-    assert rev.stranded_end_human_readable == 101
+    assert stranded_start(rev) == 400
+    assert stranded_end(rev) == 100
+    assert stranded_start_human_readable(rev) == 400
+    assert stranded_end_human_readable(rev) == 101
     _assert_stranded_human_readable_consistency(rev)
 
 
@@ -140,11 +141,11 @@ def test_stranded_coordinates_single_part():
 @pytest.mark.parametrize("location", [FeatureLocation(1000, 1300, 1), FeatureLocation(1000, 1300, -1), FeatureLocation(100, 400, 1)])
 def test_simple_location_overlay_bounds(location):
     """overlay bounds are relative to the feature, not to its position on the contig."""
-    assert location.overlay(0, 300) == location
+    assert overlay(location, 0, 300) == location
     if location.strand == -1:
-        assert location.overlay(30, 60) == FeatureLocation(1210, 1270, -1)
+        assert overlay(location, 30, 60) == FeatureLocation(1210, 1270, -1)
     else:
-        assert location.overlay(30, 60) == FeatureLocation(int(location.start) + 30, int(location.start) + 90, 1)
+        assert overlay(location, 30, 60) == FeatureLocation(int(location.start) + 30, int(location.start) + 90, 1)
     for offset, length in [(150, 300), (0, 301), (-1, 10), (0, -1)]:
         with pytest.raises(ValueError):
-            location.overlay(offset, length)
+            overlay(location, offset, length)

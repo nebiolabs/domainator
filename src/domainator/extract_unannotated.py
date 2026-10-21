@@ -16,7 +16,8 @@ from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.locations import slice_record_from_location
 from domainator.model import region_id, check_annotation_type, feature_score, evalue_passes
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.Bio.SeqFeature import FeatureLocation
+from Bio.SeqFeature import FeatureLocation
+from domainator.location_ops import inverted
 
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
@@ -66,7 +67,7 @@ def extract_unannotated(records, *, evalue=None, min_score=None, keep_direction=
         if domains_envelope is None:
             unannotated_regions = FeatureLocation(0, len(rec))
         else:
-            unannotated_regions = domains_envelope.inverted(length=len(rec))
+            unannotated_regions = inverted(domains_envelope, length=len(rec))
         
         if unannotated_regions is None:
             continue

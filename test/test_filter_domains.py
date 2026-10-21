@@ -3,12 +3,12 @@ from domainator.domainate import main as domainate_main
 from pathlib import Path
 import tempfile
 import pytest
-from domainator.Bio import SeqIO
-from domainator.Bio.Seq import Seq
+from Bio import SeqIO
+from Bio.Seq import Seq
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation
+from Bio.SeqRecord import SeqRecord
 
 # Mocking a SeqFeature
 def mock_seq_feature(start, end, score, evalue, db, name, cds_id, annotation_type=DOMAIN_FEATURE_NAME):

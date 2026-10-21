@@ -1084,7 +1084,7 @@ def test_enum_report_partial_count_protein_fragments(shared_datadir):
 def test_enum_report_fragment(shared_datadir):
     """--fragment is only reported for rows that are a single protein or CDS; otherwise it is empty, with a warning."""
     import pyhmmer
-    from domainator.Bio import SeqIO
+    from Bio import SeqIO
     with tempfile.TemporaryDirectory() as output_dir:
         annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
         out = output_dir + "/report.tsv"

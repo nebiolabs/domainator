@@ -4,9 +4,10 @@ from typing import Dict, Iterable, List, Tuple, Union
 import functools
 
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition, BeforePosition, AfterPosition
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition, BeforePosition, AfterPosition
+from Bio.SeqRecord import SeqRecord
 from domainator.partial import codon_offset, location_partial_ends, on_contig_translation
+from domainator.location_ops import circular_envelope, merge_parts, stranded_end, stranded_start
 
 
 def regions_overlap(region1, region2, min_overlap_fraction=0.0):
@@ -233,7 +234,7 @@ def pad_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], 
             # TODO: handle the case where a middle part is beyond the bounds of the outer parts
             
             part_1_strand = location.parts[0].strand
-            envelope = location.circular_envelope(len(r), part_1_strand)
+            envelope = circular_envelope(location, len(r), part_1_strand)
             if len(envelope) == len(r): # envelope covers the entire contig, so just return the starting location
                 return location
             elif len(envelope.parts) == 1: # envelope is a single FeatureLocation (i.e. it does not cross the origin, so the padding might cross the origin)
@@ -252,8 +253,8 @@ def pad_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], 
                     return out_location
             else: # envelope crosses the origin, implying that the padding will not cross the origin
                 # adjust pad_upstream and pad_downstream so that they won't run into the envelope.
-                l_start = envelope.stranded_start
-                l_end = envelope.stranded_end 
+                l_start = stranded_start(envelope)
+                l_end = stranded_end(envelope) 
                 remaining_span = abs(l_start - l_end) # size of the record minus the size of the envelope
                 pad_upstream = min(pad_upstream, remaining_span) # adjust pad_upstream so that it won't run into the envelope
                 pad_downstream = min(pad_downstream, remaining_span) # adjust pad_downstream so that it won't run into the envelope
@@ -483,7 +484,7 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
                 new_parts.append(new_loc)
             # Merge parts that are adjacent or overlap
             if getattr(f.location, "operator", None) == "join" or getattr(f.location, "operator", None) is None: # only merge parts if the original location was a join or not a CompoundLocation (for example, an origin-spanning source) TODO: should we merge parts for any other operators?
-                new_parts = CompoundLocation.merge_parts(new_parts) # TODO: There are some edge cases where this will merge things that maybe users won't want to merge, but it's better than not merging at all. Can fix later if anyone complains.
+                new_parts = merge_parts(new_parts) # TODO: There are some edge cases where this will merge things that maybe users won't want to merge, but it's better than not merging at all. Can fix later if anyone complains.
 
             if len(new_parts) == 0: # this can happen for source features that don't intersect with the location
                 pass

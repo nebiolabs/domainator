@@ -16,8 +16,8 @@ from domainator.locations import slice_record
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.expr import BooleanEvaluator
 from domainator.model import DomainatorCDS, region_id
-from domainator.Bio.SeqFeature import FeatureLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import FeatureLocation
+from Bio.SeqRecord import SeqRecord
 from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 from domainator.select_by_cds import validate_range
 

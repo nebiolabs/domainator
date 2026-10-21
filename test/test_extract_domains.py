@@ -1,8 +1,8 @@
 import pytest
-from domainator.Bio import SeqIO
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from domainator import extract_domains
 import tempfile
 from domainator import DOMAIN_FEATURE_NAME

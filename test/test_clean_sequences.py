@@ -2,9 +2,9 @@ import tempfile
 
 from domainator import clean_sequences
 from domainator.seqio import parse_seqfiles
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 
 
 def test_clean_name_for_newick():

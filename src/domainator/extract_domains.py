@@ -20,7 +20,8 @@ from domainator.locations import slice_record_from_location, pad_location
 from domainator.model import region_id, get_cds_unique_name, check_annotation_type, feature_score, evalue_passes
 from domainator.partial import cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
+from Bio.SeqFeature import FeatureLocation, CompoundLocation
+from domainator.location_ops import merge_parts
 
 def extract_domains(records, *, evalue=None, min_score=None, domains=None, extend_up=0, extend_down=0, combine=False, keep_direction=False, keep_name=False, annotation_type:str="domainator", databases=None, splice=False, partial="include"):
     """
@@ -133,7 +134,7 @@ def extract_domains(records, *, evalue=None, min_score=None, domains=None, exten
                 if not splice_parts:
                     continue
 
-                merged_parts = CompoundLocation.merge_parts(splice_parts)
+                merged_parts = merge_parts(splice_parts)
 
                 if len(merged_parts) == 1:
                     splice_location = merged_parts[0]

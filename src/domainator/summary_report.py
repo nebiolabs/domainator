@@ -544,7 +544,7 @@ def summary_report(records, *, out_text_handle, out_html_handle, focus_domains=N
                 name = feature.qualifiers['name'][0]
                 description = feature.qualifiers['description'][0]
                 score = feature_score(feature)
-                location = (feature.location.start, feature.location.end, feature.strand)
+                location = (feature.location.start, feature.location.end, feature.location.strand)
                 id = name # TODO: someday distinguish different databases
                 
                 if id not in contig_domains:

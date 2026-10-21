@@ -4,11 +4,11 @@ from domainator.domain_search import main
 import domainator.domain_search as domain_search_module
 import tempfile
 from glob import glob
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.model import DomainatorCDS
+from domainator.model import DomainatorCDS, set_hit_best_score, set_hit_names
 from domainator.offsets import count_peptides_in_record
 from domainator.partial import get_fragment_status
 from domainator.seqio import parse_seqfiles, write_genbank
@@ -698,8 +698,8 @@ def test_domain_search_passes_allowed_taxids_to_domainate(shared_datadir, monkey
     def build_record(record_id, hit_name):
         rec = SeqRecord(Seq("MA"), id=record_id, description=record_id)
         rec.annotations["molecule_type"] = "protein"
-        rec.set_hit_names({0: hit_name})
-        rec.set_hit_best_score(42.0)
+        set_hit_names(rec, {0: hit_name})
+        set_hit_best_score(rec, 42.0)
         return rec
 
     matched_records = [build_record("match_1", "keep_me"), build_record("match_2", "drop_me")]
@@ -864,7 +864,7 @@ def test_domain_search_keeps_record_annotations(shared_datadir):
 
 def _write_bgzf_copy(src_path, dest_path):
     """Write a BGZF-compressed copy of src_path to dest_path."""
-    from domainator.Bio import bgzf
+    from Bio import bgzf
     with open(src_path, "rb") as fh:
         data = fh.read()
     with bgzf.BgzfWriter(str(dest_path)) as out:

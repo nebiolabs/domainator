@@ -158,9 +158,9 @@ def test_quiet_and_verbose_set_the_log_level(shared_datadir, tmp_path, capsys):
 
 
 def test_warnings_are_logged_with_a_prefix(tmp_path, capsys):
-    from domainator.Bio.Seq import Seq
-    from domainator.Bio.SeqRecord import SeqRecord
-    from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
     from domainator.seqio import write_genbank
     # Every CDS is unannotated, so --unannotated would strip them all: trim_contigs warns and skips the contig.
     record = SeqRecord(Seq("ATG" * 200), id="rec", annotations={"molecule_type": "DNA"})

@@ -17,12 +17,13 @@ import pyhmmer
 
 from domainator.cli.common import add_input, reject_stdin, tool_parser
 from domainator import build_ssn
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator.data_matrix import DataMatrix
 from domainator import select_by_cds
 from domainator.seqio import COMPRESSION_EXTENSIONS, get_file_type, is_compressed_path, open_writable_seqfile, parse_seqfiles, write_genbank
 from domainator.model import DomainatorCDS
 from domainator.hmmio import open_hmm_file, open_writable_hmm_file
+from domainator.location_ops import stranded_start
 
 
 SUPPORTED_INPUT_TYPES = {"genbank", "fasta", "hmm", "cm"}
@@ -188,7 +189,7 @@ def _get_destination_handle(
 
 def _center_record_on_search_hit(record):
     cdss = DomainatorCDS.list_from_contig(record, include_nucleic_acid_annotations=True)
-    cdss.sort(key=lambda cds: cds.feature.location.stranded_start)
+    cdss.sort(key=lambda cds: stranded_start(cds.feature.location))
 
     for focus_index, cds in enumerate(cdss):
         if cds.domain_search_feature is not None:

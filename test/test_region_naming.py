@@ -12,9 +12,9 @@ from collections import defaultdict
 import pytest
 
 from domainator import domain_search, extract_domains, extract_unannotated, rotate_contigs, select_by_cds, select_by_coord, trim_contigs
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import CompoundLocation, FeatureLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqFeature import CompoundLocation, FeatureLocation
+from Bio.SeqRecord import SeqRecord
 from domainator.seqio import parse_seqfiles
 from domainator.model import region_id
 from domainator.locations import slice_record_from_location

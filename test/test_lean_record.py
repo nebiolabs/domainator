@@ -225,7 +225,7 @@ def test_native_fasta_matches_biopython(shared_datadir):
 def test_native_bgzf_matches_uncompressed(shared_datadir, tmp_path):
     """Parsing a BGZF copy via the native parser (virtual offsets) must yield the
     same records as parsing the uncompressed original."""
-    from domainator.Bio import bgzf
+    from Bio import bgzf
     src = shared_datadir / "206.gb"
     bgz = tmp_path / "206.gb.bgz"
     with open(src, "rb") as fh, bgzf.BgzfWriter(str(bgz)) as w:
@@ -354,9 +354,9 @@ def test_native_fragment_status_matches_python(tmp_path, shared_datadir):
 @pytest.mark.parametrize("table", [1, 2, 4, 6, 11, 25])
 def test_native_search_peptides_use_transl_table(tmp_path, table):
     """A CDS without a /translation is translated with its /transl_table, as Biopython does."""
-    from domainator.Bio.Seq import Seq
-    from domainator.Bio.SeqRecord import SeqRecord
-    from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+    from Bio.SeqFeature import SeqFeature, FeatureLocation
     from domainator.seqio import write_genbank
     record = SeqRecord(Seq("ATGTGAAAATGAAGATAGTAA" + "A" * 30), id="c1", name="c1", annotations={"molecule_type": "DNA"})
     record.features = [SeqFeature(FeatureLocation(0, 21, 1), type="CDS", qualifiers={"transl_table": [str(table)], "locus_tag": ["x"]})]

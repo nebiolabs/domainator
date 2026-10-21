@@ -42,8 +42,8 @@ from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, Iterator, List, NamedTuple, Optional, Sequence, Tuple
 
 from domainator.errors import InputError
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from domainator.external import append_extra_args
 from domainator.seqio import COMPRESSION_EXTENSIONS, EXTENSION_TO_TYPE, get_file_type
 from domainator.domainate import SearchResult
@@ -1114,7 +1114,7 @@ def build_protein_record(name: str, sequence: str, source_path: Optional[str] = 
                 f"({len(sequence)}) for {name}; not storing 3Di."
             )
         else:
-            from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
+            from Bio.SeqFeature import SeqFeature, FeatureLocation
             record.features.append(
                 SeqFeature(
                     location=FeatureLocation(0, len(sequence), strand=1),

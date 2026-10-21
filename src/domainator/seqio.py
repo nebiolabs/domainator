@@ -11,9 +11,10 @@ import sys
 import warnings
 
 from domainator import lean_record
-from domainator.Bio import SeqIO, BiopythonParserWarning, BiopythonWarning
-from domainator.Bio import bgzf
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio import SeqIO
+from Bio import bgzf
+from Bio.SeqRecord import SeqRecord
+from domainator.genbank import parse_genbank, write_genbank_records
 from domainator.model import get_domain_cds_annotation_strings
 from domainator.partial import normalize_partial_codes
 try:
@@ -58,11 +59,6 @@ EXTENSION_TO_TYPE = {
 COMPRESSION_EXTENSIONS = {"gz", "bgz", "bgzf"}
 
 GZIP_MAGIC = b"\x1f\x8b"
-
-# The vendored parser warns about every quirk of real-world GenBank files; keep those quiet
-# without touching warnings from any other package.
-warnings.filterwarnings("ignore", category=BiopythonParserWarning, module=r"domainator\.Bio\.")
-warnings.filterwarnings("ignore", category=BiopythonWarning, module=r"domainator\.Bio\.SeqIO\.InsdcIO")
 
 
 STDIN_PATHS = frozenset({"-", "/dev/stdin"})
@@ -280,7 +276,7 @@ def write_genbank(seq_records, file_name, default_molecule_type="DNA", add_domai
         swap_name_id(record)
         record.name = record.name.replace(" ",replace_space_with)
         record.features.sort(key=lambda x: x.location.start)
-        SeqIO.write(record, outfile, "genbank")
+        write_genbank_records([record], outfile)
         swap_name_id(record)
 
     if file_type == "name":
@@ -395,7 +391,7 @@ def _iter_raw_genbank_records(file, seek_to, default_molecule_type, backend, max
         try:
             if seek_to is not None:
                 bp_handle.seek(seek_to)
-            for skip_count, rec in enumerate(SeqIO.parse(bp_handle, "genbank")):
+            for skip_count, rec in enumerate(parse_genbank(bp_handle)):
                 if skip_count < emitted:
                     continue
                 yield lean_record.seqrecord_to_lean(rec)
@@ -407,7 +403,7 @@ def _iter_raw_genbank_records(file, seek_to, default_molecule_type, backend, max
         try:
             if seek_to is not None:
                 handle.seek(seek_to)
-            for rec in SeqIO.parse(handle, "genbank"):
+            for rec in parse_genbank(handle):
                 yield rec
         finally:
             if input_type == "name":

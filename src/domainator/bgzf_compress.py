@@ -12,7 +12,7 @@ try:
 except ImportError:
     _gbfast = None
 
-from domainator.Bio import bgzf
+from Bio import bgzf
 
 
 def native_available():

@@ -13,8 +13,9 @@ from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from typing import Optional, Set, Dict
-from domainator.Bio.SeqFeature import SeqFeature
+from Bio.SeqFeature import SeqFeature
 from domainator.model import feature_evalue, feature_score
+from domainator.location_ops import overlap_size
 
 #TODO: parallelize input parsing
 #TODO: the logic of this program is a bit confusing, in terms of interplay between different filters.
@@ -40,7 +41,7 @@ def domain_overlap(hits:Dict[int, SeqFeature], allowed_fraction_overlap):
         # Number of non-overlapping hits the current hit does not overlap with
         for j in range(0, len(no_overlap_hits)):
             # Does this hit overlap the current kept hits
-            overlap_fraction = hits[i].location.overlap_size(no_overlap_hits[j].location) / len(hits[i].location)
+            overlap_fraction = overlap_size(hits[i].location, no_overlap_hits[j].location) / len(hits[i].location)
             if overlap_fraction > allowed_fraction_overlap:
                 break
         else:

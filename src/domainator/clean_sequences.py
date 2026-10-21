@@ -15,7 +15,7 @@ from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, chec
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.locations import slice_record
-from domainator.Bio.Data import IUPACData
+from Bio.Data import IUPACData
 
 
 @dataclass

@@ -1,5 +1,5 @@
 import tempfile
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator import trim_contigs
 from domainator.seqio import parse_seqfiles
 from domainator.model import DomainatorCDS
@@ -127,8 +127,8 @@ def test_trim_contigs_unannotated_alone(shared_datadir, tmp_path):
 
 def test_trim_contigs_cds_range_without_cdss(tmp_path):
     """A contig with no CDS annotations is left alone by --cds_range."""
-    from domainator.Bio.Seq import Seq
-    from domainator.Bio.SeqRecord import SeqRecord
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
     from domainator.seqio import write_genbank
     in_gb = str(tmp_path / "in.gb")
     write_genbank([SeqRecord(Seq("ACGT" * 50), id="no_cds", annotations={"molecule_type": "DNA"})], in_gb)

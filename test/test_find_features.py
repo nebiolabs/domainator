@@ -3,7 +3,7 @@
 import os
 import pytest
 import tempfile
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME
 
 

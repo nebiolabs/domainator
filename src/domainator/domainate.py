@@ -19,12 +19,12 @@ from typing import NamedTuple, List, Dict, Optional, Union
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import partial_help
 from domainator.locations import feature_intervals, overlap_fraction
-from domainator.model import get_sources
+from domainator.model import get_sources, set_hit_best_score, set_hit_names, set_hit_scores
 from domainator.offsets import count_peptides
 from domainator.partial import PARTIAL_CHOICES, codon_offset, fragment_status_allowed, get_fragment_status, normalize_cds_translation, on_contig_translation
 from domainator.taxonomy.records import get_taxid, location_taxid, source_taxids, taxid_allowed
@@ -39,6 +39,7 @@ from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator import foldseek as foldseek_lib
 from domainator.lean_record import LeanContig, lean_to_seqrecord, lean_translate, LEAN_SEARCH_TYPES, materialize_lean_search, LeanSearchContig, LeanFastaContig
+from domainator.location_ops import overlay
 
 #TODO: add support for distinguishing complete domains from cutoff domains. For example see the pfam or hmmer domain graphics. I think this can be done by comparing the size of the domain consensus to the domain border coords (from domain.Alignment) on the hits.
 #TODO: also look at: https://github.com/Larofeticus/hpc_hmmsearch, https://www.higithub.com/apcamargo/repo/hpc_pfam_search, https://docs.nersc.gov/performance/case-studies/hmmer3/
@@ -839,8 +840,8 @@ def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max
         overlap_by_db (bool): if True, then filter by overlap by database. If False, then filter by overlap by all databases.
     """
     hits_list.sort(key=lambda x: x.score, reverse=True)
-    contig.set_hit_best_score(hits_list[0].score)
-    contig.set_hit_names({0: hits_list[0].name}) # 0 is a dummy variable, since there is only one CDS in a protein contig.
+    set_hit_best_score(contig, hits_list[0].score)
+    set_hit_names(contig, {0: hits_list[0].name}) # 0 is a dummy variable, since there is only one CDS in a protein contig.
     if best_annotation:
         hit = hits_list[0]
         location = FeatureLocation(hit.start, hit.end, strand=1)
@@ -883,7 +884,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
             hit = hits[feature_id][0]
             annot_length = (hit.end - hit.start) * 3
             try:
-                location = feature.location.overlay(offset + hit.start*3, annot_length)
+                location = overlay(feature.location, offset + hit.start*3, annot_length)
             except ValueError as e:
                 warnings.warn(f"Could not overlay location for {hit.name} on {contig.name}, {feature.qualifiers['cds_id'][0]}: {e}. Skipping annotation.")
                 continue
@@ -897,7 +898,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
                 # Create new domain feature with information on the HMMER hit
                 annot_length = (hit.end - hit.start) * 3
                 try:
-                    location = feature.location.overlay(offset + hit.start*3, annot_length)
+                    location = overlay(feature.location, offset + hit.start*3, annot_length)
                 except ValueError as e:
                     warnings.warn(f"Could not overlay location for {hit.name} on {contig.name}, {feature.qualifiers['cds_id'][0]}: {e}. Skipping annotation.")
                     continue
@@ -908,14 +909,14 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
                 contig.features.append(f)
     
     # makes a temporary annotation in the SeqRecord containing a {cds_index: best_domain_score}
-    contig.set_hit_scores(hit_scores)
-    contig.set_hit_names(best_hits)
+    set_hit_scores(contig, hit_scores)
+    set_hit_names(contig, best_hits)
 
 
 def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[SearchResult], max_hits: int, max_overlap: float, no_annotations: bool, best_annotation: bool, overlap_by_db: bool = False, max_hits_per_contig: Optional[int] = None):
     hits_list = deduplicate_contig_hits(contig, hits_list)
     hits_list.sort(key=lambda x: x.score, reverse=True)
-    contig.set_hit_best_score(hits_list[0].score)
+    set_hit_best_score(contig, hits_list[0].score)
     hit_scores = dict()
     hit_names = dict()
 
@@ -933,8 +934,8 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
             hit_scores[feature_index] = hit.score
             hit_names[feature_index] = hit.name
 
-    contig.set_hit_scores(hit_scores)
-    contig.set_hit_names(hit_names)
+    set_hit_scores(contig, hit_scores)
+    set_hit_names(contig, hit_names)
 
     if no_annotations:
         return

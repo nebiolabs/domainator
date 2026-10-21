@@ -33,7 +33,7 @@ from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.Bio.SeqFeature import CompoundLocation, FeatureLocation
+from Bio.SeqFeature import CompoundLocation, FeatureLocation
 from domainator.seqio import parse_seqfiles
 from domainator.model import region_id
 from domainator.locations import slice_record_from_location

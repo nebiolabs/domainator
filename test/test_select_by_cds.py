@@ -1,17 +1,18 @@
 import tempfile
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator import select_by_cds
 from domainator.domainate import main as domainate_main
 from domainator.domain_search import main as domain_search_main
 from domainator.seqio import parse_seqfiles
-from domainator.model import DomainatorCDS
+from domainator.model import DomainatorCDS, set_dist_to_end, set_dist_to_start, set_focus_strand
 import pytest
 from io import StringIO
 import sys
 import subprocess
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from domainator.location_ops import circular_envelope
 from helpers import compare_seqfiles
 
 
@@ -192,9 +193,9 @@ def test_select_by_cds_pad_where_start_is_default(shared_datadir):
 
 def _padding_record(id, dist_to_start, focus_length, dist_to_end, focus_strand):
     record = SeqRecord(Seq("A" * (dist_to_start + focus_length + dist_to_end)), id=id)
-    record.set_dist_to_start(dist_to_start)
-    record.set_dist_to_end(dist_to_end)
-    record.set_focus_strand(focus_strand)
+    set_dist_to_start(record, dist_to_start)
+    set_dist_to_end(record, dist_to_end)
+    set_focus_strand(record, focus_strand)
     return record
 
 @pytest.mark.parametrize("where,expected", [
@@ -279,22 +280,22 @@ def test_circular_focus_distances_match_pad_location(shared_datadir, strand):
     for feature in contig.features:
         if feature.type != "CDS":
             continue
-        envelope = feature.location.circular_envelope(len(contig), strand)
+        envelope = circular_envelope(feature.location, len(contig), strand)
         for pad in [(0, 0), (100, 50), (len(contig), len(contig))]:
             slice_location, distances = select_by_cds.pad_location(contig, envelope, pad[0], pad[1], return_extension_sizes=True)
             assert select_by_cds.circular_focus_distances(slice_location, feature.location, len(contig), strand) == distances
 
 
 def test_pad_records_circular_becomes_linear():
-    from domainator.Bio.Seq import Seq
-    from domainator.Bio.SeqRecord import SeqRecord
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
     records = list()
     for seq, dist_to_start in (("AAAACCCC", 4), ("CCCC", 0)):
         record = SeqRecord(Seq(seq), id="x")
         record.annotations.update(molecule_type="DNA", topology="circular")
-        record.set_dist_to_start(dist_to_start)
-        record.set_dist_to_end(0)
-        record.set_focus_strand(1)
+        set_dist_to_start(record, dist_to_start)
+        set_dist_to_end(record, 0)
+        set_focus_strand(record, 1)
         records.append(record)
     select_by_cds.pad_records(records)
     # only the record that was padded is no longer the circular molecule

@@ -1,4 +1,4 @@
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 
 def compare_files(f1,f2, skip_lines=0):
     with open(f1,"r") as newfile, open(f2, "r") as oldfile:
@@ -66,7 +66,7 @@ def gzip_file(src, dst):
 
 def bgzip_file(src, dst):
     """Write src to dst as BGZF (block gzip). Returns str(dst)."""
-    from domainator.Bio import bgzf as _bgzf
+    from Bio import bgzf as _bgzf
     with open(src, "rb") as fh, _bgzf.BgzfWriter(str(dst)) as w:
         w.write(fh.read())
     return str(dst)

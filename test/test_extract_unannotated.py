@@ -1,5 +1,5 @@
 import tempfile
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator import extract_unannotated
 from domainator.seqio import parse_seqfiles
 from domainator.model import DomainatorCDS

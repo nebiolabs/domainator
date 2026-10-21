@@ -1,12 +1,12 @@
 import tempfile
 import io
 from helpers import compare_seqfiles, compare_seqrecords
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator import extract_peptides
 from domainator import DOMAIN_FEATURE_NAME
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from domainator.seqio import parse_seqfiles
 
 def compare_files(f1,f2):

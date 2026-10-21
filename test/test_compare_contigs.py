@@ -10,9 +10,9 @@ import scipy.sparse
 from domainator.data_matrix import DataMatrix
 import pytest
 from domainator import DOMAIN_FEATURE_NAME
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, FeatureLocation
+from Bio.SeqRecord import SeqRecord
 from domainator.seqio import write_genbank
 
 #import filecmp

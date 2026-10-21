@@ -3,9 +3,9 @@ import domainator.domainate as domainate_module
 from domainator.domainate import main, filter_by_overlap, SearchResult
 import tempfile
 from glob import glob
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.model import DomainatorCDS
 from domainator.offsets import count_peptides_in_record
@@ -734,6 +734,7 @@ def test_annotate_ignores_stale_pressed_sidecars(shared_datadir, tmp_path):
 
 from domainator.partial import normalize_partial_codes
 from domainator.seqio import parse_seqfiles
+from domainator.location_ops import stranded_end, stranded_start
 
 _PARTIAL_CDS_LOCUS_TAG = "HOV79_30125" # complement(803..>2688), /codon_start=3, translation of the on-contig part
 
@@ -934,7 +935,7 @@ def test_prodigal_circular_origin_genes(shared_datadir):
     rotated.features = [f for f in rotated.features if f.type != "CDS"]
     prodigal_CDS_annotate(rotated)
     def gene_ends(rec, offset):
-        return sorted(((int(f.location.stranded_start) + offset) % len(rec), (int(f.location.stranded_end) + offset) % len(rec)) for f in rec.features if f.type == "CDS")
+        return sorted(((int(stranded_start(f.location)) + offset) % len(rec), (int(stranded_end(f.location)) + offset) % len(rec)) for f in rec.features if f.type == "CDS")
     assert gene_ends(rotated, shift) == gene_ends(record, 0)
 
 

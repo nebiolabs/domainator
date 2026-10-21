@@ -79,7 +79,7 @@ def test_gbfast_bgzf_offsets_match_python(shared_datadir, tmp_path):
     import glob
     from domainator.offsets import get_fasta_offsets, get_genbank_offsets, get_offsets
     from domainator.seqio import detect_compression
-    from domainator.Bio import bgzf
+    from Bio import bgzf
     from domainator.offsets import _gbfast as gbfast
     if gbfast is None or not hasattr(gbfast, "genbank_offsets_bgzf"):
         pytest.skip("native _gbfast BGZF scanner not built")
@@ -116,7 +116,7 @@ def test_gbfast_bgzf_offsets_multiblock(shared_datadir, tmp_path):
     """Records spanning many BGZF blocks: offsets must still match the Python
     scanner exactly, and every offset must seek to a record boundary."""
     from domainator.offsets import get_genbank_offsets
-    from domainator.Bio import bgzf
+    from Bio import bgzf
     from domainator.offsets import _gbfast as gbfast
     if gbfast is None or not hasattr(gbfast, "genbank_offsets_bgzf"):
         pytest.skip("native _gbfast BGZF scanner not built")

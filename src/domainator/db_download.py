@@ -34,10 +34,10 @@ import subprocess
 import time
 import requests
 from domainator.cli.common import add_output, add_switch, check_outputs, resolve_cpu, tool_parser
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
-from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
+from Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
 from domainator.seqio import write_genbank, parse_seqfiles
 from domainator.taxonomy.records import filter_by_taxonomy, compile_taxonomy_allowed
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help

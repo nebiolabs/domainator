@@ -1,7 +1,7 @@
 import tempfile
 
 from domainator import select_by_coord
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from domainator.seqio import parse_seqfiles
 import pytest
 

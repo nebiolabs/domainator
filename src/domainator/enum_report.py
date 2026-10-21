@@ -19,15 +19,16 @@ from domainator.taxonomy.records import TaxonomyData
 from domainator.partial import get_fragment_status, cds_fragment_status, contig_has_fragment, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.find_features import search_motif
-from domainator.Bio.SeqUtils.ProtParam import ProteinAnalysis
-from domainator.Bio.SeqUtils import molecular_weight
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
+from Bio.SeqUtils import molecular_weight
 from pathlib import Path
 from typing import List, Tuple, Union, Dict, Any
-from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import FeatureLocation, CompoundLocation
+from Bio.SeqRecord import SeqRecord
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.filter_domains import filter_domains
 from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
+from domainator.location_ops import stranded_end_human_readable, stranded_start, stranded_start_human_readable
 import re
 
 SELECT_CATEGORIES = {"contig", "cds", "domain"}
@@ -94,7 +95,7 @@ def get_domain_architecture_detailed(rec:SeqRecord, domain_sep:str="/", CDS_sep:
         
     else: # nucleic acid
         cdss = DomainatorCDS.list_from_contig(rec, skip_pseudo=True, include_nucleic_acid_annotations=True)
-        cdss.sort(key=lambda x: x.feature.location.stranded_start)
+        cdss.sort(key=lambda x: stranded_start(x.feature.location))
         for cds in cdss:
             domainator_features = list()
             for feature in cds.domain_features:
@@ -103,7 +104,7 @@ def get_domain_architecture_detailed(rec:SeqRecord, domain_sep:str="/", CDS_sep:
             if len(domainator_features) == 0:
                 CDS_features.append(no_domains_tag)
             else:
-                domainator_features.sort(key=lambda x:x.location.stranded_start)
+                domainator_features.sort(key=lambda x:stranded_start(x.location))
                 if (cds.feature.location.strand == -1):
                     domainator_features.reverse()
                 CDS_features.append(domain_sep.join([feature.qualifiers["name"][0] for feature in domainator_features]))
@@ -169,8 +170,8 @@ def domain_search(rec:SeqRecord) -> Tuple[str, str, int, int, int, int, int, str
             query_start = str(feature.qualifiers["rstart"][0])
             query_end = str(feature.qualifiers["rend"][0])
             query_len = str(feature.qualifiers["rlen"][0])
-            search_match_start = feature.location.stranded_start_human_readable
-            search_match_end = feature.location.stranded_end_human_readable
+            search_match_start = stranded_start_human_readable(feature.location)
+            search_match_end = stranded_end_human_readable(feature.location)
             search_match_strand = get_strand(feature.location)
             search_match_score = feature_score(feature)
             search_match_identity = float(feature.qualifiers.get("identity",(0,))[0])
@@ -240,7 +241,7 @@ def qualifier_factory(spec, sep="; "):
         raise ValueError("qualifier spec must be length 2")
 
     def qualifier(rec, loc, tax):
-        rec.features.sort(key=lambda x: x.location.stranded_start)
+        rec.features.sort(key=lambda x: stranded_start(x.location))
         hits = list()
         for feature in rec.features:
             if feature.type == spec[0]:
@@ -592,7 +593,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
         sources = get_sources(rec)
         if rec.annotations['molecule_type'] != "protein": # nucleic acid
             cdss = DomainatorCDS.list_from_contig(rec, include_nucleic_acid_annotations=True)
-            cdss.sort(key=lambda x: x.feature.location.stranded_start)
+            cdss.sort(key=lambda x: stranded_start(x.feature.location))
 
             for i in range(len(cdss)):
                 if by == "cds":
@@ -703,8 +704,8 @@ def enum_report(records, *, by, analyses, tsv_out_handle, html_out_handle, colum
     STATIC_ANALYSES = {"domains": {"columns": ["domains"], "column_types": ["str"], "function": lambda rec,loc,tax: get_domain_content(rec)[0]}, 
                 "domain_descriptions": {"columns": ["domain_descriptions"], "column_types": ["str"], "function": lambda rec,loc,tax: get_domain_content(rec)[1]}, 
                 "sequence": {"columns": ["sequence"], "column_types": ["str"], "function": lambda rec,loc,tax: str(rec.seq)},  #TODO: maybe for domains and CDSs convert to forward strand.
-                "start": {"columns": ["start"], "column_types": ["int"], "function": lambda rec,loc,tax: loc.stranded_start_human_readable}, #TODO: can be off by one depending on strand
-                "end": {"columns": ["end"], "column_types": ["int"], "function": lambda rec,loc,tax: loc.stranded_end_human_readable}, #TODO: can be off by one depending on strand
+                "start": {"columns": ["start"], "column_types": ["int"], "function": lambda rec,loc,tax: stranded_start_human_readable(loc)}, #TODO: can be off by one depending on strand
+                "end": {"columns": ["end"], "column_types": ["int"], "function": lambda rec,loc,tax: stranded_end_human_readable(loc)}, #TODO: can be off by one depending on strand
                 "strand": {"columns": ["strand"], "column_types": ["str"], "function": lambda rec,loc,tax: get_strand(loc)},
                 "length": {"columns": ["length"], "column_types": ["int"], "function": lambda rec,loc,tax: str(len(rec))}, 
                 "topology": {"columns": ["topology"], "column_types": ["str"], "function": lambda rec,loc,tax: rec.annotations.get("topology", "linear")}, 

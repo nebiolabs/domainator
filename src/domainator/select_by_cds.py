@@ -19,10 +19,11 @@ from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.expr import BooleanEvaluator
-from domainator.model import DomainatorCDS, get_non_domainator_features, region_id, check_annotation_type
+from domainator.model import DomainatorCDS, get_non_domainator_features, region_id, check_annotation_type, get_dist_to_end, get_hit_best_score, get_dist_to_start, get_focus_strand, get_hit_names, get_hit_scores, set_dist_to_end, set_dist_to_start, set_focus_strand, set_hit_best_score
 from domainator.locations import pad_location, slice_record_from_location, circular_dist, WHERE_CHOICES
-from domainator.Bio.SeqFeature import FeatureLocation
+from Bio.SeqFeature import FeatureLocation
 from domainator.partial import fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES
+from domainator.location_ops import circular_envelope, copy_location, overlap_size, stranded_end, stranded_start
 from typing import Tuple, Optional, Set
 #TODO: account for different domain databases
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
@@ -46,10 +47,10 @@ def pad_anchor(record, where:str="start") -> int:
     """
     if where not in WHERE_CHOICES:
         raise ValueError(f"where must be one of {', '.join(WHERE_CHOICES)}, not {where}")
-    left = record.get_dist_to_start()
-    right = len(record) - record.get_dist_to_end()
+    left = get_dist_to_start(record)
+    right = len(record) - get_dist_to_end(record)
     length = right - left
-    if record.get_focus_strand() == -1:
+    if get_focus_strand(record) == -1:
         if where == "start":
             return right
         elif where == "end":
@@ -108,7 +109,7 @@ def deduplicate_and_pad(regions, *, deduplicate=False, pad=False, anchor="start"
             yield region
     if pad:
         if best_first:
-            kept.sort(reverse=True)
+            kept.sort(key=get_hit_best_score, reverse=True)
         pad_records(kept, where=anchor)
         yield from kept
 
@@ -156,13 +157,13 @@ def pad_circular_cds(center:int, size:int, left_pad:int, right_pad:int) -> Tuple
         max_coord_shifted = max_coord - min_coord
         
         # calculuate overlap size:
-        overlap_size = (max_coord_shifted + 1) - size
-        if overlap_size > 0:
+        overflow = (max_coord_shifted + 1) - size
+        if overflow > 0:
             # divide overlap equally between min and max
-            min_coord_shifted += overlap_size // 2
-            max_coord_shifted -= overlap_size // 2
-            # if overlap_size is odd, then we need to adjust one of the coordinates by 1
-            if overlap_size % 2 == 1:
+            min_coord_shifted += overflow // 2
+            max_coord_shifted -= overflow // 2
+            # if overflow is odd, then we need to adjust one of the coordinates by 1
+            if overflow % 2 == 1:
                     max_coord_shifted -= 1 
         # shift the perspective back to the original coordinate system
         max_coord = max_coord_shifted + min_coord
@@ -182,11 +183,11 @@ def circular_focus_distances(slice_location, focus_location, contig_length:int, 
         contig_length: the length of the contig
         strand: the strand of the slice and focus feature
     """
-    focus_envelope = focus_location.circular_envelope(contig_length, strand)
+    focus_envelope = circular_envelope(focus_location, contig_length, strand)
     if strand == -1:
-        dist_to_start = circular_dist(int(focus_envelope.stranded_start), int(slice_location.stranded_start), contig_length)
+        dist_to_start = circular_dist(int(stranded_start(focus_envelope)), int(stranded_start(slice_location)), contig_length)
     else:
-        dist_to_start = circular_dist(int(slice_location.stranded_start), int(focus_envelope.stranded_start), contig_length)
+        dist_to_start = circular_dist(int(stranded_start(slice_location)), int(stranded_start(focus_envelope)), contig_length)
     dist_to_end = len(slice_location) - dist_to_start - len(focus_envelope)
     return dist_to_start, dist_to_end
 
@@ -254,17 +255,17 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
             downstream_pad = len(contig)
             if _from_domain_search and focus_cds.domain_search_feature is not None:
                 # center the contig on the search hit, rather than on the CDS containing it. Distances are still to the focus CDS, so that padding aligns CDSs.
-                slice_location = pad_location(contig, focus_cds.domain_search_feature.location.circular_envelope(len(contig), strand), upstream_pad, downstream_pad)
+                slice_location = pad_location(contig, circular_envelope(focus_cds.domain_search_feature.location, len(contig), strand), upstream_pad, downstream_pad)
                 dist_to_start, dist_to_end = circular_focus_distances(slice_location, focus_cds.feature.location, len(contig), strand)
             else:
-                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, focus_cds.feature.location.circular_envelope(len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
+                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
         elif kb_range is not None or cds_range is None:
             upstream_pad = 0
             downstream_pad = 0
             if kb_range is not None:
                 upstream_pad = int(kb_range[0] * 1000)
                 downstream_pad = int(kb_range[1] * 1000)
-            slice_location, (dist_to_start, dist_to_end) = pad_location(contig, focus_cds.feature.location.circular_envelope(len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
+            slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
         elif cds_range is not None:
             if strand == -1:
                 left_cds, right_cds = pad_circular_cds(cds_idx, len(cds_list), cds_range[1], cds_range[0])
@@ -272,27 +273,27 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
                 left_cds, right_cds = pad_circular_cds(cds_idx, len(cds_list), cds_range[0], cds_range[1])
 
             #TODO: account for overlapping CDSs
-            left_envelope = cds_list[left_cds].feature.location.circular_envelope(len(contig), 1)
-            focus_envelope = focus_cds.feature.location.circular_envelope(len(contig), 1)
-            right_envelope = cds_list[right_cds].feature.location.circular_envelope(len(contig), 1)
+            left_envelope = circular_envelope(cds_list[left_cds].feature.location, len(contig), 1)
+            focus_envelope = circular_envelope(focus_cds.feature.location, len(contig), 1)
+            right_envelope = circular_envelope(cds_list[right_cds].feature.location, len(contig), 1)
             neighborhood = left_envelope + focus_envelope + right_envelope
 
-            slice_location = neighborhood.circular_envelope(len(contig), strand)
+            slice_location = circular_envelope(neighborhood, len(contig), strand)
             dist_location = slice_location
             if dist_location.parts[0].strand != 1:
-                dist_location = dist_location.copy()
+                dist_location = copy_location(dist_location)
                 for part in dist_location.parts:
                     part.strand = 1       
 
-            dist_to_start = circular_dist(dist_location.stranded_start, focus_envelope.stranded_start, len(contig))
-            dist_to_end = circular_dist(focus_envelope.stranded_end, dist_location.stranded_end, len(contig))
+            dist_to_start = circular_dist(stranded_start(dist_location), stranded_start(focus_envelope), len(contig))
+            dist_to_end = circular_dist(stranded_end(focus_envelope), stranded_end(dist_location), len(contig))
             if strand == -1: # reverse strand, so swap dist to start and end
                 tmp = dist_to_start
                 dist_to_start = dist_to_end
                 dist_to_end = tmp
             
             if len(slice_location) == len(contig): # Account for the edge case where neighborhood spans the entire contig, which would make the neighborhood improperly centered.
-                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, focus_cds.feature.location.circular_envelope(len(contig), strand), len(contig), len(contig), return_extension_sizes=True)
+                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), len(contig), len(contig), return_extension_sizes=True)
 
     features = get_non_domainator_features(contig)
     
@@ -320,9 +321,9 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
         dist_to_end = tmp
     record.id = region_id(contig, slice_location, flip=flip)
 
-    record.set_dist_to_start(dist_to_start)
-    record.set_dist_to_end(dist_to_end)
-    record.set_focus_strand(-1 if flip else 1)
+    set_dist_to_start(record, dist_to_start)
+    set_dist_to_end(record, dist_to_end)
+    set_focus_strand(record, -1 if flip else 1)
     return record, slice_location
 
 def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,
@@ -391,13 +392,13 @@ def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_
     for rec in records:
         # First make a list of all the focus CDSs, by index
         cdss = DomainatorCDS.list_from_contig(rec, evalue, include_nucleic_acid_annotations=True) # _from_domain_search
-        cdss.sort(key=lambda x: x.feature.location.stranded_start) #TODO: why is this stranded_start, not start?
+        cdss.sort(key=lambda x: stranded_start(x.feature.location)) #TODO: why is this stranded_start, not start?
         if max_region_overlap < 1.0:
             selected_locations = list()
         
         if _from_domain_search:
-            hit_scores = rec.get_hit_scores()
-            hit_names = rec.get_hit_names()
+            hit_scores = get_hit_scores(rec)
+            hit_names = get_hit_names(rec)
 
         for focus_index, cds in enumerate(cdss):
             keep = False
@@ -444,12 +445,12 @@ def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_
             if keep:
                 record, record_location = get_cds_neighborhood(rec, cdss, focus_index, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, _from_domain_search=_from_domain_search)
                 if _from_domain_search:
-                    record.set_hit_best_score(best_score)
+                    set_hit_best_score(record, best_score)
                 
                 if max_region_overlap < 1.0:
                     loc_len = len(record_location)
                     for other_location in selected_locations:
-                        if (record_location.overlap_size(other_location) / loc_len) > max_region_overlap:
+                        if (overlap_size(record_location, other_location) / loc_len) > max_region_overlap:
                             break
                     else:
                         selected_locations.append(record_location)

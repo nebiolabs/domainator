@@ -9,10 +9,10 @@ import pytest
 from domainator import rotate_contigs, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.rotate_contigs import origin_cut, rotation_location, rotate_record
 from domainator.domain_search import main as domain_search_main
-from domainator.Bio import SeqIO
-from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqRecord import SeqRecord
-from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
 from domainator.seqio import parse_seqfiles
 from domainator.model import region_id
 

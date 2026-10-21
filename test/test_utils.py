@@ -10,8 +10,8 @@ from domainator.partial import cds_fragment_status, contig_has_fragment, descrip
 from domainator.seqio import db_name_from_path, detect_compression, parse_seqfiles, write_genbank
 from domainator.taxonomy.records import location_taxid
 import tempfile
-from domainator.Bio import SeqIO, SeqRecord, Seq
-from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
+from Bio import SeqIO, SeqRecord, Seq
+from Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
 import io
 import pytest
 from array import array
@@ -547,7 +547,8 @@ def test_committed_fixtures_with_sidecars_read_as_text(shared_datadir, fixture):
 
 # --- partial ('<' / '>') locations, cut features, and fragment status ---
 
-from domainator.Bio.SeqFeature import BeforePosition, AfterPosition, ExactPosition
+from Bio.SeqFeature import BeforePosition, AfterPosition, ExactPosition
+from domainator.location_ops import merge_parts
 
 _PARTIAL_TEST_SEQ = "AAAAAATGGCTAGCAAAGGTGAAGAACTGTTTACCGGTGTTGTGCCGATTCTGGTGGAACTGGATGGCAAAAAA" # 75 nt; ORF from 5 to 71
 
@@ -652,7 +653,7 @@ def test_slice_drops_cut_domain_features():
 
 
 def test_merge_parts_keeps_partial_markers():
-    merged = CompoundLocation.merge_parts([FeatureLocation(BeforePosition(0), 10, 1), FeatureLocation(10, AfterPosition(20), 1)])
+    merged = merge_parts([FeatureLocation(BeforePosition(0), 10, 1), FeatureLocation(10, AfterPosition(20), 1)])
     assert len(merged) == 1
     assert isinstance(merged[0].start, BeforePosition)
     assert isinstance(merged[0].end, AfterPosition)

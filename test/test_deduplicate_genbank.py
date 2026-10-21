@@ -5,7 +5,7 @@ from domainator.seqio import parse_seqfiles
 from pathlib import Path
 import tempfile
 from domainator import deduplicate_genbank
-from domainator.Bio import Seq
+from Bio import Seq
 
 
 @pytest.mark.requires_binary("cd-hit")

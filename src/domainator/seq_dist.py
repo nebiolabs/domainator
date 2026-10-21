@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import threading
 from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
-from domainator.Bio import SeqIO
+from Bio import SeqIO
 from collections import OrderedDict,namedtuple, defaultdict
 import numpy as np
 import scipy.sparse

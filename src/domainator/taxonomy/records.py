@@ -2,7 +2,7 @@
 """
 from typing import Optional
 
-from domainator.Bio.SeqRecord import SeqRecord
+from Bio.SeqRecord import SeqRecord
 from domainator.locations import feature_intervals, location_covers
 from domainator.model import get_sources
 from domainator.taxonomy.ncbi import NCBITaxonomy

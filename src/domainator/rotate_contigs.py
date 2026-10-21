@@ -31,19 +31,18 @@ from domainator.cli.common import STDIN_PATHS, add_annotation_type, add_input, a
 from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.offsets import count_peptides
-from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
-from domainator.Bio.SeqRecord import SeqRecord, DOMAINATOR_DIST_TO_START_ANNOTATION, DOMAINATOR_DIST_TO_END_ANNOTATION, DOMAINATOR_FOCUS_STRAND_ANNOTATION, DOMAINATOR_HIT_SCORES_ANNOTATION, DOMAINATOR_HIT_NAMES_ANNOTATION, DOMAINATOR_HIT_BEST_SCORE_ANNOTATION
+from Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
+from domainator.model import SEARCH_ANNOTATIONS
 from domainator.domainate import domainate, read_references
 from domainator.lean_record import LeanContig, lean_to_seqrecord, LEAN_SEARCH_TYPES, materialize_lean_search
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.locations import slice_record_from_location, WHERE_CHOICES
 from domainator.model import region_id, check_annotation_type
+from domainator.location_ops import circular_envelope
 
 _NUCLEOTIDE_LETTERS = set("ACGTURYSWKMBDHVN-.")
-
-# Temporary annotations set by domainate. They describe the record before rotation, so they are not carried over.
-_SEARCH_ANNOTATIONS = {DOMAINATOR_DIST_TO_START_ANNOTATION, DOMAINATOR_DIST_TO_END_ANNOTATION, DOMAINATOR_FOCUS_STRAND_ANNOTATION, DOMAINATOR_HIT_SCORES_ANNOTATION, DOMAINATOR_HIT_NAMES_ANNOTATION, DOMAINATOR_HIT_BEST_SCORE_ANNOTATION}
 
 
 def _as_seqrecord(rec) -> SeqRecord:
@@ -69,7 +68,7 @@ def envelope_interval(location, contig_length:int) -> Tuple[int, int, int]:
                 the region may continue across the origin.
     """
     strand = _location_strand(location)
-    parts = location.circular_envelope(contig_length, strand).parts
+    parts = circular_envelope(location, contig_length, strand).parts
     length = sum(len(part) for part in parts)
     if len(parts) == 1:
         start = int(parts[0].start)
@@ -137,7 +136,8 @@ def rotate_record(rec:SeqRecord, cut:int, reverse:bool, features:Optional[Iterab
     """
     location = rotation_location(cut, len(rec), reverse)
     rotated = slice_record_from_location(rec, location, features)
-    rotated.annotations = {key: value for key, value in rec.annotations.items() if key not in _SEARCH_ANNOTATIONS}
+    # The search annotations set by domainate describe the record before rotation, so they are not carried over.
+    rotated.annotations = {key: value for key, value in rec.annotations.items() if key not in SEARCH_ANNOTATIONS}
     rotated.annotations["topology"] = "circular"
     if not keep_name:
         rotated.id = region_id(rec, location)

@@ -16,7 +16,7 @@ from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles
-from domainator.model import feature_score
+from domainator.model import feature_score, get_hit_best_score, set_hit_best_score
 
 
 def _get_feature_score(feature, record_id: str) -> float:
@@ -73,21 +73,22 @@ def set_record_best_score(record, domains: Optional[Set[str]] = None, databases:
                 f"Record {record.id} does not contain any {DOMAIN_FEATURE_NAME} features matching the requested domains and databases."
             )
 
-    record.set_hit_best_score(best_score)
+    set_hit_best_score(record, best_score)
 
 
 def sort_contigs(records: Iterable, *, max_hits: Optional[int] = None, domains: Optional[Set[str]] = None, databases: Optional[Set[str]] = None):
-    out_heap = []
+    out_heap = []  # (best score, -input order, record), so of equal scores the earlier record ranks higher
 
-    for record in records:
+    for index, record in enumerate(records):
         set_record_best_score(record, domains=domains, databases=databases)
+        entry = (get_hit_best_score(record), -index, record)
         if max_hits is None or len(out_heap) < max_hits:
-            heapq.heappush(out_heap, record)
+            heapq.heappush(out_heap, entry)
         else:
-            heapq.heappushpop(out_heap, record)
+            heapq.heappushpop(out_heap, entry)
 
     out_heap.sort(reverse=True)
-    for record in out_heap:
+    for _, _, record in out_heap:
         yield record
 
 
