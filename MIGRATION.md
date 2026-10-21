@@ -271,6 +271,7 @@ internal; see `docs/stability.md`.
 | `DeduplicateGenbank().deduplicate_genbank(...)` and `.cluster_members` | `deduplicate_genbank(inputs, identity=..., clusters=[])`, which appends the clusters to the list |
 | `MaxTree` and the edge functions imported from `domainator.data_matrix` | import them from `domainator.ssn_edges` (`SortedUndirectedEdges`, `CompactNeighborRankings` from `domainator.edge_types`) |
 | `utils.pyhmmer_decode(x)` | `x` (pyhmmer 0.12 returns `str`) |
+| `write_genbank(records, path, preserve_original=..., add_domain_cds_annotations=..., replace_space_with=...)` | `write_genbank(records, path)`; it never changes the records, so `preserve_original` is not needed |
 
 Where `domainator.utils` went:
 

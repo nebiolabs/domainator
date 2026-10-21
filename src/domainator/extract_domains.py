@@ -16,7 +16,7 @@ from domainator.cli.common import add_annotation_type, add_input, add_seq_output
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
-from domainator.locations import slice_record_from_location, pad_location
+from domainator.locations import FeatureIndex, slice_record_from_location, pad_location
 from domainator.model import region_id, get_cds_unique_name, check_annotation_type, feature_score, evalue_passes
 from domainator.partial import cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
@@ -52,6 +52,7 @@ def extract_domains(records, *, evalue=None, min_score=None, domains=None, exten
     databases = set(databases) if databases is not None else None
     #TODO: ensure naming consistency with select_by_cds.
     for rec in records:
+        feature_index = FeatureIndex(rec.features)
         hit_domains = list() #list of SeqFeatures
         if partial != "include":
             cds_by_id = {get_cds_unique_name(f): f for f in rec.features if f.type == "CDS"}
@@ -106,7 +107,7 @@ def extract_domains(records, *, evalue=None, min_score=None, domains=None, exten
 
                 
                 location = FeatureLocation(start, end, new_strand)
-                contig_sections.append(slice_record_from_location(rec, location)) # slice_record_from_location handles maintaining source and taxonomy annotations.
+                contig_sections.append(slice_record_from_location(rec, location, feature_index.near(location))) # slice_record_from_location handles maintaining source and taxonomy annotations.
                 if not keep_name:
                     contig_sections[-1].id = region_id(rec, location)
 
@@ -141,7 +142,7 @@ def extract_domains(records, *, evalue=None, min_score=None, domains=None, exten
                 else:
                     splice_location = CompoundLocation(merged_parts, operator="join")
 
-                new_rec = slice_record_from_location(rec, splice_location) # slice_record_from_location handles maintaining source and taxonomy annotations.
+                new_rec = slice_record_from_location(rec, splice_location, feature_index.near(splice_location)) # slice_record_from_location handles maintaining source and taxonomy annotations.
                 if rec.annotations.get("topology", None) == "circular":
                     new_rec.annotations["topology"] = "circular"
 
@@ -156,7 +157,7 @@ def extract_domains(records, *, evalue=None, min_score=None, domains=None, exten
                     
                     location = pad_location(rec, domain.location, extend_up, extend_down)
 
-                    contig_sections.append(slice_record_from_location(rec, location)) # slice_record_from_location handles maintaining source and taxonomy annotations.
+                    contig_sections.append(slice_record_from_location(rec, location, feature_index.near(location))) # slice_record_from_location handles maintaining source and taxonomy annotations.
 
                     # slice_from_location will flip the strand if the domain is on the reverse strand, so we need to flip it back if we want to keep the direction.
                     flip = rec.annotations['molecule_type'] != "protein" and keep_direction and strand == -1

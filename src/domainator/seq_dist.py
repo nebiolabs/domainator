@@ -569,21 +569,23 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
             "blastp", returncode, "".join(stderr_lines), input_fasta,
             tmpdir=tmpdir, command=dmnd_command, diamond_params=diamond_params))
 
-def make_seq_name_to_idx_dict(input_path):
+def _seq_name_to_idx_dict(names_and_lengths, input_path):
+    """name_to_idx, idx_to_name and idx_to_len for sequences, keeping the first of duplicate names."""
     name_to_idx = OrderedDict()
     idx_to_name = list()
     idx_to_len = list()
-    idx = 0
-    for rec in parse_seqfiles([input_path]):
-        id = rec.id
-        if id in name_to_idx:  
-            warnings.warn(f"Warning: duplicate sequence name found in input {input_path}: {rec.id}")
+    for name, length in names_and_lengths:
+        if name in name_to_idx:
+            warnings.warn(f"Warning: duplicate sequence name found in input {input_path}: {name}")
         else:
-            name_to_idx[id] = idx
-            idx_to_len.append(len(rec.seq))
-            idx_to_name.append(id)
-            idx += 1
+            name_to_idx[name] = len(idx_to_name)
+            idx_to_len.append(length)
+            idx_to_name.append(name)
     return name_to_idx, idx_to_name, idx_to_len
+
+
+def make_seq_name_to_idx_dict(input_path):
+    return _seq_name_to_idx_dict(((rec.id, len(rec.seq)) for rec in parse_seqfiles([input_path])), input_path)
 
 def make_hmm_name_to_idx_dict_from_path(hmm_path):
     name_to_idx = OrderedDict()
@@ -689,9 +691,21 @@ def run_hmmer_compare(hmmer_queries, hmmer_targets, k, threads, min_score: float
                 yield hit
 
 def convert_to_fasta(input_path, output_path):
-    with open(output_path,"w") as outh:
-        for rec in parse_seqfiles([input_path]):
-            SeqIO.write(rec,outh,"fasta")
+    """Write input_path as FASTA, and return its make_seq_name_to_idx_dict (from the same pass)."""
+    def records():
+        with open(output_path, "w") as outh:
+            for rec in parse_seqfiles([input_path]):
+                SeqIO.write(rec, outh, "fasta")
+                yield rec.id, len(rec.seq)
+    return _seq_name_to_idx_dict(records(), input_path)
+
+
+def _fasta_and_index(input_path, input_format, output_path):
+    """A FASTA path for input_path (itself if it is FASTA, else a conversion written to output_path),
+    and its make_seq_name_to_idx_dict."""
+    if input_format == "fasta":
+        return input_path, make_seq_name_to_idx_dict(input_path)
+    return output_path, convert_to_fasta(input_path, output_path)
 
 
 def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_type=None, query_order=None):
@@ -760,20 +774,12 @@ def seq_dist(input_path, *, input_format, reference, reference_format, max_hits_
             parts = algorithm.split("_")
 
             # convert input and db to fasta if not fasta
-            dmnd_input = input_path
-            if input_format != "fasta":
-                dmnd_input = tmpdir + "/input.fasta"
-                convert_to_fasta(input_path, dmnd_input) #TODO: better error message when supplied with hmmer file
-            query_name_to_idx, query_idx_to_name, query_idx_to_len = make_seq_name_to_idx_dict(dmnd_input) #name to index
+            dmnd_input, (query_name_to_idx, query_idx_to_name, query_idx_to_len) = _fasta_and_index(input_path, input_format, tmpdir + "/input.fasta")
             db_name_to_idx, db_idx_to_name, db_idx_to_len = query_name_to_idx, query_idx_to_name, query_idx_to_len
             if input_path == reference:
                 dmnd_ref = dmnd_input
             else:
-                dmnd_ref = reference
-                if reference_format != "fasta":
-                    dmnd_ref = tmpdir + "/ref.fasta"
-                    convert_to_fasta(reference, dmnd_ref)
-                db_name_to_idx, db_idx_to_name, db_idx_to_len = make_seq_name_to_idx_dict(dmnd_ref) #name to index
+                dmnd_ref, (db_name_to_idx, db_idx_to_name, db_idx_to_len) = _fasta_and_index(reference, reference_format, tmpdir + "/ref.fasta")
             preflight = build_diamond_preflight_warning(
                 parts[1], len(query_name_to_idx), int(sum(query_idx_to_len)),
                 square=(input_path == reference),
@@ -789,13 +795,14 @@ def seq_dist(input_path, *, input_format, reference, reference_format, max_hits_
         
         elif algorithm == "hmmer":
             hmmer_seqfile = input_path
-            if input_format != "fasta": #might be possible to just go from 
+            if input_format != "fasta":
                 hmmer_seqfile = tmpdir + "/input.fasta"
                 convert_to_fasta(input_path, hmmer_seqfile)
 
+            # The hits are named by easel, so the matrix labels come from easel's names too.
             with pyhmmer.easel.SequenceFile(hmmer_seqfile, digital=True) as seq_file:
                 hmmer_seqs = list(seq_file)
-            query_name_to_idx, query_idx_to_name, query_idx_to_len = make_seq_name_to_idx_dict(hmmer_seqfile) #name to index
+            query_name_to_idx, query_idx_to_name, query_idx_to_len = _seq_name_to_idx_dict(((seq.name, len(seq)) for seq in hmmer_seqs), input_path)
 
 
             if reference_format == "hmm":
@@ -805,14 +812,12 @@ def seq_dist(input_path, *, input_format, reference, reference_format, max_hits_
             else: # a sequence type
                 search_type = "phmmer"
                 hmmer_dbfile = reference
-                if reference_format != "fasta":  
+                if reference_format != "fasta":
                     hmmer_dbfile = tmpdir + "/ref.fasta"
                     convert_to_fasta(reference, hmmer_dbfile)
                 with pyhmmer.easel.SequenceFile(hmmer_dbfile, digital=True) as seq_file:
                     db_data = list(seq_file)
-                db_name_to_idx, db_idx_to_name, db_idx_to_len = make_seq_name_to_idx_dict(hmmer_dbfile)
-                
-            #TODO: do easel and biopython split names and descriptions in the same way?
+                db_name_to_idx, db_idx_to_name, db_idx_to_len = _seq_name_to_idx_dict(((seq.name, len(seq)) for seq in db_data), reference)
                        
             results_iter = run_hmmsearch(hmmer_seqs, db_data, max_hits_per_query, cpu, search_type, min_score=threshold, progress=progress, query_count=len(db_data))
             score_progress = False

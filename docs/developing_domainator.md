@@ -25,6 +25,15 @@ coverage html
 ```
 then open htmlcov/index.html in a browser to see coverage
 
+## benchmarks
+
+`scripts/bench/bench.py` times parsing, writing, `domainate`, `domain_search` and `extract_domains` on a test genome. Save timings before a change and compare after:
+```
+python scripts/bench/bench.py --json_out before.json
+python scripts/bench/bench.py --baseline before.json
+```
+Each step reports its fastest of `--repeat` runs; `--only domainate` runs a subset.
+
 
 ## Projects that domainator depends on
 

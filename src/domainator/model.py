@@ -155,10 +155,6 @@ class DomainatorCDS():
         idx:int = 0
         nuc_idx:int = 0 # nucleotide annotation index, used for naming nucleotide annotations that don't have cds_id qualifiers based on their position on the contig.
 
-        def location_key(feature: SeqFeature) -> str:
-            name_parts = ["_".join((str(stranded_start_human_readable(p)), str(p.strand), str(stranded_end_human_readable(p)))) for p in feature.location.parts]
-            return " ".join(name_parts)
-
         for i, feature in enumerate(contig.features): #get the CDS features
             if feature.type == 'CDS':
                 if skip_pseudo and ("pseudo" in feature.qualifiers or "pseudogene" in feature.qualifiers):
@@ -166,13 +162,12 @@ class DomainatorCDS():
                 cds_num = get_cds_unique_name(feature)
                 name = get_cds_name(feature, name_precedence)
                 if cds_num not in name_to_idx:
-                    #cds_rec = get_seq_record(start, end, name, strand, contig.seq)
                     cdss.append(DomainatorCDS(name, cds_num, i, feature))
                     name_to_idx[cds_num] = idx
                     idx += 1
                 else:
                     warnings.warn(f"multiple cdss found with contig id: {contig.id}, CDS num: {cds_num}, so only the first one is kept.")
-        for feature in contig.features: #get the domainator features
+        for i, feature in enumerate(contig.features): #get the domainator features
             if feature.type == DOMAIN_FEATURE_NAME or feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
                 if feature_evalue(feature) <= domain_evalue and feature_score(feature) > domain_score:
                     if include_nucleic_acid_annotations and feature.qualifiers.get("cds_id", [None])[0] == ".":
@@ -181,7 +176,7 @@ class DomainatorCDS():
                         if cds_num not in name_to_idx: # should always be true.
                             name = feature.qualifiers.get("name", [cds_num])[0]
                             pseudo_feature = SeqFeature(location=feature.location, type="CDS", qualifiers={"cds_id": [cds_num]})
-                            cdss.append(DomainatorCDS(name, cds_num, contig.features.index(feature), pseudo_feature))
+                            cdss.append(DomainatorCDS(name, cds_num, i, pseudo_feature))
                             cdss[-1].is_nucleic_acid = True
                             name_to_idx[cds_num] = idx
                             idx += 1

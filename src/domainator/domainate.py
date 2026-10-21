@@ -113,6 +113,23 @@ def get_input_molecule_types(input_files, default_molecule_type="protein"):
 
 #{"name": <hmm_name> as str, "desc": <hmm_description> as str, "evalue": <domain_evalue> as float,
 #        "score": <domain_score> as float, "start": <current_left> as int, "end": <current_right> as int}
+class HMMDatabase(dict):
+    """The HMMs of one reference database, by name, that also keeps them as optimized profiles.
+
+    pyhmmer's hmmsearch converts each HMM query to an optimized profile on every call, which is
+    once per batch of targets; converting once and passing the profiles saves that.
+    """
+    def optimized_profiles(self):
+        if not hasattr(self, "_optimized"):
+            self._optimized = []
+            for hmm in self.values():
+                background = pyhmmer.plan7.Background(hmm.alphabet)
+                profile = pyhmmer.plan7.Profile(hmm.M, hmm.alphabet)
+                profile.configure(hmm, background)
+                self._optimized.append(profile.to_optimized())
+        return self._optimized
+
+
 class SearchResult(NamedTuple):
     name: str
     """hmm profile name (hmm_name)"""
@@ -426,7 +443,7 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
                     fasta_files.append(file)
     
     if len(hmm_files) > 0:
-        out["hmmsearch"] = read_hmms(hmm_files)
+        out["hmmsearch"] = {db_name: HMMDatabase(hmms) for db_name, hmms in read_hmms(hmm_files).items()}
     if len(fasta_files) > 0:
         out["phmmer"] = read_pyhmmer_peptide_fastas(fasta_files)
     if len(nucleotide_hmm_files) > 0:
@@ -476,7 +493,9 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
         return out
 
 
-    varargs={"sequences": proteins, "cpus": cpu, "Z": z, "E": evalue, "domE": evalue, "incdomE": evalue}
+    # one block for all the searches of this batch (pyhmmer would otherwise build one per search)
+    protein_block = pyhmmer.easel.DigitalSequenceBlock(pyhmmer.easel.Alphabet.amino(), proteins)
+    varargs={"sequences": protein_block, "cpus": cpu, "Z": z, "E": evalue, "domE": evalue, "incdomE": evalue}
     if max_mode:
         varargs["bias_filter"] = False
         varargs["F1"] = 1.0
@@ -486,9 +505,10 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
     for (algorithm, db_dict) in references.items():
 
         for db_name in db_dict:
-            #hits = pyhmmer.hmmer.hmmsearch(hmms[db_name].values(), proteins, cpu, Z=z, domE=evalue, incdomE=evalue) #yields top_hits for each query
             if algorithm == "hmmsearch":
-                hits = pyhmmer.hmmer.hmmsearch(db_dict[db_name].values(), **varargs)
+                queries = db_dict[db_name]
+                queries = queries.optimized_profiles() if isinstance(queries, HMMDatabase) else queries.values()
+                hits = pyhmmer.hmmer.hmmsearch(queries, **varargs)
                 hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "hmmsearch", out)
             elif algorithm == "phmmer":
                 hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **varargs)
@@ -1104,7 +1124,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
     On circular contigs, the ends of the sequence aren't real ends. Genes that cross the origin are called separately
     (see _prodigal_origin_genes) and annotated as joins across the origin.
     """
-    orf_finder = pyrodigal.GeneFinder(meta=True) #TODO: maybe make this static?
+    orf_finder = pyrodigal.GeneFinder(meta=True)
     circular = rec.annotations.get("topology") == "circular"
     seq = bytes(rec.seq)
 

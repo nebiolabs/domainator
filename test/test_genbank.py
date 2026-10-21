@@ -67,3 +67,24 @@ def test_parsing_leaves_the_warning_filters_alone():
     with open(os.path.join(_DATA, "pDONR201_multi_genemark_domainator.gb")) as handle:
         list(parse_genbank(handle))
     assert warnings.filters == before
+
+
+def test_write_genbank_leaves_records_unchanged():
+    from domainator.seqio import parse_seqfiles, write_genbank
+    path = os.path.join(_DATA, "pDONR201_multi_genemark_domainator.gb")
+    records = list(parse_seqfiles([path]))
+    for record in records:
+        del record.annotations["date"]
+        record.features.reverse()
+        for feature in record.features:
+            if feature.type == "CDS":
+                feature.qualifiers = {k: v for k, v in feature.qualifiers.items() if not k.startswith("domainator_")}
+    before = [_signature(r) for r in records]
+    out = io.StringIO()
+    write_genbank(records, out)
+    assert [_signature(r) for r in records] == before
+    # ...and what it wrote has the date, the sorted features and the domain summaries.
+    written = list(parse_genbank(io.StringIO(out.getvalue())))
+    assert all("date" in r.annotations for r in written)
+    assert all([int(f.location.start) for f in r.features] == sorted(int(f.location.start) for f in r.features) for r in written)
+    assert any(k.startswith("domainator_") for r in written for f in r.features if f.type == "CDS" for k in f.qualifiers)

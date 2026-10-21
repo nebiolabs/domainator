@@ -58,6 +58,21 @@ def test_get_newick_with_empty_leaf_names(tree, leaf_names):
     assert result == '((:1,:1):3,(:2,:2):2);'
 
 
+def test_deep_trees_do_not_recurse():
+    # A caterpillar tree is as deep as it has leaves, deeper than Python's recursion limit.
+    n = 5000
+    node = TreeNode(0, 0)
+    for i in range(1, n):
+        parent = TreeNode(n + i, i)
+        parent.left, parent.right = node, TreeNode(i, 0)
+        node = parent
+    names = [f"s{i}" for i in range(n)]
+    newick = get_newick(node, node.dist, names)
+    assert newick.count("(") == n - 1 and newick.endswith(");")
+    edges, internal_nodes = build_tree.get_tree_edges(node, node.dist, names)
+    assert len(edges) == 2 * n - 2 and len(internal_nodes) == n - 1
+
+
 def test_newick_output(shared_datadir):
 
     with tempfile.TemporaryDirectory() as output_dir:

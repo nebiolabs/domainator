@@ -3,6 +3,7 @@
 Always read and write sequence files through :func:`parse_seqfiles` and :func:`write_genbank`,
 which keep the qualifiers Domainator adds.
 """
+import copy
 from datetime import date
 from pathlib import Path
 import gzip
@@ -235,52 +236,51 @@ def open_if_is_name(filename_or_handle, mode="r"):
     return (out, input_type)
 
 
-def write_genbank(seq_records, file_name, default_molecule_type="DNA", add_domain_cds_annotations=True, preserve_original=False, replace_space_with=""):
-    """
+def write_genbank(seq_records, file_name, default_molecule_type="DNA"):
+    """Write SeqRecords as GenBank, to a file name or a handle. The records are not changed.
 
-        seq_records: an iterable of SeqRecords
-
-        file_name can be a file handle
-
-        This function will modify the input seqrecords as a side effect. To stop it from doing that, use "preserve_original=True"
+    Each record is written as parse_seqfiles would read it back: its id goes in the LOCUS line
+    (with spaces removed) and its name in ACCESSION. Records without a molecule type get
+    default_molecule_type, and records without a date get today's. Features are written in order
+    of start position, and each CDS gets a domainator_<database> qualifier summarizing the
+    Domainator domains on it (and loses any for databases with no domains left).
     """
     outfile, file_type = open_if_is_name_for_write(file_name)
+    try:
+        for record in seq_records:
+            write_genbank_records([_genbank_output_record(record, default_molecule_type)], outfile)
+    finally:
+        if file_type == "name":
+            outfile.close()
 
-    for record in seq_records:
-        if preserve_original:
-            record = copy_SeqRecord(record)
 
-        if 'molecule_type' not in record.annotations:
-            record.annotations['molecule_type'] = default_molecule_type
-        if "date" not in record.annotations:
-            record.annotations["date"] = date.today().strftime(
-                "%d-%b-%Y").upper()
+def _genbank_output_record(record, default_molecule_type):
+    """A new record that is ``record`` as write_genbank writes it, sharing what it doesn't change."""
+    annotations = dict(record.annotations)
+    annotations.setdefault("molecule_type", default_molecule_type)
+    if "date" not in annotations:
+        annotations["date"] = date.today().strftime("%d-%b-%Y").upper()
+    cds_domain_annotations = get_domain_cds_annotation_strings(record)
+    features = [_with_domain_qualifiers(f, cds_domain_annotations) if f.type == "CDS" else f for f in record.features]
+    features.sort(key=lambda x: x.location.start)
+    return SeqRecord(record.seq, id=record.name, name=record.id.replace(" ", ""), description=record.description,
+                     dbxrefs=record.dbxrefs, features=features, annotations=annotations,
+                     letter_annotations=record.letter_annotations)
 
-        if add_domain_cds_annotations:
-            cds_domain_annotations = get_domain_cds_annotation_strings(record)
-            
-            for feature in record.features:
-                if feature.type == "CDS":
-                    seen_domain_dbs = set()
-                    if "cds_id" in feature.qualifiers and feature.qualifiers["cds_id"][0] in cds_domain_annotations:
-                        
-                        for domain_db, annotation_string_list in cds_domain_annotations[feature.qualifiers["cds_id"][0]].items():
-                            feature.qualifiers[f"domainator_{domain_db}"] = [
-                                " & ".join(annotation_string_list)]
-                            seen_domain_dbs.add(f"domainator_{domain_db}")
-                    
-                    for qual in list(feature.qualifiers.keys()): #delete qualifiers for databases where all of the domains have been filtered out.
-                        if qual.startswith("domainator_") and qual not in seen_domain_dbs:
-                            del feature.qualifiers[qual]
 
-        swap_name_id(record)
-        record.name = record.name.replace(" ",replace_space_with)
-        record.features.sort(key=lambda x: x.location.start)
-        write_genbank_records([record], outfile)
-        swap_name_id(record)
+def _with_domain_qualifiers(cds, cds_domain_annotations):
+    """``cds``, or a copy of it with its domainator_<database> qualifiers brought up to date."""
+    domains = cds_domain_annotations.get(cds.qualifiers.get("cds_id", [None])[0], {})
+    wanted = {f"domainator_{db}": [" & ".join(strings)] for db, strings in domains.items()}
+    stale = [q for q in cds.qualifiers if q.startswith("domainator_") and q not in wanted]
+    if not stale and all(cds.qualifiers.get(q) == v for q, v in wanted.items()):
+        return cds
+    qualifiers = {k: v for k, v in cds.qualifiers.items() if k not in stale}
+    qualifiers.update(wanted)
+    out = copy.copy(cds)
+    out.qualifiers = qualifiers
+    return out
 
-    if file_type == "name":
-        outfile.close()
 
 def swap_name_id(record):
     """

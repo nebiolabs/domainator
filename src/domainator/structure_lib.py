@@ -1101,8 +1101,7 @@ def build_protein_record(name: str, sequence: str, source_path: Optional[str] = 
                          threedi: Optional[str] = None) -> SeqRecord:
     """Build a protein SeqRecord for one structure chain.
 
-    id is set as well as name because utils.write_genbank calls swap_name_id before
-    writing, so the GenBank LOCUS ends up coming from id.
+    id is set as well as name because write_genbank writes the id in the LOCUS line.
     """
     description = f"structure={source_path}" if source_path else ""
     record = SeqRecord(seq=Seq(sequence), id=name, name=name, description=description)

@@ -20,7 +20,8 @@ from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.expr import BooleanEvaluator
 from domainator.model import DomainatorCDS, get_non_domainator_features, region_id, check_annotation_type, get_dist_to_end, get_hit_best_score, get_dist_to_start, get_focus_strand, get_hit_names, get_hit_scores, set_dist_to_end, set_dist_to_start, set_focus_strand, set_hit_best_score
-from domainator.locations import pad_location, slice_record_from_location, circular_dist, WHERE_CHOICES
+from domainator import DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.locations import FeatureIndex, pad_location, slice_record_from_location, circular_dist, WHERE_CHOICES
 from Bio.SeqFeature import FeatureLocation
 from domainator.partial import fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES
 from domainator.location_ops import circular_envelope, copy_location, overlap_size, stranded_end, stranded_start
@@ -191,7 +192,18 @@ def circular_focus_distances(slice_location, focus_location, contig_length:int, 
     dist_to_end = len(slice_location) - dist_to_start - len(focus_envelope)
     return dist_to_start, dist_to_end
 
-def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=None, kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, _from_domain_search=False):
+def neighborhood_feature_index(contig, cds_list) -> FeatureIndex:
+    """The features get_cds_neighborhood carries into a neighborhood: the contig's features other than
+    domain annotations, then the domain annotations and search hit of each CDS in cds_list."""
+    features = get_non_domainator_features(contig)
+    for cds in cds_list:
+        features.extend(cds.domain_features)
+        if cds.domain_search_feature is not None:
+            features.append(cds.domain_search_feature)
+    return FeatureIndex(features)
+
+
+def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=None, kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, _from_domain_search=False, _feature_index=None):
     """
         contig: a SeqRecord object
 
@@ -208,6 +220,8 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
         normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
 
         _from_domain_search: if True, then remove DOMAIN_SEARCH_BEST_HIT_NAME records from CDSs other than the focus CDS.
+
+        _feature_index: neighborhood_feature_index(contig, cds_list), to reuse when getting several neighborhoods of one contig.
     """
    
     focus_cds = cds_list[cds_idx]
@@ -295,14 +309,12 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
             if len(slice_location) == len(contig): # Account for the edge case where neighborhood spans the entire contig, which would make the neighborhood improperly centered.
                 slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), len(contig), len(contig), return_extension_sizes=True)
 
-    features = get_non_domainator_features(contig)
-    
+    if _feature_index is None:
+        _feature_index = neighborhood_feature_index(contig, cds_list)
+    features = _feature_index.near(slice_location)
+    if _from_domain_search: # only the focus CDS keeps its search hit
+        features = [f for f in features if f.type != DOMAIN_SEARCH_BEST_HIT_NAME or f is focus_cds.domain_search_feature]
     # Domain annotations cut by the edge of the region are dropped by slice_record_from_location.
-    for cds_i, cds in enumerate(cds_list):
-        features.extend(cds.domain_features)
-        if cds.domain_search_feature is not None:
-            if not _from_domain_search or cds_i == cds_idx:
-                features.append(cds.domain_search_feature)
     try:
         record = slice_record_from_location(contig, slice_location, features)
         if contig.annotations.get("topology") == "circular" and len(slice_location) == len(contig): # the whole circular contig, rotated
@@ -400,6 +412,7 @@ def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_
             hit_scores = get_hit_scores(rec)
             hit_names = get_hit_names(rec)
 
+        feature_index = None
         for focus_index, cds in enumerate(cdss):
             keep = False
             
@@ -443,7 +456,9 @@ def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_
                 keep = False
 
             if keep:
-                record, record_location = get_cds_neighborhood(rec, cdss, focus_index, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, _from_domain_search=_from_domain_search)
+                if feature_index is None:
+                    feature_index = neighborhood_feature_index(rec, cdss)
+                record, record_location = get_cds_neighborhood(rec, cdss, focus_index, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, _from_domain_search=_from_domain_search, _feature_index=feature_index)
                 if _from_domain_search:
                     set_hit_best_score(record, best_score)
                 

@@ -42,67 +42,69 @@ def clean_name_for_newick(name, quiet=False):
         warnings.warn(f"sequence name {name} contains characters that don't play well with newick, so for newick export, it has been changed to {out}")
   return out
 
-def get_tree_edges(node, parent_dist, leaf_names, parent_name=None, edges=None, internal_nodes=None) -> dict: #adapted from: https://stackoverflow.com/questions/28222179/save-dendrogram-to-newick-format
+def get_tree_edges(node, parent_dist, leaf_names):
     """
     Convert scipy.cluster.hierarchy.to_tree()-output to an edge list
 
     node: output of scipy.cluster.hierarchy.to_tree()
     parent_dist: output of scipy.cluster.hierarchy.to_tree().dist
     leaf_names: list of leaf names
-    parent_name: the name of the parent node
-    edges: leave empty, this variable will be populated by an empty dict, and is used in recursion.
-    
+
     returns:
-        dictionary of edges: [(start,end)]:dist
-        internal_nodes: names of internal nodes
+        dictionary of edges: [(start,end)]:dist, in depth-first order (left subtrees first)
+        internal_nodes: names of internal nodes, in the same order
     """
-    #TODO: make this not recursive
-
-    if edges is None:
-        edges = dict()
-        internal_nodes = list()
-
-    if node.is_leaf():
-        name = leaf_names[node.id]
-        edges[(parent_name,name)] = parent_dist - node.dist
-    else:
+    edges = dict()
+    internal_nodes = list()
+    stack = [(node, parent_dist, None)]
+    while stack:
+        node, parent_dist, parent_name = stack.pop()
+        if node.is_leaf():
+            if parent_name is not None: # a tree of one leaf has no edges
+                edges[(parent_name, leaf_names[node.id])] = parent_dist - node.dist
+            continue
         name = f"__INTERNAL_NODE_{node.id}__"
         internal_nodes.append(name)
         if parent_name is not None:
-            edges[(parent_name,name)] = parent_dist - node.dist
-        get_tree_edges(node.get_left(), node.dist, leaf_names, parent_name=name, edges=edges, internal_nodes=internal_nodes)
-        get_tree_edges(node.get_right(), node.dist, leaf_names, parent_name=name, edges=edges, internal_nodes=internal_nodes)
-        return edges, internal_nodes
+            edges[(parent_name, name)] = parent_dist - node.dist
+        stack.append((node.get_right(), node.dist, name))
+        stack.append((node.get_left(), node.dist, name))
+    return edges, internal_nodes
 
 
-def get_newick(node, parent_dist, leaf_names, newick='') -> str: #from: https://stackoverflow.com/questions/28222179/save-dendrogram-to-newick-format
-    """ 
+def get_newick(node, parent_dist, leaf_names) -> str:
+    """
     Convert scipy.cluster.hierarchy.to_tree()-output to Newick format.
 
     node: output of scipy.cluster.hierarchy.to_tree()
     parent_dist: output of scipy.cluster.hierarchy.to_tree().dist
     leaf_names: list of leaf names
-    newick: leave empty, this variable is used in recursion.
-    
-    returns:
-        tree in Newick format
-    """
-    #TODO: make this not recursive
 
+    returns:
+        tree in Newick format, each node's right subtree before its left one
+    """
     if len(leaf_names) == 1:
         return f"({leaf_names[0]}:0);" #if there's only one leaf, the tree is just a leaf
 
-    if node.is_leaf():
-        return "%s:%.6g%s" % (leaf_names[node.id], parent_dist - node.dist, newick)
-    else:
-        if len(newick) > 0:
-            newick = "):%.6g%s" % (parent_dist - node.dist, newick)
-        else:
-            newick = ");"
-        newick = get_newick(node.get_left(), node.dist, leaf_names, newick=newick)
-        newick = get_newick(node.get_right(), node.dist, leaf_names, newick=",%s" % (newick))
-        newick = "(%s" % (newick)
-        return newick
+    root = node
+    out = list()
+    stack = [(node, parent_dist)] # a node to write, or a string to write as is
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            out.append(item)
+            continue
+        node, parent_dist = item
+        branch = ":%.6g" % (parent_dist - node.dist)
+        if node.is_leaf():
+            out.append(leaf_names[node.id] + branch)
+            continue
+        out.append("(")
+        stack.append(")" if node is root else ")" + branch)
+        stack.append((node.get_left(), node.dist))
+        stack.append(",")
+        stack.append((node.get_right(), node.dist))
+    return "".join(out) + ";"
 
 
 DISTANCE_CONVERSIONS = ("auto", "precomputed", "score_dist")

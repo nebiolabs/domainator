@@ -1,6 +1,7 @@
 """Slicing records and padding locations, with their features carried over.
 """
 from typing import Dict, Iterable, List, Tuple, Union
+from collections import defaultdict
 import functools
 
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
@@ -323,6 +324,29 @@ def _truncate_cds_qualifiers(feature:SeqFeature, kept_intervals:List[Tuple[int,i
         qualifiers["translation"] = [translation[first_residue:last_residue]]
     return qualifiers
 
+class FeatureIndex:
+    """The features of a record, binned by position, for cutting many regions out of one record.
+
+    near(location) returns the features whose outer bounds touch the location, in their original
+    order: a superset of the ones slice_record_from_location keeps, found without scanning them all.
+    """
+    BIN_SIZE = 4096
+
+    def __init__(self, features: Iterable[SeqFeature]):
+        self.features = list(features)
+        self.bins = defaultdict(list)
+        for i, feature in enumerate(self.features):
+            for b in range(int(feature.location.start) // self.BIN_SIZE, int(feature.location.end) // self.BIN_SIZE + 1):
+                self.bins[b].append(i)
+
+    def near(self, location) -> List[SeqFeature]:
+        found = set()
+        for part in location.parts:
+            for b in range(int(part.start) // self.BIN_SIZE, int(part.end) // self.BIN_SIZE + 1):
+                found.update(self.bins.get(b, ()))
+        return [self.features[i] for i in sorted(found)]
+
+
 def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], features:Iterable[SeqFeature]=None, pad_upstream:int = 0, pad_downstream:int = 0, truncate_features=True) -> SeqRecord:
     """Extract a sub-record from supplied parent record using the location of the SeqFeature object.
         Output record will have the same id, name, description, dbxrefs, and annotations as the parent record.
@@ -404,7 +428,12 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
     is_protein = r.annotations.get("molecule_type") == "protein"
     # include features that overlap the location. Features cut by the edge of the location are truncated, and the cut ends get '<' or '>' markers.
     # Domain hit features that are cut are dropped, because their scores and coordinates describe the whole hit.
+    loc_bounds = [(int(part.start), int(part.end)) for part in location.parts]
     for f in features:
+        # Skip features nowhere near the location (the outer bounds of a feature cover all its parts).
+        f_outer_start, f_outer_end = int(f.location.start), int(f.location.end)
+        if not any(f_outer_start <= loc_end and f_outer_end >= loc_start for loc_start, loc_end in loc_bounds):
+            continue
         is_hit_feature = f.type == DOMAIN_FEATURE_NAME or f.type == DOMAIN_SEARCH_BEST_HIT_NAME
         f_parts = f.location.parts
         overlap = [set() for _ in range(len(f_parts))] # list of sets of indices of location parts that overlap with the feature part
@@ -413,9 +442,7 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
             part_found = False
             f_start = int(f_part.start)
             f_end = int(f_part.end)
-            for loc_part_index, loc_part in enumerate(location.parts):
-                loc_start = int(loc_part.start)
-                loc_end = int(loc_part.end)
+            for loc_part_index, (loc_start, loc_end) in enumerate(loc_bounds):
                 if ( # part is completely contained in loc_part
                     loc_start <= f_start
                     and loc_end >= f_end
