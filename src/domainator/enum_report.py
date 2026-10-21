@@ -4,13 +4,16 @@ Takes a genbank file which has been annotated using Domainate, write tabulated d
 
 """
 
+import contextlib
+import os
 import sys
 import warnings
 import argparse
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
 from domainator.utils import get_sources, DomainatorCDS, parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, TaxonomyData, get_fragment_status, cds_fragment_status, contig_has_fragment, fragment_status_allowed, PARTIAL_CHOICES, partial_help
-from domainator.select_by_cds import get_cds_neighborhood
-from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.find_features import search_motif
 from domainator.Bio.SeqUtils.ProtParam import ProteinAnalysis
 from domainator.Bio.SeqUtils import molecular_weight
@@ -828,21 +831,13 @@ def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None
     Yields:
         SeqRecord objects with '_source_filename' added to annotations
     """
-    from domainator.utils import open_if_is_name
-    
     for file in seqfiles:
-        # Determine the filename to store
-        filename = None
-        try:
-            # If it's a file path or Path object, convert to string
+        if file in STDIN_PATHS:
+            filename = "<stdin>"
+        elif isinstance(file, (str, os.PathLike)):
             filename = str(file)
-        except:
-            # If it's already a file handle, try to get the name
-            if hasattr(file, 'name'):
-                filename = file.name
-            else:
-                filename = "<stdin>"
-        
+        else:
+            filename = getattr(file, "name", "<stdin>")
         # Parse records from this file
         for rec in parse_seqfiles([file], contigs, filetype_override):
             rec.annotations["_source_filename"] = filename
@@ -947,18 +942,14 @@ def enum_report(records, by, analyses, tsv_out_handle, html_out_handle, column_n
     for writer in writers:
         writer.write_footer()
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
-                        help="Genbank filenames. If not supplied then reads from to stdin.")
+    add_input(parser, "Genbank filenames.")
 
-    parser.add_argument('-o', '--output', default=None, required=False, 
-                        help="The name of the output tsv file.")
-    parser.add_argument('--html', default=None, required=False,
-                        help="Write a table in html format to this file.")
-    parser.add_argument('--json', default=None, required=False,
-                        help="Write streaming NDJSON (one compact JSON object per record) to this file. Use '-' for stdout.")
+    add_output(parser, "tsv", "Write the table to this tab-separated file.", primary=True)
+    add_output(parser, "html", "Write the table in html format to this file.")
+    add_output(parser, "json", "Write streaming NDJSON (one compact JSON object per record) to this file.")
     parser.add_argument('--html_max_height', default=None, required=False, type=int,
                         help="Max height in pixels to set the html output to.")
 
@@ -1077,33 +1068,14 @@ def main(argv):
                         help="If supplied, then this list will be used instead of the default column names.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
 
-
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
    
-    ### Figure out what input and output files ####
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
-    
-    out = None
-    if params.output is not None:
-        out = open(params.output, "w")
-
-    html_out_handle = None
-    if params.html is not None:
-        html_out_handle = open(params.html, "w")
-
-    json_out_handle = None
-    if params.json is not None:
-        json_out_handle = sys.stdout if params.json == "-" else open(params.json, "w")
-
-    if out is None and html_out_handle is None and json_out_handle is None:
-        raise ValueError("You must supply at least one of --output, --html, or --json.")
+    check_outputs(parser, params, ["tsv_out", "html_out", "json_out"])
 
     #print(getattr(params, COLS_ARG_NAME))
     # figure out other parameters
@@ -1133,36 +1105,23 @@ def main(argv):
     
     # Choose the appropriate record parser
     if use_filename_tracking:
-        records_iter = parse_seqfiles_with_filenames(genbanks, target_contigs, filetype_override=filetype_override)
+        records_iter = parse_seqfiles_with_filenames(params.input, target_contigs)
     else:
-        records_iter = parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override)
+        records_iter = parse_seqfiles(params.input, target_contigs)
 
     # Run
-    enum_report(records_iter,
-                params.by,
-                analyses,
-                out,
-                html_out_handle,
-                params.column_names,
-                params.html_max_height,
-                ncbi_taxonomy=ncbi_taxonomy,
-                databases=databases,
-                json_out_handle=json_out_handle,
-                partial=params.partial,
-                )
-
-    if params.output is not None:
-        out.close()
-
-    if params.html is not None:
-        html_out_handle.close()
-
-    if json_out_handle is not None and json_out_handle is not sys.stdout:
-        json_out_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    with contextlib.ExitStack() as outputs:
+        def open_output(path):
+            return None if path is None else outputs.enter_context(output_file(path))
+        enum_report(records_iter,
+                    params.by,
+                    analyses,
+                    open_output(params.tsv_out),
+                    open_output(params.html_out),
+                    params.column_names,
+                    params.html_max_height,
+                    ncbi_taxonomy=ncbi_taxonomy,
+                    databases=databases,
+                    json_out_handle=open_output(params.json_out),
+                    partial=params.partial,
+                    )

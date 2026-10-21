@@ -8,13 +8,13 @@ Handling of nucleic acids is less stable and will may change in future updates, 
 can write a fasta or a genbank file
 """
 
-#TODO: better filtering of output records when input is nucleic acids. Use functions from select_by_cds.py to extract CDSs first, then extract the domains from the individual CDSs.
+#TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
 
-import sys
-from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.Bio import SeqIO
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, write_genbank, slice_record_from_location, region_id, pad_location, get_cds_unique_name, cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
-from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id, pad_location, get_cds_unique_name, cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation
 
 def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pad_down=0, combine=False, keep_direction=False, keep_name=False, search_hits=False, databases=None, splice=False, partial="include"):
@@ -30,7 +30,7 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
         combine: if True, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. Will raise an error if the contig is circular, because the envelope cannot be determined.
         keep_direction: by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything.
         keep_name: by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
-        search_hits: if True, then only select domains that are marked as search hits (from domain_search.py).
+        search_hits: if True, then only select domains that are marked as search hits (from domainator domain_search).
         databases: if not None, then only select domains from these databases. default: all databases.
         splice: if True, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together, in the order they are read on the strand of the domain with the lowest start coordinate.
         partial: select domains by the fragment status of the CDS (or protein record) they are on: "include" (default, all), "exclude" (skip domains on fragments), or "only" (only domains on fragments).
@@ -41,8 +41,6 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
 
     if splice and combine:
         raise ValueError("Cannot use --splice and --combine at the same time.")
-
-
 
     databases = set(databases) if databases is not None else None
     #TODO: ensure naming consistency with select_by_cds.
@@ -164,17 +162,12 @@ def extract_domains(records, evalue=None, score=None, domains=None, pad_up=0, pa
             for out_rec in contig_sections:
                 yield out_rec 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', nargs='+', required=False,
-                        default=None,
-                        help="Genbank filenames. If not supplied, reads from stdin.")
+    add_input(parser, 'Genbank filenames.')
 
-
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="the name of the output file. If not supplied, writes to stdout.")
-
+    add_seq_outputs(parser)
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -182,10 +175,9 @@ def main(argv):
     parser.add_argument('--contigs_file', default=None, 
                         help="only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
-
     parser.add_argument('-e', '--evalue', default=None, type=float,
                         help="the evalue cutoff (max) for domain annotations to be extracted")
-    parser.add_argument("--score", type=float, default=None, required=False, 
+    parser.add_argument("--min_score", type=float, default=None, required=False, 
                         help="the score cutoff (min) for domain annotations to be extracted")
 
     parser.add_argument('--domains', type=str, default=None, nargs='+',
@@ -196,13 +188,12 @@ def main(argv):
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Domain databases to use for domain extraction. default: all databases.")
 
-    parser.add_argument('--search_hits', action='store_true', default=False, help="Select domains that are marked as search hits (from domain_search.py).")
+    add_annotation_type(parser, help="Which annotations to extract.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which domains to extract, by the CDS or protein they are on") + " Contig-level nucleotide hits are never on fragments.")
 
-    #parser.add_argument("--padding", type=int, default=0, help="extract this many additional residues (or bases) to each side of the hit region.")
-    parser.add_argument("--pad_up", type=int, default=0, help="extract this many additional residues (or bases) upstream of the hit region.")
-    
-    parser.add_argument("--pad_down", type=int, default=0, help="extract this many additional residues (or bases) downstream of the hit region.")
+    parser.add_argument("--extend_range", type=int, default=None, help="extract this many additional residues (or bases) on each side of the hit region. Sets the default of --extend_up and --extend_down.")
+    parser.add_argument("--extend_up", type=int, default=None, help="extract this many additional residues (or bases) upstream of the hit region. Default: --extend_range, or 0.")
+    parser.add_argument("--extend_down", type=int, default=None, help="extract this many additional residues (or bases) downstream of the hit region. Default: --extend_range, or 0.")
 
     parser.add_argument("--combine", action="store_true", default=False, help="if set, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. "
                         "By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous. Cannot be used with --splice.")
@@ -216,27 +207,22 @@ def main(argv):
     parser.add_argument('--keep_name', action='store_true', default=False,
                        help="by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.")
 
-    parser.add_argument('--fasta_out', action='store_true', default=False,
-                        help="makes output a fasta file when activated")
-
     parser.add_argument('--config', action=ActionConfigFile)
-        
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
    
     ### Figure out what input and output files ####
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
+    genbanks = params.input
 
-    if params.output is None:
-        out = sys.stdout
-    else:
-        out = open(params.output, "w")
-
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    extend_default = params.extend_range if params.extend_range is not None else 0
+    extend_up = params.extend_up if params.extend_up is not None else extend_default
+    extend_down = params.extend_down if params.extend_down is not None else extend_default
 
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)
@@ -245,31 +231,19 @@ def main(argv):
     
     # Run
     extracted_domains_iterator = extract_domains(
-        parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override), 
+        parse_seqfiles(genbanks, target_contigs), 
         params.evalue, 
-        params.score, 
+        params.min_score, 
         selected_domains, 
-        params.pad_up,
-        params.pad_down,
+        extend_up,
+        extend_down,
         params.combine, 
         params.keep_direction, 
         params.keep_name,
-        search_hits=params.search_hits,
+        search_hits=params.annotation_type == "domain_search",
         databases=params.databases,
         splice=params.splice,
         partial=params.partial,
         )
 
-    if params.fasta_out:
-        SeqIO.write(extracted_domains_iterator, out, "fasta")
-    else:
-        write_genbank(extracted_domains_iterator, out)
-
-    if params.output is not None:
-        out.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    write_seq_outputs(extracted_domains_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

@@ -31,7 +31,7 @@ def test_extract_unannotated_lb_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        extract_unannotated.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--lb", "10"])
+        extract_unannotated.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--min_length", "10"])
         seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 3
         [str(seq) for seq in seqs] == ["FPALSPDSVDNRITASQEEFVETQKGHPSGWPSA*", "MDADLYGYKWARDNVGQSGATIYRLYGKPDAPELFLKHGKGSVANDV", "DMNKLQFHLMLDEFF*"]

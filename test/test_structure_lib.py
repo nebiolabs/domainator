@@ -457,3 +457,31 @@ def test_iter_flat_db_streams_without_slurping(aligner, shared_datadir, tmp_path
     assert len(entries) == 9
     assert all(sequence and "\x00" not in sequence and "\n" not in sequence
                for sequence in entries.values())
+
+
+def _parse_structure_search(argv):
+    from domainator import structure_search
+    return structure_search.build_parser().parse_args(["-i", "db", "-r", "refs", "-o", "out.gb"] + argv)
+
+
+def test_backend_args_are_one_shell_split_string():
+    params = _parse_structure_search(["--foldseek_args=--prefilter-mode 2 --exhaustive-search"])
+    assert params.foldseek_args == "--prefilter-mode 2 --exhaustive-search"
+    aligner = structure_lib.FoldseekAligner.__new__(structure_lib.FoldseekAligner)
+    aligner.extra_args = ["--prefilter-mode", "2", "--exhaustive-search"]
+    assert aligner._append_extra_args(["foldseek", "search", "-e", "10"]) == [
+        "foldseek", "search", "-e", "10", "--prefilter-mode", "2", "--exhaustive-search"]
+
+
+def test_backend_args_refuse_options_domainator_sets():
+    aligner = structure_lib.FoldseekAligner.__new__(structure_lib.FoldseekAligner)
+    aligner.extra_args = ["-e", "1", "--prefilter-mode", "2"]
+    with pytest.raises(ValueError, match="--foldseek_args cannot set -e"):
+        aligner._append_extra_args(["foldseek", "search", "-e", "10"])
+
+
+def test_backend_args_must_match_the_selected_backend():
+    params = _parse_structure_search(["--algorithm", "foldseek", "--reseek_args=-verysensitive"])
+    with pytest.raises(ValueError, match="--reseek_args was given, but the search backend is foldseek"):
+        structure_lib.build_aligner(params)
+

@@ -32,7 +32,7 @@ def test_extract_peptides_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/peptides.gb"
-        extract_peptides.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "pDONR201_3", "--cdss", "pDONR201_2"])
+        extract_peptides.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "pDONR201_3", "--cds", "pDONR201_2"])
         
         #compare_seqfiles(out, shared_datadir / "extract_peptides_test_1_out.gb")
         recs = list(SeqIO.parse(out, "genbank"))
@@ -78,7 +78,7 @@ def test_domain_search_hit_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        extract_peptides.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--search_hits"])
+        extract_peptides.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--annotation_type", "domain_search"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         new_file[0].name = "pDONR201_1"
@@ -332,3 +332,10 @@ def test_extract_peptides_partial(shared_datadir, partial, expected):
         out = output_dir + "/peptides.gb"
         extract_peptides.main(["-i", str(shared_datadir / _helpers.PARTIAL_FIXTURE), "-o", out, "--partial", partial])
         assert {r.name for r in SeqIO.parse(out, "genbank")} == expected
+
+
+def test_extract_peptides_evalue_is_numeric(shared_datadir, tmp_path):
+    out = str(tmp_path / "out.gb")
+    extract_peptides.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "-e", "1e-10"])
+    evalues = [float(f.qualifiers["evalue"][0]) for rec in parse_seqfiles([out]) for f in rec.features if f.type == DOMAIN_FEATURE_NAME]
+    assert evalues and max(evalues) < 1e-10

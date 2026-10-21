@@ -57,11 +57,11 @@ pytest test
 exit # or ctrl + d 
 ```
 
-# Using ESM-2 3B 3Di with domainate.py
+# Using ESM-2 3B 3Di with domainator domainate
 
 In this workflow, we first create a reference Foldseek 3Di database, and then use domainator to annotate contigs from that database
 
-(Note that domain_search.py with ESM-2 3B 3Di is not supported. To search a large structure database with a small number of queries, use [structure_search.py](structure_search.md).)
+(Note that domainator domain_search with ESM-2 3B 3Di is not supported. To search a large structure database with a small number of queries, use [domainator structure_search](structure_search.md).)
 
 ## conda
 ```bash
@@ -73,8 +73,8 @@ predict_from_ESM2_to_3Di.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o F
 # convert the amino acid and 3di fasta files into a foldseek database
 fasta2foldseek.py --aa domainator/test/data/foldseek/FeSOD_20.fasta --tdi FeSOD_20.3di.fasta -o FeSOD
 
-# run domainate.py with the foldseek reference database. In this example, our query is the same file we used to make the database, but it could be any fasta or genbank file.
-domainate.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3Di_weights ESM-2_3B_3Di.pt --esm2_3Di_device cuda:0
+# run domainator domainate with the foldseek reference database. In this example, our query is the same file we used to make the database, but it could be any fasta or genbank file.
+domainator domainate -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3di_weights ESM-2_3B_3Di.pt --esm2_3di_device cuda:0
 ```
 
 ## Apptainer/Singularity
@@ -87,7 +87,7 @@ apptainer exec --nv domainator/domainator_esmologs.sif predict_from_ESM2_to_3Di.
 # convert the amino acid and 3di fasta files into a foldseek database
 apptainer exec domainator/domainator_esmologs.sif fasta2foldseek.py --aa domainator/test/data/foldseek/FeSOD_20.fasta --tdi FeSOD_20.3di.fasta -o FeSOD
 
-# run domainate.py with the foldseek reference database. In this example, our query is the same file we used to make the database, but it could be any fasta or genbank file.
-apptainer exec --nv domainator/domainator_esmologs.sif domainate.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3Di_weights ESM-2_3B_3Di.pt --esm2_3Di_device cuda:0
+# run domainator domainate with the foldseek reference database. In this example, our query is the same file we used to make the database, but it could be any fasta or genbank file.
+apptainer exec --nv domainator/domainator_esmologs.sif domainator domainate -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_3Di.gb --foldseek FeSOD --esm2_3di_weights ESM-2_3B_3Di.pt --esm2_3di_device cuda:0
 ```
 

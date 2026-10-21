@@ -5,11 +5,11 @@ Build a sequence similarity network and do analysis related to that.
 
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 import os
-import sys
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix, MaxTree, mst_edge_index_dict
 from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_edge_index_dict
@@ -18,7 +18,6 @@ import scipy.sparse
 from scipy.sparse.csgraph import connected_components
 import pandas as pd
 from pathlib import Path
-from domainator import __version__, RawAndDefaultsFormatter
 from typing import List, Union, Dict
 import numpy as np
 from domainator.utils import get_palette, sort_palette_values, list_and_file_to_dict_keys
@@ -315,7 +314,7 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
                 color_table=color_table,
                 max_output_bytes=max_output_bytes,
                 output_description=f"XGMML network output '{xgmml}'",
-                mitigation_options=["--lb", "--mst", "--knn", "--subset"],
+                mitigation_options=["--threshold", "--mst", "--knn", "--subset"],
             )
             os.replace(temp_xgmml_path, xgmml)
             temp_xgmml_path = None
@@ -340,15 +339,13 @@ def build_ssn(matrix: DataMatrix, lb:float=0, metadata_files:List[Union[str, Pat
                 out.write(f"{value}\t{color_table[value]}\n")
 
 
-def main(argv):
-    parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
     
-    input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument('-i', '--input', type=str, required=False,
-                        help="pairwise similarity (or distance) scores. In the network, nodes will be derived from row and column names, and edges will be added between pairs of rows and columns meeting the threshold criteria. Format can be tab-separated text, or Domainator hdf5.")
+    add_input(parser, "pairwise similarity (or distance) scores. In the network, nodes will be derived from row and column names, and edges will be added between pairs of rows and columns meeting the threshold criteria. Format can be tab-separated text, or Domainator hdf5.", multiple=False, stdin=False)
 
-    parser.add_argument('--lb', type=float, default=0, required=False,
-                        help="exclude all edges with weights less than or equal to this value. This should be >= 0.")
+    parser.add_argument('--threshold', type=float, default=0, required=False,
+                        help="keep only edges with weights strictly above this value. This should be >= 0.")
 
     # parser.add_argument('--metric', type=str, default="score", required=False,
     #                     help="what to call the metric in the edge annotations") #TODO: reactivate this? or add "value" annotation in DataMatrix
@@ -368,17 +365,16 @@ def main(argv):
     parser.add_argument("--mark_mst", action="store_true", default=False, help=f"Give every edge a boolean '{MST_COLUMN}' property saying whether it belongs to the maximum spanning tree. Useful for styling or filtering the MST backbone within a larger network in Cytoscape.")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
 
-    parser.add_argument('--xgmml', type=str, required=True, default=None, #TODO: what other kinds of output might be useful?
-                        help="write a cytoscape xgmml file of the projection.")
+    add_output(parser, "xgmml", "Write the network to this Cytoscape xgmml file.", primary=True, required=True, stdout=False)
 
     parser.add_argument('--cluster', required=False, default=False, action="store_true",
                         help="Creates a new metadata column called 'SSN_cluster', replacing that column from the metadata file if already present. Finds clusters by following connectivity, assigns each cluster a distinct integer, based on size rank, bigger clusters get smaller numbers.")
 
-    parser.add_argument('--cluster_tsv', required=False, type=str, default=None,
-                        help="Path to write a tsv file will mapping each sequence to its cluster. If set, then --cluster is automatically activated. If --no_cluster_header not set, then the file will have header contig cluster.")
+    parser.add_argument('--cluster_tsv_out', required=False, type=str, default=None,
+                        help="Path to write a tsv file mapping each sequence to its cluster. If set, then --cluster is automatically activated. If --no_cluster_header is not set, then the file will have the header: contig cluster.")
 
     parser.add_argument('--no_cluster_header', action="store_true", required=False, default=False,
-                        help="If set, then the tsv file will not have a header. Only relevant if --cluster_tsv is set.")
+                        help="If set, then the tsv file will not have a header. Only relevant if --cluster_tsv_out is set.")
 
     add_max_output_gb_argument(parser)
 
@@ -393,9 +389,13 @@ def main(argv):
     # TODO: 
     # parser.add_argument('--gradient', type=str, required=False, default=None,
     #                     help="Color nodes based on a gradient instead of discrete value mapping.")
+    return parser
 
 
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    check_outputs(parser, params, ["xgmml_out"])
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
 
@@ -404,7 +404,7 @@ def main(argv):
     cluster = False
     if params.cluster:
         cluster=True
-    if params.cluster_tsv:
+    if params.cluster_tsv_out:
         cluster=True
 
     color_table = None
@@ -416,19 +416,12 @@ def main(argv):
     # Run
     # params.metric,
     try:
-        # The MST paths need the unthresholded matrix; --lb is applied later by the tree
+        # The MST paths need the unthresholded matrix; --threshold is applied later by the tree
         # walk. Pure --knn and the default path can prune on load and save the memory.
-        load_lower_bound = None if params.mst else params.lb
-        build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.lb, params.metadata, params.color_by, color_table,
-                  params.xgmml, cluster, params.cluster_tsv, params.no_cluster_header, params.color_table_out,
+        load_lower_bound = None if params.mst else params.threshold
+        build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.threshold, params.metadata, params.color_by, color_table,
+                  params.xgmml_out, cluster, params.cluster_tsv_out, params.no_cluster_header, params.color_table_out,
                   params.mst, params.knn, subset_labels, max_output_bytes=max_output_bytes,
                   max_color_groups=params.max_color_groups, mark_mst=params.mark_mst)
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-    
-if __name__ == '__main__':
-    main(sys.argv[1:])

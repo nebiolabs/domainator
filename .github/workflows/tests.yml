@@ -1,0 +1,55 @@
+name: Tests
+
+# Runs the test suite on every push and pull request.
+#
+# - `pip` jobs install only the Python dependencies; tests that need an external
+#   program (diamond, cd-hit, usearch, foldseek, cmbuild, ...) skip themselves via the
+#   `requires_binary` marker or their own skipif checks.
+# - The `conda` job also installs those programs from bioconda, so the
+#   binary-dependent tests run too.
+# Tests that download from the internet are deselected (`-m "not network"`).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pip:
+    name: pip / ${{ matrix.os }} / py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # GitHub runners ship a Rust toolchain, so the optional native extension builds.
+      - run: python -m pip install -e ".[test]"
+      - run: python -c "from domainator import _gbfast"
+      - run: python -m pytest -m "not network" -ra
+
+  conda:
+    name: conda (with external programs)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: domainator
+          create-args: >-
+            -c conda-forge -c bioconda
+            python=3.13 pip rust
+            cd-hit diamond foldseek usearch infernal ncbi-datasets-cli
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -m "not network" -ra

@@ -39,7 +39,7 @@ def test_select_by_cds_1(shared_datadir):
 ])
 def test_select_by_cds_cds_range_keep_direction_1(cds_range, expected_cds_count, capsys, shared_datadir):
     
-    select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--domains", "CAT", "--cds_range", str(cds_range), "--keep_direction"])
+    select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--domains", "CAT", "--cds_range", str(cds_range), "--keep_direction", "-o", "-"])
     captured = capsys.readouterr()
     # with open(f"test_out/select_by_cds{cds_range}_{expected_cds_count}.gb","w") as outfile:
     #     print(captured.out, file=outfile)
@@ -64,7 +64,7 @@ def test_select_by_cds_cds_range_keep_direction_1(cds_range, expected_cds_count,
 ])
 def test_select_by_cds_cds_range_1(cds_range, expected_cds_count, capsys, shared_datadir):
     
-    select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--domains", "CAT", "--cds_range", str(cds_range)])
+    select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--domains", "CAT", "--cds_range", str(cds_range), "-o", "-"])
     captured = capsys.readouterr()
     # with open(f"test_out/select_by_cds{cds_range}_{expected_cds_count}.gb","w") as outfile:
     #     print(captured.out, file=outfile)
@@ -89,7 +89,7 @@ def test_select_by_cds_cds_range_1(cds_range, expected_cds_count, capsys, shared
 ])
 def test_select_by_cds_kb_range_keep_direction_1(kb_range, expected_cds_count, expected_size, capsys, shared_datadir):
     
-    select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--domains", "CAT", "--kb_range", str(kb_range), "--keep_direction"])
+    select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--domains", "CAT", "--kb_range", str(kb_range), "--keep_direction", "-o", "-"])
     captured = capsys.readouterr()
     # with open(f"test_out/select_by_cds{kb_range}_{expected_cds_count}.gb","w") as outfile:
     #     print(captured.out, file=outfile)
@@ -162,7 +162,7 @@ def test_select_by_cds_pad_where(where, keep_direction, shared_datadir):
     # CAT and CcdB CDSs have different lengths, so start, end, and center alignments give different paddings.
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/extraction.gb"
-        args = ["-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), "-o", out, "--domains", "CAT", "CcdB", "--pad", "--pad_where", where]
+        args = ["-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), "-o", out, "--domains", "CAT", "CcdB", "--pad", "--anchor", where]
         if keep_direction:
             args.append("--keep_direction")
         select_by_cds.main(args)
@@ -186,7 +186,7 @@ def test_select_by_cds_pad_where_start_is_default(shared_datadir):
         out_start = output_dir + "/start.gb"
         args = ["-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), "--cds_range", "1", "--domains", "CAT", "CcdB", "--pad"]
         select_by_cds.main(args + ["-o", out_default])
-        select_by_cds.main(args + ["-o", out_start, "--pad_where", "start"])
+        select_by_cds.main(args + ["-o", out_start, "--anchor", "start"])
         compare_seqfiles(out_default, out_start)
 
 def _padding_record(id, dist_to_start, focus_length, dist_to_end, focus_strand):
@@ -251,7 +251,7 @@ def test_select_by_cds_domain_expr_config_file(shared_datadir):
         out = output_dir + "/extraction.gb"
         config_file = output_dir + "/config.yml"
         with open(config_file, "w") as fh:
-            subprocess.run([sys.executable, select_by_cds.__file__, "-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), '--cds_range', '1', "-o", out, "--domain_expr", "CAT", "--pad", '--print_config'], stdout=fh, stderr=fh, check=True)
+            subprocess.run([sys.executable, "-m", "domainator", "select_by_cds", "-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), '--cds_range', '1', "-o", out, "--domain_expr", "CAT", "--pad", '--print_config'], stdout=fh, stderr=fh, check=True)
         select_by_cds.main(["--config", config_file])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 4
@@ -372,7 +372,7 @@ def test_domain_search_hit_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        select_by_cds.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--search_hits"])
+        select_by_cds.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--annotation_type", "domain_search"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         cdss = DomainatorCDS.list_from_contig(new_file[0])
@@ -390,7 +390,7 @@ def test_select_by_cds_include_nucleic_acids_flag(shared_datadir):
             "--input", str(shared_datadir / "simple_dna_target.fna"),
             "--fasta_type", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
-            "--output", annotated,
+            "--genbank_out", annotated,
             "--evalue", "0.1",
         ])
 
@@ -421,7 +421,7 @@ def test_select_by_cds_search_hits_selects_nucleic_acid_annotations(shared_datad
             "--evalue", "0.1",
         ])
 
-        select_by_cds.main(["-i", annotated, "-o", out, "--search_hits"])
+        select_by_cds.main(["-i", annotated, "-o", out, "--annotation_type", "domain_search"])
         records = list(SeqIO.parse(out, "genbank"))
 
         assert len(records) == 1
@@ -516,3 +516,12 @@ def test_select_by_cds_partial(shared_datadir):
         out = output_dir + "/invert.gb"
         select_by_cds.main(["-i", str(shared_datadir / _helpers.PARTIAL_FIXTURE), "-o", out, "--partial", "only", "--cds", _helpers.COMPLETE_CDS_LOCUS_TAG, "--invert"])
         assert [str(f.location) for r in parse_seqfiles([out]) for f in r.features if f.type == "CDS"] == ["[<0:1886](+)"]
+
+
+def test_select_by_cds_writes_compressed_output(shared_datadir, tmp_path):
+    import gzip
+    plain, compressed = str(tmp_path / "out.gb"), str(tmp_path / "out.gb.gz")
+    for out in (plain, compressed):
+        select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains", "CAT"])
+    with gzip.open(compressed, "rt") as handle:
+        assert handle.read() == open(plain).read()

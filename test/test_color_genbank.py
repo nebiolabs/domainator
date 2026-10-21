@@ -10,7 +10,7 @@ def test_color_genbank_1(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--mode", "domains_and_cdss"])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--target", "domains_and_cdss"])
         assert Path(out).is_file()
         cds_colors = {"1264_-1_959": "#FF0000", "2916_1_3677": "#00FF00", "2265_-1_1606": "#0000FF"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF"}
@@ -33,7 +33,7 @@ def test_color_genbank_2(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--mode", "domains_and_cdss"])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--target", "domains_and_cdss"])
         assert Path(out).is_file()
         cds_colors = {"1264_-1_959": "#3BA3EC", "2916_1_3677": "#B287F4", "2265_-1_1606": "#F77468"}
         domain_colors = {"CcdB": "#3BA3EC", "APH": "#B287F4", "CAT": "#F77468"}
@@ -55,7 +55,7 @@ def test_color_genbank_3(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "pDONR_201_domainator_domain_reorder.gb"), "-o", out, "--mode", "domains_and_cdss", "--color_table", str(shared_datadir / "color_specification.tsv")])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR_201_domainator_domain_reorder.gb"), "-o", out, "--target", "domains_and_cdss", "--color_table", str(shared_datadir / "color_specification.tsv")])
         assert Path(out).is_file()
         cds_colors = {"1605_-1_2265": "#0000FF"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF", "Condensation":	"#FF00FF", "2-oxoacid_dh":	"#FFFFFF"}
@@ -77,7 +77,7 @@ def test_color_genbank_pseudo_1(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_pseudo.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--mode", "domains_and_cdss"])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_pseudo.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--target", "domains_and_cdss"])
         assert Path(out).is_file()
         # that's the only assertion we need because we're just testing that it doesn't crash.
 
@@ -87,7 +87,7 @@ def test_color_genbank_domain_search_1(shared_datadir):
         #output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "color_domain_search_test.gb"), "-o", out, "--mode", "domains_and_cdss", "--color_table", str(shared_datadir / "color_specification.tsv"), "--search_hit_color", "#555500"])
+        color_genbank.main(["-i", str(shared_datadir / "color_domain_search_test.gb"), "-o", out, "--target", "domains_and_cdss", "--color_table", str(shared_datadir / "color_specification.tsv"), "--search_hit_color", "#555500"])
         assert Path(out).is_file()
         cds_colors = {"1605_-1_2265": "#0000FF", "2265_-1_1606": "#555500", "1264_-1_959":"#555500"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF", "Condensation":	"#FF00FF", "2-oxoacid_dh":	"#FFFFFF"}
@@ -108,7 +108,7 @@ def test_color_genbank_clear_1(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "MT_nbs.gb"), "-o", out, "--clear", "--color_domains"])
+        color_genbank.main(["-i", str(shared_datadir / "MT_nbs.gb"), "-o", out, "--clear", "--target", "domains"])
         assert Path(out).is_file()
         for rec in utils.parse_seqfiles([out]):
             for feature in rec.features:
@@ -123,7 +123,7 @@ def test_color_genbank_color_table_out_1(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         color_table_out = output_dir + "/color_table.tsv"
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--mode", "domains_and_cdss", "--color_table_out", color_table_out])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--target", "domains_and_cdss", "--color_table_out", color_table_out])
         assert Path(out).is_file()
         color_table_dict = {}
         with open(color_table_out, "r") as f:
@@ -139,7 +139,7 @@ def test_color_genbank_color_table_out_2(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         color_table_out = output_dir + "/color_table.tsv"
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--mode", "domains_and_cdss", "--color_table_out", color_table_out])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--target", "domains_and_cdss", "--color_table_out", color_table_out])
         assert Path(out).is_file()
         color_table_dict = {}
         
@@ -159,7 +159,7 @@ def test_color_genbank_databases_1(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/tmp_colored_genbank.gb"
         
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--color_domains", "--databases", "pdonr_hmms_1"])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--color_table", str(shared_datadir / "color_specification.tsv"), "--target", "domains", "--databases", "pdonr_hmms_1"])
         assert Path(out).is_file()
         cds_colors = {"1264_-1_959": "#FF0000", "2916_1_3677": "#00FF00", "2265_-1_1606": "#0000FF"}
         domain_colors = {"CcdB": "#FF0000", "APH": "#00FF00", "CAT": "#0000FF"}
@@ -175,11 +175,11 @@ def test_color_genbank_databases_1(shared_datadir):
                         assert not ('Color' in feature.qualifiers)
         assert seen == 6
 
-def test_color_genbank_legacy_color_both_compatibility(shared_datadir):
+def test_color_genbank_mode_domains_and_cdss(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/tmp_colored_genbank.gb"
 
-        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--color_both"])
+        color_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--target", "domains_and_cdss"])
         assert Path(out).is_file()
 
         saw_domain_color = False
@@ -202,7 +202,7 @@ def test_color_genbank_domain_database_1(shared_datadir):
         color_genbank.main([
             "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"),
             "-o", out,
-            "--mode", "domains",
+            "--target", "domains",
             "--domain_database",
             "--color_table_out", color_table_out,
         ])

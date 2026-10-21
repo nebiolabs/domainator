@@ -8,7 +8,7 @@ def test_contig_stats_1(shared_datadir):
         # output_dir = "test_out"
         out_html = output_dir + "/contig_stats_test.html"
         out_txt = output_dir + "/contig_stats_test.txt"
-        summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "-o", out_txt, "--html", out_html, "--domains", "Sod_Fe_C", "Sod_Fe_N" ])
+        summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "-o", out_txt, "--html_out", out_html, "--domains", "Sod_Fe_C", "Sod_Fe_N" ])
         for fh in (out_html, out_txt):
             f_txt = open(fh).read()
             assert "Domain Stats" in f_txt
@@ -25,7 +25,7 @@ def test_contig_stats_empty_input(shared_datadir):
         # output_dir = "test_out"
         out_html = output_dir + "/contig_stats_test.html"
         out_txt = output_dir + "/contig_stats_test.txt"
-        summary_report.main(["-i", str(shared_datadir / "empty.gb"), "-o", out_txt, "--html", out_html, ])
+        summary_report.main(["-i", str(shared_datadir / "empty.gb"), "-o", out_txt, "--html_out", out_html, ])
         for fh in (out_html, out_txt):
             f_txt = open(fh).read()
             assert "LOCUS" not in f_txt
@@ -41,7 +41,7 @@ def test_contig_stats_taxonomy_1(shared_datadir):
         #output_dir = "test_out"
         out_html = output_dir + "/contig_stats_test.html"
         out_txt = output_dir + "/contig_stats_test.txt"
-        summary_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out_txt, "--html", out_html, "--taxonomy", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp")])
+        summary_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out_txt, "--html_out", out_html, "--taxonomy", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp")])
         txt = open(out_txt).read()
         html = open(out_html).read()
 
@@ -62,7 +62,7 @@ def test_summary_report_database_1(shared_datadir):
         # output_dir = "test_out"
         out_html = output_dir + "/contig_stats_test.html"
         out_txt = output_dir + "/contig_stats_test.txt"
-        summary_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out_txt, "--html", out_html, "--databases", "pdonr_hmms_1"])
+        summary_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out_txt, "--html_out", out_html, "--databases", "pdonr_hmms_1"])
         for fh in (out_html, out_txt):
             f_txt = open(fh).read()
             assert "pdonr_hmms_1" in f_txt
@@ -79,14 +79,14 @@ def test_summary_report_nucleotide_annotations(shared_datadir):
             "--input", str(shared_datadir / "simple_dna_target.fna"),
             "--fasta_type", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
-            "--output", annotated,
+            "-o", annotated,
             "--evalue", "0.1",
         ])
 
         summary_report.main([
             "-i", annotated,
             "-o", out_txt,
-            "--html", out_html,
+            "--html_out", out_html,
         ])
 
         for path in (out_txt, out_html):
@@ -107,7 +107,7 @@ def test_summary_report_partial(shared_datadir, partial, expected_cdss, expected
         annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
         out = output_dir + "/summary.txt"
         table = output_dir + "/domains.tsv"
-        summary_report.main(["-i", annotated, "-o", out, "--domains_table", table, "--partial", partial])
+        summary_report.main(["-i", annotated, "-o", out, "--domains_tsv_out", table, "--partial", partial])
         with open(out) as handle:
             text = handle.read()
         assert f"CDSs: {expected_cdss}\n" in text
@@ -123,7 +123,7 @@ def test_summary_report_counts_protein_fragments(shared_datadir):
         fasta = output_dir + "/fragments.fasta"
         _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
         out = output_dir + "/summary.json"
-        summary_report.main(["-i", fasta, "--json", out])
+        summary_report.main(["-i", fasta, "--json_out", out])
         import json
         with open(out) as handle:
             stats = json.load(handle)["contig_stats"]
@@ -140,10 +140,10 @@ def test_co_occurence_count_is_unaffected_by_focus_domains(shared_datadir, tmp_p
     gb = str(shared_datadir / "FeSOD_20_pfam.gb")
     plain, focused = tmp_path / "plain.tsv", tmp_path / "focused.tsv"
     plain_fraction, focused_fraction = tmp_path / "plain_fraction.tsv", tmp_path / "focused_fraction.tsv"
-    summary_report.main(["-i", gb, "-o", str(tmp_path / "plain.txt"), "--co_occurence_count", str(plain),
-                         "--co_occurence_fraction", str(plain_fraction)])
-    summary_report.main(["-i", gb, "-o", str(tmp_path / "focused.txt"), "--co_occurence_count", str(focused),
-                         "--co_occurence_fraction", str(focused_fraction), "--domains", "Sod_Fe_C", "Sod_Fe_N"])
+    summary_report.main(["-i", gb, "-o", str(tmp_path / "plain.txt"), "--co_occurrence_count_out", str(plain),
+                         "--co_occurrence_fraction_out", str(plain_fraction)])
+    summary_report.main(["-i", gb, "-o", str(tmp_path / "focused.txt"), "--co_occurrence_count_out", str(focused),
+                         "--co_occurrence_fraction_out", str(focused_fraction), "--domains", "Sod_Fe_C", "Sod_Fe_N"])
 
     counts = DataMatrix.from_file(plain)
     focused_counts = DataMatrix.from_file(focused)
@@ -151,3 +151,10 @@ def test_co_occurence_count_is_unaffected_by_focus_domains(shared_datadir, tmp_p
     np.testing.assert_array_equal(focused_counts.toarray(), counts.toarray())
     assert counts.symmetric
     np.testing.assert_array_equal(DataMatrix.from_file(focused_fraction).toarray(), DataMatrix.from_file(plain_fraction).toarray())
+
+
+def test_summary_report_output_dash_writes_stdout(shared_datadir, tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "-o", "-"])
+    assert "Sod_Fe" in capsys.readouterr().out
+    assert not (tmp_path / "-").exists()

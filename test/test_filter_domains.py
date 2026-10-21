@@ -126,7 +126,8 @@ def test_main_1(tmpdir):
     test_args = [
         "--input", str(input_file),
         "--evalue", "0.05",
-        "--max_overlap", "1.0"
+        "--max_overlap", "1.0",
+        "-o", "-",
     ]
 
     # Call main function
@@ -145,7 +146,7 @@ def test_filter_domainator_1(input_files,overlap,evalue,input_type,database,shar
     if input_type == "gb":
         arguments = arguments + ["-i"] + input_file_paths
     if database is not None:
-        arguments = arguments + ["--databases_filter", database]
+        arguments = arguments + ["--databases", database]
     with tempfile.TemporaryDirectory() as output_dir:
         outfile = output_dir + "/out.gb"
         arguments = arguments + ["-o"] + [outfile]
@@ -225,7 +226,7 @@ def test_filter_domainator_nucleotide_annotations(shared_datadir):
             "--input", str(shared_datadir / "simple_dna_target.fna"),
             "--fasta_type", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
-            "--output", annotated,
+            "--genbank_out", annotated,
             "--evalue", "0.1",
         ])
 
@@ -240,3 +241,12 @@ def test_filter_domainator_nucleotide_annotations(shared_datadir):
         assert len(recs) == 1
         domainator_features = [feature for feature in recs[0].features if feature.type == DOMAIN_FEATURE_NAME]
         assert len(domainator_features) == 0
+
+
+def test_filter_domains_writes_complete_compressed_output(shared_datadir, tmp_path):
+    import gzip
+    plain, compressed = str(tmp_path / "out.gb"), str(tmp_path / "out.gb.gz")
+    for out in (plain, compressed):
+        main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "-e", "1e-10"])
+    with gzip.open(compressed, "rt") as handle:
+        assert handle.read() == open(plain).read()

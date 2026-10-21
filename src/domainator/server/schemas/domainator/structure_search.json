@@ -3,8 +3,8 @@
   "display_name": "Structure Search",
   "category": "Editors",
   "description": "Search a structure database with a small number of reference structures\n\nThe structure-input counterpart of domain_search.py. For searching large structure\ndatabases (for example a foldseek database built from AlphaFold DB) with a handful of\nreference structures.\n\nOnly records that had a hit are written. Each one carries a Domain_Search feature marking\nthe region homologous to the best-matching reference; pass --add_annotations to also write\na Domainator feature for every hit.\n\nReferences are aligned as the query and the searched database as the target, which is both\nwhat foldseek is optimized for and what makes --evalue mean the same thing it means\nelsewhere in domainator: it is computed against the database being searched. The hit\ncoordinates are positions on the database record; the matching positions on the reference\nare recorded in the /rstart, /rend and /rlen qualifiers.\n\nHit records are built from the sequences the backend reports, so the searched database is\nnever read end to end and its size does not bound memory. Note that --max_seqs bounds how\nmany hits the backend keeps per reference; the default is low for a large database, and a\nwarning is issued whenever a reference saturates it.\n\nUse structure_domainate.py instead to annotate every input structure rather than select\nhits, and structure_to_genbank.py to convert structures without searching at all.",
-  "runner": "module",
-  "entry_point": "domainator.structure_search",
+  "runner": "domainator",
+  "entry_point": "structure_search",
   "parameters": [
     {
       "name": "Input",
@@ -27,14 +27,14 @@
     },
     {
       "name": "References",
-      "parameter": "references",
+      "parameter": "reference",
       "help": "reference structures to search with. Same accepted forms as --input.",
       "type": "string",
       "required": true,
       "multiple": true,
       "flags": [
         "-r",
-        "--references"
+        "--reference"
       ],
       "file_types": [
         "pdb",
@@ -46,12 +46,12 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "output genbank filename. If not supplied, or if given as '-', writes to stdout.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -205,21 +205,21 @@
       ]
     },
     {
-      "name": "Keep Db",
-      "parameter": "keep_db",
+      "name": "Db Out",
+      "parameter": "db_out",
       "help": "when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.",
-      "type": "string",
+      "type": "output",
       "flags": [
-        "--keep_db"
+        "--db_out"
       ]
     },
     {
-      "name": "Hits Tsv",
-      "parameter": "hits_tsv",
-      "help": "write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference cap is applied, so it may hold more rows than the output.",
-      "type": "string",
+      "name": "Hits Tsv Out",
+      "parameter": "hits_tsv_out",
+      "help": "write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output.",
+      "type": "output",
       "flags": [
-        "--hits_tsv"
+        "--hits_tsv_out"
       ]
     },
     {
@@ -232,13 +232,21 @@
       ]
     },
     {
-      "name": "Aligner Arg",
-      "parameter": "aligner_arg",
-      "help": "extra arguments appended verbatim to the backend's search command line, for options domainator does not wrap. Example: --aligner_arg --prefilter-mode 2",
+      "name": "Foldseek Args",
+      "parameter": "foldseek_args",
+      "help": "extra options for the foldseek search command, as one quoted string split like a shell command line. Options that domainator sets itself are refused.",
       "type": "string",
-      "multiple": true,
       "flags": [
-        "--aligner_arg"
+        "--foldseek_args"
+      ]
+    },
+    {
+      "name": "Reseek Args",
+      "parameter": "reseek_args",
+      "help": "extra options for the reseek search command, as one quoted string split like a shell command line. Options that domainator sets itself are refused.",
+      "type": "string",
+      "flags": [
+        "--reseek_args"
       ]
     },
     {

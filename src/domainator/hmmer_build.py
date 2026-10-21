@@ -3,9 +3,9 @@
     Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.
     Some of these options are not available in the standard hmmbuild tool from HMMER.
 """
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 from pyhmmer.easel import MSAFile
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
 from domainator.utils import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name, open_writable_hmm_file, OUTPUT_COMPRESSION_HELP
 import os
 import sys
@@ -99,14 +99,12 @@ def hmmer_build(file:Union[str,BinaryIO], alphabet:Optional[pyhmmer.easel.Alphab
     return hmm
     
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, required=False, type=str,
-                          help="Path of input msa. If not supplied, reads from stdin. Acceptable formats are the same as for hmmbuild.")
+    add_input(parser, "Path of input msa. Acceptable formats are the same as for hmmbuild.", multiple=False)
 
-    parser.add_argument("-o", "--output", default=None, required=False,  type=str,
-                        help="hmm output file path. If not supplied writes to stdout." + OUTPUT_COMPRESSION_HELP)
+    add_output(parser, "hmm", "Write the profile to this hmm file." + OUTPUT_COMPRESSION_HELP, primary=True)
 
     parser.add_argument("--name", default=None, required=True, type=str,
                             help="Name of the HMM profile.")
@@ -123,33 +121,24 @@ def main(argv):
                             help="Tail mass from which to derive the window length. Nucleotide alphabets only. Only one of --window_length and --window_beta may be given.")
 
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
 
-    if params.input is None:
-        input_file = sys.stdin.buffer
-    else:
-        input_file = open(params.input, "rb")
-
-    if params.output is None:
-        output_handle = sys.stdout.buffer
-    else:
-        output_handle = open_writable_hmm_file(params.output)
+    check_outputs(parser, params, ["hmm_out"])
+    from_stdin = params.input in STDIN_PATHS
+    input_file = sys.stdin.buffer if from_stdin else open(params.input, "rb")
+    output_handle = open_writable_hmm_file(params.hmm_out)
 
     alphabet = get_alphabet(params.alphabet)
 
     hmm = hmmer_build(file=input_file, alphabet=alphabet, name=params.name, acc=params.acc, desc=params.desc, window_length=params.window_length, window_beta=params.window_beta)
     hmm.write(output_handle)
 
-    if params.input is not None:
+    if not from_stdin:
         input_file.close()
-
-    if params.output is not None:
-        output_handle.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+    output_handle.close()

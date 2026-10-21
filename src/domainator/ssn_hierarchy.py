@@ -200,8 +200,8 @@ def threshold_merge_event_rows(component_summary):
             row_idx += 1
 
         # The MST edge index of the last edge scoring strictly above this threshold, so a
-        # stop labeled `threshold_to` reproduces the `--lb threshold_to` cut exactly (the
-        # tie group at that threshold is excluded, as `--lb` excludes it).
+        # stop labeled `threshold_to` reproduces the `--threshold threshold_to` cut exactly (the
+        # tie group at that threshold is excluded, as `--threshold` excludes it).
         edge_index = first_summary_row_idx - 2
 
         event_rows.append({
@@ -452,7 +452,7 @@ def threshold_slider_stops(merge_event_rows, tree=None, threshold_index_lookup=N
     Shared by ``matrix_report``, the ``.dsnv`` viewer (via its JavaScript port) and
     ``ssn_bundle`` so their sliders offer the same cuts. The trailing floor stop is
     what makes the fully merged network reachable at all: every other stop excludes
-    its own tie group under the strictly-above ``--lb`` convention, so the lowest
+    its own tie group under the strictly-above ``--threshold`` convention, so the lowest
     event stop still splits the weakest merge back apart. It is derived from the MST
     rather than from ``merge_event_rows``, which a cap may have thinned.
 

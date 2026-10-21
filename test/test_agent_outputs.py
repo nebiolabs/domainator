@@ -37,7 +37,7 @@ def test_enum_report_json(shared_datadir):
         out = os.path.join(output_dir, "enum.ndjson")
         tsv = os.path.join(output_dir, "enum.tsv")
         enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "-o", tsv,
-                          "--domains", "--length", "--json", out])
+                          "--domains", "--length", "--json_out", out])
         records = _read_ndjson(out)
         assert len(records) == 4
         for record in records:
@@ -50,7 +50,7 @@ def test_enum_report_json_only(shared_datadir):
     # --json is a valid sole output (no -o / --html required)
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "enum.ndjson")
-        enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "--json", out, "--domain_count"])
+        enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "--json_out", out, "--domain_count"])
         records = _read_ndjson(out)
         assert len(records) == 4
         assert all("domain_count" in r for r in records)
@@ -59,7 +59,7 @@ def test_enum_report_json_only(shared_datadir):
 def test_hmmer_report_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "hmm.ndjson")
-        hmmer_report.main(["-i", str(shared_datadir / "FeSOD_pfam.hmm"), "--acc", "--length", "--json", out])
+        hmmer_report.main(["-i", str(shared_datadir / "FeSOD_pfam.hmm"), "--acc", "--length", "--json_out", out])
         records = _read_ndjson(out)
         assert len(records) == 2
         for record in records:
@@ -70,7 +70,7 @@ def test_hmmer_report_json(shared_datadir):
 def test_summary_report_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "summary.json")
-        summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "--json", out])
+        summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "--json_out", out])
         payload = _read_json(out)
         assert payload["contig_stats"]["contigs"] == 20
         assert payload["contig_stats"]["length"]["min"] > 0
@@ -82,7 +82,7 @@ def test_summary_report_json(shared_datadir):
 def test_matrix_report_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "matrix.json")
-        matrix_report.main(["-i", str(shared_datadir / "FeSOD_dist.dense.hdf5"), "--json", out])
+        matrix_report.main(["-i", str(shared_datadir / "FeSOD_dist.dense.hdf5"), "--json_out", out])
         payload = _read_json(out)
         assert payload["nodes"] == 20
         assert payload["non_zero_edges"] > 0
@@ -157,23 +157,23 @@ def test_ssn_navigator_modes(shared_datadir):
             ssn_navigator.main(["-i", bundle_path, "-o", out] + args)
             return _read_json(out)
 
-        overview = run(["--mode", "overview"])
+        overview = run(["--query", "overview"])
         assert overview["nodes"] == 4
         assert {c["name"] for c in overview["metadata_columns"]} == {"category", "count"}
 
-        thresholds = run(["--mode", "thresholds"])
+        thresholds = run(["--query", "thresholds"])
         assert len(thresholds["thresholds"]) >= 1
 
-        clusters = run(["--mode", "clusters", "--threshold", "5"])
+        clusters = run(["--query", "clusters", "--threshold", "5"])
         assert clusters["clusters"] == 2
         assert clusters["singletons"] == 1
 
         # Locate the cluster containing node A and confirm its members.
-        cluster = run(["--mode", "cluster", "--threshold", "5", "--node", "A", "--members"])
+        cluster = run(["--query", "cluster", "--threshold", "5", "--node", "A", "--members"])
         assert cluster["size"] == 3
         assert set(cluster["members"]) == {"A", "B", "C"}
 
-        node = run(["--mode", "node", "--node", "A"])
+        node = run(["--query", "node", "--node", "A"])
         assert node["metadata"]["category"] == "alpha"
         assert len(node["memberships"]) == len(thresholds["thresholds"])
 

@@ -3,8 +3,8 @@
   "display_name": "Deduplicate Genbank",
   "category": "Editors",
   "description": "Remove redundant sequences from a genbank file\n\nRuns a clustering algorithm, such as cdhit, usearch, or diamond on sequences from a genbank (or fasta) file to reduce redundancy.\nThe \"hash\" algorithm is a faster way to deduplicate exact duplicates, by hashing the sequences and eliminating hash duplicates.",
-  "runner": "module",
-  "entry_point": "domainator.deduplicate_genbank",
+  "runner": "domainator",
+  "entry_point": "deduplicate_genbank",
   "parameters": [
     {
       "name": "Input",
@@ -26,25 +26,23 @@
         "faa",
         "fna"
       ]
-
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "The name of the output file.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
       "name": "Fasta Out",
       "parameter": "fasta_out",
-      "help": "makes output a fasta file when activated",
-      "type": "boolean",
-      "default": false,
+      "help": "Write the records to this FASTA file. Use - for standard output.",
+      "type": "output",
       "flags": [
         "--fasta_out"
       ]
@@ -91,11 +89,11 @@
     },
     {
       "name": "Identity Threshold",
-      "parameter": "id",
+      "parameter": "identity",
       "help": "Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent.",
       "type": "number",
       "flags": [
-        "--id"
+        "--identity"
       ],
       "min": 0,
       "max": 1,
@@ -132,21 +130,12 @@
       ]
     },
     {
-      "name": "Params",
-      "parameter": "params",
-      "help": "string of parameters to pass to the clustering algorithm, in the form of a json dict in single quotes. example: '\"-s\":0.9'",
-      "type": "string",
-      "flags": [
-        "--params"
-      ]
-    },
-    {
       "name": "Cluster Table",
-      "parameter": "cluster_table",
+      "parameter": "cluster_tsv_out",
       "help": "If supplied, then write a tab separated table with columns: representative, contigs.",
       "type": "output",
       "flags": [
-        "--cluster_table"
+        "--cluster_tsv_out"
       ]
     },
     {
@@ -163,11 +152,11 @@
   "advanced_parameters": [
     {
       "name": "Log",
-      "parameter": "log",
+      "parameter": "log_out",
       "help": "The name of the log file. If not supplied, writes to stderr.",
       "type": "output",
       "flags": [
-        "--log"
+        "--log_out"
       ]
     },
     {

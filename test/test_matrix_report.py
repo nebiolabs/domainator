@@ -32,7 +32,7 @@ def test_matrix_report_1(shared_datadir, input_file):
         # output_dir = "test_out"
         out_html = output_dir + "/matrix_report_test.html"
         out_txt = output_dir + "/matrix_report_test.txt"
-        matrix_report.main(["-i", str(shared_datadir / input_file), "-o", out_txt, "--html", out_html])
+        matrix_report.main(["-i", str(shared_datadir / input_file), "-o", out_txt, "--html_out", out_html])
         for fh in (out_html, out_txt):
             f_txt = open(fh).read()
             assert "Matrix Report" in f_txt
@@ -103,7 +103,7 @@ class TestInteractiveHTML:
             
             matrix_report.main([
                 "-i", input_file,
-                "--html", output_file,
+                "--html_out", output_file,
                 "--knn_projection"
             ])
             
@@ -205,7 +205,7 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_html = output_dir + "/matrix_report_test.html"
         out_txt = output_dir + "/matrix_report_test.txt"
-        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html, "--knn_projection"])
+        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html_out", out_html, "--knn_projection"])
 
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
@@ -234,7 +234,7 @@ def test_matrix_report_includes_merge_event_outputs():
         matrix_report.main([
             "-i", input_file,
             "-o", out_txt,
-            "--html", out_html,
+            "--html_out", out_html,
         ])
 
         text_content = open(out_txt).read()
@@ -319,7 +319,7 @@ def test_matrix_report_supports_product_merge_impact_metric():
         matrix_report.main([
             "-i", input_file,
             "-o", out_txt,
-            "--html", out_html,
+            "--html_out", out_html,
             "--merge_impact_metric", "product",
         ])
 
@@ -342,7 +342,7 @@ def test_matrix_report_default_excludes_mst_knn(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_html = output_dir + "/matrix_report_test.html"
         out_txt = output_dir + "/matrix_report_test.txt"
-        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html", out_html])
+        matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html_out", out_html])
 
         text_content = open(out_txt).read()
         html_content = open(out_html).read()
@@ -375,7 +375,7 @@ def test_matrix_report_max_merge_events_filters_html_payload():
         matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
-            "--html", out_html,
+            "--html_out", out_html,
             "--max_merge_events", "2",
         ])
 
@@ -428,7 +428,7 @@ def test_matrix_report_caps_merge_events_on_a_network_large_enough_to_bite():
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         matrix.write(input_file, output_type="hdf")
         matrix_report.main([
-            "-i", input_file, "--html", out_html, "--max_merge_events", "5",
+            "-i", input_file, "--html_out", out_html, "--max_merge_events", "5",
         ])
         html_content = open(out_html).read()
         payload = _embedded_report_payload(html_content)
@@ -466,7 +466,7 @@ def test_matrix_report_max_merge_events_zero_includes_all_html_events():
         matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
-            "--html", out_html,
+            "--html_out", out_html,
             "--max_merge_events", "0",
         ])
 
@@ -566,7 +566,7 @@ def test_matrix_report_slider_stops_are_proportionally_spaced():
         matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
-            "--html", out_html,
+            "--html_out", out_html,
         ])
 
         html_content = open(out_html).read()
@@ -596,7 +596,7 @@ def test_matrix_report_profile_stages_emits_timings(capsys):
         matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
-            "--html", out_html,
+            "--html_out", out_html,
             "--knn_projection",
             "--profile_stages",
         ])
@@ -634,7 +634,7 @@ def test_matrix_report_progress_emits_live_updates(capsys):
         matrix.write(input_file, output_type="hdf")
         matrix_report.main([
             "-i", input_file,
-            "--html", out_html,
+            "--html_out", out_html,
             "--progress",
         ])
 
@@ -742,7 +742,7 @@ def test_slider_reaches_the_fully_merged_network():
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         DataMatrix(data, row_names, row_names).write(input_file, output_type="hdf")
-        matrix_report.main(["-i", input_file, "--html", out_html])
+        matrix_report.main(["-i", input_file, "--html_out", out_html])
         payload = _embedded_report_payload(open(out_html).read())
         tree = MaxTree(DataMatrix.from_file(input_file))
 
@@ -790,7 +790,7 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         bundle_path = os.path.join(output_dir, "net.dsnv")
         DataMatrix(data, row_names, row_names).write(input_file, output_type="hdf")
-        matrix_report.main(["-i", input_file, "--html", out_html])
+        matrix_report.main(["-i", input_file, "--html_out", out_html])
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_path])
         report_stops = _embedded_report_payload(open(out_html).read())['slider_stops']
         bundle_stops = ssn_bundle.slider_stops(load_bundle(bundle_path))
@@ -836,7 +836,7 @@ def test_matrix_report_hover_labels_follow_the_merge_impact_metric():
         for metric, (bead, total, moving_sum) in expected.items():
             out_html = os.path.join(output_dir, f"report_{metric}.html")
             matrix_report.main([
-                "-i", input_file, "--html", out_html,
+                "-i", input_file, "--html_out", out_html,
                 "--merge_impact_metric", metric,
             ])
             html_content = open(out_html).read()
@@ -874,7 +874,7 @@ def test_matrix_report_split_chart_offers_png_and_svg_download():
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         out_html = os.path.join(output_dir, "report.html")
         matrix.write(input_file, output_type="hdf")
-        matrix_report.main(["-i", input_file, "--html", out_html])
+        matrix_report.main(["-i", input_file, "--html_out", out_html])
         html_content = open(out_html).read()
 
     assert "const splitChartConfig = {" in html_content

@@ -74,21 +74,23 @@ def test_process_local_gbff_skips_corrupt_gzip(shared_datadir):
 
 
 
+@pytest.mark.network
 def test_uniprot_download_fasta(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "uniprot_sprot.fasta"
-        domainator_db_download.main(["--db", "swissprot", "--num_recs", "2", "--output", str(outfile)])
+        domainator_db_download.main(["--db", "swissprot", "--max_records", "2", "--fasta_out", str(outfile)])
         assert outfile.exists()
         assert outfile.stat().st_size > 0
         recs = list(utils.parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
+@pytest.mark.network
 def test_uniprot_download_genbank(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         outfile = Path(output_dir) / "uniprot_sprot.gb"
-        domainator_db_download.main(["--db", "swissprot_gb", "--num_recs", "2", "--output", str(outfile)])
+        domainator_db_download.main(["--db", "swissprot_gb", "--max_records", "2", "--genbank_out", str(outfile)])
         assert outfile.exists()
         assert outfile.stat().st_size > 0
         recs = list(utils.parse_seqfiles([str(outfile)]))
@@ -96,6 +98,7 @@ def test_uniprot_download_genbank(shared_datadir):
 
 
 
+@pytest.mark.network
 def test_genbank_download_genbank_1(shared_datadir):
     small_genbanks=['https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/008/766/775/GCA_008766775.1_ASM876677v1','https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/031/580/395/GCA_031580395.1_ASM3158039v1']
     with tempfile.TemporaryDirectory() as output_dir:
@@ -107,6 +110,7 @@ def test_genbank_download_genbank_1(shared_datadir):
         recs = list(utils.parse_seqfiles([str(outfile)]))
         assert len(recs) == 1
 
+@pytest.mark.network
 def test_genbank_download_genbank_2(shared_datadir):
     small_genbanks=['https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/008/766/775/GCA_008766775.1_ASM876677v1','https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/031/580/395/GCA_031580395.1_ASM3158039v1']
     with tempfile.TemporaryDirectory() as output_dir:
@@ -118,6 +122,7 @@ def test_genbank_download_genbank_2(shared_datadir):
         recs = list(utils.parse_seqfiles([str(outfile)]))
         assert len(recs) == 2
 
+@pytest.mark.network
 def test_genbank_download_genbank_3(shared_datadir):
     small_genbanks=['https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/008/766/775/GCA_008766775.1_ASM876677v1', 'https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/002/987/885/GCA_002987885.1_ASM298788v1']
     with tempfile.TemporaryDirectory() as output_dir:
@@ -272,18 +277,19 @@ def test_process_via_datasets_num_recs_slices_download(shared_datadir, monkeypat
         assert success_log.read_text().split() == ["GCA_000000011"]
 
 
-def test_success_log_equals_exclude_file_raises():
-    """--success_rec_log (truncated each run) must not be the same file as
+def test_success_log_equals_exclude_file_raises(capsys):
+    """--success_log_out (truncated each run) must not be the same file as
     --exclude_accessions_file, or the canonical exclusion log would be erased."""
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "out.fasta"
         log = Path(td) / "log.txt"
-        with pytest.raises(Exception, match="must be different files"):
+        with pytest.raises(SystemExit):
             domainator_db_download.main([
-                "--db", "swissprot", "--output", str(out),
-                "--success_rec_log", str(log),
+                "--db", "swissprot", "--fasta_out", str(out),
+                "--success_log_out", str(log),
                 "--exclude_accessions_file", str(log),
             ])
+        assert "must be different files" in capsys.readouterr().err
         assert not out.exists()  # guard fires before the output is created/blanked
 
 
@@ -380,7 +386,7 @@ class _FakeResponse:
 def test_uniprot_download_partial(monkeypatch, tmp_path, db, payload, partial, expected):
     monkeypatch.setattr(domainator_db_download.requests, "get", lambda url, stream=True: _FakeResponse(payload))
     outfile = tmp_path / ("out.gb" if db.endswith("_gb") else "out.fasta")
-    domainator_db_download.main(["--db", db, "--output", str(outfile), "--partial", partial, "--skip_taxonomy_update"])
+    domainator_db_download.main(["--db", db, "--genbank_out" if db.endswith("_gb") else "--fasta_out", str(outfile), "--partial", partial, "--no_taxonomy_update"])
     records = list(utils.parse_seqfiles([str(outfile)]))
     assert {accession for accession in ("A0A001", "A0A002") if any(accession in r.id + r.name for r in records)} == expected
     if db == "swissprot_gb" and partial == "only":

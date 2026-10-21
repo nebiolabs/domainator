@@ -3,9 +3,9 @@
   "display_name": "Domainate",
   "category": "Editors",
   "description": "Annotate sequence files with protein or nucleic-acid references\n\nProtein references are searched against CDSs or protein records with hmmsearch or phmmer. Nucleic-acid references are searched against whole nucleotide contigs with nhmmer or infernal cmsearch. Hits passing the threshold are added to the output GenBank file as Domainator annotations.\n\nSupported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. Protein inputs cannot be searched with nucleotide references.\n\nNOTES: genbank files that contain translation annotations in their CDS features will run much faster than those without translation annotations.\n       domainate.py stores the entire reference set in memory, so it is not suitable for cases where the reference set is larger than your system memory (this may change in future versions).",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 1,
-  "entry_point": "domainator.domainate",
+  "entry_point": "domainate",
   "parameters": [
     {
       "name": "Input",
@@ -44,13 +44,13 @@
     },
     {
       "name": "References",
-      "parameter": "references",
+      "parameter": "reference",
       "help": "reference files to search against the input. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.",
       "type": "file",
       "multiple": true,
       "flags": [
         "-r",
-        "--references"
+        "--reference"
       ],
       "file_types": [
         "hmm",
@@ -63,13 +63,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "output genbank filename.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -95,12 +95,12 @@
     },
     {
       "name": "Max Domains",
-      "parameter": "max_domains",
+      "parameter": "max_hits_per_cds",
       "help": "the maximum number of domains to be reported per CDS. If not specified, then no max_domains filter is applied.",
       "type": "integer",
       "default": 0,
       "flags": [
-        "--max_domains"
+        "--max_hits_per_cds"
       ]
     },
     {
@@ -153,7 +153,6 @@
       ],
       "min": 0.0,
       "max": 1.0
-
     },
     {
       "name": "Gene Call",
@@ -169,7 +168,8 @@
       ]
     }
   ],
-  "advanced_parameters": [    {
+  "advanced_parameters": [
+    {
       "name": "Min Evalue",
       "parameter": "min_evalue",
       "help": "hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. [default 0]",
@@ -262,24 +262,6 @@
       "default": 10000,
       "flags": [
         "--batch_size"
-      ]
-    },
-    {
-      "name": "Offset",
-      "parameter": "offset",
-      "help": "File offset to start reading records at. (Note that this usually only makes sense when there is just a single input file). Default: start at the top of the file",
-      "type": "integer",
-      "flags": [
-        "--offset"
-      ]
-    },
-    {
-      "name": "Recs To Read",
-      "parameter": "recs_to_read",
-      "help": "Stop after reading this many records. Default: read all the records",
-      "type": "integer",
-      "flags": [
-        "--recs_to_read"
       ]
     }
   ]

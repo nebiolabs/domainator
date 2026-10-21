@@ -1,19 +1,20 @@
 """Sort contigs by Domain_Search score.
 
-This matches the output ordering used by domain_search.py when --max_hits is set.
+This matches the output ordering used by domainator domain_search when --max_hits is set.
 It is primarily intended for post-processing domain_search output written without
 --max_hits, where the temporary hit_best_score annotation is not preserved in the
 written GenBank file.
 """
 
 import heapq
-import sys
 from typing import Iterable, Optional, Set
 
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter, __version__
-from domainator.utils import parse_seqfiles, write_genbank
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles
 
 
 def _get_feature_score(feature, record_id: str) -> float:
@@ -88,60 +89,40 @@ def sort_contigs(records: Iterable, max_hits: Optional[int] = None, domains: Opt
         yield record
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="Input genbank files. If not supplied, reads from stdin.")
-    parser.add_argument("-o", "--output", default=None, type=str, required=False,
-                        help="Output genbank filename. If not supplied, writes to stdout.")
+    add_input(parser, "GenBank files.")
+    add_seq_outputs(parser)
     parser.add_argument("--max_hits", type=int, default=None,
-                        help="Maximum number of contigs to return. Prioritized by the best selected annotation score. [default: return all contigs]")
+                        help="Maximum number of contigs to return, keeping the best-scoring ones. If not supplied, return all contigs.")
     parser.add_argument("--domains", type=str, default=None, nargs="+",
-                        help="If supplied, sort by the best Domainator annotation score from domains with these names instead of Domain_Search annotation scores.")
+                        help="If supplied, sort by the best Domainator annotation score from domains with these names instead of Domain_Search annotation scores. Additive with --domains_file.")
+    parser.add_argument("--domains_file", type=str, default=None,
+                        help="Like --domains, but read the domain names from this file, one per line. Additive with --domains.")
     parser.add_argument("--databases", type=str, default=None, nargs="+",
                         help="When used with --domains, only consider Domainator annotations from these databases.")
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    if params.max_hits is not None and params.max_hits < 0:
-        raise ValueError("max_hits must be >= 0.")
+    if params.max_hits is not None and params.max_hits < 1:
+        parser.error("--max_hits must be at least 1. Leave it out to return all contigs.")
 
-    domains = None if params.domains is None else set(params.domains)
+    domains = list_and_file_to_dict_keys(params.domains, params.domains_file, as_set=True)
     databases = None if params.databases is None else set(params.databases)
     if domains is None:
         databases = None
 
-    if params.input is None:
-        input_files = (sys.stdin,)
-        filetype_override = "genbank"
-    else:
-        input_files = params.input
-        filetype_override = None
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
-
-    max_hits = None if params.max_hits == 0 else params.max_hits
-
-    for record in sort_contigs(
-        parse_seqfiles(input_files, filetype_override=filetype_override),
-        max_hits=max_hits,
+    write_seq_outputs(sort_contigs(
+        parse_seqfiles(params.input),
+        max_hits=params.max_hits,
         domains=domains,
         databases=databases,
-    ):
-        write_genbank((record,), output_handle)
-
-    if params.output is not None:
-        output_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    ), genbank=params.genbank_out, fasta=params.fasta_out)

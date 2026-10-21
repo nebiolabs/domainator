@@ -10,16 +10,15 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 
 """
 
-import sys
-from argparse import SUPPRESS
-from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, open_if_is_name
-import warnings
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, open_if_is_name
 import re
 import seaborn as sns
 from collections import OrderedDict
 import random
-from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 
 #TODO: color gradient based on bit score
 
@@ -195,26 +194,12 @@ def color_genbank(records, color_table, color_targets, search_hit_color=None, cl
             for annotation, color in color_map.items():
                 out.write(f"{annotation}\t{color}\n")
 
-def resolve_color_mode(parser, params):
-    legacy_mode = None
-    if params.color_domains:
-        legacy_mode = "domains"
-    elif params.color_both:
-        legacy_mode = "domains_and_cdss"
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    if params.mode is not None and legacy_mode is not None and params.mode != legacy_mode:
-        parser.error("--mode cannot be combined with legacy flags that request a different coloring target")
+    add_input(parser, 'Genbank filenames.')
 
-    return params.mode or legacy_mode or "cdss"
-
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-
-    parser.add_argument('-i', '--input', nargs='+', default=None, required=False,
-                        help="Genbank filenames. If not supplied, reads from stdin.")
-
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="the name of the output genbank file. If not supplied, writes to stdout.")
+    add_seq_outputs(parser)
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only color contigs with ids in this list (other contigs will be excluded from output). Additive with --contigs_file. default: all contigs.")
@@ -232,41 +217,32 @@ def main(argv):
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Domain databases to use for coloring. default: all databases.")
 
-    parser.add_argument("--mode", default=None, choices=tuple(COLOR_MODES.keys()),
-                        help="what to color. domains: color only domain annotations. cdss: color only CDS annotations. domains_and_cdss: color both domains and CDS annotations. Default: cdss")
+    parser.add_argument("--target", default="cdss", choices=tuple(COLOR_MODES.keys()),
+                        help="what to color. domains: color only domain annotations. cdss: color only CDS annotations. domains_and_cdss: color both domains and CDS annotations.")
     parser.add_argument("--domain_database", action="store_true", default=False,
                         help="if set, then color domains based on their database instead of their name. If used with --color_table, the first column must contain database ids.")
 
-    # TODO: remove these compatibility flags after downstream callers have migrated to --mode.
-    parser.add_argument("--color_domains", action="store_true", default=False, help=SUPPRESS)
-    parser.add_argument("--color_both", action="store_true", default=False, help=SUPPRESS)
  
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
    
     ### Figure out what input and output files ####
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
+    genbanks = params.input
 
-
-    if params.output is None:
-        out = sys.stdout
-    else:
-        out = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     # figure out other parameters
 
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)
 
-    color_mode = resolve_color_mode(parser, params)
-    color_targets = COLOR_MODES[color_mode]
+    color_targets = COLOR_MODES[params.target]
     color_feature = "database" if params.domain_database else "name"
 
     color_table = None
@@ -281,10 +257,9 @@ def main(argv):
     if params.databases is not None:
         databases = set(params.databases)
 
-
     # Run
-    write_genbank(color_genbank(
-            parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override),
+    write_seq_outputs(color_genbank(
+            parse_seqfiles(genbanks, target_contigs),
             color_table, 
             color_targets,
             search_hit_color,
@@ -292,15 +267,4 @@ def main(argv):
             color_table_out=params.color_table_out,
             databases=databases,
             color_feature=color_feature
-            ), 
-        out)
-    
-
-    if params.output is not None:
-        out.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-    
-if __name__ == '__main__':
-    main(sys.argv[1:])
+            ), genbank=params.genbank_out, fasta=params.fasta_out)

@@ -4,9 +4,9 @@ From a domainator-annotated genbank file, extracts a subset of contigs based on 
 
 Selection criteria are combined as follows:
 
-(contig length within specified bounds [length_lb, length_ub])
+(contig length within specified bounds [--min_length, --max_length])
 AND 
-(contig CDS count within specified bounds [cds_count_lb, cds_count_ub])
+(contig CDS count within specified bounds [--min_cds, --max_cds])
 AND 
 (contig matches specified taxonomy filters)
 AND
@@ -28,16 +28,17 @@ If --invert is specified, the selection criteria in the middle expression (the s
 but the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.
 
 """
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import sys
 
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, filter_by_taxonomy, filter_by_partial, PARTIAL_CHOICES
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, BooleanEvaluator, filter_by_taxonomy, filter_by_partial, PARTIAL_CHOICES
 from typing import Set, Optional
-from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
-from domainator.Bio import SeqIO
 
 # TODO: account for different domain databases
 # TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
@@ -87,7 +88,7 @@ def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
 
 
 
-def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unanntotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain", partial="include"):
+def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str =None, domain_evalue=float("inf"), first=None, length_lb=None, length_ub=None, cds_count_lb=None, cds_count_ub=None, definition_regex=None, sequence_regex=None, target_contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unannotated=False, search_score_lb=None, search_score_ub=None, domain_type="domain", partial="include"):
     """
 
         Args:
@@ -129,7 +130,7 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
 
             databases: only consider domains from these databases
 
-            unanntotated: keep contigs with no domain annotations
+            unannotated: keep contigs with no domain annotations
 
             search_score_lb: only keep contigs with a domain_search annotation score greater than this
 
@@ -209,7 +210,7 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             if sequence_regex.search(str(contig.seq)): # select the contig if the sequence matches the regex
                 selected = True
                 
-        if target_domains is not None or domain_expr is not None or unanntotated or search_score_lb is not None or search_score_ub is not None:
+        if target_domains is not None or domain_expr is not None or unannotated or search_score_lb is not None or search_score_ub is not None:
             domains = set()
             domain_search_feature = None
             at_least_one_test = True
@@ -233,7 +234,7 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
             if domain_expr is not None and expression_evaluator.check_expression(domains): # select the contig if it contains the specified combination of domains
                 selected = True
             
-            if unanntotated and len(domains) == 0: # select the contig if it contains no domains
+            if unannotated and len(domains) == 0: # select the contig if it contains no domains
                 selected = True
         if not at_least_one_test: # if no selection criteria are specified, select the contig
             selected = True
@@ -250,15 +251,12 @@ def select_by_contig(contigs, target_domains: Set[str] = None, domain_expr: str 
                 if returned == first:
                     break
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, required=False,
-                          nargs="+", type=str,
-                          help="names of input genbank files. If not supplied, reads from stdin.")
+    add_input(parser, 'Names of input genbank files.')
 
-    parser.add_argument('-o', '--output', default=None, required=False,  
-                        help="genbank output file name. If not supplied writes to stdout.")
+    add_seq_outputs(parser)
 
     parser.add_argument('--contigs', type=str, default=None, nargs='+',
                         help="Only consider contigs with these names.")
@@ -284,25 +282,21 @@ def main(argv):
                         help="Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. "
                         "A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition, NON_TER features, "
                         "or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location, or a /partial qualifier. Not affected by --invert.")
-    parser.add_argument("--domain_type", type=str, default="domain", choices={"domain", "search", "both"}, help="The type of domain to consider, domain, search, both. Default: domain")    
+    add_annotation_type(parser, choices=("domainator", "domain_search", "all"), help="Which annotations to select contigs by.")    
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Consider only domains from these databases when filtering by domain. default: all databases.")
 
     parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
 
-    parser.add_argument('-e', '--evalue', default=100000000.0, type=float,
-                        help="the evalue cutoff for domain annotations to be considered when selecting by domain.")
-
-    parser.add_argument('--fasta_out', action='store_true', default=False,
-                        help="makes output a fasta file when activated")
+    parser.add_argument('-e', '--evalue', default=None, type=float,
+                        help="the evalue cutoff (max) for domain annotations to be considered when selecting by domain. Default: no cutoff.")
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
-
 
     # parser.add_argument('--taxid', default=None, type=int, nargs="+",  #TODO: implement this. Probably need another argument to point to the ncbi taxonomy database files.
     #                     help="Exclude contigs based on the /db_xref='taxon:' qualifier of the source annotation. "
@@ -311,29 +305,28 @@ def main(argv):
     # parser.add_argument('--qualifier_regex', type=str, nargs=3, required=False, action=CustomAction, #TODO: implement this
     #                     help="Supply three strings, an feature type and a qualifier name and a regex. Keep only contigs that match.")
 
-    parser.add_argument('--first', default=None, type=int,
+    parser.add_argument('--max_records', default=None, type=int,
                         help="If set then stop after returning this many contigs.")
 
-    parser.add_argument('--length_lb', default=None, type=int,
+    parser.add_argument('--min_length', default=None, type=int,
                         help="skip contigs smaller than this. In units of bp (aa for protein input).")
 
-    parser.add_argument('--length_ub', default=None, type=int,
+    parser.add_argument('--max_length', default=None, type=int,
                         help="skip contigs larger than this. In units of bp (aa for protein input).")
 
-    parser.add_argument('--cds_count_lb', default=None, type=int,
+    parser.add_argument('--min_cds', default=None, type=int,
                         help="skip contigs with fewer CDSs than this. Pseudogenes are not counted.")
 
-    parser.add_argument('--cds_count_ub', default=None, type=int,
+    parser.add_argument('--max_cds', default=None, type=int,
                         help="skip contigs with more CDSs than this. Pseudogenes are not counted.")
     
-    parser.add_argument('--search_score_lb', default=None, type=float,
+    parser.add_argument('--min_search_score', default=None, type=float,
                             help="Skip contigs with a domain_search annotation score smaller than this.")
-    parser.add_argument('--search_score_ub', default=None, type=float,
+    parser.add_argument('--max_search_score', default=None, type=float,
                             help="Skip contigs with a domain_search annotation score larger than this.")
     
     parser.add_argument('--invert', action='store_true',
                         help="Invert the selection criteria. i.e. return contigs that do not match the selection criteria.")
-
 
     parser.add_argument('--config', action=ActionConfigFile)  
     
@@ -343,9 +336,12 @@ def main(argv):
     #                    help="the name of the database which you want to filter annotations from.") #TODO: see todo above.
 
     #TODO: error when evalue is defined but no domains are defined.
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
-
 
     # figure out selection filters
 
@@ -355,17 +351,9 @@ def main(argv):
         params.domains, params.domains_file, as_set=True)
     domain_expr = params.domain_expr
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
+    genbanks = params.input
 
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
         raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
@@ -380,15 +368,15 @@ def main(argv):
     # Run
    
     extracted_contigs_iterator = select_by_contig(
-                    parse_seqfiles(genbanks, filetype_override=filetype_override), 
+                    parse_seqfiles(genbanks), 
                     selected_domains, 
                     domain_expr, 
-                    params.evalue,
-                    params.first,
-                    params.length_lb,
-                    params.length_ub,
-                    params.cds_count_lb,
-                    params.cds_count_ub,
+                    float("inf") if params.evalue is None else params.evalue,
+                    params.max_records,
+                    params.min_length,
+                    params.max_length,
+                    params.min_cds,
+                    params.max_cds,
                     params.definition_regex,
                     params.sequence_regex,
                     target_contigs,
@@ -399,24 +387,11 @@ def main(argv):
                     params.exclude_taxids,
                     taxonomy_expr=params.taxonomy_expr,
                     databases=params.databases,
-                    unanntotated=params.unannotated,
-                    search_score_lb=params.search_score_lb,
-                    search_score_ub=params.search_score_ub,
-                    domain_type=params.domain_type,
+                    unannotated=params.unannotated,
+                    search_score_lb=params.min_search_score,
+                    search_score_ub=params.max_search_score,
+                    domain_type={"domainator": "domain", "domain_search": "search", "all": "both"}[params.annotation_type],
                     partial=params.partial
     )
 
-    if params.fasta_out:
-        SeqIO.write(extracted_contigs_iterator, output_handle, "fasta")
-    else:
-        write_genbank(extracted_contigs_iterator, output_handle)
-
-    if params.output is not None:
-        output_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    write_seq_outputs(extracted_contigs_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

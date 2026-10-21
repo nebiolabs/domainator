@@ -4,7 +4,7 @@
 
 A guide to using the interactive viewer. For the on-disk `.dsnv` bundle schema see
 [File Formats](file_formats.md#domainator-similarity-network-viewer-bundles-dsnv); for the
-scriptable, read-only companion see `ssn_navigator.py` in the
+scriptable, read-only companion see `domainator ssn_navigator` in the
 [program table](../README.md).
 
 - [What it is](#what-it-is)
@@ -32,7 +32,7 @@ A sequence similarity network (SSN) is usually explored by picking a similarity 
 thresholding an all-vs-all matrix, and looking at the connected components. Picking the
 cutoff is the hard part, and re-thresholding a large matrix for each guess is slow.
 
-The DSNV inverts that. `build_ssn_viewer.py` computes a **maximum spanning tree** of the
+The DSNV inverts that. `domainator build_ssn_viewer` computes a **maximum spanning tree** of the
 similarity matrix once and records the order in which clusters merge along it. The
 viewer replays that merge order in the browser, so **moving the threshold slider is
 instant** and works the same on a 200-node network and a 200,000-node one — the bundle
@@ -48,13 +48,13 @@ lives in the browser tab until you explicitly save it back out.
 ## Building a viewer
 
 ```bash
-# a matrix from any of the comparison tools (seq_dist.py, compare_contigs.py,
-# kmer_dist.py, structure_dist.py, ...)
-seq_dist.py -i proteins.fasta -r proteins.fasta -o scores.hdf5 --mode score
+# a matrix from any of the comparison tools (seq_dist.py, domainator compare_contigs,
+# domainator kmer_dist, domainator structure_dist, ...)
+domainator seq_dist -i proteins.fasta -r proteins.fasta --hdf_out scores.hdf5 --mode score
 
 # a bundle plus a standalone page with the data already inside it
-build_ssn_viewer.py -i scores.hdf5 \
-    --html network.html --embed_data \
+domainator build_ssn_viewer -i scores.hdf5 \
+    --html_out network.html --embed_data \
     --metadata families.tsv taxonomy.tsv \
     --color_by family --label_by locus_tag \
     --name "Nuclease candidates"
@@ -62,9 +62,9 @@ build_ssn_viewer.py -i scores.hdf5 \
 
 | Option | Why you want it |
 | --- | --- |
-| `--html PATH` | Write the viewer page. Without `--embed_data` it is an empty shell that opens bundles you pick from disk. |
+| `--html_out PATH` | Write the viewer page. Without `--embed_data` it is an empty shell that opens bundles you pick from disk. |
 | `--embed_data` | Inline the bundle into the page, so opening the file shows the network immediately. This is the shareable artifact — one file, no dependencies. |
-| `-o PATH` | Write the `.dsnv` bundle on its own (for `ssn_navigator.py`, or to load into an existing shell page). |
+| `-o PATH` | Write the `.dsnv` bundle on its own (for `domainator ssn_navigator`, or to load into an existing shell page). |
 | `--metadata A.tsv B.tsv` | Tab-separated tables keyed by node id in the first column. Several are merged left-to-right. Column types are inferred as text, integer or float. |
 | `--color_by`, `--label_by` | The columns the viewer selects on open. Both are changeable in the UI. |
 | `--categorical COL ...` | Numeric columns to color as discrete categories rather than a gradient — cluster numbers, plasmid groups, anything where the number is a name. Toggleable per column later. |
@@ -157,7 +157,7 @@ would give you. Zoom into a band and those 50 slots are re-spent on the events i
 band, so merges too small to make the global list appear, and keep appearing as you go
 further in. This is why the default is 50 rather than something larger: on a zoomable
 chart a small number resolves *more*, because you can always go and get the detail where
-you want it. `matrix_report.py`'s split chart has no window to spend a cap on, so it keeps
+you want it. `domainator matrix_report`'s split chart has no window to spend a cap on, so it keeps
 a default of 500.
 
 Below it, the **slider** moves between *stops*. A stop is a threshold at which the graph
@@ -313,7 +313,7 @@ Text columns, and numeric columns marked categorical, get a **discrete palette**
 color per distinct value.
 
 The default is **Domainator distinct (64)** — the same palette `get_palette()` hands out,
-so a column's colors in the viewer match what `build_ssn.py` and friends would have
+so a column's colors in the viewer match what `domainator build_ssn` and friends would have
 drawn for the same values. Colors are assigned in sorted value order and cycle if the
 column has more than 64 values.
 
@@ -379,7 +379,7 @@ Three scopes recur throughout the app and are worth keeping straight:
 ## Editing metadata
 
 Metadata edited in the viewer is real data: `Save session` writes it into the bundle's
-`metadata` table, so `ssn_navigator.py` and any other reader see the annotations without
+`metadata` table, so `domainator ssn_navigator` and any other reader see the annotations without
 knowing anything about the viewer. This is the intended way to record conclusions —
 "these 40 nodes are the ones worth ordering" — against the network you drew them from.
 
@@ -387,7 +387,7 @@ Five panels sit above the table, one open at a time:
 
 **Add column** — a new Text or Number column. Or **Fill with cluster numbers**, which
 numbers every node by the cluster it is in *at the current threshold*, largest cluster
-first. That is the same column `build_ssn.py --lb <threshold> --cluster` writes, under the
+first. That is the same column `domainator build_ssn --threshold <threshold> --cluster` writes, under the
 same default name `SSN_cluster`, so the two are interchangeable downstream. Cluster
 numbers are labels rather than magnitudes, so the column is marked categorical
 automatically.
@@ -553,7 +553,7 @@ Nodes in different components of the original network are exempt, since they wer
 unrelated.
 
 If your subset is not MST-connected, subset the source matrix instead:
-`build_ssn_viewer.py --subset` / `--subset_file`, which *measures* those relationships
+`domainator build_ssn_viewer --subset` / `--subset_file`, which *measures* those relationships
 rather than inferring them.
 
 An extraction is a complete bundle: it carries the node ids, the induced MST edges, the

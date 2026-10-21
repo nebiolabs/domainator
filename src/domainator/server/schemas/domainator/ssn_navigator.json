@@ -3,9 +3,9 @@
   "display_name": "SSN Navigator",
   "category": "Summary reports",
   "description": "Navigate a build_ssn_viewer .dsnv bundle and emit compact JSON summaries of clusters and their metadata at a chosen similarity threshold.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 1,
-  "entry_point": "domainator.ssn_navigator",
+  "entry_point": "ssn_navigator",
   "parameters": [
     {
       "name": "Input",
@@ -25,7 +25,7 @@
     },
     {
       "name": "Mode",
-      "parameter": "mode",
+      "parameter": "query",
       "help": "Which navigation query to run.",
       "type": "string",
       "default": "overview",
@@ -37,7 +37,7 @@
         "node"
       ],
       "flags": [
-        "--mode"
+        "--query"
       ]
     },
     {
@@ -51,11 +51,11 @@
     },
     {
       "name": "Cluster Id",
-      "parameter": "id",
+      "parameter": "cluster_id",
       "help": "Cluster id to describe (see the 'clusters' mode). For the 'cluster' mode.",
       "type": "integer",
       "flags": [
-        "--id"
+        "--cluster"
       ]
     },
     {
@@ -69,12 +69,12 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "json_out",
       "help": "Write JSON to this file. Default: stdout.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--json_out"
       ]
     }
   ],

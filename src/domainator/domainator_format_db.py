@@ -19,14 +19,13 @@ stream, so records are preserved exactly. Compressed inputs are decompressed to 
 temporary working file first; uncompressed inputs are read in place.
 """
 import os
-import shutil
 import sys
 import warnings
 from collections import namedtuple
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
 from domainator import utils, db_index, bgzf_compress
 from domainator.output_guardrails import make_temporary_output_path
 
@@ -252,14 +251,13 @@ def format_db(inputs, *, shards=None, compress=False, index=False, output_dir=No
     return [path for path, _ in results]
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument('-i', '--input', nargs='+', required=True, type=str,
-                        help="GenBank or FASTA database file(s) to format. May be plain, gzip, or BGZF.")
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, "GenBank or FASTA database file(s) to format. May be plain, gzip, or BGZF.", stdin=False)
     parser.add_argument('--shards', type=int, default=None,
                         help="Split each input into this many shards (balanced by record count). "
                              "Shards are named '<base>.0.<ext>', '<base>.1.<ext>', ... Default: no sharding.")
-    parser.add_argument('--compress', '--bgzf', action='store_true', dest='compress', default=False,
+    parser.add_argument('--compress', action='store_true', default=False,
                         help="Write BGZF (block-gzip) output (gunzip-readable, seekable, ~3-4x smaller).")
     parser.add_argument('--index', action='store_true', default=False,
                         help="Write a .didx offset index for each output file (lets domain_search "
@@ -270,35 +268,31 @@ def main(argv):
                         help="Base name for the output database (format/compression extensions are kept), "
                              "e.g. --name mydb turns 'foo.gb' into 'mydb.gb' / 'mydb.0.gb.bgz'. Requires a "
                              "single input; intended for --shards/--compress (warns on index-only runs).")
-    parser.add_argument('--cpu', type=int, default=1,
-                        help="Number of parallel workers (also threads for the BGZF compressor).")
+    parser.add_argument('--cpu', type=int, default=0,
+                        help="Number of parallel workers (also threads for the BGZF compressor). 0: one per physical core.")
     parser.add_argument('--level', type=int, default=6,
                         help="BGZF/deflate compression level (1-12).")
     parser.add_argument('--force', action='store_true', default=False,
                         help="Overwrite existing outputs / rebuild indexes instead of skipping.")
-    parser.add_argument('--log', default=None, type=str,
-                        help="Log file. Default: stderr.")
+    parser.add_argument('--log_out', default=None, type=str,
+                        help="Write the log to this file. If not supplied, writes it to stderr.")
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    if params.cpu < 1:
-        raise ValueError("--cpu must be >= 1")
-    log = sys.stderr if params.log is None else open(params.log, "w")
+    reject_stdin(parser, params.input, "it formats database files in place")
+    cpu = resolve_cpu(params.cpu)
+    log = sys.stderr if params.log_out is None else open(params.log_out, "w")
     try:
         format_db(
             params.input, shards=params.shards, compress=params.compress, index=params.index,
-            output_dir=params.output_dir, name=params.name, cpu=params.cpu, level=params.level,
+            output_dir=params.output_dir, name=params.name, cpu=cpu, level=params.level,
             force=params.force, log=log,
         )
     finally:
-        if params.log is not None:
+        if params.log_out is not None:
             log.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

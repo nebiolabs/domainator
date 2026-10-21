@@ -1,22 +1,22 @@
 """Calculates similarity or distance matrices between protein structures.
 
-The structure-input counterpart of seq_dist.py. Typically only -i is supplied, giving an
+The structure-input counterpart of domainator seq_dist. Typically only -i is supplied, giving an
 all-vs-all matrix of the input structures; a separate -r produces a rectangular matrix of
 input structures against reference structures.
 
 Every chain of every input is a row, whether or not it had a hit, so the row and column
-labels are exactly the record ids that structure_to_genbank.py writes for the same
-structures, and the matrix feeds build_ssn.py, build_tree.py or build_ssn_viewer.py
-directly. That does mean the input database is read end to end, unlike structure_search.py.
+labels are exactly the record ids that domainator structure_to_genbank writes for the same
+structures, and the matrix feeds domainator build_ssn, domainator build_tree or domainator build_ssn_viewer
+directly. That does mean the input database is read end to end, unlike domainator structure_search.
 
-Alignment direction is the opposite of structure_search.py and structure_domainate.py: the
+Alignment direction is the opposite of domainator structure_search and domainator structure_domainate: the
 input is the QUERY and the reference is the TARGET, so rows are inputs and columns are
-references, and --evalue is computed against the reference set. This matches seq_dist.py,
+references, and --evalue is computed against the reference set. This matches domainator seq_dist,
 where diamond is run with the input as -q and the reference as -d.
 
 --mode selects what goes in the cells. The score-based modes (score, bool, norm_score,
 row_norm_score, score_dist, efi_score, efi_score_dist) are computed from the aligner's
-alignment score and behave exactly as they do in seq_dist.py. The structural modes put a
+alignment score and behave exactly as they do in domainator seq_dist. The structural modes put a
 similarity that is already bounded in [0, 1] in the cell -- tmscore, lddt, fident -- and
 their *_dist forms are simply 1 - that value, needing none of the min(row_max, col_max)
 normalization that score_dist does. tmscore and lddt require --algorithm foldseek and
@@ -35,9 +35,10 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import scipy.sparse
 import tqdm
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 
-from domainator import RawAndDefaultsFormatter, __version__, structure_lib
+from domainator.cli.common import add_input, tool_parser
+from domainator import structure_lib
 from domainator.compare_contigs import _keep_top_k_per_row
 from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
 from domainator.matrix_output import (
@@ -151,7 +152,7 @@ def _enumerate_entries(aligner: structure_lib.StructureAligner,
     Read from the database rather than from the hits, because a structure with no hits at
     all still needs its row and column, and efi_score needs a length for every one of
     them. Names are used verbatim: foldseek is built with --chain-name-mode 1, so they are
-    already the extension-free '<basename>_<chain>' ids that structure_to_genbank.py
+    already the extension-free '<basename>_<chain>' ids that domainator structure_to_genbank
     writes, and stripping them again would corrupt a name like 'some.long.name_A'.
     """
     name_to_idx: Dict[str, int] = dict()
@@ -387,19 +388,17 @@ def structure_dist(input_values: Sequence[str],
         write_matrix_outputs(
             matrix, row_names, col_names,
             hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--max_hits_per_query", "--lb", "-e/--evalue", "--mst", "--knn"],
+            mitigation_options=["--max_hits_per_query", "--threshold", "-e/--evalue", "--mst", "--knn"],
             row_lengths=row_lengths_array, col_lengths=col_lengths_array, data_type=mode,
         )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__,
-                            formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', required=True, nargs='+', type=str,
-                        help="structures to compare: pdb/cif files (optionally gzipped), a directory searched recursively, a glob, or the prefix of a prebuilt aligner database.")
+    add_input(parser, "structures to compare: pdb/cif files (optionally gzipped), a directory searched recursively, a glob, or the prefix of a prebuilt aligner database.", stdin=False)
     parser.add_argument('-r', '--reference', default=None, nargs='+', type=str,
                         help="structures to compare the input against. Same accepted forms as --input. If not supplied, the input is compared against itself, giving a square all-vs-all matrix. Rows are inputs and columns are references.")
 
@@ -413,17 +412,17 @@ def main(argv):
 
     add_symmetrize_argument(parser, extra_help="Requires a square self-comparison (no -r). Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
-    parser.add_argument('--lb', type=float, default=0,
+    parser.add_argument('--threshold', type=float, default=0,
                         help="Round any values lower than or equal to this down to zero. This applies to the raw per-hit value before the --mode transform: the aligner's alignment score for the score-based modes, and the metric itself (0-1) for the tmscore/lddt/fident modes.")
 
     parser.add_argument('--max_hits_per_query', type=int, default=None,
                         help="Include at most this many non-zero entries in the matrix for each input structure, keeping the highest-valued ones. Applied after --symmetrize. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE + " Use --max_seqs to bound the search itself.")
 
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires a square self-comparison and --mode in {score, bool, efi_score, tmscore, lddt, fident}; bool selects on the alignment scores and then keeps the selected cells as 1. Best paired with --hdf.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires a square self-comparison and --mode in {score, bool, efi_score, tmscore, lddt, fident}; bool selects on the alignment scores and then keeps the selected cells as 1. Best paired with --hdf_out.")
 
-    parser.add_argument('--keep_db', default=None, type=str,
+    parser.add_argument('--db_out', default=None, type=str,
                         help="when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.")
-    parser.add_argument('--hits_tsv', default=None, type=str,
+    parser.add_argument('--hits_tsv_out', default=None, type=str,
                         help="write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search.")
     parser.add_argument('--progress', action='store_true',
                         help="Show a progress bar for long-running steps.")
@@ -431,7 +430,11 @@ def main(argv):
     structure_lib.add_backend_arguments(parser)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     if params.metrics:
@@ -447,8 +450,8 @@ def main(argv):
         raise ValueError("--max_hits_per_query must be >= 0")
     hdf, dense_text = resolve_matrix_outputs(params)
     if params.mode in STRUCTURE_VALUE_FIELDS or params.mode in STRUCTURE_DIST_MODES:
-        if not 0 <= params.lb <= 1:
-            raise ValueError(f"--lb must be between 0 and 1 for --mode {params.mode}.")
+        if not 0 <= params.threshold <= 1:
+            raise ValueError(f"--threshold must be between 0 and 1 for --mode {params.mode}.")
 
     # None means "compare the input against itself", which also lets prepared_databases
     # build one database instead of two.
@@ -466,16 +469,16 @@ def main(argv):
             raise ValueError(
                 f"{option} is only supported with --mode {sorted(SPARSIFY_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
-                f"For '{params.mode}', run 'structure_dist --mode score --hdf out.hdf5' "
+                f"For '{params.mode}', run 'structure_dist --mode score --hdf_out out.hdf5' "
                 f"then 'transform_matrix -i out.hdf5 --mode {params.mode} {option} "
-                f"--hdf pruned.hdf5'."
+                f"--hdf_out pruned.hdf5'."
             )
         if params.symmetrize != "none":
             raise ValueError(
                 f"{option} output is always max-symmetric -- the accumulator selects "
                 "edges on max(M[i,j], M[j,i]) and writes that value to both cells -- so "
                 f"--symmetrize {params.symmetrize} cannot be applied on top of it. Drop "
-                f"--symmetrize, or run 'structure_dist --mode score --hdf out.hdf5' "
+                f"--symmetrize, or run 'structure_dist --mode score --hdf_out out.hdf5' "
                 f"and prune with transform_matrix afterwards."
             )
     elif params.symmetrize != "none" and not self_comparison:
@@ -498,23 +501,15 @@ def main(argv):
         dense_text=dense_text,
         evalue=params.evalue,
         max_hits_per_query=params.max_hits_per_query,
-        lb=params.lb,
+        lb=params.threshold,
         symmetrize=params.symmetrize,
         mst=params.mst,
         knn=params.knn,
         alignment_type=params.alignment_type,
         max_seqs=params.max_seqs,
         tmp_dir=params.tmp_dir,
-        keep_db=params.keep_db,
-        hits_tsv=params.hits_tsv,
+        keep_db=params.db_out,
+        hits_tsv=params.hits_tsv_out,
         max_output_bytes=max_output_bytes,
         progress=params.progress,
     )
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

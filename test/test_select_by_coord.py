@@ -19,7 +19,7 @@ def test_select_by_coord_linear_region_1(shared_datadir):
         coords = output_dir + "/coords.tsv"
         _write_table(coords, ["contig", "start", "end"], [("pDONR201_3", 2, 6)])
 
-        select_by_coord.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "-c", coords])
+        select_by_coord.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--coords", coords])
 
         source = {record.id: record for record in SeqIO.parse(str(shared_datadir / "simple_genpept.gb"), "genbank")}
         records = list(parse_seqfiles([out]))
@@ -34,7 +34,7 @@ def test_select_by_coord_repeated_contig_rows_1(shared_datadir):
         coords = output_dir + "/coords.tsv"
         _write_table(coords, ["contig", "start", "end"], [("pDONR201_3", 1, 3), ("pDONR201_3", 4, 6)])
 
-        select_by_coord.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "-c", coords])
+        select_by_coord.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--coords", coords])
 
         source = {record.id: record for record in SeqIO.parse(str(shared_datadir / "simple_genpept.gb"), "genbank")}
         records = list(parse_seqfiles([out]))
@@ -51,7 +51,7 @@ def test_select_by_coord_reverse_strand_1(shared_datadir):
         coords = output_dir + "/coords.tsv"
         _write_table(coords, ["contig", "start", "end", "strand"], [("pDONR201_3", 1, 6, "-")])
 
-        select_by_coord.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "-c", coords])
+        select_by_coord.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--coords", coords])
 
         source = next(record for record in SeqIO.parse(str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "genbank") if record.id == "pDONR201_3")
         records = list(parse_seqfiles([out]))
@@ -66,7 +66,7 @@ def test_select_by_coord_circular_origin_span_1(shared_datadir):
         coords = output_dir + "/coords.tsv"
         _write_table(coords, ["contig", "start", "end"], [("pDONR201", 4468, 3)])
 
-        select_by_coord.main(["-i", str(shared_datadir / "pDONR201_domainator_circular.gb"), "-o", out, "-c", coords])
+        select_by_coord.main(["-i", str(shared_datadir / "pDONR201_domainator_circular.gb"), "-o", out, "--coords", coords])
 
         source = next(SeqIO.parse(str(shared_datadir / "pDONR201_domainator_circular.gb"), "genbank"))
         expected = str(source.seq[4467:] + source.seq[:3])
@@ -83,7 +83,7 @@ def test_select_by_coord_circular_origin_span_reverse_1(shared_datadir):
         coords = output_dir + "/coords.tsv"
         _write_table(coords, ["contig", "start", "end", "strand"], [("pDONR201", 4468, 3, "reverse")])
 
-        select_by_coord.main(["-i", str(shared_datadir / "pDONR201_domainator_circular.gb"), "-o", out, "-c", coords])
+        select_by_coord.main(["-i", str(shared_datadir / "pDONR201_domainator_circular.gb"), "-o", out, "--coords", coords])
 
         source = next(SeqIO.parse(str(shared_datadir / "pDONR201_domainator_circular.gb"), "genbank"))
         expected = str((source.seq[4467:] + source.seq[:3]).reverse_complement())
@@ -100,7 +100,7 @@ def test_select_by_coord_linear_origin_span_raises_1(shared_datadir):
         _write_table(coords, ["contig", "start", "end"], [("pDONR201_3", 10, 5)])
 
         with pytest.raises(ValueError, match="only valid for circular contigs"):
-            select_by_coord.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "-c", coords])
+            select_by_coord.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--coords", coords])
 
 
 def test_select_by_coord_file_basename_filter_1(shared_datadir):
@@ -119,7 +119,7 @@ def test_select_by_coord_file_basename_filter_1(shared_datadir):
             str(shared_datadir / "pdonr_peptides.fasta"),
             "-o",
             out,
-            "-c",
+            "--coords",
             coords,
         ])
 
@@ -140,7 +140,7 @@ def test_select_by_coord_missing_file_matches_all_files_1(shared_datadir):
             str(shared_datadir / "pdonr_peptides.fasta"),
             "-o",
             out,
-            "-c",
+            "--coords",
             coords,
         ])
 
@@ -155,4 +155,4 @@ def test_select_by_coord_rejects_extra_columns_1(shared_datadir):
         _write_table(coords, ["contig", "start", "end", "extra"], [("pDONR201_3", 1, 3, "x")])
 
         with pytest.raises(ValueError, match="Unexpected coordinate table columns"):
-            select_by_coord.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "-c", coords])
+            select_by_coord.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--coords", coords])

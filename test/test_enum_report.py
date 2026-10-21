@@ -271,7 +271,7 @@ def test_enum_report_nucleotide_contig_annotations(shared_datadir):
             "--input", str(shared_datadir / "simple_dna_target.fna"),
             "--fasta_type", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
-            "--output", annotated,
+            "-o", annotated,
             "--evalue", "0.1",
         ])
 
@@ -303,7 +303,7 @@ def test_enum_report_nucleotide_architecture_detailed(shared_datadir):
             "--input", str(shared_datadir / "simple_dna_target.fna"),
             "--fasta_type", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
-            "--output", annotated,
+            "-o", annotated,
             "--evalue", "0.1",
         ])
 
@@ -330,7 +330,7 @@ def test_enum_report_nucleotide_by_cds_skips_pseudo_cdss(shared_datadir):
             "--input", str(shared_datadir / "simple_dna_target.fna"),
             "--fasta_type", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
-            "--output", annotated,
+            "-o", annotated,
             "--evalue", "0.1",
         ])
 
@@ -446,7 +446,7 @@ def test_enum_report_html_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
         assert Path(out).is_file()
         
         compare_files(out, reference)
@@ -459,7 +459,7 @@ def test_enum_report_html_max_height_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html", out, "--html_max_height", "100", "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--html_max_height", "100", "--domains", "--sequence",  "--length", "--architecture", "--score"])
         assert Path(out).is_file()
         
         compare_files(out, reference)
@@ -471,7 +471,7 @@ def test_enum_report_html_quote_escape_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept_quote_name.gb"), "--by", "domain", "--html", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept_quote_name.gb"), "--by", "domain", "--html_out", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
         assert Path(out).is_file()
         
         compare_files(out, reference)
@@ -763,7 +763,7 @@ def test_enum_report_config_file_1(shared_datadir):
         # or as a list in the config file
         config_content = f"""input:
   - {str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")}
-output: {out}
+tsv_out: {out}
 """
         
         with open(config_file, 'w') as f:

@@ -15,24 +15,20 @@ When max_hits or pad are specified, hits will be sorted by best domain score and
 If neither is set, then hits will be written on the fly and not sorted.
 """
 
-import sys
-import os
-import tempfile
-from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, open_writable_seqfile, is_compressed_path, index_total_cds, native_parser_available, PARTIAL_CHOICES, WHERE_CHOICES, sequence_hashes
-from domainator import __version__
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_input, add_seq_outputs, add_switch, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.outputs import SeqOutputs
+from domainator.utils import parse_seqfiles, partition_seqfile, i_partition_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, index_total_cds, native_parser_available, PARTIAL_CHOICES, WHERE_CHOICES, sequence_hashes
 from domainator import select_by_cds
-import psutil
-from domainator import partition_seqfile
 from domainator import db_index
-from domainator import domainate, RawAndDefaultsFormatter
+from domainator import domainate
 import heapq
 from typing import List, Tuple, Set, Optional
 from domainator import extract_peptides
 import warnings
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
-from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path, write_records_with_limit
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded
 
 
 # Per-process taxonomy filter, populated by the pool initializer. The include/
@@ -215,7 +211,7 @@ class _partition_seqfile_worker():
         self.cdss_per_partition = cdss_per_partition
     
     def __call__(self, input_file):
-        return partition_seqfile.partition_seqfile(input_file,cdss_per_partition=self.cdss_per_partition)
+        return partition_seqfile(input_file, self.cdss_per_partition)
     
 
 def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, fasta_type="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoy_names=None, max_hits_per_contig=None, partial="include", deduplicate_by_sequence=False, dedup_both_strands=False):
@@ -290,7 +286,7 @@ def domain_search(partitions, references, z, evalue, max_hits, max_overlap, cpu,
     #     references on every restart, defeating R4.
     #   - No chunksize on imap_unordered: partitions are already large (~batch_size
     #     CDSs each), so per-task dispatch overhead is negligible; chunking would
-    #     only coarsen load balancing. (hmmer_search.py reaches the same conclusion.)
+    #     only coarsen load balancing. (domainator hmmer_search reaches the same conclusion.)
     #   - cpu - 1 workers: the parent process does the heap merge and GenBank
     #     writing, so it is reserved one core rather than oversubscribing.
     with make_pool(processes=cpu - 1, **pool_kwargs) as pool:
@@ -335,28 +331,26 @@ def get_input_molecule_types(input_files: List[str], default_molecule_type="prot
 
 
 
-def main(argv):
+def build_parser():
     if native_parser_available():
         parser_status = "Native (Rust) parser: installed (fast GenBank/FASTA parsing and offset scanning)."
     else:
         parser_status = ("Native (Rust) parser: NOT installed; using the slower Biopython parser. "
                          "See the README 'Native (Rust) acceleration' section to build it.")
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n{parser_status}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+    parser = tool_parser(f"{parser_status}\n\n" + __doc__)
 
-    parser.add_argument('-i', '--input', default=None, required=True,
-                       nargs='+', type=str,
-                       help="the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.")
+    add_input(parser, "the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.", stdin=False)
     parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
-    parser.add_argument('-r', '--references', required=True, type=str,
+    parser.add_argument('-r', '--reference', required=True, type=str,
                         default=None, nargs='+',
                         help="reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.") 
 
-    parser.add_argument('-o', '--output', default=None, type=str, required=False,
-                        help="output genbank filename. If not supplied, writes to stdout. "
-                        "If the filename ends in .gz/.bgz, the output is written as BGZF (block-gzip): "
-                        "it is gunzip-readable and ~3-4x smaller, and can be used directly as a "
-                        "random-access, partitionable compressed input to a later domainator step.")
+    add_seq_outputs(parser, genbank_help="Write the hits to this GenBank file. "
+                    "If the filename ends in .gz/.bgz, the output is written as BGZF (block-gzip): "
+                    "it is gunzip-readable and ~3-4x smaller, and can be used directly as a "
+                    "random-access, partitionable compressed input to a later domainator step.",
+                    fasta_help="Write the hits to this FASTA file.")
 
 
     parser.add_argument('-Z', default=1000, type=int, 
@@ -375,7 +369,7 @@ def main(argv):
                         help="Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
 
     parser.add_argument('--max_hits', type=int, default=None,
-                        help="the maximum number of CDSs returned by the search. Prioritized by bitscore of best scoring profile. [default: return all hits passing the evalue threshold]")
+                        help="the maximum number of CDSs returned by the search, keeping the best-scoring ones by the bitscore of their best scoring profile. If not supplied, return all hits passing the evalue threshold.")
     
     parser.add_argument('--max_hits_per_contig', type=int, default=None,
                         help="the maximum number of independent hits per contig. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit. [default: unlimited]")
@@ -403,12 +397,13 @@ def main(argv):
                         help="the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. [default 1]")
     parser.add_argument('--add_annotations', action='store_true', default=False,
                         help="When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.")
-    parser.add_argument('--deduplicate', action='store_true', default=False,
-                        help="by default if the same region is extracted for multiple hits then both will be kept. Set this option to eliminate redundancies.")
+    add_switch(parser, "deduplicate", default=False,
+               help="if the same region is extracted for multiple hits, then keep only one copy of it (compared by record ID).",
+               negative_help="keep every copy of a region extracted for multiple hits. This can result in duplicated contig names.")
     parser.add_argument('--deduplicate_by_sequence', action='store_true', default=False,
-                        help="Drop hits whose output sequence is identical to an earlier hit (SHA-256 hash, as in deduplicate_genbank.py --algorithm hash). "
+                        help="Drop hits whose output sequence is identical to an earlier hit (SHA-256 hash, as in domainator deduplicate_genbank --algorithm hash). "
                         "Useful for highly redundant databases. Independent of --deduplicate, which only drops repeated record IDs.")
-    parser.add_argument('--dedup_both_strands', action='store_true', default=False,
+    parser.add_argument('--both_strands', action='store_true', default=False,
                         help="With --deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.")
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")
@@ -440,8 +435,8 @@ def main(argv):
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract regions around CDSs on the specified strand.")
 
     parser.add_argument('--pad', action='store_true', default=False,
-                       help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --pad_where.")
-    parser.add_argument('--pad_where', type=str, default="start", choices=WHERE_CHOICES,
+                       help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor.")
+    parser.add_argument('--anchor', type=str, default="start", choices=WHERE_CHOICES,
                        help="Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. "
                        "start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.")
 
@@ -462,14 +457,17 @@ def main(argv):
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     # parameter validation
-    if params.cpu <= 0:
-        cpus = psutil.cpu_count(logical=False)
-    else:
-        cpus = params.cpu
+    cpus = resolve_cpu(params.cpu)
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    reject_stdin(parser, params.input, "it reads its input more than once (to count and partition it)")
 
     if params.evalue > 10:
         raise ValueError("evalue must be <= 10.")
@@ -481,26 +479,14 @@ def main(argv):
     # BGZF-compressed outputs (-o foo.gb.gz) the file on disk will be smaller than
     # this limit (R1).
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    output_description = f"domain_search GenBank output '{params.output if params.output is not None else 'stdout'}'"
     mitigation_options = ["--max_hits", "--max_hits_per_contig", "--cds_range", "--kb_range"]
     extra_guidance = None
     if params.whole_contig:
         extra_guidance = "Avoid --whole_contig on broad searches unless you expect very few hits."
 
-    temp_output_path = None
-    if params.output is None:
-        out = sys.stdout
-    else:
-        temp_output_path = make_temporary_output_path(params.output)
-        # If the final output path is .gz/.bgz, write BGZF (random-access gzip) so
-        # the result is a compressed, partitionable input for the next step (R1).
-        # The compression decision follows params.output, not the .tmp temp path.
-        out = open_writable_seqfile(temp_output_path, compressed=is_compressed_path(params.output))
-
-    if params.max_hits == 0:
-        max_hits = None
-    else:
-        max_hits = params.max_hits
+    if params.max_hits is not None and params.max_hits < 1:
+        parser.error("--max_hits must be at least 1. Leave it out to return all hits.")
+    max_hits = params.max_hits
         
     whole_contig = params.whole_contig
     normalize_direction = not params.keep_direction
@@ -516,17 +502,17 @@ def main(argv):
     input_files = [shard for db in params.input for shard in db_index.resolve_database_shards(db)]
 
     molecule_types = get_input_molecule_types(input_files, default_molecule_type=params.fasta_type)
-    reference_groups = domainate.read_references(params.references, foldseek=None)
+    reference_groups = domainate.read_references(params.reference, foldseek=None)
     domainate.validate_input_molecule_types(molecule_types, reference_groups)
     if len(molecule_types) > 1 and "protein" in molecule_types and not translate:
         raise ValueError("Inputs are a combination of DNA and protein sequences, but --translate is not set. This would lead to an output genbank file with mixed protein and DNA sequences.")
     if ("protein" in molecule_types or translate) and (kb_range is not None or cds_range is not None or whole_contig or pad):
         raise ValueError("Protein sequence output is not compatible with neighborhood extraction or padding.")
-    if params.dedup_both_strands:
+    if params.both_strands:
         if not params.deduplicate_by_sequence:
-            raise ValueError("--dedup_both_strands requires --deduplicate_by_sequence.")
+            parser.error("--both_strands requires --deduplicate_by_sequence.")
         if "protein" in molecule_types or translate:
-            raise ValueError("--dedup_both_strands is only supported for nucleotide output.")
+            parser.error("--both_strands is only supported for nucleotide output.")
     
 
 
@@ -539,7 +525,7 @@ def main(argv):
         header_counts = [index_total_cds(f) for f in input_files]
         if header_counts and all(c is not None for c in header_counts):
             Z = sum(header_counts)
-            partitions = partition_seqfile.i_partition_seqfiles(input_files, cdss_per_partition=params.batch_size)
+            partitions = i_partition_seqfiles(input_files, params.batch_size)
         else:
             cds_count = 0
             partitions = list()
@@ -549,7 +535,7 @@ def main(argv):
                     partitions.extend(file_partitions)
             Z = cds_count
     else: #Z is pre-set, so partitions can be a lazy iterator.
-        partitions = partition_seqfile.i_partition_seqfiles(input_files, cdss_per_partition=params.batch_size)
+        partitions = i_partition_seqfiles(input_files, params.batch_size)
         Z = params.Z
 
     if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
@@ -567,11 +553,13 @@ def main(argv):
     ### Run
     seen = set()
     records = list()
-    current_output_bytes = 0
+    outputs = SeqOutputs(params.genbank_out, params.fasta_out, max_output_bytes=max_output_bytes,
+                         mitigation_options=mitigation_options, extra_guidance=extra_guidance)
     try:
-        for record in domain_search(
+        with outputs:
+            hits = domain_search(
             partitions,
-            references=params.references,
+            references=params.reference,
             z=Z,
             evalue=params.evalue,
             max_hits=max_hits,
@@ -597,55 +585,20 @@ def main(argv):
             max_hits_per_contig=params.max_hits_per_contig,
             partial=params.partial,
             deduplicate_by_sequence=params.deduplicate_by_sequence,
-            dedup_both_strands=params.dedup_both_strands,
-            ):
-            if not pad:
-                if not deduplicate or (record.id not in seen):
-                    current_output_bytes = write_records_with_limit(
-                        (record,),
-                        out,
-                        current_output_bytes,
-                        max_output_bytes,
-                        output_description,
-                        mitigation_options,
-                        extra_guidance,
-                    )
-            else:
-                if not deduplicate or (record.id not in seen):
-                    records.append(record)
-            if deduplicate:
-                seen.add(record.id)
-        if pad:
-            records.sort(reverse=True)
-            select_by_cds.pad_records(records, where=params.pad_where)
-            current_output_bytes = write_records_with_limit(
-                records,
-                out,
-                current_output_bytes,
-                max_output_bytes,
-                output_description,
-                mitigation_options,
-                extra_guidance,
+            dedup_both_strands=params.both_strands,
             )
+            for record in hits:
+                if deduplicate and record.id in seen:
+                    continue
+                if deduplicate:
+                    seen.add(record.id)
+                if pad:
+                    records.append(record)
+                else:
+                    outputs.write(record)
+            if pad:
+                records.sort(reverse=True)
+                select_by_cds.pad_records(records, where=params.anchor)
+                outputs.write_all(records)
     except OutputSizeLimitExceeded as exc:
-        if params.output is not None:
-            out.close()
-            if temp_output_path is not None and os.path.exists(temp_output_path):
-                os.remove(temp_output_path)
         raise SystemExit(str(exc)) from None
-    except Exception:
-        if params.output is not None:
-            out.close()
-            if temp_output_path is not None and os.path.exists(temp_output_path):
-                os.remove(temp_output_path)
-        raise
-
-    if params.output is not None:
-        out.close()
-        os.replace(temp_output_path, params.output)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

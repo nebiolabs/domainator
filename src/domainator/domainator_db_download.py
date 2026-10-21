@@ -26,26 +26,26 @@
     WARNING: Downloading large databases can take a long time and use a lot of disk space!
 """
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import gzip
 import os
 import shutil
 import subprocess
 import time
 import requests
+from domainator.cli.common import add_output, add_switch, check_outputs, resolve_cpu, tool_parser
 from domainator.Bio import SeqIO
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
 import sys
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
 from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager, compile_taxonomy_allowed, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
-from domainator import __version__, RawAndDefaultsFormatter
-from typing import Dict, List, Set, Tuple, Union, Optional, Iterator
+from domainator import __version__
+from typing import Dict, Set, Optional, Iterator
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
 import tqdm
 import datetime
 import tempfile
-import psutil
 import functools
 from contextlib import nullcontext
 from requests.adapters import HTTPAdapter
@@ -530,7 +530,7 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
 
     accessions = [r["assembly_accession"] for r in genbank_accessions]
     if num_recs is not None:
-        # cap the *download* (not just the append) so --num_recs is a cheap end-to-end test
+        # cap the *download* (not just the append) so --max_records is a cheap end-to-end test
         accessions = accessions[:num_recs]
     accession_file = workdir / "accessions.txt"
     with open(accession_file, "w") as fh:
@@ -692,6 +692,10 @@ def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids
 
 
 UNIPROT_DBS = {"swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}
+FASTA_DBS = {"swissprot", "trembl", "uniprot"}
+"""Databases downloaded as FASTA; all others are downloaded as GenBank."""
+GENBANK_DBS = (UNIPROT_DBS - FASTA_DBS) | {"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks",
+                                        "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all"}
 
 def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpus:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None, partial="include"):
 
@@ -913,18 +917,23 @@ def domainator_db_download(ncbi_taxonomy, output_file_path, include_taxids, excl
             **ncbi_friendly_kwargs,
         )
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument("--db", type=str.lower, choices={"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks", "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all", "swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}, help="Database to download")
-    parser.add_argument("-o", "--output", type=str, required=True, help="Output filename")
+def build_parser():
+    parser = tool_parser(__doc__)
+    parser.add_argument("--db", type=str.lower, required=True, choices=sorted(FASTA_DBS | GENBANK_DBS),
+                        help="Database to download. swissprot, trembl and uniprot are downloaded as FASTA (write them with --fasta_out); "
+                             "the _gb UniProt databases and the ncbi databases are downloaded as GenBank (write them with -o/--genbank_out).")
+    add_output(parser, "genbank", "Write the downloaded GenBank records to this file.", primary=True)
+    add_output(parser, "fasta", "Write the downloaded FASTA records to this file.")
     parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES,
                         help=partial_help("Which UniProt records to download") + " Only for the UniProt databases.")
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
     parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
     parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a record when it is in the record's lineage. Mutually exclusive with --include_taxids/--exclude_taxids. For prokaryote-only (_proks) databases, Eukaryota are excluded in addition to this expression.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
-    parser.add_argument("--skip_taxonomy_update", action="store_true", help="By default, if taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version. Setting this flag will skip this check.")
-    parser.add_argument("--success_rec_log", type=str, default=None, help="Path to log file for successfully written records. If not specified, successfully written records will not be logged.")
+    add_switch(parser, "taxonomy_update", default=True,
+               help="if the taxonomy database exists, check it against the version on the ncbi server and update it if there is a newer version.",
+               negative_help="skip the check for a newer version of the taxonomy database.")
+    parser.add_argument("--success_log_out", type=str, default=None, help="Path to log file for successfully written records. If not specified, successfully written records will not be logged.")
 
     parser.add_argument('--exclude_accessions', type=str, default=None, nargs='+',
                         help="Exclude genbank records with these accessions. Should be versionless (i.e. without the '.' and number after the '.')")
@@ -935,12 +944,12 @@ def main(argv):
     parser.add_argument("--ncbi_summary", type=str, default=None, help="Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt.")
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
                         help="When activated, for nucleotide databases, such as Genbank, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None].")
-    parser.add_argument("--num_recs", type=int, default=None, help="Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.")
+    parser.add_argument("--max_records", type=int, default=None, help="Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.")
     parser.add_argument("--append", action="store_true", help="Append to existing file") 
     parser.add_argument("--before", type=str, default=None, help="For ncbi databases, only download records before this date. Format is YYYY-MM-DD.")
     parser.add_argument("--after", type=str, default=None, help="For ncbi databases, only download records after this date. Format is YYYY-MM-DD.")
     parser.add_argument('--cpu', type=int, default=0,
-                        help="the number of cores of the cpu which are used at a time to download ncbi records [default: use all available cores]")
+                        help="the number of cores of the cpu which are used at a time to download ncbi records. 0: one per physical core.")
 
     parser.add_argument('--download_backend', type=str.lower, default="datasets", choices={"direct", "datasets"},
                         help="Network backend for ncbi genome downloads. 'datasets' uses the NCBI Datasets CLI dehydrate/rehydrate workflow (recommended for large jobs; NCBI's own bulk tool handles throttling). 'direct' downloads .gbff.gz files over HTTPS directly. [default: datasets]")
@@ -962,26 +971,38 @@ def main(argv):
                         help="For the 'datasets' backend: pass `--gzip` to `datasets rehydrate` so the rehydrated genomic.gbff files are stored gzip-compressed (much smaller scratch dir; read transparently). Recommended for very large downloads.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    expected_output, other_output = ("fasta_out", "genbank_out") if params.db in FASTA_DBS else ("genbank_out", "fasta_out")
+    if getattr(params, other_output) is not None:
+        parser.error(f"--db {params.db} is downloaded as {'FASTA' if params.db in FASTA_DBS else 'GenBank'}, so write it with "
+                     f"{'--fasta_out' if expected_output == 'fasta_out' else '-o/--genbank_out'}.")
+    output = getattr(params, expected_output)
+    if output == "-":
+        output = "/dev/stdout"  # worker processes append to the output by path
 
-    # Guard against wiping the canonical exclusion log: --success_rec_log is opened with "w"
+    # Guard against wiping the canonical exclusion log: --success_log_out is opened with "w"
     # (truncated), so pointing it at the same file as --exclude_accessions_file would erase
     # the list of already-downloaded accessions. Checked before the output is touched.
-    if (params.success_rec_log is not None and params.exclude_accessions_file is not None
-            and os.path.abspath(params.success_rec_log) == os.path.abspath(params.exclude_accessions_file)):
-        raise Exception(
-            "--success_rec_log and --exclude_accessions_file must be different files: "
-            "--success_rec_log is truncated on each run, which would erase the exclusion log. "
+    if (params.success_log_out is not None and params.exclude_accessions_file is not None
+            and os.path.abspath(params.success_log_out) == os.path.abspath(params.exclude_accessions_file)):
+        parser.error(
+            "--success_log_out and --exclude_accessions_file must be different files: "
+            "--success_log_out is truncated on each run, which would erase the exclusion log. "
             "Write new successes to a separate file (e.g. success_log_new.txt) and merge it "
             "into the exclusion log after a clean run."
         )
 
     if params.append:
-        if not Path(params.output).is_file():
-            raise Exception(f"File {params.output} is not a file, so you cannot append to it.")
+        if not Path(output).is_file():
+            parser.error(f"{output} is not a file, so you cannot append to it.")
     else: # overwrite the output file with a blank file
-        with open(params.output, "w") as output_handle:
+        with open(output, "w") as output_handle:
             pass
     
         
@@ -996,7 +1017,7 @@ def main(argv):
         # create the path to the NCBI taxonomy database
         Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
         # load the NCBI taxonomy database
-        ncbi_taxonomy = NCBITaxonomy(params.ncbi_taxonomy_path, not params.skip_taxonomy_update)
+        ncbi_taxonomy = NCBITaxonomy(params.ncbi_taxonomy_path, params.taxonomy_update)
 
 
     before = None
@@ -1009,10 +1030,7 @@ def main(argv):
     
 
     # parameter validation
-    if params.cpu <= 0:
-        cpus = psutil.cpu_count(logical=False)
-    else:
-        cpus = params.cpu
+    cpus = resolve_cpu(params.cpu)
 
     download_workers = cpus if params.download_workers <= 0 else params.download_workers
 
@@ -1024,14 +1042,8 @@ def main(argv):
     api_key = params.ncbi_api_key or os.environ.get("NCBI_API_KEY")
     user_agent = f"domainator/{__version__}" + (f" ({email})" if email else "")
 
-    domainator_db_download(ncbi_taxonomy, params.output, params.include_taxids, params.exclude_taxids, params.db, params.gene_call, params.num_recs, params.ncbi_summary, before, after, cpus, success_rec_log=params.success_rec_log, exclude_accessions=exclude_accessions,
+    domainator_db_download(ncbi_taxonomy, output, params.include_taxids, params.exclude_taxids, params.db, params.gene_call, params.max_records, params.ncbi_summary, before, after, cpus, success_rec_log=params.success_log_out, exclude_accessions=exclude_accessions,
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
                            datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,
                            datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr, partial=params.partial)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == "__main__":
-    main(sys.argv[1:])

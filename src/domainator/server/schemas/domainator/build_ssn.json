@@ -3,9 +3,9 @@
   "display_name": "Build SSN",
   "category": "Plots",
   "description": "Generates Sequence Similarity Networks\n    \nBuild a sequence similarity network and do analysis related to that.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 1,
-  "entry_point": "domainator.build_ssn",
+  "entry_point": "build_ssn",
   "parameters": [
     {
       "name": "Input",
@@ -25,12 +25,12 @@
     },
     {
       "name": "Lb",
-      "parameter": "lb",
+      "parameter": "threshold",
       "help": "exclude all edges with weights less than or equal to this value. This should be >= 0.",
       "type": "number",
       "default": 0,
       "flags": [
-        "--lb"
+        "--threshold"
       ]
     },
     {
@@ -91,11 +91,12 @@
     },
     {
       "name": "Xgmml",
-      "parameter": "xgmml",
+      "parameter": "xgmml_out",
       "help": "write a cytoscape xgmml file of the projection.",
       "type": "output",
       "flags": [
-        "--xgmml"
+        "-o",
+        "--xgmml_out"
       ]
     },
     {
@@ -141,11 +142,11 @@
     },
     {
       "name": "Cluster Tsv",
-      "parameter": "cluster_tsv",
+      "parameter": "cluster_tsv_out",
       "help": "Path to write a tsv file will mapping each sequence to its cluster. If set, then --cluster is automatically activated. If --no_cluster_header not set, then the file will have header contig cluster.",
       "type": "output",
       "flags": [
-        "--cluster_tsv"
+        "--cluster_tsv_out"
       ]
     },
     {

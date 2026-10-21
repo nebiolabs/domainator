@@ -3,9 +3,9 @@
   "display_name": "Clean Sequences",
   "category": "Editors",
   "description": "Clean and filter sequences in genbank or fasta files\n\nThis tool provides functionality to:\n- Clean sequence names for compatibility with newick format\n- Deduplicate sequence names to ensure uniqueness\n- Strip non-canonical residues from sequence ends\n- Filter out sequences containing non-canonical residues",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 4,
-  "entry_point": "domainator.clean_sequences",
+  "entry_point": "clean_sequences",
   "parameters": [
     {
       "name": "Input",
@@ -45,21 +45,20 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "Genbank output file name.",
       "required": true,
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
       "name": "Fasta Out",
       "parameter": "fasta_out",
-      "help": "Makes output a fasta file when activated.",
-      "type": "boolean",
-      "default": false,
+      "help": "Write the records to this FASTA file. Use - for standard output.",
+      "type": "output",
       "flags": [
         "--fasta_out"
       ]

@@ -1,9 +1,9 @@
 """Rotate circular contigs so that their origin is set relative to a domain annotation.
 
 For each contig, one domain is chosen from new annotations found by searching the references (-r) against the contig,
-and/or from pre-existing Domainator (--domains) or domain_search (--search_hits) annotations.
+and/or from pre-existing Domainator (--domains) or domain_search (--annotation_type domain_search) annotations.
 If there are several candidates, the one with the highest score is chosen (ties broken by lowest E-value, then by position).
-The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--where),
+The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--anchor),
 and reverse complemented if necessary to put the chosen domain on the forward strand (unless --keep_direction).
 
 Positions are relative to the chosen domain, in its own orientation:
@@ -20,21 +20,21 @@ need --gene_call to be found by protein references. Nucleotide references (nucle
 infernal CM files) are searched against the whole contig.
 """
 
-import sys
 import warnings
 from itertools import islice
 from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
+from domainator.cli.common import STDIN_PATHS, add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator import utils
-from domainator.Bio import SeqIO
 from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, SeqFeature
 from domainator.Bio.SeqRecord import SeqRecord, DOMAINATOR_DIST_TO_START_ANNOTATION, DOMAINATOR_DIST_TO_END_ANNOTATION, DOMAINATOR_FOCUS_STRAND_ANNOTATION, DOMAINATOR_HIT_SCORES_ANNOTATION, DOMAINATOR_HIT_NAMES_ANNOTATION, DOMAINATOR_HIT_BEST_SCORE_ANNOTATION
 from domainator.domainate import domainate, read_references
 from domainator.lean_record import LeanContig, lean_to_seqrecord, LEAN_SEARCH_TYPES, materialize_lean_search
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, slice_record_from_location, region_id, WHERE_CHOICES
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id, WHERE_CHOICES
 
 _NUCLEOTIDE_LETTERS = set("ACGTURYSWKMBDHVN-.")
 
@@ -280,17 +280,13 @@ def _rotate_contigs(records, reference_groups, z, evalue, domains, databases, se
         yield rotate_record(rec, cut, reverse, features, keep_name)
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="names of input genbank or fasta files. Must be nucleotide sequences. If not supplied, reads genbank from stdin.")
-    parser.add_argument("-o", "--output", default=None, type=str, required=False,
-                        help="output file name. If not supplied, writes to stdout.")
-    parser.add_argument("--fasta_out", action="store_true", default=False,
-                        help="makes output a fasta file when activated")
+    add_input(parser, 'Names of input genbank or fasta files. Must be nucleotide sequences.')
+    add_seq_outputs(parser)
 
-    parser.add_argument("-r", "--references", required=False, type=str, default=None, nargs="+",
+    parser.add_argument("-r", "--reference", required=False, type=str, default=None, nargs="+",
                         help="reference files to search against the input, to find new domains to rotate on. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.")
     parser.add_argument("-Z", default=1000, type=int,
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
@@ -304,10 +300,9 @@ def main(argv):
                         help="text file containing names of pre-existing domainator annotations to rotate on.")
     parser.add_argument("--databases", type=str, default=None, nargs="+",
                         help="Consider only pre-existing annotations from these databases. default: all databases.")
-    parser.add_argument("--search_hits", action="store_true", default=False,
-                        help="Rotate on pre-existing search hit annotations (from domain_search.py).")
+    add_annotation_type(parser, help="Which pre-existing annotations to rotate on.")
 
-    parser.add_argument("--where", type=str, default="start", choices=WHERE_CHOICES,
+    parser.add_argument("--anchor", type=str, default="start", choices=WHERE_CHOICES,
                         help="where to put the origin, relative to the chosen domain in its own orientation (not relative to the original orientation of the contig). "
                         "start: the first base of the domain becomes the first base of the contig. end: the last base of the domain becomes the last base of the contig. center: the origin is placed in the middle of the domain.")
     parser.add_argument("--keep_direction", action="store_true", default=False,
@@ -330,7 +325,11 @@ def main(argv):
                         help="How many contigs to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.")
 
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     if params.evalue > 10:
@@ -338,28 +337,23 @@ def main(argv):
 
     domains = list_and_file_to_dict_keys(params.domains, params.domains_file, as_set=True)
 
-    filetype_override = None
-    if params.input is None:
-        input_files = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        input_files = params.input
+    input_files = params.input
 
     z = params.Z
     if z == 0:
-        if params.input is None:
-            raise ValueError("-Z 0 counts the sequences in the input files, so it can't be used when reading from stdin.")
+        if any(path in STDIN_PATHS for path in params.input):
+            parser.error("-Z 0 counts the sequences in the input files, so it can't be used when reading from stdin.")
         z = sum(utils.count_peptides(file_path) for file_path in params.input)
 
     rotated = rotate_contigs(
-        parse_seqfiles(input_files, None, filetype_override=filetype_override, default_molecule_type="DNA"),
-        references=params.references,
+        parse_seqfiles(input_files, None, default_molecule_type="DNA"),
+        references=params.reference,
         z=z,
         evalue=params.evalue,
         domains=domains,
         databases=params.databases,
-        search_hits=params.search_hits,
-        where=params.where,
+        search_hits=params.annotation_type == "domain_search",
+        where=params.anchor,
         keep_direction=params.keep_direction,
         circularize=params.circularize,
         keep_name=params.keep_name,
@@ -370,23 +364,6 @@ def main(argv):
         batch_size=params.batch_size,
     )
 
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
-    if params.fasta_out:
-        SeqIO.write(rotated, output_handle, "fasta")
-    else:
-        write_genbank(rotated, output_handle)
-
-    if params.output is not None:
-        output_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+    write_seq_outputs(rotated, genbank=params.genbank_out, fasta=params.fasta_out)

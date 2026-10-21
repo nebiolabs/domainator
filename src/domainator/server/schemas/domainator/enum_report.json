@@ -3,8 +3,8 @@
   "display_name": "Enum Report",
   "category": "Record-wise reports",
   "description": "Writes record-wise information from Genbank files into tab-separated or html tables\nTakes a genbank file which has been annotated using Domainate, write tabulated descriptions of each contig, CDS, or domain.",
-  "runner": "module",
-  "entry_point": "domainator.enum_report",
+  "runner": "domainator",
+  "entry_point": "enum_report",
   "parameters": [
     {
       "name": "Input",
@@ -26,25 +26,25 @@
         "fa",
         "faa",
         "fna"
-      ]      
+      ]
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "tsv_out",
       "help": "The name of the output tsv file.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--tsv_out"
       ]
     },
     {
       "name": "Html",
-      "parameter": "html",
+      "parameter": "html_out",
       "help": "Write a table in html format to this file.",
       "type": "output",
       "flags": [
-        "--html"
+        "--html_out"
       ]
     },
     {
@@ -74,7 +74,7 @@
     },
     {
       "name": "Domains",
-      "parameter": "output_cols__domains",
+      "parameter": "output_cols",
       "help": "report domain content as alphabetical and semicolon-separated, only listing duplicates once.",
       "type": "boolean",
       "flags": [
@@ -89,7 +89,7 @@
     },
     {
       "name": "Domain Descriptions",
-      "parameter": "output_cols__domain_descriptions",
+      "parameter": "output_cols",
       "help": "report domain content as alphabetical and semicolon-separated, only listing duplicates once.",
       "type": "boolean",
       "flags": [
@@ -104,7 +104,7 @@
     },
     {
       "name": "Score",
-      "parameter": "output_cols__score",
+      "parameter": "output_cols",
       "help": "report report the sum of domain scores.",
       "type": "boolean",
       "flags": [
@@ -119,7 +119,7 @@
     },
     {
       "name": "Identity",
-      "parameter": "output_cols__identity",
+      "parameter": "output_cols",
       "help": "report report the sum of domain identities.",
       "type": "boolean",
       "flags": [
@@ -134,7 +134,7 @@
     },
     {
       "name": "Architecture",
-      "parameter": "output_cols__architecture",
+      "parameter": "output_cols",
       "help": "report domains in order of appearance of start position in the sequence and semicolon-separated.",
       "type": "boolean",
       "flags": [
@@ -149,7 +149,7 @@
     },
     {
       "name": "Architecture Detailed",
-      "parameter": "output_cols__architecture_detailed",
+      "parameter": "output_cols",
       "help": "report domain architecture in order of appearance of start position in the sequence. Within each CDS, domains are separated by a '/'. CDSs are separated by a ';'. CDSs with no domains are represented by 'no_domains'.",
       "type": "boolean",
       "flags": [
@@ -164,7 +164,7 @@
     },
     {
       "name": "Start",
-      "parameter": "output_cols__start",
+      "parameter": "output_cols",
       "help": "report the start coordinate of the feature.",
       "type": "boolean",
       "flags": [
@@ -179,7 +179,7 @@
     },
     {
       "name": "End",
-      "parameter": "output_cols__end",
+      "parameter": "output_cols",
       "help": "report the end coordinate of the feature.",
       "type": "boolean",
       "flags": [
@@ -194,7 +194,7 @@
     },
     {
       "name": "Strand",
-      "parameter": "output_cols__strand",
+      "parameter": "output_cols",
       "help": "report the strand of the feature.",
       "type": "boolean",
       "flags": [
@@ -209,7 +209,7 @@
     },
     {
       "name": "Length",
-      "parameter": "output_cols__length",
+      "parameter": "output_cols",
       "help": "report the (contig, cds, or domain) length as a column in the output.",
       "type": "boolean",
       "flags": [
@@ -224,7 +224,7 @@
     },
     {
       "name": "Topology",
-      "parameter": "output_cols__topology",
+      "parameter": "output_cols",
       "help": "report the topology in the output (typically only makes sense when using --by contig).",
       "type": "boolean",
       "flags": [
@@ -239,7 +239,7 @@
     },
     {
       "name": "Sequence",
-      "parameter": "output_cols__sequence",
+      "parameter": "output_cols",
       "help": "report the (contig, cds, or domain) sequence as a column in the output.",
       "type": "boolean",
       "flags": [
@@ -254,7 +254,7 @@
     },
     {
       "name": "Cds Count",
-      "parameter": "output_cols__cds_count",
+      "parameter": "output_cols",
       "help": "report the number of CDSs as a column in the output",
       "type": "boolean",
       "flags": [
@@ -269,7 +269,7 @@
     },
     {
       "name": "Domain Count",
-      "parameter": "output_cols__domain_count",
+      "parameter": "output_cols",
       "help": "report the number of domains as a column in the output",
       "type": "boolean",
       "flags": [
@@ -284,7 +284,7 @@
     },
     {
       "name": "Definition",
-      "parameter": "output_cols__definition",
+      "parameter": "output_cols",
       "help": "report sequence definition line from the genbank file.",
       "type": "boolean",
       "flags": [
@@ -299,7 +299,7 @@
     },
     {
       "name": "Filename",
-      "parameter": "output_cols__filename",
+      "parameter": "output_cols",
       "help": "report the filename of the input file from which the record originated.",
       "type": "boolean",
       "flags": [
@@ -314,7 +314,7 @@
     },
     {
       "name": "Domain Search",
-      "parameter": "output_cols__domain_search",
+      "parameter": "output_cols",
       "help": "This is a composite metric that will return multiple columns: best_query, query_description, query_start, query_end, query_length, match_start, match_end, match_strand, match_score, match_identity.",
       "type": "boolean",
       "flags": [
@@ -329,7 +329,7 @@
     },
     {
       "name": "Taxid Lineage",
-      "parameter": "output_cols__taxid_lineage",
+      "parameter": "output_cols",
       "help": "a semicolon separated list of taxids from the root to the taxid of the sequence.",
       "type": "boolean",
       "flags": [
@@ -344,7 +344,7 @@
     },
     {
       "name": "Taxname Lineage",
-      "parameter": "output_cols__taxname_lineage",
+      "parameter": "output_cols",
       "help": "a semicolon separated list of taxnames from the root to the taxid of the sequence.",
       "type": "boolean",
       "flags": [
@@ -359,7 +359,7 @@
     },
     {
       "name": "Rank Lineage",
-      "parameter": "output_cols__rank_lineage",
+      "parameter": "output_cols",
       "help": "a semicolon separated list of ranks from the root to the taxid of the sequence.",
       "type": "boolean",
       "flags": [
@@ -374,7 +374,7 @@
     },
     {
       "name": "Taxid",
-      "parameter": "output_cols__taxid",
+      "parameter": "output_cols",
       "help": "The taxid at the given rank (e.g. superkingdom, genus, species); use 'self' for the lowest level taxid available for the record. Enter one entry per line; within a line, provide one or more ranks separated by spaces or commas. The column will be named taxid_[rank].",
       "type": "dynamic",
       "flags": [
@@ -390,7 +390,7 @@
     },
     {
       "name": "Taxname",
-      "parameter": "output_cols__taxname",
+      "parameter": "output_cols",
       "help": "The taxname at the given rank (e.g. superkingdom, genus, species); use 'self' for the lowest level taxname available for the record. Enter one entry per line; within a line, provide one or more ranks separated by spaces or commas. The column will be named taxname_[rank].",
       "type": "dynamic",
       "flags": [
@@ -406,7 +406,7 @@
     },
     {
       "name": "Qualifier",
-      "parameter": "output_cols__qualifier",
+      "parameter": "output_cols",
       "help": "Supply two strings: a feature type and a qualifier name. Report the values of all instances of this feature+qualifier combination (multiple hits are joined with ';'). Enter one entry per line; within a line provide exactly two values separated by spaces or a comma.",
       "type": "dynamic",
       "flags": [
@@ -422,7 +422,7 @@
     },
     {
       "name": "Feature Count",
-      "parameter": "output_cols__feature_count",
+      "parameter": "output_cols",
       "help": "Reports the number of features of this type. Enter one entry per line.",
       "type": "dynamic",
       "flags": [
@@ -438,7 +438,7 @@
     },
     {
       "name": "Motif Count",
-      "parameter": "output_cols__motif_count",
+      "parameter": "output_cols",
       "help": "Report the number of the given PROSITE motif present in the sequence. If nucleotide sequences are provided, then nucleotide motifs are counted. If protein sequences are provided, then protein motifs are counted. More information about PROSITE specification can be found: https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html. Enter one entry per line.",
       "type": "dynamic",
       "flags": [
@@ -454,7 +454,7 @@
     },
     {
       "name": "Isoelectric Point",
-      "parameter": "output_cols__isoelectric_point",
+      "parameter": "output_cols",
       "help": "Report the isoelectric point of a protein. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig).",
       "type": "boolean",
       "flags": [
@@ -469,7 +469,7 @@
     },
     {
       "name": "Net Charge",
-      "parameter": "output_cols__net_charge",
+      "parameter": "output_cols",
       "help": "Report the net charge of a protein at the given pH. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig). Enter one entry per line.",
       "type": "dynamic",
       "flags": [
@@ -485,7 +485,7 @@
     },
     {
       "name": "Repeat Count",
-      "parameter": "output_cols__repeat_count",
+      "parameter": "output_cols",
       "help": "Report the number of repeats of the given length or longer. For example AGGKKK will have repeat_count_1 = 3, repeat_count_2 = 2, and repeat_count_3 = 1. Enter one entry per line.",
       "type": "dynamic",
       "flags": [
@@ -501,7 +501,7 @@
     },
     {
       "name": "Named Domain Count",
-      "parameter": "output_cols__named_domain_count",
+      "parameter": "output_cols",
       "help": "Count the number of Domainator domain features with the given domain name. Can be supplied multiple times. Enter one domain name per line.",
       "type": "dynamic",
       "flags": [
@@ -517,7 +517,7 @@
     },
     {
       "name": "Starts With",
-      "parameter": "output_cols__starts_with",
+      "parameter": "output_cols",
       "help": "Reports the first character of the contig sequence.",
       "type": "boolean",
       "flags": [
@@ -532,7 +532,7 @@
     },
     {
       "name": "Molecular Weight",
-      "parameter": "output_cols__molecular_weight",
+      "parameter": "output_cols",
       "help": "Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.",
       "type": "boolean",
       "flags": [
@@ -547,7 +547,7 @@
     },
     {
       "name": "Fragment",
-      "parameter": "output_cols__fragment",
+      "parameter": "output_cols",
       "help": "Reports whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' or MGnify 'FL=0' header). Only for rows that are a single protein or CDS (protein records, CDSs, and the domains of protein records); otherwise empty, with a warning. See also --partial_count.",
       "type": "boolean",
       "flags": [
@@ -562,7 +562,7 @@
     },
     {
       "name": "Partial Count",
-      "parameter": "output_cols__partial_count",
+      "parameter": "output_cols",
       "help": "Reports the number of partial CDSs: by contig, the number of CDSs with '<' or '>' in their location (for a protein record, 1 if it is a fragment); by cds, 1 if the CDS or protein is a fragment, otherwise 0; by domain, 1 if the CDS or protein the domain is on is a fragment, otherwise 0, whether or not the domain reaches the missing end.",
       "type": "boolean",
       "flags": [
@@ -621,7 +621,7 @@
     },
     {
       "name": "Append",
-      "parameter": "output_cols__append",
+      "parameter": "output_cols",
       "help": "Supply three strings: column name, column type (str/int/float), and a constant value for all rows. Enter one entry per line; within a line provide exactly three values separated by spaces or commas.",
       "type": "dynamic",
       "flags": [

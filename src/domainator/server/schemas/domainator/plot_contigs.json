@@ -3,9 +3,9 @@
   "display_name": "Plot Contigs",
   "category": "Plots",
   "description": "Create graphical representations of the contigs and their annotations\n\nIt works best for relatively small datasets, of a few megabases or a few hundred contigs.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 3,
-  "entry_point": "domainator.plot_contigs",
+  "entry_point": "plot_contigs",
   "parameters": [
     {
       "name": "Input",
@@ -27,11 +27,12 @@
     },
     {
       "name": "Html",
-      "parameter": "html",
+      "parameter": "html_out",
       "help": "name of output html file",
       "type": "output",
       "flags": [
-        "--html"
+        "-o",
+        "--html_out"
       ]
     },
     {
@@ -107,6 +108,6 @@
       "flags": [
         "--types"
       ]
-    } 
+    }
   ]
 }

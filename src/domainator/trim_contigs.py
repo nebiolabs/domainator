@@ -6,12 +6,13 @@ Typically used for nucleotide sequences, but can be used for protein sequences a
 
 """
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import sys
-from domainator.utils import parse_seqfiles, slice_record, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, FeatureLocation, region_id
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator.utils import parse_seqfiles, slice_record, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, FeatureLocation, region_id
 from domainator.Bio.SeqRecord import SeqRecord
 from typing import Tuple, List, Optional, Set, Iterable, Union
-from domainator import __version__, RawAndDefaultsFormatter
 from domainator.select_by_cds import validate_range
 
 class StripDomainsError(Exception):
@@ -129,24 +130,22 @@ def trim_contigs(records: Iterable[SeqRecord], kb_truncation: Optional[Tuple[flo
             yield trimmed
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="names of input genbank files. If not supplied, reads from stdin.")
+    add_input(parser, "GenBank files.")
 
-    parser.add_argument('-o', '--output', default=None, required=False, 
-                        help="genbank output file name. If not supplied, writes to stdout.")
+    add_seq_outputs(parser)
 
 
-    parser.add_argument('--kb_both', type=float, default=None,
+    parser.add_argument('--kb_range', type=float, default=None,
                         help="How many kb to trim from both sides of each contig.")
     parser.add_argument('--kb_left', type=float, default=None,
                         help="How many kb to trim from the left side of each contig.")
     parser.add_argument('--kb_right', type=float, default=None,
                         help="How many kb to trim from the right side of each contigs.")
 
-    parser.add_argument('--cds_both', type=int, default=None,
+    parser.add_argument('--cds_range', type=int, default=None,
                         help="How many CDSs to trim from both sides of each contig.")
     parser.add_argument('--cds_left', type=int, default=None,
                         help="How many CDSs to trim from the left side of each contig.")
@@ -160,7 +159,7 @@ def main(argv):
                         help="text file containing names of contigs to return.")
     parser.add_argument('--domains', type=str, default=None, nargs='+',
                         help="Trim CDSs containing domains with these names from the ends of each contig.") #TODO: add some way to specify the database of a domain
-    parser.add_argument('--no_domain', action='store_true', default=False,
+    parser.add_argument('--unannotated', action='store_true', default=False,
                         help="Trim CDSs containing no domain annotations from the ends of each contig.")
     
     parser.add_argument('--domains_file', type=str, default=None, 
@@ -169,26 +168,20 @@ def main(argv):
                         help="a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains for CDSs to trim")
     
     parser.add_argument('--config', action=ActionConfigFile)
-    
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     ### validate input
 
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = (sys.stdin,)
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
-
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     ### figure out selection filters
-    kb_truncation, cds_truncation = validate_range(params.kb_both, params.kb_left, params.kb_right, params.cds_both, params.cds_left, params.cds_right)
+    kb_truncation, cds_truncation = validate_range(params.kb_range, params.kb_left, params.kb_right, params.cds_range, params.cds_left, params.cds_right)
 
     target_contigs = list_and_file_to_dict_keys(params.contigs, params.contigs_file, as_set=True)
     selected_domains = list_and_file_to_dict_keys(params.domains, params.domains_file, as_set=True)
@@ -196,24 +189,12 @@ def main(argv):
 
 
     ### Run
-    #TODO: resolve code duplication with domain_search.py
-    for record in trim_contigs(
-        parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override),
+    #TODO: resolve code duplication with domainator domain_search
+    write_seq_outputs(trim_contigs(
+        parse_seqfiles(params.input, target_contigs),
         kb_truncation,
         cds_truncation,
         selected_domains,
         domain_expr,
-        params.no_domain,
-        ):
-        write_genbank((record,), output_handle)
- 
- 
-    if params.output is not None:
-        output_handle.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-  
+        params.unannotated,
+        ), genbank=params.genbank_out, fasta=params.fasta_out)

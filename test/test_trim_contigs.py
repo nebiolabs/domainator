@@ -12,7 +12,7 @@ def test_trim_contigs_cds_both_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--cds_both", "2",])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--cds_range", "2",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
@@ -24,7 +24,7 @@ def test_trim_contigs_cds_both_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--cds_both", "3",])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--cds_range", "3",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 0
@@ -33,7 +33,7 @@ def test_trim_contigs_cds_both_domains_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains", "APH", "--contigs", "pDONR201_1", "--cds_both", "1",])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains", "APH", "--contigs", "pDONR201_1", "--cds_range", "1",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
@@ -46,7 +46,7 @@ def test_trim_contigs_domain_expr_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domain_expr", "(APH & TCAD9) | (CcdB)", "--contigs", "pDONR201_1", "--cds_both", "1",])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domain_expr", "(APH & TCAD9) | (CcdB)", "--contigs", "pDONR201_1", "--cds_range", "1",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
@@ -58,7 +58,7 @@ def test_trim_contigs_no_domain_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domain_expr", "(APH & TCAD9) | (CcdB)", "--contigs", "pDONR201_1", "--no_domain"])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domain_expr", "(APH & TCAD9) | (CcdB)", "--contigs", "pDONR201_1", "--unannotated"])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
@@ -71,7 +71,7 @@ def test_trim_contigs_kb_both_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--kb_both", "2",])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--kb_range", "2",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
@@ -83,7 +83,7 @@ def test_trim_contigs_kb_both_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--kb_both", "4",])
+        trim_contigs.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--kb_range", "4",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 0
@@ -93,7 +93,7 @@ def test_trim_contigs_kb_both_peptides_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        trim_contigs.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-o", out, "--contigs", "pDONR201_2", "--kb_both", "0.010",])
+        trim_contigs.main(["-i", str(shared_datadir / "pdonr_peptides.fasta"), "-o", out, "--contigs", "pDONR201_2", "--kb_range", "0.010",])
 
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1

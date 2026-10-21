@@ -3,8 +3,8 @@
   "display_name": "Hmmer Build",
   "category": "Other",
   "description": "Build an HMM profile from a multiple sequence alignment (MSA) \n\n Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.\n\nSome of these options are not available in the standard hmmbuild tool from HMMER.",
-  "runner": "module",
-  "entry_point": "domainator.hmmer_build",
+  "runner": "domainator",
+  "entry_point": "hmmer_build",
   "parameters": [
     {
       "name": "Input",
@@ -18,13 +18,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "hmm_out",
       "help": "hmm output file path.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--hmm_out"
       ]
     },
     {

@@ -1,8 +1,8 @@
 """Filter an hmm file based on similarity to reference hmm profiles
 
-If you want a distance matrix, use seq_dist.py with .hmm files for both inputs and outputs.
+If you want a distance matrix, use domainator seq_dist with .hmm files for both inputs and outputs.
 
-If you want something more like hhsearch or blast, use hmmer_compare.py, which uses 
+If you want something more like hhsearch or blast, use domainator hmmer_compare, which uses 
 the same algorithm, but a different interface (can output the same input profile multiple times).
 
 
@@ -15,26 +15,25 @@ Söding, Johannes. “Protein Homology Detection by HMM–HMM Comparison.” Bio
 
 Amino acid, DNA, and RNA profiles are all supported, but the -i and -r sides must use
 the same alphabet (DNA and RNA count as different alphabets). Profile-profile scores are
-on the scale of whichever alphabet is in use, so the default --score_cutoff differs
+on the scale of whichever alphabet is in use, so the default --min_score differs
 between amino acid and nucleotide profiles.
 """
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='numpy') # suppress "UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero."
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 from dataclasses import dataclass
 import sys
 import io
 import os
 import numpy as np
 import pyhmmer
-from typing import List, Iterable, TextIO, Tuple, Union, Dict, Optional, BinaryIO
+from typing import Iterable, Tuple, Optional, BinaryIO
 import heapq
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import STDOUT_PATHS, add_input, add_output, check_outputs, resolve_cpu, tool_parser
 from domainator.utils import make_pool, pyhmmer_decode, read_hmms, alphabet_name, alphabet_score_scale, common_hmm_alphabet, iter_hmms_with_alphabet, open_writable_hmm_file, is_compressed_path, check_writable_hmm_path, OUTPUT_COMPRESSION_HELP
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
 from numba import jit
 import numba as nb
-import psutil
 
 
 def _input_display_name(input_file) -> str:
@@ -50,11 +49,11 @@ def _estimate_hmm_profile_size_bytes(profile: pyhmmer.plan7.HMM) -> int:
 
 
 DEFAULT_SCORE_CUTOFF_AMINO = 10.0
-"""Default --score_cutoff for amino acid profiles."""
+"""Default --min_score for amino acid profiles."""
 
 
 def default_score_cutoff(alphabet) -> float:
-    """Alphabet-appropriate default for --score_cutoff.
+    """Alphabet-appropriate default for --min_score.
 
     Profile-profile scores are sums of natural-log-odds column scores, and the
     per-column ceiling depends on the alphabet: about log(4)=1.39 for DNA and RNA
@@ -63,7 +62,7 @@ def default_score_cutoff(alphabet) -> float:
     empty result that looks the same as "no homologs found". Scaling the default
     keeps it at the same relative position on each alphabet's score scale.
 
-    Only the default is scaled: a --score_cutoff the user supplied explicitly is
+    Only the default is scaled: a --min_score the user supplied explicitly is
     always taken literally.
     """
     if alphabet is None:
@@ -85,7 +84,7 @@ def check_alphabets_match(input_alphabet, reference_alphabet, input_name, tool_n
         f"Input (-i) profiles in '{input_name}' are {alphabet_name(input_alphabet)}, but the "
         f"reference (-r) profiles are {alphabet_name(reference_alphabet)}. {tool_name} aligns "
         f"profiles column by column, so both sides must use the same alphabet. Rebuild one side "
-        f"with hmmer_build.py --alphabet, or use domainate.py / domain_search.py to search "
+        f"with domainator hmmer_build --alphabet, or use domainator domainate / domainator domain_search to search "
         f"nucleotide profiles against sequences."
     )
 
@@ -464,7 +463,7 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
     if score_cutoff is None:
         score_cutoff = default_score_cutoff(reference_alphabet)
         alphabet_label = alphabet_name(reference_alphabet) if reference_alphabet is not None else "amino"
-        print(f"Using --score_cutoff {score_cutoff:g} (the default for {alphabet_label} profiles).", file=sys.stderr)
+        print(f"Using --min_score {score_cutoff:g} (the default for {alphabet_label} profiles).", file=sys.stderr)
 
     worker = _hmmer_search_worker(references, score_cutoff)
 
@@ -476,14 +475,14 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
             input_alphabet, input_profiles = iter_hmms_with_alphabet(input_file, role="input")
             if input_alphabet is None:
                 continue
-            check_alphabets_match(input_alphabet, reference_alphabet, _input_display_name(input_file), "hmmer_search.py")
+            check_alphabets_match(input_alphabet, reference_alphabet, _input_display_name(input_file), "domainator hmmer_search")
             with make_pool(processes=cpu) as pool:
                 for hit in pool.imap(worker, input_profiles, chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                     if hit is not None:
                         yield hit
 
     written_bytes = 0
-    mitigation_options = ["--max_hits", "--score_cutoff"]
+    mitigation_options = ["--max_hits", "--min_score"]
 
     if max_hits is None:
         for hit in run_comparison():
@@ -516,18 +515,16 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
             written_bytes += profile_bytes
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument('-i', '--input', type=str, required=False, nargs='+',
-                        help="Input query files. One or more hmm text files with one or more hmmer3 profiles. Default: stdin.\nIf -i and -r are different, -i will typically be the bigger of the two, as it is what is being filtered.")
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, "Input query files. One or more hmm text files with one or more hmmer3 profiles.\nIf -i and -r are different, -i will typically be the bigger of the two, as it is what is being filtered.")
     
     parser.add_argument('-r', "--reference", type=str, required=True, nargs='+',
                         help="Reference files. One or more hmm text files with one or more hmmer3 profiles.\nIf -i and -r are different, -r will typically be the smaller of the two, as it is used as a filtering criterion.")
     
-    parser.add_argument('-o', '--output', type=str, required=False, default=None,
-                        help=".hmm file to write hit profiles to. Default: stdout" + OUTPUT_COMPRESSION_HELP)
+    add_output(parser, "hmm", "Write the hit profiles to this hmm file." + OUTPUT_COMPRESSION_HELP, primary=True)
 
-    parser.add_argument('--score_cutoff', type=float, default = None,
+    parser.add_argument('--min_score', type=float, default = None,
                         help=f"Report alignments with scores greater than or equal to this. "
                              f"Default: {DEFAULT_SCORE_CUTOFF_AMINO:g} for amino acid profiles, and the "
                              f"equivalent point on the nucleotide score scale for DNA and RNA profiles "
@@ -535,58 +532,47 @@ def main(argv):
                              f"used as-is, without rescaling.")
 
     parser.add_argument('--max_hits', type=int, default=None,
-                        help="The maximum number of hmms returned by the search. Prioritized by bitscore of best scoring profile. Default: return all hits passing the score cutoff.")
+                        help="The maximum number of hmms returned by the search, keeping the best-scoring ones by the bitscore of their best scoring profile. If not supplied, return all hits passing the score cutoff.")
     
     parser.add_argument('--cpu', type=int, default=0, required=False,
-                        help="how many cpu threads to use. Default: use all available cores")
+                        help="how many cpu threads to use. 0: one per physical core.")
 
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    if params.cpu <= 0:
-        cpus = psutil.cpu_count(logical=False)
-    else:
-        cpus = params.cpu
+    check_outputs(parser, params, ["hmm_out"])
+    if params.max_hits is not None and params.max_hits < 1:
+        parser.error("--max_hits must be at least 1. Leave it out to return all hits.")
+    cpus = resolve_cpu(params.cpu)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    check_writable_hmm_path(params.output)
-    output_description = f"hmmer_search HMM output '{params.output if params.output is not None else 'stdout'}'"
+    to_stdout = params.hmm_out in STDOUT_PATHS
+    output_description = f"hmmer_search HMM output '{params.hmm_out}'"
     temp_output_path = None
-    if params.output is None:
-        out = sys.stdout.buffer
+    if to_stdout:
+        out = open_writable_hmm_file(params.hmm_out)
     else:
-        temp_output_path = make_temporary_output_path(params.output)
-        out = open_writable_hmm_file(temp_output_path, compressed=is_compressed_path(params.output))
-    
-    if params.input is None:
-        input_files = [sys.stdin.buffer] # pyhmmer needs a binary stream
-    else:
-        input_files = params.input
+        check_writable_hmm_path(params.hmm_out)
+        temp_output_path = make_temporary_output_path(params.hmm_out)
+        out = open_writable_hmm_file(temp_output_path, compressed=is_compressed_path(params.hmm_out))
 
     try:
-        hmmer_search(input_files, params.reference, out, params.score_cutoff, params.max_hits, cpus, max_output_bytes=max_output_bytes, output_description=output_description)
-    except OutputSizeLimitExceeded as exc:
-        if params.output is not None:
-            out.close()
-            if temp_output_path is not None and os.path.exists(temp_output_path):
-                os.remove(temp_output_path)
-        raise SystemExit(str(exc)) from None
-    except Exception:
-        if params.output is not None:
-            out.close()
-            if temp_output_path is not None and os.path.exists(temp_output_path):
-                os.remove(temp_output_path)
+        hmmer_search(params.input, params.reference, out, params.min_score, params.max_hits, cpus, max_output_bytes=max_output_bytes, output_description=output_description)
+    except BaseException as exc:
+        out.close()
+        if temp_output_path is not None and os.path.exists(temp_output_path):
+            os.remove(temp_output_path)
+        if isinstance(exc, OutputSizeLimitExceeded):
+            raise SystemExit(str(exc)) from None
         raise
 
-    if params.output is not None:
-        out.close()
-        os.replace(temp_output_path, params.output)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    out.close()
+    if temp_output_path is not None:
+        os.replace(temp_output_path, params.hmm_out)

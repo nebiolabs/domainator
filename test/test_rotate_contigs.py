@@ -130,7 +130,7 @@ def test_rotated_name():
 ])
 def test_rotate_existing_domain(shared_datadir, where, expected_interval, cut):
     original = next(parse_seqfiles([shared_datadir / SPR]))
-    recs = _rotate(["-i", str(shared_datadir / SPR), "--domains", "DHFR_1", "--where", where])
+    recs = _rotate(["-i", str(shared_datadir / SPR), "--domains", "DHFR_1", "--anchor", where])
     assert len(recs) == 1
     rec = recs[0]
     assert rec.id == f"OM236515mod_{cut}:{cut + 1}rc"
@@ -235,7 +235,7 @@ def test_rotate_search_hits(shared_datadir):
         hits = os.path.join(output_dir, "hits.gb")
         domain_search_main(["-i", str(shared_datadir / "bacillus_phage_SPR.gb"), "-r", str(shared_datadir / "SPR.hmm"), "--whole_contig", "-Z", "1000", "--cpu", "1", "-o", hits])
         hits_recs = list(parse_seqfiles([hits]))
-        recs = _rotate(["-i", hits, "--search_hits"])
+        recs = _rotate(["-i", hits, "--annotation_type", "domain_search"])
     assert len(recs) == len(hits_recs) == 2
     for rec in recs:
         search_hits = _domains(rec, feature_type=DOMAIN_SEARCH_BEST_HIT_NAME)
@@ -339,7 +339,7 @@ def test_rotate_infernal(shared_datadir):
 def test_rotate_fasta_out(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "out.fasta")
-        rotate_contigs.main(["-i", str(shared_datadir / SPR), "--domains", "DHFR_1", "--fasta_out", "-o", out])
+        rotate_contigs.main(["-i", str(shared_datadir / SPR), "--domains", "DHFR_1", "--fasta_out", out])
         recs = list(SeqIO.parse(out, "fasta"))
     assert len(recs) == 1
     assert recs[0].id == "OM236515mod_1843:1844rc"
@@ -349,7 +349,7 @@ def test_rotate_fasta_out(shared_datadir):
 def test_rotate_stdin_stdout(shared_datadir, monkeypatch, capsys):
     with open(shared_datadir / SPR) as fh:
         monkeypatch.setattr("sys.stdin", fh)
-        rotate_contigs.main(["--domains", "DHFR_1"])
+        rotate_contigs.main(["-i", "-", "--domains", "DHFR_1", "-o", "-"])
     out = capsys.readouterr().out
     assert out.startswith("LOCUS       OM236515mod_1843:1844rc")
     assert "circular" in out.splitlines()[0]
@@ -360,7 +360,7 @@ def test_rotate_config_file(shared_datadir):
         out = os.path.join(output_dir, "out.gb")
         config_file = os.path.join(output_dir, "config.yml")
         with open(config_file, "w") as fh:
-            subprocess.run([sys.executable, rotate_contigs.__file__, "-i", str(shared_datadir / SPR), "--domains", "DHFR_1", "--where", "end", "-o", out, "--print_config"], stdout=fh, check=True)
+            subprocess.run([sys.executable, "-m", "domainator", "rotate_contigs", "-i", str(shared_datadir / SPR), "--domains", "DHFR_1", "--anchor", "end", "-o", out, "--print_config"], stdout=fh, check=True)
         rotate_contigs.main(["--config", config_file])
         recs = list(parse_seqfiles([out]))
     assert recs[0].id == "OM236515mod_1339:1340rc"
@@ -384,9 +384,10 @@ def test_rotate_validation(shared_datadir, args, match):
 def test_rotate_z0_stdin(shared_datadir, monkeypatch):
     with open(shared_datadir / SPR) as fh:
         monkeypatch.setattr("sys.stdin", fh)
-        with pytest.raises(ValueError, match="stdin"):
-            rotate_contigs.main(["-r", str(shared_datadir / "SPR.hmm"), "-Z", "0"])
+        with pytest.raises(SystemExit):
+            rotate_contigs.main(["-i", "-", "-r", str(shared_datadir / "SPR.hmm"), "-Z", "0", "-o", "-"])
 
 
-def test_entrypoint():
-    assert hasattr(rotate_contigs, "_entrypoint")
+def test_registered_with_the_dispatcher():
+    from domainator.cli.registry import TOOLS
+    assert TOOLS["rotate_contigs"].module == "rotate_contigs"

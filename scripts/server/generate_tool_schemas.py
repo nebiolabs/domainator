@@ -6,7 +6,6 @@ import argparse
 import importlib
 import json
 import re
-import sys
 import typing
 from argparse import SUPPRESS, _AppendConstAction, _StoreFalseAction, _StoreTrueAction
 from pathlib import Path
@@ -20,64 +19,20 @@ except ImportError:  # Python < 3.10
 
 TYPING_ANNOTATED = getattr(typing, "Annotated", None)
 TYPING_LITERAL = getattr(typing, "Literal", None)
-from unittest import mock
-
-try:  # Python 3.11+
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # Python 3.10 fallback
-    import tomli as tomllib  # type: ignore[no-redef]
 
 from jsonargparse import ArgumentParser as JsonArgParser  # type: ignore
 
-
-class ParserCaptured(Exception):
-    """Raised to short-circuit CLI execution once the parser is available."""
-
-
-captured_parser: Optional[JsonArgParser] = None
-
-
-class CaptureArgumentParser(JsonArgParser):
-    """ArgumentParser subclass that captures the constructed parser."""
-
-    def parse_args(self, *args: Any, **kwargs: Any):  # type: ignore[override]
-        global captured_parser
-        captured_parser = self
-        raise ParserCaptured
-
-
-def parse_pyproject(path: Path) -> Dict[str, str]:
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    scripts = data.get("project", {}).get("scripts", {})
-    if not isinstance(scripts, dict):
-        raise ValueError("[project.scripts] section is missing or invalid")
-    return {name: target for name, target in scripts.items() if isinstance(target, str)}
+from domainator.cli.registry import TOOLS
 
 
 def capture_parser(cli_module_name: str) -> tuple[JsonArgParser, ModuleType]:
-    """Import a CLI module and capture its ArgumentParser instance."""
+    """Import a CLI module and build its ArgumentParser."""
 
-    global captured_parser
-    captured_parser = None
-
-    with mock.patch("jsonargparse.ArgumentParser", CaptureArgumentParser):
-        cli_module = importlib.import_module(cli_module_name)
-        cli_module = importlib.reload(cli_module)
-        runner = getattr(cli_module, "main", None)
-        if runner is None:
-            raise RuntimeError(f"Module '{cli_module_name}' does not define a main() function")
-        try:
-            runner([])
-        except ParserCaptured:
-            pass
-
-    parser = captured_parser
-    captured_parser = None
-
-    if parser is None:
-        raise RuntimeError(f"Failed to capture parser for '{cli_module_name}'")
-
-    return parser, cli_module
+    cli_module = importlib.import_module(cli_module_name)
+    build_parser = getattr(cli_module, "build_parser", None)
+    if build_parser is None:
+        raise RuntimeError(f"Module '{cli_module_name}' does not define a build_parser() function")
+    return build_parser(), cli_module
 
 
 def friendly_tool_name(tool_id: str) -> str:
@@ -279,23 +234,9 @@ def module_description(module: ModuleType) -> str:
     return doc
 
 
-def resolve_cli_module(target: str) -> tuple[str, str]:
-    module_name, sep, attr_path = target.partition(":")
-    if not sep:
-        raise ValueError(f"Target '{target}' does not contain ':'")
-    parts = [segment for segment in attr_path.split(".") if segment]
-    if not parts:
-        raise ValueError(f"Target '{target}' has no attribute path")
-    if len(parts) == 1:
-        cli_module = f"{module_name}.{parts[0]}"
-    else:
-        cli_module = ".".join([module_name] + parts[:-1])
-    return module_name, cli_module
-
-
-def build_schema(tool_id: str, target: str) -> Dict[str, Any]:
-    module_name, cli_module_name = resolve_cli_module(target)
-    parser, cli_module = capture_parser(cli_module_name)
+def build_schema(command: str) -> Dict[str, Any]:
+    tool_id = TOOLS[command].module
+    parser, cli_module = capture_parser(f"domainator.{tool_id}")
 
     parameters: List[Dict[str, Any]] = []
     for action in parser._actions:
@@ -304,12 +245,12 @@ def build_schema(tool_id: str, target: str) -> Dict[str, Any]:
             parameters.append(param)
 
     schema: Dict[str, Any] = {
-        "id": tool_id.replace(".py", ""),
+        "id": tool_id,
         "display_name": friendly_tool_name(tool_id),
         "category": "Domainator",
         "description": module_description(cli_module),
-        "runner": "module",
-        "entry_point": cli_module_name,
+        "runner": "domainator",
+        "entry_point": command,
         "parameters": parameters,
         "advanced_parameters": [],
     }
@@ -327,24 +268,21 @@ def write_schema(schema: Dict[str, Any], output_dir: Path) -> None:
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Generate tool schema files from Domainator CLIs")
-    parser.add_argument("--pyproject", type=Path, default=Path("pyproject.toml"), help="Path to the Domainator pyproject.toml")
     parser.add_argument("--output-dir", type=Path, required=True, help="Destination directory for generated schemas")
-    parser.add_argument("--include", nargs="*", help="Optional subset of script names to generate (match project.scripts keys)")
+    parser.add_argument("--include", nargs="*", help="Optional subset of domainator commands to generate")
     args = parser.parse_args(argv)
 
-    scripts = parse_pyproject(args.pyproject)
+    commands = sorted(TOOLS)
     if args.include:
-        missing = [name for name in args.include if name not in scripts]
+        missing = [name for name in args.include if name not in TOOLS]
         if missing:
-            raise SystemExit(f"Requested script(s) not found: {', '.join(missing)}")
-        scripts = {name: scripts[name] for name in args.include}
+            raise SystemExit(f"Requested command(s) not found: {', '.join(missing)}")
+        commands = args.include
 
-    for tool_id, target in sorted(scripts.items()):
-        if tool_id == "domainator_server":
-            continue
-        schema = build_schema(tool_id, target)
+    for command in commands:
+        schema = build_schema(command)
         write_schema(schema, args.output_dir)
-        print(f"Generated schema for {tool_id}")
+        print(f"Generated schema for {command}")
 
 
 if __name__ == "__main__":

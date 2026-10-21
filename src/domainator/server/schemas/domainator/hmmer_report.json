@@ -3,8 +3,8 @@
   "display_name": "Hmmer Report",
   "category": "Record-wise reports",
   "description": "Writes record-wise information from hmm files into tab-separated or html tables",
-  "runner": "module",
-  "entry_point": "domainator.hmmer_report",
+  "runner": "domainator",
+  "entry_point": "hmmer_report",
   "parameters": [
     {
       "name": "Input",
@@ -22,35 +22,35 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "tsv_out",
       "help": "The name of the output tsv file.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--tsv_out"
       ]
     },
     {
       "name": "Html",
-      "parameter": "html",
+      "parameter": "html_out",
       "help": "Write a table in html format to this file.",
       "type": "output",
       "flags": [
-        "--html"
+        "--html_out"
       ]
     },
     {
       "name": "Json",
-      "parameter": "json",
+      "parameter": "json_out",
       "help": "Write streaming NDJSON (one compact JSON object per profile) to this file.",
       "type": "output",
       "flags": [
-        "--json"
+        "--json_out"
       ]
     },
     {
       "name": "Source",
-      "parameter": "output_cols__source",
+      "parameter": "output_cols",
       "help": "report the name of the hmm file.",
       "type": "boolean",
       "flags": [
@@ -65,7 +65,7 @@
     },
     {
       "name": "Acc",
-      "parameter": "output_cols__acc",
+      "parameter": "output_cols",
       "help": "report the start coordinate of the feature.",
       "type": "boolean",
       "flags": [
@@ -80,7 +80,7 @@
     },
     {
       "name": "Desc",
-      "parameter": "output_cols__desc",
+      "parameter": "output_cols",
       "help": "return the end coordinate of the feature.",
       "type": "boolean",
       "flags": [
@@ -95,7 +95,7 @@
     },
     {
       "name": "Length",
-      "parameter": "output_cols__length",
+      "parameter": "output_cols",
       "help": "return the length of the profile (i.e. the number of nodes).",
       "type": "boolean",
       "flags": [
@@ -110,7 +110,7 @@
     },
     {
       "name": "Consensus",
-      "parameter": "output_cols__consensus",
+      "parameter": "output_cols",
       "help": "return the consensus residue line of the profile, if set..",
       "type": "boolean",
       "flags": [
@@ -125,7 +125,7 @@
     },
     {
       "name": "Alphabet",
-      "parameter": "output_cols__alphabet",
+      "parameter": "output_cols",
       "help": "report the alphabet of the profile (amino, DNA, or RNA).",
       "type": "boolean",
       "flags": [
@@ -140,7 +140,7 @@
     },
     {
       "name": "Append",
-      "parameter": "output_cols__append",
+      "parameter": "output_cols",
       "help": "Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows. Enter one entry per line; separate multiple values with spaces or commas.",
       "type": "dynamic",
       "flags": [

@@ -7,21 +7,21 @@ CLI conventions, read [AGENTS.md](../AGENTS.md) first.
 
 The guiding idea: Domainator's HTML reports and binary artifacts (HDF5
 matrices, XGMML, the `.dsnv` SSN bundle) are meant for humans and browsers.
-For an agent, reach for the `--json` output modes and `ssn_navigator.py`, which
+For an agent, reach for the `--json_out` output modes and `domainator ssn_navigator`, which
 return compact, structured slices instead of whole-artifact dumps.
 
 ## Machine-readable output cheat-sheet
 
 | Tool | Flag | Shape |
 | ---- | ---- | ----- |
-| `enum_report.py` | `--json -` | NDJSON, one object per contig/CDS/domain |
-| `hmmer_report.py` | `--json -` | NDJSON, one object per HMM profile (add `--alphabet` for amino/DNA/RNA) |
-| `summary_report.py` | `--json -` | one JSON object (contig stats, domain frequency + co-occurrence, taxonomy) |
-| `matrix_report.py` | `--json -` | one JSON object (edge stats, connected components, split-event series) |
-| `ssn_navigator.py` | (always JSON) | targeted cluster / node / threshold queries |
+| `domainator enum_report` | `--json_out -` | NDJSON, one object per contig/CDS/domain |
+| `domainator hmmer_report` | `--json_out -` | NDJSON, one object per HMM profile (add `--alphabet` for amino/DNA/RNA) |
+| `domainator summary_report` | `--json_out -` | one JSON object (contig stats, domain frequency + co-occurrence, taxonomy) |
+| `domainator matrix_report` | `--json_out -` | one JSON object (edge stats, connected components, split-event series) |
+| `domainator ssn_navigator` | (always JSON) | targeted cluster / node / threshold queries |
 
-`--json -` writes to stdout; pass a path to write a file. These sit alongside the
-existing `-o`/`--html` outputs — nothing is removed.
+`--json_out -` writes to stdout; pass a path to write a file. These sit alongside the
+existing `-o`/`--html_out` outputs — nothing is removed.
 
 ## Output shapes
 
@@ -38,7 +38,7 @@ The remaining outputs have **stable shapes**, shown below (pretty-printed here;
 the tools emit them compact). These are the contract — treat added keys as
 backward-compatible, removed/renamed keys as breaking.
 
-### `summary_report --json`
+### `summary_report --json_out`
 
 ```json
 {
@@ -59,7 +59,7 @@ backward-compatible, removed/renamed keys as breaking.
 domains were given (then it is `{row_domain: {col_domain: percent}}`); `taxonomy`
 is present only with `--taxonomy`.
 
-### `matrix_report --json`
+### `matrix_report --json_out`
 
 ```json
 {
@@ -77,7 +77,7 @@ is present only with `--taxonomy`.
 ```
 
 `edge_scores` is `null` for a matrix with no non-zero edges. `split_events` is bounded by
-`matrix_report.py --max_merge_events`; a `threshold_value` of `null` denotes ∞.
+`domainator matrix_report --max_merge_events`; a `threshold_value` of `null` denotes ∞.
 
 `merge_impact` is the **sum** of every merge at that threshold, so it cannot by itself
 distinguish one large cluster splitting off from a swarm of small ones. The other three
@@ -88,9 +88,9 @@ biggest single one. `sum(size * count) == merge_impact` holds exactly, and
 `{"3": 1, "1": 33}` is one 3-node cluster plus thirty-three single nodes falling off at
 once -- `merge_impact` 36, but no cluster larger than 3.
 
-Every threshold matrix_report reports means the same thing as `build_ssn --lb`: the
+Every threshold matrix_report reports means the same thing as `build_ssn --threshold`: the
 graph of edges scoring **strictly above** the threshold. So a reported threshold `T`
-and its edge/cluster counts are exactly what `build_ssn.py -i <matrix> --lb T` emits,
+and its edge/cluster counts are exactly what `domainator build_ssn -i <matrix> --threshold T` emits,
 and `split_events[i].edge_index` is the last MST edge scoring above that threshold.
 Thresholds equal to a score are therefore exclusive of that score's own ties -- the
 merge listed at threshold `T` becomes visible at the next lower threshold.
@@ -133,9 +133,9 @@ merge listed at threshold `T` becomes visible at the next lower threshold.
 ## Recipe 1 — annotate, then get a structured summary
 
 ```bash
-domainate.py -i genomes.gb -r pfam.hmm -o annotated.gb --max_overlap 0.6
-summary_report.py -i annotated.gb --json summary.json
-enum_report.py -i annotated.gb --by contig --architecture --length --json contigs.ndjson
+domainator domainate -i genomes.gb -r pfam.hmm -o annotated.gb --max_overlap 0.6
+domainator summary_report -i annotated.gb --json_out summary.json
+domainator enum_report -i annotated.gb --by contig --architecture --length --json_out contigs.ndjson
 ```
 
 `summary.json` gives dataset-level domain frequencies and (with `--taxonomy`)
@@ -146,19 +146,19 @@ architecture — filter/aggregate it with any JSON tooling.
 
 ```bash
 # 1. all-vs-all similarity -> dense matrix
-seq_dist.py -i proteins.gb -r proteins.gb --hdf dist.hdf5
+domainator seq_dist -i proteins.gb -r proteins.gb --hdf_out dist.hdf5
 
 # 2. (optional) per-node metadata to attach, e.g. domain architecture + taxonomy
-enum_report.py -i proteins.gb --by contig --architecture --taxname superkingdom -o meta.tsv
+domainator enum_report -i proteins.gb --by contig --architecture --taxname superkingdom -o meta.tsv
 
 # 3. compact SSN bundle
-build_ssn_viewer.py -i dist.hdf5 -o net.dsnv --metadata meta.tsv
+domainator build_ssn_viewer -i dist.hdf5 -o net.dsnv --metadata meta.tsv
 
 # 4. navigate without rendering
-ssn_navigator.py -i net.dsnv --mode overview
-ssn_navigator.py -i net.dsnv --mode thresholds                 # pick a cut-point
-ssn_navigator.py -i net.dsnv --mode clusters --threshold 150   # clusters + sizes
-ssn_navigator.py -i net.dsnv --mode cluster --threshold 150 --id 5   # members + metadata distribution
+domainator ssn_navigator -i net.dsnv -o - --query overview
+domainator ssn_navigator -i net.dsnv -o - --query thresholds                 # pick a cut-point
+domainator ssn_navigator -i net.dsnv -o - --query clusters --threshold 150   # clusters + sizes
+domainator ssn_navigator -i net.dsnv -o - --query cluster --threshold 150 --cluster 5   # members + metadata distribution
 ```
 
 The `metadata.tsv` columns (from `enum_report`) become the per-cluster
@@ -167,7 +167,7 @@ with counts; numeric columns yield min/max/mean/quartiles.
 
 `--mode thresholds` derives the cuts from the bundle's merge order and reports
 `merge_events` / `merge_event_total` alongside them: those cuts are one per *selected*
-split event, which `ssn_navigator.py --max_merge_events` caps (default 500, plus up to 20
+split event, which `domainator ssn_navigator --max_merge_events` caps (default 500, plus up to 20
 more so no 5% band of the threshold range is left unrepresented). On a large network that
 is a small sample of the real event list, so treat the cuts as good candidate cut-points
 rather than as every threshold at which anything happens — and pass a higher cap, or `0`,
@@ -179,7 +179,7 @@ slider's ∞ end, where every node is its own cluster (reported as `"threshold":
 the same spelling the bundle uses); omitting `--threshold` is the other end, one cluster
 per connected component.
 
-Add `--html net.html --embed_data` in step 3 for a self-contained browser viewer
+Add `--html_out net.html --embed_data` in step 3 for a self-contained browser viewer
 of the same network. Annotations made there (edited cells, new columns) are saved
 back into an ordinary `.dsnv` by its "Save session…" button, so a session file
 feeds straight back into step 4 and the new columns show up in the per-cluster
@@ -193,8 +193,8 @@ the table is currently showing, exportable as SVG, PNG or TSV.
 ## Recipe 3 — inspect a matrix's cluster structure
 
 ```bash
-seq_dist.py -i proteins.gb -r proteins.gb --hdf dist.hdf5
-matrix_report.py -i dist.hdf5 --json -
+domainator seq_dist -i proteins.gb -r proteins.gb --hdf_out dist.hdf5
+domainator matrix_report -i dist.hdf5 --json_out -
 ```
 
 Returns edge-score stats, the number of connected components, and the strongest
@@ -203,9 +203,9 @@ building an SSN.
 
 ## Notes on token efficiency
 
-- `ssn_navigator.py` and the report `--json` modes bound their lists with
+- `domainator ssn_navigator` and the report `--json_out` modes bound their lists with
   `--top_n` (default 50). Raise it deliberately when you need the long tail.
-- `ssn_navigator.py --mode cluster` omits the member id list unless you pass
+- `domainator ssn_navigator --query cluster` omits the member id list unless you pass
   `--members`; the metadata distribution summary is usually what you want.
 - NDJSON (`enum_report`/`hmmer_report`) streams, so you can `head`/filter huge
   reports without materializing the whole thing.

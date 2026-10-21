@@ -3,8 +3,8 @@
   "display_name": "Trim Contigs",
   "category": "Editors",
   "description": "Trim contigs based on CDS or domain names or presence of domains in CDSs\n\nCircular contigs are linearized before trimming.\n\nTypically used for nucleotide sequences, but can be used for protein sequences as well, if you use the 'kb' options to mean 1000 amino acids. CDS and domain options are not supported for protein sequences.",
-  "runner": "module",
-  "entry_point": "domainator.trim_contigs",
+  "runner": "domainator",
+  "entry_point": "trim_contigs",
   "parameters": [
     {
       "name": "Input",
@@ -30,22 +30,22 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "genbank output file name.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
       "name": "Kb Both",
-      "parameter": "kb_both",
+      "parameter": "kb_range",
       "help": "How many kb to trim from both sides of each contig.",
       "type": "number",
       "flags": [
-        "--kb_both"
+        "--kb_range"
       ]
     },
     {
@@ -68,11 +68,11 @@
     },
     {
       "name": "Cds Both",
-      "parameter": "cds_both",
+      "parameter": "cds_range",
       "help": "How many CDSs to trim from both sides of each contig.",
       "type": "integer",
       "flags": [
-        "--cds_both"
+        "--cds_range"
       ]
     },
     {
@@ -127,12 +127,12 @@
     },
     {
       "name": "No Domain",
-      "parameter": "no_domain",
+      "parameter": "unannotated",
       "help": "Trim CDSs containing no domain annotations from the ends of each contig.",
       "type": "boolean",
       "default": false,
       "flags": [
-        "--no_domain"
+        "--unannotated"
       ]
     },
     {

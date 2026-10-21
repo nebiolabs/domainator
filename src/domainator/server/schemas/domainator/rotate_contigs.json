@@ -3,9 +3,9 @@
   "display_name": "Rotate Contigs",
   "category": "Editors",
   "description": "Rotate circular contigs so that their origin is set relative to a domain annotation\n\nFor each contig, one domain is chosen from new annotations found by searching the references (-r) against the contig, and/or from pre-existing Domainator (--domains) or domain_search (--search_hits) annotations. If there are several candidates, the one with the highest score is chosen (ties broken by lowest E-value, then by position). The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--where), and reverse complemented if necessary to put the chosen domain on the forward strand (unless --keep_direction).\n\nPositions are relative to the chosen domain, in its own orientation:\nstart:  the first base of the domain becomes the first base of the contig.\nend:    the last base of the domain becomes the last base of the contig.\ncenter: the origin is placed in the middle of the domain.\n\nInputs must be nucleotide sequences. Only circular contigs are rotated. FASTA records and linear GenBank records are skipped with a warning, unless --circularize is set, in which case they are treated as circular. Contigs without a qualifying domain are skipped with a warning. Output contigs are always marked as circular.\n\nProtein references are searched against CDS translations, so contigs without CDS annotations (such as all FASTA inputs) need --gene_call to be found by protein references. Nucleotide references (nucleotide HMMs, nucleotide FASTA, and infernal CM files) are searched against the whole contig.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 5,
-  "entry_point": "domainator.rotate_contigs",
+  "entry_point": "rotate_contigs",
   "parameters": [
     {
       "name": "Input",
@@ -29,24 +29,24 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "Output file name.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ],
       "required": true
     },
     {
       "name": "References",
-      "parameter": "references",
+      "parameter": "reference",
       "help": "reference files to search against the input, to find new domains to rotate on. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.",
       "type": "file",
       "multiple": true,
       "flags": [
         "-r",
-        "--references"
+        "--reference"
       ],
       "file_types": [
         "hmm",
@@ -68,13 +68,17 @@
       ]
     },
     {
-      "name": "Search Hits",
-      "parameter": "search_hits",
-      "help": "Rotate on pre-existing search hit annotations (from domain_search.py).",
-      "type": "boolean",
-      "default": false,
+      "name": "Annotation Type",
+      "parameter": "annotation_type",
+      "help": "Which pre-existing annotations to rotate on. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search).",
+      "type": "string",
       "flags": [
-        "--search_hits"
+        "--annotation_type"
+      ],
+      "default": "domainator",
+      "choices": [
+        "domain_search",
+        "domainator"
       ]
     },
     {
@@ -90,7 +94,7 @@
     },
     {
       "name": "Where",
-      "parameter": "where",
+      "parameter": "anchor",
       "help": "where to put the origin, relative to the chosen domain in its own orientation (not relative to the original orientation of the contig). start: the first base of the domain becomes the first base of the contig. end: the last base of the domain becomes the last base of the contig. center: the origin is placed in the middle of the domain.",
       "type": "string",
       "choices": [
@@ -100,7 +104,7 @@
       ],
       "default": "start",
       "flags": [
-        "--where"
+        "--anchor"
       ]
     },
     {
@@ -149,9 +153,8 @@
     {
       "name": "Fasta Out",
       "parameter": "fasta_out",
-      "help": "makes output a fasta file when activated",
-      "type": "boolean",
-      "default": false,
+      "help": "Write the records to this FASTA file. Use - for standard output.",
+      "type": "output",
       "flags": [
         "--fasta_out"
       ]

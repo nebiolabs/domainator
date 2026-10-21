@@ -4,14 +4,13 @@ Amino acid, DNA, and RNA profiles are all supported; use --alphabet to report wh
 alphabet each profile uses.
 """
 
-import sys
-from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, pyhmmer_decode, alphabet_name, iter_hmms_with_alphabet, db_name_from_path
-from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
-from pathlib import Path
-from typing import List, Tuple, Union, Iterable, Dict
-import json
-from domainator.enum_report import DynamicArg, COLS_ARG_NAME, EnumTSVWriter, EnumHTMLWriter, EnumJSONWriter, get_analysis_names
+import contextlib
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
+from domainator.utils import pyhmmer_decode, alphabet_name, iter_hmms_with_alphabet, db_name_from_path
+from typing import Tuple, Union, Iterable
+from domainator.enum_report import DynamicArg, COLS_ARG_NAME, EnumTSVWriter, EnumHTMLWriter, EnumJSONWriter
 import pyhmmer
 import os
 from io import IOBase
@@ -129,18 +128,14 @@ def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], analyses, 
     for writer in writers:
         writer.write_footer()
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
-                        help="hmm filenames. If not supplied then reads from to stdin.")
+    add_input(parser, "hmm filenames.")
 
-    parser.add_argument('-o', '--output', default=None, required=False, 
-                        help="The name of the output tsv file.")
-    parser.add_argument('--html', default=None, required=False,
-                        help="Write a table in html format to this file.")
-    parser.add_argument('--json', default=None, required=False,
-                        help="Write streaming NDJSON (one compact JSON object per profile) to this file. Use '-' for stdout.")
+    add_output(parser, "tsv", "Write the table to this tab-separated file.", primary=True)
+    add_output(parser, "html", "Write the table in html format to this file.")
+    add_output(parser, "json", "Write streaming NDJSON (one compact JSON object per profile) to this file.")
     parser.add_argument('--html_max_height', default=None, required=False, type=int,
                         help="Max height in pixels to set the html output to.")
 
@@ -169,48 +164,22 @@ def main(argv):
                         help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
    
-    ### Figure out what input and output files ####
-    if params.input is None:
-        inputs = [sys.stdin.buffer] # pyhmmer needs a binary stream
-    else:
-        inputs = params.input
-    
-    out = None
-    if params.output is not None:
-        out = open(params.output, "w")
-
-    html_out_handle = None
-    if params.html is not None:
-        html_out_handle = open(params.html, "w")
-
-    json_out_handle = None
-    if params.json is not None:
-        json_out_handle = sys.stdout if params.json == "-" else open(params.json, "w")
-
-    if out is None and html_out_handle is None and json_out_handle is None:
-        raise ValueError("You must supply at least one of --output, --html, or --json.")
+    check_outputs(parser, params, ["tsv_out", "html_out", "json_out"])
 
     analyses = list()
     if hasattr(params, COLS_ARG_NAME):
         analyses = getattr(params, COLS_ARG_NAME)
 
     # Run
-    hmmer_report(read_hmms_to_iterators(inputs), analyses, out, html_out_handle, params.column_names, params.html_max_height, json_out_handle=json_out_handle)
-
-    if params.output is not None:
-        out.close()
-
-    if params.html is not None:
-        html_out_handle.close()
-
-    if json_out_handle is not None and json_out_handle is not sys.stdout:
-        json_out_handle.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    with contextlib.ExitStack() as outputs:
+        def open_output(path):
+            return None if path is None else outputs.enter_context(output_file(path))
+        hmmer_report(read_hmms_to_iterators(params.input), analyses, open_output(params.tsv_out), open_output(params.html_out),
+                     params.column_names, params.html_max_height, json_out_handle=open_output(params.json_out))

@@ -426,7 +426,7 @@ def test_pad_where(where, shared_datadir):
     hmms = shared_datadir / "pdonr_hmms.hmm"
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--pad_where", where, "--cpu", "1"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--cds_range", str(1), "--pad", "--anchor", where, "--cpu", "1"]
         main(args)
         records = list(utils.parse_seqfiles([out]))
         assert len(records) > 1
@@ -493,7 +493,7 @@ def test_deduplicate_by_sequence_both_strands(shared_datadir):
         main(base_args)
         assert len(list(SeqIO.parse(out, "genbank"))) == 2
 
-        main(base_args + ["--dedup_both_strands"])
+        main(base_args + ["--both_strands"])
         assert len(list(SeqIO.parse(out, "genbank"))) == 1
 
 @pytest.mark.parametrize("extra_args", [
@@ -526,14 +526,16 @@ def test_deduplicate_by_sequence_protein(shared_datadir, extra_args):
         assert len(dedup_seqs) == len(expected)
         assert set(dedup_seqs) == expected
 
-def test_deduplicate_by_sequence_validation(shared_datadir):
+def test_deduplicate_by_sequence_validation(shared_datadir, capsys):
     hmms = shared_datadir / "pdonr_hmms.hmm"
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.gb"
-        with pytest.raises(ValueError, match="requires --deduplicate_by_sequence"):
-            main(['--input', str(shared_datadir / "pDONR201.gb"), "-r", str(hmms), "-o", out, "--cpu", "1", "--dedup_both_strands"])
-        with pytest.raises(ValueError, match="only supported for nucleotide output"):
-            main(['--input', str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(hmms), "-o", out, "--cpu", "1", "--deduplicate_by_sequence", "--dedup_both_strands"])
+        with pytest.raises(SystemExit):
+            main(['--input', str(shared_datadir / "pDONR201.gb"), "-r", str(hmms), "-o", out, "--cpu", "1", "--both_strands"])
+        assert "requires --deduplicate_by_sequence" in capsys.readouterr().err
+        with pytest.raises(SystemExit):
+            main(['--input', str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(hmms), "-o", out, "--cpu", "1", "--deduplicate_by_sequence", "--both_strands"])
+        assert "only supported for nucleotide output" in capsys.readouterr().err
 
 def test_domain_search_peptides(shared_datadir):
     input_files = [str(shared_datadir / "simple_genpept.gb"),  str(shared_datadir / "pdonr_peptides.fasta")]

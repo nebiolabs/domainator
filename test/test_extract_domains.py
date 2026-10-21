@@ -14,7 +14,7 @@ def test_extract_domains_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 4
         for rec in out_recs:
@@ -27,7 +27,7 @@ def test_extract_domains_fasta_out_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/domains.fasta"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "--fasta_out", "-o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "--fasta_out", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 4
         for rec in out_recs:
@@ -51,7 +51,7 @@ def test_extract_domains_padding_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "--pad_up", "10", "--pad_down", "10", "-o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "--extend_up", "10", "--extend_down", "10", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 4
         for rec in out_recs:
@@ -75,7 +75,7 @@ def test_extract_domains_combine_1(shared_datadir, capsys):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "CcdA", "--pad_up", "10", "--pad_down", "10", "--combine", "-o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "CcdA", "--extend_up", "10", "--extend_down", "10", "--combine", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 4
         for rec in out_recs:
@@ -87,7 +87,7 @@ def test_extract_domains_keep_names_1(shared_datadir, capsys):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "CcdA", "--pad_up", "10", "--pad_down", "10", "--combine", "--keep_name", "-o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "CcdA", "--extend_up", "10", "--extend_down", "10", "--combine", "--keep_name", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         old_recs = list(parse_seqfiles([shared_datadir / "pDONR201_multi_genemark_domainator.gb"]))
         old_names = {rec.name for rec in old_recs}
@@ -105,7 +105,7 @@ def test_extract_domains_origin_spanning_domain_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations.gb", "--pad_up", "10", "--pad_down", "10", "--domains", "Thymidylat_synt", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations.gb", "--extend_up", "10", "--extend_down", "10", "--domains", "Thymidylat_synt", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 1
         for rec in out_recs:
@@ -120,7 +120,7 @@ def test_extract_domains_origin_spanning_domain_1_reversed(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations_reversed.gb", "--pad_up", "10", "--pad_down", "10", "--domains", "Thymidylat_synt", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations_reversed.gb", "--extend_up", "10", "--extend_down", "10", "--domains", "Thymidylat_synt", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 1
         for rec in out_recs:
@@ -134,7 +134,7 @@ def test_extract_domains_origin_spanning_domain_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations.gb", "--pad_up", "10000", "--pad_down", "10000", "--domains", "Thymidylat_synt", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations.gb", "--extend_up", "10000", "--extend_down", "10000", "--domains", "Thymidylat_synt", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 1
         for rec in out_recs:
@@ -147,7 +147,7 @@ def test_extract_domains_origin_spanning_domain_3(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations_reversed.gb", "--pad_up", "10000", "--pad_down", "10000", "--domains", "Thymidylat_synt", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations_reversed.gb", "--extend_up", "10000", "--extend_down", "10000", "--domains", "Thymidylat_synt", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 1
         for rec in out_recs:
@@ -161,7 +161,7 @@ def test_extract_domains_origin_non_spanning_domain_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations.gb", "--pad_up", "10000", "--pad_down", "10000", "--domains", "DHFR_1", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations.gb", "--extend_up", "10000", "--extend_down", "10000", "--domains", "DHFR_1", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 1
         for rec in out_recs:
@@ -174,7 +174,7 @@ def test_extract_domains_origin_non_spanning_domain_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations_reversed.gb", "--pad_up", "10000", "--pad_down", "10000", "--domains", "DHFR_1", "--o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "bacillus_phage_SPR_with_annotations_reversed.gb", "--extend_up", "10000", "--extend_down", "10000", "--domains", "DHFR_1", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         assert len(out_recs) == 1
         for rec in out_recs:
@@ -185,7 +185,7 @@ def test_domain_search_hit_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        extract_domains.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--search_hits"])
+        extract_domains.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--annotation_type", "domain_search"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         assert len(new_file[0]) == 123
@@ -197,7 +197,7 @@ def test_domain_database_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        extract_domains.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--database", "pdonr_hmms_1", "--domains", "APH", "CcdB"])
+        extract_domains.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--databases", "pdonr_hmms_1", "--domains", "APH", "CcdB"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 4
         assert len(new_file[0]) == 297

@@ -50,7 +50,7 @@ def _build_embedded_viewer(out_dir):
 
     build_ssn_viewer.main([
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Browser Test Viewer",
     ])
@@ -92,7 +92,7 @@ def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical
 
     args = [
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Color Test Viewer",
         "--metadata", str(meta_file),
@@ -126,7 +126,7 @@ def _build_embedded_viewer_many_categories(out_dir, node_count=120):
 
     build_ssn_viewer.main([
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Many Category Viewer",
         "--metadata", str(meta_file),
@@ -244,7 +244,7 @@ def _build_embedded_viewer_dense_random(out_dir, node_count=60):
     matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Dense Test Viewer",
     ])
@@ -287,7 +287,7 @@ def _build_embedded_viewer_capped(out_dir, node_count=60):
     matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Capped Test Viewer",
     ])
@@ -335,7 +335,7 @@ def _build_embedded_viewer_two_bead(out_dir):
     html_file = out_dir / "viewer_two_bead.html"
     matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
-        "-i", str(input_file), "--html", str(html_file), "--embed_data",
+        "-i", str(input_file), "--html_out", str(html_file), "--embed_data",
         "--name", "Two Bead Viewer",
     ])
     return html_file
@@ -372,7 +372,7 @@ def _build_embedded_viewer_product_metric(out_dir):
     html_file = out_dir / "viewer_product.html"
     matrix.write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
-        "-i", str(input_file), "--html", str(html_file), "--embed_data",
+        "-i", str(input_file), "--html_out", str(html_file), "--embed_data",
         "--name", "Product Metric Viewer", "--merge_impact_metric", "product",
     ])
     return html_file
@@ -5696,7 +5696,7 @@ def _build_embedded_viewer_spindles(out_dir):
     DataMatrix(data, names, names).write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Spindle Test Viewer",
     ])
@@ -6089,7 +6089,7 @@ def _build_embedded_viewer_crowded(out_dir, blob_count=10, blob_size=20):
     DataMatrix(data, names, names).write(str(input_file), output_type="hdf")
     build_ssn_viewer.main([
         "-i", str(input_file),
-        "--html", str(html_file),
+        "--html_out", str(html_file),
         "--embed_data",
         "--name", "Crowded Test Viewer",
     ])

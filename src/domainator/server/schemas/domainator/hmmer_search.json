@@ -3,8 +3,8 @@
   "display_name": "Hmmer Search",
   "category": "Editors",
   "description": "Filter an hmm file based on similarity to reference hmm profiles\n\nIf you want a distance matrix, use seq_dist.py with .hmm files for both inputs and outputs.\n\nIf you want something more like hhsearch or blast, use hmmer_compare.py, which uses \nthe same algorithm, but a different interface (can output the same input profile multiple times).\n\n\nAdapted from pseudocode in:\nSteinegger, Martin, Markus Meier, Milot Mirdita, Harald V\u00f6hringer, Stephan J. Haunsberger, and Johannes S\u00f6ding. \u201cHH-Suite3 for Fast Remote Homology Detection and Deep Protein Annotation.\u201d BMC Bioinformatics 20, no. 1 (September 14, 2019): 473. https://doi.org/10.1186/s12859-019-3019-7.\n\nand\n\nS\u00f6ding, Johannes. \u201cProtein Homology Detection by HMM\u2013HMM Comparison.\u201d Bioinformatics 21, no. 7 (April 1, 2005): 951\u201360. https://doi.org/10.1093/bioinformatics/bti125.",
-  "runner": "module",
-  "entry_point": "domainator.hmmer_search",
+  "runner": "domainator",
+  "entry_point": "hmmer_search",
   "parameters": [
     {
       "name": "Input",
@@ -37,22 +37,22 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "hmm_out",
       "help": ".hmm file to write hit profiles to.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--hmm_out"
       ]
     },
     {
       "name": "Score Cutoff",
-      "parameter": "score_cutoff",
+      "parameter": "min_score",
       "help": "Report alignments with scores greater than or equal to this. Default: 10 for amino acid profiles, and the equivalent point on the nucleotide score scale for DNA and RNA profiles (about 4.63). A value supplied here is used as-is, without rescaling.",
       "type": "number",
       "flags": [
-        "--score_cutoff"
+        "--min_score"
       ]
     },
     {

@@ -9,21 +9,19 @@ Most Domainator CLIs already expose a `main(argv)` entry point that the server c
 ### Prerequisites
 
 - A Python environment with Domainator (and its optional extras) installed.
-- Access to the project `pyproject.toml` that declares the CLI entry points under `[project.scripts]`.
 
 ### Command
 
 Run the generator from the repository root:
 
 ```
-python scripts/server/generate_tool_schemas.py --pyproject pyproject.toml --output-dir src/domainator/server/schemas/generated/
+python scripts/server/generate_tool_schemas.py --output-dir src/domainator/server/schemas/generated/
 ```
 
 Key options:
 
-- `--pyproject`: path to the Domainator `pyproject.toml` containing the CLI script definitions.
-- `--output-dir`: destination folder that will receive one `<tool-id>.json` schema per CLI.
-- `--include`: optional whitelist of script names (matching `[project.scripts]` keys) when you only need a subset.
+- `--output-dir`: destination folder that will receive one `<tool-id>.json` schema per command.
+- `--include`: optional list of `domainator` commands (as registered in `src/domainator/cli/registry.py`) when you only need a subset.
 
 Generated schemas can be committed directly or used as a starting point for manual edits.
 
@@ -37,8 +35,8 @@ Schemas live under `src/domainator/server/schemas/` and have the following shape
   "display_name": "Tool Display Name",
   "category": "Domainator",
   "description": "One or more lines describing the tool.",
-  "runner": "module",
-  "entry_point": "domainator.some_cli",
+  "runner": "domainator",
+  "entry_point": "some_command",
   "parameters": [ ... ],
   "advanced_parameters": [ ... ]
 }
@@ -78,7 +76,8 @@ The `runner` field determines how the server launches the tool. Supported values
 
 | Runner  | Behavior | Entry Point Expectations |
 |---------|----------|---------------------------|
-| `module` | Invokes `python -m <entry_point> --config=<args.json>` | `<entry_point>` must be an importable module that processes a `--config` file. All Domainator CLIs expose `_entrypoint/main` helpers that accept this flag via `jsonargparse`. |
+| `domainator` | Invokes `python -m domainator <entry_point> --config=<args.json>` | `<entry_point>` is a `domainator` command name. All Domainator commands accept `--config` via `jsonargparse`. |
+| `module` | Invokes `python -m <entry_point> --config=<args.json>` | `<entry_point>` must be an importable module that runs when executed and processes a `--config` file. |
 | `python` | Executes `python <entry_point> --config=<args.json>` | Use when the CLI is a Python script rather than a module. Ensure it accepts the `--config` argument. |
 | `shell`  | Runs `/bin/sh -c "<entry_point> --config=<args.json>"` | Provide a shell command string. Useful for wrappers around non-Python binaries. |
 | `binary` (default) | Launches `<entry_point> --config=<args.json>` directly | For standalone executables already on `PATH`. |

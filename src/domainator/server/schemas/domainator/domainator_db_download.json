@@ -3,9 +3,9 @@
   "display_name": "Domainator DB Download",
   "category": "Other",
   "description": "Download sequence databases from the internet in formats appropriate for Domainator\n    Including the following databases:\n    - Uniprot (includes Trembl and SwissProt) (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)\n    - Trembl (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)\n    - SwissProt (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)\n    - ncbi_complete_genome_proks: NCBI genomes where assembly_level is \"Complete Genome\". (excluding eukaryotes)\n    - ncbi_complete_genome_nonredundant_proks: non-redundant NCBI genomes where assembly_level is \"Complete Genome\". (excluding eukaryotes)\n    - ncbi_representative_proks : representative and reference genomes from the NCBI database (excluding eukaryotes)\n    - ncbi_representative_all : representative and reference genomes from the NCBI database (all taxa, including eukaryotes)\n    - ncbi_nonredundant_proks : non-redundant genomes from the NCBI database (excluding eukaryotes)\n    - ncbi_nonredundant_all : non-redundant genomes from the NCBI database (all taxa, including eukaryotes)\n    - ncbi_all : all genomes from the NCBI database including duplicates of the same species (all taxa, including eukaryotes). Can produce very large files, up to 10 TB or more, so use with caution.\n \n\n    Key taxa:\n        81490 : prokaryotic environmental samples\n        408169 : metagenomes\n        2 : bacteria\n        2157 : archaea\n        10239 : viruses\n        \n        2759 : eukaryota\n\n\nWARNING: Downloading large databases can take a long time and use a lot of disk space!",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 1,
-  "entry_point": "domainator.domainator_db_download",
+  "entry_point": "db_download",
   "parameters": [
     {
       "name": "Db",
@@ -34,13 +34,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "Output filename",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -84,21 +84,21 @@
     },
     {
       "name": "Skip Taxonomy Update",
-      "parameter": "skip_taxonomy_update",
+      "parameter": "taxonomy_update",
       "help": "By default, if taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version. Setting this flag will skip this check.",
       "type": "boolean",
       "default": false,
       "flags": [
-        "--skip_taxonomy_update"
+        "--no_taxonomy_update"
       ]
     },
     {
       "name": "Success Rec Log",
-      "parameter": "success_rec_log",
+      "parameter": "success_log_out",
       "help": "Path to log file for successfully written records. If not specified, successfully written records will not be logged.",
       "type": "output",
       "flags": [
-        "--success_rec_log"
+        "--success_log_out"
       ]
     },
     {
@@ -150,11 +150,11 @@
     },
     {
       "name": "Num Recs",
-      "parameter": "num_recs",
+      "parameter": "max_records",
       "help": "Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.",
       "type": "integer",
       "flags": [
-        "--num_recs"
+        "--max_records"
       ]
     },
     {

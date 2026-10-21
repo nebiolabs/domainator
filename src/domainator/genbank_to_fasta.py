@@ -1,48 +1,23 @@
 """
     Convert a GenBank file to a FASTA file
 """
-from jsonargparse import ArgumentParser, ActionConfigFile
-import sys
-from domainator.Bio import SeqIO
-from domainator import __version__, RawAndDefaultsFormatter
+from jsonargparse import ActionConfigFile
+
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
 from domainator.utils import parse_seqfiles
 
-# TODO: replace this with a more general purpose script that can convert between any of the supported formats
-# allow specification of various paramters, such as species, accession, etc.
+
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, 'Genbank filenames.')
+    add_output(parser, "fasta", "Write the records to this FASTA file.", primary=True)
+    parser.add_argument('--config', action=ActionConfigFile)
+    return parser
+
 
 def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-
-    parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
-                       help="Genbank filenames. If not supplied, reads from stdin.")
-
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="the name of the output fasta file. If not supplied writes to stdout.")
-
-    parser.add_argument('--config', action=ActionConfigFile)
-
+    parser = build_parser()
     params = parser.parse_args(argv)
-
-    ### Figure out what input and output files ####
-    
-    if params.input is None:
-        genbanks = [sys.stdin]
-    else:
-        genbanks = params.input
-
-    if params.output is None:
-        out = sys.stdout
-    else:
-        out = open(params.output, "w")
-
-    for rec in parse_seqfiles(genbanks, filetype_override="genbank"):
-        SeqIO.write(rec, out, "fasta")
-    
-    if params.output is not None:
-        out.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+    check_outputs(parser, params, ["fasta_out"])
+    write_seq_outputs(parse_seqfiles(params.input, filetype_override="genbank"), fasta=params.fasta_out)

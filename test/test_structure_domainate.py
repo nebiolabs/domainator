@@ -105,7 +105,7 @@ def test_database_prefix_input_matches_structure_file_input(inputs, references, 
     from_files = tmp_path / "files.gb"
     prefix = tmp_path / "indb"
     structure_domainate.main(["-i", inputs, "-r", references, "-o", str(from_files),
-                              "--keep_db", str(prefix), "--cpu", "2"])
+                              "--db_out", str(prefix), "--cpu", "2"])
     from_db = tmp_path / "db.gb"
     structure_domainate.main(["-i", str(prefix), "-r", references, "-o", str(from_db), "--cpu", "2"])
 

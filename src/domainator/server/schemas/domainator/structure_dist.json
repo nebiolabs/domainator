@@ -3,8 +3,8 @@
   "display_name": "Structure Dist",
   "category": "Comparisons",
   "description": "Calculates similarity or distance matrices between protein structures.\n\nThe structure-input counterpart of seq_dist.py. Typically only -i is supplied, giving an\nall-vs-all matrix of the input structures; a separate -r produces a rectangular matrix of\ninput structures against reference structures.\n\nEvery chain of every input is a row, whether or not it had a hit, so the row and column\nlabels are exactly the record ids that structure_to_genbank.py writes for the same\nstructures, and the matrix feeds build_ssn.py, build_tree.py or build_ssn_viewer.py\ndirectly. That does mean the input database is read end to end, unlike structure_search.py.\n\nAlignment direction is the opposite of structure_search.py and structure_domainate.py: the\ninput is the QUERY and the reference is the TARGET, so rows are inputs and columns are\nreferences, and --evalue is computed against the reference set. This matches seq_dist.py,\nwhere diamond is run with the input as -q and the reference as -d.\n\n--mode selects what goes in the cells. The score-based modes (score, bool, norm_score,\nrow_norm_score, score_dist, efi_score, efi_score_dist) are computed from the aligner's\nalignment score and behave exactly as they do in seq_dist.py. The structural modes put a\nsimilarity that is already bounded in [0, 1] in the cell -- tmscore, lddt, fident -- and\ntheir *_dist forms are simply 1 - that value, needing none of the min(row_max, col_max)\nnormalization that score_dist does. tmscore and lddt require --algorithm foldseek and\nC-alpha coordinates in both databases; fident works with either backend.\n\nNote that with --algorithm reseek there is no bit score: structure_lib records -log10(p)\nin its place. That is monotonic in significance, so score, bool and the normalized modes\nremain meaningful, but the values are not comparable to foldseek's and efi_score, which\nassumes a bit score in its 2^(-score) term, is rejected.",
-  "runner": "module",
-  "entry_point": "domainator.structure_dist",
+  "runner": "domainator",
+  "entry_point": "structure_dist",
   "priority": 1,
   "parameters": [
     {
@@ -46,11 +46,12 @@
     },
     {
       "name": "HDF5 matrix",
-      "parameter": "hdf",
+      "parameter": "hdf_out",
       "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--hdf"
+        "-o",
+        "--hdf_out"
       ]
     },
     {
@@ -121,12 +122,12 @@
     },
     {
       "name": "Lower bound",
-      "parameter": "lb",
+      "parameter": "threshold",
       "help": "Round any values lower than or equal to this down to zero, before the mode transform.",
       "type": "number",
       "default": 0,
       "flags": [
-        "--lb"
+        "--threshold"
       ]
     },
     {
@@ -167,11 +168,11 @@
   "advanced_parameters": [
     {
       "name": "Dense text matrix",
-      "parameter": "dense_text",
+      "parameter": "dense_text_out",
       "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
-        "--dense_text"
+        "--dense_text_out"
       ]
     },
     {
@@ -214,21 +215,21 @@
       ]
     },
     {
-      "name": "Keep database",
-      "parameter": "keep_db",
-      "help": "also write the database built from the input structures, using this path as its prefix.",
-      "type": "string",
+      "name": "Db Out",
+      "parameter": "db_out",
+      "help": "when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.",
+      "type": "output",
       "flags": [
-        "--keep_db"
+        "--db_out"
       ]
     },
     {
       "name": "Hits TSV",
-      "parameter": "hits_tsv",
+      "parameter": "hits_tsv_out",
       "help": "write the aligner's own hit table here, for cross-checking against a hand-run search.",
       "type": "output",
       "flags": [
-        "--hits_tsv"
+        "--hits_tsv_out"
       ]
     },
     {
@@ -259,13 +260,21 @@
       ]
     },
     {
-      "name": "Extra aligner arguments",
-      "parameter": "aligner_arg",
-      "help": "extra arguments appended verbatim to the backend's search command line.",
+      "name": "Foldseek Args",
+      "parameter": "foldseek_args",
+      "help": "extra options for the foldseek search command, as one quoted string split like a shell command line. Options that domainator sets itself are refused.",
       "type": "string",
-      "multiple": true,
       "flags": [
-        "--aligner_arg"
+        "--foldseek_args"
+      ]
+    },
+    {
+      "name": "Reseek Args",
+      "parameter": "reseek_args",
+      "help": "extra options for the reseek search command, as one quoted string split like a shell command line. Options that domainator sets itself are refused.",
+      "type": "string",
+      "flags": [
+        "--reseek_args"
       ]
     },
     {

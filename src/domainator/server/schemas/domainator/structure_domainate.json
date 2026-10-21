@@ -3,8 +3,8 @@
   "display_name": "Structure Domainate",
   "category": "Editors",
   "description": "Annotate protein structures with hits to reference structures\n\nThe structure-input counterpart of domainate.py. Reads structure files (pdb/cif,\noptionally gzipped, given as files, globs, or a directory searched recursively) or a\nprebuilt foldseek database, aligns reference structures against them, and writes a protein\ngenbank file where every input chain is one record carrying Domainator features for the\nreferences that hit it.\n\nEvery input record is written, whether or not it had hits, unless --hits_only is given.\nUse structure_search.py instead when searching a large database with a few references.\n\nReferences are aligned as the query and the input database as the target, so --evalue is\nalways computed against the database being annotated, exactly as it is for the rest of\ndomainator. The annotated coordinates are positions on the input record; the matching\npositions on the reference are recorded in the /rstart, /rend and /rlen qualifiers.\n\nBecause the input database is built from real structures it carries C-alpha coordinates,\nso --alignment_type 1 (TM-align) and the coordinate-based --metrics are available here.\n\nRecord coordinates are indices into the *observed* residue sequence extracted from the\nstructure, not original PDB residue numbers.",
-  "runner": "module",
-  "entry_point": "domainator.structure_domainate",
+  "runner": "domainator",
+  "entry_point": "structure_domainate",
   "parameters": [
     {
       "name": "Input",
@@ -27,14 +27,14 @@
     },
     {
       "name": "References",
-      "parameter": "references",
+      "parameter": "reference",
       "help": "reference structures to annotate the input with. Same accepted forms as --input.",
       "type": "string",
       "required": true,
       "multiple": true,
       "flags": [
         "-r",
-        "--references"
+        "--reference"
       ],
       "file_types": [
         "pdb",
@@ -46,12 +46,12 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "output genbank filename. If not supplied, or if given as '-', writes to stdout.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -68,12 +68,12 @@
     },
     {
       "name": "Max Domains",
-      "parameter": "max_domains",
+      "parameter": "max_hits_per_cds",
       "help": "maximum number of annotations to add per record. 0 means no limit.",
       "type": "integer",
       "default": 0,
       "flags": [
-        "--max_domains"
+        "--max_hits_per_cds"
       ]
     },
     {
@@ -206,21 +206,21 @@
       ]
     },
     {
-      "name": "Keep Db",
-      "parameter": "keep_db",
+      "name": "Db Out",
+      "parameter": "db_out",
       "help": "also write the aligner database built from the input structures, using this path as its prefix, so it can be reused as --input later.",
-      "type": "string",
+      "type": "output",
       "flags": [
-        "--keep_db"
+        "--db_out"
       ]
     },
     {
-      "name": "Hits Tsv",
-      "parameter": "hits_tsv",
-      "help": "write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference cap is applied, so it may hold more rows than the output.",
-      "type": "string",
+      "name": "Hits Tsv Out",
+      "parameter": "hits_tsv_out",
+      "help": "write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output.",
+      "type": "output",
       "flags": [
-        "--hits_tsv"
+        "--hits_tsv_out"
       ]
     },
     {
@@ -233,13 +233,21 @@
       ]
     },
     {
-      "name": "Aligner Arg",
-      "parameter": "aligner_arg",
-      "help": "extra arguments appended verbatim to the backend's search command line, for options domainator does not wrap. Example: --aligner_arg --prefilter-mode 2",
+      "name": "Foldseek Args",
+      "parameter": "foldseek_args",
+      "help": "extra options for the foldseek search command, as one quoted string split like a shell command line. Options that domainator sets itself are refused.",
       "type": "string",
-      "multiple": true,
       "flags": [
-        "--aligner_arg"
+        "--foldseek_args"
+      ]
+    },
+    {
+      "name": "Reseek Args",
+      "parameter": "reseek_args",
+      "help": "extra options for the reseek search command, as one quoted string split like a shell command line. Options that domainator sets itself are refused.",
+      "type": "string",
+      "flags": [
+        "--reseek_args"
       ]
     },
     {

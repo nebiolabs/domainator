@@ -5,7 +5,7 @@ def test_color_table_legend(shared_datadir, tmp_path):
     svg_file = tmp_path / "test.svg"
     title = "Test Legend"
 
-    color_table_to_legend.main(["-i", str(shared_datadir / "color_specification.tsv"), "--svg", str(svg_file), "--title", title])
+    color_table_to_legend.main(["-i", str(shared_datadir / "color_specification.tsv"), "--svg_out", str(svg_file), "--title", title])
     """
     CcdB	#ff0000
     APH	#00ff00

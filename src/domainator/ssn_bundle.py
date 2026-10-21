@@ -1,8 +1,8 @@
 """Read-only helpers for navigating a build_ssn_viewer ``.dsnv`` bundle.
 
-The bundle is a gzip-compressed JSON document (see ``build_ssn_viewer.py``) that
+The bundle is a gzip-compressed JSON document (see ``domainator build_ssn_viewer``) that
 stores an agglomerative MST merge tree plus a positional metadata table. These
-helpers let non-browser callers (notably ``ssn_navigator.py``) reconstruct the
+helpers let non-browser callers (notably ``domainator ssn_navigator``) reconstruct the
 clusters that are active at a chosen similarity threshold and summarize the
 metadata of their members, mirroring the logic of the JavaScript viewer's
 ``activeClustersAtThreshold`` / ``componentMembers`` functions.
@@ -43,7 +43,7 @@ SSN_VIEWER_BUNDLE_FORMAT = "domainator_ssn_viewer_bundle"
 # v3: per-event merge_size_counts/largest_merge/merge_count + graph.merge_moving_sum
 # v4: optional top-level "app_state" section written by the HTML viewer's "Save
 #     session" button (viewer UI state + selection presets). Purely additive:
-#     build_ssn_viewer.py never writes app_state, and a reader that ignores the
+#     domainator build_ssn_viewer never writes app_state, and a reader that ignores the
 #     section can treat a v4 file exactly like a v3 file.
 # v5: graph.merge_event_total and graph.max_merge_events, so a reader can say how
 #     many of the network's split events the capped graph.merge_event_series is
@@ -184,7 +184,7 @@ def clusters_at_threshold(hierarchy: dict, threshold: Optional[float]) -> List[i
     Python port of the viewer's ``activeClustersAtThreshold``: descend into a
     cluster node when it merged at or below the cut, otherwise emit the whole
     component. A merge at *exactly* the cut is split back apart, because
-    ``build_ssn --lb T`` keeps only edges scoring strictly above ``T`` -- the
+    ``build_ssn --threshold T`` keeps only edges scoring strictly above ``T`` -- the
     comparison here has to be ``<=`` to match that and the viewer.
     ``threshold=None`` is the bundle's "∞" slider stop (``threshold_value: null``)
     and, like the viewer, means +infinity: every merge is cut, so every node is

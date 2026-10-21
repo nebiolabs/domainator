@@ -46,18 +46,18 @@ CASES = [
     ("domain_search_cds_range_keep_direction", domain_search, SPR_UNANNOTATED, ["-r", "SPR.hmm", "--cds_range", "1", "-Z", "1000", "--cpu", "1", "--keep_direction"]),
     ("extract_domains", extract_domains, LINEAR, ["--domains", "CAT", "APH"]),
     ("extract_domains_keep_direction", extract_domains, LINEAR, ["--domains", "CAT", "APH", "--keep_direction"]),
-    ("extract_domains_pad", extract_domains, LINEAR, ["--domains", "CAT", "APH", "--pad_up", "100", "--pad_down", "50"]),
-    ("extract_domains_pad_keep_direction", extract_domains, LINEAR, ["--domains", "CAT", "APH", "--pad_up", "100", "--pad_down", "50", "--keep_direction"]),
+    ("extract_domains_pad", extract_domains, LINEAR, ["--domains", "CAT", "APH", "--extend_up", "100", "--extend_down", "50"]),
+    ("extract_domains_pad_keep_direction", extract_domains, LINEAR, ["--domains", "CAT", "APH", "--extend_up", "100", "--extend_down", "50", "--keep_direction"]),
     ("extract_domains_combine", extract_domains, LINEAR, ["--domains", "CcdA", "CcdB", "--combine"]),
     ("extract_domains_combine_keep_direction", extract_domains, LINEAR, ["--domains", "CcdA", "CcdB", "--combine", "--keep_direction"]),
-    ("extract_domains_origin", extract_domains, SPR, ["--domains", "Thymidylat_synt", "--pad_up", "10"]),
-    ("extract_domains_origin_keep_direction", extract_domains, SPR, ["--domains", "Thymidylat_synt", "--pad_up", "10", "--keep_direction"]),
+    ("extract_domains_origin", extract_domains, SPR, ["--domains", "Thymidylat_synt", "--extend_up", "10"]),
+    ("extract_domains_origin_keep_direction", extract_domains, SPR, ["--domains", "Thymidylat_synt", "--extend_up", "10", "--keep_direction"]),
     ("extract_domains_origin_forward", extract_domains, SPR_REVERSED, ["--domains", "Thymidylat_synt"]),
     ("extract_unannotated", extract_unannotated, PROTEINS, []),
     ("extract_unannotated_largest", extract_unannotated, PROTEINS, ["--largest"]),
-    ("trim_contigs", trim_contigs, LINEAR, ["--cds_both", "2"]),
-    ("rotate_contigs", rotate_contigs, SPR, ["--domains", "DHFR_1", "--where", "center"]),
-    ("rotate_contigs_keep_direction", rotate_contigs, SPR, ["--domains", "DHFR_1", "--where", "center", "--keep_direction"]),
+    ("trim_contigs", trim_contigs, LINEAR, ["--cds_range", "2"]),
+    ("rotate_contigs", rotate_contigs, SPR, ["--domains", "DHFR_1", "--anchor", "center"]),
+    ("rotate_contigs_keep_direction", rotate_contigs, SPR, ["--domains", "DHFR_1", "--anchor", "center", "--keep_direction"]),
     ("rotate_contigs_forward", rotate_contigs, SPR_REVERSED, ["--domains", "Thymidylat_synt"]),
 ]
 
@@ -91,7 +91,7 @@ def _run(datadir, output_dir, case_id, tool, input_file, args):
 def _run_coords(datadir, output_dir, case_id, input_file, rows):
     table = os.path.join(output_dir, case_id + ".tsv")
     _write_table(table, rows)
-    return _run(datadir, output_dir, case_id, select_by_coord, input_file, ["-c", table])
+    return _run(datadir, output_dir, case_id, select_by_coord, input_file, ["--coords", table])
 
 
 def _parents(datadir, input_file):

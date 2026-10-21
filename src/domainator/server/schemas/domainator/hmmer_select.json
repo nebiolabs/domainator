@@ -3,8 +3,8 @@
   "display_name": "Hmmer Select",
   "category": "Editors",
   "description": "Find profiles in an hmm file using text-based searches\n\nSearch through an hmm file to find profiles with names or descriptions matching a specified regex or string, or containing a specified string.\n\nAll specifications are treated as \"OR\" with relation to each other. So any profile that matches any of the specifications will be returned.",
-  "runner": "module",
-  "entry_point": "domainator.hmmer_select",
+  "runner": "domainator",
+  "entry_point": "hmmer_select",
   "parameters": [
     {
       "name": "Input",
@@ -23,13 +23,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "hmm_out",
       "help": "Hmm output file name.",
       "required": true,
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--hmm_out"
       ]
     },
     {

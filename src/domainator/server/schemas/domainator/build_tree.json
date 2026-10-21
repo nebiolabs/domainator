@@ -3,9 +3,9 @@
   "display_name": "Build Tree",
   "category": "Plots",
   "description": "Generates trees from distance matrices",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 2,
-  "entry_point": "domainator.build_tree",
+  "entry_point": "build_tree",
   "parameters": [
     {
       "name": "Input",
@@ -51,20 +51,21 @@
     },
     {
       "name": "Xgmml",
-      "parameter": "xgmml",
+      "parameter": "xgmml_out",
       "help": "write a cytoscape xgmml file of the tree.",
       "type": "output",
       "flags": [
-        "--xgmml"
+        "--xgmml_out"
       ]
     },
     {
       "name": "Newick",
-      "parameter": "newick",
+      "parameter": "newick_out",
       "help": "write a newick file of the tree.",
       "type": "output",
       "flags": [
-        "--newick"
+        "-o",
+        "--newick_out"
       ]
     }
   ],

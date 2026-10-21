@@ -1,7 +1,7 @@
 """Shared plumbing for structure-based search and annotation.
 
-This module has no CLI. It is imported by structure_to_genbank.py,
-structure_domainate.py and structure_search.py.
+This module has no CLI. It is imported by domainator structure_to_genbank,
+domainator structure_domainate and domainator structure_search.
 
 Three things live here:
 
@@ -33,9 +33,9 @@ import heapq
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
-import sys
 import tempfile
 import warnings
 from abc import ABC, abstractmethod
@@ -46,10 +46,7 @@ from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator import utils
 from domainator.domainate import SearchResult
-from domainator.output_guardrails import (
-    make_temporary_output_path, OutputSizeLimitExceeded, write_records_with_limit,
-)
-from domainator.utils import open_if_is_name_for_write
+from domainator.output_guardrails import OutputSizeLimitExceeded
 
 # Structure file extensions, taken from the shared extension map so there is one source of
 # truth. All of these are accepted by foldseek; reseek documents pdb/cif/mmcif/ent, and
@@ -403,7 +400,7 @@ class StructureAligner(ABC):
     default_max_seqs: Optional[int] = None
 
     # Names of the raw hit tables this backend leaves in the work directory, most-processed
-    # first. --hits_tsv exports the first one that exists, so it reflects what the run
+    # first. --hits_tsv_out exports the first one that exists, so it reflects what the run
     # actually used rather than an intermediate.
     results_filenames: Tuple[str, ...] = ()
 
@@ -418,6 +415,10 @@ class StructureAligner(ABC):
         self.tmp_dir = tmp_dir
         self.options = dict(options or {})
         self.bin_path = self._resolve_bin(bin_path)
+
+    def _append_extra_args(self, argv: List[str]) -> List[str]:
+        """Return ``argv`` followed by the user's extra arguments, refusing any option Domainator already sets."""
+        return utils.append_extra_args(argv, self.extra_args, f"--{self.name}_args")
 
     def resolve_alignment_type(self, alignment_type: Optional[int]) -> Optional[int]:
         """Fill in the backend's default when the caller did not ask for a specific type."""
@@ -545,7 +546,7 @@ class FoldseekAligner(StructureAligner):
         if is_reseek_db(db.prefix):
             raise RuntimeError(
                 f"'{db.prefix}' is a reseek database, which foldseek cannot read. "
-                "Use --algorithm reseek, or point --input/--references at structure files "
+                "Use --algorithm reseek, or point --input/--reference at structure files "
                 "or a foldseek database."
             )
         if not is_aligner_db(db.prefix):
@@ -747,7 +748,7 @@ class FoldseekAligner(StructureAligner):
             # lddt/rmsd/alntmscore are computed from the alignment backtrace, which
             # foldseek search only stores when -a is given.
             search_argv.append("-a")
-        search_argv += self._thread_args() + gpu_args + self.extra_args
+        search_argv = self._append_extra_args(search_argv + self._thread_args() + gpu_args)
         run_command(search_argv, "foldseek search", expect=f"{aln_path}.dbtype", env=env)
 
         convert_argv = [self.bin_path, "convertalis", query_db.prefix, target_db.prefix,
@@ -963,7 +964,7 @@ class ReseekAligner(StructureAligner):
                 "-pvalue", repr(pvalue),
                 "-stats", self._stats_level(),
                 "-columns", "+".join(self.COLUMNS)]
-        argv += self._thread_args() + self.extra_args
+        argv = self._append_extra_args(argv + self._thread_args())
         run_command(argv, "reseek -search", expect=results_path)
 
         if max_seqs:
@@ -1178,8 +1179,11 @@ def add_backend_arguments(parser, include_search_arguments: bool = True) -> None
     for name in sorted(ALIGNERS):
         parser.add_argument(f'--{name}_path', default=None, type=str,
                             help=f"path to the {name} executable. If not supplied, {name} is looked up on PATH.")
-    parser.add_argument('--aligner_arg', nargs='+', default=None, type=str,
-                        help="extra arguments appended verbatim to the backend's search command line, for options domainator does not wrap. Example: --aligner_arg --prefilter-mode 2")
+    for name in sorted(ALIGNERS):
+        parser.add_argument(f'--{name}_args', default=None, type=str,
+                            help=f"extra options for the {name} search command, for options domainator does not wrap, as one "
+                                 f"quoted string split like a shell command line. Use the = form: "
+                                 f"--{name}_args=\"--option value\". Options that domainator sets itself are refused.")
     parser.add_argument('--cpu', type=int, default=0,
                         help="number of threads to give the backend. 0 lets the backend use all available cores.")
     parser.add_argument('--tmp_dir', default=None, type=str,
@@ -1209,11 +1213,15 @@ BACKEND_OPTIONS = ("reseek_stats", "reseek_sensitivity")
 def build_aligner(params) -> StructureAligner:
     """Instantiate the backend selected by the parsed arguments."""
     aligner_class = ALIGNERS[params.algorithm]
+    for name in ALIGNERS:
+        if name != params.algorithm and getattr(params, f"{name}_args", None):
+            raise ValueError(f"--{name}_args was given, but the search backend is {params.algorithm} (--algorithm).")
+    extra_args = getattr(params, f"{params.algorithm}_args", None)
     return aligner_class(
         bin_path=getattr(params, f"{params.algorithm}_path", None),
         cpu=getattr(params, "cpu", 0),
         device=getattr(params, "device", None),
-        extra_args=getattr(params, "aligner_arg", None),
+        extra_args=shlex.split(extra_args) if extra_args else None,
         tmp_dir=getattr(params, "tmp_dir", None),
         options={name: getattr(params, name, None) for name in BACKEND_OPTIONS},
     )
@@ -1250,7 +1258,7 @@ def prepared_databases(aligner: StructureAligner, input_values: Sequence[str],
 
     if input_kind == "db" and keep_db is not None:
         raise RuntimeError(
-            "--keep_db writes the database built from input structures, but the input is "
+            "--db_out writes the database built from input structures, but the input is "
             f"already a database ('{input_resolved[0]}')."
         )
 
@@ -1351,42 +1359,20 @@ def copy_hits_tsv(work_dir: str, destination: str, aligner: StructureAligner) ->
             return
     warnings.warn(
         f"No raw hit table was found in '{work_dir}' for backend '{aligner.name}'; "
-        "--hits_tsv not written."
+        "--hits_tsv_out not written."
     )
 
 
-def write_records(records, output, max_output_bytes, output_description, mitigation_options):
-    """Write genbank records to a path or stdout, enforcing the output size limit.
+def write_records(records, genbank_out, fasta_out, max_output_bytes, mitigation_options):
+    """Write protein records to the GenBank and/or FASTA outputs, enforcing the output size limit.
 
-    Writes to a temporary file next to the target and renames on success, so a failed or
-    size-limited run does not leave a partial output file behind. stdout is written
-    directly, since there is nothing to rename.
-
-    An output of None or "-" means stdout, matching the rest of the suite.
+    Files are written to a temporary name and renamed on success, so a failed or size-limited
+    run does not leave a partial output behind. ``-`` writes standard output.
     """
-    from domainator.utils import write_genbank
+    from domainator.outputs import write_seq_outputs
 
-    if output is None or output == "-":
-        write_genbank(records, sys.stdout, default_molecule_type="protein")
-        return
-
-    temp_output_path = make_temporary_output_path(output)
-    handle, _ = open_if_is_name_for_write(temp_output_path)
     try:
-        written_bytes = 0
-        for record in records:
-            written_bytes = write_records_with_limit(
-                (record,), handle, written_bytes, max_output_bytes,
-                output_description, mitigation_options,
-            )
+        write_seq_outputs(records, genbank_out, fasta_out, max_output_bytes=max_output_bytes,
+                          mitigation_options=mitigation_options, default_molecule_type="protein")
     except OutputSizeLimitExceeded as exc:
-        handle.close()
-        os.remove(temp_output_path)
         raise SystemExit(str(exc)) from None
-    except Exception:
-        handle.close()
-        if os.path.exists(temp_output_path):
-            os.remove(temp_output_path)
-        raise
-    handle.close()
-    os.replace(temp_output_path, output)

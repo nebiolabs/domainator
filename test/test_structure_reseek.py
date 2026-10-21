@@ -420,7 +420,7 @@ def test_hits_tsv_for_reseek(inputs, references, tmp_path):
     tsv = tmp_path / "raw.tsv"
     with pytest.warns(RuntimeWarning):
         structure_search.main(["-i", inputs, "-r", references, "--algorithm", "reseek",
-                               "--hits_tsv", str(tsv), "-o", str(out), "--cpu", "2"])
+                               "--hits_tsv_out", str(tsv), "-o", str(out), "--cpu", "2"])
     lines = [line for line in tsv.read_text().split("\n") if line]
     assert len(lines) == 2
     assert {line.split("\t")[1] for line in lines} == EXPECTED_HITS
@@ -432,7 +432,7 @@ def test_prebuilt_reseek_database_as_input(inputs, references, tmp_path):
     first = tmp_path / "first.gb"
     with pytest.warns(RuntimeWarning):
         structure_search.main(["-i", inputs, "-r", references, "--algorithm", "reseek",
-                               "--keep_db", str(prefix), "-o", str(first), "--cpu", "2"])
+                               "--db_out", str(prefix), "-o", str(first), "--cpu", "2"])
     second = tmp_path / "second.gb"
     structure_search.main(["-i", f"{prefix}.bcb", "-r", references, "--algorithm", "reseek",
                            "-o", str(second), "--cpu", "2"])

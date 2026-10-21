@@ -8,7 +8,7 @@ Genbank files are the sequence format most used by Domainator. Genbank files are
 ### Features
 Domainator produces and understands some feature types particular to it.
 
-`Domainator` features are domain annotations added to genbank files by `domainate.py` or `domain_search.py`. The `cds_id` qualifier is particularly critical as it links the `Domainator` feature to a `CDS` feature. Domainator adds a `cds_id` qualifier to any `CDS` feature lacking one. The `cds_id` is expected to be unique within a contig. The general format for an automatically generated `cds_id` is `[start coordinate]_[strand]_[end coordinate]`. Multi-part CDSs, for example CDSs containing introns or crossing the origin are handled in a somewhat more complicated way, as special cases, with the goal being to maintain a one-cds_id to one_cds relation. For nucleotide contig-level annotations (produced by nhmmer or infernal searches), `cds_id` is set to `"."` because the hit is not associated with a particular CDS.
+`Domainator` features are domain annotations added to genbank files by `domainator domainate` or `domainator domain_search`. The `cds_id` qualifier is particularly critical as it links the `Domainator` feature to a `CDS` feature. Domainator adds a `cds_id` qualifier to any `CDS` feature lacking one. The `cds_id` is expected to be unique within a contig. The general format for an automatically generated `cds_id` is `[start coordinate]_[strand]_[end coordinate]`. Multi-part CDSs, for example CDSs containing introns or crossing the origin are handled in a somewhat more complicated way, as special cases, with the goal being to maintain a one-cds_id to one_cds relation. For nucleotide contig-level annotations (produced by nhmmer or infernal searches), `cds_id` is set to `"."` because the hit is not associated with a particular CDS.
 
 `rstart`, `rend` are the start and end coordinates of the local alignment in the "reference" (i.e. profile). `rlen` is the total length of the reference profile, so you can get an idea of how the local alignment is oriented with respect to the entire reference profile/sequence.
 
@@ -28,7 +28,7 @@ Domainator produces and understands some feature types particular to it.
 ```
 
 
-Annotations produced by a structural aligner (`structure_domainate.py`, `structure_search.py`) carry the same qualifiers, with `program` naming the aligner (for example `foldseek`). They may additionally carry `tmscore`, `lddt`, `rmsd` and `prob` when those were requested with `--metrics`. These four qualifiers are optional and are simply absent when the aligner did not compute them, so files written by the sequence-based tools are unchanged. They are scores for the alignment as a whole, on their own scales rather than on the `score` bitscore scale, so they should not be compared against `score` or against each other.
+Annotations produced by a structural aligner (`domainator structure_domainate`, `domainator structure_search`) carry the same qualifiers, with `program` naming the aligner (for example `foldseek`). They may additionally carry `tmscore`, `lddt`, `rmsd` and `prob` when those were requested with `--metrics`. These four qualifiers are optional and are simply absent when the aligner did not compute them, so files written by the sequence-based tools are unchanged. They are scores for the alignment as a whole, on their own scales rather than on the `score` bitscore scale, so they should not be compared against `score` or against each other.
 
 ```javascript
      Domainator      1..76
@@ -51,9 +51,9 @@ Annotations produced by a structural aligner (`structure_domainate.py`, `structu
 
 Note that for structure-derived records, all coordinates are indices into the *observed* residue sequence that the aligner extracted from the structure file, not original PDB residue numbers. A chain with a disordered loop has a sequence shorter than its residue-number span, so positions cannot be mapped back to the structure's own numbering.
 
-`misc_feature` features carrying a `threedi` qualifier are written by `structure_to_genbank.py --store_3di`. The qualifier holds the chain's full-length 3Di structural-alphabet string, one character per residue. It is a single opaque string rather than a per-residue annotation, so it does not survive tools that slice records (`extract_domains.py`, `select_by_coord.py`).
+`misc_feature` features carrying a `threedi` qualifier are written by `domainator structure_to_genbank --store_3di`. The qualifier holds the chain's full-length 3Di structural-alphabet string, one character per residue. It is a single opaque string rather than a per-residue annotation, so it does not survive tools that slice records (`domainator extract_domains`, `domainator select_by_coord`).
 
-`Domain_Search` features are added by `domain_search.py` and `structure_search.py`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domain_search.py`, and there are exactly one per contig on sequences returned by `domain_search.py`. Other programs, such as `extract_domains.py`, `select_by_cds.py`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, typically by using the `--search_hits` command line argument.
+`Domain_Search` features are added by `domainator domain_search` and `domainator structure_search`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domainator domain_search`, and there are exactly one per contig on sequences returned by `domainator domain_search`. Other programs, such as `domainator extract_domains`, `domainator select_by_cds`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, selected with `--annotation_type domain_search`.
 
 ### Taxonomy
 
@@ -74,47 +74,47 @@ If no taxid is noted in either place, the Taxid will be assigned [32644](https:/
 
 Domainator keeps the GenBank partial markers `<` and `>` on feature locations. `<` means the feature starts before the given position, and `>` means it ends after it. For example, `complement(803..>2688)` is a CDS on the minus strand that runs off the end of the contig, so its 5' end (and its protein's N-terminus) is missing.
 
-**Slicing.** Tools that extract part of a record (`domain_search.py` and `select_by_cds.py` neighborhoods, `select_by_coord.py`, `extract_domains.py`, `trim_contigs.py`, `extract_peptides.py`, and others) keep features that the slice cuts, and mark the cut ends with `<` or `>`. Existing markers on ends that are kept are preserved. There are three exceptions:
+**Slicing.** Tools that extract part of a record (`domainator domain_search` and `domainator select_by_cds` neighborhoods, `domainator select_by_coord`, `domainator extract_domains`, `domainator trim_contigs`, `domainator extract_peptides`, and others) keep features that the slice cuts, and mark the cut ends with `<` or `>`. Existing markers on ends that are kept are preserved. There are three exceptions:
 * `source` features don't get new markers.
 * `Domainator` and `Domain_Search` features that the slice cuts are dropped, because their scores and coordinates describe the whole hit.
 * A feature split across the ends of a rotated circular contig is not cut (its whole sequence is still in the record), so it is written as a `join` without markers.
 
-**CDS reading frame and translation.** When a CDS is cut, its `codon_start` qualifier is updated so the reading frame is preserved. Its `translation` is trimmed to the residues whose codons are completely kept, following the NCBI convention that the translation of a partial CDS covers only the part on the contig. If the kept part is not contiguous (an interior exon was cut out), the `translation` is removed and is re-translated the next time the record goes through `domainate.py`.
+**CDS reading frame and translation.** When a CDS is cut, its `codon_start` qualifier is updated so the reading frame is preserved. Its `translation` is trimmed to the residues whose codons are completely kept, following the NCBI convention that the translation of a partial CDS covers only the part on the contig. If the kept part is not contiguous (an interior exon was cut out), the `translation` is removed and is re-translated the next time the record goes through `domainator domainate`.
 
-Some files give a partial CDS the translation of the full protein, including residues encoded off the edge of the contig. When `domainate.py` and `domain_search.py` read such a CDS, they trim the translation to the on-contig residues, from the partial end. If both ends are partial, they can't tell where the extra residues belong, so they re-translate from the contig and warn. A complete 3' end is assumed to end in a stop codon, which GenBank translations omit and Domainator's own translations include as `*`.
+Some files give a partial CDS the translation of the full protein, including residues encoded off the edge of the contig. When `domainator domainate` and `domainator domain_search` read such a CDS, they trim the translation to the on-contig residues, from the partial end. If both ends are partial, they can't tell where the extra residues belong, so they re-translate from the contig and warn. A complete 3' end is assumed to end in a stop codon, which GenBank translations omit and Domainator's own translations include as `*`.
 
 Domain hits on a CDS are placed relative to its `codon_start`: residue 1 of the translation starts `codon_start - 1` bases into the CDS.
 
 **Gene-caller partial codes.** prodigal and GeneMark mark partial genes with a two-digit code, which some conversions copy into a `/partial` qualifier, e.g. `/partial="10"`. The first digit is the left (low-coordinate) end and the second the right end, regardless of strand; `1` means the gene runs off that end (or into a gap). Domainator converts these codes to `<` / `>` markers when it reads a GenBank file, and removes the qualifier, because the code is tied to the coordinates and would be wrong after reverse complementing. A partial end within 2 bases of the contig edge is extended to the edge, like the partial genes from `--gene_call`, with `codon_start` set if the 5' end moved; a partial end elsewhere (a gap) is marked where it is. For example, `2..106 /partial="10"` becomes `<1..106 /codon_start=2`. Existing `<` / `>` markers take precedence over a code. A legacy `/partial` qualifier without a value says nothing about which end is missing, so it is left as is, and the CDS is a fragment with unknown missing ends (`?`).
 
-**Gene calling.** With `--gene_call` (`domainate.py`, `domain_search.py`, `find_features.py`, `kmer_dist.py`, `domainator_db_download.py`), genes that prodigal finds running off the edge of a linear contig are kept as partial CDSs, annotated the way GenBank annotates them: extended to the edge of the contig (prodigal itself stops at the last whole codon), marked with `<` or `>`, and given a `codon_start` when the 5' end is partial. On circular contigs, genes that cross the origin are called by running prodigal again on a window spanning the origin (20 kb on each side, or the whole contig, rotated, if it is shorter than 40 kb), and annotated as joins across the origin, e.g. `complement(join(1843..2552,1..130))`. Only genes crossing the origin are taken from that second run, and one that overlaps a gene from the main run more than prodigal itself allows (60 bp on the same strand, 200 bp on opposite strands) is skipped.
+**Gene calling.** With `--gene_call` (`domainator domainate`, `domainator domain_search`, `domainator find_features`, `domainator kmer_dist`, `domainator db_download`), genes that prodigal finds running off the edge of a linear contig are kept as partial CDSs, annotated the way GenBank annotates them: extended to the edge of the contig (prodigal itself stops at the last whole codon), marked with `<` or `>`, and given a `codon_start` when the 5' end is partial. On circular contigs, genes that cross the origin are called by running prodigal again on a window spanning the origin (20 kb on each side, or the whole contig, rotated, if it is shorter than 40 kb), and annotated as joins across the origin, e.g. `complement(join(1843..2552,1..130))`. Only genes crossing the origin are taken from that second run, and one that overlaps a gene from the main run more than prodigal itself allows (60 bp on the same strand, 200 bp on opposite strands) is skipped.
 
 **Fragment status.** Like taxids, Domainator reads a fragment status for each protein or CDS:
 * A CDS is a fragment if either outer end of its location has a `<` or `>`. Its status is `N` (5' end, and so the N-terminus, missing), `C` (3' end missing), or `NC` (both). A CDS with a `/partial` qualifier without a value (the legacy INSDC qualifier) is a fragment with unknown missing ends, `?`.
-* For a protein record, a `CDS` or `Protein` feature spanning the record decides, the same way. This is what `domain_search.py --translate` writes, and what NCBI GenPept records carry.
-* Otherwise, UniProt `NON_TER` features on the first or last residue decide: `N` for the first residue, `C` for the last, or `NC` for both. UniProt text (`.dat`) entries carry these, and `domainator_db_download.py --db swissprot_gb` (and `trembl_gb`, `uniprot_gb`) keeps them in the GenBank files it writes.
+* For a protein record, a `CDS` or `Protein` feature spanning the record decides, the same way. This is what `domainator domain_search --translate` writes, and what NCBI GenPept records carry.
+* Otherwise, UniProt `NON_TER` features on the first or last residue decide: `N` for the first residue, `C` for the last, or `NC` for both. UniProt text (`.dat`) entries carry these, and `domainator db_download --db swissprot_gb` (and `trembl_gb`, `uniprot_gb`) keeps them in the GenBank files it writes.
 * Otherwise, a protein record is a fragment with unknown missing ends, `?`, if its description contains ` (Fragment)` or ` (Fragments)`, a `Flags:` list with `Fragment` or `Fragments`, or the token `FL=0`. The first is how UniProt marks fragments in FASTA headers, e.g. `>tr|A0A0|A0A0_ECOLI Superoxide dismutase (Fragment) OS=Escherichia coli OX=562`. The second is the `DE   Flags: Fragment;` line of a UniProt text entry, which ends up in the DEFINITION of a converted GenBank file. MGnify protein FASTA headers use `FL=0` for fragments and `FL=1` for full-length proteins, e.g. `>MGYP003477041764 FL=0 CR=1`; only `FL=0` matters, since a protein is full length unless marked otherwise. The status is never written into descriptions, so headers round-trip unchanged.
 
 These tools take `--partial {include,exclude,only}` (default `include`) to select by fragment status:
 
 | Tool | What `--partial` selects |
 |---|---|
-| `domainate.py`, `domain_search.py`, `find_features.py` | which CDSs/proteins are searched or annotated. Records are still written by `domainate.py` and `find_features.py`. |
-| `select_by_cds.py` | which CDSs regions are extracted around |
-| `extract_peptides.py` | which CDSs peptides are extracted from |
-| `extract_domains.py` | which domains are extracted, by the CDS or protein they are on. Contig-level nucleotide hits are never on fragments. |
-| `select_by_contig.py` | which contigs are selected. A protein record by its own status; a nucleotide contig is a fragment if it contains any partial CDS. |
-| `enum_report.py` | which rows are reported: by contig (as for `select_by_contig.py`), by CDS, or by domain (by the CDS or protein the domain is on) |
-| `summary_report.py` | which CDSs/proteins are counted. Filtered protein records are skipped; on nucleotide contigs, filtered CDSs and the domains on them aren't counted, but the contig is. The report always includes the number of partial CDSs and protein fragments among those counted. |
-| `domainator_db_download.py` | which UniProt records are downloaded (UniProt databases only) |
+| `domainator domainate`, `domainator domain_search`, `domainator find_features` | which CDSs/proteins are searched or annotated. Records are still written by `domainator domainate` and `domainator find_features`. |
+| `domainator select_by_cds` | which CDSs regions are extracted around |
+| `domainator extract_peptides` | which CDSs peptides are extracted from |
+| `domainator extract_domains` | which domains are extracted, by the CDS or protein they are on. Contig-level nucleotide hits are never on fragments. |
+| `domainator select_by_contig` | which contigs are selected. A protein record by its own status; a nucleotide contig is a fragment if it contains any partial CDS. |
+| `domainator enum_report` | which rows are reported: by contig (as for `domainator select_by_contig`), by CDS, or by domain (by the CDS or protein the domain is on) |
+| `domainator summary_report` | which CDSs/proteins are counted. Filtered protein records are skipped; on nucleotide contigs, filtered CDSs and the domains on them aren't counted, but the contig is. The report always includes the number of partial CDSs and protein fragments among those counted. |
+| `domainator db_download` | which UniProt records are downloaded (UniProt databases only) |
 
-`--partial` is never inverted by `--invert`. `enum_report.py --fragment` adds a `fragment` column with the status (`complete`, `N`, `C`, `NC`, or `?`) for rows that are a single protein or CDS: protein records, CDSs, and domains on protein records (which get the status of the protein). Like the other protein-specific columns, it is empty for other rows, with a warning. `enum_report.py --partial_count` adds a `partial_count` column: by contig, the number of partial CDSs on the contig (for a protein record, 1 if it is a fragment); by CDS, 1 if the CDS or protein is a fragment; by domain, 1 if the CDS or protein the domain is on is a fragment, whether or not the domain reaches the missing end. Otherwise 0.
+`--partial` is never inverted by `--invert`. `domainator enum_report --fragment` adds a `fragment` column with the status (`complete`, `N`, `C`, `NC`, or `?`) for rows that are a single protein or CDS: protein records, CDSs, and domains on protein records (which get the status of the protein). Like the other protein-specific columns, it is empty for other rows, with a warning. `domainator enum_report --partial_count` adds a `partial_count` column: by contig, the number of partial CDSs on the contig (for a protein record, 1 if it is a fragment); by CDS, 1 if the CDS or protein is a fragment; by domain, 1 if the CDS or protein the domain is on is a fragment, whether or not the domain reaches the missing end. Otherwise 0.
 
-FASTA output (`--fasta_out`, `genbank_to_fasta.py`) carries no locations, so a fragment's status survives only if its header already says ` (Fragment)`.
+FASTA output (`--fasta_out`, `domainator genbank_to_fasta`) carries no locations, so a fragment's status survives only if its header already says ` (Fragment)`.
 
 ### Names of extracted regions
 
-Tools that extract part of a contig (`select_by_cds.py`, `domain_search.py`, `split_by_cluster.py --pad_on_search_hits`, `extract_domains.py`, `extract_unannotated.py`, `select_by_coord.py`, `trim_contigs.py`, `rotate_contigs.py`) rename the region in the same way (`domainator.utils.region_id`):
+Tools that extract part of a contig (`domainator select_by_cds`, `domainator domain_search`, `domainator split_by_cluster --pad_on_search_hits`, `domainator extract_domains`, `domainator extract_unannotated`, `domainator select_by_coord`, `domainator trim_contigs`, `domainator rotate_contigs`) rename the region in the same way (`domainator.utils.region_id`):
 
 ```
 <contig id>_<first>:<last>[rc]
@@ -137,7 +137,7 @@ Tools that extract part of a contig (`select_by_cds.py`, `domain_search.py`, `sp
 | whole contig rotated to start at base 11 | `c_11:10` |
 | whole contig, reverse complemented | `c_rc` |
 
-`extract_domains.py --splice` drops the sequence between domains, so its names give only the first and last bases.
+`domainator extract_domains --splice` drops the sequence between domains, so its names give only the first and last bases.
 
 
 ### Differences from BioPython in internal storing of Genbank records
@@ -160,10 +160,10 @@ One constraint is worth stating explicitly, because Domainator enforces it: **an
 may only contain profiles of a single alphabet.** HMMER locks a profile file to the alphabet
 of its first profile, so concatenating profiles of different alphabets produces a file that
 cannot be read past the first one. The `hmmer_*` programs reject mixed-alphabet inputs rather
-than writing such a file, and `hmmer_select.py --alphabet` splits a mixed set of files into
+than writing such a file, and `domainator hmmer_select --alphabet` splits a mixed set of files into
 per-alphabet outputs. DNA and RNA count as different alphabets.
 
-`hmmer_build.py` writes the `MAXL` line (the nhmmer search window) for nucleotide profiles;
+`domainator hmmer_build` writes the `MAXL` line (the nhmmer search window) for nucleotide profiles;
 `--window_length` and `--window_beta` control it. Profiles written by HMMER and by Domainator
 both carry `DATE` and `COM` lines recording when and how they were built, so two profiles
 built from the same alignment are not byte-identical.
@@ -216,8 +216,8 @@ per chain and names them `<file basename>_<chain>`.
 These extensions are recognized by `domainator.utils.get_file_type`, which reports them as
 type `structure`. That type is deliberately not readable by any sequence reader: every
 consumer of `get_file_type` whitelists the types it accepts, so a structure file handed to
-`domainate.py`, `domain_search.py` or any other sequence tool is rejected with a message
-pointing at [structure_to_genbank.py and friends](structure_search.md) rather than a generic
+`domainator domainate`, `domainator domain_search` or any other sequence tool is rejected with a message
+pointing at [domainator structure_to_genbank and friends](structure_search.md) rather than a generic
 "extension not recognized".
 
 Aligner databases are *not* identified by extension. A foldseek database is a set of files
@@ -229,13 +229,13 @@ detection is avoided for both so that a mis-named file is not mistaken for a dat
 
 Domainator uses hdf5 files to store data matrices in Compressed Sparse Row (CSR) format. Code for reading, writing, and using data matrices is found in the `data_matrix.py` file (which is not executable, but imported by various other scripts). In memory, every matrix is a CSR array, whatever format it was read from.
 
-hdf5 output is specified using the `--hdf [filename]` command line argument, for example by `seq_dist.py`. (`--sparse` and `--dense` are deprecated aliases for `--hdf`.) For matrix input, the data format is automatically detected.
+hdf5 output is specified using the `--hdf_out [filename]` command line argument, for example by `domainator seq_dist`. For matrix input, the data format is automatically detected.
 
 Domainator data matrix hdf5 files have the following attributes:
 ```python
 ARRAY_TYPE: {SPARSE_CSR, SPARSE_CSR_UPPER_TRIANGLE, DENSE} # how the values are stored, see below. DENSE is read but no longer written.
 SYMMETRIC_LABELS: {1, 0} # indicates whether the x and y axis labels (and lengths) are the same
-MATRIX_FILE_VERSION: str # "major.minor"; the major version is incremented on any backwards-compatibility-breaking changes to the matrix format. Readers reject an unknown major version.
+MATRIX_FILE_VERSION: str # "major.minor"; the major version is incremented on any backwards-compatibility-breaking changes to the matrix format. Readers reject an unknown major version (see "Matrix file versions" below).
 (optional) DATA_TYPE: str # describes the type of data in the matrix (e.g. 'score', 'norm_score', 'row_norm_score', 'score_dist', 'bool', 'efi_score')
 ```
 
@@ -256,28 +256,37 @@ Matrices are stored as canonical CSR arrays: explicit zero values are removed an
 `ARRAY_TYPE` values:
 
 - `SPARSE_CSR`: the full matrix.
-- `SPARSE_CSR_UPPER_TRIANGLE` (version 1.1): written when the row and column labels (and lengths) are the same and every value equals its transpose exactly. Only the upper triangle, including the diagonal, is stored; readers rebuild the lower triangle by mirroring it. This roughly halves the file. Matrices that are only approximately symmetric (e.g. raw DIAMOND bit scores) are stored in full; use `--symmetrize` on `seq_dist.py`, `structure_dist.py` or `transform_matrix.py` to make them exactly symmetric. Older Domainator versions cannot read this type and fail with an error rather than misreading the file.
+- `SPARSE_CSR_UPPER_TRIANGLE` (version 2.0): written when the row and column labels (and lengths) are the same and every value equals its transpose exactly. Only the upper triangle, including the diagonal, is stored; readers rebuild the lower triangle by mirroring it. This roughly halves the file. Matrices that are only approximately symmetric (e.g. raw DIAMOND bit scores) are stored in full; use `--symmetrize` on `domainator seq_dist`, `domainator structure_dist` or `domainator transform_matrix` to make them exactly symmetric. Older Domainator versions cannot read this type and fail with an error rather than misreading the file.
 - `DENSE` (version 1.0 only): every cell in `DENSE_DATA`. Still readable; the matrix is converted to CSR on load.
 
-What a missing (zero) cell means depends on `DATA_TYPE`. For similarity scores (`score`, `efi_score`, `bool`, ...) it means "no hit", and the SSN tools treat it as "no edge". For distances (any `DATA_TYPE` ending in `_dist`) it means distance 0, i.e. identical; every other cell is stored, so a distance matrix takes about 1.5 times the space of a dense array, or about 0.75 times when it is symmetric and stored as a triangle. The SSN tools (`build_ssn.py`, `build_ssn_viewer.py`, `matrix_report.py`, `split_by_cluster.py`) refuse distance matrices, and `build_tree.py` uses `DATA_TYPE` to decide whether to convert scores into distances.
+What a missing (zero) cell means depends on `DATA_TYPE`. For similarity scores (`score`, `efi_score`, `bool`, ...) it means "no hit", and the SSN tools treat it as "no edge". For distances (any `DATA_TYPE` ending in `_dist`) it means distance 0, i.e. identical; every other cell is stored, so a distance matrix takes about 1.5 times the space of a dense array, or about 0.75 times when it is symmetric and stored as a triangle. The SSN tools (`domainator build_ssn`, `domainator build_ssn_viewer`, `domainator matrix_report`, `domainator split_by_cluster`) refuse distance matrices, and `domainator build_tree` uses `DATA_TYPE` to decide whether to convert scores into distances.
 
-Threshold tables derived from a matrix (`matrix_report.py`, `build_ssn_viewer.py`) use
+Threshold tables derived from a matrix (`domainator matrix_report`, `domainator build_ssn_viewer`) use
 one row per distinct maximum-spanning-tree edge weight, and every row describes the graph
-that `build_ssn --lb <threshold>` keeps: edges scoring **strictly above** the threshold.
-An extra `threshold = 0` row (the `--lb 0` default) closes the table out with the complete
+that `build_ssn --threshold <threshold>` keeps: edges scoring **strictly above** the threshold.
+An extra `threshold = 0` row (the `--threshold 0` default) closes the table out with the complete
 graph when every score is positive. Ties at a threshold are excluded from that
 threshold's own row, so counts are a function of the threshold alone rather than of the
 order in which equal-weight edges happened to be sorted.
 
-`MATRIX_FILE_VERSION` is the compatibility marker for this schema. It should be incremented when a change would prevent older Domainator versions from reading a file correctly or would change the meaning of an existing dataset or attribute.
+`MATRIX_FILE_VERSION` is the compatibility marker for this schema. Its major version is incremented when a change would prevent older Domainator versions from reading a file correctly or would change the meaning of an existing dataset or attribute; the minor version is incremented for additive changes that older readers can safely ignore.
+
+### Matrix file versions
+
+| Version | Changes | Read by |
+|---|---|---|
+| 1.0 | `SPARSE_CSR` and `DENSE` array types. | All Domainator versions. |
+| 2.0 | Adds `SPARSE_CSR_UPPER_TRIANGLE`. `DENSE` is no longer written (still read). | Domainator versions that read version 2. Older versions read `SPARSE_CSR` files but fail with an error on `SPARSE_CSR_UPPER_TRIANGLE`. |
+
+Current readers accept major versions 1 and 2 and reject any other major version.
 
 In the future, we may add a `DESCRIPTION` field to distinguish different kinds of data, like raw scores, normalized scores, etc. But so far it is up to the user to remember what the data represents. We may also add `ROW_SEQ_LENGTHS` and `COL_SEQ_LENGTHS` variables to allow for calculation of scores using the EFI score formula, which normalizes on length.
 
 ## Domainator Similarity Network Viewer bundles (`.dsnv`)
 
-`build_ssn_viewer.py` turns a symmetric similarity matrix into a `.dsnv` bundle: a
+`domainator build_ssn_viewer` turns a symmetric similarity matrix into a `.dsnv` bundle: a
 **gzip-compressed JSON document** read by the standalone HTML viewer page
-(`--html`/`--embed_data`) and by `ssn_navigator.py`. Readers accept plain (uncompressed)
+(`--html_out`/`--embed_data`) and by `domainator ssn_navigator`. Readers accept plain (uncompressed)
 JSON as well, detected by the gzip magic number. The bundle stores an MST-derived merge
 hierarchy rather than the matrix itself, so its size scales with the node count, not with
 O(n²) edges. For how to *use* the viewer, see [ssn_viewer.md](ssn_viewer.md); this section
@@ -320,7 +329,7 @@ Deriving costs one pass over `mst_edges` and scales with the node count, so the 
 stays O(nodes) on a network with hundreds of thousands of split events — and, more
 usefully, no selection is baked in when the file is written. How many split events to
 plot is chosen where they are displayed: the viewer's "Split events" box,
-`ssn_navigator.py --max_merge_events`, or the `max_merge_events` argument to those
+`domainator ssn_navigator --max_merge_events`, or the `max_merge_events` argument to those
 `ssn_bundle` functions. The viewer goes further and spends its cap on the part of the axis
 currently on screen, so the same file yields more detail as you zoom — see
 [Key algorithms](algorithms.md#spending-the-cap-on-a-window). A **pre-v6 bundle still carries a stored copy** of all of it,
@@ -354,7 +363,7 @@ min-first convention to rely on. The array holds
 network has `n - 1` and a network of isolated nodes has none.
 
 Replaying the first `m` of these through a union-find reproduces the connected components
-that `build_ssn --lb <weight of edge m>` would produce — the property the whole bundle
+that `build_ssn --threshold <weight of edge m>` would produce — the property the whole bundle
 rests on. See [Key algorithms](algorithms.md#why-a-maximum-spanning-tree).
 
 #### `hierarchy`
@@ -413,7 +422,7 @@ above. All seven are gone from a v6 file — see the version table below, and
 `ssn_bundle.py` for the functions that produce them now.
 
 A stop from `slider_stops` no longer carries `threshold_index` either: it indexed the
-two threshold tables, which no longer exist here. `matrix_report.py` keeps both the
+two threshold tables, which no longer exist here. `domainator matrix_report` keeps both the
 tables and the index, because that report does carry full-graph edge counts.
 
 
@@ -441,9 +450,9 @@ The version constants live in `ssn_bundle.py`
 | Version | Change |
 | --- | --- |
 | 3 | Per-event `merge_size_counts`/`largest_merge`/`merge_count` and `graph.merge_moving_sum`. |
-| 4 | Optional top-level `app_state`. Purely additive: `build_ssn_viewer.py` never writes it, and a reader that ignores the section can treat a v4 file exactly like a v3 file. |
+| 4 | Optional top-level `app_state`. Purely additive: `domainator build_ssn_viewer` never writes it, and a reader that ignores the section can treat a v4 file exactly like a v3 file. |
 | 5 | `graph.merge_event_total` and `graph.max_merge_events`. Purely additive, and **both keys are optional** — a reader that ignores them treats a v5 file exactly like a v4 file, and a writer that does not know them may omit them. (The viewer's "Save session" re-stamps the current version onto whatever bundle was loaded, so a session saved from a v3/v4 file is a v5 file without them.) |
-| 6 | **A removal.** `graph.cluster_count_by_threshold`, `graph.edges_by_threshold`, `graph.merge_event_series`, `graph.merge_event_total`, `graph.max_merge_events`, `graph.merge_moving_sum` and `graph.slider_stops` (and its `threshold_index`) are all gone: the first two described a graph the bundle never carried, and the rest are derived from `graph.mst_edges`. This build reads v3–v6, because everything it needs has been present since v3, and it ignores the stored copies in an older file rather than inheriting the cap they were written with. A v3/v4/v5 *reader* handed a v6 file would find those keys missing. `build_ssn_viewer.py --max_merge_events` went with them; the cap is set where the series is displayed. |
+| 6 | **A removal.** `graph.cluster_count_by_threshold`, `graph.edges_by_threshold`, `graph.merge_event_series`, `graph.merge_event_total`, `graph.max_merge_events`, `graph.merge_moving_sum` and `graph.slider_stops` (and its `threshold_index`) are all gone: the first two described a graph the bundle never carried, and the rest are derived from `graph.mst_edges`. This build reads v3–v6, because everything it needs has been present since v3, and it ignores the stored copies in an older file rather than inheriting the cap they were written with. A v3/v4/v5 *reader* handed a v6 file would find those keys missing. The `--max_merge_events` option of `domainator build_ssn_viewer` went with them; the cap is set where the series is displayed. |
 
 Bump `SSN_VIEWER_BUNDLE_VERSION` for any change to the schema, and add the old version to
 `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written
@@ -456,7 +465,7 @@ because refusing a file it can very likely still render is the worse failure.
 The viewer's "Save session…" button writes the bundle back out with an `app_state`
 section carrying the UI state. **The rest of the file is an ordinary bundle**: metadata
 edited in the viewer is written into `metadata.rows`/`metadata.columns`, so
-`ssn_navigator.py` and any other reader see the annotations without understanding
+`domainator ssn_navigator` and any other reader see the annotations without understanding
 `app_state` at all.
 
 ```python
@@ -473,7 +482,7 @@ The viewer can also write an **extraction**: a bundle over a chosen subset of no
 rebuilt from the induced MST edges rather than re-derived from the source matrix.
 `ssn_viewer_html.py` ports `ssn_hierarchy.py`'s hierarchy and merge-series maths into
 JavaScript to do this, so the two must be changed together; the browser tests assert the
-port reproduces `build_ssn_viewer.py`'s output field-for-field when the whole network is
+port reproduces `domainator build_ssn_viewer`'s output field-for-field when the whole network is
 selected.
 
 An extraction is only written when every original network component contributes a single
@@ -483,7 +492,7 @@ with no evidence of how the surviving pieces relate — writing them out as sepa
 components would assert an absence of similarity the file cannot support. Nodes in
 different components of the original network are exempt, since they were already
 unrelated. To extract an arbitrary subset, subset the source matrix instead
-(`build_ssn_viewer.py --subset`), which measures those relationships rather than
+(`domainator build_ssn_viewer --subset`), which measures those relationships rather than
 inferring them. Nothing has to be left empty any more: a v6 graph holds only the four
 keys an induced sub-MST can rebuild exactly. (`graph.edges_by_threshold` used to be the
 exception — it counted edges of the *full* graph, which a bundle never carried — and it
@@ -510,9 +519,9 @@ Two rules make this section survive UI churn, and changes to it should preserve 
 ## Tabular data matrix
 
 In addition to hdf5 formatted tabular data, Domainator also supports plain text dense matrices. 
-Plain text matrix output is generally specified using the `--dense_text [filename]` command line argument, for example by `seq_dist.py`. For matrix input, the data format is automatically detected.
+Plain text matrix output is generally specified using the `--dense_text_out [filename]` command line argument, for example by `domainator seq_dist`. For matrix input, the data format is automatically detected.
 
-Plain text is also the way to bring in score or distance matrices produced outside Domainator. It is converted to the same in-memory CSR representation on load. A text file records no `DATA_TYPE`, so `build_tree.py` assumes its values are distances unless told otherwise with `--distance score_dist`.
+Plain text is also the way to bring in score or distance matrices produced outside Domainator. It is converted to the same in-memory CSR representation on load. A text file records no `DATA_TYPE`, so `domainator build_tree` assumes its values are distances unless told otherwise with `--distance score_dist`.
 
 Domainator plain text matrices are tab-separated and require row and column labels. For example:
 ```
@@ -523,7 +532,7 @@ seq_2   0.3 1.0
 
 ## Color specification
 
-Some programs, for example, `color_genbank.py` accept color specifications as tab separated text files.
+Some programs, for example, `domainator color_genbank` accept color specifications as tab separated text files.
 
 Color files should NOT have a header. 
 
@@ -540,7 +549,7 @@ Condensation	#ff00ff
 ## domain_search databases: shards and `.didx` indexes
 
 A *domain_search database* is a GenBank or FASTA file, optionally BGZF-compressed,
-optionally split into shards. `domainator_format_db.py` produces these; `domain_search.py`
+optionally split into shards. `domainator format_db` produces these; `domainator domain_search`
 consumes them. They are created and read transparently — you normally just pass the
 logical database name.
 
@@ -554,7 +563,7 @@ mydb.gb.bgz     ->  mydb.0.gb.bgz,  mydb.1.gb.bgz,  ...
 ```
 
 Leading zeros in the shard number are allowed but ignored (`mydb.00.gb` == shard 0;
-they are sorted numerically). `domain_search.py` expands a logical name (`mydb.gb`) to
+they are sorted numerically). `domainator domain_search` expands a logical name (`mydb.gb`) to
 its shards automatically. If both an unsharded file and shards exist for the same name,
 the tools refuse to guess and raise an error — keep only one set.
 

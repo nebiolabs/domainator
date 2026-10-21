@@ -3,8 +3,8 @@
   "display_name": "Transform Matrix",
   "category": "Other",
   "description": "Transforms a score matrix into various kinds of normalized matrices\n\n   For matrices with any data type, can convert between hdf5 and dense text, or change the datatype.",
-  "runner": "module",
-  "entry_point": "domainator.transform_matrix",
+  "runner": "domainator",
+  "entry_point": "transform_matrix",
   "parameters": [
     {
       "name": "Input",
@@ -25,20 +25,21 @@
     },
     {
       "name": "Dense Text",
-      "parameter": "dense_text",
+      "parameter": "dense_text_out",
       "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
-        "--dense_text"
+        "--dense_text_out"
       ]
     },
     {
       "name": "HDF5 matrix",
-      "parameter": "hdf",
+      "parameter": "hdf_out",
       "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--hdf"
+        "-o",
+        "--hdf_out"
       ]
     },
     {
@@ -64,7 +65,7 @@
   "advanced_parameters": [
     {
       "name": "Input Type",
-      "parameter": "input_type",
+      "parameter": "value_type",
       "help": "If the type of the input matrix is not specified, specify the type of input matrix. Default: None",
       "type": "file",
       "choices": [
@@ -78,7 +79,7 @@
         "bool"
       ],
       "flags": [
-        "--input_type"
+        "--value_type"
       ]
     },
     {

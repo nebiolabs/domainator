@@ -24,8 +24,8 @@ features *do*, see the [Similarity Network Viewer guide](ssn_viewer.md), the
 
 ## Why a maximum spanning tree
 
-The tools in this family all start from an all-vs-all score matrix — `seq_dist.py`,
-`compare_contigs.py`, `kmer_dist.py`, `structure_dist.py` — and all ask the same
+The tools in this family all start from an all-vs-all score matrix — `domainator seq_dist`,
+`domainator compare_contigs`, `domainator kmer_dist`, `domainator structure_dist` — and all ask the same
 question: at a given similarity cutoff, what are the connected components?
 
 The naive answer re-thresholds the O(n²) matrix for every candidate cutoff. The
@@ -39,8 +39,8 @@ that scales with the node count instead of the edge count.
 
 Domainator computes that forest once, in `MaxTree`
 ([ssn_edges.py:650](../src/domainator/ssn_edges.py#L650), re-exported from
-`data_matrix`), and everything downstream — `build_ssn.py --mst`, the `matrix_report.py`
-plots, the `.dsnv` bundle written by `build_ssn_viewer.py`, `ssn_navigator.py` — reads
+`data_matrix`), and everything downstream — `domainator build_ssn --mst`, the `domainator matrix_report`
+plots, the `.dsnv` bundle written by `domainator build_ssn_viewer`, `domainator ssn_navigator` — reads
 that one structure.
 
 Scores are similarities, so the interesting tree is the *maximum* spanning tree, not the
@@ -97,7 +97,7 @@ those counters into the tables every consumer actually queries: `thresholds`,
 `cluster_count_by_threshold`, `cluster_count_by_edge_count`.
 
 Three conventions are worth knowing before touching this code, because breaking any of
-them silently desynchronizes the reports from what `build_ssn.py` would actually emit:
+them silently desynchronizes the reports from what `domainator build_ssn` would actually emit:
 
 **Rows are keyed by distinct threshold, not by MST edge.** Many MST edges can share a
 weight. Keying rows by edge would give one threshold several contradictory answers;
@@ -105,12 +105,12 @@ keying by distinct weight gives it exactly one. `thresholds` is therefore the de
 descending weight list, and the per-edge counters are subsampled at each tie group's first
 edge.
 
-**A cut keeps scores *strictly greater* than the threshold.** That is the `--lb`
-convention of `build_ssn.py`, so every row of these tables reproduces an actual
-`--lb <threshold>` run. It also means a cut *at* the lowest MST weight still drops that
+**A cut keeps scores *strictly greater* than the threshold.** That is the `--threshold`
+convention of `domainator build_ssn`, so every row of these tables reproduces an actual
+`--threshold <threshold>` run. It also means a cut *at* the lowest MST weight still drops that
 weight's own tie group — the weakest merge comes apart again. That is why, when every
 score is positive, an extra `threshold = 0` row is appended for the complete graph (the
-`--lb 0` default), and why the viewer's slider needs a floor stop (below).
+`--threshold 0` default), and why the viewer's slider needs a floor stop (below).
 
 **Cluster counts are derived, not counted.** `cluster_count = n_nodes - mst_edges_above`:
 each MST edge kept by a cut merges exactly two components, so the component count falls by
@@ -131,20 +131,20 @@ graph (`build_ssn`, `transform_matrix`, `seq_dist`, `compare_contigs`, `structur
 
 `StreamingMstKnnAccumulator` ([ssn_edges.py:370](../src/domainator/ssn_edges.py#L370))
 computes the same selection from a stream of edges fed in one at a time via `add_edge`,
-never materializing the matrix. `compare_contigs.py` and `kmer_dist.py` use it to sparsify
+never materializing the matrix. `domainator compare_contigs` and `domainator kmer_dist` use it to sparsify
 while they compute chunks of the similarity matrix, discarding each chunk after feeding it in
-([compare_contigs.py:304](../src/domainator/compare_contigs.py#L304)); `seq_dist.py` and
-`structure_dist.py` feed it each hit as the aligner reports it.
+([compare_contigs.py:304](../src/domainator/compare_contigs.py#L304)); `domainator seq_dist` and
+`domainator structure_dist` feed it each hit as the aligner reports it.
 
-The metrics of `compare_contigs.py` (weighted Jaccard and adjacency indices) and
-`kmer_dist.py` (Jaccard and containment) are exactly symmetric in a self-comparison, so
+The metrics of `domainator compare_contigs` (weighted Jaccard and adjacency indices) and
+`domainator kmer_dist` (Jaccard and containment) are exactly symmetric in a self-comparison, so
 unless `--max_hits_per_query` is set (a per-row cap needs whole rows) each chunk scores only
 columns at or right of the diagonal. The full matrix is then rebuilt by mirroring
 (`data_matrix.mirror_upper_triangle`), which roughly halves the scoring work. The streaming
 accumulator keeps one slot per unordered pair, so it is fed the upper triangle directly.
 
 A `--max_hits_per_query` cap is applied before the edges reach the accumulator, in every
-tool. Where hits arrive in no fixed order (`structure_dist.py`), `sparsify.PerQueryTopK`
+tool. Where hits arrive in no fixed order (`domainator structure_dist`), `sparsify.PerQueryTopK`
 holds each query's best hits until the stream ends, in O(n · cap) memory.
 
 ### The MST half is exact, via the matroid property
@@ -192,7 +192,7 @@ batch paths agree on values as well as on membership.
 
 ## Exact MST + kNN edge counts per threshold
 
-`matrix_report.py --knn_projection` shows how many edges a `--lb t --mst --knn k` run would
+`domainator matrix_report --knn_projection` shows how many edges a `--threshold t --mst --knn k` run would
 emit, for every threshold in the table and every k in `[1, max_k]`. Computing that by re-running the
 selection per (threshold, k) pair would be quadratic in the table size.
 
@@ -264,7 +264,7 @@ already in one component has zero impact and is not counted as a merge.
 The row's `edge_index` is `first_summary_row_idx - 2`: summary row 0 is the pre-merge
 state and summary row i corresponds to `mst_edges[i-1]`, so that expression names the last
 MST edge scoring *strictly above* this threshold — the edge index that reproduces the
-`--lb threshold_to` cut exactly.
+`--threshold threshold_to` cut exactly.
 
 ### Capping without blanking the axis
 
@@ -273,7 +273,7 @@ A large network has far more threshold groups than are worth plotting, so
 caps the series at `max_merge_events` (default 500) ranked by impact.
 
 The cap is applied **where the series is displayed**, never where a file is written: the
-viewer's "Split events" box, `ssn_navigator.py --max_merge_events`, `matrix_report.py
+viewer's "Split events" box, `domainator ssn_navigator --max_merge_events`, `domainator matrix_report
 --max_merge_events`. A `.dsnv` bundle stores no series at all (see
 [File Formats](file_formats.md#what-is-derived-not-stored)), so raising the cap re-runs
 the selection rather than requiring a rebuild from the source matrix.
@@ -344,7 +344,7 @@ sum taken afterwards undercounts exactly the small events this series exists to 
 
 `threshold_slider_stops` ([ssn_hierarchy.py:434](../src/domainator/ssn_hierarchy.py#L434))
 emits `∞`, one stop per event row, and then a **floor stop**. The floor is what makes the
-fully merged network reachable at all: under the strictly-above `--lb` convention every
+fully merged network reachable at all: under the strictly-above `--threshold` convention every
 other stop excludes its own tie group, so the lowest event stop still splits the weakest
 merge back apart.
 
@@ -366,7 +366,7 @@ rather than index something that is not there.
 Both HTML front-ends need to answer "what are the clusters at this stop?" fast enough to
 feel instant while a slider is dragged. They do it two different ways.
 
-**`matrix_report.py` checkpoints a union-find.** Replaying MST edges from scratch per
+**`domainator matrix_report` checkpoints a union-find.** Replaying MST edges from scratch per
 stop is O(stops · edges). Instead `buildClusterCheckpoints` walks the stops once and
 snapshots the union-find's `parent`/`size` arrays every `CLUSTER_CHECKPOINT_STRIDE` (50)
 stops ([matrix_report.py:913](../src/domainator/matrix_report.py#L913)). A query copies
@@ -383,7 +383,7 @@ its members. Children are ordered by minimum leaf index so the layout is determi
 Cutting is then a descent from the roots: recurse into a cluster whose `threshold ≤ cut`,
 otherwise keep it whole (`activeClustersAtThreshold`,
 [ssn_viewer_html.py:7116](../src/domainator/ssn_viewer_html.py#L7116)). The `≤` is the
-strictly-above `--lb` convention again — a component that merged exactly *at* the
+strictly-above `--threshold` convention again — a component that merged exactly *at* the
 threshold is split back apart. Membership needs no traversal at all, just the
 `leaf_order` slice. This is what lets the `.dsnv` bundle scale with the node count rather
 than with O(n²) edges. [A worked example on a small

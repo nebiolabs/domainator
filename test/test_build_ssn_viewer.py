@@ -384,7 +384,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
         build_ssn_viewer.main([
             "-i", input_file,
             "-o", bundle_file,
-            "--html", html_file,
+            "--html_out", html_file,
             "--name", "Viewer Test",
         ])
 
@@ -756,7 +756,7 @@ def test_build_ssn_viewer_writes_static_html_without_input():
         html_file = os.path.join(output_dir, "viewer.html")
 
         build_ssn_viewer.main([
-            "--html", html_file,
+            "--html_out", html_file,
             "--name", "Viewer Only",
         ])
 
@@ -787,7 +787,7 @@ def test_build_ssn_viewer_embeds_data_in_viewer_html():
 
         build_ssn_viewer.main([
             "-i", input_file,
-            "--html", html_file,
+            "--html_out", html_file,
             "--embed_data",
             "--name", "Embedded Viewer",
         ])
@@ -806,7 +806,7 @@ def test_build_ssn_viewer_embeds_data_in_viewer_html():
         assert embedded_bundle["graph"]["nodes"] == row_names
 
 
-def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied():
+def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied(capsys):
     data = np.array([
         [0, 10],
         [10, 0],
@@ -818,23 +818,25 @@ def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied():
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         matrix.write(input_file, output_type="hdf")
 
-        with pytest.raises(SystemExit, match="provide -o/--output or --embed_data"):
+        with pytest.raises(SystemExit):
             build_ssn_viewer.main([
                 "-i", input_file,
             ])
+        assert "provide -o/--dsnv_out or --embed_data" in capsys.readouterr().err
 
 
-def test_build_ssn_viewer_rejects_output_without_input():
+def test_build_ssn_viewer_rejects_output_without_input(capsys):
     with tempfile.TemporaryDirectory() as output_dir:
         bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
 
-        with pytest.raises(SystemExit, match="-o/--output requires -i/--input"):
+        with pytest.raises(SystemExit):
             build_ssn_viewer.main([
                 "-o", bundle_file,
             ])
+        assert "-o/--dsnv_out requires -i/--input" in capsys.readouterr().err
 
 
-def test_build_ssn_viewer_rejects_embed_without_viewer_html():
+def test_build_ssn_viewer_rejects_embed_without_viewer_html(capsys):
     data = np.array([
         [0, 10],
         [10, 0],
@@ -846,16 +848,18 @@ def test_build_ssn_viewer_rejects_embed_without_viewer_html():
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         matrix.write(input_file, output_type="hdf")
 
-        with pytest.raises(SystemExit, match="--embed_data requires --html"):
+        with pytest.raises(SystemExit):
             build_ssn_viewer.main([
                 "-i", input_file,
                 "--embed_data",
             ])
+        assert "--embed_data requires --html_out" in capsys.readouterr().err
 
 
-def test_build_ssn_viewer_requires_viewer_html_without_input():
-    with pytest.raises(SystemExit, match="--html is required"):
+def test_build_ssn_viewer_requires_viewer_html_without_input(capsys):
+    with pytest.raises(SystemExit):
         build_ssn_viewer.main([])
+    assert "No output specified" in capsys.readouterr().err
 
 def test_load_bundle_accepts_every_supported_version():
     """Older bundles still load: everything this build reads has been there since v3.

@@ -9,7 +9,7 @@ def test_hmmer_search_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_path = output_dir + f"/out_scores.hmm"
-        hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),  "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--score_cutoff", "13"])
+        hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),  "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--min_score", "13"])
         file_contents = Path(out_path).read_text()
         assert "NAME  CAT" in file_contents
         assert "NAME  2-oxoacid_dh" in file_contents
@@ -24,7 +24,7 @@ def test_hmmer_search_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_path = output_dir + f"/out_scores.hmm"
-        hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),  "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--score_cutoff", "13", "--max_hits", "2"])
+        hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),  "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--min_score", "13", "--max_hits", "2"])
         file_contents = Path(out_path).read_text()
         assert "NAME  CAT" in file_contents
         assert "NAME  2-oxoacid_dh" in file_contents
@@ -43,7 +43,7 @@ def test_hmmer_search_max_output_gb_blocks_large_hmm_output(shared_datadir):
                 "-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
                 "-r", str(shared_datadir / "pdonr_hmms.hmm"),
                 "-o", out_path,
-                "--score_cutoff", "13",
+                "--min_score", "13",
                 "--max_output_gb", "0.000001",
             ])
         assert not Path(out_path).exists()
@@ -55,7 +55,7 @@ def test_hmmer_search_dna(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out.hmm"
         hmmer_search.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "-r", str(shared_datadir / "dna_profiles_1.hmm"),
-                           "-o", out_path, "--score_cutoff", "13", "--cpu", "2"])
+                           "-o", out_path, "--min_score", "13", "--cpu", "2"])
         file_contents = Path(out_path).read_text()
         assert "ALPH  DNA" in file_contents
         assert "NAME  dna_prof_1" in file_contents # self hit
@@ -67,7 +67,7 @@ def test_hmmer_search_rna(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out.hmm"
         hmmer_search.main(["-i", str(shared_datadir / "rna_profiles.hmm"), "-r", str(shared_datadir / "rna_profiles.hmm"),
-                           "-o", out_path, "--score_cutoff", "13", "--cpu", "2"])
+                           "-o", out_path, "--min_score", "13", "--cpu", "2"])
         file_contents = Path(out_path).read_text()
         assert "ALPH  RNA" in file_contents
         assert "NAME  rna_prof_1" in file_contents
@@ -95,10 +95,10 @@ def test_hmmer_search_explicit_score_cutoff_is_not_rescaled(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         loose_path = output_dir + "/loose.hmm"
         hmmer_search.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "-r", str(shared_datadir / "dna_profiles_1.hmm"),
-                           "-o", loose_path, "--score_cutoff", "4.0", "--cpu", "2"])
+                           "-o", loose_path, "--min_score", "4.0", "--cpu", "2"])
         strict_path = output_dir + "/strict.hmm"
         hmmer_search.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "-r", str(shared_datadir / "dna_profiles_1.hmm"),
-                           "-o", strict_path, "--score_cutoff", "10.0", "--cpu", "2"])
+                           "-o", strict_path, "--min_score", "10.0", "--cpu", "2"])
         assert "NAME  dna_prof_3" in Path(loose_path).read_text()
         assert "NAME  dna_prof_3" not in Path(strict_path).read_text()
 
@@ -137,7 +137,7 @@ def test_hmmer_search_gzip_output(shared_datadir, tmp_path):
     plain = str(tmp_path / "out.hmm")
     gz = str(tmp_path / "out.hmm.gz")
     args = ["-i", str(shared_datadir / "pdonr_hmms_1.hmm"), "-r", str(shared_datadir / "pdonr_hmms.hmm"),
-            "--score_cutoff", "13"]
+            "--min_score", "13"]
     hmmer_search.main(args + ["-o", plain])
     hmmer_search.main(args + ["-o", gz])
 
@@ -159,7 +159,7 @@ def test_hmmer_search_rejects_bgzf_output(shared_datadir, tmp_path):
     with pytest.raises(ValueError, match="BGZF"):
         hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
                            "-r", str(shared_datadir / "pdonr_hmms.hmm"),
-                           "-o", str(tmp_path / "out.hmm.bgz"), "--score_cutoff", "13"])
+                           "-o", str(tmp_path / "out.hmm.bgz"), "--min_score", "13"])
 
 
 @pytest.mark.parametrize("compressor,suffix", [("gzip_file", ".hmm.gz"), ("bgzip_file", ".hmm.bgz")])
@@ -170,10 +170,10 @@ def test_hmmer_search_compressed_input(shared_datadir, tmp_path, compressor, suf
     comp_out = str(tmp_path / "comp.hmm")
     hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
                        "-r", str(shared_datadir / "pdonr_hmms.hmm"),
-                       "-o", plain_out, "--score_cutoff", "13"])
+                       "-o", plain_out, "--min_score", "13"])
     hmmer_search.main(["-i", compress(shared_datadir / "pdonr_hmms_1.hmm", tmp_path / ("q" + suffix)),
                        "-r", compress(shared_datadir / "pdonr_hmms.hmm", tmp_path / ("r" + suffix)),
-                       "-o", comp_out, "--score_cutoff", "13"])
+                       "-o", comp_out, "--min_score", "13"])
     assert Path(comp_out).read_bytes() == Path(plain_out).read_bytes()
 
 
@@ -183,6 +183,6 @@ def test_hmmer_search_max_output_gb_counts_uncompressed(shared_datadir, tmp_path
     with pytest.raises(SystemExit):
         hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
                            "-r", str(shared_datadir / "pdonr_hmms.hmm"),
-                           "-o", str(out), "--score_cutoff", "13",
+                           "-o", str(out), "--min_score", "13",
                            "--max_output_gb", "0.000001"])
     assert not out.exists()

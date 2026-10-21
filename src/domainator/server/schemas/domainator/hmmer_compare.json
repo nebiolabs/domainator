@@ -2,9 +2,9 @@
   "id": "hmmer_compare",
   "display_name": "Hmmer Compare",
   "category": "Other",
-  "description": "Aligns and calculates alignment scores between hmmer3 profiles \n\nKind of like hhsearch except much slower and for hmmer3 profiles instead of hhsuite profiles.\n\nAdapted from pseudocode in:\nSteinegger, Martin, Markus Meier, Milot Mirdita, Harald Vöhringer, Stephan J. Haunsberger, and Johannes Söding. “HH-Suite3 for Fast Remote Homology Detection and Deep Protein Annotation.” BMC Bioinformatics 20, no. 1 (September 14, 2019): 473. https://doi.org/10.1186/s12859-019-3019-7.\n\nand\n\nSöding, Johannes. \"Protein Homology Detection by HMM–HMM Comparison.\" Bioinformatics 21, no. 7 (April 1, 2005): 951–60. https://doi.org/10.1093/bioinformatics/bti125.",
-  "runner": "module",
-  "entry_point": "domainator.hmmer_compare",
+  "description": "Aligns and calculates alignment scores between hmmer3 profiles \n\nKind of like hhsearch except much slower and for hmmer3 profiles instead of hhsuite profiles.\n\nAdapted from pseudocode in:\nSteinegger, Martin, Markus Meier, Milot Mirdita, Harald V\u00f6hringer, Stephan J. Haunsberger, and Johannes S\u00f6ding. \u201cHH-Suite3 for Fast Remote Homology Detection and Deep Protein Annotation.\u201d BMC Bioinformatics 20, no. 1 (September 14, 2019): 473. https://doi.org/10.1186/s12859-019-3019-7.\n\nand\n\nS\u00f6ding, Johannes. \"Protein Homology Detection by HMM\u2013HMM Comparison.\" Bioinformatics 21, no. 7 (April 1, 2005): 951\u201360. https://doi.org/10.1093/bioinformatics/bti125.",
+  "runner": "domainator",
+  "entry_point": "hmmer_compare",
   "parameters": [
     {
       "name": "Input",
@@ -36,12 +36,12 @@
     },
     {
       "name": "Score Cutoff",
-      "parameter": "score_cutoff",
+      "parameter": "min_score",
       "help": "Report alignments with scores greater than or equal to this. Scores are on the score scale of the input alphabet: DNA and RNA scores run at roughly half the amino acid scale, so a threshold tuned on proteins is about twice as strict on nucleotide profiles.",
       "type": "number",
       "default": 0,
       "flags": [
-        "--score_cutoff"
+        "--min_score"
       ]
     },
     {
@@ -56,12 +56,12 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "tsv_out",
       "help": "File to write the scores and alignments to.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--tsv_out"
       ]
     },
     {

@@ -23,7 +23,7 @@ def test_build_ssn(input_file, expected_output, shared_datadir):
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml", out_cytoscape, "--lb", "175", "--color_by", "SSN_cluster", "--cluster_tsv", out_clusters, "--no_cluster_header", "--metadata", metadata])
+        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml_out", out_cytoscape, "--threshold", "175", "--color_by", "SSN_cluster", "--cluster_tsv_out", out_clusters, "--no_cluster_header", "--metadata", metadata])
         assert Path(out_cytoscape).is_file()
         assert Path(out_clusters).is_file()
         compare_files(out_clusters,shared_datadir/'ssn_FeSOD_clusters.tsv')
@@ -39,7 +39,7 @@ def test_build_ssn_2(input_file, expected_output, shared_datadir):
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml", out_cytoscape, "--lb", "175", "--color_by", "SSN_cluster", "--cluster_tsv", out_clusters, "--metadata", metadata])
+        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml_out", out_cytoscape, "--threshold", "175", "--color_by", "SSN_cluster", "--cluster_tsv_out", out_clusters, "--metadata", metadata])
         assert Path(out_cytoscape).is_file()
         assert Path(out_clusters).is_file()
         compare_files(out_clusters,shared_datadir/'ssn_FeSOD_clusters_header.tsv')
@@ -53,8 +53,8 @@ def test_build_ssn_3(shared_datadir):
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml", out_cytoscape, "--lb", "175", "--color_by", "SSN_cluster",
-                        "--cluster_tsv", out_clusters, "--metadata", metadata, "--color_table_out", output_dir + "/color_table.tsv"])
+        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml_out", out_cytoscape, "--threshold", "175", "--color_by", "SSN_cluster",
+                        "--cluster_tsv_out", out_clusters, "--metadata", metadata, "--color_table_out", output_dir + "/color_table.tsv"])
         assert Path(out_cytoscape).is_file()
         assert Path(out_clusters).is_file()
         assert Path(output_dir + "/color_table.tsv").is_file()
@@ -77,8 +77,8 @@ def test_build_ssn_max_color_groups(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_color_table = output_dir + "/color_table.tsv"
-        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml", output_dir + "/out.xgmml",
-                        "--lb", "175", "--color_by", "SSN_cluster", "--cluster_tsv", output_dir + "/clusters.tsv",
+        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml_out", output_dir + "/out.xgmml",
+                        "--threshold", "175", "--color_by", "SSN_cluster", "--cluster_tsv_out", output_dir + "/clusters.tsv",
                         "--metadata", metadata, "--color_table_out", out_color_table,
                         "--max_color_groups", "2"])
 
@@ -102,8 +102,8 @@ def test_build_ssn_4(shared_datadir):
         metadata = str(shared_datadir / "FeSOD_metadata.tsv")
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml", out_cytoscape, "--lb", "175", "--color_by", "SSN_cluster",
-                        "--cluster_tsv", out_clusters, "--metadata", metadata, "--color_table_out", output_dir + "/color_table.tsv", "--color_table", str(shared_datadir / "color_table_123.tsv")])
+        build_ssn.main(["-i", str(shared_datadir / input_file),"--xgmml_out", out_cytoscape, "--threshold", "175", "--color_by", "SSN_cluster",
+                        "--cluster_tsv_out", out_clusters, "--metadata", metadata, "--color_table_out", output_dir + "/color_table.tsv", "--color_table", str(shared_datadir / "color_table_123.tsv")])
         assert Path(out_cytoscape).is_file()
         assert Path(out_clusters).is_file()
         assert Path(output_dir + "/color_table.tsv").is_file()
@@ -120,14 +120,14 @@ def test_build_ssn_mst(shared_datadir):
         # Run without MST
         out_clusters_full = output_dir + f"/{input_file}_out_clusters_full.tsv"
         out_cytoscape_full = output_dir + f"/{input_file}_out_full.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml", out_cytoscape_full, "--lb", "175", 
-                        "--color_by", "SSN_cluster", "--cluster_tsv", out_clusters_full, "--metadata", metadata])
+        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml_out", out_cytoscape_full, "--threshold", "175", 
+                        "--color_by", "SSN_cluster", "--cluster_tsv_out", out_clusters_full, "--metadata", metadata])
         
         # Run with MST
         out_clusters_mst = output_dir + f"/{input_file}_out_clusters_mst.tsv"
         out_cytoscape_mst = output_dir + f"/{input_file}_out_mst.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml", out_cytoscape_mst, "--lb", "175", 
-                        "--color_by", "SSN_cluster", "--cluster_tsv", out_clusters_mst, "--metadata", metadata, "--mst"])
+        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml_out", out_cytoscape_mst, "--threshold", "175", 
+                        "--color_by", "SSN_cluster", "--cluster_tsv_out", out_clusters_mst, "--metadata", metadata, "--mst"])
         
         # Both files should be created
         assert Path(out_cytoscape_full).is_file()
@@ -159,10 +159,10 @@ def test_build_ssn_mst_knn(shared_datadir):
         out_cytoscape_full = output_dir + f"/{input_file}_out_full.xgmml"
         build_ssn.main([
             "-i", str(shared_datadir / input_file),
-            "--xgmml", out_cytoscape_full,
-            "--lb", "175",
+            "--xgmml_out", out_cytoscape_full,
+            "--threshold", "175",
             "--color_by", "SSN_cluster",
-            "--cluster_tsv", out_clusters_full,
+            "--cluster_tsv_out", out_clusters_full,
             "--metadata", metadata,
         ])
 
@@ -170,10 +170,10 @@ def test_build_ssn_mst_knn(shared_datadir):
         out_cytoscape_mst = output_dir + f"/{input_file}_out_mst.xgmml"
         build_ssn.main([
             "-i", str(shared_datadir / input_file),
-            "--xgmml", out_cytoscape_mst,
-            "--lb", "175",
+            "--xgmml_out", out_cytoscape_mst,
+            "--threshold", "175",
             "--color_by", "SSN_cluster",
-            "--cluster_tsv", out_clusters_mst,
+            "--cluster_tsv_out", out_clusters_mst,
             "--metadata", metadata,
             "--mst",
         ])
@@ -182,10 +182,10 @@ def test_build_ssn_mst_knn(shared_datadir):
         out_cytoscape_mst_knn = output_dir + f"/{input_file}_out_mst_knn.xgmml"
         build_ssn.main([
             "-i", str(shared_datadir / input_file),
-            "--xgmml", out_cytoscape_mst_knn,
-            "--lb", "175",
+            "--xgmml_out", out_cytoscape_mst_knn,
+            "--threshold", "175",
             "--color_by", "SSN_cluster",
-            "--cluster_tsv", out_clusters_mst_knn,
+            "--cluster_tsv_out", out_clusters_mst_knn,
             "--metadata", metadata,
             "--mst", "--knn", "2",
         ])
@@ -214,11 +214,11 @@ def test_build_ssn_mst_knn_preserves_ssn_cluster_colors(shared_datadir):
         out_color_table_baseline = output_dir + "/color_table_baseline.tsv"
         build_ssn.main([
             "-i", str(shared_datadir / input_file),
-            "--xgmml", out_cytoscape_baseline,
-            "--lb", "175",
+            "--xgmml_out", out_cytoscape_baseline,
+            "--threshold", "175",
             "--color_by", "SSN_cluster",
             "--color_table_out", out_color_table_baseline,
-            "--cluster_tsv", out_clusters_baseline,
+            "--cluster_tsv_out", out_clusters_baseline,
             "--metadata", metadata,
         ])
 
@@ -227,11 +227,11 @@ def test_build_ssn_mst_knn_preserves_ssn_cluster_colors(shared_datadir):
         out_color_table_mst_knn = output_dir + "/color_table_mst_knn.tsv"
         build_ssn.main([
             "-i", str(shared_datadir / input_file),
-            "--xgmml", out_cytoscape_mst_knn,
-            "--lb", "175",
+            "--xgmml_out", out_cytoscape_mst_knn,
+            "--threshold", "175",
             "--color_by", "SSN_cluster",
             "--color_table_out", out_color_table_mst_knn,
-            "--cluster_tsv", out_clusters_mst_knn,
+            "--cluster_tsv_out", out_clusters_mst_knn,
             "--metadata", metadata,
             "--mst", "--knn", "2",
         ])
@@ -276,8 +276,8 @@ def test_build_ssn_mark_mst(extra_args, expect_non_mst, shared_datadir):
     """--mark_mst tags every edge, and finds the same MST on all three edge paths."""
     with tempfile.TemporaryDirectory() as output_dir:
         out_cytoscape = output_dir + "/out.xgmml"
-        build_ssn.main(["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--xgmml", out_cytoscape,
-                        "--lb", "175", "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"),
+        build_ssn.main(["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--xgmml_out", out_cytoscape,
+                        "--threshold", "175", "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"),
                         "--mark_mst"] + extra_args)
 
         edges = _read_edges(out_cytoscape)
@@ -291,13 +291,13 @@ def test_build_ssn_mark_mst(extra_args, expect_non_mst, shared_datadir):
 def test_build_ssn_mark_mst_is_additive(shared_datadir):
     """--mark_mst only adds the attribute: clusters and edges are otherwise unchanged."""
     with tempfile.TemporaryDirectory() as output_dir:
-        common = ["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--lb", "175",
+        common = ["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--threshold", "175",
                   "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"),
                   "--color_by", "SSN_cluster"]
-        build_ssn.main(common + ["--xgmml", output_dir + "/off.xgmml",
-                                 "--cluster_tsv", output_dir + "/off.tsv"])
-        build_ssn.main(common + ["--xgmml", output_dir + "/on.xgmml",
-                                 "--cluster_tsv", output_dir + "/on.tsv", "--mark_mst"])
+        build_ssn.main(common + ["--xgmml_out", output_dir + "/off.xgmml",
+                                 "--cluster_tsv_out", output_dir + "/off.tsv"])
+        build_ssn.main(common + ["--xgmml_out", output_dir + "/on.xgmml",
+                                 "--cluster_tsv_out", output_dir + "/on.tsv", "--mark_mst"])
 
         compare_files(output_dir + "/off.tsv", output_dir + "/on.tsv")
         off, on = _read_edges(output_dir + "/off.xgmml"), _read_edges(output_dir + "/on.xgmml")
@@ -316,10 +316,10 @@ def test_build_ssn_max_output_gb_blocks_xgmml(shared_datadir):
         with pytest.raises(SystemExit, match="--max_output_gb"):
             build_ssn.main([
                 "-i", str(shared_datadir / input_file),
-                "--xgmml", out_cytoscape,
-                "--lb", "175",
+                "--xgmml_out", out_cytoscape,
+                "--threshold", "175",
                 "--color_by", "SSN_cluster",
-                "--cluster_tsv", out_clusters,
+                "--cluster_tsv_out", out_clusters,
                 "--metadata", metadata,
                 "--max_output_gb", "0.000001",
             ])
@@ -352,10 +352,10 @@ def test_build_ssn_subset(shared_datadir, subset_mode):
 
         build_ssn.main([
             "-i", str(shared_datadir / input_file),
-            "--xgmml", out_cytoscape,
-            "--lb", "175",
+            "--xgmml_out", out_cytoscape,
+            "--threshold", "175",
             "--color_by", "SSN_cluster",
-            "--cluster_tsv", out_clusters,
+            "--cluster_tsv_out", out_clusters,
             "--metadata", metadata,
             *subset_args,
         ])
@@ -441,7 +441,7 @@ def test_build_ssn_mst_knn_accepts_k_one(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         build_ssn.main([
             "-i", str(shared_datadir / "FeSOD_dist.tsv"),
-            "--xgmml", str(Path(output_dir) / "out.xgmml"),
+            "--xgmml_out", str(Path(output_dir) / "out.xgmml"),
             "--mst", "--knn", "1",
         ])
 
@@ -452,7 +452,7 @@ def test_build_ssn_mst_knn_rejects_k_below_one(shared_datadir, k):
         with pytest.raises(SystemExit):
             build_ssn.main([
                 "-i", str(shared_datadir / "FeSOD_dist.tsv"),
-                "--xgmml", str(Path(output_dir) / "out.xgmml"),
+                "--xgmml_out", str(Path(output_dir) / "out.xgmml"),
                 "--mst", "--knn", k,
             ])
 
@@ -494,7 +494,7 @@ def test_build_ssn_knn_and_mst_combinations(shared_datadir):
                           ("knn2", ["--knn", "2"]), ("mst_knn1", ["--mst", "--knn", "1"])):
             xgmml = output_dir + f"/{tag}.xgmml"
             cluster_tsv = output_dir + f"/{tag}.tsv"
-            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--cluster_tsv", cluster_tsv] + args)
+            build_ssn.main(["-i", input_file, "--xgmml_out", xgmml, "--cluster_tsv_out", cluster_tsv] + args)
             outputs[tag] = _xgmml_edge_names(xgmml, labels)
             clusters[tag] = len({line.split("\t")[1] for line in
                                  Path(cluster_tsv).read_text().splitlines()[1:]})
@@ -526,7 +526,7 @@ def test_build_ssn_knn_marks_mst_edges():
         input_file = output_dir + "/input.hdf5"
         matrix.write(input_file, "hdf")
         xgmml = output_dir + "/knn_marked.xgmml"
-        build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "2", "--mark_mst"])
+        build_ssn.main(["-i", input_file, "--xgmml_out", xgmml, "--knn", "2", "--mark_mst"])
 
         text = Path(xgmml).read_text()
         assert 'name="MST"' in text
@@ -544,14 +544,14 @@ def test_build_ssn_knn_rejects_invalid_combinations():
 
         # k must select at least one neighbor when there is no spanning tree to fall back on
         with pytest.raises(SystemExit):
-            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--knn", "0"])
+            build_ssn.main(["-i", input_file, "--xgmml_out", xgmml, "--knn", "0"])
 
         # --mst does not lift the floor: --knn 0 would mean "add nothing"
         with pytest.raises(SystemExit):
-            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--mst", "--knn", "0"])
+            build_ssn.main(["-i", input_file, "--xgmml_out", xgmml, "--mst", "--knn", "0"])
         # the old shorthand is gone
         with pytest.raises(SystemExit):
-            build_ssn.main(["-i", input_file, "--xgmml", xgmml, "--mst_knn", "2"])
+            build_ssn.main(["-i", input_file, "--xgmml_out", xgmml, "--mst_knn", "2"])
 
 
 @pytest.mark.parametrize("args", [["--mst"], ["--knn", "2"], ["--mst", "--knn", "2"]])
@@ -562,7 +562,7 @@ def test_build_ssn_sparsify_rejects_distance_matrix(args):
         input_file = output_dir + "/input.hdf5"
         matrix.write(input_file, "hdf")
         with pytest.raises(ValueError, match="distance"):
-            build_ssn.main(["-i", input_file, "--xgmml", output_dir + "/out.xgmml"] + args)
+            build_ssn.main(["-i", input_file, "--xgmml_out", output_dir + "/out.xgmml"] + args)
 
 
 def test_graph_tools_reject_distance_matrices(tmp_path):
@@ -573,4 +573,4 @@ def test_graph_tools_reject_distance_matrices(tmp_path):
     matrix_file = tmp_path / "dist.hdf5"
     DataMatrix(np.array([[0.0, 0.2], [0.2, 0.0]]), names, names, data_type="score_dist").write(str(matrix_file), "hdf")
     with pytest.raises(ValueError, match="'score_dist' distance matrix"):
-        build_ssn.main(["-i", str(matrix_file), "--xgmml", str(tmp_path / "out.xgmml")])
+        build_ssn.main(["-i", str(matrix_file), "--xgmml_out", str(tmp_path / "out.xgmml")])

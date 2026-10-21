@@ -3,9 +3,9 @@
   "display_name": "Sort Contigs",
   "category": "Editors",
   "description": "Sort contigs by Domain_Search score\n\nMatches the output ordering used by domain_search.py when --max_hits is set. This is primarily intended for post-processing domain_search output written without --max_hits, where the temporary hit_best_score annotation is not preserved in the written GenBank file.\n\nIf --domains is supplied, sorting switches to the best matching Domainator annotation score for the requested domain names. If --databases is also supplied, only matching Domainator annotations from those databases are considered.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 5,
-  "entry_point": "domainator.sort_contigs",
+  "entry_point": "sort_contigs",
   "parameters": [
     {
       "name": "Input",
@@ -26,13 +26,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "Output genbank filename.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {

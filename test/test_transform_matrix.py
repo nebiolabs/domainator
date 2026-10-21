@@ -65,7 +65,7 @@ def test_transform_matrix_1(output_mode, expected, shared_datadir):
         matrix = DataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
         expected_matrix = DataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
         matrix.write(input_file, "hdf")
-        transform_matrix.main(["-i", input_file, "--hdf", hdf_out, "--mode", output_mode])
+        transform_matrix.main(["-i", input_file, "--hdf_out", hdf_out, "--mode", output_mode])
 
         compare_data_matrix(DataMatrix.from_file(hdf_out), expected_matrix)
 
@@ -99,7 +99,7 @@ def test_transform_matrix_2(shared_datadir):
         matrix = DataMatrix(input, rows, columns, row_lengths, col_lengths, "score")
         expected_matrix = DataMatrix(expected, rows, columns, row_lengths, col_lengths, output_mode)
         matrix.write(input_file, "hdf")
-        transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--mode", output_mode])
+        transform_matrix.main(["-i", input_file, "--hdf_out", dense_out, "--mode", output_mode])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         compare_data_matrix(dense_output_matrix, expected_matrix)
@@ -122,7 +122,7 @@ def test_transform_matrix_default_mode_preserves_values():
         matrix = DataMatrix(input_data, rows, columns, data_type="bool")
         matrix.write(input_file, "hdf")
 
-        transform_matrix.main(["-i", input_file, "--hdf", dense_out])
+        transform_matrix.main(["-i", input_file, "--hdf_out", dense_out])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         np.testing.assert_array_equal(dense_output_matrix.toarray(), input_data)
@@ -146,7 +146,7 @@ def test_transform_matrix_lb_applied_after_mode_transform():
         matrix = DataMatrix(input_data, rows, columns, data_type="score")
         matrix.write(input_file, "hdf")
 
-        transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--mode", "bool", "--lb", "0.5"])
+        transform_matrix.main(["-i", input_file, "--hdf_out", dense_out, "--mode", "bool", "--threshold", "0.5"])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         expected = np.array([
@@ -178,7 +178,7 @@ def test_transform_matrix_bool_sparsify_selects_on_scores():
         matrix = DataMatrix(input_data, rows, columns, data_type="score")
         matrix.write(input_file, "hdf")
 
-        transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--mode", "bool", "--knn", "1"])
+        transform_matrix.main(["-i", input_file, "--hdf_out", dense_out, "--mode", "bool", "--knn", "1"])
         dense_output_matrix = DataMatrix.from_file(dense_out)
 
         expected = np.array([
@@ -309,7 +309,7 @@ def test_transform_matrix_max_output_gb_blocks_dense_output():
         matrix.write(input_file, "hdf")
 
         with pytest.raises(SystemExit, match="--max_output_gb"):
-            transform_matrix.main(["-i", input_file, "--hdf", dense_out, "--max_output_gb", "0.000001"])
+            transform_matrix.main(["-i", input_file, "--hdf_out", dense_out, "--max_output_gb", "0.000001"])
 
 
 def test_transform_matrix_output_format_conversions():
@@ -332,8 +332,8 @@ def test_transform_matrix_output_format_conversions():
 
         transform_matrix.main([
             "-i", input_file,
-            "--dense_text", dense_text_out,
-            "--hdf", sparse_out,
+            "--dense_text_out", dense_text_out,
+            "--hdf_out", sparse_out,
             "--mode", "bool",
         ])
 
@@ -392,7 +392,7 @@ def test_transform_matrix_sparsify_rejects_distance_matrix(args):
         input_file = output_dir + "/input.hdf5"
         DataMatrix(data, labels, labels, data_type="score").write(input_file, "hdf")
         with pytest.raises(ValueError, match="distance"):
-            transform_matrix.main(["-i", input_file, "--hdf", output_dir + "/out.hdf5",
+            transform_matrix.main(["-i", input_file, "--hdf_out", output_dir + "/out.hdf5",
                                    "--mode", "score_dist"] + args)
 
 
@@ -431,7 +431,7 @@ def test_transform_matrix_knn_excludes_mst():
                           ("knn1", ["--knn", "1"]), ("mst_knn1", ["--mst", "--knn", "1"]),
                           ("knn2", ["--knn", "2"]), ("mst_knn2", ["--mst", "--knn", "2"])):
             out_file = output_dir + f"/{tag}.hdf5"
-            transform_matrix.main(["-i", input_file, "--hdf", out_file] + args)
+            transform_matrix.main(["-i", input_file, "--hdf_out", out_file] + args)
             results[tag] = _off_diagonal_pairs(DataMatrix.from_file(out_file).toarray())
 
         # the bridge is only reachable through the spanning tree
@@ -499,7 +499,7 @@ def test_transform_matrix_rejects_knn_zero():
         input_file = output_dir + "/input.hdf5"
         DataMatrix(data, labels, labels, data_type="score").write(input_file, "hdf")
         with pytest.raises(SystemExit):
-            transform_matrix.main(["-i", input_file, "--hdf", output_dir + "/out.hdf5",
+            transform_matrix.main(["-i", input_file, "--hdf_out", output_dir + "/out.hdf5",
                                    "--mst", "--knn", "0"])
 
 
@@ -645,7 +645,7 @@ def test_transform_matrix_normalized_modes_can_be_sparsified(tmp_path, mode):
     # These modes used to hand a dok_array to --mst/--knn, which crashed.
     input_file, out_file = tmp_path / "in.hdf5", tmp_path / "out.hdf5"
     _write_score_matrix(input_file, ASYMMETRIC_SCORES)
-    transform_matrix.main(["-i", str(input_file), "--mode", mode, "--knn", "1", "--hdf", str(out_file)])
+    transform_matrix.main(["-i", str(input_file), "--mode", mode, "--knn", "1", "--hdf_out", str(out_file)])
     out = DataMatrix.from_file(out_file)
     assert out.data_type == mode
     assert out.exactly_symmetric
@@ -656,7 +656,7 @@ def test_transform_matrix_symmetrize_writes_upper_triangle(tmp_path):
 
     input_file, out_file = tmp_path / "in.hdf5", tmp_path / "out.hdf5"
     _write_score_matrix(input_file, ASYMMETRIC_SCORES)
-    transform_matrix.main(["-i", str(input_file), "--symmetrize", "max", "--hdf", str(out_file)])
+    transform_matrix.main(["-i", str(input_file), "--symmetrize", "max", "--hdf_out", str(out_file)])
     with h5py.File(out_file, "r") as handle:
         assert handle.attrs["ARRAY_TYPE"] == "SPARSE_CSR_UPPER_TRIANGLE"
     data = np.asarray(ASYMMETRIC_SCORES)
@@ -665,42 +665,26 @@ def test_transform_matrix_symmetrize_writes_upper_triangle(tmp_path):
 
 @pytest.mark.parametrize("args,message", [
     (["--symmetrize", "max", "--mst"], "always max-symmetric"),
-    (["--mode", "score_dist", "--lb", "0.5"], "distance"),
+    (["--mode", "score_dist", "--threshold", "0.5"], "distance"),
 ])
 def test_transform_matrix_rejects_invalid_symmetrize_and_lb(tmp_path, args, message):
     input_file = tmp_path / "in.hdf5"
     _write_score_matrix(input_file, ASYMMETRIC_SCORES)
     with pytest.raises(ValueError, match=message):
-        transform_matrix.main(["-i", str(input_file), "--hdf", str(tmp_path / "out.hdf5")] + args)
+        transform_matrix.main(["-i", str(input_file), "--hdf_out", str(tmp_path / "out.hdf5")] + args)
 
 
 def test_transform_matrix_symmetrize_rejects_distance_input(tmp_path):
     input_file = tmp_path / "in.hdf5"
     DataMatrix(np.eye(2), ["a", "b"], ["a", "b"], data_type="score_dist").write(str(input_file), "hdf")
     with pytest.raises(ValueError, match="distance matrix"):
-        transform_matrix.main(["-i", str(input_file), "--symmetrize", "max", "--hdf", str(tmp_path / "out.hdf5")])
-
-
-@pytest.mark.parametrize("option", ["--sparse", "--dense"])
-def test_transform_matrix_deprecated_hdf_aliases_still_write(tmp_path, option):
-    input_file, out_file = tmp_path / "in.hdf5", tmp_path / "out.hdf5"
-    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
-    with pytest.warns(FutureWarning, match=f"{option} is deprecated"):
-        transform_matrix.main(["-i", str(input_file), option, str(out_file)])
-    np.testing.assert_array_equal(DataMatrix.from_file(out_file).toarray(), ASYMMETRIC_SCORES)
-
-
-def test_transform_matrix_rejects_two_hdf_outputs(tmp_path):
-    input_file = tmp_path / "in.hdf5"
-    _write_score_matrix(input_file, ASYMMETRIC_SCORES)
-    with pytest.warns(FutureWarning), pytest.raises(ValueError, match="Only one hdf5 output"):
-        transform_matrix.main(["-i", str(input_file), "--hdf", str(tmp_path / "a.hdf5"), "--sparse", str(tmp_path / "b.hdf5")])
+        transform_matrix.main(["-i", str(input_file), "--symmetrize", "max", "--hdf_out", str(tmp_path / "out.hdf5")])
 
 
 def test_transform_matrix_score_dist_round_trips_through_hdf(tmp_path):
     input_file, hdf_out, text_out = tmp_path / "in.hdf5", tmp_path / "out.hdf5", tmp_path / "out.tsv"
     _write_score_matrix(input_file, ASYMMETRIC_SCORES)
-    transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf", str(hdf_out), "--dense_text", str(text_out)])
+    transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf_out", str(hdf_out), "--dense_text_out", str(text_out)])
     from_hdf = DataMatrix.from_file(hdf_out)
     assert from_hdf.data_type == "score_dist"
     # the diagonal (distance 0) is not stored, and comes back as 0
@@ -712,5 +696,5 @@ def test_transform_matrix_max_output_gb_applies_to_distance_hdf(tmp_path):
     input_file = tmp_path / "in.hdf5"
     _write_score_matrix(input_file, ASYMMETRIC_SCORES)
     with pytest.raises(SystemExit, match="--max_output_gb"):
-        transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf", str(tmp_path / "out.hdf5"),
+        transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf_out", str(tmp_path / "out.hdf5"),
                                "--max_output_gb", "0.000000001"])

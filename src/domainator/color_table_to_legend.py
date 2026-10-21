@@ -5,17 +5,18 @@ The generated SVG file contains rectangles filled with the corresponding colors 
 """
 
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import sys
-from typing import Tuple, List, Optional, Set, NamedTuple, Union, Dict
-from os import PathLike
-from domainator import __version__, RawAndDefaultsFormatter
+from typing import Dict
+from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
 from domainator.color_genbank import read_color_table
 from collections import OrderedDict
 import html
 
 
 def color_table_to_legend(table: Dict[str, str], svg: str, title: str):
+    """Write an SVG legend of ``table`` (annotation -> hex color) to ``svg``, a path (``-`` for stdout)."""
     # Constants for layout and styling
     title_font_size = 24
     item_font_size = 20
@@ -34,7 +35,7 @@ def color_table_to_legend(table: Dict[str, str], svg: str, title: str):
     total_width = max(box_width + padding*3 + (longest_key * item_font_size)/2, padding*3 + (len(title) * title_font_size) /2) # Assumed extra space for text
     
 
-    with open(svg, "w") as f:
+    with output_file(svg) as f:
         f.write(f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">
     <g font-family="Arial, sans-serif">
@@ -52,43 +53,35 @@ def color_table_to_legend(table: Dict[str, str], svg: str, title: str):
 </svg>
 """)
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="""names of color table files. If not supplied, reads from stdin.\n
+    add_input(parser, """names of color table files.
                         Files are tab separated with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000""")
-    parser.add_argument("--svg", default=None, type=str, required=True,
-                        help="name of output svg file")
+    add_output(parser, "svg", "Write the legend to this svg file.", primary=True, required=True)
     parser.add_argument("--title", default="Legend", type=str, required=False,
                         help="Title of the legend. Default: 'Legend'")
     #TODO: font, font size, indicator shape, etc.
 
     parser.add_argument('--config', action=ActionConfigFile)
-    
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     ### validate input
 
 
-    if params.input is None:
-        input_path = (sys.stdin,)
-    else:
-        input_path = params.input
-    
+    check_outputs(parser, params, ["svg_out"])
     table = OrderedDict()
-    for color_table_file in input_path:
+    for color_table_file in params.input:
+        if color_table_file in STDIN_PATHS:
+            color_table_file = sys.stdin
         for k, v in read_color_table(color_table_file).items():
             table[k] = v
 
     ### Run
     
-    color_table_to_legend(table, params.svg, params.title)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-
-
+    color_table_to_legend(table, params.svg_out, params.title)

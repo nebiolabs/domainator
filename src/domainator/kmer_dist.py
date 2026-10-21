@@ -8,17 +8,15 @@ or strand-invariant nucleotide k-mers when --nucleotide_kmers is supplied.
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 
-import sys
 from dataclasses import dataclass
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import numpy as np
-import psutil
 import scipy.sparse
 import tqdm
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 
-from domainator import RawAndDefaultsFormatter, __version__
+from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
 from domainator.compare_contigs import (
     _StreamingCSRChunkBuilder,
     _feed_chunk_to_accumulator,
@@ -665,23 +663,22 @@ def kmer_dist(
         write_matrix_outputs(
             matrix, query_representation.names, reference_representation.names,
             hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
+            mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
             row_lengths=query_representation.lengths, col_lengths=reference_representation.lengths, data_type=mode,
         )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument('-i', '--input', type=str, required=True,
-                        help="Input sequence file. This can be a fasta or genbank file.")
-    parser.add_argument('--input_type', type=str, required=False, default=None, choices={"fasta", "genbank"},
-                        help="File type for the input sequence file.")
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, "Input sequence file. This can be a fasta or genbank file.", multiple=False, stdin=False)
+    parser.add_argument('--input_format', type=str, required=False, default=None, choices=["fasta", "genbank"],
+                        help="File format of the input, if it cannot be told from the file extension.")
     parser.add_argument('-r', '--reference', type=str, required=False,
                         help="Reference file. If not provided, the input file will be used as the reference.")
-    parser.add_argument('--reference_type', type=str, required=False, default=None, choices={"fasta", "genbank"},
-                        help="File type for the reference sequence file.")
+    parser.add_argument('--reference_format', type=str, required=False, default=None, choices=["fasta", "genbank"],
+                        help="File format of the reference, if it cannot be told from the file extension.")
     parser.add_argument('--fasta_type', type=str, default="protein", choices={"protein", "nucleotide"},
                         help="Whether fasta inputs should be interpreted as protein or nucleotide sequences.")
     parser.add_argument('--gene_call', type=str, default=None, choices={"all", "unannotated"}, required=False,
@@ -697,40 +694,42 @@ def main(argv):
     parser.add_argument('--mode', type=str, required=False, default="score", choices=VALID_MODES,
                         help="Output matrix values. score: raw similarity, bool: 1 if a similarity is non-zero, score_dist: 1 - (score / min(row_max, col_max)).")
     add_matrix_output_arguments(parser, noun="similarity (or, for score_dist, distance) matrix")
-    parser.add_argument('--lb', default=0, type=float, required=False,
+    parser.add_argument('--threshold', default=0, type=float, required=False,
                         help="Round any similarities lower than or equal to this down to zero before mode transforms.")
     parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
                         help="Include at most this many non-zero entries in the matrix for each input sequence, keeping the highest-valued ones. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE)
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Selects on the k-mer similarity. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool}. Best paired with --hdf.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Selects on the k-mer similarity. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool}. Best paired with --hdf_out.")
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="How many cpu threads to use. Default: use all physical cores.")
     parser.add_argument('--progress', action='store_true',
                         help="Show a progress bar for long-running steps.")
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    input_type = _resolve_sequence_file_type(params.input, params.input_type, "Input")
+    reject_stdin(parser, [params.input, params.reference] if params.reference else [params.input])
+    input_type = _resolve_sequence_file_type(params.input, params.input_format, "Input")
     if params.reference is None:
         reference_path = params.input
         reference_type = input_type
     else:
         reference_path = params.reference
-        reference_type = _resolve_sequence_file_type(reference_path, params.reference_type, "Reference")
+        reference_type = _resolve_sequence_file_type(reference_path, params.reference_format, "Reference")
 
     hdf, dense_text = resolve_matrix_outputs(params)
-    if not 0 <= params.lb <= 1:
-        raise ValueError("--lb must be between 0 and 1 for k-mer similarities.")
+    if not 0 <= params.threshold <= 1:
+        raise ValueError("--threshold must be between 0 and 1 for k-mer similarities.")
     if params.max_hits_per_query is not None and params.max_hits_per_query < 0:
         raise ValueError("--max_hits_per_query must be >= 0")
     if params.gene_call is not None and params.nucleotide_kmers:
         warnings.warn("--gene_call has no effect when --nucleotide_kmers is supplied.")
 
-    if params.cpu <= 0:
-        cpu = psutil.cpu_count(logical=False)
-    else:
-        cpu = params.cpu
+    cpu = resolve_cpu(params.cpu)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     kmer_dist(
@@ -744,7 +743,7 @@ def main(argv):
         cpu,
         hdf,
         dense_text,
-        params.lb,
+        params.threshold,
         fasta_type=params.fasta_type,
         ksize=params.ksize,
         nucleotide_kmers=params.nucleotide_kmers,
@@ -754,11 +753,3 @@ def main(argv):
         mst=params.mst,
         knn=params.knn,
     )
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

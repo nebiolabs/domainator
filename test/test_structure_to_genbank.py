@@ -76,7 +76,7 @@ def test_keep_db_is_reusable_as_input(shared_datadir, tmp_path):
     first = tmp_path / "first.gb"
     prefix = tmp_path / "kept"
     structure_to_genbank.main(["-i", str(shared_datadir / "structures" / "inputs"),
-                               "-o", str(first), "--keep_db", str(prefix), "--cpu", "2"])
+                               "-o", str(first), "--db_out", str(prefix), "--cpu", "2"])
     assert structure_lib.is_aligner_db(str(prefix))
     assert structure_lib.StructureDB(prefix=str(prefix)).has_coordinates()
 
@@ -92,7 +92,7 @@ def test_keep_db_rejected_for_database_input(shared_datadir, tmp_path):
     with pytest.raises(RuntimeError, match="already a database"):
         structure_to_genbank.main(["-i", str(shared_datadir / "foldseek" / "FeSOD"),
                                    "-o", str(tmp_path / "x.gb"),
-                                   "--keep_db", str(tmp_path / "kept")])
+                                   "--db_out", str(tmp_path / "kept")])
 
 
 def test_database_input(shared_datadir, tmp_path):

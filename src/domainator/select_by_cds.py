@@ -12,12 +12,12 @@ otherwise:
     return every cds in contigs
 
 """
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import sys
-from domainator.utils import parse_seqfiles, write_genbank, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, region_id, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, add_switch, check_outputs, tool_parser
+from domainator.outputs import SeqOutputs
+from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, region_id, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
 from typing import Tuple, Optional, Set
-from domainator import __version__, RawAndDefaultsFormatter
-
 #TODO: account for different domain databases
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
 #       https://www.ebi.ac.uk/interpro/search/ida/
@@ -494,14 +494,12 @@ def validate_range(kb_range, kb_up, kb_down, cds_range, cds_up, cds_down):
     return (kb_range_out, cds_range_out)
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="names of input genbank files. If not supplied, reads from stdin.")
+    add_input(parser, "GenBank files.")
 
-    parser.add_argument('-o', '--output', default=None, required=False, 
-                        help="genbank output file name. If not supplied, writes to stdout.")
+    add_seq_outputs(parser)
 
 
     parser.add_argument('--kb_range', type=float, default=None,
@@ -545,27 +543,29 @@ def main(argv):
 
     parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
 
-    parser.add_argument('--search_hits', action='store_true', default=False, help="Select CDSs that are marked as search hits (from domain_search.py).")
+    add_annotation_type(parser, help="Which annotations to select CDSs by.")
     #TODO: 
     # parser.add_argument('--domain_count_expr', type=str, default=None,
     #                     help="a comparator and a number, to specify a desired number of domains. Example: '> 2' would mean to return contigs with more than 2 domains.")
 
     parser.add_argument('--pad', action='store_true', default=False,
-                        help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --pad_where.")
-    parser.add_argument('--pad_where', type=str, default="start", choices=WHERE_CHOICES,
+                        help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor.")
+    parser.add_argument('--anchor', type=str, default="start", choices=WHERE_CHOICES,
                         help="Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. "
                         "start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.")
 
     parser.add_argument('--keep_direction', action='store_true', default=False,
                         help="by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.")
-    parser.add_argument('--skip_deduplicate', action='store_true', default=False,
-                        help="by default if the same region is extracted for multiple hits, then only one will be kept. Set this option to retain redundancies (which might be useful if you are counting hits), but will result in duplicated contig names, which could be a problem for downstream domainator applications.")
+    add_switch(parser, "deduplicate", default=True,
+               help="if the same region is extracted for multiple hits, then keep only one copy of it.",
+               negative_help="keep every copy of a region extracted for multiple hits (which might be useful if you are counting hits). "
+                             "This results in duplicated contig names, which could be a problem for downstream domainator applications.")
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")
 
 
-    parser.add_argument('-e', '--evalue', default=100000000, type=float,
-                        help="the evalue cutoff for domain annotations to be put onto the new genbank file")
+    parser.add_argument('-e', '--evalue', default=None, type=float,
+                        help="the evalue cutoff (max) for domain annotations to be considered when selecting CDSs. Default: no cutoff.")
 
     parser.add_argument('--invert', action='store_true',
                         help="Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).")
@@ -588,30 +588,24 @@ def main(argv):
 
     # parser.add_argument('-d', '--database', type=str, default=None,
     #                    help="the name of the database which you want to filter annotations from.") #TODO: see todo above.
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     ### validate input
 
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = (sys.stdin,)
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
-
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     ### figure out selection filters
     kb_range, cds_range = validate_range(params.kb_range, params.kb_up, params.kb_down, params.cds_range, params.cds_up, params.cds_down)
 
     whole_contig = params.whole_contig
     normalize_direction = not params.keep_direction
-    deduplicate = not params.skip_deduplicate
+    deduplicate = params.deduplicate
     pad = params.pad
 
     target_contigs = list_and_file_to_dict_keys(params.contigs, params.contigs_file, as_set=True)
@@ -621,11 +615,11 @@ def main(argv):
 
 
     ### Run
-    #TODO: resolve code duplication with domain_search.py
+    #TODO: resolve code duplication with domainator domain_search
     seen = set()
     records = list()
-    for record in select_by_cds(
-        parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override), 
+    selected = select_by_cds(
+        parse_seqfiles(params.input, target_contigs), 
         selected_cdss, 
         selected_domains, 
         domain_expr, 
@@ -633,8 +627,8 @@ def main(argv):
         kb_range, 
         whole_contig, 
         normalize_direction,
-        params.evalue,
-        search_hits = params.search_hits,
+        float("inf") if params.evalue is None else params.evalue,
+        search_hits = params.annotation_type == "domain_search",
         invert = params.invert,
         max_region_overlap = params.max_region_overlap,
         strand = params.strand,
@@ -642,27 +636,17 @@ def main(argv):
         unannotated = params.unannotated,
         include_nucleic_acids = params.include_nucleic_acids,
         partial = params.partial,
-        ):
-        #skip_deduplicate, pad
-        if not pad:
-            if not deduplicate or (record.id not in seen):
-                write_genbank((record,), output_handle)
-        else:
-            if not deduplicate or (record.id not in seen):
+        )
+    with SeqOutputs(params.genbank_out, params.fasta_out) as outputs:
+        for record in selected:
+            if deduplicate and record.id in seen:
+                continue
+            if deduplicate:
+                seen.add(record.id)
+            if pad:
                 records.append(record)
-        if deduplicate:
-            seen.add(record.id)
-
-    if pad:
-        pad_records(records, where=params.pad_where)
-        write_genbank(records, output_handle)
-
-    if params.output is not None:
-        output_handle.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-  
+            else:
+                outputs.write(record)
+        if pad:
+            pad_records(records, where=params.anchor)
+            outputs.write_all(records)

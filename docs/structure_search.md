@@ -3,20 +3,20 @@
 
 Domainator can use protein structures as input, either annotating them with reference
 structures or searching a large structure database with a few reference structures. Both
-produce ordinary Domainator genbank files, so the rest of the suite — `extract_domains.py`,
-`plot_contigs.py`, `enum_report.py`, `summary_report.py`, `color_genbank.py`,
-`build_ssn.py`, `seq_dist.py`, `select_by_contig.py` — works on the results unchanged.
-`structure_dist.py` is the exception: it writes a data matrix rather than genbank, feeding
-`build_ssn.py`, `build_tree.py` and `build_projection.py` the way `seq_dist.py` does.
+produce ordinary Domainator genbank files, so the rest of the suite — `domainator extract_domains`,
+`domainator plot_contigs`, `domainator enum_report`, `domainator summary_report`, `domainator color_genbank`,
+`domainator build_ssn`, `domainator seq_dist`, `domainator select_by_contig` — works on the results unchanged.
+`domainator structure_dist` is the exception: it writes a data matrix rather than genbank, feeding
+`domainator build_ssn`, `domainator build_tree` and `domainator build_projection` the way `domainator seq_dist` does.
 
 There are four tools, mirroring the sequence-based ones:
 
 |  | sequence input | structure input |
 | ---- | ---- | ---- |
-| **annotate** (all records, `Domainator` features) | `domainate.py` | `structure_domainate.py` |
-| **search** (hit records, `Domain_Search` features) | `domain_search.py` | `structure_search.py` |
-| **compare** (pairwise score/distance matrix) | `seq_dist.py` | `structure_dist.py` |
-| **convert** | — | `structure_to_genbank.py` |
+| **annotate** (all records, `Domainator` features) | `domainator domainate` | `domainator structure_domainate` |
+| **search** (hit records, `Domain_Search` features) | `domainator domain_search` | `domainator structure_search` |
+| **compare** (pairwise score/distance matrix) | `domainator seq_dist` | `domainator structure_dist` |
+| **convert** | — | `domainator structure_to_genbank` |
 
 ## Requirements
 
@@ -87,8 +87,8 @@ foldseek search: `<file basename>_<chain>`, for example `1ubq_A`.
 ## Annotating structures
 
 ```bash
-structure_domainate.py -i my_structures/ -r reference_structures/ -o annotated.gb
-plot_contigs.py -i annotated.gb -o annotated.html
+domainator structure_domainate -i my_structures/ -r reference_structures/ -o annotated.gb
+domainator plot_contigs -i annotated.gb --html_out annotated.html
 ```
 
 Every input chain is written, whether or not it had a hit. Add `--hits_only` to keep just
@@ -98,7 +98,7 @@ Because both databases are built from real structures they carry C-alpha coordin
 full range of foldseek alignment modes is available:
 
 ```bash
-structure_domainate.py -i my_structures/ -r reference_structures/ \
+domainator structure_domainate -i my_structures/ -r reference_structures/ \
     --alignment_type 1 --metrics tmscore lddt rmsd -o annotated.gb
 ```
 
@@ -111,9 +111,9 @@ degradation.
 ## Searching a large structure database
 
 ```bash
-structure_search.py -i /path/to/afdb_foldseek_db -r query.pdb \
+domainator structure_search -i /path/to/afdb_foldseek_db -r query.pdb \
     --max_hits 1000 --max_seqs 1000000 --device cuda:0 --cpu 6 -o hits.gb
-enum_report.py -i hits.gb --domains -o hits.tsv
+domainator enum_report -i hits.gb --domains -o hits.tsv
 ```
 
 Only records that matched are written, each carrying a `Domain_Search` feature marking the
@@ -137,31 +137,31 @@ Two knobs matter at scale:
 
 ## Comparing structures to each other
 
-`structure_dist.py` is the structure-input counterpart of `seq_dist.py`: an all-vs-all
+`domainator structure_dist` is the structure-input counterpart of `domainator seq_dist`: an all-vs-all
 structural alignment whose output is a data matrix rather than annotations.
 
 ```bash
-structure_dist.py -i my_structures/ --mode tmscore --alignment_type 1 --hdf tm.hdf5
-build_tree.py -i tm.hdf5 --newick tree.nwk
+domainator structure_dist -i my_structures/ --mode tmscore --alignment_type 1 --hdf_out tm.hdf5
+domainator build_tree -i tm.hdf5 --newick_out tree.nwk
 ```
 
 Omitting `-r` compares the input against itself, which is the usual case; supplying it
 gives a rectangular matrix of inputs against references. Every input chain is a row whether
 or not it aligned to anything, and the row and column labels are exactly the record ids
-`structure_to_genbank.py` writes for the same structures, so a matrix and a genbank of the
+`domainator structure_to_genbank` writes for the same structures, so a matrix and a genbank of the
 same inputs line up.
 
 Two things differ from the other structure tools:
 
 * **The alignment direction is reversed.** Here the input is the query and the reference is
   the target, so rows are inputs and `--evalue` is computed against the reference set —
-  the same meaning it has in `seq_dist.py`, where diamond runs with the input as `-q`.
+  the same meaning it has in `domainator seq_dist`, where diamond runs with the input as `-q`.
 * **The whole input database is read**, since a structure with no hits still needs its row.
-  `structure_search.py` avoids that, and remains the right tool for finding a handful of
+  `domainator structure_search` avoids that, and remains the right tool for finding a handful of
   matches in a very large database.
 
 `--mode` chooses what the cells hold. The score-based modes behave exactly as they do in
-`seq_dist.py`, and the structural modes — `tmscore`, `lddt`, `fident` — put a similarity
+`domainator seq_dist`, and the structural modes — `tmscore`, `lddt`, `fident` — put a similarity
 already bounded in [0, 1] in the cell, so their `_dist` forms are simply `1 - value` and
 need none of the `min(row_max, col_max)` normalization `score_dist` does. Because an absent
 pair in a distance matrix means "maximally distant" rather than zero, the `_dist` modes are
@@ -170,7 +170,7 @@ dense-only.
 foldseek scores each direction of a pair separately, so the raw matrix is slightly
 asymmetric. `--symmetrize` reconciles the two directions, and the choice matters when a
 pair was found in only one direction, because the missing direction is a stored zero rather
-than a missing value: `max` keeps such a pair (the convention `build_ssn.py`, `--mst`, and
+than a missing value: `max` keeps such a pair (the convention `domainator build_ssn`, `--mst`, and
 `--knn` use), `min` deletes it, making it a mutual-hit filter, and `mean` halves it.
 `--mst` and `--knn` prune the matrix as it is built and are always max-symmetric.
 
@@ -181,47 +181,46 @@ reused:
 
 ```bash
 # build the reference database once
-structure_to_genbank.py -i reference_structures/ --keep_db refdb -o refs.gb
+domainator structure_to_genbank -i reference_structures/ --db_out refdb -o refs.gb
 
 # reuse it, and keep the input database too
-structure_domainate.py -i my_structures/ -r refdb --keep_db mydb -o annotated.gb
-structure_search.py    -i mydb -r refdb -o hits.gb
+domainator structure_domainate -i my_structures/ -r refdb --db_out mydb -o annotated.gb
+domainator structure_search    -i mydb -r refdb -o hits.gb
 ```
 
-A database written by `--keep_db` carries C-alpha coordinates, so it supports every alignment
+A database written by `--db_out` carries C-alpha coordinates, so it supports every alignment
 mode and metric. Databases built from amino acid and 3Di sequences instead — including the
 ones described in the [ESM-2 3B 3Di documentation](esm_3b_foldseek.md) — do not, and are
 limited to `--alignment_type 0` and `2`.
 
 ## Using structures with the sequence-based tools
 
-`structure_to_genbank.py` converts structures without searching, which makes them ordinary
+`domainator structure_to_genbank` converts structures without searching, which makes them ordinary
 Domainator inputs:
 
 ```bash
-structure_to_genbank.py -i my_structures/ -o chains.gb
+domainator structure_to_genbank -i my_structures/ -o chains.gb
 
-domainate.py -i chains.gb -r pfam.hmm -o annotated.gb        # annotate with HMM profiles
-domain_search.py -i chains.gb -r query.hmm -o hits.gb        # search them by sequence
-seq_dist.py -i chains.gb -r chains.gb --hdf distances.hdf5   # by sequence, not fold
-deduplicate_genbank.py -i chains.gb -o nonredundant.gb
+domainator domainate -i chains.gb -r pfam.hmm -o annotated.gb        # annotate with HMM profiles
+domainator domain_search -i chains.gb -r query.hmm -o hits.gb        # search them by sequence
+domainator seq_dist -i chains.gb -r chains.gb --hdf_out distances.hdf5   # by sequence, not fold
+domainator deduplicate_genbank -i chains.gb -o nonredundant.gb
 ```
 
-The three genbank-producing structure tools write to stdout when `-o` is omitted or given
-as `-`, so they can be piped into any tool that reads genbank from stdin
-(`structure_dist.py` has no stdout mode: it writes matrix files through `--hdf` and
-`--dense_text`):
+The three genbank-producing structure tools write to stdout with `-o -`, so they can be
+piped into any tool that reads genbank from stdin with `-i -` (`domainator structure_dist`
+writes matrix files through `--hdf_out` and `--dense_text_out`; `--dense_text_out -` writes to stdout):
 
 ```bash
-structure_to_genbank.py -i my_structures/ -o - | color_genbank.py --color_domains -o colored.gb
+domainator structure_to_genbank -i my_structures/ -o - | domainator color_genbank --target domains -o colored.gb
 ```
 
-Note that `domainate.py` and `domain_search.py` read from files rather than stdin, so write
+Note that `domainator domainate` and `domainator domain_search` read from files rather than stdin, so write
 an intermediate file for those (as above).
 
-The `seq_dist.py` line above compares the amino acid sequences foldseek extracted from the
+The `domainator seq_dist` line above compares the amino acid sequences foldseek extracted from the
 structures, not the structures themselves, so it will miss remote homologs that share a
-fold but little sequence. Use `structure_dist.py` when you want the fold compared.
+fold but little sequence. Use `domainator structure_dist` when you want the fold compared.
 
 `--store_3di` additionally records each chain's 3Di structural-alphabet string in a
 `/threedi` qualifier, which is useful for rebuilding a foldseek database from a genbank file.
@@ -238,12 +237,12 @@ cannot do is an error, not a silent no-op.
 | ---- | ---- | ---- |
 | `--alignment_type` | `0`/`1`/`2`, default `2` | not supported (no such concept) |
 | `--metrics` | `tmscore`, `lddt`, `rmsd`, `prob` | none |
-| `--mode` (`structure_dist.py`) | every mode | score-based modes plus `fident`/`fident_dist`; `tmscore`, `lddt` and `efi_score` rejected |
+| `--mode` (`domainator structure_dist`) | every mode | score-based modes plus `fident`/`fident_dist`; `tmscore`, `lddt` and `efi_score` rejected |
 | `--store_3di` | supported | not supported |
 | database | a set of files sharing a prefix | one `.bcb` file |
 | minimum chain length | none | 32 residues; shorter chains are dropped |
 | provenance in record descriptions | yes | no source map available |
-| sensitivity knobs | `--alignment_type`, `--aligner_arg` | `--reseek_sensitivity`, `--reseek_stats` |
+| sensitivity knobs | `--alignment_type`, `--foldseek_args` | `--reseek_sensitivity`, `--reseek_stats` |
 | `--max_seqs` | bounds the search, default 1000 | bounds the output only, no cap by default |
 
 Two reseek-specific options:
@@ -301,7 +300,7 @@ Domainator applies this bound itself.
 
 ## Cross-checking against foldseek directly
 
-`--hits_tsv` writes the aligner's own hit table alongside the genbank output, which makes the
+`--hits_tsv_out` writes the aligner's own hit table alongside the genbank output, which makes the
 results directly comparable to a hand-run search. Note that with reseek this is the table as
 reseek produced it, before Domainator applies `--max_seqs`, so it can contain more rows than
 the genbank output has records.
@@ -309,17 +308,21 @@ the genbank output has records.
 ```bash
 foldseek easy-search refs/*.pdb $db ref.tsv tmp --format-mode 4 -e 0.001 \
     --format-output query,target,fident,alnlen,qstart,qend,tstart,tend,evalue,bits,qlen,tlen
-structure_search.py -i $db -r refs/ -e 0.001 --hits_tsv ours.tsv -o hits.gb
+domainator structure_search -i $db -r refs/ -e 0.001 --hits_tsv_out ours.tsv -o hits.gb
 ```
 
 ## Passing options through to foldseek
 
-`--aligner_arg` appends arguments verbatim to the aligner's search command line, for options
-Domainator does not wrap:
+`--foldseek_args` (or `--reseek_args`) appends options to the aligner's search command line,
+for options Domainator does not wrap. Give them as one quoted string, which is split like a
+shell command line, and use the `=` form so they are not mistaken for Domainator's own options:
 
 ```bash
-structure_search.py -i $db -r refs/ --aligner_arg --prefilter-mode 2 -o hits.gb
+domainator structure_search -i $db -r refs/ --foldseek_args="--prefilter-mode 2" -o hits.gb
 ```
+
+Options that Domainator sets itself (for example `-e` or `--max-seqs`) are refused, so use
+Domainator's own option for them instead.
 
 ## Limitations
 
@@ -330,11 +333,11 @@ structure_search.py -i $db -r refs/ --aligner_arg --prefilter-mode 2 -o hits.gb
 * **No coordinates in genbank.** Structure coordinates are deliberately not stored in the
   genbank output — they would inflate records several-fold, exceed what standard genbank
   parsers accept on one line, and would be silently wrong after any tool that slices
-  records. Persist the aligner database with `--keep_db` instead.
+  records. Persist the aligner database with `--db_out` instead.
 * **Backend-specific gaps.** See the comparison table above: reseek has no alignment types,
   no structural metrics, no 3Di output, no provenance, and a 32-residue minimum chain
   length.
-* **LoLalign** is not in any foldseek release yet. When it lands, `--aligner_arg` should
+* **LoLalign** is not in any foldseek release yet. When it lands, `--foldseek_args` should
   make it reachable without a Domainator release.
 * **Scores are not comparable across backends.** foldseek reports a bitscore and reseek
   reports `-log10(p)`. Annotations from the two are individually meaningful but must not be

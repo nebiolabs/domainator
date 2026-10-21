@@ -66,7 +66,7 @@ def test_newick_output(shared_datadir):
         xgmm_out = str(output_dir + "/test.xgmml")
         metadata = str(shared_datadir / 'FeSOD_metadata.tsv')
 
-        build_tree.main(['--input', str(shared_datadir / 'FeSOD_score_dist.tsv'), '--newick', newick_out, '--xgmml', xgmm_out, "--metadata", metadata])
+        build_tree.main(['--input', str(shared_datadir / 'FeSOD_score_dist.tsv'), '--newick_out', newick_out, '--xgmml_out', xgmm_out, "--metadata", metadata])
         compare_files(newick_out, str(shared_datadir / 'FeSOD_score_dist.newick'))
         compare_files(xgmm_out, str(shared_datadir / 'FeSOD_score_dist.xgmml'))
 
@@ -128,5 +128,5 @@ def test_build_tree_from_hdf_distance_matrix_matches_text(shared_datadir, tmp_pa
     hdf_path = tmp_path / "score_dist.hdf5"
     DataMatrix.write_hdf(text_matrix.data, hdf_path, text_matrix.rows, text_matrix.columns, data_type="score_dist")
     newick_out = tmp_path / "from_hdf.newick"
-    build_tree.main(['--input', str(hdf_path), '--newick', str(newick_out), '--quiet'])
+    build_tree.main(['--input', str(hdf_path), '--newick_out', str(newick_out), '--quiet'])
     compare_files(str(newick_out), str(shared_datadir / 'FeSOD_score_dist.newick'))

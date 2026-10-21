@@ -1,13 +1,13 @@
 """Annotate protein structures with hits to reference structures.
 
-The structure-input counterpart of domainate.py. Reads structure files (pdb/cif,
+The structure-input counterpart of domainator domainate. Reads structure files (pdb/cif,
 optionally gzipped, given as files, globs, or a directory searched recursively) or a
 prebuilt foldseek database, aligns reference structures against them, and writes a protein
 genbank file where every input chain is one record carrying Domainator features for the
 references that hit it.
 
 Every input record is written, whether or not it had hits, unless --hits_only is given.
-Use structure_search.py instead when searching a large database with a few references.
+Use domainator structure_search instead when searching a large database with a few references.
 
 References are aligned as the query and the input database as the target, so --evalue is
 always computed against the database being annotated, exactly as it is for the rest of
@@ -23,15 +23,15 @@ structure, not original PDB residue numbers.
 
 import sys
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator import domainate
 from domainator import structure_lib
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 
 
-MITIGATION_OPTIONS = ["--hits_only", "--max_domains", "-e/--evalue", "--no_annotations"]
+MITIGATION_OPTIONS = ["--hits_only", "--max_hits_per_cds", "-e/--evalue", "--no_annotations"]
 
 
 def structure_domainate(input_values, reference_values, aligner, evalue=0.001, min_evalue=0.0,
@@ -104,21 +104,19 @@ def structure_domainate(input_values, reference_values, aligner, evalue=0.001, m
             yield record
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', default=None, required=True, nargs='+', type=str,
-                        help="structures to annotate: pdb/cif files (optionally gzipped), a directory to search recursively, a glob, or the prefix of a prebuilt foldseek database.")
-    parser.add_argument('-r', '--references', default=None, required=True, nargs='+', type=str,
+    add_input(parser, "structures to annotate: pdb/cif files (optionally gzipped), a directory to search recursively, a glob, or the prefix of a prebuilt foldseek database.", stdin=False)
+    parser.add_argument('-r', '--reference', default=None, required=True, nargs='+', type=str,
                         help="reference structures to annotate the input with. Same accepted forms as --input.")
-    parser.add_argument('-o', '--output', default=None, type=str,
-                        help="output genbank filename. If not supplied, or if given as '-', writes to stdout.")
+    add_seq_outputs(parser)
     parser.add_argument('-e', '--evalue', type=float, default=0.001,
                         help="threshold E value for a hit. E values are computed against the input database.")
     parser.add_argument('--min_evalue', type=float, default=0.0,
                         help="minimum E value for a hit. Useful for excluding near-identical matches, such as a structure's hit to itself.")
-    parser.add_argument('--max_domains', type=int, default=0,
-                        help="maximum number of annotations to add per record. 0 means no limit.")
+    parser.add_argument('--max_hits_per_cds', type=int, default=None,
+                        help="maximum number of annotations to add per record. If not supplied, there is no limit.")
     parser.add_argument('--max_overlap', type=float, default=1,
                         help="maximum fraction of overlap allowed between annotations on one record. 1 disables overlap filtering.")
     parser.add_argument('--overlap_by_db', action='store_true', default=False,
@@ -129,15 +127,20 @@ def main(argv):
                         help="do not write Domainator features. Only meaningful together with --hits_only, where it selects hit records without annotating them.")
     parser.add_argument('--database_name', default=None, type=str,
                         help="value for the /database qualifier on the annotations. Defaults to the reference database or directory name.")
-    parser.add_argument('--keep_db', default=None, type=str,
+    parser.add_argument('--db_out', default=None, type=str,
                         help="also write the aligner database built from the input structures, using this path as its prefix, so it can be reused as --input later.")
-    parser.add_argument('--hits_tsv', default=None, type=str,
+    parser.add_argument('--hits_tsv_out', default=None, type=str,
                         help="write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output.")
     structure_lib.add_backend_arguments(parser)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     if params.evalue <= 0:
         raise RuntimeError("--evalue must be greater than 0.")
@@ -146,7 +149,9 @@ def main(argv):
     if params.no_annotations and not params.hits_only:
         raise RuntimeError("--no_annotations only makes sense together with --hits_only, "
                            "otherwise the output would carry no information at all.")
-    max_domains = params.max_domains if params.max_domains > 0 else sys.maxsize
+    if params.max_hits_per_cds is not None and params.max_hits_per_cds < 1:
+        parser.error("--max_hits_per_cds must be at least 1. Leave it out to add every annotation.")
+    max_domains = sys.maxsize if params.max_hits_per_cds is None else params.max_hits_per_cds
 
     aligner = structure_lib.build_aligner(params)
     # Validate the backend-capability arguments before any database is built, so an
@@ -155,25 +160,15 @@ def main(argv):
     aligner.check_capabilities(params.alignment_type, params.metrics or [], [])
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    output_description = f"structure_domainate genbank output ({params.output or 'stdout'})"
 
     records = structure_domainate(
-        params.input, params.references, aligner,
+        params.input, params.reference, aligner,
         evalue=params.evalue, min_evalue=params.min_evalue, max_domains=max_domains,
         max_overlap=params.max_overlap, overlap_by_db=params.overlap_by_db,
         hits_only=params.hits_only, no_annotations=params.no_annotations,
         alignment_type=params.alignment_type, metrics=params.metrics,
-        max_seqs=params.max_seqs, tmp_dir=params.tmp_dir, keep_db=params.keep_db,
-        database_name=params.database_name, hits_tsv=params.hits_tsv,
+        max_seqs=params.max_seqs, tmp_dir=params.tmp_dir, keep_db=params.db_out,
+        database_name=params.database_name, hits_tsv=params.hits_tsv_out,
     )
 
-    structure_lib.write_records(records, params.output, max_output_bytes,
-                                output_description, MITIGATION_OPTIONS)
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    structure_lib.write_records(records, params.genbank_out, params.fasta_out, max_output_bytes, MITIGATION_OPTIONS)

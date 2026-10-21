@@ -1,57 +1,33 @@
-"""Shared matrix output options (--hdf, --dense_text) for the matrix-producing tools.
+"""Shared matrix output options (-o/--hdf_out, --dense_text_out) for the matrix-producing tools.
 
-``--hdf`` writes Domainator hdf5 (CSR; the upper triangle only when the values are
-exactly symmetric). ``--dense_text`` writes tab-separated text. ``--sparse`` and
-``--dense`` are deprecated aliases for ``--hdf``. ``--symmetrize`` is the shared option
-for reconciling the two directions of a self-comparison.
+``--hdf_out`` writes Domainator hdf5 (CSR; the upper triangle only when the values are
+exactly symmetric). ``--dense_text_out`` writes tab-separated text. ``--symmetrize`` is the
+shared option for reconciling the two directions of a self-comparison.
 """
 
-import warnings
 from typing import Optional, Sequence, Tuple
 
-from domainator.data_matrix import DataMatrix, SYMMETRIZE_CHOICES, _get_file_type
+from domainator.data_matrix import DataMatrix, SYMMETRIZE_CHOICES, get_matrix_file_type
 from domainator.output_guardrails import enforce_matrix_output_limit
-
-_DEPRECATED_HDF_OPTIONS = ("sparse", "dense")
 
 
 def add_matrix_output_arguments(parser, *, noun: str = "matrix") -> None:
-    """Add --hdf and --dense_text, plus the deprecated --sparse/--dense aliases of --hdf."""
-    parser.add_argument("--hdf", type=str, default=None,
+    """Add -o/--hdf_out and --dense_text_out."""
+    parser.add_argument("-o", "--hdf_out", type=str, default=None,
                         help=f"Write the {noun} to this Domainator hdf5 file. Values are stored sparse; "
                              "a matrix with exactly symmetric values is stored as its upper triangle.")
-    parser.add_argument("--dense_text", type=str, default=None,
-                        help=f"Write the {noun} to this tab-separated text file, every cell included.")
-    for option in _DEPRECATED_HDF_OPTIONS:
-        parser.add_argument(f"--{option}", type=str, default=None,
-                            help="Deprecated alias for --hdf.")
+    parser.add_argument("--dense_text_out", type=str, default=None,
+                        help=f"Write the {noun} to this tab-separated text file, every cell included. Use - for standard output.")
 
 
 def resolve_matrix_outputs(params, *, require_output: bool = True) -> Tuple[Optional[str], Optional[str]]:
-    """Return ``(hdf_path, dense_text_path)`` from parsed arguments.
-
-    Folds the deprecated --sparse/--dense into --hdf (with a warning) and checks the
-    hdf5 file extension.
-    """
-    hdf_options = {"hdf": params.hdf}
-    for option in _DEPRECATED_HDF_OPTIONS:
-        path = getattr(params, option)
-        if path is not None:
-            warnings.warn(f"--{option} is deprecated and will be removed in a future version; use --hdf instead.",
-                          FutureWarning, stacklevel=2)
-            hdf_options[option] = path
-
-    hdf_paths = {path for path in hdf_options.values() if path is not None}
-    if len(hdf_paths) > 1:
-        given = ", ".join(f"--{option} {path}" for option, path in hdf_options.items() if path is not None)
-        raise ValueError(f"Only one hdf5 output can be written, but got: {given}. Use --hdf.")
-    hdf = next(iter(hdf_paths), None)
-
-    if hdf is not None and _get_file_type(hdf) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --hdf output, such as .h5, .hdf5, or .hdf.")
-    if require_output and hdf is None and params.dense_text is None:
-        raise ValueError("No output specified! Please specify at least one of: --hdf, --dense_text")
-    return hdf, params.dense_text
+    """Return ``(hdf_path, dense_text_path)`` from parsed arguments, checking the hdf5 file extension."""
+    hdf = params.hdf_out
+    if hdf is not None and get_matrix_file_type(hdf) != "hdf5":
+        raise ValueError("Please use an hdf5 related extension for the --hdf_out output, such as .h5, .hdf5, or .hdf.")
+    if require_output and hdf is None and params.dense_text_out is None:
+        raise ValueError("No output specified! Please specify at least one of: -o/--hdf_out, --dense_text_out")
+    return hdf, params.dense_text_out
 
 
 def write_matrix_outputs(matrix, row_names, col_names, *, hdf: Optional[str], dense_text: Optional[str],
@@ -78,7 +54,7 @@ def write_matrix_outputs(matrix, row_names, col_names, *, hdf: Optional[str], de
             output_type="dense_text", matrix=matrix, row_names=row_names, col_names=col_names,
             row_lengths=row_lengths, col_lengths=col_lengths, data_type=data_type,
             max_output_bytes=max_output_bytes, output_path=dense_text,
-            mitigation_options=["--hdf"] + mitigation_options,
+            mitigation_options=["--hdf_out"] + mitigation_options,
         )
         DataMatrix.write_dense_text(matrix, dense_text, row_names, col_names, row_lengths, col_lengths, data_type)
 
@@ -94,5 +70,5 @@ def add_symmetrize_argument(parser, *, extra_help: str = "") -> None:
                              "two -- note a pair found in only one direction has a stored zero in the other, so min "
                              "DELETES it, making this a mutual-hit filter. mean: the average of the two -- note a "
                              "pair found in only one direction is HALVED, because the missing direction contributes "
-                             "zero. A symmetric result is stored as its upper triangle by --hdf, about half the size."
+                             "zero. A symmetric result is stored as its upper triangle by --hdf_out, about half the size."
                              + suffix)

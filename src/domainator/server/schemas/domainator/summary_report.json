@@ -3,9 +3,9 @@
   "display_name": "Summary Report",
   "category": "Summary reports",
   "description": "From a domainator-annotated genbank file, calculates contig stats and domain frequency stats",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 1,
-  "entry_point": "domainator.summary_report",
+  "entry_point": "summary_report",
   "parameters": [
     {
       "name": "Input",
@@ -31,38 +31,38 @@
     },
     {
       "name": "Html Output",
-      "parameter": "html",
+      "parameter": "html_out",
       "help": "html file to write output to.",
       "type": "output",
       "flags": [
-        "--html"
+        "--html_out"
       ]
     },
     {
-      "name": "Domains Table",
-      "parameter": "domains_table",
+      "name": "Domains Tsv Out",
+      "parameter": "domains_tsv_out",
       "help": "Write a tab-separated table of domain frequencies to this file. Headers are: domain, database, count, description, avg score.",
-      "type": "string",
+      "type": "output",
       "flags": [
-        "--domains_table"
+        "--domains_tsv_out"
       ]
     },
     {
       "name": "Co Occurence Fraction",
-      "parameter": "co_occurence_fraction",
+      "parameter": "co_occurrence_fraction_out",
       "help": "Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the fraction of contigs containing the row-domain that also include the column-domain (so the matrix is assymetric).",
       "type": "output",
       "flags": [
-        "--co_occurence_fraction"
+        "--co_occurrence_fraction_out"
       ]
     },
     {
       "name": "Co Occurence Count",
-      "parameter": "co_occurence_count",
+      "parameter": "co_occurrence_count_out",
       "help": "Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the number of contigs containing both the row-domain and the column-domain (so the matrix is symmetric).",
       "type": "output",
       "flags": [
-        "--co_occurence_count"
+        "--co_occurrence_count_out"
       ]
     },
     {
@@ -133,12 +133,12 @@
   "advanced_parameters": [
     {
       "name": "Text Output",
-      "parameter": "output",
+      "parameter": "text_out",
       "help": "Text file to write output to.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--text_out"
       ]
     },
     {

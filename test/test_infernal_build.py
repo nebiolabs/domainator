@@ -105,7 +105,7 @@ def test_infernal_build_with_fasta_input(fasta_file):
 
 @pytest.mark.skipif(not CMBUILD_AVAILABLE, reason="Infernal cmbuild not installed")
 def test_main_with_required_params(stockholm_file, capsys):
-    main(["--name", "test_cm", "--input", stockholm_file])
+    main(["--name", "test_cm", "--input", stockholm_file, "-o", "-"])
     captured = capsys.readouterr()
     assert "INFERNAL1/a" in captured.out
     assert "NAME     test_cm" in captured.out
@@ -113,7 +113,7 @@ def test_main_with_required_params(stockholm_file, capsys):
 
 @pytest.mark.skipif(not CMBUILD_AVAILABLE, reason="Infernal cmbuild not installed")
 def test_main_with_optional_params(stockholm_file, capsys):
-    main(["--name", "test_cm", "--acc", "RFTEST1", "--desc", "Test CM description", "--input", stockholm_file])
+    main(["--name", "test_cm", "--acc", "RFTEST1", "--desc", "Test CM description", "--input", stockholm_file, "-o", "-"])
     captured = capsys.readouterr()
     output = captured.out
     assert "INFERNAL1/a" in output
@@ -124,7 +124,7 @@ def test_main_with_optional_params(stockholm_file, capsys):
 
 @pytest.mark.skipif(not CMBUILD_AVAILABLE, reason="Infernal cmbuild not installed")
 def test_main_with_fasta_input(fasta_file, capsys):
-    main(["--name", "test_cm", "--acc", "RFTEST1", "--desc", "FASTA input description", "--input", fasta_file, "--noss"])
+    main(["--name", "test_cm", "--acc", "RFTEST1", "--desc", "FASTA input description", "--input", fasta_file, "--noss", "-o", "-"])
     captured = capsys.readouterr()
     output = captured.out
     assert "NAME     test_cm" in output
@@ -138,7 +138,7 @@ def test_main_writes_output_file(stockholm_file):
         output_path = handle.name
 
     try:
-        main(["--name", "test_cm", "--acc", "RFTEST1", "--desc", "Test CM description", "--input", stockholm_file, "--output", output_path])
+        main(["--name", "test_cm", "--acc", "RFTEST1", "--desc", "Test CM description", "--input", stockholm_file, "--cm_out", output_path])
         with open(output_path, "r", encoding="utf-8") as output_handle:
             output = output_handle.read()
         assert "NAME     test_cm" in output

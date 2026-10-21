@@ -140,7 +140,7 @@ def test_database_prefix_input_matches_structure_file_input(database, references
     from_files = tmp_path / "files.gb"
     prefix = tmp_path / "indb"
     structure_search.main(["-i", database, "-r", references, "-o", str(from_files),
-                           "--keep_db", str(prefix), "--cpu", "2"])
+                           "--db_out", str(prefix), "--cpu", "2"])
     from_db = tmp_path / "db.gb"
     structure_search.main(["-i", str(prefix), "-r", references, "-o", str(from_db), "--cpu", "2"])
     assert ([(r.id, str(r.seq)) for r in _read(from_files)]
@@ -163,7 +163,7 @@ def test_hits_tsv(database, references, tmp_path):
     out = tmp_path / "hits.gb"
     tsv = tmp_path / "raw.tsv"
     structure_search.main(["-i", database, "-r", references, "-o", str(out),
-                           "--hits_tsv", str(tsv), "--cpu", "2"])
+                           "--hits_tsv_out", str(tsv), "--cpu", "2"])
     lines = [line for line in tsv.read_text().split("\n") if line]
     assert len(lines) == 2
     targets = {line.split("\t")[1] for line in lines}

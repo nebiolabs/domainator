@@ -7,11 +7,12 @@ It works best for relatively small datasets, of a few megabases or a few hundred
 # TODO: more command line options
 # TODO: better support for eukaryotic genomes
 
-from jsonargparse import ArgumentParser, ActionConfigFile
-import sys
-from typing import Tuple, List, Optional, Set, NamedTuple, Union, Dict
+from jsonargparse import ActionConfigFile
+from typing import List, Optional, Set, Union, Dict
 from os import PathLike
-from domainator import __version__, RawAndDefaultsFormatter, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.utils import parse_seqfiles, get_cds_name, open_if_is_name
 from domainator.Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
 from domainator.Bio.SeqRecord import SeqRecord
@@ -19,7 +20,6 @@ from collections import defaultdict
 import html
 import json
 from domainator.color_genbank import normalize_color_hex
-from pprint import pprint
 import pandas as pd
 from domainator.utils import get_palette
 
@@ -448,9 +448,8 @@ def show_contigs(recs:Union[str,List[SeqRecord]], window_height=600, window_widt
                 For those platforms, you can open the created html file in a web browser,
                 or use the create_d3_html function to create the html file with a specified name.
     """
-    from IPython.display import HTML, IFrame, display
+    from IPython.display import IFrame, display
     # capture the output of create_d3_html as a string
-    from io import StringIO
     import tempfile
     import os
     
@@ -463,13 +462,11 @@ def show_contigs(recs:Union[str,List[SeqRecord]], window_height=600, window_widt
         display(IFrame(os.path.basename(s.name), width=window_width, height=window_height))
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="names of input genbank files. If not supplied, reads from stdin.")
-    parser.add_argument("--html", default=None, type=str, required=True,
-                        help="name of output html file")
+    add_input(parser, "names of input genbank files.")
+    add_output(parser, "html", "Write the plot to this html file.", primary=True, required=True)
     parser.add_argument("--height", default=2400, type=int, required=False,
                         help="height of the contig plot, in pixels")
     parser.add_argument("--width", default=1200, type=int, required=False,
@@ -487,24 +484,23 @@ def main(argv):
     parser.add_argument('--color_by', type=str, required=False, default=None,
                         help="Color the contig lines in the plot based on this column of the metadata table.")
     
-    # TODO: allow user to supply a color table, like build_ssn.py
+    # TODO: allow user to supply a color table, like domainator build_ssn
     #TODO: option to embed d3.js (v7) in the html file for offline use
     # TODO: change defaults for proteins?
     
 
     parser.add_argument('--config', action=ActionConfigFile)
-    
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     ### validate input
 
 
-    filetype_override = None
-    if params.input is None:
-        input_path = (sys.stdin,)
-        filetype_override = "genbank"
-    else:
-        input_path = params.input
+    check_outputs(parser, params, ["html_out"])
 
     feature_types = params.types
     if params.types is None:
@@ -513,15 +509,10 @@ def main(argv):
 
 
     ### Run
-    recs = list(parse_seqfiles(input_path, filetype_override=filetype_override))
+    recs = list(parse_seqfiles(params.input))
     
-    create_d3_html(params.html, recs, metadata_files=params.metadata, color_by=params.color_by,
-                   arrow_height=params.feature_height,
-                   feature_label_px=params.feature_font_size,
-                   window_height=params.height, window_width=params.width, feature_types=feature_types)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    with output_file(params.html_out) as html_handle:
+        create_d3_html(html_handle, recs, metadata_files=params.metadata, color_by=params.color_by,
+                       arrow_height=params.feature_height,
+                       feature_label_px=params.feature_font_size,
+                       window_height=params.height, window_width=params.width, feature_types=feature_types)

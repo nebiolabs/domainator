@@ -13,21 +13,21 @@ The cut-points offered by ``thresholds`` and ``node`` are derived from the bundl
 merge order, not read out of it, so ``--max_merge_events`` controls how many are offered
 (``0`` for one per split event) whatever the bundle was built with.
 
-Modes:
+Queries (--query):
   overview    network size, metadata columns, component count, defaults.
   thresholds  suggested similarity cut-points with the resulting cluster counts.
   clusters    list the clusters active at --threshold (with sizes).
-  cluster     detail one cluster (--id or --node): size, members, metadata.
+  cluster     detail one cluster (--cluster or --node): size, members, metadata.
   node        a node's metadata and the cluster it falls in at each cut-point.
 """
 
 import json
 import math
-import sys
 
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
 from domainator.ssn_bundle import (
     clusters_at_threshold,
     coarsest_threshold,
@@ -137,7 +137,7 @@ def _cluster_for_node(hierarchy, node_index, threshold):
     cluster's ancestors merged later and therefore score lower, so the condition fails
     once and the walk stops -- no need to look at any other branch of the tree.
 
-    This is O(depth) rather than O(clusters), which matters because ``--mode node``
+    This is O(depth) rather than O(clusters), which matters because ``--query node``
     repeats the question at every cut-point. The ``>`` is the same strictly-above rule
     the descent uses, so a merge sitting exactly on the cut is not taken.
 
@@ -241,10 +241,10 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
             if cluster_id not in active:
                 raise ValueError(
                     f"Cluster id {cluster_id} is not an active cluster at "
-                    f"threshold {threshold}; use --mode clusters to list valid ids."
+                    f"threshold {threshold}; use --query clusters to list valid ids."
                 )
         else:
-            raise ValueError("cluster mode requires either --id or --node.")
+            raise ValueError("cluster mode requires either --cluster or --node.")
 
         member_indices = component_members(hierarchy, cluster_id)
         result = {
@@ -288,39 +288,42 @@ def ssn_navigator(bundle, mode, threshold=None, cluster_id=None, node=None,
     raise ValueError(f"Unknown mode '{mode}'. Choose one of {MODES}.")
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__,
-                            formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument("-i", "--input", type=str, required=True,
-                        help="A Domainator Similarity Network Viewer bundle (.dsnv) produced by build_ssn_viewer.py.")
-    parser.add_argument("-o", "--output", type=str, default=None,
-                        help="Write JSON to this file. Default: stdout.")
-    parser.add_argument("--mode", type=str, default="overview", choices=MODES,
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, "A Domainator Similarity Network Viewer bundle (.dsnv) produced by build_ssn_viewer.", multiple=False, stdin=False)
+    add_output(parser, "json", "Write the JSON answer to this file.", primary=True)
+    parser.add_argument("--query", type=str, default="overview", choices=MODES,
                         help="Which navigation query to run.")
     parser.add_argument("--threshold", type=str, default=None,
                         help="Similarity threshold to cut the network at (higher = finer "
                              "clusters), matching the viewer's slider. Pass 'inf' for the "
                              "slider's fine end, where every node is its own cluster. Omit "
                              "it for the coarse end: one cluster per connected component.")
-    parser.add_argument("--id", type=int, default=None, dest="cluster_id",
-                        help="Cluster id to describe (see --mode clusters). For --mode cluster.")
+    parser.add_argument("--cluster", type=int, default=None, dest="cluster_id",
+                        help="Cluster id to describe (see --query clusters). For --query cluster.")
     parser.add_argument("--node", type=str, default=None,
-                        help="Node id/name to describe or locate. For --mode cluster/node.")
+                        help="Node id/name to describe or locate. For --query cluster/node.")
     parser.add_argument("--min_size", type=int, default=1,
-                        help="Only report clusters with at least this many members (--mode clusters).")
+                        help="Only report clusters with at least this many members (--query clusters).")
     parser.add_argument("--top_n", type=int, default=50,
                         help="Bound list output: at most this many clusters, category values, etc.")
     parser.add_argument("--members", action="store_true", default=False,
-                        help="Include the full member id list in --mode cluster output.")
+                        help="Include the full member id list in --query cluster output.")
     parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
-                        help="How many split events the --mode thresholds/node cut-points are drawn from: the strongest this many by impact, plus a few so that no 5%% band of the threshold range with an event to offer is left without one. 0 offers a cut-point at every split event. The series is derived from the bundle's merge order, so any value works on any bundle.")
+                        help="How many split events the --query thresholds/node cut-points are drawn from: the strongest this many by impact, plus a few so that no 5%% band of the threshold range with an event to offer is left without one. 0 offers a cut-point at every split event. The series is derived from the bundle's merge order, so any value works on any bundle.")
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    check_outputs(parser, params, ["json_out"])
 
     bundle = load_bundle(params.input)
     result = ssn_navigator(
         bundle,
-        mode=params.mode,
+        mode=params.query,
         threshold=params.threshold,
         cluster_id=params.cluster_id,
         node=params.node,
@@ -330,18 +333,6 @@ def main(argv):
         max_merge_events=params.max_merge_events,
     )
 
-    out_handle = open(params.output, "w") if params.output is not None else sys.stdout
-    try:
+    with output_file(params.json_out) as out_handle:
         json.dump(result, out_handle, separators=(",", ":"))
         out_handle.write("\n")
-    finally:
-        if out_handle is not sys.stdout:
-            out_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == "__main__":
-    _entrypoint()

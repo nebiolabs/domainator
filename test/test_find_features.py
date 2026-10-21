@@ -19,7 +19,6 @@ def test_find_features_import():
     """Test that find_features module can be imported."""
     from domainator import find_features
     assert hasattr(find_features, 'main')
-    assert hasattr(find_features, '_entrypoint')
     assert hasattr(find_features, 'find_features')
 
 
@@ -99,7 +98,7 @@ def test_find_features_protein_fasta(shared_datadir):
             '--input', str(fasta),
             '-o', str(out),
             '--tmbed',
-            '--gpu_device', 'None',  # Use CPU for testing
+            '--device', 'None',  # Use CPU for testing
         ]
         
         main(args)
@@ -125,7 +124,7 @@ def test_find_features_genbank(shared_datadir):
             '--input', str(gb),
             '-o', str(out),
             '--tmbed',
-            '--gpu_device', 'None',  # Use CPU for testing
+            '--device', 'None',  # Use CPU for testing
         ]
         
         main(args)

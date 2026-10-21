@@ -1789,7 +1789,7 @@ def _table_editing_js() -> str:
         });
     }
 
-    // The viewer's counterpart to `build_ssn.py --lb <threshold> --cluster`: writes
+    // The viewer's counterpart to `domainator build_ssn --threshold <threshold> --cluster`: writes
     // the connected-component number at the current threshold into a column. The
     // default name matches that tool's CLUSTER_COLUMN so the two are interchangeable
     // downstream, and an existing column of the same name is overwritten, as there.
@@ -1819,7 +1819,7 @@ def _table_editing_js() -> str:
             writeMetadataValue(nodeIndex, columnName, clusterNumbers.numberFor(nodeIndex));
         });
         // Cluster ids are labels, not magnitudes, so color them as discrete
-        // categories -- the same thing build_ssn_viewer.py's --categorical asks for.
+        // categories -- the same thing domainator build_ssn_viewer's --categorical asks for.
         state.categoricalColumns.add(columnName);
 
         refreshAfterMetadataEdit({columnsChanged: !existing});
@@ -2945,7 +2945,7 @@ def _extraction_js() -> str:
     // remaining pieces relate, and writing them out as separate components
     // would assert an absence of similarity that only the original all-vs-all
     // matrix could establish. Subset that matrix with
-    // build_ssn_viewer.py --subset instead, which measures the relationship
+    // domainator build_ssn_viewer --subset instead, which measures the relationship
     // rather than guessing at it.
     //
     // Nodes in *different* components of the original network are exempt: they
@@ -3436,7 +3436,7 @@ def _extraction_js() -> str:
                 'join them in the MST. The bundle records no similarity between those pieces, so ' +
                 'extracting them would assert they are unrelated. Select the nodes that link them ' +
                 '(raising the threshold shows where the links are), or subset the original matrix ' +
-                'with build_ssn_viewer.py --subset.'};
+                'with domainator build_ssn_viewer --subset.'};
         }
 
         const nodeCount = induced.nodeIndices.length;
@@ -5448,7 +5448,7 @@ def ssn_viewer_html(
         }
         for metric in MERGE_IMPACT_CHOICES
     })
-    # Shared with get_palette (build_ssn.py and friends) so "Domainator distinct"
+    # Shared with get_palette (domainator build_ssn and friends) so "Domainator distinct"
     # in the viewer means the same colors those tools write.
     categorical_palettes_js = json.dumps([
         {
@@ -6604,7 +6604,7 @@ def ssn_viewer_html(
                     <div class="note" id="split-event-count"></div>
                     <div class="split-event-cap">
                         <label for="split-event-cap">Split events</label>
-                        <!-- The cap used to be build_ssn_viewer.py --max_merge_events,
+                        <!-- The cap used to be domainator build_ssn_viewer --max_merge_events,
                              baked into the bundle. The series is derived on load now, so
                              it is a control here instead: raising it costs one replay of
                              the merge order, not a rebuild of the file. -->
@@ -6753,7 +6753,7 @@ def ssn_viewer_html(
                     </select>
                     <button id="metadata-add-column" type="button">Add</button>
                     <span class="metadata-edit-label">or</span>
-                    <button id="metadata-add-cluster-column" type="button" title="Number every node by the cluster it belongs to at the current threshold, largest cluster first — the same column build_ssn.py --cluster writes. Defaults to the name SSN_cluster.">Fill with cluster numbers</button>
+                    <button id="metadata-add-cluster-column" type="button" title="Number every node by the cluster it belongs to at the current threshold, largest cluster first — the same column domainator build_ssn --cluster writes. Defaults to the name SSN_cluster.">Fill with cluster numbers</button>
                 </div>
                 <div id="metadata-set-panel" class="metadata-edit-panel" hidden>
                     <select id="metadata-fill-column"></select>
@@ -7625,7 +7625,7 @@ def ssn_viewer_html(
                 active.push(componentId);
                 continue;
             }}
-            // Strictly-above, matching `build_ssn --lb thresholdValue`: a component that
+            // Strictly-above, matching `build_ssn --threshold thresholdValue`: a component that
             // merged exactly at the threshold is split back apart here.
             if (component.threshold <= thresholdValue) {{
                 stack.push(component.right);
@@ -7934,7 +7934,7 @@ def ssn_viewer_html(
     // colored by a hue hashed from their text -- stable, but arbitrary, and free to
     // put two adjacent categories on nearly the same color. They now get
     // get_palette()'s own 64 distinct colors in sort_palette_values order, so an
-    // untouched viewer agrees with what build_ssn.py would have drawn.
+    // untouched viewer agrees with what domainator build_ssn would have drawn.
     const DEFAULT_CATEGORICAL_PALETTE = 'domainator';
 
     // Derived, not user data: never written into a session, and never reported as
@@ -10749,10 +10749,10 @@ def ssn_viewer_html(
 
     // Cluster numbers for the current threshold, keyed by node index: connected
     // components ranked by size with the largest numbered 1. This mirrors
-    // build_ssn.py's --cluster (CLUSTER_COLUMN, rename_labels_by_frequency + 1),
+    // domainator build_ssn's --cluster (CLUSTER_COLUMN, rename_labels_by_frequency + 1),
     // so a column made here lines up with what that tool writes. Equal-sized
     // clusters are ordered by hierarchy position rather than by lowest member
-    // index, so their numbers can differ from build_ssn.py's on ties.
+    // index, so their numbers can differ from domainator build_ssn's on ties.
     function clusterNumbersAtCurrentThreshold() {{
         const activeClusterIds = activeClustersAtThreshold(selectedThresholdValue());
         const componentAssignments = activeClusterAssignments(activeClusterIds);
@@ -11284,7 +11284,7 @@ def ssn_viewer_html(
 
     // Build a standalone legend SVG for the current color column. Returns
     // {{svg, width, height}}. Discrete columns get a box+label per value (ported from
-    // color_table_to_legend.py); numeric columns get a sampled gradient bar with
+    // domainator color_table_to_legend); numeric columns get a sampled gradient bar with
     // min/mid/max ticks. All fills pass through svgColorParts so default hsl() colors
     // become SVG-editor-safe rgb()+opacity. No external refs (keeps PNG untainted).
     function buildLegendSVG() {{

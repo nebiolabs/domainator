@@ -3,8 +3,8 @@
   "display_name": "Extract Peptides",
   "category": "Editors",
   "description": "Converts annotated CDSs into annotated protein sequences\n\nTakes a domainator-annotated genbank file \nCreates peptide genbank or fasta files with the domainator annotations from the CDSs found in the original\ngenbank file\n\nBy default, extracts peptides from all CDSs in the genbank file.\n\nIf any criteria are supplied, then only peptides from CDSs that meet the criteria will be extracted.\n\nCriteria are combined with the following logic:\n    (all OR target_CDSs OR target_domains OR unannotated OR search_hits) AND (target_contigs OR strand)",
-  "runner": "module",
-  "entry_point": "domainator.extract_peptides",
+  "runner": "domainator",
+  "entry_point": "extract_peptides",
   "parameters": [
     {
       "name": "Input",
@@ -22,17 +22,17 @@
         "gbk",
         "genbank",
         "gbff"
-      ]      
+      ]
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "the name of the output genbank file.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -56,13 +56,17 @@
       ]
     },
     {
-      "name": "Search Hits",
-      "parameter": "search_hits",
-      "help": "extract peptides from the search hits (from domain_search.py).",
-      "type": "boolean",
-      "default": false,
+      "name": "Annotation Type",
+      "parameter": "annotation_type",
+      "help": "Which annotations to select peptides by. With domain_search, the search hits are extracted. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search).",
+      "type": "string",
       "flags": [
-        "--search_hits"
+        "--annotation_type"
+      ],
+      "default": "domainator",
+      "choices": [
+        "domain_search",
+        "domainator"
       ]
     },
     {
@@ -90,21 +94,21 @@
     },
     {
       "name": "Cdss",
-      "parameter": "cdss",
+      "parameter": "cds",
       "help": "only look for peptides on cdss with these names",
       "type": "string",
       "multiple": true,
       "flags": [
-        "--cdss"
+        "--cds"
       ]
     },
     {
       "name": "Cdss File",
-      "parameter": "cdss_file",
+      "parameter": "cds_file",
       "help": "only look for peptides on cdss with names listed in this text file.",
       "type": "file",
       "flags": [
-        "--cdss_file"
+        "--cds_file"
       ]
     },
     {
@@ -140,9 +144,8 @@
     {
       "name": "Fasta Out",
       "parameter": "fasta_out",
-      "help": "makes output a fasta file when activated",
-      "type": "boolean",
-      "default": false,
+      "help": "Write the records to this FASTA file. Use - for standard output.",
+      "type": "output",
       "flags": [
         "--fasta_out"
       ]

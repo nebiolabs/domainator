@@ -3,9 +3,9 @@
   "display_name": "Seq Dist",
   "category": "Comparisons",
   "description": "Calculates similarity scores between protein sequences or HMM profiles\n\nTypically the input and reference will be the same sequence file, creating a pairwise similarity matrix. \nAn hmm file can also be used as a reference to make a table of profile scores for each input peptide.\nAn hmm file can also be used as both input and reference to compare profile similarity.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 1,
-  "entry_point": "domainator.seq_dist",
+  "entry_point": "seq_dist",
   "parameters": [
     {
       "name": "Input",
@@ -52,21 +52,22 @@
     },
     {
       "name": "HDF5 matrix",
-      "parameter": "hdf",
+      "parameter": "hdf_out",
       "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--hdf"
+        "-o",
+        "--hdf_out"
       ]
     },
     {
       "name": "Lb",
-      "parameter": "lb",
+      "parameter": "threshold",
       "help": "Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).",
       "type": "number",
       "default": 0,
       "flags": [
-        "--lb"
+        "--threshold"
       ]
     },
     {
@@ -133,7 +134,7 @@
   "advanced_parameters": [
     {
       "name": "Input Type",
-      "parameter": "input_type",
+      "parameter": "input_format",
       "help": "File type for the sequence file",
       "type": "file",
       "choices": [
@@ -142,12 +143,12 @@
         "genbank"
       ],
       "flags": [
-        "--input_type"
+        "--input_format"
       ]
     },
     {
       "name": "Reference Type",
-      "parameter": "reference_type",
+      "parameter": "reference_format",
       "help": "File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.",
       "type": "string",
       "choices": [
@@ -156,16 +157,16 @@
         "genbank"
       ],
       "flags": [
-        "--reference_type"
+        "--reference_format"
       ]
     },
     {
       "name": "Dense Text Output",
-      "parameter": "dense_text",
+      "parameter": "dense_text_out",
       "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
-        "--dense_text"
+        "--dense_text_out"
       ]
     },
     {

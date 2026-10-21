@@ -5,8 +5,7 @@
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-from jsonargparse import ArgumentParser, ActionConfigFile
-import sys
+from jsonargparse import ActionConfigFile
 from pathlib import Path
 import pandas as pd
 import seaborn as sns
@@ -15,8 +14,7 @@ from sklearn.decomposition import PCA, TruncatedSVD
 import umap
 from matplotlib import pyplot as plt
 import numpy as np
-import json
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, add_output, check_outputs, parse_keyword_args, tool_parser
 from domainator.data_matrix import DataMatrix
 from domainator.cytoscape import write_cytoscape_xgmml
 import scipy as sp
@@ -126,7 +124,7 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
 
     elif algorithm == "coords":
         if algorithm_parameters:
-            raise ValueError(f"--params does not apply to --algorithm coords, which reads the coordinates as given: {algorithm_parameters}")
+            raise ValueError(f"algorithm parameters do not apply to --algorithm coords, which reads the coordinates as given: {algorithm_parameters}")
         embedded = check_coords(n_components, data_matrix)
 
     embedded = center_and_scale(embedded, scale)
@@ -166,12 +164,10 @@ def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_b
                 out.write(f"{domain}\t{color}\n")
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
     
-    input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument('-i', '--input', type=str, required=False,
-                        help="The matrix that you want to project into 2D or 3D space, rows are observations (typically gene names), columns are features (typically similarity to other genes, or hmm profile scores). Format can be tab-separated text or Domainator hdf5.")
+    add_input(parser, "The matrix that you want to project into 2D or 3D space, rows are observations (typically gene names), columns are features (typically similarity to other genes, or hmm profile scores). Format can be tab-separated text or Domainator hdf5.", multiple=False, stdin=False)
 
     #TODO: add a way to train the projection on a subset of rows and/or columns ("training rows")
     #TODO: train just on reference sequences then project on all sequences
@@ -190,39 +186,40 @@ def main(argv):
     parser.add_argument("--color_table", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
     
-    parser.add_argument('--png_out', type=str, required=False, default=None,
-                        help="write a png file of the projection.")
-    
-    parser.add_argument('--xgmml', type=str, required=False, default=None,
-                        help="write a Cytoscape xgmml file of the projection.")
-
-    parser.add_argument('--coords_out', type=str, required=False, default=None,
-                        help="write a tsv file with the projected coordinates.")
+    add_output(parser, "xgmml", "Write the projection to this Cytoscape xgmml file.", primary=True, stdout=False)
+    add_output(parser, "png", "Write a picture of the projection to this png file.", stdout=False)
+    add_output(parser, "coords", "Write the projected coordinates to this tab-separated file.", stdout=False)
 
     # parser.add_argument('--gradient', type=str, required=False, default=None,
     #                     help="Color nodes based on a gradient instead of discrete value mapping.")
 
-    parser.add_argument('--params', type=str, required=False, default=None,
-                        help="additional parameters to pass to the algorithm, in the form of a json dict.")
+    for algorithm in ("pca", "tsne", "umap"):
+        parser.add_argument(f'--{algorithm}_args', type=str, required=False, default=None,
+                            help=f"keyword arguments for the {algorithm} implementation, as key=value pairs in one quoted string, "
+                                 f"for example --{algorithm}_args=\"n_components=2\". Values are read as Python literals where possible.")
     
     parser.add_argument('--scale', type=float, required=False, default=1000,
                         help="scale the largest axis so that the difference between the largest and smallest value is this. Default: 1000")
     
-    parser.add_argument('--3d', action='store_true', default=False,
+    parser.add_argument('--three_d', action='store_true', default=False,
                         help="if set, then makes 3d projections. default: 2d projections.")
     
     parser.add_argument('--config', action=ActionConfigFile)
 
     #TODO: add a way to generate an interactive html output, could be with plotly. You could store the metadata as mouseover notes.
+    return parser
 
 
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    check_outputs(parser, params, ["xgmml_out", "png_out", "coords_out"])
 
-
-    algorithm_parameters = {}
-    if params.params:
-        new_params = "{" + params.params + "}" 
-        algorithm_parameters = json.loads(new_params)
+    for algorithm in ("pca", "tsne", "umap"):
+        if algorithm != params.algorithm and getattr(params, f"{algorithm}_args"):
+            parser.error(f"--{algorithm}_args was given, but --algorithm is {params.algorithm}.")
+    algorithm_args = getattr(params, f"{params.algorithm}_args", None)
+    algorithm_parameters = parse_keyword_args(algorithm_args, f"--{params.algorithm}_args")
 
     input_file = params.input
 
@@ -233,12 +230,6 @@ def main(argv):
     # Run
     # def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_by, png_out, coords_out, xgmml, scale, three_dee=False, algorithm_parameters=None)
     build_projection(data_matrix=DataMatrix.from_file(input_file), algorithm=params.algorithm, metadata_files=params.metadata, color_by=params.color_by, 
-                     png_out=params.png_out, coords_out=params.coords_out, xgmml=params.xgmml, scale=params.scale, three_dee=vars(params)['3d'], 
+                     png_out=params.png_out, coords_out=params.coords_out, xgmml=params.xgmml_out, scale=params.scale, three_dee=params.three_d, 
                      algorithm_parameters=algorithm_parameters,
                      color_table=color_table, color_table_out=params.color_table_out)
-
-def _entrypoint():
-    main(sys.argv[1:])
-    
-if __name__ == '__main__':
-    main(sys.argv[1:])

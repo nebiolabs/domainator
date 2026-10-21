@@ -8,14 +8,16 @@ An hmm file can also be used as both input and reference to compare profile simi
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import heapq
-import json
+import re
+import shlex
 import shutil
 import sys
 import subprocess
 import tempfile
 import threading
+from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
 from domainator.Bio import SeqIO
 from collections import OrderedDict,namedtuple, defaultdict
 import numpy as np
@@ -23,9 +25,8 @@ import scipy.stats
 import scipy.sparse
 import pyhmmer
 import tqdm
-from typing import Iterator, List
+from typing import Iterator
 from domainator.utils import get_file_type, open_hmm_file, parse_seqfiles, make_pool, pyhmmer_decode
-from domainator import __version__, RawAndDefaultsFormatter
 from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
 from domainator.hmmer_search import compare_hmmer
 from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
@@ -37,7 +38,6 @@ from domainator.sparsify import (MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_
 # Modes whose post-transform values are computable per edge (no global matrix maxes),
 # and therefore compatible with streaming --mst/--knn pruning.
 SPARSIFY_STREAMABLE_MODES = {"score", "bool", "efi_score"}
-import psutil
 
 CmpResult = namedtuple("CmpResult", ["score", "input", "reference"])
 
@@ -222,7 +222,7 @@ def _finish_query_progress(progress_bar, current_query_idx, total_queries):
 PREFLIGHT_SEQUENCE_THRESHOLD = 50_000
 # Sensitivities where diamond auto-selects --index-chunks 1 (measured, diamond v2.2.5.185).
 SINGLE_INDEX_CHUNK_MODES = frozenset({"vs", "us"})
-# --params keys that mean the caller has already bounded diamond's scratch themselves.
+# --diamond_args flags that mean the caller has already bounded diamond's scratch themselves.
 _SCRATCH_TUNING_FLAGS = frozenset({"-b", "--block-size", "-c", "--index-chunks"})
 
 
@@ -254,8 +254,8 @@ def build_diamond_preflight_warning(mode, n_sequences, total_letters, square,
         lines.append("  only the filesystem's free space reflects it.")
     lines.append("  Peak scratch can reach the terabyte range for a redundant input, and is")
     lines.append("  not tuned automatically because it cannot be predicted from input size.")
-    lines.append("  To bound it, pass block/index-chunk options through --params, e.g.:")
-    lines.append("      --params '\"-b\":0.07, \"-c\":4'")
+    lines.append("  To bound it, pass block/index-chunk options through --diamond_args, e.g.:")
+    lines.append("      --diamond_args=\"-b 0.07 -c 4\"")
     lines.append("  A smaller -b lowers peak scratch further; -c splits the reference index")
     lines.append("  into that many passes. Neither changes the resulting matrix.")
     lines.append("  Lowering --algorithm (diamond_s, diamond_mids) reduces the work most, but")
@@ -279,14 +279,14 @@ _DISK_MITIGATIONS = (
     "Lower the sensitivity: --algorithm diamond_s (16 seed shapes) or diamond_mids (8), "
     "instead of diamond_us (64). This is usually the single largest reduction.",
     "Shrink diamond's query blocks so less scratch is live at once, e.g. "
-    "--params '\"-b\":0.01, \"-c\":4'. Peak scratch scales roughly with -b.",
+    "--diamond_args=\"-b 0.01 -c 4\". Peak scratch scales roughly with -b.",
     "Put the scratch on a larger filesystem: set TMPDIR, or "
-    "--params '\"--tmpdir\":\"/path/with/space\"'.",
+    "--diamond_args=\"--tmpdir /path/with/space\".",
     "Consider fewer input sequences (for example dereplicating first); the seed-hit "
     "volume grows quadratically with the size of a redundant input.",
 )
 _MEMORY_MITIGATIONS = (
-    "Shrink diamond's query blocks: --params '\"-b\":0.01, \"-c\":4'.",
+    "Shrink diamond's query blocks: --diamond_args=\"-b 0.01 -c 4\".",
     "Lower the sensitivity: --algorithm diamond_s or diamond_mids.",
     "Use fewer threads (--cpu N); diamond allocates per-thread buffers.",
 )
@@ -323,7 +323,7 @@ def build_diamond_failure_message(stage, returncode, stderr_text, input_fasta,
     """Explain a failed diamond run and suggest what the caller can change.
 
     Recognizes the failure modes that are actionable from the seq_dist command line
-    (scratch disk exhaustion, memory exhaustion, a rejected --params flag, unreadable
+    (scratch disk exhaustion, memory exhaustion, a rejected --diamond_args flag, unreadable
     input) and falls back to the raw stderr when the cause is not one of those.
     """
     haystack = stderr_text.lower()
@@ -359,11 +359,11 @@ def build_diamond_failure_message(stage, returncode, stderr_text, input_fasta,
         lines.append("")
         lines.append("  Cause: diamond rejected one of its command line options.")
         if diamond_params:
-            rendered = ", ".join(f'"{flag}":{value!r}' for flag, value in diamond_params.items())
-            lines.append(f"  Options passed via --params: {rendered}")
-            lines.append("  Check these against `diamond blastp --help`; --params is forwarded as-is.")
+            rendered = " ".join(flag if value is None else f"{flag} {value}" for flag, value in diamond_params.items())
+            lines.append(f"  Options passed via --diamond_args: {rendered}")
+            lines.append("  Check these against `diamond blastp --help`; --diamond_args is forwarded as-is.")
         else:
-            lines.append("  No --params were supplied, so this may be a diamond version mismatch.")
+            lines.append("  No --diamond_args were supplied, so this may be a diamond version mismatch.")
     elif any(pattern in haystack for pattern in _DIAMOND_INPUT_PATTERNS):
         lines.append("")
         lines.append("  Cause: diamond could not read an input or database file.")
@@ -378,7 +378,7 @@ def build_diamond_failure_message(stage, returncode, stderr_text, input_fasta,
     return "\n".join(lines)
 
 
-# diamond options that seq_dist sets itself. Overriding these through --params would
+# diamond options that seq_dist sets itself. Overriding these through --diamond_args would
 # either break parsing of the result stream or silently contradict a seq_dist option,
 # so they are rejected with a pointer to the option that does control them.
 RESERVED_DIAMOND_PARAMS = {
@@ -393,7 +393,7 @@ RESERVED_DIAMOND_PARAMS = {
     "-k": "-k",
     "--max-target-seqs": "-k",
     "--max-hsps": "seq_dist (fixed at 1)",
-    "--min-score": "--lb",
+    "--min-score": "--threshold",
     "--verbose": "seq_dist (required for progress reporting)",
     "--fast": "--algorithm",
     "--mid-sensitive": "--algorithm",
@@ -403,41 +403,48 @@ RESERVED_DIAMOND_PARAMS = {
     "--ultra-sensitive": "--algorithm",
 }
 
-# diamond options seq_dist supplies a default for, but which --params may replace.
+# diamond options seq_dist supplies a default for, but which --diamond_args may replace.
 def _default_overridable_diamond_params(tmpdir):
     return OrderedDict((("--algo", "0"), ("--tmpdir", tmpdir)))
 
 
-def parse_diamond_params(params_str):
-    """Parse a --params string into an ordered dict of {flag: value}.
+def parse_diamond_args(args_str):
+    """Parse a --diamond_args string into an ordered dict of {flag: value}.
 
-    The string is a json dict body without the enclosing braces, matching the
-    --params syntax of deduplicate_genbank.py, for example: '"-c":4, "-b":0.4'.
-    A null value means the flag takes no argument, for example: '"--target-indexed":null'.
+    The string is split like a shell command line, for example: "-c 4 -b 0.4 --target-indexed".
+    A flag followed by another flag (or by nothing) takes no argument and maps to None.
     """
-    if not params_str:
+    if not args_str:
         return OrderedDict()
     try:
-        parsed = json.loads("{" + params_str + "}", object_pairs_hook=OrderedDict)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Could not parse --params as a json dict: {exc}\n"
-            "Expected a json dict body without the outer braces, such as: "
-            "--params '\"-c\":4, \"-b\":0.4'"
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise ValueError("--params must be a json dict of diamond options, such as: --params '\"-c\":4'")
-    for flag in parsed:
-        if not flag.startswith("-"):
-            raise ValueError(
-                f"--params keys must be diamond option flags starting with '-', but got: {flag!r}"
-            )
+        tokens = shlex.split(args_str)
+    except ValueError as exc:
+        raise ValueError(f"Could not split --diamond_args into options: {exc}") from exc
+
+    def is_flag(token):
+        return token.startswith("-") and not _NUMBER_RE.fullmatch(token)
+
+    parsed = OrderedDict()
+    i = 0
+    while i < len(tokens):
+        flag = tokens[i]
+        if not is_flag(flag):
+            raise ValueError(f"--diamond_args must be diamond options starting with '-', but got: {flag!r}")
         if flag in RESERVED_DIAMOND_PARAMS:
             raise ValueError(
-                f"--params may not set '{flag}', because seq_dist controls it via "
+                f"--diamond_args may not set '{flag}', because seq_dist controls it via "
                 f"{RESERVED_DIAMOND_PARAMS[flag]}."
             )
+        if i + 1 < len(tokens) and not is_flag(tokens[i + 1]):
+            parsed[flag] = tokens[i + 1]
+            i += 2
+        else:
+            parsed[flag] = None
+            i += 1
     return parsed
+
+
+_NUMBER_RE = re.compile(r"-?\d+(\.\d*)?([eE][-+]?\d+)?")
 
 
 def add_params_to_args_list(arg_list, params):
@@ -494,7 +501,7 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
         dmnd_command.extend(["--min-score", str(min_score)])
     dmnd_command.extend(mode_to_arg[mode])
 
-    # Defaults seq_dist supplies but --params may replace. --tmpdir defaults to the
+    # Defaults seq_dist supplies but --diamond_args may replace. --tmpdir defaults to the
     # managed temporary directory so that diamond's (large, unlinked-while-open)
     # search scratch lands next to the database instead of in the working directory.
     overridable_params = _default_overridable_diamond_params(tmpdir)
@@ -722,8 +729,8 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
             raise ValueError(
                 f"{option} is only supported with --mode {sorted(SPARSIFY_STREAMABLE_MODES)} "
                 f"(modes that normalize against global matrix maxima cannot be streamed). "
-                f"For '{mode}', run 'seq_dist --mode score --hdf out.hdf5' then "
-                f"'transform_matrix -i out.hdf5 --mode {mode} {option} --hdf pruned.hdf5'."
+                f"For '{mode}', run 'seq_dist --mode score --hdf_out out.hdf5' then "
+                f"'transform_matrix -i out.hdf5 --mode {mode} {option} --hdf_out pruned.hdf5'."
             )
         if reference_path != input_path:
             raise ValueError(
@@ -822,7 +829,7 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
             # bounded memory; the full all-vs-all matrix is never materialized. mode value
             # is computed per edge (no global maxima needed for score/efi_score). bool
             # selects on the raw score, since all-1 values would leave nothing to rank, and
-            # becomes a 0/1 mask afterward. The raw-score --lb gate runs first (matching the
+            # becomes a 0/1 mask afterward. The raw-score --threshold gate runs first (matching the
             # help text), then the accumulator prunes on values > 0.
             log_lengths = np.log10(np.asarray(query_idx_to_len, dtype=np.float64)) if mode == "efi_score" else None
             accumulator = StreamingMstKnnAccumulator(len(query_name_to_idx), mst=mst, knn=knn, lower_bound=0)
@@ -870,30 +877,28 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
         write_matrix_outputs(
             matrix, query_idx_to_name, db_idx_to_name,
             hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--max_hits_per_query", "--lb", "--mst", "--knn"],
+            mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
             row_lengths=query_idx_to_len, col_lengths=db_idx_to_len, data_type=mode,
         )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
 
-def main(argv):
-    #TODO: support for nucleotide sequences? (see compare_contigs.py), can be implemented easily with nhmmer, without adding new dependencies.
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument('-i', '--input', type=str, required=True,
-                        help="Input query file. Queries in the input file will be compared to the reference sequences/profiles. This can be a fasta, genbank, or hmm file.")
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, "Input query file. Queries in the input file will be compared to the reference sequences/profiles. This can be a fasta, genbank, or hmm file.", multiple=False, stdin=False)
 
-    parser.add_argument('--input_type', type=str, required=False, default=None, choices={"fasta", "genbank", "hmm"},
-                        help="File type for the sequence file.")
+    parser.add_argument('--input_format', type=str, required=False, default=None, choices=["fasta", "genbank", "hmm"],
+                        help="File format of the input, if it cannot be told from the file extension.")
 
     parser.add_argument('-r', "--reference", type=str, required=False,
                         help="Reference file. If not provided, the input file will be used as the reference, and the output will be a pairwise similarity matrix between the input sequences/profiles. This can be a fasta, genbank, or hmm file.")
 
-    parser.add_argument('--reference_type', type=str, required=False, default=None, choices={"fasta", "genbank", "hmm"},
-                        help="File type for the sequence file. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.")
+    parser.add_argument('--reference_format', type=str, required=False, default=None, choices=["fasta", "genbank", "hmm"],
+                        help="File format of the reference, if it cannot be told from the file extension. Ignored for some kinds of algorithms, for example, hmmer expects a .hmm reference file.")
 
     add_matrix_output_arguments(parser, noun="similarity (or, for *_dist modes, distance) matrix")
 
-    parser.add_argument('--lb', default=0, type=float, required=False,
+    parser.add_argument('--threshold', default=0, type=float, required=False,
                         help="Round any scores lower than this down to zero (this applies to raw scores not processed/normalized).")
 
 
@@ -903,24 +908,24 @@ def main(argv):
     parser.add_argument('--algorithm', type=str, required=False, default="diamond_us", choices={"diamond_f", "diamond_d", "diamond_mids", "diamond_s", "diamond_mors", "diamond_vs", "diamond_us", "hmmer", "hmmer_compare"},
                         help="Which distance metric to use, diamond_*; f: fast, d: default, mids: mid-sensitive, s: sensitive, mors: more-sensitive, vs: very-sensitive, us: ultra-sensitive. default: diamond_us (ultra sensitive)")
 
-    parser.add_argument("--params", default=None,
-                        help='String of extra parameters to pass to diamond blastp, as a json dict body in single quotes. '
-                             'Example: \'"-c":4, "-b":0.4\'. Use a null value for flags that take no argument, such as \'"--target-indexed":null\'. '
+    parser.add_argument("--diamond_args", default=None,
+                        help="Extra options for diamond blastp, as one quoted string split like a shell command line. Use the = form: "
+                             '--diamond_args="-c 4 -b 0.4 --target-indexed". '
                              "Options that seq_dist sets itself (query, database, --outfmt, -p, --max-target-seqs, --max-hsps, --min-score, --verbose, and the sensitivity flags) "
                              "are rejected; use the corresponding seq_dist option instead. "
                              "seq_dist defaults --algo to 0 and --tmpdir to its own managed temporary directory; both can be replaced here. "
                              "Useful for large all-vs-all runs, where diamond's seed-search scratch can exceed available disk: "
                              "a smaller --block-size (-b) and/or more --index-chunks (-c) bound its peak scratch usage.")
 
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool, efi_score}; bool selects on the scores and then keeps the selected cells as 1. Best paired with --hdf.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool, efi_score}; bool selects on the scores and then keeps the selected cells as 1. Best paired with --hdf_out.")
 
-    add_symmetrize_argument(parser, extra_help="Applied to the raw scores, after --lb and --max_hits_per_query. Requires the reference to be the same file as the input. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
+    add_symmetrize_argument(parser, extra_help="Applied to the raw scores, after --threshold and --max_hits_per_query. Requires the reference to be the same file as the input. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")
 
     parser.add_argument('--cpu', type=int, default=0, required=False,
-                        help="how many cpu threads to use. Default: use all available cores.")
+                        help="how many cpu threads to use. 0: one per physical core.")
 
     parser.add_argument('--progress', action='store_true',
                         help="Show a progress bar for long-running steps.")
@@ -928,13 +933,19 @@ def main(argv):
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    #TODO: support for nucleotide sequences? (see domainator compare_contigs), can be implemented easily with nhmmer, without adding new dependencies.
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     ### make output directory
 
-    input_type = params.input_type
-    if params.input_type is None:
+    reject_stdin(parser, [params.input, params.reference] if params.reference else [params.input])
+    input_type = params.input_format
+    if params.input_format is None:
         input_type = get_file_type(params.input)
 
     if params.reference is None:
@@ -942,28 +953,18 @@ def main(argv):
         reference_type = input_type
     else:
         reference_path = params.reference
-        reference_type = params.reference_type
-        if params.reference_type is None:
+        reference_type = params.reference_format
+        if params.reference_format is None:
             reference_type = get_file_type(reference_path)
 
     hdf, dense_text = resolve_matrix_outputs(params)
 
-    if params.cpu <= 0:
-        cpus = psutil.cpu_count(logical=False)
-    else:
-        cpus = params.cpu
+    cpus = resolve_cpu(params.cpu)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
-    diamond_params = parse_diamond_params(params.params)
+    diamond_params = parse_diamond_args(params.diamond_args)
     if diamond_params and not params.algorithm.startswith("diamond"):
-        raise ValueError(f"--params only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
+        raise ValueError(f"--diamond_args only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, hdf, dense_text, params.lb, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params, symmetrize=params.symmetrize)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-
+    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, hdf, dense_text, params.threshold, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params, symmetrize=params.symmetrize)

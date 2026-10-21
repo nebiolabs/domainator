@@ -206,7 +206,7 @@ def test_clean_sequences_fasta_output(shared_datadir):
     """Test fasta output"""
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/clean_out.fasta"
-        clean_sequences.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--fasta_out"])
+        clean_sequences.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--fasta_out", out])
         # Just verify the file exists and can be read
         seqs = list(utils.parse_seqfiles([out]))
         assert len(seqs) > 0
@@ -269,7 +269,7 @@ def test_clean_sequences_log_file(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/clean_out.gb"
         log = output_dir + "/clean_log.txt"
-        clean_sequences.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--strip", "--log", log])
+        clean_sequences.main(["-i", str(shared_datadir / "simple_genpept.gb"), "-o", out, "--strip", "--log_out", log])
         
         with open(log, "r") as f:
             log_content = f.read()

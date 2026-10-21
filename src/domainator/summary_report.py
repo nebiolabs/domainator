@@ -20,8 +20,8 @@
 ### TODO: maybe make the output just a single html file instead of a directory?
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-from jsonargparse import ArgumentParser, ActionConfigFile
-import sys
+from jsonargparse import ActionConfigFile
+import contextlib
 from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -29,17 +29,18 @@ import pandas as pd
 from io import BytesIO
 import base64
 import html
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, TaxonomyData, get_taxid, get_fragment_status, fragment_status_allowed, get_cds_unique_name, PARTIAL_CHOICES, partial_help
 from domainator.data_matrix import DataMatrix
-from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
+from domainator import DOMAIN_FEATURE_NAME
 import numpy as np
-from typing import Dict, List
+from typing import Dict
 from bashplotlib.histogram import plot_hist
 import io
 from contextlib import redirect_stdout
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
-from collections import deque
 from domainator.filter_domains import filter_domains
 
 
@@ -469,7 +470,7 @@ def tax_data_to_hierarchy(tax_data):
 
     
 
-def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurence_fraction_outfile=None, co_occurence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None, partial="include"):
+def summary_report(records, out_text_handle, out_html_handle, focus_domains=None, co_occurrence_fraction_outfile=None, co_occurrence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None, partial="include"):
     """
 
         Args:
@@ -607,37 +608,26 @@ def summary_report(records, out_text_handle, out_html_handle, focus_domains=None
             output.write_taxonomy(taxa_data)
         output.write_footer()
 
-    if co_occurence_fraction_outfile is not None:
-        write_cooccurence_matrix(domains, co_occurence_fraction_outfile, row_norm=True)
+    if co_occurrence_fraction_outfile is not None:
+        write_cooccurence_matrix(domains, co_occurrence_fraction_outfile, row_norm=True)
     
-    if co_occurence_count_outfile is not None:
-        write_cooccurence_matrix(domains, co_occurence_count_outfile, row_norm=False)
+    if co_occurrence_count_outfile is not None:
+        write_cooccurence_matrix(domains, co_occurrence_count_outfile, row_norm=False)
 
     if domains_table is not None:
         domain_table_df.to_csv(domains_table, sep="\t", index=False)
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs='+', type=str, help="name of input genbank files.")
-    
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="Text file to write output to.")
-    
-    parser.add_argument('--html', default=None, required=False,
-                        help="html file to write output to.")
+    add_input(parser, "name of input genbank files.")
 
-    parser.add_argument('--json', default=None, required=False,
-                        help="Write the full summary as a single compact JSON object to this file. Use '-' for stdout.")
-
-    parser.add_argument('--domains_table', default=None, required=False,
-                        help="Write a tab-separated table of domain frequencies to this file. Headers are: domain, database, count, description, avg score.")
-
-    parser.add_argument('--co_occurence_fraction', default=None, required=False,
-                        help="Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the fraction of contigs containing the row-domain that also include the column-domain (so the matrix is assymetric).")
-    
-    parser.add_argument('--co_occurence_count', default=None, required=False,
-                        help="Write a dense text matrix of domain co-occurence frequencies to this file. Every row is a domain, the values are the number of contigs containing both the row-domain and the column-domain (so the matrix is symmetric).")
+    add_output(parser, "text", "Write the report as text to this file.", primary=True)
+    add_output(parser, "html", "Write the report as html to this file.")
+    add_output(parser, "json", "Write the full summary as a single compact JSON object to this file.")
+    add_output(parser, "domains_tsv", "Write a tab-separated table of domain frequencies to this file. Headers are: domain, database, count, description, avg score.", stdout=False)
+    add_output(parser, "co_occurrence_fraction", "Write a dense text matrix of domain co-occurrence frequencies to this file. Every row is a domain, the values are the fraction of contigs containing the row-domain that also include the column-domain (so the matrix is asymmetric).", stdout=False)
+    add_output(parser, "co_occurrence_count", "Write a dense text matrix of domain co-occurrence frequencies to this file. Every row is a domain, the values are the number of contigs containing both the row-domain and the column-domain (so the matrix is symmetric).", stdout=False)
 
     parser.add_argument('--taxonomy', default=False, required=False, action="store_true",
                         help="Write a summary of the taxonomic origins of the contigs.")
@@ -668,32 +658,15 @@ def main(argv):
 
     # TODO: domain scores histogram #for command line, maybe use bashplotlib
     # TODO: domain_search scores histogram
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    if params.output is None and params.html is None and params.json is None and params.co_occurence_fraction is None and params.co_occurence_count is None and params.domains_table is None:
-        parser.error("No output file specified. Use --output, --html, --json, --co_occurence_fraction, and/or --co_occurence_count and/or --domains_table to specify at least one output file.")
-
-
-    out = None
-    if params.output is not None:
-        out = open(params.output, "w")
-
-    out_html_handle = None
-    if params.html is not None:
-        out_html_handle = open(params.html, "w")
-
-    out_json_handle = None
-    if params.json is not None:
-        out_json_handle = sys.stdout if params.json == "-" else open(params.json, "w")
- 
-
-    # decide whether input is from stdin
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
+    check_outputs(parser, params, ["text_out", "html_out", "json_out", "domains_tsv_out",
+                                   "co_occurrence_fraction_out", "co_occurrence_count_out"])
 
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)
@@ -712,33 +685,20 @@ def main(argv):
         databases = set(params.databases)
 
     ### Run
-    summary_report(
-        parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override), 
-        out,
-        out_html_handle,
-        selected_domains,
-        params.co_occurence_fraction,
-        params.co_occurence_count,
-        report_taxonomy=params.taxonomy,
-        ncbi_taxonomy=ncbi_taxonomy,
-        domains_table=params.domains_table,
-        databases=databases,
-        out_json_handle=out_json_handle,
-        partial=params.partial,
-    )
-
-    if params.output is not None and params.output != "-":
-        out.close()
-
-    if params.html is not None:
-        out_html_handle.close()
-
-    if out_json_handle is not None and out_json_handle is not sys.stdout:
-        out_json_handle.close()
-
-def _entrypoint():
-    main(sys.argv[1:])    
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-  
+    with contextlib.ExitStack() as outputs:
+        def open_output(path):
+            return None if path is None else outputs.enter_context(output_file(path))
+        summary_report(
+            parse_seqfiles(params.input, target_contigs),
+            open_output(params.text_out),
+            open_output(params.html_out),
+            selected_domains,
+            params.co_occurrence_fraction_out,
+            params.co_occurrence_count_out,
+            report_taxonomy=params.taxonomy,
+            ncbi_taxonomy=ncbi_taxonomy,
+            domains_table=params.domains_tsv_out,
+            databases=databases,
+            out_json_handle=open_output(params.json_out),
+            partial=params.partial,
+        )

@@ -42,7 +42,7 @@ def test_hmmer_report_alphabet_column(shared_datadir):
 def test_hmmer_report_alphabet_column_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         json_path = output_dir + "/out.ndjson"
-        hmmer_report.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "--alphabet", "--json", json_path])
+        hmmer_report.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "--alphabet", "--json_out", json_path])
         records = [json.loads(line) for line in Path(json_path).read_text().splitlines() if line.strip()]
         assert [rec["name"] for rec in records] == ["dna_prof_1", "dna_prof_2", "dna_prof_3"]
         assert {rec["alphabet"] for rec in records} == {"DNA"}

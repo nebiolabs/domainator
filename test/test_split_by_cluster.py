@@ -69,8 +69,8 @@ def test_split_by_cluster_genbank_matrix_formats(shared_datadir, tmp_path, matri
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
         "--write_small_clusters",
     ])
@@ -91,8 +91,8 @@ def test_split_by_cluster_fasta(shared_datadir, tmp_path):
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
         "--write_small_clusters",
     ])
@@ -113,8 +113,8 @@ def test_split_by_cluster_hmm(shared_datadir, tmp_path):
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
         "--write_small_clusters",
     ])
@@ -137,8 +137,8 @@ def test_split_by_cluster_cm_small_clusters(shared_datadir, tmp_path):
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
         "--write_small_clusters",
     ])
@@ -158,7 +158,7 @@ def test_split_by_cluster_requires_exact_label_match(shared_datadir, tmp_path):
         split_by_cluster.main([
             "-i", str(input_path),
             "--matrix", str(matrix_path),
-            "--outdir", str(tmp_path / "out"),
+            "--output_dir", str(tmp_path / "out"),
         ])
 
 
@@ -172,8 +172,8 @@ def test_split_by_cluster_skips_small_clusters_by_default(shared_datadir, tmp_pa
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
     ])
 
@@ -192,7 +192,7 @@ def test_split_by_cluster_pad_on_search_hits_centers_genbank(shared_datadir, tmp
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
+        "--output_dir", str(tmp_path / "out"),
         "--pad_on_search_hits",
     ])
 
@@ -215,7 +215,7 @@ def test_split_by_cluster_pad_on_search_hits_requires_domain_search(shared_datad
         split_by_cluster.main([
             "-i", str(input_path),
             "--matrix", str(matrix_path),
-            "--outdir", str(tmp_path / "out"),
+            "--output_dir", str(tmp_path / "out"),
             "--pad_on_search_hits",
         ])
 
@@ -230,7 +230,7 @@ def test_split_by_cluster_pad_on_search_hits_requires_genbank(shared_datadir, tm
         split_by_cluster.main([
             "-i", str(input_path),
             "--matrix", str(matrix_path),
-            "--outdir", str(tmp_path / "out"),
+            "--output_dir", str(tmp_path / "out"),
             "--pad_on_search_hits",
         ])
 
@@ -248,8 +248,8 @@ def test_split_by_cluster_refuses_to_overwrite(shared_datadir, tmp_path):
         split_by_cluster.main([
             "-i", str(input_path),
             "--matrix", str(matrix_path),
-            "--outdir", str(outdir),
-            "--lb", "0",
+            "--output_dir", str(outdir),
+            "--threshold", "0",
             "--min_cluster_size", "2",
         ])
 
@@ -294,8 +294,8 @@ def test_split_by_cluster_hmm_gzip(shared_datadir, tmp_path):
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
         "--write_small_clusters",
     ])
@@ -320,7 +320,7 @@ def test_split_by_cluster_rejects_compressed_cm(shared_datadir, tmp_path):
         split_by_cluster.main([
             "-i", str(compressed_cm),
             "--matrix", str(matrix_path),
-            "--outdir", str(tmp_path / "out"),
+            "--output_dir", str(tmp_path / "out"),
         ])
 
 
@@ -343,8 +343,8 @@ def test_split_by_cluster_genbank_bgzf(shared_datadir, tmp_path):
     split_by_cluster.main([
         "-i", str(input_path),
         "--matrix", str(matrix_path),
-        "--outdir", str(tmp_path / "out"),
-        "--lb", "0",
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
         "--min_cluster_size", "2",
         "--write_small_clusters",
     ])

@@ -1,6 +1,6 @@
 """Search a structure database with a small number of reference structures.
 
-The structure-input counterpart of domain_search.py. For searching large structure
+The structure-input counterpart of domainator domain_search. For searching large structure
 databases (for example a foldseek database built from AlphaFold DB) with a handful of
 reference structures.
 
@@ -19,16 +19,16 @@ never read end to end and its size does not bound memory. Note that --max_seqs b
 many hits the backend keeps per reference; the default is low for a large database, and a
 warning is issued whenever a reference saturates it.
 
-Use structure_domainate.py instead to annotate every input structure rather than select
-hits, and structure_to_genbank.py to convert structures without searching at all.
+Use domainator structure_domainate instead to annotate every input structure rather than select
+hits, and domainator structure_to_genbank to convert structures without searching at all.
 """
 
 import heapq
 import sys
 
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator import domainate
 from domainator import structure_lib
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
@@ -132,7 +132,7 @@ def _emit_groups(groups, max_hits, max_overlap, overlap_by_db, add_annotations):
 
     Without max_hits records stream out as their groups complete. With it, a bounded heap
     keyed on best hit score holds the current top max_hits and the survivors are written
-    best-first once the search finishes -- the same policy as domain_search.py. Each heap
+    best-first once the search finishes -- the same policy as domainator domain_search. Each heap
     entry carries its own sequence, so the heap bounds memory as well as output.
     """
     if max_hits is None:
@@ -215,15 +215,13 @@ def _emit_groups_with_db_sequences(groups, aligner, input_db, max_hits, max_over
                             overlap_by_db, add_annotations)
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', default=None, required=True, nargs='+', type=str,
-                        help="the structure database to search: the prefix of a prebuilt foldseek database, or pdb/cif files (optionally gzipped), a directory to search recursively, or a glob.")
-    parser.add_argument('-r', '--references', default=None, required=True, nargs='+', type=str,
+    add_input(parser, "the structure database to search: the prefix of a prebuilt foldseek database, or pdb/cif files (optionally gzipped), a directory to search recursively, or a glob.", stdin=False)
+    parser.add_argument('-r', '--reference', default=None, required=True, nargs='+', type=str,
                         help="reference structures to search with. Same accepted forms as --input.")
-    parser.add_argument('-o', '--output', default=None, type=str,
-                        help="output genbank filename. If not supplied, or if given as '-', writes to stdout.")
+    add_seq_outputs(parser)
     parser.add_argument('-e', '--evalue', type=float, default=0.001,
                         help="threshold E value for a hit. E values are computed against the searched database.")
     parser.add_argument('--min_evalue', type=float, default=0.0,
@@ -238,15 +236,20 @@ def main(argv):
                         help="also write a Domainator feature for every hit, in addition to the Domain_Search feature for the best hit.")
     parser.add_argument('--database_name', default=None, type=str,
                         help="value for the /database qualifier on the annotations. Defaults to the reference database or directory name.")
-    parser.add_argument('--keep_db', default=None, type=str,
+    parser.add_argument('--db_out', default=None, type=str,
                         help="when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix.")
-    parser.add_argument('--hits_tsv', default=None, type=str,
+    parser.add_argument('--hits_tsv_out', default=None, type=str,
                         help="write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output.")
     structure_lib.add_backend_arguments(parser)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     if params.evalue <= 0:
         raise RuntimeError("--evalue must be greater than 0.")
@@ -262,25 +265,15 @@ def main(argv):
     aligner.check_capabilities(params.alignment_type, params.metrics or [], [])
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    output_description = f"structure_search genbank output ({params.output or 'stdout'})"
 
     records = structure_search(
-        params.input, params.references, aligner,
+        params.input, params.reference, aligner,
         evalue=params.evalue, min_evalue=params.min_evalue, max_hits=params.max_hits,
         max_overlap=params.max_overlap, overlap_by_db=params.overlap_by_db,
         add_annotations=params.add_annotations, alignment_type=params.alignment_type,
         metrics=params.metrics, max_seqs=params.max_seqs, tmp_dir=params.tmp_dir,
-        keep_db=params.keep_db, database_name=params.database_name,
-        hits_tsv=params.hits_tsv,
+        keep_db=params.db_out, database_name=params.database_name,
+        hits_tsv=params.hits_tsv_out,
     )
 
-    structure_lib.write_records(records, params.output, max_output_bytes,
-                                output_description, MITIGATION_OPTIONS)
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    structure_lib.write_records(records, params.genbank_out, params.fasta_out, max_output_bytes, MITIGATION_OPTIONS)

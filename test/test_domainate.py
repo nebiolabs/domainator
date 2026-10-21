@@ -26,7 +26,7 @@ def test_domainator_one_file(Z, expected_string, shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out{Z}.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
         args += ["-Z", str(Z)]
         main(args)
         assert os.path.isfile(out)
@@ -49,7 +49,7 @@ def test_domainator_multi(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         assert len(glob(output_dir+"/*.gb")) == 1
@@ -62,7 +62,7 @@ def test_domainator_no_cdss(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input', str(gb),  "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input', str(gb),  "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         assert len(glob(output_dir+"/*.gb")) == 1
@@ -75,7 +75,7 @@ def test_domainator_pseudo(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input', str(gb),  "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--hits_only", "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input', str(gb),  "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--hits_only", "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         assert len(glob(output_dir+"/*.gb")) == 1
@@ -173,7 +173,7 @@ def test_annotate_peptides(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out_fa"
-        main(['-i', str(shared_datadir/"FeSOD_20.gb"), '--references', str(shared_datadir/"FeSOD_pfam.hmm"), "--output", out + ".gb"])
+        main(['-i', str(shared_datadir/"FeSOD_20.gb"), '--reference', str(shared_datadir/"FeSOD_pfam.hmm"), "--genbank_out", out + ".gb"])
         assert os.path.isfile(out + ".gb")
 
 #(genbanks, hmm, evalue, output, max_overlap, cpu, max_domains, format="genbank", gff=False):
@@ -183,7 +183,7 @@ def test_annotate_peptides_fasta(shared_datadir):
         # output_dir = "test_out"
         out = output_dir + "/out_fa"
 
-        main(['--input', str(shared_datadir/"FeSOD_20.fasta"), '--references', str(shared_datadir/"FeSOD_pfam.hmm"), "--output", out + ".gb"])
+        main(['--input', str(shared_datadir/"FeSOD_20.fasta"), '--reference', str(shared_datadir/"FeSOD_pfam.hmm"), "--genbank_out", out + ".gb"])
         assert os.path.isfile(out + ".gb")
 
 
@@ -194,7 +194,7 @@ def test_domainator_phmmer(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -215,7 +215,7 @@ def test_domainator_evalue_cutoff_filters_hits(shared_datadir):
             "-r", str(hmms),
             "--evalue", "0.1",
             "-o", permissive_out,
-            "--max_domains", "1",
+            "--max_hits_per_cds", "1",
             "--max_overlap", "1",
             "-Z", "0",
         ])
@@ -224,7 +224,7 @@ def test_domainator_evalue_cutoff_filters_hits(shared_datadir):
             "-r", str(hmms),
             "--evalue", "1e-40",
             "-o", strict_out,
-            "--max_domains", "1",
+            "--max_hits_per_cds", "1",
             "--max_overlap", "1",
             "-Z", "0",
         ])
@@ -273,7 +273,7 @@ def test_domainator_rejects_protein_input_with_nucleotide_references(shared_data
             main([
                 "--input", str(protein_input),
                 "-r", str(nucleotide_reference),
-                "--output", str(out),
+                "--genbank_out", str(out),
             ])
 
 
@@ -287,7 +287,7 @@ def test_domainator_nucleotide_fasta_query_uses_nhmmer(shared_datadir):
             "--input", str(nucleotide_input),
             "--fasta_type", "nucleotide",
             "-r", str(nucleotide_reference),
-            "--output", str(out),
+            "--genbank_out", str(out),
             "--evalue", "0.1",
         ])
 
@@ -322,7 +322,7 @@ def test_domainator_nucleotide_hmm_query_uses_nhmmer(shared_datadir):
             "--input", str(nucleotide_input),
             "--fasta_type", "nucleotide",
             "-r", str(hmm_path),
-            "--output", str(out),
+            "--genbank_out", str(out),
             "--evalue", "0.1",
         ])
 
@@ -343,7 +343,7 @@ def test_domainator_infernal_cm_query(shared_datadir):
             "--input", str(nucleotide_input),
             "--fasta_type", "nucleotide",
             "-r", str(cm_reference),
-            "--output", str(out),
+            "--genbank_out", str(out),
             "--hits_only",
             "--evalue", "0.1",
         ])
@@ -469,7 +469,7 @@ def test_domainator_nucleotide_multi_hit_annotations(shared_datadir):
             "--input", str(nucleotide_input),
             "--fasta_type", "nucleotide",
             "-r", str(nucleotide_reference),
-            "--output", str(out),
+            "--genbank_out", str(out),
             "--evalue", "0.1",
         ])
 
@@ -503,7 +503,7 @@ def test_domainator_nucleotide_query_spanning_circular_origin(shared_datadir):
         main([
             "--input", gb_path,
             "-r", query_path,
-            "--output", out,
+            "--genbank_out", out,
             "--hits_only",
             "--evalue", "0.1",
         ])
@@ -522,7 +522,7 @@ def test_domainator_min_evalue(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1), "--min_evalue", "2e-160", "-Z", "0"]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1), "--min_evalue", "2e-160", "-Z", "0"]
 
         main(args)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -532,27 +532,6 @@ def test_domainator_min_evalue(shared_datadir):
 
 
 
-@pytest.mark.parametrize("files,offset,read_count,expected_record_ct,rec0_name",
-[(["pDONR201.gb"],0,1,1,"pDONR201"),
-(["pDONR201.gb"],0,10,1,"pDONR201"),
-(["pDONR201.gb"],0,0,0,""),
-(["pDONR201_multi_genemark.gb","pDONR201.gb"],16382,10,2, "pDONR201_3"), #seeks past the end of pDONR201.gb
-])
-def test_domainator_seek(files,offset,read_count,expected_record_ct,rec0_name,shared_datadir):
-    hmms = shared_datadir / "CcdB.hmm"
-
-
-    with tempfile.TemporaryDirectory() as output_dir:
-        # output_dir = "test_out"
-        out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(shared_datadir / x) for x in files] + [ "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
-        args += ['--offset', str(offset), "--recs_to_read", str(read_count)]
-        main(args)
-        recs = list(SeqIO.parse(out, "genbank"))
-        assert len(recs) == expected_record_ct
-        if len(recs) > 0:
-            assert recs[0].name == rec0_name
-
 def test_domainator_origin_spanning_1(shared_datadir):
     gbs = [shared_datadir / "bacillus_phage_SPR.gb"]
     references = shared_datadir / "SPR.hmm"
@@ -560,7 +539,7 @@ def test_domainator_origin_spanning_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "-Z", "1000", "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "-Z", "1000", "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         compare_seqfiles(out, shared_datadir / "bacillus_phage_SPR_with_annotations.gb", skip_qualifiers={"identity", "accession"})
@@ -574,7 +553,7 @@ def test_domainator_intron_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "-Z", "1000", "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "-Z", "1000", "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         recs = list(SeqIO.parse(out, "genbank"))
@@ -588,7 +567,7 @@ def test_domainator_intron_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "-Z", "1000", "--evalue", str(0.1), "-o", str(out), "--max_domains", str(1), "--max_overlap", str(1)]
+        args = ['--input'] + [str(x) for x in gbs] + [ "-r", str(references), "-Z", "1000", "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         recs = list(SeqIO.parse(out, "genbank"))
@@ -725,8 +704,8 @@ def test_annotate_with_compressed_references(shared_datadir, tmp_path, compresso
 
     plain_out = str(tmp_path / "plain.gb")
     compressed_out = str(tmp_path / "compressed.gb")
-    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--references', str(plain_ref), '-o', plain_out])
-    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--references', str(compressed_ref), '-o', compressed_out])
+    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--reference', str(plain_ref), '-o', plain_out])
+    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--reference', str(compressed_ref), '-o', compressed_out])
 
     assert _database_qualifiers(plain_out) == {"FeSOD_pfam"}
     assert _database_qualifiers(compressed_out) == {"FeSOD_pfam"}
@@ -743,7 +722,7 @@ def test_annotate_ignores_stale_pressed_sidecars(shared_datadir, tmp_path):
     ref.write_bytes((shared_datadir / "pdonr_hmms.hmm").read_bytes())
 
     out = str(tmp_path / "out.gb")
-    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--references', str(ref), '-o', out])
+    main(['-i', str(shared_datadir / "FeSOD_20.gb"), '--reference', str(ref), '-o', out])
     # The stale sidecars would have annotated Sod_Fe_C / Sod_Fe_N.
     names = {q for rec in SeqIO.parse(out, "genbank") for f in rec.features
              if f.type == DOMAIN_FEATURE_NAME for q in f.qualifiers.get("name", [])}
@@ -948,3 +927,14 @@ def test_prodigal_circular_origin_genes(shared_datadir):
     def gene_ends(rec, offset):
         return sorted(((int(f.location.stranded_start) + offset) % len(rec), (int(f.location.stranded_end) + offset) % len(rec)) for f in rec.features if f.type == "CDS")
     assert gene_ends(rotated, shift) == gene_ends(record, 0)
+
+
+@pytest.mark.parametrize("batch_size", [7, 100])
+def test_domainate_hits_only_keeps_input_order(shared_datadir, tmp_path, batch_size):
+    fasta = str(shared_datadir / "FeSOD_20.fasta")
+    out = str(tmp_path / "out.gb")
+    main(["-i", fasta, "-r", str(shared_datadir / "FeSOD_pfam.hmm"), "-o", out, "--hits_only", "-Z", "20", "--batch_size", str(batch_size)])
+    input_ids = [rec.id for rec in SeqIO.parse(fasta, "fasta")]
+    output_ids = [rec.id for rec in SeqIO.parse(out, "genbank")]
+    assert output_ids
+    assert output_ids == [i for i in input_ids if i in set(output_ids)]

@@ -3,9 +3,9 @@
   "display_name": "Select By CDS",
   "category": "Editors",
   "description": "Extract contig regions around selected CDSs\n\nTakes a domain-annotated genbank file and extracts regions of contigs based on contig or CDS name or presence of specified domains within individual CDSs.\n\nSpecify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.\n\nif target_cdss, target_domains or domain_expr is specified then selection logic is:\n\n    contigs & (target_cdss or target_domains or domain_expr or unannotated)\n\notherwise:\n    return every cds in contigs",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 3,
-  "entry_point": "domainator.select_by_cds",
+  "entry_point": "select_by_cds",
   "parameters": [
     {
       "name": "Input",
@@ -27,13 +27,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "genbank output file name.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -206,13 +206,17 @@
       ]
     },
     {
-      "name": "Search Hits",
-      "parameter": "search_hits",
-      "help": "Select CDSs that are marked as search hits (from domain_search.py).",
-      "type": "boolean",
-      "default": false,
+      "name": "Annotation Type",
+      "parameter": "annotation_type",
+      "help": "Which annotations to select CDSs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search).",
+      "type": "string",
       "flags": [
-        "--search_hits"
+        "--annotation_type"
+      ],
+      "default": "domainator",
+      "choices": [
+        "domain_search",
+        "domainator"
       ]
     },
     {
@@ -227,7 +231,7 @@
     },
     {
       "name": "Pad Where",
-      "parameter": "pad_where",
+      "parameter": "anchor",
       "help": "Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.",
       "type": "string",
       "default": "start",
@@ -237,7 +241,7 @@
         "center"
       ],
       "flags": [
-        "--pad_where"
+        "--anchor"
       ]
     },
     {
@@ -252,12 +256,12 @@
     },
     {
       "name": "Skip Deduplicate",
-      "parameter": "skip_deduplicate",
+      "parameter": "deduplicate",
       "help": "by default if the same region is extracted for multiple hits, then only one will be kept. Set this option to retain redundancies (which might be useful if you are counting hits), but will result in duplicated contig names, which could be a problem for downstream domainator applications.",
       "type": "boolean",
       "default": false,
       "flags": [
-        "--skip_deduplicate"
+        "--no_deduplicate"
       ]
     },
     {

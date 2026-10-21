@@ -2,9 +2,9 @@
   "id": "compare_contigs",
   "display_name": "Compare Contigs",
   "category": "Comparisons",
-  "description": "Calculates similarity metrics for gene neighborhoods\n\nTakes a genbank file annotated with domainator and calculates similarities between contigs and writes reports.\n\nji, ai, and dss metrics are similar to and inspired by the metrics used in the BigScape method:\nNavarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. \"A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data.\" Nature Chemical Biology 16, no. 1 (January 2020): 60–68. https://doi.org/10.1038/s41589-019-0400-9.",
-  "runner": "module",
-  "entry_point": "domainator.compare_contigs",
+  "description": "Calculates similarity metrics for gene neighborhoods\n\nTakes a genbank file annotated with domainator and calculates similarities between contigs and writes reports.\n\nji, ai, and dss metrics are similar to and inspired by the metrics used in the BigScape method:\nNavarro-Mu\u00f1oz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. \"A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data.\" Nature Chemical Biology 16, no. 1 (January 2020): 60\u201368. https://doi.org/10.1038/s41589-019-0400-9.",
+  "runner": "domainator",
+  "entry_point": "compare_contigs",
   "parameters": [
     {
       "name": "Input",
@@ -25,12 +25,12 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "hdf_out",
       "help": "Name of genbank output, contigs will be sorted hierarchically within the output genbank. If not supplied then no genbank output will be generated. To write to stdout, use '-'. default: None",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--hdf_out"
       ]
     },
     {
@@ -65,20 +65,21 @@
     },
     {
       "name": "HDF5 matrix",
-      "parameter": "hdf",
+      "parameter": "hdf_out",
       "help": "Write the matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle.",
       "type": "output",
       "flags": [
-        "--hdf"
+        "-o",
+        "--hdf_out"
       ]
     },
     {
       "name": "Dense Text",
-      "parameter": "dense_text",
+      "parameter": "dense_text_out",
       "help": "Write the matrix to this tab-separated text file, every cell included.",
       "type": "output",
       "flags": [
-        "--dense_text"
+        "--dense_text_out"
       ]
     }
   ],

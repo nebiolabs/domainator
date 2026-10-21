@@ -13,17 +13,16 @@ Criteria are combined with the following logic:
 
 """
 
-import sys
-from jsonargparse import ArgumentParser, ActionConfigFile
-from typing import List, Optional, Dict, Set
+from jsonargparse import ActionConfigFile
+from typing import Optional, Set
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
 from domainator.Bio.Seq import Seq
-from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, CompoundLocation, BeforePosition, AfterPosition
+from domainator.Bio.SeqFeature import FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.Seq import Seq
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, DomainatorCDS, get_sources, copy_feature, slice_record_from_location, codon_offset, fragment_status_allowed, get_fragment_status, PARTIAL_CHOICES, partial_help
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, DomainatorCDS, get_sources, copy_feature, slice_record_from_location, codon_offset, fragment_status_allowed, get_fragment_status, PARTIAL_CHOICES, partial_help
 import warnings
-from domainator.Bio import SeqIO
-from domainator import __version__, RawAndDefaultsFormatter
 from itertools import chain
 
 # TODO: account for different databases in domain selection
@@ -67,7 +66,7 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
             target_cdss: only consider peptides from cdss with these names
             keep_cds_feature: if True, keep the CDS feature on the peptide record. If False, remove it.
             cds_id_type: if "name", then target_cdss is a list of CDS names. If "num", then target_cdss is a list of CDS numbers.
-            search_hits: if True, extract peptides from the search hits (from domain_search.py).
+            search_hits: if True, extract peptides from the search hits (from domainator domain_search).
             strand: only extract peptides of CDSs on the specified strand. If None, then extract peptides from CDSs on both strands. forward strand is "f", reverse strand is "r".
             unannotated: if True, extract peptides from CDSs with no domain annotations.
             _from_domain_search: if True, then the input records are from a domain search, and we can skip all the annotation propagation.
@@ -170,14 +169,12 @@ def extract_peptides(records, evalue, target_domains:Optional[Set], target_cdss,
 
                 yield rec
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', nargs='+', required=False, default=None,
-                       help="Genbank filenames. If not supplied, reads from stdin.")
+    add_input(parser, 'Genbank filenames.')
 
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="the name of the output genbank file. If not supplied writes to stdout.")
+    add_seq_outputs(parser)
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only look for peptides on contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -195,7 +192,7 @@ def main(argv):
     
     parser.add_argument('--unannotated', action='store_true', default=False, help="extract peptides from CDSs with no domain annotations.")
 
-    parser.add_argument('--search_hits', action='store_true', default=False, help="extract peptides from the search hits (from domain_search.py).")
+    add_annotation_type(parser, help="Which annotations to select peptides by. With domain_search, the search hits are extracted.")
 
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract peptides from CDSs on the specified strand.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which CDSs to extract peptides from") + " Not affected by --invert.")
@@ -203,9 +200,9 @@ def main(argv):
     parser.add_argument('--invert', action='store_true',
                         help="Invert the CDS selection criteria. i.e. return peptides from CDSs that don't match the CDS selection criteria. (Only applies to CDS selection, not contig selection)")
     
-    parser.add_argument('--cdss', type=str, default=None, nargs='+',
+    parser.add_argument('--cds', type=str, default=None, nargs='+',
                         help="only look for peptides on cdss with these names") 
-    parser.add_argument('--cdss_file', type=str, default=None,
+    parser.add_argument('--cds_file', type=str, default=None,
                         help="only look for peptides on cdss with names listed in this text file.")
 
     parser.add_argument('--keep_name', action='store_true', default=False,
@@ -217,53 +214,45 @@ def main(argv):
                         help='The CDS qualifier to preferentially use as the name of the peptide.'
                         ' If not supplied, then qualifiers will be checked in order of: ["protein_id", "gene_id", "locus_tag", "gene"]')
 
-    parser.add_argument('-e', '--evalue', default=100000000,
-                        help="the evalue cutoff for domain annotations to be put onto the new genbank file")
+    parser.add_argument('-e', '--evalue', type=float, default=None,
+                        help="the evalue cutoff (max) for domain annotations to be put onto the new genbank file. Default: no cutoff.")
     
-    parser.add_argument('--fasta_out', action='store_true', default=False,
-                        help="makes output a fasta file when activated")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
    
     ### Figure out what input and output files ####
     
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
+    genbanks = params.input
+    
 
-    if params.output is None:
-        out = sys.stdout
-    else:
-        out = open(params.output, "w")
-
-
-
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     target_contigs = list_and_file_to_dict_keys(params.contigs, params.contigs_file, as_set=True)
     target_domains = list_and_file_to_dict_keys(params.domains, params.domains_file, as_set=True)
-    target_cdss = list_and_file_to_dict_keys(params.cdss, params.cdss_file, as_set=True)
+    target_cdss = list_and_file_to_dict_keys(params.cds, params.cds_file, as_set=True)
+    search_hits = params.annotation_type == "domain_search"
 
     extract_all = False
-    if target_domains is None and target_cdss is None and not params.unannotated and not params.search_hits:
+    if target_domains is None and target_cdss is None and not params.unannotated and not search_hits:
         extract_all = True
         if params.invert:
             warnings.warn("Invert supplied with no selection criteria. Invert will be ignored.")
             params.invert = False
 
-
     # Run
     extracted_peptides_iterator = extract_peptides(
-                    parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override),
-                    params.evalue,
+                    parse_seqfiles(genbanks, target_contigs),
+                    float("inf") if params.evalue is None else params.evalue,
                     target_domains,
                     target_cdss,
                     keep_cds_feature=True,
-                    search_hits = params.search_hits,
+                    search_hits = search_hits,
                     strand = params.strand,
                     unannotated = params.unannotated,
                     extract_all=extract_all,
@@ -274,17 +263,4 @@ def main(argv):
                     partial = params.partial,
                     )
 
-    if params.fasta_out:
-        SeqIO.write(extracted_peptides_iterator, out, "fasta")
-    else:
-        write_genbank(extracted_peptides_iterator, out, default_molecule_type="protein")
-
-
-    if params.output is not None:
-        out.close()
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    write_seq_outputs(extracted_peptides_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

@@ -835,3 +835,33 @@ def test_mgnify_full_length_token(description, is_fragment):
     record = SeqRecord.SeqRecord(Seq.Seq("MKRFSLAILA"), id=description.split()[0], description=description)
     record.annotations["molecule_type"] = "protein"
     assert utils.get_fragment_status(record) == ("?" if is_fragment else None)
+
+
+@pytest.mark.parametrize("expression,domains,expected", [
+    ("((A))", {"A"}, True),
+    ("((A))", set(), False),
+    ("(A & (B | C))", {"A", "C"}, True),
+    ("(A & (B | C))", {"B", "C"}, False),
+    ("~(A | B)", set(), True),
+])
+def test_boolean_evaluator_nested_parentheses(expression, domains, expected):
+    assert utils.BooleanEvaluator(expression).check_expression(domains) == expected
+
+
+def test_get_domain_names_keeps_hits_at_or_below_evalue(shared_datadir):
+    rec = next(utils.parse_seqfiles([str(shared_datadir / "pDONR201_multi_genemark_domainator.gb")]))
+    checked = 0
+    for cds in utils.DomainatorCDS.list_from_contig(rec):
+        expected = {f.qualifiers["name"][0] for f in cds.domain_features if float(f.qualifiers["evalue"][0]) <= 1e-10}
+        assert cds.get_domain_names(evalue=1e-10) == expected
+        checked += len(expected)
+    assert checked > 0
+
+
+def test_get_domain_cds_annotation_strings_reports_missing_qualifier(capsys):
+    rec = SeqRecord.SeqRecord(Seq.Seq("ATG" * 10), id="rec1", name="rec1")
+    rec.features.append(SeqFeature(FeatureLocation(0, 9, 1), type=DOMAIN_FEATURE_NAME,
+                                   qualifiers={"cds_id": ["c1"], "database": ["db"], "name": ["d"], "evalue": ["1e-5"]}))
+    with pytest.raises(KeyError, match="rec1"):
+        utils.get_domain_cds_annotation_strings(rec)
+    assert capsys.readouterr().out == ""

@@ -8,6 +8,7 @@ from domainator import deduplicate_genbank
 from domainator.Bio import Seq
 
 
+@pytest.mark.requires_binary("cd-hit")
 def test_deduplicate_genbank_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
@@ -15,7 +16,7 @@ def test_deduplicate_genbank_1(shared_datadir):
         out = output_dir + "/deduplicate_out.gb"
         cluster_table_out = output_dir + "/cluster_table.tsv"
 
-        deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--id", "0.99", "-o", out, "--params", "\"-s\":0.9", "--prefix_count", "--cluster_table", cluster_table_out])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--identity", "0.99", "-o", out, "--cdhit_args=-s 0.9", "--prefix_count", "--cluster_tsv_out", cluster_table_out])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         for rec in recs:
@@ -40,30 +41,33 @@ def test_deduplicate_genbank_1(shared_datadir):
 
 
 
+@pytest.mark.requires_binary("cd-hit")
 def test_deduplicate_genbank_cdhit_low_id_1(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/deduplicate_out.gb"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--id", "0.4", "--cpu", "1", "-o", out, "--prefix_count"])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--identity", "0.4", "--cpu", "1", "-o", out, "--prefix_count"])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         assert recs[0].id[:3] == "10-"
         assert len(recs) == 4
 
+@pytest.mark.requires_binary("usearch")
 def test_deduplicate_genbank_cdhit_low_id_2(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/deduplicate_out.gb"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--algorithm", "usearch", "--id", "0.4", "--cpu", "1", "-o", out, "--prefix_count"])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--algorithm", "usearch", "--identity", "0.4", "--cpu", "1", "-o", out, "--prefix_count"])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         assert recs[0].id[:2] == "6-"
         assert len(recs) == 5
 
+@pytest.mark.requires_binary("usearch")
 def test_deduplicate_genbank_usearch(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
@@ -72,7 +76,7 @@ def test_deduplicate_genbank_usearch(shared_datadir):
         log = output_dir + "/deduplicate_out.log"
         cluster_table_out = output_dir + "/cluster_table.tsv"
 
-        deduplicate_genbank.main( ["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--algorithm", "usearch", "--id", "0.3", "-o", out, "--cpu", "1", "--suffix_count", "--log", log, "--cluster_table", cluster_table_out] )
+        deduplicate_genbank.main( ["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--algorithm", "usearch", "--identity", "0.3", "-o", out, "--cpu", "1", "--suffix_count", "--log_out", log, "--cluster_tsv_out", cluster_table_out] )
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         for rec in recs:
@@ -107,7 +111,7 @@ def test_deduplicate_genbank_hash(shared_datadir):
         log = output_dir + "/deduplicate_out.log"
         cluster_table_out = output_dir + "/cluster_table.tsv"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--id", "1", "--algorithm", "hash", "-o", out, "--prefix_count", "--log", log, "--cluster_table", cluster_table_out])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--identity", "1", "--algorithm", "hash", "-o", out, "--prefix_count", "--log_out", log, "--cluster_tsv_out", cluster_table_out])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         for rec in recs:
@@ -150,14 +154,13 @@ def test_deduplicate_genbank_hash_both_strands(shared_datadir):
 
         deduplicate_genbank.main([
             "-i", input_fasta,
-            "--id", "1",
+            "--identity", "1",
             "--algorithm", "hash",
             "--fasta_type", "nucleotide",
             "--both_strands",
             "--prefix_count",
-            "--fasta_out",
-            "-o", out,
-            "--log", log,
+            "--fasta_out", out,
+            "--log_out", log,
         ])
 
         assert Path(out).is_file()
@@ -175,9 +178,9 @@ def test_deduplicate_genbank_usearch_both_strands_sets_flag():
 
         captured = {}
 
-        def fake_run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=None):
+        def fake_run_clustering(algorithm, input_fasta_path, id, extra_args, bin_path=None, add_count=None, cpus=1, log_handle=None):
             captured["algorithm"] = algorithm
-            captured["params"] = dict(params)
+            captured["extra_args"] = list(extra_args)
             return {"0"}, {"0": ["0"]}
 
         original_run_clustering = deduplicate_genbank.run_clustering
@@ -187,7 +190,7 @@ def test_deduplicate_genbank_usearch_both_strands_sets_flag():
             recs = list(dedup.deduplicate_genbank(
                 [input_fasta],
                 "usearch",
-                {},
+                [],
                 1,
                 None,
                 None,
@@ -199,7 +202,7 @@ def test_deduplicate_genbank_usearch_both_strands_sets_flag():
             deduplicate_genbank.run_clustering = original_run_clustering
 
         assert captured["algorithm"] == "usearch"
-        assert captured["params"].get("-strand") == "both"
+        assert captured["extra_args"] == ["-strand", "both"]
         assert len(recs) == 1
 
 
@@ -207,7 +210,7 @@ def test_diamond_builds_cluster_command():
     search = deduplicate_genbank.Diamond(
         "/tmp/input.fasta",
         0.99,
-        {"--member-cover": 90},
+        ["--member-cover", "90"],
         bin_path="/opt/diamond",
         cpus=3,
     )
@@ -245,7 +248,7 @@ def test_deduplicate_genbank_diamond_rejects_nucleotide_input():
             list(dedup.deduplicate_genbank(
                 [str(input_fasta)],
                 "diamond",
-                {},
+                [],
                 0.99,
                 None,
                 None,
@@ -254,6 +257,7 @@ def test_deduplicate_genbank_diamond_rejects_nucleotide_input():
             ))
 
 
+@pytest.mark.requires_binary("diamond")
 def test_deduplicate_genbank_diamond():
     with tempfile.TemporaryDirectory() as output_dir:
         input_fasta = Path(output_dir) / "input.fasta"
@@ -272,13 +276,12 @@ def test_deduplicate_genbank_diamond():
             "-i", str(input_fasta),
             "--algorithm", "diamond",
             "--bin_path", "diamond",
-            "--id", "0.9999",
+            "--identity", "0.9999",
             "--cpu", "1",
             "--prefix_count",
-            "--fasta_out",
-            "-o", str(out),
-            "--log", str(log),
-            "--cluster_table", str(cluster_table_out),
+            "--fasta_out", str(out),
+            "--log_out", str(log),
+            "--cluster_tsv_out", str(cluster_table_out),
         ])
 
         assert out.is_file()
@@ -298,6 +301,7 @@ def test_deduplicate_genbank_diamond():
         assert "Output size: 2" in log_file
 
 
+@pytest.mark.requires_binary("diamond")
 def test_deduplicate_genbank_diamond_single_centroid():
     with tempfile.TemporaryDirectory() as output_dir:
         input_fasta = Path(output_dir) / "input.fasta"
@@ -315,13 +319,12 @@ def test_deduplicate_genbank_diamond_single_centroid():
             "-i", str(input_fasta),
             "--algorithm", "diamond",
             "--bin_path", "diamond",
-            "--id", "0",
+            "--identity", "0",
             "--cpu", "1",
             "--prefix_count",
-            "--fasta_out",
-            "-o", str(out),
-            "--log", str(log),
-            "--cluster_table", str(cluster_table_out),
+            "--fasta_out", str(out),
+            "--log_out", str(log),
+            "--cluster_tsv_out", str(cluster_table_out),
         ])
 
         assert out.is_file()
@@ -347,9 +350,9 @@ def test_deduplicate_genbank_cdhit_est_both_strands_sets_flag():
 
         captured = {}
 
-        def fake_run_clustering(algorithm, input_fasta_path, id, params, bin_path=None, add_count=None, cpus=1, log_handle=None):
+        def fake_run_clustering(algorithm, input_fasta_path, id, extra_args, bin_path=None, add_count=None, cpus=1, log_handle=None):
             captured["algorithm"] = algorithm
-            captured["params"] = dict(params)
+            captured["extra_args"] = list(extra_args)
             return {"0"}, {"0": ["0"]}
 
         original_run_clustering = deduplicate_genbank.run_clustering
@@ -359,7 +362,7 @@ def test_deduplicate_genbank_cdhit_est_both_strands_sets_flag():
             recs = list(dedup.deduplicate_genbank(
                 [input_fasta],
                 "cd-hit",
-                {},
+                [],
                 0.8,
                 None,
                 None,
@@ -371,22 +374,24 @@ def test_deduplicate_genbank_cdhit_est_both_strands_sets_flag():
             deduplicate_genbank.run_clustering = original_run_clustering
 
         assert captured["algorithm"] == "cd-hit-est"
-        assert captured["params"].get("-r") == 1
+        assert captured["extra_args"] == ["-r", "1"]
         assert len(recs) == 1
 
 
+@pytest.mark.requires_binary("cd-hit")
 def test_deduplicate_genbank_cdhit_low_id_nt(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/deduplicate_out.gb"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark.gb"), "--algorithm", "cd-hit", "--id", "0.8", "--cpu", "1", "-o", out, "--prefix_count"])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi_genemark.gb"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "-o", out, "--prefix_count"])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         assert recs[0].id[:2] == "4-"
         assert len(recs) == 1
 
+@pytest.mark.requires_binary("cd-hit")
 def test_deduplicate_genbank_cdhit_fasta_input(shared_datadir):
     
     with tempfile.TemporaryDirectory() as output_dir:
@@ -394,7 +399,7 @@ def test_deduplicate_genbank_cdhit_fasta_input(shared_datadir):
         out = output_dir + "/deduplicate_out.gb"
         log = output_dir + "/deduplicate_out.log"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "--algorithm", "cd-hit", "--id", "0.8", "--cpu", "1", "-o", out, "--prefix_count", "--log", log])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "FeSOD_20.fasta"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "-o", out, "--prefix_count", "--log_out", log])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         assert recs[0].id[:2] == "1-"
@@ -404,13 +409,14 @@ def test_deduplicate_genbank_cdhit_fasta_input(shared_datadir):
         assert "Input  size: 20" in log_file
         assert "Output size: 20" in log_file
 
+@pytest.mark.requires_binary("cd-hit-est")
 def test_deduplicate_genbank_cdhit_fasta_input_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/deduplicate_out.fasta"
         log = output_dir + "/deduplicate_out.log"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi.fasta"), "--algorithm", "cd-hit", "--id", "0.8", "--cpu", "1", "-o", out, "--prefix_count", "--fasta_type", "nucleotide", "--fasta_out", "--log", log])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi.fasta"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "--fasta_out", out, "--prefix_count", "--fasta_type", "nucleotide", "--log_out", log])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         assert recs[0].id[:2] == "4-"

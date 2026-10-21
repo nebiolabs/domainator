@@ -8,6 +8,15 @@ run all tests
 pytest test
 ```
 
+Two markers are registered in `pyproject.toml`:
+
+- `requires_binary("diamond", ...)`: the test is skipped unless every named external program is on `PATH` (implemented in `test/conftest.py`). Use it for any test that runs an external program, directly or through a tool's default algorithm.
+- `network`: the test downloads from the internet. Skip these with `pytest -m "not network"`.
+
+Domainator's own `FutureWarning`s are turned into errors in the test suite, so tests can't rely on deprecated usage.
+
+CI (`.github/workflows/tests.yml`) runs `pytest -m "not network"` on every push and pull request. The `pip` jobs have no external programs, so binary-dependent tests skip; the `conda` job installs them from bioconda and runs everything.
+
 examine test coverage
 ```
 coverage run -m pytest test
@@ -16,19 +25,6 @@ coverage html
 ```
 then open htmlcov/index.html in a browser to see coverage
 
-
-## Converting the manual into a pdf
-on Ubuntu
-
-Install pandoc
-```
-sudo apt-get install pandoc texlive-latex-base texlive-fonts-recommended texlive-extra-utils texlive-latex-extra librsvg2-bin
-```
-
-run pandoc
-```
-pandoc -V geometry:margin=0.5in -V geometry:paperwidth=13.5in  README.md -o README.pdf
-```
 
 ## Projects that domainator depends on
 

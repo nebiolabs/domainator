@@ -3,9 +3,9 @@
   "display_name": "Find Features",
   "category": "Editors",
   "description": "Annotate sequence files with feature detection algorithms\n\nFor each CDS or protein in the input file, run feature detection algorithms to identify transmembrane regions, signal peptides, and other sequence features.\n\nSupported algorithms:\n    - TMbed: Transmembrane protein prediction using ProtT5 language model embeddings\n    - MOTIF: PROSITE-style pattern matching for exact motif search",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 2,
-  "entry_point": "domainator.find_features",
+  "entry_point": "find_features",
   "parameters": [
     {
       "name": "Input",
@@ -45,13 +45,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "Output genbank filename. If not supplied, writes to stdout.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -101,12 +101,12 @@
     },
     {
       "name": "GPU Device",
-      "parameter": "gpu_device",
+      "parameter": "device",
       "help": "For models that can use GPU acceleration, use this device if available. By default: if not set to 'None' try using the specified device for algorithms that allow GPU acceleration, if GPU not available, fall back to CPU mode if available. Choices: ['None', '0', 'cuda:0', ...]",
       "type": "string",
       "default": "cuda:0",
       "flags": [
-        "--gpu_device"
+        "--device"
       ]
     },
     {

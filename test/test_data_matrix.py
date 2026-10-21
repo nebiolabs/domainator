@@ -1306,7 +1306,7 @@ def test_symmetric_matrix_is_stored_as_upper_triangle(tmp_path):
 
     with h5py.File(out_file, "r") as handle:
         assert handle.attrs["ARRAY_TYPE"] == "SPARSE_CSR_UPPER_TRIANGLE"
-        assert handle.attrs["MATRIX_FILE_VERSION"] == "1.1"
+        assert handle.attrs["MATRIX_FILE_VERSION"] == "2.0"
         assert len(handle["SPARSE_VALUES"]) == np.count_nonzero(np.triu(data))
 
     matrix = DataMatrix.from_file(out_file)
@@ -1384,8 +1384,22 @@ def test_legacy_dense_and_sparse_files_hold_the_same_matrix(shared_datadir):
     np.testing.assert_allclose(dense.toarray(), text.toarray())
 
 
+@pytest.mark.parametrize("version", ["1.0", "1.1", "2.0", "2.3"])
+def test_major_versions_1_and_2_are_readable(tmp_path, version):
+    """1.1 is the pre-release version of SPARSE_CSR_UPPER_TRIANGLE; 2.3 stands in for a future additive change."""
+    import h5py
+
+    data = _symmetric_test_matrix()
+    names = ['A', 'B', 'C', 'D']
+    out_file = tmp_path / "versioned.hdf5"
+    DataMatrix.write_hdf(data, out_file, names, names)
+    with h5py.File(out_file, "a") as handle:
+        handle.attrs["MATRIX_FILE_VERSION"] = version
+    np.testing.assert_array_equal(DataMatrix.from_file(out_file).toarray(), data)
+
+
 @pytest.mark.parametrize("attribute,value,message", [
-    ("MATRIX_FILE_VERSION", "2.0", "Unsupported matrix file version"),
+    ("MATRIX_FILE_VERSION", "3.0", "Unsupported matrix file version"),
     ("ARRAY_TYPE", "SPARSE_COO", "Unrecognized matrix ARRAY_TYPE"),
 ])
 def test_unreadable_files_are_rejected(tmp_path, attribute, value, message):
@@ -1443,12 +1457,3 @@ def test_duplicate_csr_entries_are_summed_before_zeros_are_dropped():
     matrix = DataMatrix(data, ['A', 'B'], ['A', 'B'])
     assert matrix.nnz == 1
     np.testing.assert_array_equal(matrix.toarray(), [[0.0, 0.0], [2.0, 0.0]])
-
-
-@pytest.mark.parametrize("output_type", ["sparse", "dense"])
-def test_write_accepts_deprecated_output_types(tmp_path, output_type):
-    matrix = DataMatrix(np.eye(2), ['A', 'B'], ['A', 'B'])
-    out_file = tmp_path / "out.hdf5"
-    with pytest.warns(FutureWarning, match="deprecated"):
-        matrix.write(out_file, output_type)
-    np.testing.assert_array_equal(DataMatrix.from_file(out_file).toarray(), np.eye(2))

@@ -64,7 +64,7 @@ def test_distance_modes_round_trip_through_hdf(inputs, tmp_path, mode):
     # A distance matrix's zeros (identical pairs) are dropped from the CSR file and must
     # come back as zeros, so hdf and dense text hold the same matrix.
     hdf_path, text_path = tmp_path / "out.hdf5", tmp_path / "out.tsv"
-    structure_dist.main(["-i", inputs, "--mode", mode, "--hdf", str(hdf_path), "--dense_text", str(text_path)])
+    structure_dist.main(["-i", inputs, "--mode", mode, "--hdf_out", str(hdf_path), "--dense_text_out", str(text_path)])
     from_hdf = DataMatrix.from_file(hdf_path)
     from_text = DataMatrix.from_file(text_path)
     assert from_hdf.data_type == mode
@@ -75,31 +75,31 @@ def test_distance_modes_round_trip_through_hdf(inputs, tmp_path, mode):
 def test_symmetrize_requires_a_square_comparison(inputs, references, tmp_path):
     with pytest.raises(ValueError, match="square, symmetric comparison"):
         structure_dist.main(["-i", inputs, "-r", references, "--symmetrize", "max",
-                             "--dense_text", str(tmp_path / "out.tsv")])
+                             "--dense_text_out", str(tmp_path / "out.tsv")])
 
 
 def test_symmetrize_rejected_with_streaming_pruning(inputs, tmp_path):
     with pytest.raises(ValueError, match="always max-symmetric"):
         structure_dist.main(["-i", inputs, "--symmetrize", "min", "--knn", "2",
-                             "--hdf", str(tmp_path / "out.hdf5")])
+                             "--hdf_out", str(tmp_path / "out.hdf5")])
 
 
 def test_streaming_pruning_rejects_a_non_streamable_mode(inputs, tmp_path):
     with pytest.raises(ValueError, match="only supported with --mode"):
         structure_dist.main(["-i", inputs, "--mode", "norm_score", "--mst", "--knn", "2",
-                             "--hdf", str(tmp_path / "out.hdf5")])
+                             "--hdf_out", str(tmp_path / "out.hdf5")])
 
 
 def test_streaming_pruning_requires_a_square_comparison(inputs, references, tmp_path):
     with pytest.raises(ValueError, match="square, symmetric comparison"):
         structure_dist.main(["-i", inputs, "-r", references, "--knn", "2",
-                             "--hdf", str(tmp_path / "out.hdf5")])
+                             "--hdf_out", str(tmp_path / "out.hdf5")])
 
 
 def test_metrics_is_rejected_because_mode_derives_it(inputs, tmp_path):
     with pytest.raises(ValueError, match="derives the structural metric from --mode"):
         structure_dist.main(["-i", inputs, "--metrics", "tmscore",
-                             "--dense_text", str(tmp_path / "out.tsv")])
+                             "--dense_text_out", str(tmp_path / "out.tsv")])
 
 
 def test_no_output_specified(inputs):
@@ -109,13 +109,13 @@ def test_no_output_specified(inputs):
 
 def test_dense_output_needs_an_hdf5_extension(inputs, tmp_path):
     with pytest.raises(ValueError, match="hdf5 related extension"):
-        structure_dist.main(["-i", inputs, "--hdf", str(tmp_path / "out.txt")])
+        structure_dist.main(["-i", inputs, "--hdf_out", str(tmp_path / "out.txt")])
 
 
 def test_structural_mode_bounds_the_lower_bound(inputs, tmp_path):
-    with pytest.raises(ValueError, match="--lb must be between 0 and 1"):
-        structure_dist.main(["-i", inputs, "--mode", "tmscore", "--lb", "5",
-                             "--dense_text", str(tmp_path / "out.tsv")])
+    with pytest.raises(ValueError, match="--threshold must be between 0 and 1"):
+        structure_dist.main(["-i", inputs, "--mode", "tmscore", "--threshold", "5",
+                             "--dense_text_out", str(tmp_path / "out.tsv")])
 
 
 def test_symmetrize_max_min_and_mean_on_a_one_directional_pair():
@@ -174,7 +174,7 @@ def test_metric_reader_clamps_quietly_within_tolerance_and_loudly_outside():
 @needs_foldseek
 def test_self_comparison_matrix(inputs, tmp_path):
     out = tmp_path / "d.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
 
     assert sorted(matrix.rows) == ALL_NAMES
@@ -195,7 +195,7 @@ def test_self_comparison_matrix(inputs, tmp_path):
 @needs_foldseek
 def test_row_lengths_are_the_chain_lengths(inputs, tmp_path):
     out = tmp_path / "d.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     lengths = dict(zip(matrix.rows, matrix.row_lengths))
     assert lengths == CHAIN_LENGTHS
@@ -207,7 +207,7 @@ def test_labels_match_structure_to_genbank_record_ids(inputs, tmp_path):
     # structures must use the same names, or nothing downstream lines up.
     matrix_path = tmp_path / "d.hdf5"
     genbank_path = tmp_path / "chains.gb"
-    structure_dist.main(["-i", inputs, "--hdf", str(matrix_path), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(matrix_path), "--cpu", "2"])
     structure_to_genbank.main(["-i", inputs, "-o", str(genbank_path), "--cpu", "2"])
 
     matrix = DataMatrix.from_file(str(matrix_path))
@@ -220,8 +220,8 @@ def test_labels_match_structure_to_genbank_record_ids(inputs, tmp_path):
 def test_the_raw_matrix_is_asymmetric_and_symmetrize_fixes_it(inputs, tmp_path):
     raw_path = tmp_path / "raw.hdf5"
     sym_path = tmp_path / "sym.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(raw_path), "--cpu", "2"])
-    structure_dist.main(["-i", inputs, "--symmetrize", "max", "--hdf", str(sym_path),
+    structure_dist.main(["-i", inputs, "--hdf_out", str(raw_path), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--symmetrize", "max", "--hdf_out", str(sym_path),
                          "--cpu", "2"])
     raw = DataMatrix.from_file(str(raw_path)).toarray()
     sym = DataMatrix.from_file(str(sym_path)).toarray()
@@ -238,7 +238,7 @@ def test_symmetrize_min_keeps_a_subset_of_max(inputs, tmp_path):
     paths = dict()
     for how in ("min", "max"):
         path = tmp_path / f"{how}.hdf5"
-        structure_dist.main(["-i", inputs, "--symmetrize", how, "--hdf", str(path),
+        structure_dist.main(["-i", inputs, "--symmetrize", how, "--hdf_out", str(path),
                              "--cpu", "2"])
         paths[how] = DataMatrix.from_file(str(path)).toarray()
     assert np.allclose(paths["min"], paths["min"].T)
@@ -250,8 +250,8 @@ def test_symmetrize_min_keeps_a_subset_of_max(inputs, tmp_path):
 def test_bool_mode(inputs, tmp_path):
     score_path = tmp_path / "score.hdf5"
     bool_path = tmp_path / "bool.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(score_path), "--cpu", "2"])
-    structure_dist.main(["-i", inputs, "--mode", "bool", "--hdf", str(bool_path),
+    structure_dist.main(["-i", inputs, "--hdf_out", str(score_path), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--mode", "bool", "--hdf_out", str(bool_path),
                          "--cpu", "2"])
     score = DataMatrix.from_file(str(score_path)).toarray()
     booled = DataMatrix.from_file(str(bool_path))
@@ -263,7 +263,7 @@ def test_bool_mode(inputs, tmp_path):
 @needs_foldseek
 def test_fident_mode_is_a_fraction(inputs, tmp_path):
     out = tmp_path / "f.hdf5"
-    structure_dist.main(["-i", inputs, "--mode", "fident", "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--mode", "fident", "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     assert matrix.data_type == "fident"
     array = matrix.toarray()
@@ -276,9 +276,9 @@ def test_tmscore_and_lddt_modes(inputs, tmp_path):
     tm_path = tmp_path / "tm.hdf5"
     lddt_path = tmp_path / "lddt.hdf5"
     structure_dist.main(["-i", inputs, "--mode", "tmscore", "--alignment_type", "1",
-                         "-e", "10", "--hdf", str(tm_path), "--cpu", "2"])
+                         "-e", "10", "--hdf_out", str(tm_path), "--cpu", "2"])
     structure_dist.main(["-i", inputs, "--mode", "lddt", "-e", "10",
-                         "--hdf", str(lddt_path), "--cpu", "2"])
+                         "--hdf_out", str(lddt_path), "--cpu", "2"])
     tm = DataMatrix.from_file(str(tm_path))
     lddt = DataMatrix.from_file(str(lddt_path))
 
@@ -296,8 +296,8 @@ def test_tmscore_dist_is_one_minus_tmscore_with_a_zero_diagonal(inputs, tmp_path
     tm_path = tmp_path / "tm.hdf5"
     dist_path = tmp_path / "dist.hdf5"
     common = ["-i", inputs, "--alignment_type", "1", "-e", "10", "--cpu", "2"]
-    structure_dist.main(common + ["--mode", "tmscore", "--hdf", str(tm_path)])
-    structure_dist.main(common + ["--mode", "tmscore_dist", "--hdf", str(dist_path)])
+    structure_dist.main(common + ["--mode", "tmscore", "--hdf_out", str(tm_path)])
+    structure_dist.main(common + ["--mode", "tmscore_dist", "--hdf_out", str(dist_path)])
     tm = DataMatrix.from_file(str(tm_path)).toarray()
     dist = DataMatrix.from_file(str(dist_path))
 
@@ -313,7 +313,7 @@ def test_tmscore_dist_is_one_minus_tmscore_with_a_zero_diagonal(inputs, tmp_path
 @needs_foldseek
 def test_k_keeps_one_entry_per_row(inputs, tmp_path):
     out = tmp_path / "k.hdf5"
-    structure_dist.main(["-i", inputs, "--max_hits_per_query", "1", "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--max_hits_per_query", "1", "--hdf_out", str(out), "--cpu", "2"])
     array = DataMatrix.from_file(str(out)).toarray()
     assert ((array != 0).sum(axis=1) == 1).all()
 
@@ -322,8 +322,8 @@ def test_k_keeps_one_entry_per_row(inputs, tmp_path):
 def test_lower_bound_drops_weak_pairs(inputs, tmp_path):
     unbounded = tmp_path / "a.hdf5"
     bounded = tmp_path / "b.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(unbounded), "--cpu", "2"])
-    structure_dist.main(["-i", inputs, "--lb", "400", "--hdf", str(bounded), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(unbounded), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--threshold", "400", "--hdf_out", str(bounded), "--cpu", "2"])
     loose = DataMatrix.from_file(str(unbounded)).toarray()
     tight = DataMatrix.from_file(str(bounded)).toarray()
     assert (tight[tight != 0] > 400).all()
@@ -333,7 +333,7 @@ def test_lower_bound_drops_weak_pairs(inputs, tmp_path):
 @needs_foldseek
 def test_rectangular_comparison(inputs, references, tmp_path):
     out = tmp_path / "r.hdf5"
-    structure_dist.main(["-i", inputs, "-r", references, "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "-r", references, "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     assert sorted(matrix.rows) == ALL_NAMES
     assert matrix.columns == ["UBQref_A"]
@@ -346,7 +346,7 @@ def test_rectangular_comparison(inputs, references, tmp_path):
 @needs_foldseek
 def test_reference_identical_to_input_is_treated_as_a_self_comparison(inputs, tmp_path):
     out = tmp_path / "s.hdf5"
-    structure_dist.main(["-i", inputs, "-r", inputs, "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "-r", inputs, "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     assert matrix.symmetric_labels is True
 
@@ -356,9 +356,9 @@ def test_mst_knn_streaming_matches_the_batch_transform(inputs, tmp_path):
     full = tmp_path / "full.hdf5"
     batch = tmp_path / "batch.hdf5"
     stream = tmp_path / "stream.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(full), "--cpu", "2"])
-    transform_matrix.main(["-i", str(full), "--mst", "--knn", "2", "--hdf", str(batch)])
-    structure_dist.main(["-i", inputs, "--mst", "--knn", "2", "--hdf", str(stream),
+    structure_dist.main(["-i", inputs, "--hdf_out", str(full), "--cpu", "2"])
+    transform_matrix.main(["-i", str(full), "--mst", "--knn", "2", "--hdf_out", str(batch)])
+    structure_dist.main(["-i", inputs, "--mst", "--knn", "2", "--hdf_out", str(stream),
                          "--cpu", "2"])
 
     batch_matrix = DataMatrix.from_file(str(batch))
@@ -377,7 +377,7 @@ def test_mst_knn_streaming_matches_the_batch_transform(inputs, tmp_path):
 @needs_foldseek
 def test_knn_output_is_max_symmetric(inputs, tmp_path):
     out = tmp_path / "knn.hdf5"
-    structure_dist.main(["-i", inputs, "--knn", "2", "--hdf", str(out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--knn", "2", "--hdf_out", str(out), "--cpu", "2"])
     array = DataMatrix.from_file(str(out)).toarray()
     assert np.allclose(array, array.T)
 
@@ -386,7 +386,7 @@ def test_knn_output_is_max_symmetric(inputs, tmp_path):
 def test_mst_knn_with_a_structural_mode(inputs, tmp_path):
     out = tmp_path / "tm_knn.hdf5"
     structure_dist.main(["-i", inputs, "--mode", "tmscore", "--alignment_type", "1",
-                         "-e", "10", "--mst", "--knn", "2", "--hdf", str(out), "--cpu", "2"])
+                         "-e", "10", "--mst", "--knn", "2", "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     assert matrix.data_type == "tmscore"
     array = matrix.toarray()
@@ -398,7 +398,7 @@ def test_mst_knn_with_a_structural_mode(inputs, tmp_path):
 def test_default_run_does_not_warn_about_saturation(inputs, tmp_path, recwarn):
     # Regression guard: foldseek's own default caps hits at 1000 per query, which would
     # silently truncate a large all-vs-all. structure_dist derives its own cap instead.
-    structure_dist.main(["-i", inputs, "--hdf", str(tmp_path / "d.hdf5"), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(tmp_path / "d.hdf5"), "--cpu", "2"])
     assert not [w for w in recwarn if "max_seqs" in str(w.message)]
 
 
@@ -406,14 +406,14 @@ def test_default_run_does_not_warn_about_saturation(inputs, tmp_path, recwarn):
 def test_max_seqs_saturation_warns(inputs, tmp_path):
     with pytest.warns(RuntimeWarning, match="was reached by"):
         structure_dist.main(["-i", inputs, "--max_seqs", "1", "-e", "10",
-                             "--hdf", str(tmp_path / "d.hdf5"), "--cpu", "2"])
+                             "--hdf_out", str(tmp_path / "d.hdf5"), "--cpu", "2"])
 
 
 @needs_foldseek
 def test_max_output_gb(inputs, tmp_path):
     out = tmp_path / "d.hdf5"
     with pytest.raises(SystemExit, match="--max_output_gb"):
-        structure_dist.main(["-i", inputs, "--hdf", str(out), "--cpu", "2",
+        structure_dist.main(["-i", inputs, "--hdf_out", str(out), "--cpu", "2",
                              "--max_output_gb", "0.000000001"])
     assert not out.exists()
 
@@ -421,7 +421,7 @@ def test_max_output_gb(inputs, tmp_path):
 @needs_foldseek
 def test_max_output_gb_zero_disables_the_guardrail(inputs, tmp_path):
     out = tmp_path / "d.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(out), "--cpu", "2",
+    structure_dist.main(["-i", inputs, "--hdf_out", str(out), "--cpu", "2",
                          "--max_output_gb", "0"])
     assert out.exists()
 
@@ -431,9 +431,9 @@ def test_prebuilt_database_input_matches_structure_file_input(inputs, tmp_path):
     from_files = tmp_path / "files.hdf5"
     from_db = tmp_path / "db.hdf5"
     db_prefix = tmp_path / "mydb"
-    structure_dist.main(["-i", inputs, "--hdf", str(from_files),
-                         "--keep_db", str(db_prefix), "--cpu", "2"])
-    structure_dist.main(["-i", str(db_prefix), "--hdf", str(from_db), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(from_files),
+                         "--db_out", str(db_prefix), "--cpu", "2"])
+    structure_dist.main(["-i", str(db_prefix), "--hdf_out", str(from_db), "--cpu", "2"])
 
     files_matrix = DataMatrix.from_file(str(from_files))
     db_matrix = DataMatrix.from_file(str(from_db))
@@ -444,8 +444,8 @@ def test_prebuilt_database_input_matches_structure_file_input(inputs, tmp_path):
 @needs_foldseek
 def test_hits_tsv(inputs, tmp_path):
     hits = tmp_path / "hits.tsv"
-    structure_dist.main(["-i", inputs, "--hdf", str(tmp_path / "d.hdf5"),
-                         "--hits_tsv", str(hits), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(tmp_path / "d.hdf5"),
+                         "--hits_tsv_out", str(hits), "--cpu", "2"])
     assert hits.is_file()
     queries = {line.split("\t")[0] for line in hits.read_text().splitlines() if line.strip()}
     assert queries <= set(ALL_NAMES)
@@ -457,17 +457,17 @@ def test_matrix_feeds_the_downstream_tools(inputs, tmp_path):
 
     score_path = tmp_path / "score.hdf5"
     dist_path = tmp_path / "dist.hdf5"
-    structure_dist.main(["-i", inputs, "--hdf", str(score_path), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--hdf_out", str(score_path), "--cpu", "2"])
     structure_dist.main(["-i", inputs, "--mode", "tmscore_dist", "--alignment_type", "1",
-                         "-e", "10", "--hdf", str(dist_path), "--cpu", "2"])
+                         "-e", "10", "--hdf_out", str(dist_path), "--cpu", "2"])
 
     xgmml = tmp_path / "ssn.xgmml"
-    build_ssn.main(["-i", str(score_path), "--xgmml", str(xgmml)])
+    build_ssn.main(["-i", str(score_path), "--xgmml_out", str(xgmml)])
     assert xgmml.is_file() and "<edge" in xgmml.read_text()
 
     # A data_type of "tmscore_dist" must not be rejected anywhere downstream.
     newick = tmp_path / "tree.nwk"
-    build_tree.main(["-i", str(dist_path), "--newick", str(newick)])
+    build_tree.main(["-i", str(dist_path), "--newick_out", str(newick)])
     tree = newick.read_text()
     assert tree.strip() and "1UBQ_A" in tree
 
@@ -476,14 +476,14 @@ def test_matrix_feeds_the_downstream_tools(inputs, tmp_path):
 def test_transform_matrix_accepts_a_structural_matrix_for_pruning_only(inputs, tmp_path):
     tm_path = tmp_path / "tm.hdf5"
     structure_dist.main(["-i", inputs, "--mode", "tmscore", "--alignment_type", "1",
-                         "-e", "10", "--hdf", str(tm_path), "--cpu", "2"])
+                         "-e", "10", "--hdf_out", str(tm_path), "--cpu", "2"])
     # pass-through pruning is fine
     transform_matrix.main(["-i", str(tm_path), "--knn", "2",
-                           "--hdf", str(tmp_path / "pruned.hdf5")])
+                           "--hdf_out", str(tmp_path / "pruned.hdf5")])
     # but re-deriving a score transform from it is not
     with pytest.raises(ValueError, match="only supported from a 'score' matrix"):
         transform_matrix.main(["-i", str(tm_path), "--mode", "efi_score",
-                               "--hdf", str(tmp_path / "bad.hdf5")])
+                               "--hdf_out", str(tmp_path / "bad.hdf5")])
 
 
 # --------------------------------------------------------------------------------------
@@ -495,7 +495,7 @@ def test_reseek_self_comparison(inputs, tmp_path):
     out = tmp_path / "r.hdf5"
     with pytest.warns(RuntimeWarning, match="shorter than 32 residues"):
         structure_dist.main(["-i", inputs, "--algorithm", "reseek",
-                             "--hdf", str(out), "--cpu", "2"])
+                             "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     assert set(matrix.rows) == RESEEK_NAMES
     assert (np.diag(matrix.toarray()) > 0).all()
@@ -507,7 +507,7 @@ def test_reseek_supports_fident(inputs, tmp_path):
     out = tmp_path / "f.hdf5"
     with pytest.warns(RuntimeWarning, match="shorter than 32 residues"):
         structure_dist.main(["-i", inputs, "--algorithm", "reseek", "--mode", "fident",
-                             "--hdf", str(out), "--cpu", "2"])
+                             "--hdf_out", str(out), "--cpu", "2"])
     matrix = DataMatrix.from_file(str(out))
     # reseek reports pctid, which structure_lib converts to a fraction
     assert matrix.toarray().max() <= 1.0
@@ -518,21 +518,21 @@ def test_reseek_supports_fident(inputs, tmp_path):
 def test_reseek_rejects_tmscore_and_efi_score(inputs, tmp_path):
     with pytest.raises(RuntimeError, match="tmscore"):
         structure_dist.main(["-i", inputs, "--algorithm", "reseek", "--mode", "tmscore",
-                             "--hdf", str(tmp_path / "a.hdf5")])
+                             "--hdf_out", str(tmp_path / "a.hdf5")])
     with pytest.raises(RuntimeError, match="bit score"):
         structure_dist.main(["-i", inputs, "--algorithm", "reseek", "--mode", "efi_score",
-                             "--hdf", str(tmp_path / "b.hdf5")])
+                             "--hdf_out", str(tmp_path / "b.hdf5")])
 
 
 @needs_both
 def test_backends_agree_on_which_pairs_are_related(inputs, tmp_path):
     foldseek_path = tmp_path / "fs.hdf5"
     reseek_path = tmp_path / "rs.hdf5"
-    structure_dist.main(["-i", inputs, "--mode", "bool", "--hdf", str(foldseek_path),
+    structure_dist.main(["-i", inputs, "--mode", "bool", "--hdf_out", str(foldseek_path),
                          "--cpu", "2"])
     with pytest.warns(RuntimeWarning, match="shorter than 32 residues"):
         structure_dist.main(["-i", inputs, "--algorithm", "reseek", "--mode", "bool",
-                             "--hdf", str(reseek_path), "--cpu", "2"])
+                             "--hdf_out", str(reseek_path), "--cpu", "2"])
 
     foldseek = DataMatrix.from_file(str(foldseek_path))
     reseek = DataMatrix.from_file(str(reseek_path))
@@ -547,10 +547,10 @@ def test_max_hits_per_query_applies_before_streaming_sparsify(inputs, tmp_path):
     capped = tmp_path / "capped.hdf5"
     batch = tmp_path / "batch.hdf5"
     stream = tmp_path / "stream.hdf5"
-    structure_dist.main(["-i", inputs, "--max_hits_per_query", "2", "--hdf", str(capped), "--cpu", "2"])
-    transform_matrix.main(["-i", str(capped), "--knn", "1", "--hdf", str(batch)])
+    structure_dist.main(["-i", inputs, "--max_hits_per_query", "2", "--hdf_out", str(capped), "--cpu", "2"])
+    transform_matrix.main(["-i", str(capped), "--knn", "1", "--hdf_out", str(batch)])
     structure_dist.main(["-i", inputs, "--max_hits_per_query", "2", "--knn", "1",
-                         "--hdf", str(stream), "--cpu", "2"])
+                         "--hdf_out", str(stream), "--cpu", "2"])
     stream_array = DataMatrix.from_file(str(stream)).toarray()
     np.testing.assert_array_equal(stream_array, stream_array.T)
     np.testing.assert_allclose(stream_array, DataMatrix.from_file(str(batch)).toarray())
@@ -560,8 +560,8 @@ def test_max_hits_per_query_applies_before_streaming_sparsify(inputs, tmp_path):
 def test_bool_sparsify_selects_on_scores(inputs, tmp_path):
     score_out = tmp_path / "score.hdf5"
     bool_out = tmp_path / "bool.hdf5"
-    structure_dist.main(["-i", inputs, "--knn", "1", "--hdf", str(score_out), "--cpu", "2"])
-    structure_dist.main(["-i", inputs, "--knn", "1", "--mode", "bool", "--hdf", str(bool_out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--knn", "1", "--hdf_out", str(score_out), "--cpu", "2"])
+    structure_dist.main(["-i", inputs, "--knn", "1", "--mode", "bool", "--hdf_out", str(bool_out), "--cpu", "2"])
     score_array = DataMatrix.from_file(str(score_out)).toarray()
     bool_array = DataMatrix.from_file(str(bool_out)).toarray()
     np.testing.assert_array_equal(bool_array != 0, score_array != 0)

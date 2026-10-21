@@ -60,13 +60,13 @@ def test_hmmer_build_with_binaryio():
 
 
 def test_main_with_required_params(msa_file, capsys):
-    main(["--name", "test_profile", "--input", msa_file])
+    main(["--name", "test_profile", "--input", msa_file, "-o", "-"])
     captured = capsys.readouterr()
     assert "HMMER3/f" in captured.out
     assert "NAME  test_profile" in captured.out
 
 def test_main_with_optional_params(msa_file, capsys):
-    main(["--name", "test_profile", "--acc", "P12345", "--desc", "Test profile description", "--input", msa_file, "--alphabet", "dna"])
+    main(["--name", "test_profile", "--acc", "P12345", "--desc", "Test profile description", "--input", msa_file, "--alphabet", "dna", "-o", "-"])
     captured = capsys.readouterr()
     output = captured.out
     assert "HMMER3/f" in output

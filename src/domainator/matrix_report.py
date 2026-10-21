@@ -1,18 +1,18 @@
 """ Reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for similarity networks
 """
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import sys
 import math
 from time import perf_counter
 import base64
 import gzip
 
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.outputs import output_file
 from domainator.data_matrix import DataMatrix, MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
-from domainator import __version__, RawAndDefaultsFormatter
 from bashplotlib.histogram import plot_hist
 import io
 from contextlib import ExitStack, redirect_stdout
-from domainator.summary_report import histplot_base64
 import numpy as np
 import json
 from domainator.ssn_hierarchy import (
@@ -20,7 +20,6 @@ from domainator.ssn_hierarchy import (
     MERGE_EVENT_DENSITY_BINS,
     MERGE_IMPACT_CHOICES,
     MERGE_IMPACT_MIN_CHILD,
-    MERGE_IMPACT_PRODUCT,
     component_size_summary_by_threshold,
     filter_merge_event_rows,
     format_merge_impact_metric,
@@ -62,7 +61,7 @@ def _slider_stop_rows(merge_event_rows, tree=None):
 
     The stop list ends with a floor cut below the weakest MST edge. Without it the
     slider stopped one merge short of the fully merged network, because every other
-    stop excludes its own tie group under the strictly-above ``--lb`` convention.
+    stop excludes its own tie group under the strictly-above ``--threshold`` convention.
 
     ``threshold_index_lookup`` is passed because this report, unlike a ``.dsnv``
     bundle, carries the threshold tables and reads each cut's edge count out of them.
@@ -320,7 +319,7 @@ Max: {max_val:.1f}
         
         edges_by_thresh = tree.edges_by_threshold
         if len(edges_by_thresh) > 0:
-            print(f"\nEdges kept at key thresholds (equivalent to build_ssn --lb <threshold>):", file=self.out_handle)
+            print(f"\nEdges kept at key thresholds (equivalent to build_ssn --threshold <threshold>):", file=self.out_handle)
             show_indices = [0, 1, 2, len(edges_by_thresh)//2, -3, -2, -1]
             seen = set()
             for i in show_indices:
@@ -732,7 +731,7 @@ class SummaryHTMLWriter():
                           formatNumber(backfilled) + ' so that every ' + bandPercent +
                           '% of the axis with an event to show has one.'
                         : ' \u2014 the strongest by impact.');
-                note.title = 'Set by matrix_report.py --max_merge_events (0 plots them all). ' +
+                note.title = 'Set by domainator matrix_report --max_merge_events (0 plots them all). ' +
                     'A stretch with no stems is a stretch whose events were too small to make ' +
                     'the cut, not necessarily a quiet one.';
             }}
@@ -777,7 +776,7 @@ class SummaryHTMLWriter():
     <div class="chart-with-controls">
         <div class="slider-container">
             <label for="threshold-slider">
-                Threshold (build_ssn --lb): <span id="threshold-number">∞</span>
+                Threshold (build_ssn --threshold): <span id="threshold-number">∞</span>
             </label>
             <div class="threshold-slider-track">
                 <input type="range" id="threshold-slider" min="0" max="{SLIDER_POSITION_SCALE if len(slider_stops) > 0 else 0}" value="0" step="1">
@@ -1052,7 +1051,7 @@ class SummaryHTMLWriter():
             xaxis: {{title: 'Threshold', type: 'log', autorange: true}},
             yaxis: {{title: 'Number of Clusters'}},
             yaxis2: {{
-                title: 'Edges kept (--lb threshold)',
+                title: 'Edges kept (--threshold threshold)',
                 overlaying: 'y',
                 side: 'right'
             }},
@@ -1130,7 +1129,7 @@ class SummaryHTMLWriter():
         document.getElementById('largest-cluster').textContent = formatNumber(sizes[0] || 0);
         
         // Edge count for this cut. EDGES_BY_THRESH has one row per distinct threshold
-        // (not per MST edge), and each row is what `build_ssn --lb <threshold>` keeps.
+        // (not per MST edge), and each row is what `build_ssn --threshold <threshold>` keeps.
         const thresholdIndex = sliderStop ? sliderStop.threshold_index : -1;
         let edgeCount = 0;
         if (thresholdIndex >= 0 && thresholdIndex < EDGES_BY_THRESH.length) {{
@@ -1272,20 +1271,16 @@ def matrix_report(matrix:DataMatrix, out_text_handle, out_html_handle, knn_proje
         output.write_footer()
     _record_stage_timing(stage_timings, "render_outputs", stage_start, outputs=len(longform_outputs))
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, required=True, type=str, help="name of input matrix file.")
-    
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="Text file to write output to.")
-    
-    parser.add_argument('--html', default=None, required=False,
-                        help="html file to write output to.")
-    parser.add_argument('--json', default=None, required=False,
-                        help="Write a compact JSON summary (edge stats, connected components, split-event series) to this file. Use '-' for stdout.")
+    add_input(parser, "name of input matrix file.", multiple=False, stdin=False)
+
+    add_output(parser, "text", "Write the report as text to this file.", primary=True)
+    add_output(parser, "html", "Write the report as html to this file.")
+    add_output(parser, "json", "Write a compact JSON summary (edge stats, connected components, split-event series) to this file.")
     parser.add_argument('--knn_projection', action='store_true', default=False,
-                        help=f"Project how many edges 'build_ssn --lb T --mst --knn K' would keep, for every threshold T and K from {KNN_PROJECTION_MIN_K} to {KNN_PROJECTION_MAX_K}, and add a K slider to the HTML report. Disabled by default to reduce memory use.")
+                        help=f"Project how many edges 'build_ssn --threshold T --mst --knn K' would keep, for every threshold T and K from {KNN_PROJECTION_MIN_K} to {KNN_PROJECTION_MAX_K}, and add a K slider to the HTML report. Disabled by default to reduce memory use.")
     parser.add_argument('--merge_impact_metric', choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
                         help="Metric used for split-event plots and tables: 'min_child' emphasizes the smaller cluster breaking away, while 'product' emphasizes balanced large splits.")
     parser.add_argument('--max_merge_events', type=int, default=DEFAULT_MAX_MERGE_EVENTS,
@@ -1296,21 +1291,21 @@ def main(argv):
                         help="Print per-stage runtime timings to stderr for profiling large matrix_report runs.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    if params.output is None and params.html is None and params.json is None:
-        parser.error("No output file specified. Use --output, --html, and/or --json to specify at least one output file.")
+    check_outputs(parser, params, ["text_out", "html_out", "json_out"])
 
     with ExitStack() as output_stack:
-        out = output_stack.enter_context(open(params.output, "w")) if params.output is not None else None
-        out_html_handle = output_stack.enter_context(open(params.html, "w")) if params.html is not None else None
-        if params.json is None:
-            out_json_handle = None
-        elif params.json == "-":
-            out_json_handle = sys.stdout
-        else:
-            out_json_handle = output_stack.enter_context(open(params.json, "w"))
+        def open_output(path):
+            return None if path is None else output_stack.enter_context(output_file(path))
+        out = open_output(params.text_out)
+        out_html_handle = open_output(params.html_out)
+        out_json_handle = open_output(params.json_out)
 
         progress_callback = None
         if params.progress or params.profile_stages:
@@ -1325,7 +1320,7 @@ def main(argv):
             _record_stage_timing(stage_timings, "load_matrix", stage_start, shape=matrix.shape, matrix_type=type(matrix).__name__)
 
         ### Run
-        if params.output is not None or params.html is not None or params.json is not None:
+        if out is not None or out_html_handle is not None or out_json_handle is not None:
             stage_start = perf_counter()
             matrix_report(
                 matrix,
@@ -1342,11 +1337,3 @@ def main(argv):
             if params.profile_stages:
                 _record_stage_timing(stage_timings, "matrix_report_total", stage_start)
                 _emit_stage_timings(stage_timings)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-
-    main(sys.argv[1:])
-  

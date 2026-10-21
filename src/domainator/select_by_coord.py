@@ -28,13 +28,13 @@ from collections import defaultdict
 from dataclasses import dataclass
 import csv
 import os
-import sys
 
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
 from domainator.Bio.SeqFeature import CompoundLocation, FeatureLocation
-from domainator.utils import parse_seqfiles, region_id, slice_record_from_location, write_genbank
+from domainator.utils import parse_seqfiles, region_id, slice_record_from_location
 
 
 ALLOWED_COLUMNS = {"contig", "start", "end", "strand", "file"}
@@ -137,14 +137,14 @@ def load_coordinate_table(table_path):
     return selections
 
 
-def parse_seqfiles_with_basename(seqfiles, contigs=None, filetype_override=None):
+def parse_seqfiles_with_basename(seqfiles, contigs=None):
     for file in seqfiles:
         if isinstance(file, (str, os.PathLike)):
             basename = os.path.basename(file)
         else:
             basename = os.path.basename(getattr(file, "name", "<stdin>"))
 
-        for rec in parse_seqfiles([file], contigs=contigs, filetype_override=filetype_override):
+        for rec in parse_seqfiles([file], contigs=contigs):
             yield basename, rec
 
 
@@ -200,47 +200,30 @@ def select_by_coord(records, coordinate_selections):
             yield extract_coordinate_region(contig, selection)
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, nargs="+", type=str, required=False,
-                        help="names of input genbank files. If not supplied, reads from stdin.")
-    parser.add_argument("-o", "--output", default=None, required=False,
-                        help="genbank output file name. If not supplied, writes to stdout.")
-    parser.add_argument("-c", "--coords", required=True, type=str,
+    add_input(parser, 'Names of input genbank files.')
+    add_seq_outputs(parser)
+    parser.add_argument("--coords", required=True, type=str,
                         help="labeled coordinate table with columns contig, start, end, strand (optional), file (optional).")
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     coordinate_selections = load_coordinate_table(params.coords)
     target_contigs = {selection.contig for selection in coordinate_selections}
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
+    genbanks = params.input
 
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     extracted_regions = select_by_coord(
-        parse_seqfiles_with_basename(genbanks, contigs=target_contigs, filetype_override=filetype_override),
+        parse_seqfiles_with_basename(genbanks, contigs=target_contigs),
         coordinate_selections,
     )
-    write_genbank(extracted_regions, output_handle)
-
-    if params.output is not None:
-        output_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+    write_seq_outputs(extracted_regions, genbank=params.genbank_out, fasta=params.fasta_out)

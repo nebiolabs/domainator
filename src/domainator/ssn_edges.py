@@ -523,8 +523,8 @@ def mst_knn_edge_counts_by_threshold(matrix: 'DataMatrix', tree: 'MaxTree', max_
     """Return exact MST + kNN edge counts for each threshold of ``tree`` and k in [1, max_k].
 
     Row ``i`` corresponds to ``tree.thresholds[i]`` and column ``k - 1`` counts the edges a
-    ``--lb <threshold> --mst --knn <k>`` run would emit: by default only scores strictly
-    greater than the threshold are kept, matching ``--lb``. Pass ``include_equal=True``
+    ``--threshold <threshold> --mst --knn <k>`` run would emit: by default only scores strictly
+    greater than the threshold are kept, matching ``--threshold``. Pass ``include_equal=True``
     to count ties at the threshold as well.
     """
     if max_k < 1:
@@ -644,9 +644,9 @@ class MaxTree():
         mst_edges_above_threshold: MST edges scoring strictly above each entry of thresholds
         edges_by_threshold: Array of (edge_count, threshold) pairs, one row per distinct
                             threshold. edge_count is the number of edges a
-                            ``--lb threshold`` cut keeps (scores strictly greater).
+                            ``--threshold threshold`` cut keeps (scores strictly greater).
         cluster_count_by_threshold: Array of (threshold, cluster_count) pairs for the same
-                                   ``--lb threshold`` cuts
+                                   ``--threshold threshold`` cuts
         cluster_count_by_edge_count: Array of (edge_count, cluster_count) pairs for the
                                     same cuts, keyed by edge count
 
@@ -732,7 +732,7 @@ class MaxTree():
         edge_count = 0
         # Per MST edge, how many edges (and MST edges) score strictly higher than it.
         # Because the scan is descending, that is simply the size of the prefix that
-        # precedes the edge's tie group, which is what a "--lb <weight>" cut keeps.
+        # precedes the edge's tie group, which is what a "--threshold <weight>" cut keeps.
         edges_above_by_mst_edge = []
         mst_edges_above_by_mst_edge = []
         group_score = None
@@ -790,7 +790,7 @@ class MaxTree():
     def _build_threshold_tables(self):
         """Build the per-threshold tables, one row per distinct threshold.
 
-        Every row describes exactly the graph that ``--lb <threshold>`` keeps: the edges
+        Every row describes exactly the graph that ``--threshold <threshold>`` keeps: the edges
         scoring **strictly greater** than the threshold, and the components they form.
         Keying rows by distinct threshold rather than by MST edge means a threshold has a
         single answer even when many MST edges share a weight, and makes the numbers
@@ -798,7 +798,7 @@ class MaxTree():
 
         A cut at the lowest MST weight still drops that weight's own tie group, so when
         every score is positive an extra ``threshold = 0`` row is appended for the
-        complete graph -- the ``--lb 0`` default of build_ssn.
+        complete graph -- the ``--threshold 0`` default of build_ssn.
         """
         if len(self.edges) == 0:
             thresholds = np.zeros(0, dtype=float)

@@ -5,11 +5,12 @@ based on percentage overlap between domains and evalues of domains.
 
 """
 
-from jsonargparse import ArgumentParser, ActionConfigFile
-import sys
-from domainator.utils import list_and_file_to_dict_keys, write_genbank, parse_seqfiles
-from domainator import __version__, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, RawAndDefaultsFormatter
-from typing import List, Tuple, Optional, Set, Iterable, Dict
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from typing import Optional, Set, Dict
 from domainator.Bio.SeqFeature import SeqFeature
 
 #TODO: parallelize input parsing
@@ -146,8 +147,6 @@ def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Option
     else:
         raise ValueError(f"Invalid annotation type: {annotation_type}")
 
-
-
     for rec in sequence_iterator:
         keep = find_kept_annotations(
             evalue, max_overlap, rec, databases_keep, databases_filter, selected_domains, feature_types)
@@ -164,19 +163,16 @@ def filter_domains(sequence_iterator, evalue, max_overlap, databases_keep:Option
         yield rec
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', nargs='+', required=False,
-                       default=None,
-                       help="the genbank filenames to be filtered. If not supplied, reads from stdin.")
+    add_input(parser, 'The genbank filenames to be filtered.')
     
-    parser.add_argument('-o', '--output', default=None, type=str, required=False,
-                       help="output genbank filename. If not supplied writes to stdout.")
+    add_seq_outputs(parser)
 
-    parser.add_argument('-e', '--evalue', type=float, default=100000000,
-                       help="threshold E value for the domain hit")
-    parser.add_argument('-m', '--max_overlap', type=float, default=1.0,
+    parser.add_argument('-e', '--evalue', type=float, default=None,
+                       help="threshold (max) E value for the domain hit. Default: no cutoff.")
+    parser.add_argument('--max_overlap', type=float, default=1.0,
                        help="the maximum fraction of overlap between domains to be included in the annotated genbank.")
 
     parser.add_argument('--contigs', default=[], nargs='+',
@@ -190,61 +186,49 @@ def main(argv):
     parser.add_argument('--domains_file', type=str, default=None,
                         help="text file containing names of domains to include. (all domains not matching this list will be removed).")
 
-    parser.add_argument('--databases_keep', type=str, default=None, nargs="+",
+    parser.add_argument('--keep_databases', type=str, default=None, nargs="+",
                        help="Remove annotations from all databases except these. Applied before other filters, such as domains, evalue, and max_overlap. By default will keep all annotations from all databases.")
 
-    parser.add_argument('--databases_filter', type=str, default=None, nargs="+",
-                       help="The name of the database which you want to filter annotations from, by default will filter all annoatations according to evalue, domains, and max_overlap. Domains from other databases will be left as-is.")
+    parser.add_argument('--databases', type=str, default=None, nargs="+",
+                       help="Only filter annotations from these databases, according to evalue, domains, and max_overlap; annotations from other databases are left as they are. By default, annotations from all databases are filtered.")
     
     parser.add_argument('--annotation_type', type=str, default="all", choices={"domainator", "domain_search", "all"},
-                       help="Which type of annotations to filter (domainator, domain_search, all). Default: domainator")
+                       help="Which type of annotations to filter (domainator, domain_search, all).")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     target_contigs = list_and_file_to_dict_keys(params.contigs, params.contigs_file)    
     selected_domains = list_and_file_to_dict_keys(
         params.domains, params.domains_file, as_set=True)
 
-    evalue = params.evalue
+    evalue = float("inf") if params.evalue is None else params.evalue
     max_overlap = params.max_overlap
 
+    genbanks = params.input
 
-    filetype_override = None
-    if params.input is None:
-        genbanks = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        genbanks = params.input
-
-    if params.output is None:
-        out = sys.stdout
-    else:
-        out = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
     databases_filter = None
-    if params.databases_filter is not None:
-        databases_filter = set(params.databases_filter)
+    if params.databases is not None:
+        databases_filter = set(params.databases)
 
     databases_keep = None
-    if params.databases_keep is not None:
-        databases_keep = set(params.databases_keep)
+    if params.keep_databases is not None:
+        databases_keep = set(params.keep_databases)
 
     # Run
-    write_genbank(filter_domains(
-                parse_seqfiles(genbanks, target_contigs, filetype_override=filetype_override), 
+    write_seq_outputs(filter_domains(
+                parse_seqfiles(genbanks, target_contigs), 
                 evalue=evalue,
                 max_overlap=max_overlap,
                 databases_keep=databases_keep,
                 databases_filter=databases_filter,
                 selected_domains=selected_domains,
                 annotation_type=params.annotation_type
-                ),
-        out)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+                ), genbank=params.genbank_out, fasta=params.fasta_out)

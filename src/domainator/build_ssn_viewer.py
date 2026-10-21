@@ -3,16 +3,16 @@
 import gzip
 import json
 import os
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import List, Union
 
 import pandas as pd
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator import __version__
 from domainator.build_ssn import subset_matrix_by_labels
 from domainator.data_matrix import DataMatrix, MaxTree
 from domainator.output_guardrails import (
@@ -207,17 +207,15 @@ def write_ssn_viewer_bundle(
     _write_compressed_ssn_viewer_bundle(out_path, compressed_bytes, max_output_bytes=max_output_bytes)
 
 
-def main(argv):
-    parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", type=str, required=False,
-                        help="Symmetric similarity matrix to convert into a Domainator Similarity Network Viewer bundle. Format can be tab-separated text or Domainator hdf5.")
-    parser.add_argument("-o", "--output", type=str, required=False,
-                        help="Path to write the gzip-compressed JSON Domainator Similarity Network Viewer bundle.")
-    parser.add_argument("--html", type=str, default=None,
-                        help="Optional path to write a standalone static HTML viewer shell that loads local bundle files.")
+    add_input(parser, "Symmetric similarity matrix to convert into a Domainator Similarity Network Viewer bundle. Format can be tab-separated text or Domainator hdf5.",
+              multiple=False, required=False, stdin=False)
+    add_output(parser, "dsnv", "Write the gzip-compressed JSON Domainator Similarity Network Viewer bundle (.dsnv) to this file.", primary=True, stdout=False)
+    add_output(parser, "html", "Write a standalone static HTML viewer page to this file. Without --embed_data, the page loads local bundle files.", stdout=False)
     parser.add_argument("--embed_data", action="store_true",
-                        help="Embed the input bundle JSON into --html so the viewer autoloads it on open.")
+                        help="Embed the input bundle JSON into --html_out so the viewer autoloads it on open.")
     parser.add_argument("--name", type=str, default=None,
                         help="Optional display name recorded in the bundle. Defaults to the output file stem.")
     parser.add_argument("--metadata", type=str, nargs="+", required=False, default=None,
@@ -236,34 +234,38 @@ def main(argv):
                         help="Metric the viewer uses for split events: min_child (node count of the smaller piece) or product (the two piece sizes multiplied). Recorded in the bundle as the default; switchable in the viewer.")
     add_max_output_gb_argument(parser)
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
     if params.input is None:
-        if params.output is not None:
-            raise SystemExit("-o/--output requires -i/--input.")
+        if params.dsnv_out is not None:
+            parser.error("-o/--dsnv_out requires -i/--input.")
         if params.embed_data:
-            raise SystemExit("--embed_data requires -i/--input.")
-        if params.html is None:
-            raise SystemExit("When -i/--input is omitted, --html is required.")
+            parser.error("--embed_data requires -i/--input.")
+        check_outputs(parser, params, ["html_out"])
 
         bundle_name = params.name if params.name is not None else VIEWER_APP_NAME
-        write_ssn_viewer_html(params.html, title=bundle_name)
+        write_ssn_viewer_html(params.html_out, title=bundle_name)
         return
 
-    if params.output is None and not params.embed_data:
-        raise SystemExit("When -i/--input is supplied, provide -o/--output or --embed_data.")
-    if params.embed_data and params.html is None:
-        raise SystemExit("--embed_data requires --html.")
+    if params.embed_data and params.html_out is None:
+        parser.error("--embed_data requires --html_out.")
+    if params.dsnv_out is None and not params.embed_data:
+        parser.error("When -i/--input is supplied, provide -o/--dsnv_out or --embed_data.")
+    check_outputs(parser, params, ["dsnv_out", "html_out"])
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     subset_labels = list_and_file_to_dict_keys(params.subset, params.subset_file, as_set=True)
     if params.name is not None:
         bundle_name = params.name
-    elif params.output is not None:
-        bundle_name = Path(params.output).stem
-    elif params.html is not None:
-        bundle_name = Path(params.html).stem
+    elif params.dsnv_out is not None:
+        bundle_name = Path(params.dsnv_out).stem
+    elif params.html_out is not None:
+        bundle_name = Path(params.html_out).stem
     else:
         bundle_name = VIEWER_APP_NAME
 
@@ -279,24 +281,16 @@ def main(argv):
             name=bundle_name,
         )
         # Serialize once; reuse bytes for both file output and HTML embedding.
-        need_compressed = params.output is not None or params.embed_data
+        need_compressed = params.dsnv_out is not None or params.embed_data
         json_bytes, compressed_bytes = _serialize_ssn_viewer_bundle(bundle) if need_compressed else (None, None)
 
-        if params.output is not None:
-            _write_compressed_ssn_viewer_bundle(params.output, compressed_bytes, max_output_bytes=max_output_bytes)
-        if params.html is not None:
+        if params.dsnv_out is not None:
+            _write_compressed_ssn_viewer_bundle(params.dsnv_out, compressed_bytes, max_output_bytes=max_output_bytes)
+        if params.html_out is not None:
             write_ssn_viewer_html(
-                params.html,
+                params.html_out,
                 title=bundle_name,
                 embedded_bundle_json=compressed_bytes if params.embed_data else None,
             )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

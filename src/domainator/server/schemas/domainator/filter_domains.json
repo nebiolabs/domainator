@@ -3,9 +3,9 @@
   "display_name": "Filter Domains",
   "category": "Editors",
   "description": "Filter domain anntations\n\nTakes a genbank file which has been annotated through the domainator program and filters domainator annotations,\nbased on percentage overlap between domains and evalues of domains.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 5,
-  "entry_point": "domainator.filter_domains",
+  "entry_point": "filter_domains",
   "parameters": [
     {
       "name": "Input",
@@ -27,13 +27,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "output genbank filename.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -54,7 +54,6 @@
       "type": "number",
       "default": 1.0,
       "flags": [
-        "-m",
         "--max_overlap"
       ]
     },
@@ -82,22 +81,22 @@
     },
     {
       "name": "Databases Keep",
-      "parameter": "databases_keep",
+      "parameter": "keep_databases",
       "help": "Remove annotations from all databases except these. Applied before other filters, such as domains, evalue, and max_overlap. By default will keep all annotations from all databases.",
       "type": "string",
       "multiple": true,
       "flags": [
-        "--databases_keep"
+        "--keep_databases"
       ]
     },
     {
       "name": "Databases Filter",
-      "parameter": "databases_filter",
+      "parameter": "databases",
       "help": "The name of the database which you want to filter annotations from, by default will filter all annoatations according to evalue, domains, and max_overlap. Domains from other databases will be left as-is.",
       "type": "string",
       "multiple": true,
       "flags": [
-        "--databases_filter"
+        "--databases"
       ]
     },
     {
@@ -140,6 +139,5 @@
         "txt"
       ]
     }
-
   ]
 }

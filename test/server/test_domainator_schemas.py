@@ -96,8 +96,8 @@ SCHEMA_CASES = [
         tool_id="matrix_report",
         parameters=lambda data_dir: {
             "input": str(data_dir / "scorefull.tsv"),
-            "output": "report.txt",
-            "html": "report.html",
+            "text_out": "report.txt",
+            "html_out": "report.html",
         },
         expected_outputs={
             "report.txt": _text_contains("Matrix Report"),
@@ -108,7 +108,7 @@ SCHEMA_CASES = [
         tool_id="color_table_to_legend",
         parameters=lambda data_dir: {
             "input": [str(data_dir / "color_table_123.tsv")],
-            "svg": "legend.svg",
+            "svg_out": "legend.svg",
             "title": "Integration Legend",
         },
         expected_outputs={
@@ -119,7 +119,7 @@ SCHEMA_CASES = [
         tool_id="genbank_to_fasta",
         parameters=lambda data_dir: {
             "input": [str(data_dir / "pDONR201.gb")],
-            "output": "output.fasta",
+            "fasta_out": "output.fasta",
         },
         expected_outputs={
             "output.fasta": _starts_with(">"),
@@ -129,8 +129,8 @@ SCHEMA_CASES = [
         tool_id="color_genbank",
         parameters=lambda data_dir: {
             "input": [str(data_dir / "color_domain_search_test.gb")],
-            "output": "colored.gb",
-            "mode": "domains_and_cdss",
+            "genbank_out": "colored.gb",
+            "target": "domains_and_cdss",
         },
         expected_outputs={
             "colored.gb": _has_feature_qualifier("Color"),
@@ -140,7 +140,7 @@ SCHEMA_CASES = [
         tool_id="extract_peptides",
         parameters=lambda data_dir: {
             "input": [str(data_dir / "pDONR201_multi_genemark_domainator.gb")],
-            "output": "peptides.gb",
+            "genbank_out": "peptides.gb",
         },
         expected_outputs={
             "peptides.gb": _matches_reference_peptides(),
@@ -150,9 +150,9 @@ SCHEMA_CASES = [
         tool_id="trim_contigs",
         parameters=lambda data_dir: {
             "input": [str(data_dir / "pDONR201_multi_genemark_domainator.gb")],
-            "output": "trimmed.gb",
+            "genbank_out": "trimmed.gb",
             "contigs": ["pDONR201_1"],
-            "cds_both": 2,
+            "cds_range": 2,
         },
         expected_outputs={
             "trimmed.gb": _check_trimmed_contig(1000, {"pDONR201_1_1266:2265"}),
@@ -162,7 +162,7 @@ SCHEMA_CASES = [
         tool_id="rotate_contigs",
         parameters=lambda data_dir: {
             "input": [str(data_dir / "bacillus_phage_SPR_with_annotations.gb")],
-            "output": "rotated.gb",
+            "genbank_out": "rotated.gb",
             "domains": ["DHFR_1"],
         },
         expected_outputs={
@@ -208,3 +208,26 @@ def test_domainator_schema_integration(executor: ToolExecutor, case: SchemaInteg
         assertion(output_path)
 
     assert len(job.output_artifacts) >= len(case.expected_outputs)
+
+
+SCHEMA_DIR = Path(__file__).resolve().parents[2] / "src" / "domainator" / "server" / "schemas" / "domainator"
+
+
+@pytest.mark.parametrize("schema_path", sorted(SCHEMA_DIR.glob("*.json")), ids=lambda p: p.stem)
+def test_schema_parameters_match_the_parser(schema_path: Path) -> None:
+    """Every schema parameter names an option the tool's parser accepts, under its current flags."""
+    import importlib
+    import json
+
+    from domainator.cli.registry import TOOLS
+
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    assert schema["runner"] == "domainator"
+    tool = TOOLS[schema["entry_point"]]
+    parser = importlib.import_module(f"domainator.{tool.module}").build_parser()
+    flags_by_dest = {}
+    for action in parser._actions:
+        flags_by_dest.setdefault(action.dest, set()).update(action.option_strings)
+    for param in schema["parameters"] + schema.get("advanced_parameters", []):
+        assert param["parameter"] in flags_by_dest, f"{param['parameter']} is not an option of domainator {schema['entry_point']}"
+        assert set(param.get("flags", [])) <= flags_by_dest[param["parameter"]]

@@ -5,11 +5,10 @@
 
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-from jsonargparse import ArgumentParser, ActionConfigFile
-import sys
+from jsonargparse import ActionConfigFile
 
+from domainator.cli.common import add_input, tool_parser
 from domainator.data_matrix import DataMatrix, is_distance_data_type, symmetrize_matrix
-from domainator import __version__, RawAndDefaultsFormatter
 from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded
 import scipy.sparse
@@ -141,19 +140,19 @@ def transform_matrix(array, mode, row_lengths=None, col_lengths=None):
         return MODES[mode](array, row_lengths=row_lengths, col_lengths=col_lengths)
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, required=True, type=str, help="name of input matrix file.")
+    add_input(parser, "name of input matrix file.", multiple=False, stdin=False)
 
-    parser.add_argument("--input_type", choices=set(MODES.keys()).union({None}), default=None, help="If the type of the input matrix is not specified, specify the type of input matrix. Default: None")
+    parser.add_argument("--value_type", choices=sorted(MODES.keys()), default=None, help="What the values of the input matrix are, if the file does not say. Overrides the type stored in the file.")
     
     add_matrix_output_arguments(parser, noun="transformed matrix")
 
     parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=set(MODES.keys()).union({PASS_THROUGH_MODE}), 
                         help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: none")
 
-    parser.add_argument('--lb', type=float, default=None, required=False,
+    parser.add_argument('--threshold', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
     add_sparsify_arguments(parser, requirements="Uses the post-transform values, except that --mode bool selects on the scores and then keeps the selected cells as 1; requires a square, non-distance matrix.")
 
@@ -166,6 +165,11 @@ def main(argv):
     # TODO: option to supply row and/or column lengths if not supplied in the input matrix.
 
     # TODO: option to supply row and/or column names to override those in the input matrix.
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
 
@@ -176,12 +180,12 @@ def main(argv):
 
     matrix = DataMatrix.from_file(params.input)
 
-    if params.input_type is not None:
-        if matrix.data_type == "" or matrix.data_type == params.input_type:
+    if params.value_type is not None:
+        if matrix.data_type == "" or matrix.data_type == params.value_type:
             pass
         else:
-            warnings.warn(f"Input matrix format is '{matrix.data_type}', but --input_type is '{params.input_type}'. The input matrix format is overridden.")
-        matrix.data_type = params.input_type
+            warnings.warn(f"Input matrix format is '{matrix.data_type}', but --value_type is '{params.value_type}'. The input matrix format is overridden.")
+        matrix.data_type = params.value_type
 
     requested_mode = None if params.mode == PASS_THROUGH_MODE else params.mode
     sparsify = sparsify_requested(params.mst, params.knn)
@@ -208,7 +212,7 @@ def main(argv):
         if sparsify and requested_mode == "bool" and matrix.data_type == "score":
             # Every bool cell is 1, which would leave --mst/--knn nothing to rank, so select
             # on the scores and keep the mask afterward. The kept cells are exactly the
-            # nonzero scores, so --lb still applies to the bool values below.
+            # nonzero scores, so --threshold still applies to the bool values below.
             matrix.data = sparsify_matrix(matrix, mst=params.mst, knn=params.knn, lower_bound=0)
             sparsify = False
 
@@ -220,29 +224,22 @@ def main(argv):
     if sparsify:
         check_sparsify_data_type(matrix.data_type, params.mst, params.knn)
         matrix.data = sparsify_matrix(matrix, mst=params.mst, knn=params.knn,
-                                      lower_bound=0 if params.lb is None else params.lb)
+                                      lower_bound=0 if params.threshold is None else params.threshold)
 
-    if params.lb is not None:
+    if params.threshold is not None:
         if is_distance_data_type(matrix.data_type):
-            raise ValueError(f"--lb zeroes out low values, which in a '{matrix.data_type}' (distance) matrix are the "
-                             "closest pairs (0 means identical). Apply --lb to the score matrix instead.")
-        matrix.data = apply_lower_bound(matrix.data, params.lb)
+            raise ValueError(f"--threshold zeroes out low values, which in a '{matrix.data_type}' (distance) matrix are the "
+                             "closest pairs (0 means identical). Apply --threshold to the score matrix instead.")
+        matrix.data = apply_lower_bound(matrix.data, params.threshold)
 
     ### Run
     try:
         write_matrix_outputs(
             matrix.data, matrix.rows, matrix.columns,
             hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--lb", "--mst", "--knn"],
+            mitigation_options=["--threshold", "--mst", "--knn"],
             row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths, data_type=matrix.data_type,
             symmetric=matrix.exactly_symmetric,
         )
     except OutputSizeLimitExceeded as exc:
         raise SystemExit(str(exc)) from None
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-  

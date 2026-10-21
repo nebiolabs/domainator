@@ -165,6 +165,8 @@ class ToolExecutor:
         config_flag = f"--config={cfg_path}"
         if runner == "python":
             return [self.config.python_executable, entry, config_flag]
+        if runner == "domainator":
+            return [self.config.python_executable, "-m", "domainator", entry, config_flag]
         if runner == "module":
             return [self.config.python_executable, "-m", entry, config_flag]
         if runner == "shell":

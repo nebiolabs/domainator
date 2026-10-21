@@ -3,9 +3,9 @@
   "display_name": "Build Projection",
   "category": "Plots",
   "description": "Generates 2d or 3d umap, tsne, or pca projections from matrices\n\n    output can be images, coordinates, or Cytoscape xgmml files.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 4,
-  "entry_point": "domainator.build_projection",
+  "entry_point": "build_projection",
   "parameters": [
     {
       "name": "Input",
@@ -84,11 +84,12 @@
     },
     {
       "name": "Xgmml",
-      "parameter": "xgmml",
+      "parameter": "xgmml_out",
       "help": "write a Cytoscape xgmml file of the projection.",
       "type": "output",
       "flags": [
-        "--xgmml"
+        "-o",
+        "--xgmml_out"
       ]
     }
   ],
@@ -112,15 +113,6 @@
       ]
     },
     {
-      "name": "Params",
-      "parameter": "params",
-      "help": "additional parameters to pass to the algorithm, in the form of a json dict.",
-      "type": "string",
-      "flags": [
-        "--params"
-      ]
-    },
-    {
       "name": "Scale",
       "parameter": "scale",
       "help": "scale the largest axis so that the difference between the largest and smallest value is this. Default: 1000",
@@ -132,12 +124,12 @@
     },
     {
       "name": "3D",
-      "parameter": "3d",
+      "parameter": "three_d",
       "help": "if set, then makes 3d projections. default: 2d projections.",
       "type": "boolean",
       "default": false,
       "flags": [
-        "--3d"
+        "--three_d"
       ]
     }
   ]

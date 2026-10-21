@@ -25,10 +25,9 @@ import multiprocessing
 from array import array
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Set, Union, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from typing import List, Optional
 from collections import defaultdict, OrderedDict
 import functools
 import hashlib
@@ -162,8 +161,39 @@ _ALPHABET_FACTORIES = {
 
 _AMINO_ALPHABET_K = 20
 """Size of the amino acid alphabet. The profile-profile scoring thresholds in
-hmmer_search.py were calibrated against it, so it is the reference for
+domainator hmmer_search were calibrated against it, so it is the reference for
 alphabet_score_scale()."""
+
+
+STDIN_PATHS = frozenset({"-", "/dev/stdin"})
+"""Input paths that mean "read standard input"."""
+STDOUT_PATHS = frozenset({"-", "/dev/stdout"})
+"""Output paths that mean "write standard output"."""
+
+
+class _UnclosedStdout:
+    """Standard output, wrapped so that a tool can close it like any output file: closing only flushes."""
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def write(self, data):
+        return self._stream.write(data)
+
+    def flush(self):
+        self._stream.flush()
+
+    def close(self):
+        self._stream.flush()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
 
 
 def get_alphabet(name: Optional[str]) -> Optional[pyhmmer.easel.Alphabet]:
@@ -202,7 +232,7 @@ def alphabet_score_scale(alphabet: pyhmmer.easel.Alphabet) -> float:
     The per-column score computed by hmmer_search.Saa is
     log(sum_i(q_i * r_i / background_i)), which for a perfectly conserved column
     over a uniform background tops out at log(K). The score cutoffs and alignment
-    midline thresholds in hmmer_search.py were chosen for proteins, so scaling
+    midline thresholds in domainator hmmer_search were chosen for proteins, so scaling
     them by log(K)/log(20) keeps them at the same relative position on the score
     scale of a smaller alphabet.
 
@@ -265,7 +295,10 @@ def open_hmm_file(file: Union[str, os.PathLike, IOBase]) -> pyhmmer.plan7.HMMFil
     Args:
         file: path to, or open binary handle on, an hmm file. Handles are passed
             through as-is; compression and sidecar detection are both path-based.
+            ``-`` or ``/dev/stdin`` reads standard input (uncompressed only).
     """
+    if file in STDIN_PATHS:
+        return pyhmmer.plan7.HMMFile(sys.stdin.buffer, db=False)
     if isinstance(file, (str, os.PathLike)):
         if detect_compression(file) is not None:
             return _DecompressingHMMFile(gzip.open(file, "rb"))
@@ -366,7 +399,7 @@ def _mixed_alphabet_in_file_error(role, name, exc, first_alphabet=None) -> Value
         f"The {role} hmm file '{name}' holds profiles with more than one alphabet.{seen} "
         f"HMMER locks an hmm file to the alphabet of its first profile, so such a file "
         f"cannot be read past that profile (pyhmmer reported: {exc}). "
-        f"Split it by alphabet with hmmer_select.py --alphabet."
+        f"Split it by alphabet with domainator hmmer_select --alphabet."
     )
 
 
@@ -578,8 +611,26 @@ def is_compressed_path(path):
     return bool(suffixes) and suffixes[-1] in COMPRESSION_EXTENSIONS
 
 
+def append_extra_args(argv: List[str], extra_args: Optional[Sequence[str]], option: str) -> List[str]:
+    """Return ``argv`` followed by a user's extra arguments for an external program.
+
+    Raises ValueError if the extra arguments set an option that ``argv`` already sets, naming
+    ``option`` (the Domainator option they came from) in the message.
+    """
+    extra_args = list(extra_args or ())
+    conflicts = sorted({token for token in argv if isinstance(token, str) and token.startswith("-")}
+                       .intersection(token for token in extra_args if token.startswith("-")))
+    if conflicts:
+        raise ValueError(f"{option} cannot set {', '.join(conflicts)}: Domainator sets "
+                         f"{'it' if len(conflicts) == 1 else 'them'} itself.")
+    return list(argv) + extra_args
+
+
 def open_writable_seqfile(path, compressed=None):
     """Open a path for writing, using a BGZF writer for compressed outputs.
+
+    ``-`` and ``/dev/stdout`` return standard output, which is never compressed and which
+    ``close()`` only flushes.
 
     BGZF output is itself valid gzip (so ``gunzip`` reads it) but is also
     randomly seekable, so the file can be re-used directly as a compressed,
@@ -587,6 +638,8 @@ def open_writable_seqfile(path, compressed=None):
     extension-based decision (useful when writing to a temp path whose own
     extension does not reflect the final destination).
     """
+    if path in STDOUT_PATHS:
+        return _UnclosedStdout(sys.stdout)
     if compressed is None:
         compressed = is_compressed_path(path)
     if compressed:
@@ -630,7 +683,10 @@ def open_writable_hmm_file(path, compressed=None):
 
     ``compressed`` overrides the extension-based decision, for callers writing to
     a temporary path whose own extension does not reflect the destination.
+    ``-`` and ``/dev/stdout`` return standard output (binary), which ``close()`` only flushes.
     """
+    if path in STDOUT_PATHS:
+        return _UnclosedStdout(sys.stdout.buffer)
     check_writable_hmm_path(path)
     if compressed is None:
         compressed = is_compressed_path(path)
@@ -647,6 +703,8 @@ def open_if_is_name_for_write(filename_or_handle):
     """
     if not isinstance(filename_or_handle, (str, os.PathLike)):
         return filename_or_handle, "handle"
+    if filename_or_handle in STDOUT_PATHS:
+        return sys.stdout, "handle"
     if is_compressed_path(filename_or_handle):
         return bgzf.BgzfWriter(str(filename_or_handle)), "name"
     return open(filename_or_handle, "w"), "name"
@@ -796,7 +854,7 @@ class DomainatorCDS():
             keep = True
             if databases is not None and f.qualifiers["database"][0] not in databases:
                 keep = False
-            if evalue is not None and float(f.qualifiers["evalue"][0]) < evalue:
+            if evalue is not None and float(f.qualifiers["evalue"][0]) > evalue:
                 keep = False
 
             if keep == True:    
@@ -830,8 +888,9 @@ class BooleanEvaluator():
             elif(y == '('):
                 tokens.append(y)
             elif(y == ')'):
-                tokens.append(elem)
-                elem = ''
+                if(elem != ''):
+                    tokens.append(elem)
+                    elem = ''
                 tokens.append(y)
             elif(y != ' '):
                 elem += y
@@ -945,8 +1004,7 @@ def get_domain_cds_annotation_strings(seq_record):
                     out[cds_id] = defaultdict(list)
                 out[cds_id][db].append(f"{name} ({description}, {eval}, {score})")
         except KeyError as e:
-            print(seq_record)
-            raise e
+            raise KeyError(f"Domainator feature on record {seq_record.id} is missing the {e} qualifier") from e
     return out
 
 
@@ -1164,11 +1222,12 @@ def _iter_raw_fasta_records(file, seek_to, backend="biopython", default_molecule
 def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None, max_recs=float("inf"), default_molecule_type='protein', genbank_parser=None):
     """
         args:
-            seqfiles: a genbank or fasta path
+            seqfiles: genbank or fasta paths or handles. "-" or "/dev/stdin" reads standard input,
+                as genbank unless filetype_override says otherwise.
             contigs: a dict where keys are the names of desired contigs, and values are None. Or None.
             filetype_override: if supplied then don't try to guess filetype from the extension, just use the supplied filetype
             seek_to: seek to this position in the file before reading any records
-            max_recs: stop after returning this many sequences
+            max_recs: stop reading each file after returning this many of its sequences
             genbank_parser: which GenBank backend to use, "lean" or "biopython".
                 Defaults to Biopython; the DOMAINATOR_GB_PARSER env var overrides
                 this. The "lean" backend uses the optional native (Rust) parser
@@ -1182,6 +1241,9 @@ def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None,
 
     for file in seqfiles:
         file_type = filetype_override
+        if file in STDIN_PATHS:
+            file = sys.stdin
+            file_type = filetype_override or "genbank"
         is_handle = not isinstance(file, (str, os.PathLike))
 
         if file_type is None:
@@ -1191,8 +1253,8 @@ def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None,
             if file_type == "structure":
                 raise ValueError(
                     f"'{file}' is a protein structure file, not a sequence file. Convert it "
-                    "with structure_to_genbank.py first, or use structure_domainate.py / "
-                    "structure_search.py to work with structures directly."
+                    "with domainator structure_to_genbank first, or use domainator structure_domainate / "
+                    "domainator structure_search to work with structures directly."
                 )
             if file_type not in {"genbank", "fasta"}:
                 raise ValueError(f"file extension not recognized: {file}, please specify format.")
@@ -1573,8 +1635,66 @@ def i_get_offsets(input_path):
         raise ValueError(f"Filetype not recognized for input file: {input_path}")
 
 
+def partition_seqfile(input_path, cdss_per_partition):
+    """Divide a sequence file into runs of whole records holding about ``cdss_per_partition`` CDSs.
 
-def count_peptides(file_path): 
+    Args:
+        input_path: path to a genbank (peptide or nucleotide) or fasta (peptide) file.
+        cdss_per_partition: a partition is closed as soon as it holds at least this many CDSs.
+
+    Returns:
+        (total_cds_count, [(input_path, offset, records_to_read), ...]). Seeking to each offset and
+        reading that many records reads the whole file exactly once.
+    """
+    offsets, num_proteins = get_offsets(input_path)
+    num_recs = len(offsets)
+    if num_recs == 0:
+        raise ValueError("Error: No sequence records found in input file (maybe the file has the wrong extension or there is a formatting error in the input file).")
+
+    partitions = list()
+    running_sum = 0
+    next_offset = offsets[0]
+    recs_in_buffer = 0
+    for i in range(num_recs):
+        running_sum += num_proteins[i]
+        recs_in_buffer += 1
+        if running_sum >= cdss_per_partition:
+            partitions.append((input_path, next_offset, recs_in_buffer))
+            running_sum = 0
+            recs_in_buffer = 0
+            if i + 1 < num_recs:
+                next_offset = offsets[i+1]
+    if recs_in_buffer > 0:
+        partitions.append((input_path, next_offset, recs_in_buffer))
+
+    return sum(num_proteins), partitions
+
+
+def i_partition_seqfiles(input_paths, cdss_per_partition):
+    """Lazily yield the partitions of each file, as :func:`partition_seqfile` would list them.
+
+    Yields:
+        (input_path, offset, records_to_read)
+    """
+    for input_path in input_paths:
+        running_sum = 0
+        next_offset = None
+        recs_in_buffer = 0
+        for offset, cds_count in i_get_offsets(input_path):
+            if next_offset is None:
+                next_offset = offset
+            running_sum += cds_count
+            recs_in_buffer += 1
+            if running_sum >= cdss_per_partition:
+                yield (input_path, next_offset, recs_in_buffer)
+                running_sum = 0
+                recs_in_buffer = 0
+                next_offset = None
+        if recs_in_buffer > 0:
+            yield (input_path, next_offset, recs_in_buffer)
+
+
+def count_peptides(file_path):
     _, num_proteins = get_offsets(file_path)
     return sum(num_proteins)
     
@@ -2162,7 +2282,7 @@ MGNIFY_FRAGMENT_TOKEN = "FL=0"
 # UniProt marks a missing terminus with a NON_TER feature on the first or last residue.
 NON_TERMINAL_FEATURE_NAME = "NON_TER"
 PARTIAL_CHOICES = ("include", "exclude", "only")
-# Positions relative to a feature in its own orientation, e.g. for rotate_contigs.py --where and --pad_where.
+# Positions relative to a feature in its own orientation, e.g. for the --anchor option of rotate_contigs, select_by_cds and domain_search.
 WHERE_CHOICES = ("start", "end", "center")
 
 def partial_help(what:str) -> str:
@@ -2391,18 +2511,6 @@ def normalize_cds_translation(feature:SeqFeature, contig_seq) -> None:
 _UNIDENTIFIED_TAXID = 32644  # "unidentified", get_taxid's default for records lacking a taxid
 
 
-def _merge_intervals(intervals):
-    """Coalesce a list of (start, end) half-open intervals into sorted, disjoint runs."""
-    out = []
-    for s, e in sorted(intervals):
-        if out and s <= out[-1][1]:
-            if e > out[-1][1]:
-                out[-1] = (out[-1][0], e)
-        else:
-            out.append((s, e))
-    return out
-
-
 def feature_intervals(feature):
     """(start, end) half-open intervals for a Biopython SeqFeature (``.location.parts``) or a
     lean_record LeanFeature (``.parts`` tuples). Works on both so taxonomy resolution applies
@@ -2570,15 +2678,15 @@ OTHER_COLOR = "#BFBFBF"
 
 #: Named qualitative palettes offered for discrete coloring, in menu order. Each
 #: entry is {name, label, note, colors}. "domainator" is the palette get_palette
-#: uses, so applying it to a column reproduces the colors build_ssn.py,
-#: build_projection.py and plot_contigs.py write for that column; the rest are
+#: uses, so applying it to a column reproduces the colors domainator build_ssn,
+#: domainator build_projection and domainator plot_contigs write for that column; the rest are
 #: smaller, well-known qualitative palettes for networks with few groups.
 #: Consumed by the Domainator Similarity Network Viewer (ssn_viewer_html.py injects this into the page).
 NAMED_CATEGORICAL_PALETTES = (
     {
         "name": "domainator",
         "label": "Domainator distinct (64)",
-        "note": "The palette get_palette() uses, so colors match build_ssn.py output.",
+        "note": "The palette get_palette() uses, so colors match domainator build_ssn output.",
         "colors": DISTINCT_COLORS,
     },
     {

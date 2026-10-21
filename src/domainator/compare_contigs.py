@@ -7,14 +7,14 @@ Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Ka
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import sys
-from jsonargparse import ArgumentParser, ActionConfigFile
-from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, make_pool
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_input, add_output, check_outputs, resolve_cpu, tool_parser
+from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles, write_genbank, copy_SeqRecord, make_pool, open_writable_seqfile
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 import scipy.cluster.hierarchy
 import math
-from domainator import __version__, DOMAIN_FEATURE_NAME, RawAndDefaultsFormatter
+from domainator import DOMAIN_FEATURE_NAME
 from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator, mirror_upper_triangle
 from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_matrix, sparsify_requested
 from domainator.filter_domains import filter_domains
@@ -305,7 +305,7 @@ def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, 
     """Stream per-row similarity chunks into an MST and/or kNN accumulator.
 
     Equivalent to building the full combined similarity matrix (with the per-row top-k
-    cap and ``--lb`` applied) and then calling :func:`~domainator.sparsify.sparsify_matrix`,
+    cap and ``--threshold`` applied) and then calling :func:`~domainator.sparsify.sparsify_matrix`,
     but the full matrix is never materialized: each chunk's edges are fed into the
     accumulator and discarded. The accumulator keeps one slot per unordered pair, so with
     ``upper_only`` feeding it one direction of each (symmetric) pair gives the same result.
@@ -582,7 +582,7 @@ def _check_sort_feasible(n, leaf_ordering, check_memory=True):
         raise SortMemoryLimitExceeded(
             f"Sorting {n} contigs for genbank output (-o) needs about {format_bytes(needed)} of memory, "
             f"but only {format_bytes(available)} is available. "
-            "To avoid this, drop -o and write a matrix with --hdf instead, sort a subset of contigs with --contigs or --contigs_file, "
+            "To avoid this, drop -o and write a matrix with --hdf_out instead, sort a subset of contigs with --contigs or --contigs_file, "
             "or deduplicate the input first. Use --skip_sort_memory_check to try anyway."
         )
     if leaf_ordering == "optimal" and n > _OPTIMAL_LEAF_ORDERING_WARN_CONTIGS:
@@ -643,7 +643,7 @@ class GenbankOutput(DistanceReport):
         if len(recs) > 0:
             order = _hierarchical_order(scores, linkage_method=self.linkage_method, leaf_ordering=self.leaf_ordering)
             digits = math.ceil(math.log10(len(order)+1))
-            with open(self.outpath, "w") as outfile:
+            with open_writable_seqfile(self.outpath) as outfile:
                 print_i = 0
                 for i in order:
                     rec = recs[i]
@@ -653,8 +653,7 @@ class GenbankOutput(DistanceReport):
                         print_i += 1
                     write_genbank([rec], outfile)
         else:
-            with open(self.outpath, "w") as outfile:
-                pass
+            open_writable_seqfile(self.outpath).close()
 
 
 class DenseTextTableOutput(DistanceReport):
@@ -760,13 +759,12 @@ def compare_contigs(genbanks, metrics, reports, max_hits_per_query, contigs, nam
         report.write(recs, results_matrix, report_options)
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument('-i', '--input', nargs='+', default=None, required=True, help="Genbank filenames.")
+    add_input(parser, "Genbank filenames.")
 
-    parser.add_argument('-o', '--output', default=None, required=False,
-                        help="Name of genbank output, contigs will be sorted hierarchically within the output genbank. If not supplied then no genbank output will be generated. To write to stdout, use '-'. default: None")
+    add_output(parser, "genbank", "Write the contigs to this GenBank file, sorted hierarchically by similarity.")
     
     parser.add_argument("--name_by_order", action="store_true",
                         help="Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order.")
@@ -792,10 +790,10 @@ def main(argv):
     parser.add_argument('--max_hits_per_query', default=None, type=int,
                         help="After combining all metric scores, keep this many of the top hits for each query and consider all other hits to be zero. " + MAX_HITS_PER_QUERY_SPARSIFY_NOTE + " Default: keep all hits.")
 
-    parser.add_argument('--lb', default=0, type=float, required=False,
+    parser.add_argument('--threshold', default=0, type=float, required=False,
                         help="Round any final scores less than or equal to this down to zero. This is primarily useful for making sparse outputs smaller.")
 
-    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Best paired with --hdf.")
+    add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Best paired with --hdf_out.")
 
     # Metrics
     parser.add_argument("--ji", default=0.5, required=False, type=float,
@@ -823,36 +821,28 @@ def main(argv):
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
 
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
    
     ### Figure out what input and output files ####
 
-    # if pipe_in:
-    #     genbanks = [sys.stdin]
-    # elif params.genbank is not None:
+    check_outputs(parser, params, ["hdf_out", "dense_text_out", "genbank_out"])
     genbanks = params.input
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    if params.cpu <= 0:
-        cpus = psutil.cpu_count(logical=False)
-    else:
-        cpus = params.cpu
-
+    cpus = resolve_cpu(params.cpu)
 
     reports = list()
-    # if params.clinker is not None:
-    #     reports.append(ClinkerOutput(params.clinker))
-    # if params.svg_tree is not None:
-    #     reports.append(SvgTreeOutput(params.svg_tree))
     hdf, dense_text = resolve_matrix_outputs(params, require_output=False)
     if hdf is not None:
         reports.append(HdfTableOutput(hdf, max_output_bytes=max_output_bytes))
     if dense_text is not None:
         reports.append(DenseTextTableOutput(dense_text, max_output_bytes=max_output_bytes))
-    if params.output is not None:
-        output_path = '/dev/stdout' if params.output == "-" else params.output # TODO: not cross platform, will not work on windows.
-        reports.append(GenbankOutput(output_path, linkage_method=params.linkage, leaf_ordering=params.leaf_ordering))
+    if params.genbank_out is not None:
+        reports.append(GenbankOutput(params.genbank_out, linkage_method=params.linkage, leaf_ordering=params.leaf_ordering))
 
     databases=None
     if params.databases is not None:
@@ -877,12 +867,6 @@ def main(argv):
     
     # Run
     try:
-        compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.lb, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn, check_sort_memory=not params.skip_sort_memory_check)
+        compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.threshold, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn, check_sort_memory=not params.skip_sort_memory_check)
     except (OutputSizeLimitExceeded, SortMemoryLimitExceeded) as exc:
         raise SystemExit(str(exc)) from None
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

@@ -7,17 +7,14 @@
 """
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-from jsonargparse import ArgumentParser, ActionConfigFile
-from os import PathLike
-import sys
+from jsonargparse import ActionConfigFile
+from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.build_projection import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix, is_distance_data_type
 from domainator.transform_matrix import score_dist
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from domainator import __version__, RawAndDefaultsFormatter
-from typing import List, Union
 import warnings
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
@@ -32,7 +29,7 @@ SCORE_COLUMN="TREE_DIST"
 # https://docs.scipy.org/doc/scipy/reference/cluster.hierarchy.html
 
 
-# TODO: add options for coloring the xgmml file, like build_ssn.py
+# TODO: add options for coloring the xgmml file, like domainator build_ssn
 
 def clean_name_for_newick(name, quiet=False):
   """
@@ -181,12 +178,10 @@ def build_tree(data_matrix, algorithm, metadata_files, xgmml_file, newick_file, 
         write_cytoscape_xgmml(xgmml_file, node_data, edge_data, name=Path(xgmml_file).stem)
 
 
-def main(argv):
-    parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
     
-    input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument('-i', '--input', type=str, required=False,
-                        help="Square matrix of pairwise distances or similarity scores. Format can be tab-separated text or Domainator hdf5.")
+    add_input(parser, "Square matrix of pairwise distances or similarity scores. Format can be tab-separated text or Domainator hdf5.", multiple=False, stdin=False)
 
     parser.add_argument('--distance', type=str, required=False, default="auto", choices=DISTANCE_CONVERSIONS,
                         help="How to turn matrix values into distances. precomputed: the values are distances. score_dist: the values are similarity scores, distance = 1 - (score / min(row_max, col_max)), so a pair with no score has distance 1. auto: precomputed if the matrix data type is a distance (ends in _dist) or not recorded (e.g. tab-separated text), otherwise score_dist.")
@@ -197,35 +192,18 @@ def main(argv):
     parser.add_argument('--metadata', type=str, nargs="+", required=False, default=None, 
                         help="Tab separated files of sequence metadata. These data will be added to the xgmml output.")
     
-    parser.add_argument('--xgmml', type=str, required=False, default=None, 
-                        help="write a cytoscape xgmml file of the tree.")
-    
-    parser.add_argument('--newick', type=str, required=False, default=None, #TODO: what other kinds of output might be useful?
-                        help="write a newick file of the tree.")
+    add_output(parser, "newick", "Write the tree to this Newick file.", primary=True)
+    add_output(parser, "xgmml", "Write the tree to this Cytoscape xgmml file.", stdout=False)
     
     parser.add_argument('--quiet', action="store_true", required=False, default=False, 
                         help="Suppress warnings.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
-    # parser.add_argument('--svg', type=str, required=True, default=None, #TODO: what other kinds of output might be useful?
-    #                     help="write an image of the tree in svg format.")
 
-    # parser.add_argument('--png', type=str, required=True, default=None, #TODO: what other kinds of output might be useful?
-    #                     help="write an image of the tree in png format.")
-
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
-
-
-    input_file = params.input
-    
-
-    # Run
-    # params.metric,
-    build_tree(DataMatrix.from_file(input_file), params.algorithm, params.metadata, params.xgmml, params.newick, params.quiet, params.distance)
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+    check_outputs(parser, params, ["newick_out", "xgmml_out"])
+    build_tree(DataMatrix.from_file(params.input), params.algorithm, params.metadata, params.xgmml_out, params.newick_out, params.quiet, params.distance)

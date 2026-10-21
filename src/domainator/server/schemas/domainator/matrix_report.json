@@ -3,8 +3,8 @@
   "display_name": "Matrix Report",
   "category": "Summary reports",
   "description": "Reads a DataMatrix and generates a report suitable for helping with selecting edge score thresholds for similarity networks",
-  "runner": "module",
-  "entry_point": "domainator.matrix_report",
+  "runner": "domainator",
+  "entry_point": "matrix_report",
   "parameters": [
     {
       "name": "Input",
@@ -19,21 +19,21 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "text_out",
       "help": "Text file to write output to.",
       "type": "output",
       "flags": [
         "-o",
-        "--output"
+        "--text_out"
       ]
     },
     {
       "name": "Html",
-      "parameter": "html",
+      "parameter": "html_out",
       "help": "html file to write output to.",
       "type": "output",
       "flags": [
-        "--html"
+        "--html_out"
       ]
     }
   ],

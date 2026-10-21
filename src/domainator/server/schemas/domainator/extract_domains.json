@@ -3,8 +3,8 @@
   "display_name": "Extract Domains",
   "category": "Editors",
   "description": "Extract domain-annotated regions\n\nTakes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts them from the contigs.\n\nThis tool is typically used with protein sequences, but can also be used with nucleic acid sequences.\nHandling of nucleic acids is less stable and will may change in future updates, so use with caution.\n\ncan write a fasta or a genbank file",
-  "runner": "module",
-  "entry_point": "domainator.extract_domains",
+  "runner": "domainator",
+  "entry_point": "extract_domains",
   "parameters": [
     {
       "name": "Input",
@@ -25,13 +25,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "the name of the output file.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -46,11 +46,11 @@
     },
     {
       "name": "Score",
-      "parameter": "score",
+      "parameter": "min_score",
       "help": "the score cutoff (min) for domain annotations to be extracted",
       "type": "number",
       "flags": [
-        "--score"
+        "--min_score"
       ]
     },
     {
@@ -86,33 +86,37 @@
       ]
     },
     {
-      "name": "Search Hits",
-      "parameter": "search_hits",
-      "help": "Select domains that are marked as search hits (from domain_search.py).",
-      "type": "boolean",
-      "default": false,
+      "name": "Annotation Type",
+      "parameter": "annotation_type",
+      "help": "Which annotations to extract. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search).",
+      "type": "string",
       "flags": [
-        "--search_hits"
+        "--annotation_type"
+      ],
+      "default": "domainator",
+      "choices": [
+        "domain_search",
+        "domainator"
       ]
     },
     {
       "name": "Pad Up",
-      "parameter": "pad_up",
+      "parameter": "extend_up",
       "help": "extract this many additional residues (or bases) upstream of the hit region.",
       "type": "integer",
       "default": 0,
       "flags": [
-        "--pad_up"
+        "--extend_up"
       ]
     },
     {
       "name": "Pad Down",
-      "parameter": "pad_down",
+      "parameter": "extend_down",
       "help": "extract this many additional residues (or bases) downstream of the hit region.",
       "type": "integer",
       "default": 0,
       "flags": [
-        "--pad_down"
+        "--extend_down"
       ]
     },
     {
@@ -158,15 +162,15 @@
     {
       "name": "Fasta Out",
       "parameter": "fasta_out",
-      "help": "makes output a fasta file when activated",
-      "type": "boolean",
-      "default": false,
+      "help": "Write the records to this FASTA file. Use - for standard output.",
+      "type": "output",
       "flags": [
         "--fasta_out"
       ]
     }
   ],
-  "advanced_parameters": [    {
+  "advanced_parameters": [
+    {
       "name": "Contigs",
       "parameter": "contigs",
       "help": "only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs.",
@@ -203,5 +207,6 @@
       "flags": [
         "--partial"
       ]
-    }]
+    }
+  ]
 }

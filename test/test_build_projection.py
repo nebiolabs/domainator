@@ -16,7 +16,7 @@ def test_build_projection_1(input_file, shared_datadir):
         out_png = output_dir + "/out.png"
         out_coords = output_dir + "/out.tsv"
         out_cytoscape = output_dir + "/out.xgmml"
-        build_projection.main(["-i", str(shared_datadir / input_file), "--algorithm", "pca", "--png_out", out_png, "--coords_out", out_coords, "--metadata",  str(shared_datadir / "metadata_FeSOD_20.tsv"), "--color_by", "group","--xgmml", out_cytoscape ])
+        build_projection.main(["-i", str(shared_datadir / input_file), "--algorithm", "pca", "--png_out", out_png, "--coords_out", out_coords, "--metadata",  str(shared_datadir / "metadata_FeSOD_20.tsv"), "--color_by", "group","--xgmml_out", out_cytoscape ])
         out_table = pd.read_csv(out_coords, sep="\t", index_col=0)
         out_mat = out_table.to_numpy()
         assert out_mat.shape == (20,2)
@@ -62,7 +62,7 @@ def test_build_projection_3d(input_file, shared_datadir):
         #output_dir = "tmp_out"
         out_coords = output_dir + "/out.tsv"
         out_cytoscape = output_dir + "/out.xgmml"
-        build_projection.main(["-i", str(shared_datadir / input_file), "--3d", "--algorithm", "pca", "--coords_out", out_coords, "--metadata",  str(shared_datadir / "metadata_FeSOD_20.tsv"), "--color_by", "group","--xgmml", out_cytoscape ])
+        build_projection.main(["-i", str(shared_datadir / input_file), "--three_d", "--algorithm", "pca", "--coords_out", out_coords, "--metadata",  str(shared_datadir / "metadata_FeSOD_20.tsv"), "--color_by", "group","--xgmml_out", out_cytoscape ])
         out_table = pd.read_csv(out_coords, sep="\t", index_col=0)
         out_mat = out_table.to_numpy()
         assert out_mat.shape == (20,3)
@@ -133,6 +133,6 @@ def test_build_projection_from_coords_file(shared_datadir):
 def test_build_projection_coords_rejects_params(shared_datadir, tmp_path):
     first_coords = str(tmp_path / "first.tsv")
     build_projection.main(["-i", str(shared_datadir / "scorefull.tsv"), "--algorithm", "pca", "--coords_out", first_coords])
-    with pytest.raises(ValueError, match="--params does not apply to --algorithm coords"):
+    with pytest.raises(SystemExit):
         build_projection.main(["-i", first_coords, "--algorithm", "coords", "--coords_out", str(tmp_path / "second.tsv"),
-                               "--params", '"perplexity": 5'])
+                               "--tsne_args=perplexity=5"])

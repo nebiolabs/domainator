@@ -3,9 +3,9 @@
   "display_name": "Domain Search",
   "category": "Editors",
   "description": "Search for matches to protein or nucleic-acid references\n\nFor searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries. Protein references are searched against CDSs or protein records; nucleotide FASTA, nucleotide HMMs, and infernal CM files are searched against whole nucleotide contigs. Protein inputs cannot be searched with nucleotide references.\n\nReturns the contigs with hits, possibly truncated to the neighborhood around the hits.\n\nWhen --max_hits is specified, it applies to the entire search, not individual queries. Thus if you supply 5 query profiles and --max_hits 100, \nat most 100 hits will be returned (not 500). \n\nWhen max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.\nIf neither is set, then hits will be written on the fly and not sorted.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 2,
-  "entry_point": "domainator.domain_search",
+  "entry_point": "domain_search",
   "parameters": [
     {
       "name": "Input",
@@ -44,13 +44,13 @@
     },
     {
       "name": "References",
-      "parameter": "references",
+      "parameter": "reference",
       "help": "reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.",
       "type": "file",
       "multiple": true,
       "flags": [
         "-r",
-        "--references"
+        "--reference"
       ],
       "file_types": [
         "hmm",
@@ -63,13 +63,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "output genbank filename.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -340,12 +340,12 @@
     },
     {
       "name": "Dedup Both Strands",
-      "parameter": "dedup_both_strands",
+      "parameter": "both_strands",
       "help": "With --deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.",
       "type": "boolean",
       "default": false,
       "flags": [
-        "--dedup_both_strands"
+        "--both_strands"
       ]
     },
     {
@@ -383,7 +383,7 @@
     },
     {
       "name": "Pad Where",
-      "parameter": "pad_where",
+      "parameter": "anchor",
       "help": "Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints.",
       "type": "string",
       "default": "start",
@@ -393,7 +393,7 @@
         "center"
       ],
       "flags": [
-        "--pad_where"
+        "--anchor"
       ]
     },
     {

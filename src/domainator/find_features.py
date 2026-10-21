@@ -11,7 +11,6 @@ Supported algorithms:
     - MOTIF: PROSITE-style pattern matching for exact motif search
 """
 
-import sys
 import re
 import math
 import warnings
@@ -19,13 +18,14 @@ from pathlib import Path
 warnings.filterwarnings("ignore", module='numpy')
 
 from typing import List, Dict, Tuple, Optional, NamedTuple, Iterator
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import utils, DOMAIN_FEATURE_NAME
-from domainator.utils import get_cds_unique_name, parse_seqfiles, write_genbank, BooleanEvaluator, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.utils import parse_seqfiles, BooleanEvaluator, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
 
 # TMbed prediction class labels
@@ -266,10 +266,8 @@ def get_tmbed_predictor(gpu_device: Optional[str] = "cuda:0", cpu_threads: int =
     """
     try:
         import torch
-        from tmbed.embed import T5Encoder
         from tmbed.tmbed import load_models, load_encoder, init
         from tmbed.viterbi import Decoder
-        from tmbed.utils import seed_all
     except ImportError:
         raise ImportError(
             "TMbed is required for transmembrane prediction. "
@@ -741,18 +739,11 @@ def _process_batch(
         yield contig
 
 
-def main(argv):
-    parser = ArgumentParser(
-        f"\nversion: {__version__}\n\n" + __doc__,
-        formatter_class=RawAndDefaultsFormatter
-    )
+def build_parser():
+    parser = tool_parser(__doc__)
     
-    parser.add_argument(
-        '-i', '--input', default=None, required=True,
-        nargs='+', type=str,
-        help="The genbank or fasta files to annotate. Genbank files can be "
-             "nucleotide (with CDS annotations) or peptide. Fasta files must be peptide."
-    )
+    add_input(parser, "The genbank or fasta files to annotate. Genbank files can be "
+                      "nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.")
     
     parser.add_argument(
         "--fasta_type", type=str, default="protein",
@@ -760,14 +751,11 @@ def main(argv):
         help="Whether the sequences in fasta files are protein or nucleotide sequences."
     )
     
-    parser.add_argument(
-        '-o', '--output', default=None, type=str, required=False,
-        help="Output genbank filename. If not supplied, writes to stdout."
-    )
+    add_seq_outputs(parser)
     
     parser.add_argument(
         '--cpu', type=int, default=0,
-        help="The number of CPU threads to use [default: use all available cores]"
+        help="The number of CPU threads to use. 0: one per physical core."
     )
     
     parser.add_argument(
@@ -804,11 +792,9 @@ def main(argv):
     )
     
     parser.add_argument(
-        "--gpu_device", default="cuda:0", type=str, required=False,
-        help="For models that can use GPU acceleration, use this device if available. "
-             "By default: if not set to 'None' try using the specified device for "
-             "algorithms that allow GPU acceleration, if GPU not available, fall back "
-             "to CPU mode if available. Choices: ['None', '0', 'cuda:0', ...]"
+        "--device", default="cuda:0", type=str, required=False,
+        help="For models that can use GPU acceleration, use this device if available, falling back "
+             "to the CPU if it is not. Use 'cpu' to always run on the CPU. Examples: 'cpu', 'cuda:0'."
     )
     
 
@@ -833,27 +819,23 @@ def main(argv):
     )
     
     parser.add_argument('--config', action=ActionConfigFile)
-    
+    return parser
+
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
     
-    # Handle gpu_device="None" string
-    gpu_device = params.gpu_device
-    if gpu_device and gpu_device.lower() == "none":
-        gpu_device = None
+    gpu_device = None if params.device.lower() in ("cpu", "none") else params.device
     
     # Setup output
-    if params.output is None:
-        out = sys.stdout
-    else:
-        out = open(params.output, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
     
     # Run
-    write_genbank(
+    write_seq_outputs(
         find_features(
             parse_seqfiles(
                 params.input,
-                None,
-                filetype_override=None,
                 default_molecule_type=params.fasta_type
             ),
             tmbed=params.tmbed,
@@ -865,17 +847,4 @@ def main(argv):
             tmbed_model_dir=params.tmbed_model_dir,
             motifs=params.motif,
             partial=params.partial,
-        ),
-        out
-    )
-    
-    if params.output is not None:
-        out.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+        ), genbank=params.genbank_out, fasta=params.fasta_out)

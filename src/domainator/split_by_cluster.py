@@ -8,15 +8,14 @@ single small_clusters output file.
 
 from collections import Counter
 from contextlib import ExitStack
-from jsonargparse import ActionConfigFile, ArgumentParser
+from jsonargparse import ActionConfigFile
 from os import PathLike
 from pathlib import Path
-import sys
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import pyhmmer
 
-from domainator import __version__, RawAndDefaultsFormatter
+from domainator.cli.common import add_input, reject_stdin, tool_parser
 from domainator import build_ssn
 from domainator.Bio import SeqIO
 from domainator.data_matrix import DataMatrix
@@ -304,15 +303,9 @@ def split_by_cluster(
     return {"clusters": cluster_paths, "small_clusters": small_clusters_path}
 
 
-def main(argv):
-    parser = ArgumentParser(description=f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
-    parser.add_argument(
-        "-i",
-        "--input",
-        required=True,
-        type=str,
-        help="Input genbank, fasta, hmm, or cm file to split by cluster.",
-    )
+def build_parser():
+    parser = tool_parser(__doc__)
+    add_input(parser, "Input genbank, fasta, hmm, or cm file to split by cluster.", multiple=False, stdin=False)
     parser.add_argument(
         "--matrix",
         required=True,
@@ -320,16 +313,16 @@ def main(argv):
         help="Matrix input in dense HDF5, sparse HDF5, or dense text format.",
     )
     parser.add_argument(
-        "--outdir",
+        "--output_dir",
         required=True,
         type=str,
         help="Directory to write cluster files into. Existing target files cause an error.",
     )
     parser.add_argument(
-        "--lb",
+        "--threshold",
         type=float,
         default=0,
-        help="Delete edges with weights less than or equal to this value before finding connected components.",
+        help="Keep only edges with weights strictly above this value when finding connected components.",
     )
     parser.add_argument(
         "--min_cluster_size",
@@ -350,22 +343,19 @@ def main(argv):
         help="For GenBank inputs, center each contig on its first Domain_Search annotation and pad records within each output file so the search hits align. Raises an error if any record lacks Domain_Search.",
     )
     parser.add_argument("--config", action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
+    reject_stdin(parser, params.input)
     split_by_cluster(
         input_path=params.input,
         matrix_path=params.matrix,
-        outdir=params.outdir,
-        lb=params.lb,
+        outdir=params.output_dir,
+        lb=params.threshold,
         min_cluster_size=params.min_cluster_size,
         write_small_clusters=params.write_small_clusters,
         pad_on_search_hits=params.pad_on_search_hits,
     )
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])

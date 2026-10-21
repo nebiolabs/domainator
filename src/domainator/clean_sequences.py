@@ -8,12 +8,12 @@ This module provides functionality to:
 
 """
 from dataclasses import dataclass
-from jsonargparse import ArgumentParser, ActionConfigFile
+from jsonargparse import ActionConfigFile
 import sys
 
-from domainator.utils import parse_seqfiles, slice_record, write_genbank
-from domainator import __version__, RawAndDefaultsFormatter
-from domainator.Bio import SeqIO
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.outputs import write_seq_outputs
+from domainator.utils import parse_seqfiles, slice_record
 from domainator.Bio.Data import IUPACData
 
 
@@ -195,21 +195,15 @@ def clean_sequences(contigs, fasta_type="protein", clean_name=False, deduplicate
         yield contig
 
 
-def main(argv):
-    parser = ArgumentParser(f"\nversion: {__version__}\n\n" + __doc__, formatter_class=RawAndDefaultsFormatter)
+def build_parser():
+    parser = tool_parser(__doc__)
 
-    parser.add_argument("-i", "--input", default=None, required=False,
-                        nargs="+", type=str,
-                        help="names of input genbank files. If not supplied, reads from stdin.")
+    add_input(parser, 'Names of input genbank files.')
 
     parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
                         help="Whether the sequences in fasta files are protein or nucleotide sequences.")
 
-    parser.add_argument('-o', '--output', default=None, required=False,  
-                        help="genbank output file name. If not supplied writes to stdout.")
-
-    parser.add_argument('--fasta_out', action='store_true', default=False,
-                        help="makes output a fasta file when activated")
+    add_seq_outputs(parser)
 
     parser.add_argument('--clean_name', action='store_true', default=False, 
                         help="if true then make the name compatible with newick format.")
@@ -223,36 +217,26 @@ def main(argv):
     parser.add_argument('--filter_by_aa', action='store_true', default=False, 
                         help="if true then throw out sequences containing non-canonical residues or nucleotides (depending on input type). Including * characters. (applied after strip)")
 
-    parser.add_argument('--log', default=None, required=False,
-                        help="The name of the log file. If not supplied, writes to stderr.")
+    parser.add_argument('--log_out', default=None, required=False,
+                        help="Write the cleaning statistics to this file. If not supplied, writes them to stderr.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    return parser
 
+
+def main(argv):
+    parser = build_parser()
     params = parser.parse_args(argv)
 
-    filetype_override = None
-    if params.input is None:
-        inputs = [sys.stdin]
-        filetype_override = "genbank"
-    else:
-        inputs = params.input
-
-    if params.output is None:
-        output_handle = sys.stdout
-    else:
-        output_handle = open(params.output, "w")
-
-    if params.log is None:
-        log_handle = sys.stderr
-    else:
-        log_handle = open(params.log, "w")
+    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    log_handle = sys.stderr if params.log_out is None else open(params.log_out, "w")
 
     # Initialize statistics tracking
     stats = CleaningStats()
 
     # Run
     cleaned_contigs_iterator = clean_sequences(
-        parse_seqfiles(inputs, filetype_override=filetype_override, default_molecule_type=params.fasta_type),
+        parse_seqfiles(params.input, default_molecule_type=params.fasta_type),
         fasta_type=params.fasta_type,
         clean_name=params.clean_name,
         deduplicate_names=params.deduplicate_names,
@@ -261,10 +245,7 @@ def main(argv):
         stats=stats
     )
 
-    if params.fasta_out:
-        SeqIO.write(cleaned_contigs_iterator, output_handle, "fasta")
-    else:
-        write_genbank(cleaned_contigs_iterator, output_handle, default_molecule_type=params.fasta_type)
+    write_seq_outputs(cleaned_contigs_iterator, genbank=params.genbank_out, fasta=params.fasta_out)
 
     # Write log
     print(f"Input sequences:            {stats.input_count}", file=log_handle)
@@ -274,16 +255,5 @@ def main(argv):
     print(f"Names changed:              {stats.names_changed_count}", file=log_handle)
     print(f"Sequences changed:          {stats.sequences_changed_count}", file=log_handle)
 
-    if params.output is not None:
-        output_handle.close()
-    
-    if params.log is not None:
+    if params.log_out is not None:
         log_handle.close()
-
-
-def _entrypoint():
-    main(sys.argv[1:])
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])

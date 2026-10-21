@@ -26,6 +26,8 @@ Usage:
 
     matrix.write("out.hdf5", "hdf")
 """
+import contextlib
+import sys
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import csv
@@ -54,7 +56,7 @@ def _sparse_index_dtype(matrix: scipy.sparse.csr_array) -> np.dtype:
 
     scipy keeps whatever index width an input carried, so a matrix derived from an
     int64-indexed file (e.g. a large all-vs-all matrix passed through
-    ``transform_matrix --lb``) stays int64 even when int32 would address it. Narrowing
+    ``transform_matrix --threshold``) stays int64 even when int32 would address it. Narrowing
     saves 4 bytes per non-zero on write. ``indices`` holds column indices (< n_cols) and
     ``indptr`` counts up to nnz, so int32 is safe whenever both fit.
     """
@@ -168,7 +170,7 @@ def _parse_index_style(index_style: str) -> bool:
 
 UTF8_h5py_encoding = h5py.string_dtype(encoding='utf-8')
 
-def _get_file_type(filename: Union[PathLike, str]) -> Optional[str]:
+def get_matrix_file_type(filename: Union[PathLike, str]) -> Optional[str]:
     """Detect file type from extension.
 
     Args:
@@ -284,8 +286,9 @@ class DataMatrix:
     predate it fail loudly on these files instead of silently reading half the matrix.
     """
 
-    _MATRIX_FILE_VERSION = "1.1"  #TODO: increment after any breaking changes
-    _SUPPORTED_MATRIX_FILE_MAJOR_VERSION = "1"
+    _MATRIX_FILE_VERSION = "2.0"
+    _SUPPORTED_MATRIX_FILE_MAJOR_VERSIONS = ("1", "2")
+    """Major versions this reader accepts. See "Matrix file versions" in docs/file_formats.md."""
 
     def __init__(self, data, row_names: List[str], col_names: List[str],
                  row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None,
@@ -439,9 +442,10 @@ class DataMatrix:
             raise ValueError(f"Required attribute '{cls._MATRIX_FILE_VERSION_ATTR}' not found in HDF5 file")
         if isinstance(version, bytes):
             version = version.decode("utf-8")
-        if str(version).split(".")[0] != cls._SUPPORTED_MATRIX_FILE_MAJOR_VERSION:
+        if str(version).split(".")[0] not in cls._SUPPORTED_MATRIX_FILE_MAJOR_VERSIONS:
+            supported = ", ".join(f"{major}.x" for major in cls._SUPPORTED_MATRIX_FILE_MAJOR_VERSIONS)
             raise ValueError(f"Unsupported matrix file version '{version}'. This version of Domainator reads "
-                             f"version {cls._SUPPORTED_MATRIX_FILE_MAJOR_VERSION}.x matrix files.")
+                             f"version {supported} matrix files.")
 
         for attribute in (cls._ARRAY_TYPE_ATTR, cls._SYMMETRIC_LABELS_ATTR):
             if attribute not in f.attrs:
@@ -457,7 +461,7 @@ class DataMatrix:
             lower_bound: if set, values <= lower_bound are dropped (set to 0) after loading.
                 NaNs are kept.
         """
-        file_type = _get_file_type(matrix_file)
+        file_type = get_matrix_file_type(matrix_file)
         if file_type == "hdf5":
             matrix = cls._from_hdf5(matrix_file)
         elif file_type is None:
@@ -760,9 +764,6 @@ class DataMatrix:
         Raises:
             ValueError: If output_type is not recognized
         """
-        if output_type in ("sparse", "dense"):
-            warnings.warn(f"output_type '{output_type}' is deprecated; use 'hdf'.", FutureWarning, stacklevel=2)
-            output_type = "hdf"
         if output_type == "hdf":
             self.write_hdf(self._data, file_name, self.rows, self.columns, self.row_lengths, self.column_lengths,
                            self.data_type, symmetric=self.exactly_symmetric)
@@ -913,7 +914,8 @@ class DataMatrix:
 
         Args:
             matrix (Union[np.array, scipy.sparse.sparray]): 2d array
-            file_name (Union[PathLike, str]): path to the target file to write the data to
+            file_name (Union[PathLike, str]): path to the target file to write the data to. "-" or
+                "/dev/stdout" writes standard output.
             row_names:List[str]: row labels
             col_names:List[str]: column labels
         """
@@ -922,7 +924,8 @@ class DataMatrix:
         sparse = scipy.sparse.issparse(matrix)
         if sparse:
             matrix = scipy.sparse.csr_array(matrix)
-        with open(file_name, "w") as outfile:
+        to_stdout = str(file_name) in ("-", "/dev/stdout")
+        with (contextlib.nullcontext(sys.stdout) if to_stdout else open(file_name, "w")) as outfile:
             print("\t" + "\t".join(col_names), file=outfile)
             for idx in range(len(row_names)):
                 row = matrix[[idx], :].toarray() if sparse else matrix[idx]

@@ -157,3 +157,6 @@ scratch/*
 # native extension build artifacts
 src/domainator/_gbfast*.so
 rust/target/
+
+# Local TMbed checkout
+/TMbed/

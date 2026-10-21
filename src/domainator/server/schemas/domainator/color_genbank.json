@@ -3,8 +3,8 @@
   "display_name": "Color Genbank",
   "category": "Editors",
   "description": "Add colors to domains or CDS annotations in genbank files\n\nTakes a genbank file which has been annotated using the domainator program, adds color annotations to the sequence features.\n\nDomains are colored based on domain name by default, or by database when requested.\n\nCDSs are colored based on the associated domains, prioritized by domain score.\n\nIf a color_table is provided, then the colors in the table will be used, otherwise a random color will be assigned to each annotation key.",
-  "runner": "module",
-  "entry_point": "domainator.color_genbank",
+  "runner": "domainator",
+  "entry_point": "color_genbank",
   "parameters": [
     {
       "name": "Input",
@@ -25,13 +25,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "the name of the output genbank file.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -65,10 +65,9 @@
         "--clear"
       ]
     },
-
     {
       "name": "Mode",
-      "parameter": "mode",
+      "parameter": "target",
       "help": "what to color. domains: color only domain annotations. cdss: color only CDS annotations. domains_and_cdss: color both domains and CDS annotations. Default: cdss",
       "type": "string",
       "choices": [
@@ -78,7 +77,7 @@
       ],
       "default": "cdss",
       "flags": [
-        "--mode"
+        "--target"
       ]
     },
     {
@@ -115,7 +114,7 @@
       "file_types": [
         "txt"
       ]
-    },  
+    },
     {
       "name": "Databases",
       "parameter": "databases",

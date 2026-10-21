@@ -3,9 +3,9 @@
   "display_name": "Select By Contig",
   "category": "Editors",
   "description": "Create a new genbank file with a subset of contigs from the input\n\nFrom a domainator-annotated genbank file, extracts a subset of contigs based on selection criteria.\n\nSelection criteria are combined as follows:\n\n(contig length within specified bounds [length_lb, length_ub])\nAND \n(contig matches specified taxonomy filters)\nAND # INVERT applies to this list of criteria\n(\n   (contig name in specified list [contigs, contigs_file])\nOR (contig name matches specified regex [contigs_regex])\nOR (contig definition matches specified regex [definition_regex]) \nOR (contig sequence matches specified regex [sequence_regex])\nOR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) \nOR (contig contains a combination of domains that match the specified boolean expression [domain_expr])\nOR (contig contains no domains [unannotated])\n)\nAND\n(total number of selected contigs is less than or equal to specified maximum [first])\n\nIf --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. That is, length and first are still applied, \nbut the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.",
-  "runner": "module",
+  "runner": "domainator",
   "priority": 4,
-  "entry_point": "domainator.select_by_contig",
+  "entry_point": "select_by_contig",
   "parameters": [
     {
       "name": "Input",
@@ -31,13 +31,13 @@
     },
     {
       "name": "Output",
-      "parameter": "output",
+      "parameter": "genbank_out",
       "help": "genbank output file name.",
       "type": "output",
       "required": true,
       "flags": [
         "-o",
-        "--output"
+        "--genbank_out"
       ]
     },
     {
@@ -122,7 +122,7 @@
     },
     {
       "name": "Domain Type",
-      "parameter": "domain_type",
+      "parameter": "annotation_type",
       "help": "The type of domain to consider, domain, search, both. Default: domain",
       "type": "string",
       "choices": [
@@ -132,7 +132,7 @@
       ],
       "default": "domain",
       "flags": [
-        "--domain_type"
+        "--annotation_type"
       ]
     },
     {
@@ -169,9 +169,8 @@
     {
       "name": "Fasta Out",
       "parameter": "fasta_out",
-      "help": "makes output a fasta file when activated",
-      "type": "boolean",
-      "default": false,
+      "help": "Write the records to this FASTA file. Use - for standard output.",
+      "type": "output",
       "flags": [
         "--fasta_out"
       ]
@@ -207,47 +206,47 @@
     },
     {
       "name": "First",
-      "parameter": "first",
+      "parameter": "max_records",
       "help": "If set then stop after returning this many contigs.",
       "type": "integer",
       "flags": [
-        "--first"
+        "--max_records"
       ]
     },
     {
       "name": "Length Lb",
-      "parameter": "length_lb",
+      "parameter": "min_length",
       "help": "skip contigs smaller than this. In units of bp (aa for protein input).",
       "type": "integer",
       "flags": [
-        "--length_lb"
+        "--min_length"
       ]
     },
     {
       "name": "Length Ub",
-      "parameter": "length_ub",
+      "parameter": "max_length",
       "help": "skip contigs larger than this. In units of bp (aa for protein input).",
       "type": "integer",
       "flags": [
-        "--length_ub"
+        "--max_length"
       ]
     },
     {
       "name": "Search Score Lb",
-      "parameter": "search_score_lb",
+      "parameter": "min_search_score",
       "help": "Skip contigs with a domain_search annotation score smaller than this.",
       "type": "number",
       "flags": [
-        "--search_score_lb"
+        "--min_search_score"
       ]
     },
     {
       "name": "Search Score Ub",
-      "parameter": "search_score_ub",
+      "parameter": "max_search_score",
       "help": "Skip contigs with a domain_search annotation score larger than this.",
       "type": "number",
       "flags": [
-        "--search_score_ub"
+        "--max_search_score"
       ]
     },
     {
@@ -261,7 +260,8 @@
       ]
     }
   ],
-  "advanced_parameters": [    {
+  "advanced_parameters": [
+    {
       "name": "Ncbi Taxonomy Path",
       "parameter": "ncbi_taxonomy_path",
       "help": "Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.",
@@ -295,5 +295,6 @@
       "flags": [
         "--partial"
       ]
-    }]
+    }
+  ]
 }
