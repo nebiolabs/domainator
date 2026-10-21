@@ -11,7 +11,7 @@ from typing import Iterable, Optional, Set
 
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import list_and_file_to_dict_keys
@@ -106,6 +106,7 @@ def build_parser():
     parser.add_argument("--databases", type=str, default=None, nargs="+",
                         help="When used with --domains, only consider Domainator annotations from these databases.")
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -121,7 +122,7 @@ def main(argv):
     if domains is None:
         databases = None
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     write_seq_outputs(sort_contigs(
         parse_seqfiles(params.input),

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from jsonargparse import ActionConfigFile
 import sys
 
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.locations import slice_record
@@ -221,6 +221,7 @@ def build_parser():
                         help="Write the cleaning statistics to this file. If not supplied, writes them to stderr.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -228,7 +229,7 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     log_handle = sys.stderr if params.log_out is None else open(params.log_out, "w")
 
     # Initialize statistics tracking

@@ -15,7 +15,7 @@ conda activate domainator
 - Run by name pattern: `pytest -k <pattern>`
 - Coverage: `coverage run -m pytest test && coverage report -m && coverage html` (open `htmlcov/index.html`)
 - Browser/SSN-viewer tests (optional, separate extra): `pip install -e ".[test,browser]" && playwright install chromium` — these skip automatically when `playwright` is not importable.
-- Launch the web GUI: `domainator_server --port 8080` (then visit `http://127.0.0.1:8080/`)
+- Describe every command as JSON (the tool manifest): `domainator describe --indent 1`
 
 Tests use `pytest-datadir`: fixtures live in `test/data/` and are staged via the `shared_datadir` fixture. Do not mutate fixture files; write outputs to `tempfile.TemporaryDirectory()`. Most tests call a tool's `main([...args])` directly rather than spawning subprocesses, and compare outputs with `helpers.compare_seqfiles` / `compare_seqrecords`.
 
@@ -25,7 +25,7 @@ Domainator is a suite of several dozen CLI tools that compose into genome-neighb
 
 **Every tool follows the same module shape.** A module `src/domainator/<tool>.py` exposes:
 - `<tool>(input, *, ...)` — the core function operating on/yielding `SeqRecord` objects (the reusable library API; import via `from domainator.<tool> import <tool>`). Only the main input is positional; every other parameter is keyword-only and named like the command's option (its argparse dest). Matrix producers return a `DataMatrix`; `main` writes it.
-- `build_parser()` — builds the command's options on `domainator.cli.common.tool_parser(__doc__)`, without parsing. The dispatcher, shell completion, and the schema generator all use it.
+- `build_parser()` — builds the command's options on `domainator.cli.common.tool_parser(__doc__)`, without parsing. The dispatcher, shell completion, and the tool manifest (`domainator describe`) all use it. It ends with `declare_outputs(parser, [...])`, naming the outputs of which at least one is required.
 - `main(argv)` — `build_parser().parse_args(argv)`, then runs the tool; accepts an explicit arg list (used by tests).
 
 Users run tools through one dispatcher, `domainator <command> [options]` (`src/domainator/cli/`). Its command list is the static table in `cli/registry.py`, so dispatching imports only the requested tool's module. When adding a tool, add it to `cli/registry.py` and mirror this shape. `domainator completion bash|zsh|tcsh` prints a static shell completion script generated from every `build_parser()`.
@@ -44,11 +44,9 @@ Users run tools through one dispatcher, `domainator <command> [options]` (`src/d
 - **Output guardrails.** Tools with potentially large output accept `--max_output_gb` (default 25 GB; `0` disables) to fail early — see `output_guardrails.py`.
 - **Errors and logging.** Raise a `domainator.errors` exception (`InputError`, `ExternalToolError`, `OutputSizeLimitExceeded`, `FormatVersionError`, all `DomainatorError`) for problems the user can fix; the dispatcher prints them as one line with exit status 1. Library code never calls `sys.exit` or prints progress: use `logger = logging.getLogger(__name__)` (progress at INFO, problems at WARNING) and `warnings.warn` for data warnings. `tool_parser` adds `-v/--verbose`/`-q/--quiet` and configures the `domainator` logger when the arguments are parsed.
 
-### Web server (`src/domainator/server/`)
+### Tool manifest (`src/domainator/cli/manifest.py`)
 
-A Flask app (`app.py`, launched by `cli.py` → `domainator_server`) that surfaces CLIs in a browser UI. Each tool is described by a JSON schema under `server/schemas/`; the server's `tool_registry` / `tool_executor` launch tools by writing parameters to a JSON file and invoking the tool with `--config=<file>` (Domainator CLIs parse this via `jsonargparse`).
-
-Schemas use `"runner": "domainator"` with the command name as `entry_point`, and `test/server/test_domainator_schemas.py` checks that every schema parameter is still an option of its tool, so a CLI rename must update the schemas. To add a tool to the UI: generate a schema with `python scripts/server/generate_tool_schemas.py --output-dir src/domainator/server/schemas/generated/ --include <command>`, then hand-edit it (move niche params into `advanced_parameters`). Full guide: `docs/server/adding_tools.md`. Server design: `docs/server/technical_overview.md`.
+`domainator describe` derives a JSON description of every command from its `build_parser()`, for GUIs and workflow systems (which run commands with `--config <file>`, keyed by option dest). Options are classified by name: a dest ending in `_out` is an output (and only outputs end in `_out`), `_file`/`INPUT_PATHS` are inputs, `_dir`/`DIRECTORIES` are directories, `_path` are external programs; other free-text string options must be listed in `TEXT_OPTIONS`. Commands record their required outputs with `cli.common.declare_outputs` in `build_parser()` (`check_outputs` enforces them). `test/test_manifest.py` enforces these rules and compares the interface with `test/data/manifest_snapshot.json`: when you change an option on purpose, regenerate the snapshot (the command is in that test), since the CLI is part of the stability contract. The schema is in `docs/tool_manifest.md`.
 
 ## Spelling
 

@@ -24,7 +24,7 @@ import tempfile
 
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from domainator import structure_lib
 
@@ -85,13 +85,14 @@ def build_parser():
     structure_lib.add_backend_arguments(parser, include_search_arguments=False)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out", "db_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["genbank_out", "fasta_out", "db_out"])
+    check_outputs(parser, params)
 
     aligner = structure_lib.build_aligner(params)
 

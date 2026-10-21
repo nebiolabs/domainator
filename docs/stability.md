@@ -33,6 +33,8 @@ The formats in [file_formats.md](file_formats.md):
   major version is refused with a `FormatVersionError`.
 - **Report JSON** (`--json_out` of `summary_report`, `matrix_report` and `ssn_navigator`): the
   keys, versioned by the `schema_version` key. New keys can appear in 1.x.
+- **The tool manifest** (`domainator describe`, [tool_manifest.md](tool_manifest.md)), versioned
+  by its `manifest_version` key. New keys can appear in 1.x.
 - **Other outputs**: the columns of the report TSVs and NDJSON, `hmmer_compare` scores and
   alignments, XGMML attributes and Newick naming, and the color-table and dense-text matrix
   formats.

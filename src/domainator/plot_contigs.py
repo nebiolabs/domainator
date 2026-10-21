@@ -10,7 +10,7 @@ It works best for relatively small datasets, of a few megabases or a few hundred
 from jsonargparse import ActionConfigFile
 from typing import List, Optional, Set, Union, Dict
 from os import PathLike
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.seqio import parse_seqfiles, open_if_is_name
@@ -504,6 +504,7 @@ def build_parser():
     
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["html_out"])
     return parser
 
 
@@ -514,7 +515,7 @@ def main(argv):
     ### validate input
 
 
-    check_outputs(parser, params, ["html_out"])
+    check_outputs(parser, params)
 
     feature_types = params.types
     if params.types is None:

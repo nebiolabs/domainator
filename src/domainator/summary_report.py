@@ -25,7 +25,7 @@ import pandas as pd
 from io import BytesIO
 import base64
 import html
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.seqio import parse_seqfiles
@@ -651,6 +651,8 @@ def build_parser():
     parser.add_argument('--config', action=ActionConfigFile)
 
     # TODO: domain_search scores histogram
+    declare_outputs(parser, ["text_out", "html_out", "json_out", "domains_tsv_out",
+                                   "co_occurrence_fraction_out", "co_occurrence_count_out"])
     return parser
 
 
@@ -658,8 +660,7 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
 
-    check_outputs(parser, params, ["text_out", "html_out", "json_out", "domains_tsv_out",
-                                   "co_occurrence_fraction_out", "co_occurrence_count_out"])
+    check_outputs(parser, params)
 
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)

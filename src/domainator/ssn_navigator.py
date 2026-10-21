@@ -26,7 +26,7 @@ import math
 
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.ssn_bundle import (
     clusters_at_threshold,
@@ -314,13 +314,14 @@ def build_parser():
     parser.add_argument("--max_merge_events", type=int, default=DEFAULT_MAX_MERGE_EVENTS,
                         help="How many split events the --query thresholds/node cut-points are drawn from: the strongest this many by impact, plus a few so that no 5%% band of the threshold range with an event to offer is left without one. 0 offers a cut-point at every split event. The series is derived from the bundle's merge order, so any value works on any bundle.")
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["json_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["json_out"])
+    check_outputs(parser, params)
 
     bundle = load_bundle(params.input)
     result = ssn_navigator(

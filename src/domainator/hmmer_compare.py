@@ -16,7 +16,7 @@ from jsonargparse import ActionConfigFile
 from contextlib import ExitStack
 from typing import Iterable, Optional, TextIO
 import heapq
-from domainator.cli.common import add_input, add_output, check_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, resolve_cpu, tool_parser
 from domainator.outputs import output_file
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit, check_alphabets_match
 from domainator._mp import make_pool
@@ -124,13 +124,14 @@ def build_parser():
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["tsv_out", "alignments_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["tsv_out", "alignments_out"])
+    check_outputs(parser, params)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     with ExitStack() as stack:

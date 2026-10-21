@@ -14,7 +14,7 @@ otherwise:
 """
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, add_switch, check_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
@@ -618,6 +618,7 @@ def build_parser():
     parser.add_argument('--config', action=ActionConfigFile)
     
 
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -628,7 +629,7 @@ def main(argv):
     ### validate input
 
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     ### figure out selection filters
     kb_range, cds_range = validate_range(params.kb_range, params.kb_up, params.kb_down, params.cds_range, params.cds_up, params.cds_down)

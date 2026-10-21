@@ -58,7 +58,7 @@ You can also run domainate sequentially, meaning you can run an already annotate
 ## Visualizing output
 ```bash
 domainator summary_report -i annotated.gb --html_out domain_summary.html
-domainator enum_report -i annotated.gb --by contig --definition --taxname superkingdom genus species self --length --domains --html_out enum_report.html -o enum_report.tsv
+domainator enum_report -i annotated.gb --by contig --columns definition taxname:superkingdom:genus:species:self length domains --html_out enum_report.html -o enum_report.tsv
 domainator color_genbank -i annotated.gb -o annotated_colored.gb --target domains
 domainator plot_contigs -i annotated_colored.gb --html_out contigs_plot.html
 ```
@@ -77,7 +77,7 @@ domainator domainate -i neighborhoods.gb -o annotated_neighborhoods.gb -r exampl
 
 # generate various kinds of reports of the results
 domainator summary_report -i annotated_neighborhoods.gb -o /dev/stdout --html_out summary_report.html --taxonomy
-domainator enum_report -i annotated_neighborhoods.gb -o /dev/stdout --html_out enum_report.html --definition --length --taxname superkingdom genus self --domains --domain_descriptions --domain_search
+domainator enum_report -i annotated_neighborhoods.gb -o /dev/stdout --html_out enum_report.html --columns definition length taxname:superkingdom:genus:self domains domain_descriptions domain_search
 domainator color_genbank -i annotated_neighborhoods.gb -o annotated_neighborhoods_colored.gb --target domains
 domainator plot_contigs -i annotated_neighborhoods_colored.gb --html_out neighborhoods_plot.html 
 ```
@@ -89,14 +89,14 @@ domainator domainate -i protein_hits.gb  -o annotated_proteins.gb -r example_fil
 
 # generate various kinds of reports
 domainator summary_report -i annotated_proteins.gb -o /dev/stdout --html_out summary_report.html --taxonomy
-domainator enum_report -i annotated_proteins.gb -o /dev/stdout --html_out enum_report.html --definition --length --taxname superkingdom genus self --domains --domain_descriptions --domain_search
+domainator enum_report -i annotated_proteins.gb -o /dev/stdout --html_out enum_report.html --columns definition length taxname:superkingdom:genus:self domains domain_descriptions domain_search
 domainator color_genbank -i annotated_proteins.gb -o annotated_proteins_colored.gb --target domains
 domainator plot_contigs -i annotated_proteins_colored.gb --html_out proteins_plot.html 
 ```
 
 ## Making a sequence similarity network or tree
 ```bash
-domainator enum_report -i example_files/FeSOD_20.gb --length --sequence -o metadata.tsv
+domainator enum_report -i example_files/FeSOD_20.gb --columns length sequence -o metadata.tsv
 
 # --dense_text_out gives a nice human readable score matrix files, but it can be very large, frequently you'd prefer --hdf_out for more efficient files.
 # --mode score can be later converted to various other kinds of scores, like efi_score and efi_score_dist, etc. If you only want one output, you can set --mode to that directly.
@@ -144,7 +144,7 @@ must share an alphabet.
 domainator hmmer_build -i dna_alignment.afa --alphabet dna --name my_dna_profile --window_length 500 -o my_dna_profile.hmm
 
 # Confirm what you got. --alphabet reports amino, DNA, or RNA.
-domainator hmmer_report -i my_dna_profile.hmm --alphabet --length --consensus -o dna_profile_metadata.tsv
+domainator hmmer_report -i my_dna_profile.hmm --columns alphabet length consensus -o dna_profile_metadata.tsv
 
 # Compare nucleotide profiles to each other. Scores are on the nucleotide scale, which runs
 # at roughly half the amino acid scale, so protein-tuned thresholds are about twice as
@@ -164,7 +164,7 @@ nhmmer rather than against individual CDSs.
 ## Making a profile tree or profile similarity network
 ```bash
 # write some metadata to a tab-separated file
-domainator hmmer_report -i example_files/full_CDA_pfam_clan.hmm --length --acc --desc --consensus -o CDS_metadata.tsv
+domainator hmmer_report -i example_files/full_CDA_pfam_clan.hmm --columns length acc desc consensus -o CDS_metadata.tsv
 
 # --mode score can be later converted to various other kinds of scores, like efi_score and efi_score_dist, etc. If you only want one output, you can set --mode to that directly.
 domainator seq_dist -i example_files/full_CDA_pfam_clan.hmm -r example_files/full_CDA_pfam_clan.hmm --algorithm hmmer_compare --mode score --hdf_out CDA_score.hdf5

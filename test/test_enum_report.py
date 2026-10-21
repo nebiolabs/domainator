@@ -15,7 +15,7 @@ def test_enum_report_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains"])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--columns", "domains"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -34,7 +34,7 @@ def test_enum_report_2(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains", "--sequence", "--length", "--topology" ])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--columns", "domains", "sequence", "length", "topology"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -56,7 +56,7 @@ def test_enum_report_3(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--sequence", "--length", "--architecture", "--cds_count", "--domain_count" ])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--columns", "sequence", "length", "architecture", "cds_count", "domain_count"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -79,7 +79,7 @@ def test_enum_report_circular_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_domainator_circular.gb"), "-o", out, "--domains", "--sequence", "--length", "--topology" ])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_domainator_circular.gb"), "-o", out, "--columns", "domains", "sequence", "length", "topology"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -100,12 +100,7 @@ def test_enum_report_circular_1(shared_datadir):
 def test_enum_report_named_domain_count_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main([
-            "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
-            "-o", out,
-            "--named_domain_count", "CcdB",
-            "--named_domain_count", "Condensation",
-        ])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--columns", "named_domain_count:CcdB", "named_domain_count:Condensation"])
         assert Path(out).is_file()
 
         with open(out) as f:
@@ -153,7 +148,7 @@ def test_enum_report_cds_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--by", "cds", "-o", out, "--domains", "--sequence", "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--by", "cds", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -213,7 +208,7 @@ def test_enum_report_domain_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--by", "domain", "-o", out, "--domains", "--sequence", "--length", "--architecture", "--score" ])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "--by", "domain", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -246,7 +241,7 @@ def test_enum_report_protein_domain_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -276,13 +271,7 @@ def test_enum_report_nucleotide_contig_annotations(shared_datadir):
             "--evalue", "0.1",
         ])
 
-        enum_report.main([
-            "-i", annotated,
-            "-o", out,
-            "--domains",
-            "--domain_count",
-            "--named_domain_count", "dna_query_1",
-        ])
+        enum_report.main(["-i", annotated, "-o", out, "--columns", "domains", "domain_count", "named_domain_count:dna_query_1"])
 
         with open(out) as handle:
             lines = [line.rstrip("\n").split("\t") for line in handle]
@@ -308,11 +297,7 @@ def test_enum_report_nucleotide_architecture_detailed(shared_datadir):
             "--evalue", "0.1",
         ])
 
-        enum_report.main([
-            "-i", annotated,
-            "-o", out,
-            "--architecture_detailed",
-        ])
+        enum_report.main(["-i", annotated, "-o", out, "--columns", "architecture_detailed"])
 
         with open(out) as handle:
             lines = [line.rstrip("\n").split("\t") for line in handle]
@@ -335,12 +320,7 @@ def test_enum_report_nucleotide_by_cds_skips_pseudo_cdss(shared_datadir):
             "--evalue", "0.1",
         ])
 
-        enum_report.main([
-            "-i", annotated,
-            "-o", out,
-            "--by", "cds",
-            "--domains",
-        ])
+        enum_report.main(["-i", annotated, "-o", out, "--by", "cds", "--columns", "domains"])
 
         with open(out) as handle:
             lines = [line.rstrip("\n").split("\t") for line in handle]
@@ -364,11 +344,7 @@ def test_enum_report_nucleotide_domain_search(shared_datadir):
             "--evalue", "0.1",
         ])
 
-        enum_report.main([
-            "-i", annotated,
-            "-o", out,
-            "--domain_search",
-        ])
+        enum_report.main(["-i", annotated, "-o", out, "--columns", "domain_search"])
 
         with open(out) as handle:
             lines = [line.rstrip("\n").split("\t") for line in handle]
@@ -413,7 +389,7 @@ def test_enum_report_rename_columns_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--domains", "--sequence",  "--length", "--architecture", "--score", "--column_names" ] + new_column_names)
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score", "--column_names"] + new_column_names)
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -438,7 +414,7 @@ def test_enum_report_rename_columns_error_1(shared_datadir):
         with tempfile.TemporaryDirectory() as output_dir:
             #output_dir = "test_out"
             out = output_dir + "/enum_report.tsv"
-            enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--domains", "--sequence",  "--length", "--architecture", "--score", "--column_names" ] + new_column_names)
+            enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score", "--column_names"] + new_column_names)
         
 def test_enum_report_html_1(shared_datadir):
     
@@ -447,7 +423,7 @@ def test_enum_report_html_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
         assert Path(out).is_file()
         
         compare_files(out, reference)
@@ -460,7 +436,7 @@ def test_enum_report_html_max_height_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--html_max_height", "100", "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--html_max_height", "100", "--columns", "domains", "sequence", "length", "architecture", "score"])
         assert Path(out).is_file()
         
         compare_files(out, reference)
@@ -472,7 +448,7 @@ def test_enum_report_html_quote_escape_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept_quote_name.gb"), "--by", "domain", "--html_out", out, "--domains", "--sequence",  "--length", "--architecture", "--score"])
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept_quote_name.gb"), "--by", "domain", "--html_out", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
         assert Path(out).is_file()
         
         compare_files(out, reference)
@@ -502,7 +478,7 @@ def test_enum_report_taxonomy_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out, "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), '--taxid_lineage', '--taxname_lineage', '--taxid', "self", "superkingdom", "genus", "--taxname", "self", "superkingdom", "genus", "--domain_descriptions", '--append', 'one', 'int', '1', '--append', 'two', 'float', '2.0', '--append', 'three', 'str', 'three'])
+        enum_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out, "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--columns", "taxid_lineage", "taxname_lineage", "taxid:self:superkingdom:genus", "taxname:self:superkingdom:genus", "domain_descriptions", "append:one:int:1", "append:two:float:2.0", "append:three:str:three"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -524,7 +500,7 @@ def test_enum_report_identity_1(shared_datadir):
         
         # output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "CuSOD_enum_report_test.gb"), "-o", out, '--identity', '--domain_search'])
+        enum_report.main(["-i", str(shared_datadir / "CuSOD_enum_report_test.gb"), "-o", out, "--columns", "identity", "domain_search"])
         assert Path(out).is_file()
         with open(out) as f:
             lines = f.readlines()
@@ -543,7 +519,7 @@ def test_enum_report_architecture_detailed_qualifier_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--sequence", "--length", "--architecture_detailed", "--cds_count", "--domain_count",  "--qualifier", "CDS", "gene_type", "--feature_count", "CDS" ])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--columns", "sequence", "length", "architecture_detailed", "cds_count", "domain_count", "qualifier:CDS:gene_type", "feature_count:CDS"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -571,7 +547,7 @@ def test_enum_report_database_1(shared_datadir):
         
         # output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--by", "domain", "--domains", "--databases", "pdonr_hmms_1"])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator_multi_hmm_2.gb"), "-o", out, "--by", "domain", "--columns", "domains", "--databases", "pdonr_hmms_1"])
         assert Path(out).is_file()
         with open(out) as f:
             lines = f.readlines()
@@ -613,8 +589,7 @@ def test_enum_report_filename_contig_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"), 
-                         "-o", out, "--filename", "--domains"])
+        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"), "-o", out, "--columns", "filename", "domains"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -639,9 +614,7 @@ def test_enum_report_filename_cds_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), 
-                         str(shared_datadir / "simple_genpept.gb"),
-                         "-o", out, "--filename", "--domains", "--by", "cds"])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), str(shared_datadir / "simple_genpept.gb"), "-o", out, "--columns", "filename", "domains", "--by", "cds"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -677,8 +650,7 @@ def test_enum_report_filename_domain_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "ccdb.gb"), str(shared_datadir / "simple_genpept.gb"),
-                         "-o", out, "--filename", "--domains", "--by", "domain"])
+        enum_report.main(["-i", str(shared_datadir / "ccdb.gb"), str(shared_datadir / "simple_genpept.gb"), "-o", out, "--columns", "filename", "domains", "--by", "domain"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -708,8 +680,7 @@ def test_enum_report_filename_with_other_options_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"),
-                         "-o", out, "--filename", "--domains", "--length", "--definition", "--cds_count"])
+        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"), "-o", out, "--columns", "filename", "domains", "length", "definition", "cds_count"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -733,8 +704,7 @@ def test_enum_report_no_filename_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"),
-                         "-o", out, "--domains"])
+        enum_report.main(["-i", str(shared_datadir / "206.gb"), str(shared_datadir / "ccdb.gb"), "-o", out, "--columns", "domains"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -772,7 +742,7 @@ tsv_out: {out}
         
         # Run enum_report with config file and additional command-line args
         # The append_const arguments work better from command line
-        enum_report.main(["--config", config_file, "--domains", "--sequence", "--length", "--topology"])
+        enum_report.main(["--config", config_file, "--columns", "domains", "sequence", "length", "topology"])
         
         assert Path(out).is_file()
         
@@ -796,7 +766,7 @@ def test_enum_report_starts_with_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--starts_with", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "starts_with", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -816,7 +786,7 @@ def test_enum_report_isoelectric_point_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--isoelectric_point", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "isoelectric_point", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -837,7 +807,7 @@ def test_enum_report_net_charge_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--net_charge", "7", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "net_charge:7", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -858,7 +828,7 @@ def test_enum_report_net_charge_multiple_ph_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--net_charge", "5.5", "--net_charge", "7", "--net_charge", "8.5"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "net_charge:5.5", "net_charge:7", "net_charge:8.5"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -882,7 +852,7 @@ def test_enum_report_repeat_count_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--repeat_count", "2", "--repeat_count", "3"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "repeat_count:2", "repeat_count:3"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -907,7 +877,7 @@ def test_enum_report_motif_count_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
         # Use a simple motif pattern: M-A (methionine followed by alanine)
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--motif_count", "M-A", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "motif_count:M-A", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -928,7 +898,7 @@ def test_enum_report_motif_count_complex_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
         # Use a more complex motif pattern: [AG]-x-[DE] (A or G, any amino acid, D or E)
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--motif_count", "[AG]-x-[DE]"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "motif_count:[AG]-x-[DE]"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -948,9 +918,7 @@ def test_enum_report_combined_new_options_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, 
-                         "--starts_with", "--isoelectric_point", "--net_charge", "7",
-                         "--repeat_count", "2", "--motif_count", "M-A", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "starts_with", "isoelectric_point", "net_charge:7", "repeat_count:2", "motif_count:M-A", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -976,7 +944,7 @@ def test_enum_report_molecular_weight_protein_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--molecular_weight", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "FeSOD_20.gb"), "-o", out, "--columns", "molecular_weight", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -1002,7 +970,7 @@ def test_enum_report_molecular_weight_dna_1(shared_datadir):
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--molecular_weight", "--length"])
+        enum_report.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--columns", "molecular_weight", "length"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -1036,7 +1004,7 @@ def test_enum_report_partial(shared_datadir, by, partial, expected_rows):
     with tempfile.TemporaryDirectory() as output_dir:
         annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
         out = output_dir + "/report.tsv"
-        enum_report.main(["-i", annotated, "--by", by, "--domains", "--partial_count", "--partial", partial, "-o", out])
+        enum_report.main(["-i", annotated, "--by", by, "--columns", "domains", "partial_count", "--partial", partial, "-o", out])
         with open(out) as handle:
             lines = handle.read().splitlines()
         rows = lines[1:]
@@ -1059,7 +1027,7 @@ def test_enum_report_partial_count(shared_datadir, by, expected):
     with tempfile.TemporaryDirectory() as output_dir:
         annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
         out = output_dir + "/report.tsv"
-        enum_report.main(["-i", annotated, str(shared_datadir / "pDONR201_multi_genemark.gb"), "--by", by, "--partial_count", "-o", out])
+        enum_report.main(["-i", annotated, str(shared_datadir / "pDONR201_multi_genemark.gb"), "--by", by, "--columns", "partial_count", "-o", out])
         with open(out) as handle:
             lines = [line.split("\t") for line in handle.read().splitlines()]
         key_column = {"contig": 0, "cds": 1, "domain": 2}[by]
@@ -1074,7 +1042,7 @@ def test_enum_report_partial_count_protein_fragments(shared_datadir):
         fasta = output_dir + "/fragments.fasta"
         fragment_id = _helpers.write_uniprot_fragment_fasta(shared_datadir, fasta)
         out = output_dir + "/report.tsv"
-        enum_report.main(["-i", fasta, "--partial_count", "-o", out])
+        enum_report.main(["-i", fasta, "--columns", "partial_count", "-o", out])
         with open(out) as handle:
             counts = {row.split("\t")[0]: int(row.split("\t")[1]) for row in handle.read().splitlines()[1:]}
         assert counts[fragment_id] == 1
@@ -1089,7 +1057,7 @@ def test_enum_report_fragment(shared_datadir):
         annotated = _helpers.domainate_partial_fixture(shared_datadir, output_dir)
         out = output_dir + "/report.tsv"
         def report(*args):
-            enum_report.main(["-i"] + list(args) + ["--fragment", "-o", out])
+            enum_report.main(["-i"] + list(args) + ["--columns", "fragment", "-o", out])
             with open(out) as handle:
                 return [row.split("\t") for row in handle.read().splitlines()[1:]]
         assert {row[1]: row[-1] for row in report(annotated, "--by", "cds")} == {"HOV79_30120": "complete", "HOV79_30125": "N"}

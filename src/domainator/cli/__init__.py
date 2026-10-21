@@ -18,6 +18,7 @@ from domainator.errors import DomainatorError
 BUILTIN_COMMANDS = {
     "completion": "Print a shell completion script: domainator completion {bash,zsh,tcsh}.",
     "doctor": "List the optional programs and packages, and which of them are installed.",
+    "describe": "Print a JSON description of every command and its options (the tool manifest).",
 }
 """Commands of the dispatcher itself, rather than tools."""
 
@@ -77,6 +78,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if command == "completion":
         from domainator.cli.completion import main as completion_main
         return completion_main(args)
+    if command == "describe":
+        from domainator.cli.manifest import main as describe_main
+        return describe_main(args)
     if command == "doctor":
         from domainator.cli.doctor import main as doctor_main
         return doctor_main(args)

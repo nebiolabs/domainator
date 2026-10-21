@@ -113,7 +113,7 @@ degradation.
 ```bash
 domainator structure_search -i /path/to/afdb_foldseek_db -r query.pdb \
     --max_hits 1000 --max_seqs 1000000 --device cuda:0 --cpu 6 -o hits.gb
-domainator enum_report -i hits.gb --domains -o hits.tsv
+domainator enum_report -i hits.gb --columns domains -o hits.tsv
 ```
 
 Only records that matched are written, each carrying a `Domain_Search` feature marking the

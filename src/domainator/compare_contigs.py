@@ -7,7 +7,7 @@ Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Ka
 """
 import warnings
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_output, check_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, resolve_cpu, tool_parser
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles, write_genbank, copy_SeqRecord, open_writable_seqfile
 from domainator._mp import make_pool
@@ -652,6 +652,7 @@ def build_parser():
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["hdf_out", "dense_text_out", "genbank_out"])
     return parser
 
 
@@ -661,7 +662,7 @@ def main(argv):
    
     ### Figure out what input and output files ####
 
-    check_outputs(parser, params, ["hdf_out", "dense_text_out", "genbank_out"])
+    check_outputs(parser, params)
     genbanks = params.input
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     cpus = resolve_cpu(params.cpu)

@@ -9,7 +9,7 @@ import os
 import warnings
 import argparse
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.outputs import output_file
 from domainator.model import get_sources, DomainatorCDS, feature_score
 from domainator.seqio import parse_seqfiles
@@ -28,25 +28,47 @@ from Bio.SeqRecord import SeqRecord
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.filter_domains import filter_domains
 from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
+from domainator.report_columns import VARIADIC, Column, add_columns_argument, parse_columns
 from domainator.location_ops import stranded_end_human_readable, stranded_start, stranded_start_human_readable
 import re
 
-SELECT_CATEGORIES = {"contig", "cds", "domain"}
-COLS_ARG_NAME = "output_cols"
-
-class DynamicArg(argparse.Action):
-    def __init__(self, option_strings, dest, **kwargs):
-        super().__init__(option_strings, dest, **kwargs)
-    def __call__(self, parser, namespace, values, option_string=None):
-        items = getattr(namespace, self.dest, None)
-        if items is None:
-            items = []
-        # For nargs='?' with const, when no value is provided, argparse sets
-        # values to const. We detect this case and treat it as None.
-        if self.nargs == '?' and values == self.const:
-            values = None
-        items.append( (self.const, values) )
-        setattr(namespace, self.dest, items)
+SELECT_CATEGORIES = ("contig", "cds", "domain")
+COLUMNS = (
+    Column("domains", "the domain names, in alphabetical order and separated by '; ', each listed once."),
+    Column("domain_descriptions", "the domain descriptions, in alphabetical order of domain name and separated by '; ', each listed once."),
+    Column("score", "the sum of the domain scores."),
+    Column("identity", "the sum of the domain identities."),
+    Column("architecture", "the domain names in order of start position, separated by '; '."),
+    Column("architecture_detailed", "the domain architecture in order of start position. Within each CDS, domains are separated by '/'; CDSs are separated by ';'. CDSs with no domains are 'no_domains'."),
+    Column("start", "the start coordinate of the feature."),
+    Column("end", "the end coordinate of the feature."),
+    Column("strand", "the strand of the feature."),
+    Column("length", "the length of the contig, CDS or domain."),
+    Column("topology", "the topology (usually only meaningful with --by contig)."),
+    Column("sequence", "the sequence of the contig, CDS or domain."),
+    Column("cds_count", "the number of CDSs."),
+    Column("domain_count", "the total number of domains."),
+    Column("definition", "the record's definition line."),
+    Column("filename", "the name of the input file the record came from."),
+    Column("domain_search", "several columns describing the record's best domain_search hit: best_query, query_description, query_start, query_end, query_length, match_start, match_end, match_strand, match_score, match_identity."),
+    Column("taxid_lineage", "the taxids from the root to the record's taxid, separated by ';'."),
+    Column("taxname_lineage", "the taxon names from the root to the record's taxid, separated by ';'."),
+    Column("rank_lineage", "the ranks from the root to the record's taxid, separated by ';'."),
+    Column("taxid", "the taxid at each given rank (e.g. superkingdom, genus, species; 'self' for the record's own taxid), in columns named taxid_[rank].", ("rank", VARIADIC)),
+    Column("taxname", "the taxon name at each given rank (e.g. superkingdom, genus, species; 'self' for the record's own taxon), in columns named taxname_[rank].", ("rank", VARIADIC)),
+    Column("qualifier", "the values of this qualifier on features of this type, separated by ';'.", ("feature", "qualifier")),
+    Column("feature_count", "the number of features of this type.", ("feature",)),
+    Column("motif_count", "the number of matches of this PROSITE motif in the sequence (nucleotide motifs for nucleotide sequences, protein motifs for proteins; see https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html).", ("motif",)),
+    Column("isoelectric_point", "the isoelectric point of the protein. Only defined for contigs with exactly one protein (a nucleotide contig with one CDS, or a protein record)."),
+    Column("net_charge", "the net charge of the protein at this pH. Only defined for contigs with exactly one protein.", ("pH",)),
+    Column("repeat_count", "the number of repeats of at least this length; for example AGGKKK has repeat_count_1 = 3, repeat_count_2 = 2 and repeat_count_3 = 1.", ("length",)),
+    Column("named_domain_count", "the number of Domainator domains with this name, in a column named named_domain_count_[domain].", ("domain",)),
+    Column("starts_with", "the first character of the sequence."),
+    Column("molecular_weight", "the molecular weight of the sequence in Daltons, for protein, DNA or RNA according to its molecule type."),
+    Column("partial_count", "the number of partial CDSs: by contig, the CDSs with '<' or '>' in their location (for a protein record, 1 if it is a fragment); by cds, 1 if the CDS or protein is a fragment, otherwise 0; by domain, 1 if its CDS or protein is a fragment, whether or not the domain reaches the missing end."),
+    Column("fragment", "whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' or MGnify 'FL=0' header). Only for rows that are a single protein or CDS; otherwise empty, with a warning."),
+    Column("append", "a column with this name and type (str, int or float) holding this value in every row.", ("name", "type", "value")),
+)
 
 def get_strand(loc: Union[FeatureLocation, CompoundLocation]) -> str:
     if loc.parts[0].strand == -1:
@@ -809,105 +831,44 @@ def build_parser():
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Ignore domain annotations not from these databases. default: consider all databases.")
 
-    parser.add_argument('--domains', action='append_const', dest=COLS_ARG_NAME, const="domains", #It's alphabetical so that different contigs can be compared
-                        help="report domain content as alphabetical and semicolon-separated, only listing duplicates once.")
+    add_columns_argument(parser, COLUMNS)
 
-    parser.add_argument('--domain_descriptions', action='append_const', dest=COLS_ARG_NAME, const="domain_descriptions",
-                        help="report domain content as alphabetical and semicolon-separated, only listing duplicates once.")
     
-    parser.add_argument('--score', action='append_const', dest=COLS_ARG_NAME, const="score",
-                        help="report report the sum of domain scores.")
 
-    parser.add_argument('--identity', action='append_const', dest=COLS_ARG_NAME, const="identity",
-                        help="report report the sum of domain identities.")
 
-    parser.add_argument('--architecture', action='append_const', dest=COLS_ARG_NAME, const="architecture",
-                       help="report domains in order of appearance of start position in the sequence and semicolon-separated.")
     
-    parser.add_argument('--architecture_detailed', action='append_const', dest=COLS_ARG_NAME, const="architecture_detailed",
-                       help="report domain architecture in order of appearance of start position in the sequence. Within each CDS, domains are separated by a '/'. CDSs are separated by a ';'. CDSs with no domains are represented by 'no_domains'.")
 
-    parser.add_argument('--start', action='append_const', dest=COLS_ARG_NAME, const="start",
-                        help="report the start coordinate of the feature.")
     
-    parser.add_argument('--end', action='append_const', dest=COLS_ARG_NAME, const="end",
-                        help="report the end coordinate of the feature.")
     
-    parser.add_argument('--strand', action='append_const', dest=COLS_ARG_NAME, const="strand",
-                        help="report the strand of the feature.")
 
-    parser.add_argument('--length', action='append_const', dest=COLS_ARG_NAME, const="length",
-                        help="report the (contig, cds, or domain) length as a column in the output.")
     
-    parser.add_argument('--topology', action='append_const', dest=COLS_ARG_NAME, const="topology",
-                        help="report the topology in the output (typically only makes sense when using --by contig).")
     
-    parser.add_argument('--sequence', action='append_const', dest=COLS_ARG_NAME, const="sequence",
-                        help="report the (contig, cds, or domain) sequence as a column in the output.")
     
-    parser.add_argument('--cds_count', action='append_const', dest=COLS_ARG_NAME, const="cds_count",
-                        help="report the number of CDSs as a column in the output")
     
-    parser.add_argument('--domain_count', action='append_const', dest=COLS_ARG_NAME, const="domain_count",
-                        help="report the total number of domains as a column in the output")
     
-    parser.add_argument('--definition', action='append_const', dest=COLS_ARG_NAME, const="definition",
-                        help="report sequence definition line from the genbank file.")
     
-    parser.add_argument('--filename', action='append_const', dest=COLS_ARG_NAME, const="filename",
-                        help="report the filename of the input file from which the record originated.")
     
-    parser.add_argument('--domain_search', action='append_const', dest=COLS_ARG_NAME, const="domain_search",
-                        help="This is a composite metric that will return multiple columns: best_query, query_description, query_start, query_end, query_length, match_start, match_end, match_strand, match_score, match_identity.")
     
-    parser.add_argument('--taxid_lineage', action='append_const', dest=COLS_ARG_NAME, const="taxid_lineage", help="a semicolon separated list of taxids from the root to the taxid of the sequence.") 
-    parser.add_argument('--taxname_lineage', action='append_const', dest=COLS_ARG_NAME, const="taxname_lineage", help="a semicolon separated list of taxnames from the root to the taxid of the sequence.") 
-    parser.add_argument('--rank_lineage', action='append_const', dest=COLS_ARG_NAME, const="rank_lineage", help="a semicolon separated list of ranks from the root to the taxid of the sequence.")
     
-    parser.add_argument('--taxid', nargs="+", action=DynamicArg, const="taxid", dest=COLS_ARG_NAME, help="The taxid at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxid available for the record, the column will be named 'taxid_[rank]") # 
-    parser.add_argument('--taxname', nargs="+", action=DynamicArg, const="taxname", dest=COLS_ARG_NAME, help="The taxname at the given rank (e.g. superkingdom, genus, species), use 'self' for the lowest level taxname available for the record, the column will be named 'taxname_[rank]") #
 
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
     parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
 
-    parser.add_argument('--qualifier', nargs=2, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="qualifier",
-                        help="Supply two strings, an feature type and a qualifier name. Report the values of all instances of this feature and qualifier combination. If multiple are found, they are separated by a ';'.")
-    parser.add_argument('--feature_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="feature_count",
-                        help="Reports the number of features of this type.")
     
-    parser.add_argument('--motif_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="motif_count",
-                        help="Report the number of the given PROSITE motif present in the sequence. If nucleotide sequences are provided, then nucleotide motifs are counted. If protein sequences are provided, then protein motifs are counted. More information about PROSITE specification can be found: https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html")
     
-    parser.add_argument('--isoelectric_point', action='append_const', dest=COLS_ARG_NAME, const="isoelectric_point",
-                        help="Report the isoelectric point of a protein. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig)")
     
-    parser.add_argument('--net_charge', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="net_charge",
-                        help="Report the net charge of a protein at the given pH. Only defined for contigs with exactly 1 protein sequence (either a nucleic acid contig with 1 CDS, or a protein contig)")
     
-    parser.add_argument('--repeat_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="repeat_count",
-                        help="Report the number of repeats of the given length or longer. For example AGGKKK will have repeat_count_1 = 3, repeat_count_2 = 2, and repeat_count_3 = 1")
 
-    parser.add_argument('--named_domain_count', nargs=1, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="named_domain_count",
-                        help="Count the number of Domainator domain features with the given domain name. Can be supplied multiple times. The column will be named named_domain_count_[domain].")
     
-    parser.add_argument('--starts_with', action='append_const', dest=COLS_ARG_NAME, const="starts_with",
-                        help="Reports the first character of the contig sequence.")
     
-    parser.add_argument('--molecular_weight', action='append_const', dest=COLS_ARG_NAME, const="molecular_weight",
-                        help="Reports the molecular weight (in Daltons) of the sequence. Automatically uses the correct calculation for protein, DNA, or RNA based on the molecule_type annotation.")
     
-    parser.add_argument('--partial_count', action='append_const', dest=COLS_ARG_NAME, const="partial_count",
-                        help=PARTIAL_COUNT_HELP)
-    parser.add_argument('--fragment', action='append_const', dest=COLS_ARG_NAME, const="fragment",
-                        help=FRAGMENT_HELP)
 
-    parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
-                        help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
 
     parser.add_argument('--column_names', nargs='+', default=None, required=False, type=str,
                         help="If supplied, then this list will be used instead of the default column names.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["tsv_out", "html_out", "json_out"])
     return parser
 
 
@@ -915,19 +876,15 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
    
-    check_outputs(parser, params, ["tsv_out", "html_out", "json_out"])
+    check_outputs(parser, params)
 
-    #print(getattr(params, COLS_ARG_NAME))
     # figure out other parameters
 
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)
 
     
-    if hasattr(params, COLS_ARG_NAME): 
-        analyses = getattr(params, COLS_ARG_NAME)
-    if analyses is None:
-        analyses = list()
+    analyses = parse_columns(params.columns or [], COLUMNS)
     analysis_names = get_analysis_names(analyses)
     ncbi_taxonomy = None
     if "taxid_lineage" in analysis_names or "taxname_lineage" in analysis_names or "taxname" in analysis_names or "taxid" in analysis_names:

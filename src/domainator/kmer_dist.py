@@ -49,8 +49,8 @@ from domainator._mp import get_multiprocessing_context
 DEFAULT_PROTEIN_KSIZE = 5
 DEFAULT_NUCLEOTIDE_KSIZE = 15
 VALID_GENE_CALL_VALUES = {None, "all", "unannotated"}
-VALID_METRICS = {"max_containment", "min_containment", "jaccard"}
-VALID_MODES = {"score", "bool", "score_dist"}
+VALID_METRICS = ("max_containment", "min_containment", "jaccard")
+VALID_MODES = ("score", "bool", "score_dist")
 # --mst/--knn select on the similarity itself, which bool keeps as a 0/1 mask afterward.
 SPARSIFY_MODES = {"score", "bool"}
 _PROTEIN_ALPHABET = "ACDEFGHIKLMNPQRSTVWY"

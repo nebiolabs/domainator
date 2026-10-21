@@ -7,7 +7,7 @@ based on percentage overlap between domains and evalues of domains.
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles
@@ -200,6 +200,7 @@ def build_parser():
                        help="Which type of annotations to filter (domainator, domain_search, all).")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -216,7 +217,7 @@ def main(argv):
 
     genbanks = params.input
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     databases_filter = None
     if params.databases is not None:

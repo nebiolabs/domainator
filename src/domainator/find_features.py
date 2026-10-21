@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional, NamedTuple, Iterator
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.external import import_optional
 from Bio.SeqRecord import SeqRecord
@@ -804,6 +804,7 @@ def build_parser():
     )
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -814,7 +815,7 @@ def main(argv):
     gpu_device = None if params.device.lower() in ("cpu", "none") else params.device
     
     # Setup output
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     
     # Run
     write_seq_outputs(

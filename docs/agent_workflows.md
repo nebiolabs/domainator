@@ -15,7 +15,7 @@ return compact, structured slices instead of whole-artifact dumps.
 | Tool | Flag | Shape |
 | ---- | ---- | ----- |
 | `domainator enum_report` | `--json_out -` | NDJSON, one object per contig/CDS/domain |
-| `domainator hmmer_report` | `--json_out -` | NDJSON, one object per HMM profile (add `--alphabet` for amino/DNA/RNA) |
+| `domainator hmmer_report` | `--json_out -` | NDJSON, one object per HMM profile (add `--columns alphabet` for amino/DNA/RNA) |
 | `domainator summary_report` | `--json_out -` | one JSON object (contig stats, domain frequency + co-occurrence, taxonomy) |
 | `domainator matrix_report` | `--json_out -` | one JSON object (edge stats, connected components, split-event series) |
 | `domainator ssn_navigator` | (always JSON) | targeted cluster / node / threshold queries |
@@ -28,7 +28,7 @@ existing `-o`/`--html_out` outputs — nothing is removed.
 The `enum_report` / `hmmer_report` NDJSON is **dynamic**: each object's keys are
 exactly the columns you requested via flags (e.g. `--architecture --length`),
 and values are strings, numbers, or `null`. There is no fixed key set — read the
-first line to see the shape. Example (`enum_report --by contig --architecture --length`):
+first line to see the shape. Example (`enum_report --by contig --columns architecture length`):
 
 ```json
 {"contig":"FeSOD_A0A1F4ZT98|unreviewed|Superoxide","architecture":"Sod_Fe_N; Sod_Fe_C","length":196}
@@ -135,7 +135,7 @@ merge listed at threshold `T` becomes visible at the next lower threshold.
 ```bash
 domainator domainate -i genomes.gb -r pfam.hmm -o annotated.gb --max_overlap 0.6
 domainator summary_report -i annotated.gb --json_out summary.json
-domainator enum_report -i annotated.gb --by contig --architecture --length --json_out contigs.ndjson
+domainator enum_report -i annotated.gb --by contig --columns architecture length --json_out contigs.ndjson
 ```
 
 `summary.json` gives dataset-level domain frequencies and (with `--taxonomy`)
@@ -149,7 +149,7 @@ architecture — filter/aggregate it with any JSON tooling.
 domainator seq_dist -i proteins.gb -r proteins.gb --hdf_out dist.hdf5
 
 # 2. (optional) per-node metadata to attach, e.g. domain architecture + taxonomy
-domainator enum_report -i proteins.gb --by contig --architecture --taxname superkingdom -o meta.tsv
+domainator enum_report -i proteins.gb --by contig --columns architecture taxname:superkingdom -o meta.tsv
 
 # 3. compact SSN bundle
 domainator build_ssn_viewer -i dist.hdf5 -o net.dsnv --metadata meta.tsv

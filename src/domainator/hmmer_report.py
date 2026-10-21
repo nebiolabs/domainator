@@ -6,17 +6,28 @@ alphabet each profile uses.
 
 import contextlib
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.hmmio import alphabet_name, iter_hmms_with_alphabet
 from domainator.seqio import db_name_from_path
 from typing import Tuple, Union, Iterable
-from domainator.enum_report import DynamicArg, COLS_ARG_NAME
+from domainator.report_columns import Column, add_columns_argument, parse_columns
 from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
 import pyhmmer
 import os
 from io import IOBase
 
+
+
+COLUMNS = (
+    Column("source", "the name of the hmm file."),
+    Column("acc", "the profile's accession."),
+    Column("desc", "the profile's description."),
+    Column("length", "the length of the profile (the number of nodes)."),
+    Column("consensus", "the profile's consensus residue line, if set."),
+    Column("alphabet", "the profile's alphabet (amino, DNA, or RNA)."),
+    Column("append", "a column with this name and type (str, int or float) holding this value in every row.", ("name", "type", "value")),
+)
 
 def read_hmms_to_iterators(hmm_files:Iterable[Union[str,os.PathLike, IOBase]]) -> Tuple[str, Iterable[pyhmmer.plan7.HMM]]:
     """
@@ -144,28 +155,16 @@ def build_parser():
     parser.add_argument('--column_names', nargs='+', default=None, required=False, type=str,
                         help="If supplied, then this list will be used instead of the default column names.")
 
-    parser.add_argument('--source', action='append_const', dest=COLS_ARG_NAME, const="source",
-                        help="report the name of the hmm file.")
+    add_columns_argument(parser, COLUMNS)
 
-    parser.add_argument('--acc', action='append_const', dest=COLS_ARG_NAME, const="acc",
-                        help="report the start coordinate of the feature.")
     
-    parser.add_argument('--desc', action='append_const', dest=COLS_ARG_NAME, const="desc",
-                        help="return the end coordinate of the feature.")
     
-    parser.add_argument('--length', action='append_const', dest=COLS_ARG_NAME, const="length",
-                        help="return the length of the profile (i.e. the number of nodes).")
     
-    parser.add_argument('--consensus', action='append_const', dest=COLS_ARG_NAME, const="consensus",
-                        help="return the consensus residue line of the profile, if set..")
 
-    parser.add_argument('--alphabet', action='append_const', dest=COLS_ARG_NAME, const="alphabet",
-                        help="report the alphabet of the profile (amino, DNA, or RNA).")
     
-    parser.add_argument('--append', nargs=3, required=False, action=DynamicArg, dest=COLS_ARG_NAME, const="append",
-                        help="Supply three strings, a column will be added with the first string as the column name, the second string as the column type (str, int, float) and the third string as the value for all rows.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["tsv_out", "html_out", "json_out"])
     return parser
 
 
@@ -173,11 +172,9 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
    
-    check_outputs(parser, params, ["tsv_out", "html_out", "json_out"])
+    check_outputs(parser, params)
 
-    analyses = list()
-    if hasattr(params, COLS_ARG_NAME):
-        analyses = getattr(params, COLS_ARG_NAME)
+    analyses = parse_columns(params.columns or [], COLUMNS)
 
     # Run
     with contextlib.ExitStack() as outputs:

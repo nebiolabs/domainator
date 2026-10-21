@@ -11,7 +11,7 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 """
 
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.colors import AutoColormap, normalize_color_hex, read_color_table
 from domainator.cli.common import list_and_file_to_dict_keys
@@ -146,6 +146,7 @@ def build_parser():
 
  
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -157,7 +158,7 @@ def main(argv):
 
     genbanks = params.input
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     # figure out other parameters
 

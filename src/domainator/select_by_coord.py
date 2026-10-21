@@ -31,7 +31,7 @@ import os
 
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio.SeqFeature import CompoundLocation, FeatureLocation
 from domainator.seqio import parse_seqfiles
@@ -210,6 +210,7 @@ def build_parser():
     parser.add_argument("--coords", required=True, type=str,
                         help="labeled coordinate table with columns contig, start, end, strand (optional), file (optional).")
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -222,7 +223,7 @@ def main(argv):
 
     genbanks = params.input
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     extracted_regions = select_by_coord(
         parse_seqfiles_with_basename(genbanks, contigs=target_contigs),

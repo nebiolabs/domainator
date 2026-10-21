@@ -14,7 +14,7 @@ HMMER locks an `.hmm` file to the alphabet of its first profile, so a file canno
 mixture of amino acid, DNA, and RNA profiles: anything past the first profile is unreadable.
 The `hmmer_*` programs therefore require all of their inputs to share one alphabet, and
 report an error naming the offending file when they do not. Use `domainator hmmer_select --alphabet`
-to split a mixed set of files, and `domainator hmmer_report --alphabet` to see what you have.
+to split a mixed set of files, and `domainator hmmer_report --columns alphabet` to see what you have.
 
 Note that DNA and RNA count as different alphabets, so a DNA profile cannot be compared to
 an RNA one.

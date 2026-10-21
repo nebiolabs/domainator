@@ -27,7 +27,7 @@ from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 
-from domainator.cli.common import STDIN_PATHS, add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.offsets import count_peptides
@@ -330,6 +330,7 @@ def build_parser():
                         help="How many contigs to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.")
 
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -369,6 +370,6 @@ def main(argv):
         batch_size=params.batch_size,
     )
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     write_seq_outputs(rotated, genbank=params.genbank_out, fasta=params.fasta_out)

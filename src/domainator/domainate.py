@@ -16,7 +16,7 @@ import sys
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 from typing import NamedTuple, List, Dict, Optional, Union
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from Bio.SeqRecord import SeqRecord
@@ -1389,6 +1389,7 @@ def build_parser():
 
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -1405,7 +1406,7 @@ def main(argv):
         parser.error("You must specify at least one reference database (-r/--reference or --foldseek).")
     if params.max_hits_per_cds is not None and params.max_hits_per_cds < 1:
         parser.error("--max_hits_per_cds must be at least 1. Leave it out to report all hits.")
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     reject_stdin(parser, params.input, "it reads its input more than once (to detect sequence types and count proteins)")
 
     reference_groups = read_references(params.reference, foldseek=params.foldseek)

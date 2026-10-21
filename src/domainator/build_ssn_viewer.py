@@ -11,7 +11,7 @@ from typing import List, Union
 import pandas as pd
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator import __version__
 from domainator.build_ssn import subset_matrix_by_labels
 from domainator.data_matrix import DataMatrix
@@ -234,6 +234,7 @@ def build_parser():
                         help="Metric the viewer uses for split events: min_child (node count of the smaller piece) or product (the two piece sizes multiplied). Recorded in the bundle as the default; switchable in the viewer.")
     add_max_output_gb_argument(parser)
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["dsnv_out", "html_out"])
     return parser
 
 

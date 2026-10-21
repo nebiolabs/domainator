@@ -9,7 +9,7 @@ Typically used for nucleotide sequences, but can be used for protein sequences a
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 import logging
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.locations import slice_record
@@ -181,6 +181,7 @@ def build_parser():
                         help="Only consider domain annotations from these databases when trimming by domain.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -191,7 +192,7 @@ def main(argv):
     ### validate input
 
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     ### figure out selection filters
     kb_truncation, cds_truncation = validate_range(params.kb_range, params.kb_left, params.kb_right, params.cds_range, params.cds_left, params.cds_right)

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import sys
 from jsonargparse import ActionConfigFile
 from typing import List
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio import SeqIO, Seq
 from domainator.external import append_extra_args, resolve_binary, run_command
@@ -379,6 +379,7 @@ def build_parser():
                         help="Separator to separate individual contig names in the second column of the cluster table.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -390,7 +391,7 @@ def main(argv):
     reject_stdin(parser, params.input)
 
     ### Figure out what input and output files ####
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     
     log = sys.stderr if params.log_out is None else open(params.log_out, "w")
 

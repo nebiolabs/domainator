@@ -7,7 +7,7 @@
 """
 import warnings
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix, is_distance_data_type
 from domainator.transform_matrix import score_dist
@@ -196,11 +196,12 @@ def build_parser():
     add_output(parser, "xgmml", "Write the tree to this Cytoscape xgmml file.", stdout=False)
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["newick_out", "xgmml_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["newick_out", "xgmml_out"])
+    check_outputs(parser, params)
     build_tree(DataMatrix.from_file(params.input), algorithm=params.algorithm, metadata=params.metadata, xgmml_out=params.xgmml_out, newick_out=params.newick_out, quiet=params.quiet, distance=params.distance)

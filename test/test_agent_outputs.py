@@ -36,8 +36,7 @@ def test_enum_report_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "enum.ndjson")
         tsv = os.path.join(output_dir, "enum.tsv")
-        enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "-o", tsv,
-                          "--domains", "--length", "--json_out", out])
+        enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "-o", tsv, "--columns", "domains", "length", "--json_out", out])
         records = _read_ndjson(out)
         assert len(records) == 4
         for record in records:
@@ -50,7 +49,7 @@ def test_enum_report_json_only(shared_datadir):
     # --json is a valid sole output (no -o / --html required)
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "enum.ndjson")
-        enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "--json_out", out, "--domain_count"])
+        enum_report.main(["-i", str(shared_datadir / ANNOTATED_GB), "--json_out", out, "--columns", "domain_count"])
         records = _read_ndjson(out)
         assert len(records) == 4
         assert all("domain_count" in r for r in records)
@@ -59,7 +58,7 @@ def test_enum_report_json_only(shared_datadir):
 def test_hmmer_report_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = os.path.join(output_dir, "hmm.ndjson")
-        hmmer_report.main(["-i", str(shared_datadir / "FeSOD_pfam.hmm"), "--acc", "--length", "--json_out", out])
+        hmmer_report.main(["-i", str(shared_datadir / "FeSOD_pfam.hmm"), "--columns", "acc", "length", "--json_out", out])
         records = _read_ndjson(out)
         assert len(records) == 2
         for record in records:

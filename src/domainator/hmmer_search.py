@@ -27,7 +27,7 @@ import numpy as np
 import pyhmmer
 from typing import Iterable, Tuple, Optional, BinaryIO
 import heapq
-from domainator.cli.common import STDOUT_PATHS, add_input, add_output, check_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, resolve_cpu, STDOUT_PATHS, tool_parser
 from domainator._mp import make_pool
 from domainator.hmmio import (
     read_hmms,
@@ -388,6 +388,7 @@ def build_parser():
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["hmm_out"])
     return parser
 
 
@@ -395,7 +396,7 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
 
-    check_outputs(parser, params, ["hmm_out"])
+    check_outputs(parser, params)
     if params.max_hits is not None and params.max_hits < 1:
         parser.error("--max_hits must be at least 1. Leave it out to return all hits.")
     cpus = resolve_cpu(params.cpu)

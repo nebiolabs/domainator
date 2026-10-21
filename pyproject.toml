@@ -89,8 +89,6 @@ dependencies = [
     "tqdm >=4.65",
     "requests >=2.31",
     "urllib3 >=2.0",
-    "Flask >=2.3",
-    "Werkzeug >=2.3",
 ]
 
 [project.optional-dependencies]
@@ -121,17 +119,6 @@ Paper = "https://doi.org/10.1093/nar/gkae1175"
 package-dir = {"" = "src"}
 include-package-data = true
 
-[tool.setuptools.package-data]
-"domainator.server" = [
-    "static/*.css",
-    "static/*.js",
-    "static/*.json",
-    "static/*.svg",
-    "templates/*.html",
-    "schemas/**/*.json",
-]
-
-
 [tool.setuptools.dynamic]
 version = {attr = "domainator.__version__"}
 
@@ -151,4 +138,3 @@ filterwarnings = [
 
 [project.scripts]
 "domainator" = "domainator.cli:main"
-"domainator_server" = "domainator.server.cli:main"

@@ -11,5 +11,4 @@
 - [Structure search and annotation](structure_search.md)
 - [ESM-2 3B 3Di and foldseek integration](esm_3b_foldseek.md)
 - [Limitations and FAQ](limitations_and_FAQ.md)
-- [Server Web UI](server/technical_overview.md)
-	- [Adding Tools](server/adding_tools.md)
+- [Tool manifest](tool_manifest.md): `domainator describe`, for GUIs and other programs that drive Domainator

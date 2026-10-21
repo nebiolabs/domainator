@@ -17,7 +17,7 @@ If neither is set, then hits will be written on the fly and not sorted.
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles, native_parser_available
 from domainator.offsets import partition_seqfile, i_partition_seqfiles, index_total_cds
@@ -472,6 +472,7 @@ def build_parser():
     add_max_output_gb_argument(parser)
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -481,7 +482,7 @@ def main(argv):
 
     # parameter validation
     cpus = resolve_cpu(params.cpu)
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     reject_stdin(parser, params.input, "it reads its input more than once (to count and partition it)")
 
     if params.evalue > 10:

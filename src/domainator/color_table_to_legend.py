@@ -8,7 +8,7 @@ The generated SVG file contains rectangles filled with the corresponding colors 
 from jsonargparse import ActionConfigFile
 import sys
 from typing import Dict
-from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.outputs import output_file
 from domainator.colors import read_color_table
 from collections import OrderedDict
@@ -64,6 +64,7 @@ def build_parser():
     #TODO: font, font size, indicator shape, etc.
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["svg_out"])
     return parser
 
 
@@ -74,7 +75,7 @@ def main(argv):
     ### validate input
 
 
-    check_outputs(parser, params, ["svg_out"])
+    check_outputs(parser, params)
     table = OrderedDict()
     for color_table_file in params.input:
         if color_table_file in STDIN_PATHS:

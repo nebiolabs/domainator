@@ -116,8 +116,10 @@ def add_input(parser, help: str, *, multiple: bool = True, required: bool = True
     """Add ``-i/--input``. ``stdin=False`` for commands that read their input more than once."""
     if stdin:
         help += " Use - to read standard input."
-    return parser.add_argument("-i", "--input", type=str, default=None, required=required,
-                               nargs="+" if multiple else None, help=help)
+    action = parser.add_argument("-i", "--input", type=str, default=None, required=required,
+                                 nargs="+" if multiple else None, help=help)
+    action.stdin = stdin
+    return action
 
 
 def add_output(parser, content: str, help: str, *, primary: bool = False, required: bool = False,
@@ -168,8 +170,17 @@ def add_alphabet(parser):
                                     "GenBank records declare their own molecule type.")
 
 
-def check_outputs(parser, params, dests: Sequence[str], *, required: bool = True):
-    """Require at least one of the outputs ``dests``, and at most one of them on standard output."""
+def declare_outputs(parser, dests: Sequence[str]):
+    """Record that the command writes at least one of the outputs ``dests``. check_outputs enforces
+    it, and ``domainator describe`` reports it."""
+    parser.required_outputs = list(dests)
+
+
+def check_outputs(parser, params, dests: Optional[Sequence[str]] = None, *, required: bool = True):
+    """Require at least one of the outputs ``dests`` (by default the ones declare_outputs recorded),
+    and at most one of them on standard output."""
+    if dests is None:
+        dests = parser.required_outputs
     given = [dest for dest in dests if getattr(params, dest, None) is not None]
     if required and not given:
         options = ", ".join(_option_for(parser, dest) for dest in dests)

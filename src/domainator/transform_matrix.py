@@ -148,7 +148,7 @@ def build_parser():
     
     add_matrix_output_arguments(parser, noun="transformed matrix")
 
-    parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=set(MODES.keys()).union({PASS_THROUGH_MODE}), 
+    parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=[PASS_THROUGH_MODE] + list(MODES),
                         help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)).")
 
     parser.add_argument('--threshold', type=float, default=None, required=False,

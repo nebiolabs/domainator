@@ -1,0 +1,7644 @@
+{
+ "domainate": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "nucleotide",
+    "protein"
+   ]
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "foldseek",
+   "flags": [
+    "--foldseek"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "esm2_3di_weights",
+   "flags": [
+    "--esm2_3di_weights"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "esm2_3di_device",
+   "flags": [
+    "--esm2_3di_device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "foldseek_device",
+   "flags": [
+    "--foldseek_device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "foldseek_path",
+   "flags": [
+    "--foldseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "Z",
+   "flags": [
+    "-Z"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_evalue",
+   "flags": [
+    "--min_evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_cds",
+   "flags": [
+    "--max_hits_per_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_mode",
+   "flags": [
+    "--max_mode"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_overlap",
+   "flags": [
+    "--max_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "overlap_by_db",
+   "flags": [
+    "--overlap_by_db"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "hits_only",
+   "flags": [
+    "--hits_only"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "no_annotations",
+   "flags": [
+    "--no_annotations"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "batch_size",
+   "flags": [
+    "--batch_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "gene_call",
+   "flags": [
+    "--gene_call"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "all",
+    "unannotated"
+   ]
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "domain_search": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "nucleotide",
+    "protein"
+   ]
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "Z",
+   "flags": [
+    "-Z"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_evalue",
+   "flags": [
+    "--min_evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_mode",
+   "flags": [
+    "--max_mode"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_hits",
+   "flags": [
+    "--max_hits"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_contig",
+   "flags": [
+    "--max_hits_per_contig"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "decoys",
+   "flags": [
+    "--decoys"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "decoys_file",
+   "flags": [
+    "--decoys_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_overlap",
+   "flags": [
+    "--max_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "add_annotations",
+   "flags": [
+    "--add_annotations"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "deduplicate",
+   "flags": [
+    "--deduplicate"
+   ],
+   "negative_flags": [
+    "--no_deduplicate"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "deduplicate_by_sequence",
+   "flags": [
+    "--deduplicate_by_sequence"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "both_strands",
+   "flags": [
+    "--both_strands"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_region_overlap",
+   "flags": [
+    "--max_region_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "translate",
+   "flags": [
+    "--translate"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "kb_range",
+   "flags": [
+    "--kb_range"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_up",
+   "flags": [
+    "--kb_up"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_down",
+   "flags": [
+    "--kb_down"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "cds_range",
+   "flags": [
+    "--cds_range"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_up",
+   "flags": [
+    "--cds_up"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_down",
+   "flags": [
+    "--cds_down"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "whole_contig",
+   "flags": [
+    "--whole_contig"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "strand",
+   "flags": [
+    "--strand"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "f",
+    "r"
+   ]
+  },
+  {
+   "name": "pad",
+   "flags": [
+    "--pad"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "anchor",
+   "flags": [
+    "--anchor"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "start",
+    "end",
+    "center"
+   ]
+  },
+  {
+   "name": "keep_direction",
+   "flags": [
+    "--keep_direction"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "batch_size",
+   "flags": [
+    "--batch_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "gene_call",
+   "flags": [
+    "--gene_call"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "all",
+    "unannotated"
+   ]
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "find_features": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "nucleotide",
+    "protein"
+   ]
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "gene_call",
+   "flags": [
+    "--gene_call"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "all",
+    "unannotated"
+   ]
+  },
+  {
+   "name": "tmbed",
+   "flags": [
+    "--tmbed"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "motif",
+   "flags": [
+    "--motif"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "batch_size",
+   "flags": [
+    "--batch_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "device",
+   "flags": [
+    "--device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "model_dir",
+   "flags": [
+    "--model_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "tmbed_model_dir",
+   "flags": [
+    "--tmbed_model_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  }
+ ],
+ "structure_domainate": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_evalue",
+   "flags": [
+    "--min_evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_cds",
+   "flags": [
+    "--max_hits_per_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_overlap",
+   "flags": [
+    "--max_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "overlap_by_db",
+   "flags": [
+    "--overlap_by_db"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "hits_only",
+   "flags": [
+    "--hits_only"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "no_annotations",
+   "flags": [
+    "--no_annotations"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "database_name",
+   "flags": [
+    "--database_name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "db_out",
+   "flags": [
+    "--db_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "hits_tsv_out",
+   "flags": [
+    "--hits_tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "foldseek",
+    "reseek"
+   ]
+  },
+  {
+   "name": "foldseek_path",
+   "flags": [
+    "--foldseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "reseek_path",
+   "flags": [
+    "--reseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "foldseek_args",
+   "flags": [
+    "--foldseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "reseek_args",
+   "flags": [
+    "--reseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "tmp_dir",
+   "flags": [
+    "--tmp_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "reseek_stats",
+   "flags": [
+    "--reseek_stats"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "family",
+    "superfamily",
+    "fold"
+   ]
+  },
+  {
+   "name": "reseek_sensitivity",
+   "flags": [
+    "--reseek_sensitivity"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fast",
+    "sensitive"
+   ]
+  },
+  {
+   "name": "alignment_type",
+   "flags": [
+    "--alignment_type"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false,
+   "choices": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "name": "metrics",
+   "flags": [
+    "--metrics"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false,
+   "choices": [
+    "tmscore",
+    "lddt",
+    "rmsd",
+    "prob"
+   ]
+  },
+  {
+   "name": "max_seqs",
+   "flags": [
+    "--max_seqs"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "device",
+   "flags": [
+    "--device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "structure_search": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_evalue",
+   "flags": [
+    "--min_evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits",
+   "flags": [
+    "--max_hits"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_overlap",
+   "flags": [
+    "--max_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "overlap_by_db",
+   "flags": [
+    "--overlap_by_db"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "add_annotations",
+   "flags": [
+    "--add_annotations"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "database_name",
+   "flags": [
+    "--database_name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "db_out",
+   "flags": [
+    "--db_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "hits_tsv_out",
+   "flags": [
+    "--hits_tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "foldseek",
+    "reseek"
+   ]
+  },
+  {
+   "name": "foldseek_path",
+   "flags": [
+    "--foldseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "reseek_path",
+   "flags": [
+    "--reseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "foldseek_args",
+   "flags": [
+    "--foldseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "reseek_args",
+   "flags": [
+    "--reseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "tmp_dir",
+   "flags": [
+    "--tmp_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "reseek_stats",
+   "flags": [
+    "--reseek_stats"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "family",
+    "superfamily",
+    "fold"
+   ]
+  },
+  {
+   "name": "reseek_sensitivity",
+   "flags": [
+    "--reseek_sensitivity"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fast",
+    "sensitive"
+   ]
+  },
+  {
+   "name": "alignment_type",
+   "flags": [
+    "--alignment_type"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false,
+   "choices": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "name": "metrics",
+   "flags": [
+    "--metrics"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false,
+   "choices": [
+    "tmscore",
+    "lddt",
+    "rmsd",
+    "prob"
+   ]
+  },
+  {
+   "name": "max_seqs",
+   "flags": [
+    "--max_seqs"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "device",
+   "flags": [
+    "--device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "clean_sequences": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "nucleotide",
+    "protein"
+   ]
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "clean_name",
+   "flags": [
+    "--clean_name"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "deduplicate_names",
+   "flags": [
+    "--deduplicate_names"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "strip",
+   "flags": [
+    "--strip"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "filter_by_aa",
+   "flags": [
+    "--filter_by_aa"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "log_out",
+   "flags": [
+    "--log_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  }
+ ],
+ "color_genbank": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_table",
+   "flags": [
+    "--color_table"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_table_out",
+   "flags": [
+    "--color_table_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "search_hit_color",
+   "flags": [
+    "--search_hit_color"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "clear",
+   "flags": [
+    "--clear"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "target",
+   "flags": [
+    "--target"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domains",
+    "cdss",
+    "domains_and_cdss"
+   ]
+  },
+  {
+   "name": "domain_database",
+   "flags": [
+    "--domain_database"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "deduplicate_genbank": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "log_out",
+   "flags": [
+    "--log_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "nucleotide",
+    "protein"
+   ]
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "cd-hit",
+    "usearch",
+    "hash",
+    "diamond"
+   ]
+  },
+  {
+   "name": "cdhit_path",
+   "flags": [
+    "--cdhit_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "cdhit_est_path",
+   "flags": [
+    "--cdhit_est_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "usearch_path",
+   "flags": [
+    "--usearch_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "diamond_path",
+   "flags": [
+    "--diamond_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "identity",
+   "flags": [
+    "--identity"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": true
+  },
+  {
+   "name": "prefix_count",
+   "flags": [
+    "--prefix_count"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "suffix_count",
+   "flags": [
+    "--suffix_count"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cdhit_args",
+   "flags": [
+    "--cdhit_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "usearch_args",
+   "flags": [
+    "--usearch_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "diamond_args",
+   "flags": [
+    "--diamond_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "both_strands",
+   "flags": [
+    "--both_strands"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "cluster_tsv_out",
+   "flags": [
+    "--cluster_tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "cluster_sep",
+   "flags": [
+    "--cluster_sep"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  }
+ ],
+ "extract_domains": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_score",
+   "flags": [
+    "--min_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search"
+   ]
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "extend_range",
+   "flags": [
+    "--extend_range"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "extend_up",
+   "flags": [
+    "--extend_up"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "extend_down",
+   "flags": [
+    "--extend_down"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "combine",
+   "flags": [
+    "--combine"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "splice",
+   "flags": [
+    "--splice"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "keep_direction",
+   "flags": [
+    "--keep_direction"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "keep_name",
+   "flags": [
+    "--keep_name"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "extract_peptides": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "unannotated",
+   "flags": [
+    "--unannotated"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search"
+   ]
+  },
+  {
+   "name": "strand",
+   "flags": [
+    "--strand"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "f",
+    "r"
+   ]
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "invert",
+   "flags": [
+    "--invert"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "cds",
+   "flags": [
+    "--cds"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "cds_file",
+   "flags": [
+    "--cds_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "keep_name",
+   "flags": [
+    "--keep_name"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "name_field",
+   "flags": [
+    "--name_field"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "extract_unannotated": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_score",
+   "flags": [
+    "--min_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search"
+   ]
+  },
+  {
+   "name": "keep_direction",
+   "flags": [
+    "--keep_direction"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "keep_name",
+   "flags": [
+    "--keep_name"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "largest",
+   "flags": [
+    "--largest"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "min_length",
+   "flags": [
+    "--min_length"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  }
+ ],
+ "filter_domains": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_overlap",
+   "flags": [
+    "--max_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "keep_databases",
+   "flags": [
+    "--keep_databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search",
+    "all"
+   ]
+  }
+ ],
+ "rotate_contigs": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "Z",
+   "flags": [
+    "-Z"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search"
+   ]
+  },
+  {
+   "name": "anchor",
+   "flags": [
+    "--anchor"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "start",
+    "end",
+    "center"
+   ]
+  },
+  {
+   "name": "keep_direction",
+   "flags": [
+    "--keep_direction"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "circularize",
+   "flags": [
+    "--circularize"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "keep_name",
+   "flags": [
+    "--keep_name"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "keep_annotation",
+   "flags": [
+    "--keep_annotation"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "gene_call",
+   "flags": [
+    "--gene_call"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "all",
+    "unannotated"
+   ]
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_mode",
+   "flags": [
+    "--max_mode"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "batch_size",
+   "flags": [
+    "--batch_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  }
+ ],
+ "select_by_cds": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "kb_range",
+   "flags": [
+    "--kb_range"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_up",
+   "flags": [
+    "--kb_up"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_down",
+   "flags": [
+    "--kb_down"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "cds_range",
+   "flags": [
+    "--cds_range"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_up",
+   "flags": [
+    "--cds_up"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_down",
+   "flags": [
+    "--cds_down"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "whole_contig",
+   "flags": [
+    "--whole_contig"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "cds",
+   "flags": [
+    "--cds"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "cds_file",
+   "flags": [
+    "--cds_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domain_expr",
+   "flags": [
+    "--domain_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "strand",
+   "flags": [
+    "--strand"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "f",
+    "r"
+   ]
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "unannotated",
+   "flags": [
+    "--unannotated"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search"
+   ]
+  },
+  {
+   "name": "pad",
+   "flags": [
+    "--pad"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "anchor",
+   "flags": [
+    "--anchor"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "start",
+    "end",
+    "center"
+   ]
+  },
+  {
+   "name": "keep_direction",
+   "flags": [
+    "--keep_direction"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "deduplicate",
+   "flags": [
+    "--deduplicate"
+   ],
+   "negative_flags": [
+    "--no_deduplicate"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_region_overlap",
+   "flags": [
+    "--max_region_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "invert",
+   "flags": [
+    "--invert"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "include_nucleic_acids",
+   "flags": [
+    "--include_nucleic_acids"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "select_by_contig": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "contigs_regex",
+   "flags": [
+    "--contigs_regex"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "definition_regex",
+   "flags": [
+    "--definition_regex"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "sequence_regex",
+   "flags": [
+    "--sequence_regex"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domain_expr",
+   "flags": [
+    "--domain_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search",
+    "all"
+   ]
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "unannotated",
+   "flags": [
+    "--unannotated"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_records",
+   "flags": [
+    "--max_records"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "min_length",
+   "flags": [
+    "--min_length"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_length",
+   "flags": [
+    "--max_length"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "min_cds",
+   "flags": [
+    "--min_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_cds",
+   "flags": [
+    "--max_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "min_search_score",
+   "flags": [
+    "--min_search_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_search_score",
+   "flags": [
+    "--max_search_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "invert",
+   "flags": [
+    "--invert"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "select_by_coord": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "coords",
+   "flags": [
+    "--coords"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  }
+ ],
+ "sort_contigs": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "max_hits",
+   "flags": [
+    "--max_hits"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  }
+ ],
+ "trim_contigs": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "kb_range",
+   "flags": [
+    "--kb_range"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_left",
+   "flags": [
+    "--kb_left"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_right",
+   "flags": [
+    "--kb_right"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "cds_range",
+   "flags": [
+    "--cds_range"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_left",
+   "flags": [
+    "--cds_left"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_right",
+   "flags": [
+    "--cds_right"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "unannotated",
+   "flags": [
+    "--unannotated"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domain_expr",
+   "flags": [
+    "--domain_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  }
+ ],
+ "genbank_to_fasta": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "-o",
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  }
+ ],
+ "structure_to_genbank": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "db_out",
+   "flags": [
+    "--db_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "store_3di",
+   "flags": [
+    "--store_3di"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "foldseek",
+    "reseek"
+   ]
+  },
+  {
+   "name": "foldseek_path",
+   "flags": [
+    "--foldseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "reseek_path",
+   "flags": [
+    "--reseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "foldseek_args",
+   "flags": [
+    "--foldseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "reseek_args",
+   "flags": [
+    "--reseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "tmp_dir",
+   "flags": [
+    "--tmp_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "reseek_stats",
+   "flags": [
+    "--reseek_stats"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "family",
+    "superfamily",
+    "fold"
+   ]
+  },
+  {
+   "name": "reseek_sensitivity",
+   "flags": [
+    "--reseek_sensitivity"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fast",
+    "sensitive"
+   ]
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "hmmer_build": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "hmm_out",
+   "flags": [
+    "-o",
+    "--hmm_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": true
+  },
+  {
+   "name": "acc",
+   "flags": [
+    "--acc"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "desc",
+   "flags": [
+    "--desc"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "amino",
+    "dna",
+    "rna"
+   ]
+  },
+  {
+   "name": "window_length",
+   "flags": [
+    "--window_length"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "window_beta",
+   "flags": [
+    "--window_beta"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "infernal_build": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "cm_out",
+   "flags": [
+    "-o",
+    "--cm_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": true
+  },
+  {
+   "name": "acc",
+   "flags": [
+    "--acc"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "desc",
+   "flags": [
+    "--desc"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "input_format",
+   "flags": [
+    "--input_format"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cmbuild_path",
+   "flags": [
+    "--cmbuild_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "noss",
+   "flags": [
+    "--noss"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "hand",
+   "flags": [
+    "--hand"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "symfrac",
+   "flags": [
+    "--symfrac"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "hmmer_select": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "hmm_out",
+   "flags": [
+    "-o",
+    "--hmm_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "regex",
+   "flags": [
+    "--regex"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exact",
+   "flags": [
+    "--exact"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contains",
+   "flags": [
+    "--contains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "field",
+   "flags": [
+    "--field"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "name",
+    "desc",
+    "acc",
+    "all"
+   ]
+  },
+  {
+   "name": "case_sensitive",
+   "flags": [
+    "--case_sensitive"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "amino",
+    "dna",
+    "rna"
+   ]
+  }
+ ],
+ "hmmer_search": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "hmm_out",
+   "flags": [
+    "-o",
+    "--hmm_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "min_score",
+   "flags": [
+    "--min_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits",
+   "flags": [
+    "--max_hits"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "hmmer_compare": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "min_score",
+   "flags": [
+    "--min_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_query",
+   "flags": [
+    "--max_hits_per_query"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "tsv_out",
+   "flags": [
+    "-o",
+    "--tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "alignments_out",
+   "flags": [
+    "--alignments_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "seq_dist": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "input_format",
+   "flags": [
+    "--input_format"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fasta",
+    "genbank",
+    "hmm"
+   ]
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "reference_format",
+   "flags": [
+    "--reference_format"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fasta",
+    "genbank",
+    "hmm"
+   ]
+  },
+  {
+   "name": "hdf_out",
+   "flags": [
+    "-o",
+    "--hdf_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dense_text_out",
+   "flags": [
+    "--dense_text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_query",
+   "flags": [
+    "--max_hits_per_query"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "diamond_f",
+    "diamond_d",
+    "diamond_mids",
+    "diamond_s",
+    "diamond_mors",
+    "diamond_vs",
+    "diamond_us",
+    "hmmer",
+    "hmmer_compare"
+   ]
+  },
+  {
+   "name": "diamond_args",
+   "flags": [
+    "--diamond_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "diamond_path",
+   "flags": [
+    "--diamond_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "mst",
+   "flags": [
+    "--mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "knn",
+   "flags": [
+    "--knn"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "symmetrize",
+   "flags": [
+    "--symmetrize"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "min",
+    "max",
+    "mean"
+   ]
+  },
+  {
+   "name": "mode",
+   "flags": [
+    "--mode"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "score",
+    "bool",
+    "norm_score",
+    "row_norm_score",
+    "score_dist",
+    "efi_score",
+    "efi_score_dist"
+   ]
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "progress",
+   "flags": [
+    "--progress"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "kmer_dist": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "input_format",
+   "flags": [
+    "--input_format"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fasta",
+    "genbank"
+   ]
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "reference_format",
+   "flags": [
+    "--reference_format"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fasta",
+    "genbank"
+   ]
+  },
+  {
+   "name": "alphabet",
+   "flags": [
+    "--alphabet"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "nucleotide",
+    "protein"
+   ]
+  },
+  {
+   "name": "gene_call",
+   "flags": [
+    "--gene_call"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "all",
+    "unannotated"
+   ]
+  },
+  {
+   "name": "nucleotide_kmers",
+   "flags": [
+    "--nucleotide_kmers"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "ksize",
+   "flags": [
+    "--ksize"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "metric",
+   "flags": [
+    "--metric"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "max_containment",
+    "min_containment",
+    "jaccard"
+   ]
+  },
+  {
+   "name": "mode",
+   "flags": [
+    "--mode"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "score",
+    "bool",
+    "score_dist"
+   ]
+  },
+  {
+   "name": "hdf_out",
+   "flags": [
+    "-o",
+    "--hdf_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dense_text_out",
+   "flags": [
+    "--dense_text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_query",
+   "flags": [
+    "--max_hits_per_query"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "mst",
+   "flags": [
+    "--mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "knn",
+   "flags": [
+    "--knn"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "progress",
+   "flags": [
+    "--progress"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "structure_dist": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "reference",
+   "flags": [
+    "-r",
+    "--reference"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "hdf_out",
+   "flags": [
+    "-o",
+    "--hdf_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dense_text_out",
+   "flags": [
+    "--dense_text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "mode",
+   "flags": [
+    "--mode"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "bool",
+    "efi_score",
+    "efi_score_dist",
+    "fident",
+    "fident_dist",
+    "lddt",
+    "lddt_dist",
+    "norm_score",
+    "row_norm_score",
+    "score",
+    "score_dist",
+    "tmscore",
+    "tmscore_dist"
+   ]
+  },
+  {
+   "name": "symmetrize",
+   "flags": [
+    "--symmetrize"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "min",
+    "max",
+    "mean"
+   ]
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_query",
+   "flags": [
+    "--max_hits_per_query"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "mst",
+   "flags": [
+    "--mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "knn",
+   "flags": [
+    "--knn"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "db_out",
+   "flags": [
+    "--db_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "hits_tsv_out",
+   "flags": [
+    "--hits_tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "progress",
+   "flags": [
+    "--progress"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "foldseek",
+    "reseek"
+   ]
+  },
+  {
+   "name": "foldseek_path",
+   "flags": [
+    "--foldseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "reseek_path",
+   "flags": [
+    "--reseek_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "foldseek_args",
+   "flags": [
+    "--foldseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "reseek_args",
+   "flags": [
+    "--reseek_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "tmp_dir",
+   "flags": [
+    "--tmp_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "reseek_stats",
+   "flags": [
+    "--reseek_stats"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "family",
+    "superfamily",
+    "fold"
+   ]
+  },
+  {
+   "name": "reseek_sensitivity",
+   "flags": [
+    "--reseek_sensitivity"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "fast",
+    "sensitive"
+   ]
+  },
+  {
+   "name": "alignment_type",
+   "flags": [
+    "--alignment_type"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false,
+   "choices": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "name": "metrics",
+   "flags": [
+    "--metrics"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false,
+   "choices": [
+    "tmscore",
+    "lddt",
+    "rmsd",
+    "prob"
+   ]
+  },
+  {
+   "name": "max_seqs",
+   "flags": [
+    "--max_seqs"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "device",
+   "flags": [
+    "--device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "compare_contigs": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "name_by_order",
+   "flags": [
+    "--name_by_order"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "linkage",
+   "flags": [
+    "--linkage"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "average",
+    "ward",
+    "complete",
+    "single",
+    "weighted"
+   ]
+  },
+  {
+   "name": "leaf_ordering",
+   "flags": [
+    "--leaf_ordering"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "greedy",
+    "optimal",
+    "none"
+   ]
+  },
+  {
+   "name": "skip_sort_memory_check",
+   "flags": [
+    "--skip_sort_memory_check"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "max_hits_per_query",
+   "flags": [
+    "--max_hits_per_query"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "mst",
+   "flags": [
+    "--mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "knn",
+   "flags": [
+    "--knn"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "ji",
+   "flags": [
+    "--ji"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "ai",
+   "flags": [
+    "--ai"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "hdf_out",
+   "flags": [
+    "-o",
+    "--hdf_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dense_text_out",
+   "flags": [
+    "--dense_text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "progress",
+   "flags": [
+    "--progress"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "transform_matrix": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "value_type",
+   "flags": [
+    "--value_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "bool",
+    "efi_score",
+    "efi_score_dist",
+    "norm_score",
+    "row_norm_score",
+    "score",
+    "score_dist"
+   ]
+  },
+  {
+   "name": "hdf_out",
+   "flags": [
+    "-o",
+    "--hdf_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dense_text_out",
+   "flags": [
+    "--dense_text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "mode",
+   "flags": [
+    "--mode"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "score",
+    "bool",
+    "norm_score",
+    "row_norm_score",
+    "score_dist",
+    "efi_score",
+    "efi_score_dist"
+   ]
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "mst",
+   "flags": [
+    "--mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "knn",
+   "flags": [
+    "--knn"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "symmetrize",
+   "flags": [
+    "--symmetrize"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "min",
+    "max",
+    "mean"
+   ]
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "build_ssn": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "metadata",
+   "flags": [
+    "--metadata"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "subset",
+   "flags": [
+    "--subset"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "subset_file",
+   "flags": [
+    "--subset_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_by",
+   "flags": [
+    "--color_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "color_table",
+   "flags": [
+    "--color_table"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "max_color_groups",
+   "flags": [
+    "--max_color_groups"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "mark_mst",
+   "flags": [
+    "--mark_mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "color_table_out",
+   "flags": [
+    "--color_table_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "xgmml_out",
+   "flags": [
+    "-o",
+    "--xgmml_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": true
+  },
+  {
+   "name": "cluster",
+   "flags": [
+    "--cluster"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "cluster_tsv_out",
+   "flags": [
+    "--cluster_tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "no_cluster_header",
+   "flags": [
+    "--no_cluster_header"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "mst",
+   "flags": [
+    "--mst"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "knn",
+   "flags": [
+    "--knn"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  }
+ ],
+ "build_ssn_viewer": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "dsnv_out",
+   "flags": [
+    "-o",
+    "--dsnv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "embed_data",
+   "flags": [
+    "--embed_data"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "metadata",
+   "flags": [
+    "--metadata"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "subset",
+   "flags": [
+    "--subset"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "subset_file",
+   "flags": [
+    "--subset_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_by",
+   "flags": [
+    "--color_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "label_by",
+   "flags": [
+    "--label_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "categorical",
+   "flags": [
+    "--categorical"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "merge_impact_metric",
+   "flags": [
+    "--merge_impact_metric"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "product",
+    "min_child"
+   ]
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  }
+ ],
+ "ssn_navigator": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "json_out",
+   "flags": [
+    "-o",
+    "--json_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "query",
+   "flags": [
+    "--query"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "overview",
+    "thresholds",
+    "clusters",
+    "cluster",
+    "node"
+   ]
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cluster_id",
+   "flags": [
+    "--cluster"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "node",
+   "flags": [
+    "--node"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "min_size",
+   "flags": [
+    "--min_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "top_n",
+   "flags": [
+    "--top_n"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "members",
+   "flags": [
+    "--members"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "max_merge_events",
+   "flags": [
+    "--max_merge_events"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  }
+ ],
+ "split_by_cluster": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "matrix",
+   "flags": [
+    "--matrix"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "output_dir",
+   "flags": [
+    "--output_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": true
+  },
+  {
+   "name": "threshold",
+   "flags": [
+    "--threshold"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_cluster_size",
+   "flags": [
+    "--min_cluster_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "write_small_clusters",
+   "flags": [
+    "--write_small_clusters"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "pad_on_search_hits",
+   "flags": [
+    "--pad_on_search_hits"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "build_tree": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "distance",
+   "flags": [
+    "--distance"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "auto",
+    "precomputed",
+    "score_dist"
+   ]
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "upgma"
+   ]
+  },
+  {
+   "name": "metadata",
+   "flags": [
+    "--metadata"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "newick_out",
+   "flags": [
+    "-o",
+    "--newick_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "xgmml_out",
+   "flags": [
+    "--xgmml_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  }
+ ],
+ "build_projection": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "algorithm",
+   "flags": [
+    "--algorithm"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "pca",
+    "tsne",
+    "umap",
+    "coords"
+   ]
+  },
+  {
+   "name": "metadata",
+   "flags": [
+    "--metadata"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "color_by",
+   "flags": [
+    "--color_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "color_table",
+   "flags": [
+    "--color_table"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_table_out",
+   "flags": [
+    "--color_table_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "xgmml_out",
+   "flags": [
+    "-o",
+    "--xgmml_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "png_out",
+   "flags": [
+    "--png_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "coords_out",
+   "flags": [
+    "--coords_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "pca_args",
+   "flags": [
+    "--pca_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "tsne_args",
+   "flags": [
+    "--tsne_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "umap_args",
+   "flags": [
+    "--umap_args"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "scale",
+   "flags": [
+    "--scale"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "three_d",
+   "flags": [
+    "--three_d"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "enum_report": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "tsv_out",
+   "flags": [
+    "-o",
+    "--tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "json_out",
+   "flags": [
+    "--json_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_max_height",
+   "flags": [
+    "--html_max_height"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "by",
+   "flags": [
+    "--by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "contig",
+    "cds",
+    "domain"
+   ]
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "columns",
+   "flags": [
+    "--columns"
+   ],
+   "kind": "columns",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "column_names",
+   "flags": [
+    "--column_names"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  }
+ ],
+ "hmmer_report": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "tsv_out",
+   "flags": [
+    "-o",
+    "--tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "json_out",
+   "flags": [
+    "--json_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_max_height",
+   "flags": [
+    "--html_max_height"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "column_names",
+   "flags": [
+    "--column_names"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "columns",
+   "flags": [
+    "--columns"
+   ],
+   "kind": "columns",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  }
+ ],
+ "summary_report": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "text_out",
+   "flags": [
+    "-o",
+    "--text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "json_out",
+   "flags": [
+    "--json_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "domains_tsv_out",
+   "flags": [
+    "--domains_tsv_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "co_occurrence_fraction_out",
+   "flags": [
+    "--co_occurrence_fraction_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "co_occurrence_count_out",
+   "flags": [
+    "--co_occurrence_count_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "taxonomy",
+   "flags": [
+    "--taxonomy"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "domains",
+   "flags": [
+    "--domains"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domains_file",
+   "flags": [
+    "--domains_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  }
+ ],
+ "matrix_report": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": true
+  },
+  {
+   "name": "text_out",
+   "flags": [
+    "-o",
+    "--text_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "json_out",
+   "flags": [
+    "--json_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "knn_projection",
+   "flags": [
+    "--knn_projection"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "merge_impact_metric",
+   "flags": [
+    "--merge_impact_metric"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "product",
+    "min_child"
+   ]
+  },
+  {
+   "name": "max_merge_events",
+   "flags": [
+    "--max_merge_events"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "progress",
+   "flags": [
+    "--progress"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "profile_stages",
+   "flags": [
+    "--profile_stages"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "plot_contigs": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "-o",
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": true
+  },
+  {
+   "name": "height",
+   "flags": [
+    "--height"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "width",
+   "flags": [
+    "--width"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "types",
+   "flags": [
+    "--types"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "feature_height",
+   "flags": [
+    "--feature_height"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "feature_font_size",
+   "flags": [
+    "--feature_font_size"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "metadata",
+   "flags": [
+    "--metadata"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "color_by",
+   "flags": [
+    "--color_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "color_table",
+   "flags": [
+    "--color_table"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  }
+ ],
+ "color_table_to_legend": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "svg_out",
+   "flags": [
+    "-o",
+    "--svg_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": true
+  },
+  {
+   "name": "title",
+   "flags": [
+    "--title"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  }
+ ],
+ "db_download": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "db",
+   "flags": [
+    "--db"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": true,
+   "choices": [
+    "ncbi_all",
+    "ncbi_complete_genome_nonredundant_proks",
+    "ncbi_complete_genome_proks",
+    "ncbi_nonredundant_all",
+    "ncbi_nonredundant_proks",
+    "ncbi_representative_all",
+    "ncbi_representative_proks",
+    "swissprot",
+    "swissprot_gb",
+    "trembl",
+    "trembl_gb",
+    "uniprot",
+    "uniprot_gb"
+   ]
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "negative_flags": [
+    "--no_taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "success_log_out",
+   "flags": [
+    "--success_log_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "exclude_accessions",
+   "flags": [
+    "--exclude_accessions"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_accessions_file",
+   "flags": [
+    "--exclude_accessions_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "ncbi_summary",
+   "flags": [
+    "--ncbi_summary"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "gene_call",
+   "flags": [
+    "--gene_call"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "all",
+    "unannotated"
+   ]
+  },
+  {
+   "name": "max_records",
+   "flags": [
+    "--max_records"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "append",
+   "flags": [
+    "--append"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "before",
+   "flags": [
+    "--before"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "after",
+   "flags": [
+    "--after"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "download_backend",
+   "flags": [
+    "--download_backend"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "direct",
+    "datasets"
+   ]
+  },
+  {
+   "name": "download_workers",
+   "flags": [
+    "--download_workers"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "email",
+   "flags": [
+    "--email"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "ncbi_api_key",
+   "flags": [
+    "--ncbi_api_key"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "datasets_workdir",
+   "flags": [
+    "--datasets_workdir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "datasets_include",
+   "flags": [
+    "--datasets_include"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "datasets_max_workers",
+   "flags": [
+    "--datasets_max_workers"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "datasets_path",
+   "flags": [
+    "--datasets_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "program",
+   "required": false
+  },
+  {
+   "name": "datasets_gzip",
+   "flags": [
+    "--datasets_gzip"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
+ "format_db": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "shards",
+   "flags": [
+    "--shards"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "compress",
+   "flags": [
+    "--compress"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "index",
+   "flags": [
+    "--index"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "output_dir",
+   "flags": [
+    "--output_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "cpu",
+   "flags": [
+    "--cpu"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "level",
+   "flags": [
+    "--level"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "force",
+   "flags": [
+    "--force"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "log_out",
+   "flags": [
+    "--log_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  }
+ ]
+}

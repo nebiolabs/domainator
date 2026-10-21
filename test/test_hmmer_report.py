@@ -12,7 +12,7 @@ def test_hmmer_report_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/hmmer_report.tsv"
-        hmmer_report.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out, '--source', '--acc', '--desc', '--length', '--consensus', '--append', 'one', 'int', '1', '--append', 'two', 'float', '2.0', '--append', 'three', 'str', 'three'])
+        hmmer_report.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out, "--columns", "source", "acc", "desc", "length", "consensus", "append:one:int:1", "append:two:float:2.0", "append:three:str:three"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -28,9 +28,7 @@ def test_hmmer_report_1(shared_datadir):
 def test_hmmer_report_alphabet_column(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out.tsv"
-        hmmer_report.main(["-i", str(shared_datadir / "CcdB.hmm"), str(shared_datadir / "dna_profiles_1.hmm"),
-                           str(shared_datadir / "rna_profiles.hmm"),
-                           "--source", "--alphabet", "--length", "-o", out_path])
+        hmmer_report.main(["-i", str(shared_datadir / "CcdB.hmm"), str(shared_datadir / "dna_profiles_1.hmm"), str(shared_datadir / "rna_profiles.hmm"), "--columns", "source", "alphabet", "length", "-o", out_path])
         rows = [line.split("\t") for line in Path(out_path).read_text().splitlines()]
         assert rows[0] == ["name", "source", "alphabet", "length"]
         by_name = {row[0]: row for row in rows[1:]}
@@ -42,7 +40,7 @@ def test_hmmer_report_alphabet_column(shared_datadir):
 def test_hmmer_report_alphabet_column_json(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         json_path = output_dir + "/out.ndjson"
-        hmmer_report.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "--alphabet", "--json_out", json_path])
+        hmmer_report.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "--columns", "alphabet", "--json_out", json_path])
         records = [json.loads(line) for line in Path(json_path).read_text().splitlines() if line.strip()]
         assert [rec["name"] for rec in records] == ["dna_prof_1", "dna_prof_2", "dna_prof_3"]
         assert {rec["alphabet"] for rec in records} == {"DNA"}
@@ -51,7 +49,7 @@ def test_hmmer_report_alphabet_column_json(shared_datadir):
 def test_hmmer_report_dna_consensus_and_length(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out.tsv"
-        hmmer_report.main(["-i", str(shared_datadir / "dna_profiles_1.hmm"), "--length", "--consensus", "-o", out_path])
+        hmmer_report.main(["-i", str(shared_datadir / "dna_profiles_1.hmm"), "--columns", "length", "consensus", "-o", out_path])
         row = Path(out_path).read_text().splitlines()[1].split("\t")
         assert row[0] == "dna_prof_1"
         assert int(row[1]) == 72
@@ -67,7 +65,7 @@ def test_hmmer_report_reports_mixed_alphabet_file(shared_datadir, tmp_path):
     )
     with tempfile.TemporaryDirectory() as output_dir:
         with pytest.raises(ValueError, match="more than one alphabet"):
-            hmmer_report.main(["-i", str(mixed), "--alphabet", "-o", output_dir + "/out.tsv"])
+            hmmer_report.main(["-i", str(mixed), "--columns", "alphabet", "-o", output_dir + "/out.tsv"])
 
 
 def test_hmmer_report_source_ignores_compression_suffix(shared_datadir, tmp_path):
@@ -78,8 +76,8 @@ def test_hmmer_report_source_ignores_compression_suffix(shared_datadir, tmp_path
     gz_out = tmp_path / "gz.tsv"
     gz_in = helpers.gzip_file(shared_datadir / "pdonr_hmms.hmm", tmp_path / "pdonr_hmms.hmm.gz")
 
-    hmmer_report.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-o", str(plain_out), "--source"])
-    hmmer_report.main(["-i", gz_in, "-o", str(gz_out), "--source"])
+    hmmer_report.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-o", str(plain_out), "--columns", "source"])
+    hmmer_report.main(["-i", gz_in, "-o", str(gz_out), "--columns", "source"])
 
     assert plain_out.read_text() == gz_out.read_text()
     sources = {line.split("\t")[1] for line in gz_out.read_text().splitlines()[1:]}

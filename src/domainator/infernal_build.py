@@ -9,7 +9,7 @@ accepts can be used here. Formats without structure annotation, such as aligned
 FASTA, generally require --noss.
 """
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.seqio import open_writable_seqfile
 from domainator.external import resolve_binary, run_command
 import os
@@ -153,13 +153,14 @@ def build_parser():
     parser.add_argument("--hand", action="store_true", help="Use Stockholm RF annotation to define consensus columns.")
     parser.add_argument("--symfrac", default=None, required=False, type=float, help="Consensus-column threshold to pass through to cmbuild.")
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["cm_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["cm_out"])
+    check_outputs(parser, params)
     input_file = sys.stdin.buffer if params.input in STDIN_PATHS else params.input
 
     cm_text = infernal_build(

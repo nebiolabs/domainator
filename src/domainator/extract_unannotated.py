@@ -9,7 +9,7 @@ can write a fasta or a genbank file
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys
@@ -128,6 +128,7 @@ def build_parser():
                         help=f"Extract unannotated regions of at least this length from each protein. default: no cutoff. ")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -139,7 +140,7 @@ def main(argv):
 
     genbanks = params.input
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)

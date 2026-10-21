@@ -8,7 +8,7 @@ from jsonargparse import ActionConfigFile
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from domainator.cli.common import add_input, add_output, check_outputs, parse_keyword_args, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, parse_keyword_args, tool_parser
 from domainator.data_matrix import DataMatrix
 from domainator.external import import_optional
 from domainator.cytoscape import write_cytoscape_xgmml
@@ -205,13 +205,14 @@ def build_parser():
     parser.add_argument('--config', action=ActionConfigFile)
 
     #TODO: add a way to generate an interactive html output, could be with plotly. You could store the metadata as mouseover notes.
+    declare_outputs(parser, ["xgmml_out", "png_out", "coords_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["xgmml_out", "png_out", "coords_out"])
+    check_outputs(parser, params)
 
     for algorithm in ("pca", "tsne", "umap"):
         if algorithm != params.algorithm and getattr(params, f"{algorithm}_args"):

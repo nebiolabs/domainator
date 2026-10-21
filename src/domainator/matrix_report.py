@@ -7,7 +7,7 @@ from time import perf_counter
 import base64
 import gzip
 
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import MaxTree, build_symmetric_neighbor_rankings, mst_knn_edge_counts_by_threshold
@@ -1291,6 +1291,7 @@ def build_parser():
                         help="Print per-stage runtime timings to stderr for profiling large matrix_report runs.")
     
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["text_out", "html_out", "json_out"])
     return parser
 
 
@@ -1298,7 +1299,7 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
 
-    check_outputs(parser, params, ["text_out", "html_out", "json_out"])
+    check_outputs(parser, params)
 
     with ExitStack() as output_stack:
         def open_output(path):

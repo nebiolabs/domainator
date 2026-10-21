@@ -928,7 +928,7 @@ def build_parser():
 
     add_symmetrize_argument(parser, extra_help="Applied to the raw scores, after --threshold and --max_hits_per_query. Requires the reference to be the same file as the input. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
-    parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
+    parser.add_argument("--mode", type=str, required=False, default="score", choices=list(MODES),
                         help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)).")
 
     parser.add_argument('--cpu', type=int, default=0, required=False,

@@ -22,7 +22,7 @@ that names it, so nothing changes silently. This guide lists every change.
 | `domainator_db_download.py ...` | `domainator db_download ...` |
 | `domainator_format_db.py ...` | `domainator format_db ...` |
 | `partition_seqfile.py`, `partition_seqids.py` | removed; index databases with `domainator format_db --index` instead |
-| `domainator_server` | moved to a separate project |
+| `domainator_server` | removed; the browser GUI is becoming a separate project, built on `domainator describe` (see docs/tool_manifest.md) |
 
 `domainator --help` lists all commands. `domainator completion bash` prints a tab-completion
 script (see the README).
@@ -145,6 +145,7 @@ Options not listed are unchanged.
 | | `--offset`, `--recs_to_read` | removed |
 | | | new: `--foldseek_path` |
 | enum_report | `-o/--output`, `--html`, `--json` | `-o/--tsv_out`, `--html_out`, `--json_out` |
+| | one flag per column: `--domains --length --taxname genus species --qualifier CDS product` | `--columns domains length taxname:genus:species qualifier:CDS:product` (arguments follow the column name after `:`; `domainator enum_report --help` lists the columns) |
 | extract_domains | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--score` | `--min_score` |
 | | `--search_hits` | `--annotation_type domain_search` |
@@ -168,6 +169,7 @@ Options not listed are unchanged.
 | | `--alignments` (alignments mixed into the TSV) | `--alignments_out PATH`, a separate file; the TSV is now always a plain table |
 | | `--score_cutoff` | `--min_score` |
 | hmmer_report | `-o/--output`, `--html`, `--json` | `-o/--tsv_out`, `--html_out`, `--json_out` |
+| | one flag per column: `--acc --length --append name str value` | `--columns acc length append:name:str:value` |
 | hmmer_search | `--score_cutoff` | `--min_score` |
 | infernal_build | `-o/--output` | `-o/--cm_out` |
 | | `--informat` | `--input_format` |

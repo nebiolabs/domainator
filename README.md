@@ -10,9 +10,9 @@ Domainator can be run as browser-based GUI, command line tools, or as a Python l
 ```
 conda create -n domainator -c conda-forge -c bioconda domainator python=3.12
 conda activate domainator
-domainator_server --port 8080
+domainator --help
 ```
-Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port` to change the bind address. Use `--data-dir` to specify a directory for file and job data (default: `$HOME/domainator_server`).
+`domainator --help` lists the commands, and `domainator <command> --help` describes one. See [Installation](#installation) to install from this repository, with every optional program.
 
 # Contents
  - [Overview and key concepts](#Overview-and-key-concepts)
@@ -23,7 +23,7 @@ Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port`
    - [Apptainer (Singularity)](#Apptainer-(Singularity))
  - [Updating](#Updating)
  - [Examples](#Examples)
- - [Domainator GUI](#Running-Domainator-through-the-bundled-web-interface)
+ - [Driving Domainator from other programs](#driving-domainator-from-other-programs)
  - [Using Domainator as a python library](#Using-Domainator-as-a-python-library)
  - [Credits](#Credits)
 
@@ -38,8 +38,7 @@ Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port`
   - [Structure search and annotation](docs/structure_search.md)
   - [ESM-2 3B 3Di and foldseek integration](docs/esm_3b_foldseek.md)
   - [Limitations and frequently asked questions](docs/limitations_and_FAQ.md)
-  - [Domainator Web UI](docs/server/techincal_overview.md)
-    - [Adding Tools](docs/server/adding_tools.md)
+  - [The tool manifest, for programs that drive Domainator](docs/tool_manifest.md)
 
 # Questions, comments, bug reports, and feature requests
 Please use our [discussions page](https://github.com/nebiolabs/domainator/discussions) or [create an issue](https://github.com/nebiolabs/domainator/issues)
@@ -69,8 +68,6 @@ Finally, there are few programs that defy categorization, these programs perform
 ## Overview of Domainator components
 ![Overview of Domainator components image](docs/media/Overview_diagram.png)
 *not all programs are shown
-
-![Screenshot of domainator GUI](docs/media/server_screenshot.png)
 
 ## Example genome mining workflow
 
@@ -119,7 +116,7 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 |  domainator genbank_to_fasta | converts genbank files to fasta files  | one or more genbank files  | a fasta file | yes  | yes  |  |
 |  domainator hmmer_build | runs hmmbuild. Unlike the hmmbuild from the HMMER3 package, domainator hmmer_build allows specifying accession and description from the command line | an MSA | a .hmm file (optionally gzipped) | no  | no  | Builds amino acid, DNA, and RNA profiles. The alphabet is inferred from the alignment, or set explicitly with `--alphabet`. `--window_length` and `--window_beta` set the nhmmer search window (the profile's MAXL field) for nucleotide profiles. |
 |  domainator hmmer_compare |  runs local profile alignment, calculating pairwise hmm scores and position-wise alignments |  hmmer3 profiles  |  scores and (optionally) alignments |  yes |  no  | hmmer_compare, hmmer_search, and seq_dist can all be used to compare profiles, with different outputs. Amino acid, DNA, and RNA profiles are all supported, but both sides must use the same alphabet. Scores are on the input alphabet's own scale: nucleotide scores run at roughly half the amino acid scale. |
-|  domainator hmmer_report |  Writes a tabular report from .hmm files, with a line for each profile | one or more .hmm files | a tab separated, html, or JSON (`--json_out`, streaming NDJSON) metadata table | yes  | yes  | `--alphabet` reports whether each profile is amino, DNA, or RNA. |
+|  domainator hmmer_report |  Writes a tabular report from .hmm files, with a line for each profile | one or more .hmm files | a tab separated, html, or JSON (`--json_out`, streaming NDJSON) metadata table | yes  | yes  | `--columns alphabet` reports whether each profile is amino, DNA, or RNA. |
 |  domainator hmmer_search |  Selects hmm profiles based on similarity scores to a reference set of hmm profiles |  hmmer3 profiles (optionally gzipped)  |  hmmer3 profiles (optionally gzipped) |  yes |  yes  | hmmer_compare, hmmer_search, and seq_dist can all be used to compare profiles, with different outputs. Amino acid, DNA, and RNA profiles are all supported, but `-i` and `-r` must use the same alphabet. The default `--min_score` is scaled to the alphabet, because nucleotide scores run at roughly half the amino acid scale. |
 |  domainator hmmer_select | Extracts a subset of profiles from .hmm files  | one or more .hmm files (optionally gzipped) | an hmm file (optionally gzipped) | yes  | yes  | All `--input` files must use one alphabet, because HMMER locks an .hmm file to the alphabet of its first profile. `--alphabet` splits a mixed set of files into per-alphabet outputs. |
 |  domainator kmer_dist | calculates exact k-mer similarity scores between sequence records | two sequence files (genbank or fasta). Protein inputs use protein k-mers; nucleotide inputs use translated CDS protein k-mers by default or strand-invariant nucleotide k-mers with `--nucleotide_kmers`. Use `--alphabet` to disambiguate FASTA inputs and `--gene_call` to create CDS annotations for nucleotide FASTA. | a sparse or dense matrix of similarity scores | no | no | Supports `max_containment`, `min_containment`, and `jaccard` metrics. |
@@ -297,21 +294,18 @@ domainator domainate --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm 
 ## Visualizing output
 ```bash
 domainator summary_report -i domainator_output.gb --html_out domain_summary.html
-domainator enum_report -i domainator_output.gb --by contig --taxname superkingdom genus species self --length --domains --html_out enum_report.html -o enum_report.tsv
+domainator enum_report -i domainator_output.gb --by contig --columns taxname:superkingdom:genus:species:self length domains --html_out enum_report.html -o enum_report.tsv
 domainator plot_contigs -i domainator_output.gb --html_out contigs_plot.html
 ```
 
 For more examples see: [Basic Examples](docs/examples.md), and [Advanced examples](https://github.com/nebiolabs/domainator_examples).
 
-# Running Domainator through the bundled web-interface GUI
+# Driving Domainator from other programs
 
-Start the local server:
-```
-domainator_server --port 8080
-```
-Visit `http://127.0.0.1:8080/` to open the browser UI. Use `--host` and `--port` to change the bind address. Use `--data-dir` to specify a directory for file and job data (default: `$HOME/domainator_server`).
-
-For more information check out the [server documentation](docs/server/README.md)
+`domainator describe` prints a JSON description of every command and its options, which a GUI
+or a workflow system can render as forms and run with `domainator <command> --config
+options.json`. The browser GUI that used to be bundled (`domainator_server`) is becoming a separate
+project built on it. See [docs/tool_manifest.md](docs/tool_manifest.md).
 
 # Using Domainator as a python library
 

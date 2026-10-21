@@ -12,7 +12,7 @@ can write a fasta or a genbank file
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
@@ -216,6 +216,7 @@ def build_parser():
                        help="by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -227,7 +228,7 @@ def main(argv):
 
     genbanks = params.input
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     extend_default = params.extend_range if params.extend_range is not None else 0
     extend_up = params.extend_up if params.extend_up is not None else extend_default
     extend_down = params.extend_down if params.extend_down is not None else extend_default

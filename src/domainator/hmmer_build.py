@@ -5,7 +5,7 @@
 """
 from jsonargparse import ActionConfigFile
 from pyhmmer.easel import MSAFile
-from domainator.cli.common import STDIN_PATHS, add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.hmmio import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name, open_writable_hmm_file
 from domainator.cli.common import OUTPUT_COMPRESSION_HELP
 import os
@@ -113,7 +113,7 @@ def build_parser():
                             help="Accession of the HMM profile.")
     parser.add_argument("--desc", default=None, required=False, type=str,
                             help="Description of the HMM profile.")
-    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices=set(ALPHABET_NAMES),
+    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices=list(ALPHABET_NAMES),
                             help="Alphabet of the input MSA. If not supplied, inferred from the input, which can guess wrong on short or ambiguous alignments."
                         )
     parser.add_argument("--window_length", default=None, required=False, type=int,
@@ -122,6 +122,7 @@ def build_parser():
                             help="Tail mass from which to derive the window length. Nucleotide alphabets only. Only one of --window_length and --window_beta may be given.")
 
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["hmm_out"])
     return parser
 
 
@@ -130,7 +131,7 @@ def main(argv):
     params = parser.parse_args(argv)
 
 
-    check_outputs(parser, params, ["hmm_out"])
+    check_outputs(parser, params)
     from_stdin = params.input in STDIN_PATHS
     input_file = sys.stdin.buffer if from_stdin else open(params.input, "rb")
     output_handle = open_writable_hmm_file(params.hmm_out)

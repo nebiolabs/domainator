@@ -15,7 +15,7 @@ term: it narrows whatever the text criteria matched.
 from jsonargparse import ActionConfigFile
 import logging
 import re
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.hmmio import ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file
 from domainator.cli.common import OUTPUT_COMPRESSION_HELP
 from typing import Optional, List
@@ -144,20 +144,21 @@ def build_parser():
     parser.add_argument("--case_sensitive", default=False, required=False, action="store_true",
                         help="If set, then the search is case sensitive. Otherwise it is case insensitive.")
 
-    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices=set(ALPHABET_NAMES),
+    parser.add_argument("--alphabet", default=None, required=False, type=str.lower, choices=list(ALPHABET_NAMES),
                         help="Only read input files whose profiles use this alphabet, skipping the rest. "
                              "Unlike the text criteria this narrows the selection rather than adding to it, "
                              "and it can be used on its own to split a mixed set of input files by alphabet. "
                              "Because an hmm file can only hold one alphabet, this selects whole files.")
 
     parser.add_argument("--config", action=ActionConfigFile)
+    declare_outputs(parser, ["hmm_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["hmm_out"])
+    check_outputs(parser, params)
 
     search_name = True
     search_description = True

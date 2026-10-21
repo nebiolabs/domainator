@@ -202,6 +202,6 @@ def test_downstream_reports(database, references, tmp_path):
     structure_search.main(["-i", database, "-r", references, "-o", str(out),
                            "--add_annotations", "--cpu", "2"])
     report = tmp_path / "report.tsv"
-    enum_report.main(["-i", str(out), "--domains", "-o", str(report)])
+    enum_report.main(["-i", str(out), "--columns", "domains", "-o", str(report)])
     text = report.read_text()
     assert "UBQref_A" in text

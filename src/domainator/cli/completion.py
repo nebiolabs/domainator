@@ -27,6 +27,10 @@ def build_completion_parser() -> argparse.ArgumentParser:
     completion = tool_parser(__doc__)
     completion.add_argument("shell", choices=SHELLS)
     commands.add_subcommand("completion", completion, help="Print a shell completion script.")
+    describe = tool_parser("Print a JSON description of every command.")
+    describe.add_argument("--tool", nargs="+", choices=sorted(TOOLS))
+    describe.add_argument("--indent", type=int)
+    commands.add_subcommand("describe", describe, help="Print a JSON description of every command.")
     commands.add_subcommand("doctor", tool_parser("List the optional programs and packages."), help="List the optional programs and packages.")
     for name, tool in TOOLS.items():
         parser = importlib.import_module(f"domainator.{tool.module}").build_parser()

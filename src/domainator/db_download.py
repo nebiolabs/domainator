@@ -33,7 +33,7 @@ import os
 import subprocess
 import time
 import requests
-from domainator.cli.common import add_output, add_switch, check_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_output, add_switch, check_outputs, declare_outputs, resolve_cpu, tool_parser
 from Bio import SeqIO
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
@@ -972,13 +972,14 @@ def build_parser():
                         help="For the 'datasets' backend: pass `--gzip` to `datasets rehydrate` so the rehydrated genomic.gbff files are stored gzip-compressed (much smaller scratch dir; read transparently). Recommended for very large downloads.")
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
     expected_output, other_output = ("fasta_out", "genbank_out") if params.db in FASTA_DBS else ("genbank_out", "fasta_out")
     if getattr(params, other_output) is not None:
         parser.error(f"--db {params.db} is downloaded as {'FASTA' if params.db in FASTA_DBS else 'GenBank'}, so write it with "

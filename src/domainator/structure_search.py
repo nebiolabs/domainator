@@ -29,7 +29,7 @@ import sys
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator import domainate
 from domainator import structure_lib
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
@@ -244,13 +244,14 @@ def build_parser():
     structure_lib.add_backend_arguments(parser)
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     if params.max_hits is not None and params.max_hits < 1:
         raise RuntimeError("--max_hits must be at least 1.")

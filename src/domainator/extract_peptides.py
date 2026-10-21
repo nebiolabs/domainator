@@ -16,7 +16,7 @@ Criteria are combined with the following logic:
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from typing import Optional, Set
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
@@ -224,6 +224,7 @@ def build_parser():
     
 
     parser.add_argument('--config', action=ActionConfigFile)
+    declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
 
 
@@ -236,7 +237,7 @@ def main(argv):
     genbanks = params.input
     
 
-    check_outputs(parser, params, ["genbank_out", "fasta_out"])
+    check_outputs(parser, params)
 
     target_contigs = list_and_file_to_dict_keys(params.contigs, params.contigs_file, as_set=True)
     target_domains = list_and_file_to_dict_keys(params.domains, params.domains_file, as_set=True)

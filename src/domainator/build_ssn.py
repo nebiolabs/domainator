@@ -7,7 +7,7 @@ from jsonargparse import ActionConfigFile
 from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 import os
-from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import MaxTree, mst_edge_index_dict
@@ -384,13 +384,14 @@ def build_parser():
     # TODO: generate MSAs for connected clusters (write to files and make a cytoscape column with the alinged sequences)
     # TODO: generate hmms for connected clusters (write to files)
     # TODO: 
+    declare_outputs(parser, ["xgmml_out"])
     return parser
 
 
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["xgmml_out"])
+    check_outputs(parser, params)
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
 

@@ -7,6 +7,7 @@ shared option for reconciling the two directions of a self-comparison.
 
 from typing import Optional, Sequence, Tuple
 
+from domainator.cli.common import declare_outputs
 from domainator.data_matrix import DataMatrix, SYMMETRIZE_CHOICES, get_matrix_file_type
 from domainator.output_guardrails import enforce_matrix_output_limit
 
@@ -18,6 +19,7 @@ def add_matrix_output_arguments(parser, *, noun: str = "matrix") -> None:
                              "a matrix with exactly symmetric values is stored as its upper triangle.")
     parser.add_argument("--dense_text_out", type=str, default=None,
                         help=f"Write the {noun} to this tab-separated text file, every cell included. Use - for standard output.")
+    declare_outputs(parser, ["hdf_out", "dense_text_out"])
 
 
 def resolve_matrix_outputs(params, *, require_output: bool = True) -> Tuple[Optional[str], Optional[str]]:
