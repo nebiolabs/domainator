@@ -165,11 +165,11 @@ def _iter_cytoscape_xgmml_chunks(nodes, edges=None, edge_rows=None, edge_column_
         if node_ids_by_index is not None:
             node_ids_by_index.append(node_id)
 
-        ET.SubElement(node, "att", {"type":"string", "name":"Description", "value":html.escape(name)})
+        ET.SubElement(node, "att", {"type":"string", "name":"Description", "value":name})
         for key, idx in col_to_idx.items():
             value = row[idx]
             if key != x_col and key != y_col and key != z_col:
-                ET.SubElement(node, "att", {"type":metadata_types[key], "name":str(key), "value":html.escape(format_att_value(value, metadata_types[key]))})
+                ET.SubElement(node, "att", {"type":metadata_types[key], "name":str(key), "value":format_att_value(value, metadata_types[key])})
 
         color = None
         if color_by is not None:

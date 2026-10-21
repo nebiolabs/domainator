@@ -10,8 +10,17 @@ def test_hmmer_compare_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out_path = output_dir + f"/out_scores.tsv"
-        hmmer_compare.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"),  "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--alignments", "--min_score", "13", "--cpu", "10"])
+        alignments_path = output_dir + "/alignments.txt"
+        hmmer_compare.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"),  "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--alignments_out", alignments_path, "--min_score", "13", "--cpu", "10"])
         compare_files(out_path, shared_datadir / "pDONR_201_hmm_scores.tsv")
+        compare_files(alignments_path, shared_datadir / "pDONR_201_hmm_scores_alignments.txt")
+
+
+def test_hmmer_compare_alignments_only(shared_datadir, tmp_path):
+    alignments_path = str(tmp_path / "alignments.txt")
+    hmmer_compare.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+                        "--alignments_out", alignments_path, "--min_score", "13", "--cpu", "2"])
+    compare_files(alignments_path, shared_datadir / "pDONR_201_hmm_scores_alignments.txt")
 
 
 def test_hmmer_compare_max_output_gb_blocks_large_tsv_output(shared_datadir):
@@ -22,7 +31,7 @@ def test_hmmer_compare_max_output_gb_blocks_large_tsv_output(shared_datadir):
                 "-i", str(shared_datadir / "pdonr_hmms.hmm"),
                 "-r", str(shared_datadir / "pdonr_hmms.hmm"),
                 "-o", out_path,
-                "--alignments",
+                "--alignments_out", output_dir + "/alignments.txt",
                 "--min_score", "13",
                 "--cpu", "2",
                 "--max_output_gb", "0.000001",
@@ -41,8 +50,9 @@ def test_hmmer_compare_dna(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out_scores.tsv"
         hmmer_compare.main(["-i", str(shared_datadir / "dna_profiles.hmm"), "-r", str(shared_datadir / "dna_profiles.hmm"),
-                            "-o", out_path, "--alignments", "--min_score", "13", "--cpu", "2"])
+                            "-o", out_path, "--alignments_out", output_dir + "/alignments.txt", "--min_score", "13", "--cpu", "2"])
         compare_files(out_path, shared_datadir / "dna_profiles_hmm_scores.tsv")
+        compare_files(output_dir + "/alignments.txt", shared_datadir / "dna_profiles_hmm_scores_alignments.txt")
 
 
 def test_hmmer_compare_dna_midline_reaches_strong_symbols(shared_datadir):
@@ -50,9 +60,9 @@ def test_hmmer_compare_dna_midline_reaches_strong_symbols(shared_datadir):
     # cutoffs '|' (score > 1.5) was unreachable and every nucleotide midline collapsed
     # into '.' and '+'. This is the regression test for the alphabet-aware thresholds.
     with tempfile.TemporaryDirectory() as output_dir:
-        out_path = output_dir + "/out_scores.tsv"
+        out_path = output_dir + "/alignments.txt"
         hmmer_compare.main(["-i", str(shared_datadir / "dna_profiles_1.hmm"), "-r", str(shared_datadir / "dna_profiles_1.hmm"),
-                            "-o", out_path, "--alignments", "--cpu", "2"])
+                            "--alignments_out", out_path, "--cpu", "2"])
         assert "|" in Path(out_path).read_text()
 
 
@@ -77,5 +87,5 @@ def test_hmmer_compare_rejects_mismatched_alphabets(shared_datadir):
 
 def test_hmmer_compare_cpu_zero_uses_all_cores(shared_datadir, tmp_path):
     out_path = str(tmp_path / "out_scores.tsv")
-    hmmer_compare.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--alignments", "--min_score", "13", "--cpu", "0"])
+    hmmer_compare.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), "-r", str(shared_datadir / "pdonr_hmms.hmm"), "-o", out_path, "--min_score", "13", "--cpu", "0"])
     compare_files(out_path, shared_datadir / "pDONR_201_hmm_scores.tsv")

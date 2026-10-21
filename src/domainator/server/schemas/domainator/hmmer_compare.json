@@ -57,7 +57,7 @@
     {
       "name": "Output",
       "parameter": "tsv_out",
-      "help": "File to write the scores and alignments to.",
+      "help": "File to write the scores to.",
       "type": "output",
       "flags": [
         "-o",
@@ -65,13 +65,12 @@
       ]
     },
     {
-      "name": "Alignments",
-      "parameter": "alignments",
-      "help": "when activated, will write the alignments to the output.",
-      "type": "boolean",
-      "default": false,
+      "name": "Alignments output",
+      "parameter": "alignments_out",
+      "help": "Also write each hit's alignment to this text file.",
+      "type": "output",
       "flags": [
-        "--alignments"
+        "--alignments_out"
       ]
     },
     {

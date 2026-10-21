@@ -23,7 +23,21 @@ error.
 
 ## File formats
 
-The on-disk formats in [file_formats.md](file_formats.md): the GenBank feature types and
-qualifiers Domainator writes, matrix hdf5 files, `.dsnv` bundles and `.didx` indexes. Each
-versioned format is read for its current and previous major versions, and a file from a newer
-major version is refused with a `FormatVersionError`.
+The formats in [file_formats.md](file_formats.md):
+
+- **GenBank**: the `Domainator` and `Domain_Search` feature types and the qualifiers in its
+  qualifier reference, including how locations and coordinates are written. These change only
+  by addition, so a reader must ignore qualifiers it doesn't know.
+- **Versioned files**: matrix hdf5 files (`MATRIX_FILE_VERSION`), `.dsnv` bundles and `.didx`
+  indexes. Each is read for its current and previous major versions, and a file from a newer
+  major version is refused with a `FormatVersionError`.
+- **Report JSON** (`--json_out` of `summary_report`, `matrix_report` and `ssn_navigator`): the
+  keys, versioned by the `schema_version` key. New keys can appear in 1.x.
+- **Other outputs**: the columns of the report TSVs and NDJSON, `hmmer_compare` scores and
+  alignments, XGMML attributes and Newick naming, and the color-table and dense-text matrix
+  formats.
+
+What is not part of the contract: HTML reports and the SSN viewer page (their look and the
+data embedded in them), text summaries meant for reading, the order of hits that tie on score,
+warning and log messages, and the floating-point details of scores (a different HMMER, DIAMOND
+or Foldseek version can change them).

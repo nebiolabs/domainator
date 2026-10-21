@@ -72,6 +72,7 @@ def test_summary_report_json(shared_datadir):
         out = os.path.join(output_dir, "summary.json")
         summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "--json_out", out])
         payload = _read_json(out)
+        assert next(iter(payload)) == "schema_version" and payload["schema_version"] == 1
         assert payload["contig_stats"]["contigs"] == 20
         assert payload["contig_stats"]["length"]["min"] > 0
         domains = {row["domain"] for row in payload["domain_frequency"]}
@@ -84,6 +85,7 @@ def test_matrix_report_json(shared_datadir):
         out = os.path.join(output_dir, "matrix.json")
         matrix_report.main(["-i", str(shared_datadir / "FeSOD_dist.dense.hdf5"), "--json_out", out])
         payload = _read_json(out)
+        assert next(iter(payload)) == "schema_version" and payload["schema_version"] == 1
         assert payload["nodes"] == 20
         assert payload["non_zero_edges"] > 0
         assert payload["edge_scores"]["max"] >= payload["edge_scores"]["min"]
@@ -158,6 +160,8 @@ def test_ssn_navigator_modes(shared_datadir):
             return _read_json(out)
 
         overview = run(["--query", "overview"])
+        assert list(overview)[:2] == ["schema_version", "query"]
+        assert (overview["schema_version"], overview["query"]) == (1, "overview")
         assert overview["nodes"] == 4
         assert {c["name"] for c in overview["metadata_columns"]} == {"category", "count"}
 

@@ -169,7 +169,7 @@ def pad_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], 
                 
                 # adjust min_coord and max_coord so that they don't wrap around the FeatureLocation bounds.
                 if min_coord < 0 and ((-1 * min_coord) > end_to_origin):
-                    min_coord = -1 * end_to_origin #TODO: test for off-by-one
+                    min_coord = -1 * end_to_origin
                 if max_coord > rec_len and (max_coord - rec_len > l_start):
                     max_coord = rec_len + l_start
                 
@@ -210,10 +210,10 @@ def pad_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], 
                     parts.append(FeatureLocation(l_start, l_end, strand=location.strand))
 
                 if max_coord > rec_len: # max_coord is across the origin from the end of the FeatureLocation, so we need to break it up into two parts
-                    parts[-1]._end = ExactPosition(rec_len)
+                    parts[-1] = FeatureLocation(parts[-1].start, rec_len, strand=location.strand)
                     parts.append(FeatureLocation(0, max_coord-rec_len, strand=location.strand))
                 else:
-                    parts[-1]._end = ExactPosition(max_coord)
+                    parts[-1] = FeatureLocation(parts[-1].start, max_coord, strand=location.strand)
 
                 if location.strand == -1:
                     parts.reverse()

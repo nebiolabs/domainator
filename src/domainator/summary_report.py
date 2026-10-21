@@ -98,6 +98,10 @@ CDSs per 10 kb: {num_cdss / ((sum(lengths)+0.01)/10000) : .2f}
     def write_footer(self):
         pass
 
+# The version of the --json_out document; see docs/file_formats.md.
+JSON_SCHEMA_VERSION = 1
+
+
 class SummaryJSONWriter():
     """Accumulates the summary into a single compact JSON object (agent-friendly).
 
@@ -106,7 +110,7 @@ class SummaryJSONWriter():
     """
     def __init__(self, out_handle):
         self.out_handle = out_handle
-        self.payload = {}
+        self.payload = {"schema_version": JSON_SCHEMA_VERSION}
 
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         length_stats = None

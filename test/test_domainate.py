@@ -575,6 +575,15 @@ def test_domainator_intron_2(shared_datadir):
         assert len(recs) == 1
         assert len(recs[0].features) == 23
 
+def test_gene_call_needs_explicit_Z(shared_datadir, capsys):
+    # The number of target sequences isn't known until the genes are called.
+    with tempfile.TemporaryDirectory() as output_dir:
+        args = ["--input", str(shared_datadir / "pDONR201_no_CDSs.gb"), "-r", str(shared_datadir / "pdonr_hmms.hmm"),
+                "-o", output_dir + "/out.gb", "--gene_call", "all", "-Z", "0"]
+        with pytest.raises(SystemExit):
+            main(args)
+    assert "-Z 0 can't be used with --gene_call" in capsys.readouterr().err
+
 def test_domainator_gene_annotate_1(shared_datadir):
     hmms = str(shared_datadir / "pdonr_hmms.hmm")
 

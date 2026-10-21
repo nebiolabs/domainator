@@ -149,7 +149,7 @@ domainator hmmer_report -i my_dna_profile.hmm --alphabet --length --consensus -o
 # Compare nucleotide profiles to each other. Scores are on the nucleotide scale, which runs
 # at roughly half the amino acid scale, so protein-tuned thresholds are about twice as
 # strict here. domainator hmmer_search scales its default --min_score for you.
-domainator hmmer_compare -i my_dna_profiles.hmm -r my_dna_profiles.hmm -o dna_scores.tsv --alignments
+domainator hmmer_compare -i my_dna_profiles.hmm -r my_dna_profiles.hmm -o dna_scores.tsv --alignments_out dna_alignments.txt
 domainator hmmer_search -i my_dna_profiles.hmm -r reference_dna_profiles.hmm -o dna_hits.hmm
 
 # Split a mixed set of profile files by alphabet.

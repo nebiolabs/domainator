@@ -13,7 +13,8 @@ Amino acid, DNA, and RNA profiles are all supported, but the -i and -r sides mus
 the same alphabet (DNA and RNA count as different alphabets).
 """
 from jsonargparse import ActionConfigFile
-from typing import Iterable, TextIO
+from contextlib import ExitStack
+from typing import Iterable, Optional, TextIO
 import heapq
 from domainator.cli.common import add_input, add_output, check_outputs, resolve_cpu, tool_parser
 from domainator.outputs import output_file
@@ -23,11 +24,8 @@ from domainator.hmmio import common_hmm_alphabet, iter_hmms_with_alphabet
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes
 
 
-def _format_hmmer_compare_hit(hit: HmmerHit, alignments: bool, sep: str = "\t") -> str:
-    out = sep.join((hit.query_name, hit.reference_name, f"{round(hit.score, 2):.2f}")) + "\n"
-    if alignments:
-        out += hit.alignment + "\n\n\n\n"
-    return out
+def _format_hmmer_compare_hit(hit: HmmerHit) -> str:
+    return "\t".join((hit.query_name, hit.reference_name, f"{round(hit.score, 2):.2f}")) + "\n"
 
 class _hmmer_compare_worker():
     def __init__(self, hmmer_targets, alignment=False, k=None, score_cutoff=float("-inf")):
@@ -57,26 +55,27 @@ class _hmmer_compare_worker():
 
 
 
-def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], out_handle:TextIO, min_score:float, alignments:bool, max_hits_per_query:int, cpu:int, max_output_bytes=None, output_description: str = "hmmer_compare TSV output"):
+def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_out_handle:Optional[TextIO], min_score:float, max_hits_per_query:int, cpu:int, alignments_out_handle:Optional[TextIO]=None, max_output_bytes=None, output_description: str = "hmmer_compare output"):
+    """For each hit, write a TSV row (query, reference, score) to tsv_out_handle, and the same
+    row followed by the alignment and a blank line to alignments_out_handle. Either handle can be None."""
     reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
     reference_alphabet = common_hmm_alphabet(references, role="reference")
 
-    worker = _hmmer_compare_worker(reference_hmms, alignments, max_hits_per_query, min_score)
+    worker = _hmmer_compare_worker(reference_hmms, alignments_out_handle is not None, max_hits_per_query, min_score)
 
-    sep="\t"
-    header = sep.join(("query", "reference", "score")) + "\n"
+    header = "" if tsv_out_handle is None else "\t".join(("query", "reference", "score")) + "\n"
     header_bytes = len(header.encode("utf-8"))
     enforce_output_limit(
         projected_bytes=header_bytes,
         max_output_bytes=max_output_bytes,
         output_description=output_description,
-        mitigation_options=["--max_hits_per_query", "--min_score", "--alignments"],
+        mitigation_options=["--max_hits_per_query", "--min_score", "--alignments_out"],
     )
-    out_handle.write(header)
+    if tsv_out_handle is not None:
+        tsv_out_handle.write(header)
     written_bytes = header_bytes
     
     for file in query_files:
-        # file_name = os.path.basename(Path(file).stem)
         # Each query file is read once, so it can be standard input.
         file_alphabet, query_profiles = iter_hmms_with_alphabet(file, role="input")
         if file_alphabet is None:  # no profiles in this file
@@ -85,15 +84,19 @@ def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], out_ha
         with make_pool(processes=cpu) as pool:
             for hits in pool.imap(worker, query_profiles, chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                 for hit in hits:
-                    rendered_hit = _format_hmmer_compare_hit(hit, alignments, sep=sep)
-                    hit_bytes = len(rendered_hit.encode("utf-8"))
+                    row = _format_hmmer_compare_hit(hit)
+                    alignment = None if alignments_out_handle is None else row + hit.alignment + "\n\n"
+                    hit_bytes = (0 if tsv_out_handle is None else len(row.encode("utf-8"))) + (0 if alignment is None else len(alignment.encode("utf-8")))
                     enforce_output_limit(
                         projected_bytes=written_bytes + hit_bytes,
                         max_output_bytes=max_output_bytes,
                         output_description=output_description,
-                        mitigation_options=["--max_hits_per_query", "--min_score", "--alignments"],
+                        mitigation_options=["--max_hits_per_query", "--min_score", "--alignments_out"],
                     )
-                    out_handle.write(rendered_hit)
+                    if tsv_out_handle is not None:
+                        tsv_out_handle.write(row)
+                    if alignment is not None:
+                        alignments_out_handle.write(alignment)
                     written_bytes += hit_bytes
 
 
@@ -112,10 +115,8 @@ def build_parser():
     parser.add_argument('--max_hits_per_query', type=int, required=False, default=None,
                         help="Include at most this many of the top hits for each query. Default: Include all hits.")
 
-    add_output(parser, "tsv", "Write the scores (and alignments) to this tab-separated file.", primary=True)
-
-    parser.add_argument('--alignments', action='store_true', default=False,
-                        help="when activated, will write the alignments to the output.")
+    add_output(parser, "tsv", "Write the scores to this tab-separated file.", primary=True)
+    add_output(parser, "alignments", "Also write each hit's alignment to this text file.")
     
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="how many cpu threads to use. 0: one per physical core.")
@@ -129,10 +130,12 @@ def build_parser():
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
-    check_outputs(parser, params, ["tsv_out"])
+    check_outputs(parser, params, ["tsv_out", "alignments_out"])
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
-    output_description = f"hmmer_compare TSV output '{params.tsv_out}'"
-    with output_file(params.tsv_out) as out:
-        hmmer_compare(params.input, references=params.reference, out_handle=out, min_score=params.min_score, alignments=params.alignments, max_hits_per_query=params.max_hits_per_query,
-                      cpu=resolve_cpu(params.cpu), max_output_bytes=max_output_bytes, output_description=output_description)
+    with ExitStack() as stack:
+        tsv_out = None if params.tsv_out is None else stack.enter_context(output_file(params.tsv_out))
+        alignments_out = None if params.alignments_out is None else stack.enter_context(output_file(params.alignments_out))
+        hmmer_compare(params.input, references=params.reference, tsv_out_handle=tsv_out, alignments_out_handle=alignments_out,
+                      min_score=params.min_score, max_hits_per_query=params.max_hits_per_query,
+                      cpu=resolve_cpu(params.cpu), max_output_bytes=max_output_bytes)

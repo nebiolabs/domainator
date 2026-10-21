@@ -704,8 +704,8 @@ def enum_report(records, *, by, analyses, tsv_out_handle, html_out_handle, colum
     STATIC_ANALYSES = {"domains": {"columns": ["domains"], "column_types": ["str"], "function": lambda rec,loc,tax: get_domain_content(rec)[0]}, 
                 "domain_descriptions": {"columns": ["domain_descriptions"], "column_types": ["str"], "function": lambda rec,loc,tax: get_domain_content(rec)[1]}, 
                 "sequence": {"columns": ["sequence"], "column_types": ["str"], "function": lambda rec,loc,tax: str(rec.seq)},  #TODO: maybe for domains and CDSs convert to forward strand.
-                "start": {"columns": ["start"], "column_types": ["int"], "function": lambda rec,loc,tax: stranded_start_human_readable(loc)}, #TODO: can be off by one depending on strand
-                "end": {"columns": ["end"], "column_types": ["int"], "function": lambda rec,loc,tax: stranded_end_human_readable(loc)}, #TODO: can be off by one depending on strand
+                "start": {"columns": ["start"], "column_types": ["int"], "function": lambda rec,loc,tax: stranded_start_human_readable(loc)},
+                "end": {"columns": ["end"], "column_types": ["int"], "function": lambda rec,loc,tax: stranded_end_human_readable(loc)},
                 "strand": {"columns": ["strand"], "column_types": ["str"], "function": lambda rec,loc,tax: get_strand(loc)},
                 "length": {"columns": ["length"], "column_types": ["int"], "function": lambda rec,loc,tax: str(len(rec))}, 
                 "topology": {"columns": ["topology"], "column_types": ["str"], "function": lambda rec,loc,tax: rec.annotations.get("topology", "linear")}, 

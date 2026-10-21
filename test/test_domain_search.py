@@ -575,6 +575,15 @@ def test_domain_search_one_file_translate(shared_datadir):
         assert len(new_file) == 1
         compare_seqfiles(out, shared_datadir / "domain_search_translate_out.gb", skip_qualifiers={"accession"})
 
+def test_gene_call_needs_explicit_Z(shared_datadir, capsys):
+    # The number of target sequences isn't known until the genes are called.
+    with tempfile.TemporaryDirectory() as output_dir:
+        args = ["--input", str(shared_datadir / "pDONR201_no_CDSs.gb"), "-r", str(shared_datadir / "CcdB.hmm"),
+                "-o", output_dir + "/out.gb", "--gene_call", "all", "-Z", "0"]
+        with pytest.raises(SystemExit):
+            main(args)
+    assert "-Z 0 can't be used with --gene_call" in capsys.readouterr().err
+
 def test_domain_search_gene_annotate_1(shared_datadir):
     hmms = str(shared_datadir / "CcdB.hmm")
 

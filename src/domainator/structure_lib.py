@@ -1064,7 +1064,7 @@ def structure_hits_to_search_results(
     """
     out: Dict[str, List[SearchResult]] = {}
     for hit in hits:
-        if not (hit.evalue < evalue and hit.evalue >= min_evalue):
+        if not (hit.evalue <= evalue and hit.evalue >= min_evalue):
             continue
         name = strip_structure_extension(hit.query) if strip_extension else hit.query
         description = hit.qheader.split(" ", 1)[1] if " " in hit.qheader else ""

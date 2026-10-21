@@ -42,6 +42,8 @@ from domainator.ssn_bundle import (
 from domainator.ssn_hierarchy import DEFAULT_MAX_MERGE_EVENTS
 
 MODES = ("overview", "thresholds", "clusters", "cluster", "node")
+# The version of the --json_out document; see docs/file_formats.md.
+JSON_SCHEMA_VERSION = 1
 
 
 def _metadata_row(bundle: dict, node_index: int) -> dict:
@@ -334,5 +336,5 @@ def main(argv):
     )
 
     with output_file(params.json_out) as out_handle:
-        json.dump(result, out_handle, separators=(",", ":"))
+        json.dump({"schema_version": JSON_SCHEMA_VERSION, "query": params.query, **result}, out_handle, separators=(",", ":"))
         out_handle.write("\n")

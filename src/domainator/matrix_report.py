@@ -204,6 +204,10 @@ def _estimate_mst_knn_counts_bytes(n_thresholds: int, max_k: int) -> int:
         return 0
     return int(n_thresholds) * int(max_k - KNN_PROJECTION_MIN_K + 1) * np.dtype(int).itemsize
 
+# The version of the --json_out document; see docs/file_formats.md.
+JSON_SCHEMA_VERSION = 1
+
+
 class SummaryJSONWriter():
     """Emit a compact JSON summary of the matrix/network (agent-friendly).
 
@@ -213,7 +217,7 @@ class SummaryJSONWriter():
     """
     def __init__(self, out_handle, max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
         self.out_handle = out_handle
-        self.payload = {}
+        self.payload = {"schema_version": JSON_SCHEMA_VERSION}
 
     def write_header(self, tree, edge_scores):
         n = len(edge_scores)

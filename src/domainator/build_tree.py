@@ -90,13 +90,13 @@ def get_newick(node, parent_dist, leaf_names, newick='') -> str: #from: https://
     #TODO: make this not recursive
 
     if len(leaf_names) == 1:
-        return f"({leaf_names[0]}:0.00);" #if there's only one leaf, the tree is just a leaf 
+        return f"({leaf_names[0]}:0);" #if there's only one leaf, the tree is just a leaf
 
     if node.is_leaf():
-        return "%s:%.2f%s" % (leaf_names[node.id], parent_dist - node.dist, newick)
+        return "%s:%.6g%s" % (leaf_names[node.id], parent_dist - node.dist, newick)
     else:
         if len(newick) > 0:
-            newick = "):%.2f%s" % (parent_dist - node.dist, newick)
+            newick = "):%.6g%s" % (parent_dist - node.dist, newick)
         else:
             newick = ");"
         newick = get_newick(node.get_left(), node.dist, leaf_names, newick=newick)

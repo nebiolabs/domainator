@@ -371,7 +371,7 @@ def build_parser():
     parser.add_argument('-Z', default=1000, type=int, 
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
                         "\n"
-                        "Set to 0 to use the number actual target sequences (currently this does not account for taxonomic filtering). " # TODO: account for taxonomy filtering
+                        "Set to 0 to use the number of target sequences in the input, counted before any taxonomy filter, so filtering does not change E-values. "
                         "Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.")
 
     parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001,
@@ -465,9 +465,9 @@ def build_parser():
                         "smaller values give finer parallelism at the cost of more tasks. The input is scanned once to find "
                         "partition boundaries regardless of this value.")
 
-    parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
+    parser.add_argument('--gene_call', type=str, default=None, choices=["all", "unannotated"], required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. "
-                        "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
+                        "-Z 0 can't be used with gene calling, because the number of target sequences isn't known until the genes are called.")
 
     add_max_output_gb_argument(parser)
 
@@ -486,6 +486,8 @@ def main(argv):
 
     if params.evalue > 10:
         parser.error("-e/--evalue must be <= 10.")
+    if params.Z == 0 and params.gene_call is not None:
+        parser.error("-Z 0 can't be used with --gene_call: give the database size explicitly.")
     
     if params.batch_size < 1:
         raise ValueError("batch_size must be > 0")
@@ -533,7 +535,7 @@ def main(argv):
 
     #partition the input files for parallelization later
     if params.Z == 0: #if Z is none, then we must know the total CDS count for per-sequence E-values.
-        #TODO: this is broken for taxonomy filtering, because it doesn't filter for taxonomy.
+        # Counted before the taxonomy filter, so filtering does not change E-values.
         # If every input has a valid .didx index, the total count is in the headers
         # (O(1) per file), so we can take the true count cheaply and still partition
         # lazily. Otherwise fall back to an eager parallel count over all files.

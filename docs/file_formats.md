@@ -55,6 +55,50 @@ Note that for structure-derived records, all coordinates are indices into the *o
 
 `Domain_Search` features are added by `domainator domain_search` and `domainator structure_search`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domainator domain_search`, and there are exactly one per contig on sequences returned by `domainator domain_search`. Other programs, such as `domainator extract_domains`, `domainator select_by_cds`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, selected with `--annotation_type domain_search`.
 
+### Qualifier reference
+
+Every qualifier holds one value. `.` means "not applicable" or "not known".
+
+Qualifiers of `Domainator` and `Domain_Search` features:
+
+| Qualifier | Value |
+|---|---|
+| `name` | The reference's name (HMM `NAME`, sequence id, or structure name). |
+| `database` | The reference file's name without its format and compression extensions (`refs.hmm.gz` is `refs`). |
+| `program` | What made the hit: `hmmsearch`, `phmmer`, `nhmmer`, `infernal`, `foldseek` (or another structural aligner), `MOTIF` or `TMbed`. |
+| `description` | The reference's description, or `.`. |
+| `accession` | The reference's accession (HMM `ACC`), or `.`. |
+| `evalue` | The domain's independent E-value, written as `%.1e`. |
+| `score` | The domain's bit score, written as `%.1f`. |
+| `identity` | Percent identity over the aligned part of the reference, `%.1f`. |
+| `cds_id` | The `cds_id` of the CDS the hit is on, `0_1_<length>` on a protein record, or `.` for a hit on the whole contig (nhmmer, infernal). |
+| `rstart`, `rend` | The first and last aligned positions of the reference, 1-based and inclusive, or `.` when the hit has no reference (`domainator find_features`). |
+| `rlen` | The reference's length, or `.`. |
+| `tmscore`, `lddt`, `rmsd`, `prob` | Structural alignment metrics, `%.3f`, only when computed (see above). |
+
+The feature's location is the hit's envelope: on a protein record, the residues it covers; on
+a nucleotide record, the bases of those codons, following the CDS through its parts, across the
+origin, and from its `codon_start`.
+
+Qualifiers Domainator writes on other features:
+
+| Feature | Qualifier | Written by | Value |
+|---|---|---|---|
+| `CDS` | `cds_id` | every tool that reads a CDS without one | Unique within the record; see above. |
+| `CDS` | `translation` | `domainate`, `domain_search`, `find_features`, `db_download`: added when a CDS has none, and trimmed when a partial CDS's translation runs past the edge of the contig | The translation, honoring `/transl_table` and `/codon_start`. |
+| `CDS` | `gene_id` | `--gene_call` | `<record id>_<n>`, numbering the called genes from 1. |
+| `CDS` | `source_contig` | `extract_peptides`, `domain_search --translate` | The id of the nucleotide record the peptide came from. |
+| any | `Color` | `color_genbank` | A `#rrggbb` color. Readers also accept `color`. |
+| `misc_feature` | `threedi` | `structure_to_genbank --store_3di` | See above. |
+
+### Compatibility
+
+The feature types `Domainator` and `Domain_Search` and the qualifiers above are the GenBank
+part of the 1.x stability contract ([stability.md](stability.md)). Within 1.x they change only
+by addition: a new qualifier or feature type may appear, so readers must ignore ones they don't
+know, but an existing one keeps its name, meaning and format. Files carry no version marker; a
+change that breaks this would come with Domainator 2.0 and a marker for readers to check.
+
 ### Taxonomy
 
 Some Domainator scripts recognize Taxids from the [NCBI taxonomy database](https://www.ncbi.nlm.nih.gov/taxonomy). Domainator understands several ways of marking taxonomy. 
@@ -545,6 +589,58 @@ CAT	#0000ff
 Condensation	#ff00ff
 2-oxoacid_dh	#ffffff
 ```
+
+`domainator color_genbank` writes the colors to features as a `Color` qualifier (see the
+qualifier reference above); `domainator plot_contigs` reads `Color` or `color`.
+
+## Report JSON (`--json_out`)
+
+`domainator summary_report`, `domainator matrix_report` and `domainator ssn_navigator` write one
+JSON object (on one line). Its first key, `schema_version`, is an integer that is incremented
+when a key is removed or changes meaning; new keys can appear without a new version, so
+readers must ignore keys they don't know. All three are at version 1.
+
+- `summary_report`: `contig_stats`, `domain_frequency`, `domain_cooccurrence` and `taxonomy`.
+- `matrix_report`: `nodes`, `non_zero_edges`, `edge_scores`, `connected_components`,
+  `merge_impact_metric`, `split_events`, `split_event_total` and `max_merge_events`.
+- `ssn_navigator`: `query` (the `--query` mode) and the keys of that mode's answer.
+
+`domainator enum_report --json_out` and `domainator hmmer_report --json_out` instead write
+NDJSON: one object per row, keyed by the report's column names, with `null` for a missing value.
+The columns are the ones the command line asked for, so these have no version of their own.
+
+## XGMML networks and trees
+
+`domainator build_ssn`, `domainator build_tree` and `domainator build_projection` write
+[XGMML](https://cytoscape.org/manual/Cytoscape3_10_0Manual.pdf) for Cytoscape. The `graph`
+element's `label` is the output file name without its extension.
+
+- Each node has the id and label `n<i>` (numbered from 0 in input order) and a string
+  attribute `Description`, the sequence's name. Each `--metadata` column becomes an attribute,
+  typed `integer`, `real`, `boolean` or `string` from the column's values; a missing value is
+  written as `0`, `0.0`, `false` or the empty string.
+- Each node has a `graphics` element. `build_projection` sets its `x` and `y` (`y` negated,
+  because Cytoscape's y axis points down), and `--color_by` sets its `fill`.
+- Each edge has the id and label `e<i>`, `source` and `target` node ids, and attributes for its
+  values: `build_ssn` writes `SSN_SCORE` (the matrix value) and, when marking spanning-tree
+  edges, the boolean `MST`; `build_tree` writes `TREE_DIST`, the branch length.
+- `build_ssn --cluster` adds the node attribute `SSN_cluster`, the node's cluster number.
+- `build_tree` also writes the tree's internal nodes, with the `Description`
+  `__INTERNAL_NODE_<k>__`.
+
+## Newick trees
+
+`domainator build_tree --newick_out` writes one rooted tree, with branch lengths to six
+significant digits. Leaves are named for the matrix rows, with each space, `;`, `:`, `,`,
+`(`, `)` and `'` replaced by `_` (with a warning, unless `--quiet`). Internal nodes are unnamed.
+
+## `hmmer_compare` scores and alignments
+
+`domainator hmmer_compare -o` writes a TSV with the header `query`, `reference`, `score`, and a
+row for each hit with its score to two decimals, the best hits for each query first.
+`--alignments_out` writes, for each hit, the same row, then the alignment (three lines: the
+query's consensus, a match line, and the reference's consensus, numbered with 1-based
+positions), then a blank line.
 
 ## domain_search databases: shards and `.didx` indexes
 

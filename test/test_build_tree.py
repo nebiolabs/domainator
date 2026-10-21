@@ -38,24 +38,24 @@ def tree():
 
 def test_get_newick(tree, leaf_names):
     result = get_newick(tree, tree.dist, leaf_names)
-    assert result == '((D:1.00,C:1.00):3.00,(B:2.00,A:2.00):2.00);'
+    assert result == '((D:1,C:1):3,(B:2,A:2):2);'
 
 def test_get_newick_single_node():
     single_node_tree = TreeNode(0, 0)
     leaf_names = ['A']
     result = get_newick(single_node_tree, 0, leaf_names)
-    assert result == '(A:0.00);'
+    assert result == '(A:0);'
 
 def test_get_newick_single_level(leaf_names):
     root = TreeNode(-1, 3)
     root.left = TreeNode(0, 0)
     root.right = TreeNode(1, 0)
     result = get_newick(root, root.dist, leaf_names)
-    assert result == '(B:3.00,A:3.00);'
+    assert result == '(B:3,A:3);'
 
 def test_get_newick_with_empty_leaf_names(tree, leaf_names):
     result = get_newick(tree, tree.dist, [''] * len(leaf_names))
-    assert result == '((:1.00,:1.00):3.00,(:2.00,:2.00):2.00);'
+    assert result == '((:1,:1):3,(:2,:2):2);'
 
 
 def test_newick_output(shared_datadir):

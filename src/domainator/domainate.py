@@ -136,7 +136,7 @@ class SearchResult(NamedTuple):
     """start position on reference hmm (hmm_from)"""
     rend: int
     """end position on reference hmm (hmm_to)"""
-    rlen: Union[str, int] = "" #TODO: should default be "" or None?
+    rlen: Union[str, int] = "."
     """length of reference hmm (hmm_length)"""
     program:str = "."
     """name of program that made the hit (hmmsearch, phmmer, foldseek)"""
@@ -208,7 +208,7 @@ def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, 
             contig_index = int(hit_name[0])
             cds_index = int(hit_name[1])
             for domain in hit.domains:
-                if domain.i_evalue < evalue and domain.i_evalue >= min_evalue:
+                if domain.i_evalue <= evalue and domain.i_evalue >= min_evalue:
                     domain_name = domain.alignment.hmm_name
                     domain_accession = domain.alignment.hmm_accession
                     match_positions = sum(1 for c in domain.alignment.identity_sequence if c.isalpha())
@@ -230,10 +230,10 @@ def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, 
                     #     domain_description = ""
                     domain_evalue = domain.i_evalue
                     score = domain.score
-                    start = domain.env_from - 1 #TODO: double check this for off-by-one
-                    end = domain.env_to #TODO: double check this for off-by-one
-                    ref_start = domain.alignment.hmm_from #TODO: double check this for off-by-one
-                    ref_end = domain.alignment.hmm_to #TODO: double check this for off-by-one
+                    start = domain.env_from - 1
+                    end = domain.env_to
+                    ref_start = domain.alignment.hmm_from
+                    ref_end = domain.alignment.hmm_to
                     try:
                         ref_len = references[domain_name].M
                     except AttributeError:
@@ -257,13 +257,13 @@ def foldseek_hits_to_search_results(hits, references, evalue, db_name, min_evalu
         domain_evalue = float(hit.evalue)
         # foldseek's own -e already bounds this, but --min_evalue has no foldseek
         # equivalent, so both bounds are applied here to match the hmmer path.
-        if not (domain_evalue < evalue and domain_evalue >= min_evalue):
+        if not (domain_evalue <= evalue and domain_evalue >= min_evalue):
             continue
         score = float(hit.bits)
-        start = int(hit.qstart) - 1 #TODO: double check this for off-by-one
-        end = int(hit.qend) #TODO: double check this for off-by-one
-        ref_start = int(hit.tstart) #TODO: double check this for off-by-one
-        ref_end = int(hit.tend) #TODO: double check this for off-by-one
+        start = int(hit.qstart) - 1
+        end = int(hit.qend)
+        ref_start = int(hit.tstart)
+        ref_end = int(hit.tend)
         identity = float(hit.pident)
         ref_len = int(hit.tlen)
 
@@ -289,7 +289,7 @@ def nhmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue,
             contig_index = int(hit_name[0])
             contig_length = int(hit_name[2]) if len(hit_name) > 2 else None
             for domain in hit.domains:
-                if domain.i_evalue < evalue and domain.i_evalue >= min_evalue:
+                if domain.i_evalue <= evalue and domain.i_evalue >= min_evalue:
                     identity_sequence = getattr(domain.alignment, "identity_sequence", "")
                     match_positions = sum(1 for c in identity_sequence if c.isalpha())
                     alignment_length = domain.alignment.hmm_to - (domain.alignment.hmm_from - 1)
@@ -341,7 +341,7 @@ def infernal_hits_to_search_results(hits, references, evalue, db_name, min_evalu
         query_accession = top_hits.query.accession if top_hits.query.accession is not None else ""
         reference = references[query_name]
         for hit in top_hits:
-            if hit.evalue < evalue and hit.evalue >= min_evalue:
+            if hit.evalue <= evalue and hit.evalue >= min_evalue:
                 hit_name = hit.name.split(",")
                 contig_index = int(hit_name[0])
                 contig_length = int(hit_name[2]) if len(hit_name) > 2 else None
@@ -877,7 +877,7 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
     for feature_id in hits: #iterate through the CDS features
         feature = contig.features[feature_id]
         hits[feature_id].sort(key=lambda x: x.score, reverse=True)
-        hit_scores[feature_id] = hits[feature_id][0].score #TODO: this might be inconsistent if max_hits is 0, but it would be weird for max_hits to be 0.
+        hit_scores[feature_id] = hits[feature_id][0].score
         best_hits[feature_id] = hits[feature_id][0].name
         offset = codon_offset(feature) # residue 0 starts codon_start - 1 nucleotides into the CDS
         if best_annotation:
@@ -1324,7 +1324,7 @@ def build_parser():
     parser.add_argument('-Z', default=1000, type=int, 
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
                         "\n"
-                        "Set to 0 to use the number actual target sequences (currently this does not account for taxonomic filtering). " # TODO: account for taxonomy filtering
+                        "Set to 0 to use the number of target sequences in the input, counted before any taxonomy filter, so filtering does not change E-values. "
                         "Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.")
 
     parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001, 
@@ -1362,10 +1362,10 @@ def build_parser():
     #TODO: maybe add an hmm_batch_size parameter in case there are really huge hmm files that don't all fit in memory?
  
 
-    parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
+    parser.add_argument('--gene_call', type=str, default=None, choices=["all", "unannotated"], required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. "
                         "If you supply a nucleotide fasta file, be sure to also specify --alphabet nucleotide. "
-                        "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
+                        "-Z 0 can't be used with gene calling, because the number of target sequences isn't known until the genes are called.")
 
     add_max_output_gb_argument(parser)
     parser.add_argument('--config', action=ActionConfigFile)
@@ -1378,6 +1378,8 @@ def main(argv):
 
     if params.evalue > 10:
         parser.error("-e/--evalue must be <= 10.")
+    if params.Z == 0 and params.gene_call is not None:
+        parser.error("-Z 0 can't be used with --gene_call: give the database size explicitly.")
 
     if params.reference is None and params.foldseek is None:
         parser.error("You must specify at least one reference database (-r/--reference or --foldseek).")

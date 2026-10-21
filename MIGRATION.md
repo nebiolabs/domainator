@@ -155,6 +155,7 @@ Options not listed are unchanged.
 | genbank_to_fasta | `-o/--output` | `-o/--fasta_out` |
 | hmmer_build, hmmer_select, hmmer_search | `-o/--output` | `-o/--hmm_out` |
 | hmmer_compare | `-o/--output` | `-o/--tsv_out` |
+| | `--alignments` (alignments mixed into the TSV) | `--alignments_out PATH`, a separate file; the TSV is now always a plain table |
 | | `--score_cutoff` | `--min_score` |
 | hmmer_report | `-o/--output`, `--html`, `--json` | `-o/--tsv_out`, `--html_out`, `--json_out` |
 | hmmer_search | `--score_cutoff` | `--min_score` |
@@ -218,7 +219,12 @@ Options not listed are unchanged.
 
 - `-e/--evalue` keeps annotations with an e-value *at or below* the cutoff in every program.
   select_by_contig, select_by_cds and extract_peptides used to drop an annotation whose
-  e-value equaled the cutoff.
+  e-value equaled the cutoff, and so did the searches in domainate, domain_search and the
+  structure tools.
+- domainate and domain_search refuse `-Z 0` together with `--gene_call`: the number of
+  targets isn't known until the genes are called, so give the database size. `-Z 0` counts the
+  targets before any taxonomy filter (as before; now documented), so filtering doesn't change
+  E-values.
 - domainate `--max_overlap` rejects a hit only when it overlaps a better hit by *more* than the
   allowed fraction, as filter_domains `--max_overlap` does. A hit overlapping by exactly that
   fraction used to be rejected.
@@ -238,6 +244,12 @@ Options not listed are unchanged.
   files unless they store a symmetric matrix as its upper triangle, which 0.x rejects with an
   error.
 - `DataMatrix.write()` no longer accepts the `"sparse"` and `"dense"` output types; use `"hdf"`.
+- The `--json_out` documents of summary_report, matrix_report and ssn_navigator start with a
+  `schema_version` key; ssn_navigator's also has `query`, the mode that answered.
+- build_tree writes Newick branch lengths to six significant digits instead of two decimals.
+- XGMML attribute values are no longer escaped twice: a node named `A&B` used to show up in
+  Cytoscape as `A&amp;B`.
+- The GenBank qualifiers are documented in `docs/file_formats.md`, which is the 1.x contract.
 
 ## Python API
 
@@ -297,6 +309,7 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | domain_search | `decoy_names`, `dedup_both_strands` | `decoys`, `both_strands` |
 | find_features | `gpu_device` | `device` |
 | hmmer_search, hmmer_compare | `reference_files`, `score_cutoff` | `references`, `min_score` |
+| hmmer_compare | `out_handle`, `alignments` | `tsv_out_handle`, `alignments_out_handle` (either can be None) |
 | hmmer_select | `query_regex`, `query_exact`, `query_contains` | `regex`, `exact`, `contains` |
 | seq_dist, kmer_dist | `input_type`, `reference_path`, `reference_type` | `input_format`, `reference`, `reference_format` |
 | seq_dist | `diamond_params` | `diamond_args` |
