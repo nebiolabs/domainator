@@ -269,7 +269,7 @@ def test_enum_report_nucleotide_contig_annotations(shared_datadir):
 
         domainate_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "-o", annotated,
             "--evalue", "0.1",
@@ -301,7 +301,7 @@ def test_enum_report_nucleotide_architecture_detailed(shared_datadir):
 
         domainate_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "-o", annotated,
             "--evalue", "0.1",
@@ -328,7 +328,7 @@ def test_enum_report_nucleotide_by_cds_skips_pseudo_cdss(shared_datadir):
 
         domainate_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "-o", annotated,
             "--evalue", "0.1",
@@ -355,7 +355,7 @@ def test_enum_report_nucleotide_domain_search(shared_datadir):
 
         domain_search_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "-o", annotated,
             "--whole_contig",

@@ -19,6 +19,19 @@ def test_every_command_builds_its_parser(command):
     assert parser.description
 
 
+@pytest.mark.parametrize("command", sorted(TOOLS))
+def test_evalue_options_share_one_validator(command):
+    """-e/--evalue must be > 0 and --min_evalue >= 0 everywhere, checked at parse time."""
+    from jsonargparse.typing import NonNegativeFloat, PositiveFloat
+
+    parser = importlib.import_module(f"domainator.{TOOLS[command].module}").build_parser()
+    for action in parser._actions:
+        if "--evalue" in action.option_strings:
+            assert getattr(action, "_typehint", action.type) is PositiveFloat
+        if "--min_evalue" in action.option_strings:
+            assert getattr(action, "_typehint", action.type) is NonNegativeFloat
+
+
 def test_registry_categories_are_known():
     keys = {key for key, _ in CATEGORIES}
     assert {tool.category for tool in TOOLS.values()} <= keys
@@ -105,3 +118,57 @@ try domainator seq_dist --symmetrize ""
     commands, choices = result.stdout.strip().split("\n")
     assert commands.split() == ["domain_search"]
     assert choices.split() == ["max", "mean", "min", "none"]
+
+
+def test_domainator_errors_are_one_line_messages(shared_datadir, tmp_path, capsys):
+    """A DomainatorError is printed without a traceback and exits with status 1."""
+    bad = tmp_path / "bad.hdf5"
+    import h5py
+    with h5py.File(bad, "w") as f:
+        f.attrs["MATRIX_FILE_VERSION"] = "99.0"
+    assert cli.main(["build_tree", "-i", str(bad), "-o", str(tmp_path / "out.nwk")]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("domainator build_tree: error: Unsupported matrix file version '99.0'")
+    assert "Traceback" not in err
+
+
+def test_verbose_keeps_the_traceback(tmp_path):
+    from domainator.errors import FormatVersionError
+    bad = tmp_path / "bad.hdf5"
+    import h5py
+    with h5py.File(bad, "w") as f:
+        f.attrs["MATRIX_FILE_VERSION"] = "99.0"
+    with pytest.raises(FormatVersionError):
+        cli.main(["build_tree", "-v", "-i", str(bad), "-o", str(tmp_path / "out.nwk")])
+
+
+def test_quiet_and_verbose_set_the_log_level(shared_datadir, tmp_path, capsys):
+    import logging
+    out = str(tmp_path / "out.gb")
+    args = ["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--contigs", "pDONR201_1", "--cds_range", "3"]
+    assert cli.main(["trim_contigs", *args]) == 0
+    assert logging.getLogger("domainator").level == logging.INFO
+    assert cli.main(["trim_contigs", "-q", *args]) == 0
+    assert logging.getLogger("domainator").level == logging.ERROR
+    assert cli.main(["trim_contigs", "--verbose", *args]) == 0
+    assert logging.getLogger("domainator").level == logging.DEBUG
+    with pytest.raises(SystemExit):
+        cli.main(["trim_contigs", "-q", "-v", *args])
+    assert "not allowed with" in capsys.readouterr().err
+
+
+def test_warnings_are_logged_with_a_prefix(tmp_path, capsys):
+    from domainator.Bio.Seq import Seq
+    from domainator.Bio.SeqRecord import SeqRecord
+    from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature
+    from domainator.utils import write_genbank
+    # Every CDS is unannotated, so --unannotated would strip them all: trim_contigs warns and skips the contig.
+    record = SeqRecord(Seq("ATG" * 200), id="rec", annotations={"molecule_type": "DNA"})
+    record.features = [SeqFeature(FeatureLocation(0, 300, 1), type="CDS"), SeqFeature(FeatureLocation(400, 600, 1), type="CDS")]
+    in_gb = str(tmp_path / "in.gb")
+    write_genbank([record], in_gb)
+    args = ["trim_contigs", "-i", in_gb, "-o", str(tmp_path / "out.gb"), "--unannotated"]
+    assert cli.main(args) == 0
+    assert "warning: All CDSs in contig rec are composed of domains to be stripped" in capsys.readouterr().err
+    assert cli.main(args[:1] + ["-q"] + args[1:]) == 0
+    assert capsys.readouterr().err == ""

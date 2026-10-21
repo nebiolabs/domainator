@@ -16,7 +16,6 @@ from domainator import __version__
 from domainator.build_ssn import subset_matrix_by_labels
 from domainator.data_matrix import DataMatrix, MaxTree
 from domainator.output_guardrails import (
-    OutputSizeLimitExceeded,
     add_max_output_gb_argument,
     enforce_output_limit,
     make_temporary_output_path,
@@ -269,28 +268,25 @@ def main(argv):
     else:
         bundle_name = VIEWER_APP_NAME
 
-    try:
-        bundle = build_ssn_viewer_bundle(
-            DataMatrix.from_file(params.input),
-            metadata_files=params.metadata,
-            subset_labels=subset_labels,
-            merge_impact_metric=params.merge_impact_metric,
-            color_by=params.color_by,
-            label_by=params.label_by,
-            categorical_columns=params.categorical,
-            name=bundle_name,
-        )
-        # Serialize once; reuse bytes for both file output and HTML embedding.
-        need_compressed = params.dsnv_out is not None or params.embed_data
-        json_bytes, compressed_bytes = _serialize_ssn_viewer_bundle(bundle) if need_compressed else (None, None)
+    bundle = build_ssn_viewer_bundle(
+        DataMatrix.from_file(params.input),
+        metadata_files=params.metadata,
+        subset_labels=subset_labels,
+        merge_impact_metric=params.merge_impact_metric,
+        color_by=params.color_by,
+        label_by=params.label_by,
+        categorical_columns=params.categorical,
+        name=bundle_name,
+    )
+    # Serialize once; reuse bytes for both file output and HTML embedding.
+    need_compressed = params.dsnv_out is not None or params.embed_data
+    json_bytes, compressed_bytes = _serialize_ssn_viewer_bundle(bundle) if need_compressed else (None, None)
 
-        if params.dsnv_out is not None:
-            _write_compressed_ssn_viewer_bundle(params.dsnv_out, compressed_bytes, max_output_bytes=max_output_bytes)
-        if params.html_out is not None:
-            write_ssn_viewer_html(
-                params.html_out,
-                title=bundle_name,
-                embedded_bundle_json=compressed_bytes if params.embed_data else None,
-            )
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    if params.dsnv_out is not None:
+        _write_compressed_ssn_viewer_bundle(params.dsnv_out, compressed_bytes, max_output_bytes=max_output_bytes)
+    if params.html_out is not None:
+        write_ssn_viewer_html(
+            params.html_out,
+            title=bundle_name,
+            embedded_bundle_json=compressed_bytes if params.embed_data else None,
+        )

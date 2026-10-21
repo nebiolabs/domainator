@@ -5,6 +5,7 @@ An hmm file can also be used as a reference to make a table of profile scores fo
 An hmm file can also be used as both input and reference to compare profile similarity.
 
 """
+import logging
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 
@@ -13,7 +14,6 @@ import heapq
 import re
 import shlex
 import shutil
-import sys
 import subprocess
 import tempfile
 import threading
@@ -30,10 +30,13 @@ from domainator.utils import get_file_type, open_hmm_file, parse_seqfiles, make_
 from domainator.data_matrix import StreamingMstKnnAccumulator, symmetrize_matrix
 from domainator.hmmer_search import compare_hmmer
 from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
-from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.errors import ExternalToolError
+from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes
 from domainator.transform_matrix import MODES, LOG10_2
 from domainator.sparsify import (MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_option_label,
                                  sparsify_requested)
+
+logger = logging.getLogger(__name__)
 
 # Modes whose post-transform values are computable per edge (no global matrix maxes),
 # and therefore compatible with streaming --mst/--knn pruning.
@@ -456,10 +459,13 @@ def add_params_to_args_list(arg_list, params):
 
 
 def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode, max_hsps=1, min_score: float = 0.0, query_order=None, progress: bool = False,
-            diamond_params=None) -> Iterator[CmpResult]:
+            diamond_params=None, diamond_path=None) -> Iterator[CmpResult]:
     """
         runs a search using diamond, returns a list of tuples of (inputid, referenceid, score)
+
+        diamond_path: the diamond executable, if it is not "diamond" on the PATH.
     """
+    diamond_bin = diamond_path or "diamond"
     mode_to_arg = { 
                     "f": ["--fast"], 
                     "d":[],
@@ -471,25 +477,23 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
                     }
 
     dbpath =  tmpdir+"/"+"db"
-    mkdb_command = ["diamond", "makedb", "--in", reference_fasta, "-d", dbpath]
+    mkdb_command = [diamond_bin, "makedb", "--in", reference_fasta, "-d", dbpath]
     try:
         mkdb_result = subprocess.run(mkdb_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 encoding='utf-8')
     except FileNotFoundError:
-        print("Could not run 'diamond'. It is not on PATH.\n"
-              "  Install it (conda install -c bioconda diamond) or activate the environment\n"
-              "  that provides it, then re-run.", file=sys.stderr)
-        exit(1)
+        raise ExternalToolError(f"Could not run '{diamond_bin}'. It is not on PATH.\n"
+                                "  Install it (conda install -c bioconda diamond), activate the environment\n"
+                                "  that provides it, or give its location with --diamond_path, then re-run.") from None
 
     if mkdb_result.returncode != 0:
-        print(build_diamond_failure_message(
+        raise ExternalToolError(build_diamond_failure_message(
             "makedb", mkdb_result.returncode,
             (mkdb_result.stderr or "") + (mkdb_result.stdout or ""),
-            reference_fasta, tmpdir=tmpdir, command=mkdb_command), file=sys.stderr)
-        exit(1)
+            reference_fasta, tmpdir=tmpdir, command=mkdb_command))
 
     dmnd_command = [ "stdbuf", "-oL", "-eL",
-        "diamond", "blastp", "-q", input_fasta, "-d", dbpath, "-p", str(threads),
+        diamond_bin, "blastp", "-q", input_fasta, "-d", dbpath, "-p", str(threads),
         "--outfmt", "6", "qseqid", "sseqid", "bitscore",
         "--max-hsps", str(max_hsps), "--verbose"
     ]
@@ -510,7 +514,7 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
     add_params_to_args_list(dmnd_command, overridable_params)
 
     # Echo the exact command so a run can be reproduced or retuned straight from a log.
-    print("Running diamond:\n  " + " ".join(dmnd_command), file=sys.stderr, flush=True)
+    logger.info("Running diamond:\n  " + " ".join(dmnd_command))
 
     try:
         dmnd_process = subprocess.Popen(
@@ -521,10 +525,9 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
             bufsize=1,
         )
     except FileNotFoundError as exc:
-        missing = "stdbuf" if "stdbuf" in str(exc) else "diamond"
-        print(f"Could not run '{missing}'. It is not on PATH.\n"
-              f"  Command: {' '.join(dmnd_command)}", file=sys.stderr)
-        exit(1)
+        missing = "stdbuf" if "stdbuf" in str(exc) else diamond_bin
+        raise ExternalToolError(f"Could not run '{missing}'. It is not on PATH.\n"
+                                f"  Command: {' '.join(dmnd_command)}") from None
 
     stderr_lines = list()
     stderr_thread = None
@@ -561,10 +564,9 @@ def diamond(input_fasta, reference_fasta, max_target_seqs, threads, tmpdir, mode
             _finish_query_progress(query_progress, current_query_idx, len(query_order))
 
     if returncode != 0:
-        print(build_diamond_failure_message(
+        raise ExternalToolError(build_diamond_failure_message(
             "blastp", returncode, "".join(stderr_lines), input_fasta,
-            tmpdir=tmpdir, command=dmnd_command, diamond_params=diamond_params), file=sys.stderr)
-        exit(1)
+            tmpdir=tmpdir, command=dmnd_command, diamond_params=diamond_params))
 
 def make_seq_name_to_idx_dict(input_path):
     name_to_idx = OrderedDict()
@@ -718,7 +720,7 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_per_query, algorithm, mode, threads, hdf, dense_text, lb, max_output_bytes=None, progress: bool = False, mst: bool = False, knn=None, diamond_params=None, symmetrize: str = "none"):
+def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_per_query, algorithm, mode, threads, hdf, dense_text, lb, max_output_bytes=None, progress: bool = False, mst: bool = False, knn=None, diamond_params=None, symmetrize: str = "none", diamond_path=None):
     """
 
     """
@@ -773,11 +775,11 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
                 tmpdir=tmpdir, diamond_params=diamond_params,
             )
             if preflight is not None:
-                print(preflight, file=sys.stderr, flush=True)
+                logger.warning(preflight)
 
             # call diamond
             
-            results_iter = diamond(dmnd_input, dmnd_ref, max_hits_per_query, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params)
+            results_iter = diamond(dmnd_input, dmnd_ref, max_hits_per_query, threads, tmpdir, parts[1], min_score=lb, query_order=query_idx_to_name, progress=progress, diamond_params=diamond_params, diamond_path=diamond_path)
             score_progress = False
         
         elif algorithm == "hmmer":
@@ -868,20 +870,17 @@ def seq_dist(input_path, input_type, reference_path, reference_type, max_hits_pe
     query_idx_to_len = np.array(query_idx_to_len)
     db_idx_to_len = np.array(db_idx_to_len)
     if progress:
-        print("Transforming matrix...", flush=True, file=sys.stderr)
+        logger.info("Transforming matrix...")
     if not sparsify and MODES[mode] is not None:
         matrix = MODES[mode](matrix, query_idx_to_len, db_idx_to_len)
 
 
-    try:
-        write_matrix_outputs(
-            matrix, query_idx_to_name, db_idx_to_name,
-            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
-            row_lengths=query_idx_to_len, col_lengths=db_idx_to_len, data_type=mode,
-        )
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    write_matrix_outputs(
+        matrix, query_idx_to_name, db_idx_to_name,
+        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+        mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
+        row_lengths=query_idx_to_len, col_lengths=db_idx_to_len, data_type=mode,
+    )
 
 def build_parser():
     parser = tool_parser(__doc__)
@@ -917,12 +916,15 @@ def build_parser():
                              "Useful for large all-vs-all runs, where diamond's seed-search scratch can exceed available disk: "
                              "a smaller --block-size (-b) and/or more --index-chunks (-c) bound its peak scratch usage.")
 
+    parser.add_argument("--diamond_path", type=str, default=None,
+                        help="path to the diamond executable, if it is not on the PATH.")
+
     add_sparsify_arguments(parser, requirements="Computed while streaming, so the full matrix is never held in memory. Requires the reference to be the same file as the input (a square, symmetric comparison) and --mode in {score, bool, efi_score}; bool selects on the scores and then keeps the selected cells as 1. Best paired with --hdf_out.")
 
     add_symmetrize_argument(parser, extra_help="Applied to the raw scores, after --threshold and --max_hits_per_query. Requires the reference to be the same file as the input. Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
     parser.add_argument("--mode", type=str, required=False, default="score", choices=set(MODES.keys()),
-                        help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: score")
+                        help="what kind of values should be in the matrix. score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)).")
 
     parser.add_argument('--cpu', type=int, default=0, required=False,
                         help="how many cpu threads to use. 0: one per physical core.")
@@ -967,4 +969,4 @@ def main(argv):
     if diamond_params and not params.algorithm.startswith("diamond"):
         raise ValueError(f"--diamond_args only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
 
-    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, hdf, dense_text, params.threshold, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params, symmetrize=params.symmetrize)
+    seq_dist(params.input, input_type, reference_path, reference_type, params.max_hits_per_query, params.algorithm, params.mode, cpus, hdf, dense_text, params.threshold, max_output_bytes=max_output_bytes, progress=params.progress, mst=params.mst, knn=params.knn, diamond_params=diamond_params, symmetrize=params.symmetrize, diamond_path=params.diamond_path)

@@ -77,7 +77,7 @@ def test_summary_report_nucleotide_annotations(shared_datadir):
 
         domainate_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "-o", annotated,
             "--evalue", "0.1",

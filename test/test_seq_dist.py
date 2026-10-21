@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from domainator import seq_dist
@@ -172,7 +173,7 @@ def test_seq_dist_max_output_gb_blocks_dense_output(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
 
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             seq_dist.main([
                 "-i", str(shared_datadir / "FeSOD_20.fasta"),
                 "-r", str(shared_datadir / "FeSOD_20.fasta"),
@@ -715,17 +716,17 @@ def test_diamond_failure_message_falls_back_to_stderr():
 
 
 @pytest.mark.requires_binary("diamond")
-def test_seq_dist_reports_rejected_diamond_option(shared_datadir, capsys):
+def test_seq_dist_reports_rejected_diamond_option(shared_datadir):
     """End-to-end: a bad --diamond_args flag reaches diamond and is reported usefully."""
+    from domainator.errors import ExternalToolError
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
-        with pytest.raises(SystemExit):
+        with pytest.raises(ExternalToolError) as excinfo:
             seq_dist.main(["-i", fasta, "-r", fasta, "--hdf_out", out, "--mode", "score",
                            "--diamond_args=--no-such-flag 1"])
-    captured = capsys.readouterr()
-    assert "rejected one of its command line options" in captured.err
-    assert "--no-such-flag" in captured.err
+    assert "rejected one of its command line options" in str(excinfo.value)
+    assert "--no-such-flag" in str(excinfo.value)
 
 
 def test_diamond_preflight_warns_only_on_the_risky_configuration(tmp_path):

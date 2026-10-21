@@ -25,6 +25,7 @@ from itertools import islice
 from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 
 from domainator.cli.common import STDIN_PATHS, add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
@@ -291,7 +292,7 @@ def build_parser():
     parser.add_argument("-Z", default=1000, type=int,
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
                         "Set to 0 to use the number of actual target sequences in the input files (not available when reading from stdin).")
-    parser.add_argument("-e", "--evalue", type=float, default=0.001,
+    parser.add_argument("-e", "--evalue", type=PositiveFloat, default=0.001,
                         help="threshold E value for domains to rotate on. Both new and pre-existing annotations must pass this threshold. Must be <=10.")
 
     parser.add_argument("--domains", type=str, default=None, nargs="+",
@@ -318,7 +319,7 @@ def build_parser():
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode before the search. If 'all', then any existing CDS and domainator annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. "
                         "Needed to search protein references against contigs without CDS annotations, such as fasta records.")
     parser.add_argument("--cpu", type=int, default=0,
-                        help="the number of cores of the cpu which are used at a time to run the search [default: use all available cores]")
+                        help="the number of cores of the cpu which are used at a time to run the search (0: one thread per physical core)")
     parser.add_argument("--max_mode", action="store_true", default=False,
                         help="Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
     parser.add_argument("--batch_size", type=int, default=1000,
@@ -333,7 +334,7 @@ def main(argv):
     params = parser.parse_args(argv)
 
     if params.evalue > 10:
-        raise ValueError("evalue must be <= 10.")
+        parser.error("-e/--evalue must be <= 10.")
 
     domains = list_and_file_to_dict_keys(params.domains, params.domains_file, as_set=True)
 

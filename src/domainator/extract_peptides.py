@@ -14,6 +14,7 @@ Criteria are combined with the following logic:
 """
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 from typing import Optional, Set
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
@@ -214,7 +215,7 @@ def build_parser():
                         help='The CDS qualifier to preferentially use as the name of the peptide.'
                         ' If not supplied, then qualifiers will be checked in order of: ["protein_id", "gene_id", "locus_tag", "gene"]')
 
-    parser.add_argument('-e', '--evalue', type=float, default=None,
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=None,
                         help="the evalue cutoff (max) for domain annotations to be put onto the new genbank file. Default: no cutoff.")
     
 

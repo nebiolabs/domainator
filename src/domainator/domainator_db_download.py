@@ -27,6 +27,7 @@
 """
 
 from jsonargparse import ActionConfigFile
+import logging
 import gzip
 import os
 import shutil
@@ -37,7 +38,6 @@ from domainator.cli.common import add_output, add_switch, check_outputs, resolve
 from domainator.Bio import SeqIO
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
-import sys
 from domainator.Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
 from domainator.utils import write_genbank, parse_seqfiles, filter_by_taxonomy, list_and_file_to_dict_keys, make_pool, make_manager, compile_taxonomy_allowed, get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
 from domainator import __version__
@@ -50,6 +50,8 @@ import functools
 from contextlib import nullcontext
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+logger = logging.getLogger(__name__)
 
 # TODO: write tests for genbank downloads.
 # TODO: NCBI TSA, mgnify, other databases, maybe with automatic taxonomy assignment if not annotated, that would be cool!
@@ -84,7 +86,7 @@ def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict
                 out["versionless_accession"] = out["assembly_accession"].split(".")[0]
                 yield out
 
-    print(f"Loading assembly_summary_genbank.txt", file=sys.stderr)
+    logger.info(f"Loading assembly_summary_genbank.txt")
     # Open the file and parse it
     if file_path is not None:
         with open(file_path) as f:
@@ -155,12 +157,10 @@ def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_
     else:
         summary = process_genbank_accessions(genbank_accessions, output_handle, gene_call, num_recs, download_workers, success_rec_log, user_agent)
 
-    print(
+    logger.info(
         f"Download summary ({download_backend} backend): "
         f"targeted={targeted}, appended={summary.get('appended', 0)}, "
-        f"failed={summary.get('failed', 0)}, missing={summary.get('missing', 0)}",
-        file=sys.stderr,
-    )
+        f"failed={summary.get('failed', 0)}, missing={summary.get('missing', 0)}")
 
 def filter_by_accession_exclusion(genbank_accessions, exclude_accessions):
     """
@@ -176,7 +176,7 @@ def filter_by_accession_exclusion(genbank_accessions, exclude_accessions):
 
     if exclude_accessions is not None:
         genbank_accessions = [r for r in genbank_accessions if r['versionless_accession'] not in exclude_accessions]
-        print(f"{len(genbank_accessions)} accessions after filtering by accession exclusion", file=sys.stderr)
+        logger.info(f"{len(genbank_accessions)} accessions after filtering by accession exclusion")
 
     return genbank_accessions
 
@@ -195,11 +195,11 @@ def filter_by_date(genbank_accessions, before:Optional[datetime.date], after:Opt
 
     if before is not None:
         genbank_accessions = [r for r in genbank_accessions if datetime.datetime.strptime(r['seq_rel_date'], "%Y/%m/%d").date() < before]
-        print(f"{len(genbank_accessions)} accessions before {before}", file=sys.stderr)
+        logger.info(f"{len(genbank_accessions)} accessions before {before}")
 
     if after is not None:
         genbank_accessions = [r for r in genbank_accessions if datetime.datetime.strptime(r['seq_rel_date'], "%Y/%m/%d").date() > after]
-        print(f"{len(genbank_accessions)} accessions after {after}", file=sys.stderr)
+        logger.info(f"{len(genbank_accessions)} accessions after {after}")
 
     return genbank_accessions
 
@@ -215,7 +215,7 @@ def filter_by_ftp_path(genbank_accessions):
     """
 
     filtered_gb_accessions = [r for r in genbank_accessions if r['ftp_path'].strip() != "na"]
-    print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt", file=sys.stderr)
+    logger.info(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt")
     return filtered_gb_accessions
 
 def filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, exclude_taxa, taxonomy_database, taxonomy_expr=None):
@@ -238,7 +238,7 @@ def filter_genbank_accessions_by_taxonomy(genbank_accessions, include_taxa, excl
 
     filtered_gb_accessions = [r for r in genbank_accessions if int(r['taxid']) in allowed]
 
-    print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by taxonomy", file=sys.stderr)
+    logger.info(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by taxonomy")
     return filtered_gb_accessions
 
 def filter_by_unique_taxid(genbank_accessions, taxonomy_database):
@@ -268,7 +268,7 @@ def filter_by_unique_taxid(genbank_accessions, taxonomy_database):
             seen.add(taxid)
             filtered_gb_accessions.append(r)
 
-    print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by unique taxid", file=sys.stderr)
+    logger.info(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by unique taxid")
     return filtered_gb_accessions
 
 def filter_by_refseq_category(genbank_accessions):
@@ -283,7 +283,7 @@ def filter_by_refseq_category(genbank_accessions):
     """
 
     filtered_gb_accessions = [r for r in genbank_accessions if r['refseq_category'] != "na"]
-    print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by refseq_category != na", file=sys.stderr)
+    logger.info(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by refseq_category != na")
     return filtered_gb_accessions
 
 def filter_by_assembly_level(genbank_accessions, categories={"Complete Genome"}):
@@ -299,7 +299,7 @@ def filter_by_assembly_level(genbank_accessions, categories={"Complete Genome"})
     """
 
     filtered_gb_accessions = [r for r in genbank_accessions if r['assembly_level'] in categories]
-    print(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by assembly_level in {categories}", file=sys.stderr)
+    logger.info(f"{len(filtered_gb_accessions)} accessions in assembly_summary_genbank.txt after filtering by assembly_level in {categories}")
     return filtered_gb_accessions
 
 def _is_gzip(path):
@@ -361,7 +361,7 @@ def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, record
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
 
     if not gbff_is_valid(gbff_path):
-        print(f"error: gbff validation failed for {gbff_path}, skipping", file=sys.stderr)
+        logger.warning(f"gbff validation failed for {gbff_path}, skipping")
         return False
 
     clear_domainator_annotations = True
@@ -393,10 +393,10 @@ def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, record
         return True
 
     except EOFError as e:
-        print(f"error parsing {gbff_path}: {e}", file=sys.stderr)
+        logger.warning(f"error parsing {gbff_path}: {e}")
         return False
     except Exception as e:
-        print(f"error processing {gbff_path}: {e}", file=sys.stderr)
+        logger.warning(f"error processing {gbff_path}: {e}")
         return False
 
 def worker_process(r, output_file_path, gene_call, num_recs, records_written, lock, user_agent=None):
@@ -433,10 +433,10 @@ def worker_process(r, output_file_path, gene_call, num_recs, records_written, lo
         return r["versionless_accession"]
 
     except requests.RequestException as e:
-        print(f"error downloading {remote_nucleotide_file}: {e}", file=sys.stderr)
+        logger.warning(f"error downloading {remote_nucleotide_file}: {e}")
         return False
     except Exception as e:
-        print(f"error processing {remote_nucleotide_file}: {e}", file=sys.stderr)
+        logger.warning(f"error processing {remote_nucleotide_file}: {e}")
         return False
 
 def process_genbank_accessions(genbank_accessions, output_file_path, gene_call, num_recs, download_workers:int=1, success_rec_log=None, user_agent=None):
@@ -550,7 +550,7 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
         last_rc = None
         last_result = None
         for attempt in range(1, retries + 1):
-            print("+ " + " ".join(str(c) for c in cmd), file=sys.stderr)
+            logger.info("+ " + " ".join(str(c) for c in cmd))
             result = subprocess.run(cmd)
             if result.returncode == 0:
                 return result
@@ -558,14 +558,14 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
             last_result = result
             if attempt < retries:
                 wait = 30 * attempt
-                print(f"command failed (rc={last_rc}); retrying in {wait}s "
-                      f"(attempt {attempt}/{retries - 1} of retries used)", file=sys.stderr)
+                logger.warning(f"command failed (rc={last_rc}); retrying in {wait}s "
+                      f"(attempt {attempt}/{retries - 1} of retries used)")
                 time.sleep(wait)
         if check:
             raise RuntimeError(f"command failed (rc={last_rc}) after {retries} attempt(s): "
                                f"{' '.join(str(c) for c in cmd)}")
-        print(f"command failed (rc={last_rc}) after {retries} attempt(s): "
-              f"{' '.join(str(c) for c in cmd)}", file=sys.stderr)
+        logger.warning(f"command failed (rc={last_rc}) after {retries} attempt(s): "
+              f"{' '.join(str(c) for c in cmd)}")
         return last_result
 
     download_cmd = [datasets_bin, "download", "genome", "accession", "--inputfile", str(accession_file),
@@ -604,11 +604,11 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     requested_accessions = {a.split(".")[0] for a in accessions}
     missing = len(requested_accessions - found_accessions)
     if rehydrate_result is not None and rehydrate_result.returncode != 0:
-        print(f"warning: `datasets rehydrate` exited rc={rehydrate_result.returncode} "
+        logger.warning(f"`datasets rehydrate` exited rc={rehydrate_result.returncode} "
               f"(some assemblies unavailable); proceeding with the {len(gbff_files)} genome(s) "
-              f"that rehydrated.", file=sys.stderr)
+              f"that rehydrated.")
     if missing:
-        print(f"warning: {missing} requested assemblies have no .gbff.gz after rehydrate", file=sys.stderr)
+        logger.warning(f"{missing} requested assemblies have no .gbff.gz after rehydrate")
 
     success_log_handle = None
     if success_rec_log is not None:
@@ -943,7 +943,7 @@ def build_parser():
 
     parser.add_argument("--ncbi_summary", type=str, default=None, help="Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt.")
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
-                        help="When activated, for nucleotide databases, such as Genbank, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None].")
+                        help="When activated, for nucleotide databases, such as Genbank, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated.")
     parser.add_argument("--max_records", type=int, default=None, help="Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.")
     parser.add_argument("--append", action="store_true", help="Append to existing file") 
     parser.add_argument("--before", type=str, default=None, help="For ncbi databases, only download records before this date. Format is YYYY-MM-DD.")
@@ -952,9 +952,9 @@ def build_parser():
                         help="the number of cores of the cpu which are used at a time to download ncbi records. 0: one per physical core.")
 
     parser.add_argument('--download_backend', type=str.lower, default="datasets", choices={"direct", "datasets"},
-                        help="Network backend for ncbi genome downloads. 'datasets' uses the NCBI Datasets CLI dehydrate/rehydrate workflow (recommended for large jobs; NCBI's own bulk tool handles throttling). 'direct' downloads .gbff.gz files over HTTPS directly. [default: datasets]")
+                        help="Network backend for ncbi genome downloads. 'datasets' uses the NCBI Datasets CLI dehydrate/rehydrate workflow (recommended for large jobs; NCBI's own bulk tool handles throttling). 'direct' downloads .gbff.gz files over HTTPS directly.")
     parser.add_argument('--download_workers', type=int, default=3,
-                        help="For the 'direct' backend: number of simultaneous HTTPS connections to the NCBI genomes server. NCBI rate-limits by concurrency, so keep this low (~3). 0 = use --cpu. With --gene_call set, prodigal runs inside these workers. [default: 3]")
+                        help="For the 'direct' backend: number of simultaneous HTTPS connections to the NCBI genomes server. NCBI rate-limits by concurrency, so keep this low (~3). 0 = use --cpu. With --gene_call set, prodigal runs inside these workers.")
     parser.add_argument('--email', type=str, default=None,
                         help="Contact email included in the User-Agent header sent to NCBI (politeness; not an API key). Falls back to the NCBI_EMAIL environment variable.")
     parser.add_argument('--ncbi_api_key', type=str, default=None,

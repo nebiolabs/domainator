@@ -370,7 +370,6 @@ def test_rotate_config_file(shared_datadir):
     ([], "Specify references, domains, or search_hits"),
     (["--domains", "DHFR_1", "--gene_call", "unannotated"], "gene_call only applies"),
     (["--domains", "DHFR_1", "-r", "SPR.hmm", "--gene_call", "all"], "gene_call 'all'"),
-    (["--domains", "DHFR_1", "-e", "11"], "evalue must be"),
 ])
 def test_rotate_validation(shared_datadir, args, match):
     args = [str(shared_datadir / arg) if arg.endswith(".hmm") else arg for arg in args]
@@ -379,6 +378,12 @@ def test_rotate_validation(shared_datadir, args, match):
         with pytest.raises(ValueError, match=match):
             rotate_contigs.main(["-i", str(shared_datadir / SPR), "-o", out] + args)
         assert not os.path.exists(out)
+
+
+def test_rotate_rejects_evalue_above_10(shared_datadir, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        rotate_contigs.main(["-i", str(shared_datadir / SPR), "-o", str(tmp_path / "out.gb"), "--domains", "DHFR_1", "-e", "11"])
+    assert "-e/--evalue must be <= 10" in capsys.readouterr().err
 
 
 def test_rotate_z0_stdin(shared_datadir, monkeypatch):

@@ -31,7 +31,7 @@
     },
     {
       "name": "Fasta Type",
-      "parameter": "fasta_type",
+      "parameter": "alphabet",
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
@@ -40,7 +40,7 @@
       ],
       "default": "protein",
       "flags": [
-        "--fasta_type"
+        "--alphabet"
       ]
     },
     {

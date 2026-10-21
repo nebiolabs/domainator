@@ -60,7 +60,7 @@ def build_parser():
                         Files are tab separated with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000""")
     add_output(parser, "svg", "Write the legend to this svg file.", primary=True, required=True)
     parser.add_argument("--title", default="Legend", type=str, required=False,
-                        help="Title of the legend. Default: 'Legend'")
+                        help="Title of the legend.")
     #TODO: font, font size, indicator shape, etc.
 
     parser.add_argument('--config', action=ActionConfigFile)

@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 from domainator import build_ssn
 from domainator.utils import OTHER_COLOR
 from domainator.data_matrix import DataMatrix, MaxTree, mst_knn_edge_index_dict
@@ -313,7 +314,7 @@ def test_build_ssn_max_output_gb_blocks_xgmml(shared_datadir):
         out_clusters = output_dir + f"/{input_file}_out_clusters.tsv"
         out_cytoscape = output_dir + f"/{input_file}_out.xgmml"
 
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             build_ssn.main([
                 "-i", str(shared_datadir / input_file),
                 "--xgmml_out", out_cytoscape,

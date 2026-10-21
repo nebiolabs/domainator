@@ -29,6 +29,7 @@ but the contigs that would have been selected by the middle expression are inste
 
 """
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 import sys
 
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
@@ -289,7 +290,7 @@ def build_parser():
 
     parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
 
-    parser.add_argument('-e', '--evalue', default=None, type=float,
+    parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="the evalue cutoff (max) for domain annotations to be considered when selecting by domain. Default: no cutoff.")
 
     parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")

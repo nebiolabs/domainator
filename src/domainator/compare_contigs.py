@@ -19,7 +19,8 @@ from domainator.data_matrix import DataMatrix, StreamingMstKnnAccumulator, mirro
 from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_arguments, sparsify_matrix, sparsify_requested
 from domainator.filter_domains import filter_domains
 from domainator.matrix_output import add_matrix_output_arguments, resolve_matrix_outputs, write_matrix_outputs
-from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.errors import DomainatorError
+from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes
 from typing import Optional, Set
 import numpy as np
 import scipy.sparse
@@ -467,7 +468,7 @@ _OPTIMAL_LEAF_ORDERING_WARN_CONTIGS = 5000
 _CONDENSED_BLOCK_NNZ = 1 << 20
 
 
-class SortMemoryLimitExceeded(RuntimeError):
+class SortMemoryLimitExceeded(DomainatorError, RuntimeError):
     """Raised when sorting the contigs for genbank output would need more memory than is available."""
 
 
@@ -866,7 +867,4 @@ def main(argv):
     contigs_needed = list_and_file_to_dict_keys(params.contigs, params.contigs_file)
     
     # Run
-    try:
-        compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.threshold, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn, check_sort_memory=not params.skip_sort_memory_check)
-    except (OutputSizeLimitExceeded, SortMemoryLimitExceeded) as exc:
-        raise SystemExit(str(exc)) from None
+    compare_contigs(genbanks, metrics, reports, params.max_hits_per_query, contigs=contigs_needed, name_by_order=params.name_by_order, lb=params.threshold, progress=params.progress, cpu=cpus, mst=params.mst, knn=params.knn, check_sort_memory=not params.skip_sort_memory_check)

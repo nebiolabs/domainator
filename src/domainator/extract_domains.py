@@ -11,6 +11,7 @@ can write a fasta or a genbank file
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id, pad_location, get_cds_unique_name, cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES, partial_help
@@ -175,7 +176,7 @@ def build_parser():
     parser.add_argument('--contigs_file', default=None, 
                         help="only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
-    parser.add_argument('-e', '--evalue', default=None, type=float,
+    parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="the evalue cutoff (max) for domain annotations to be extracted")
     parser.add_argument("--min_score", type=float, default=None, required=False, 
                         help="the score cutoff (min) for domain annotations to be extracted")

@@ -20,6 +20,16 @@ script (see the README).
 Options must be spelled out in full. 0.x accepted any unambiguous prefix (`--alignment` for
 `--alignments`); 1.0 does not.
 
+Every program takes `-v/--verbose` (debug output) and `-q/--quiet` (errors only: no progress
+messages or warnings). `build_tree --quiet` is now this shared option.
+
+Problems with inputs, options, or external programs print one line,
+`domainator <command>: error: ...`, and exit with status 1; usage errors exit with status 2.
+`-v` shows the traceback. In Python, these errors are subclasses of
+`domainator.errors.DomainatorError` (and of `ValueError` or `RuntimeError`, as before). Tools that
+used to `exit(1)` from library code (seq_dist's diamond errors) or raise `SystemExit` for
+`--max_output_gb` now raise `ExternalToolError` or `OutputSizeLimitExceeded`.
+
 ## Inputs and outputs
 
 **Nothing reads stdin or writes stdout unless asked to.** Use `-` as the path:
@@ -81,7 +91,9 @@ Output ending in `.gz` is compressed for every GenBank, FASTA, and TSV output.
 | `--max_domains` (domainate, structure_domainate) | `--max_hits_per_cds` | unlimited by default; `0` is an error |
 | `--aligner_arg` | `--foldseek_args`, `--reseek_args` | one quoted string: `--foldseek_args="--prefilter-mode 2"` |
 | `--params` | `--diamond_args` (seq_dist), `--<algorithm>_args` (deduplicate_genbank, build_projection) | one quoted string |
+| `--fasta_type` (domainate, domain_search, clean_sequences, deduplicate_genbank, find_features, kmer_dist) | `--alphabet {nucleotide,protein}` | the molecule type of FASTA input |
 | `-e/--evalue` in filtering programs | unchanged, but the default is now "no cutoff" | was 1e8 in some programs and none in others |
+| `-e/--evalue`, `--min_evalue` | unchanged | must be greater than 0 (`--min_evalue`: at least 0); checked when the command line is parsed |
 | `--cpu` | unchanged | `0` (the default) now means one thread per physical core everywhere |
 
 ## Program-specific changes
@@ -110,6 +122,7 @@ Options not listed are unchanged.
 | deduplicate_genbank | `-o/--output` + `--fasta_out` switch, `--log`, `--cluster_table` | `-o/--genbank_out`, `--fasta_out`, `--log_out`, `--cluster_tsv_out` |
 | | `--id` | `--identity` |
 | | `--params` | `--cdhit_args`, `--usearch_args`, `--diamond_args` |
+| | `--bin_path` | `--cdhit_path`, `--cdhit_est_path`, `--usearch_path`, `--diamond_path` |
 | domain_search | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `-r/--references` | `-r/--reference` |
 | | `--pad_where` | `--anchor` |
@@ -120,6 +133,7 @@ Options not listed are unchanged.
 | | `--max_domains` | `--max_hits_per_cds` |
 | | `--esm2_3Di_weights`, `--esm2_3Di_device` | `--esm2_3di_weights`, `--esm2_3di_device` |
 | | `--offset`, `--recs_to_read` | removed |
+| | | new: `--foldseek_path` |
 | enum_report | `-o/--output`, `--html`, `--json` | `-o/--tsv_out`, `--html_out`, `--json_out` |
 | extract_domains | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--score` | `--min_score` |
@@ -150,6 +164,7 @@ Options not listed are unchanged.
 | | `--lb` | `--threshold` |
 | matrix_report | `-o/--output`, `--html`, `--json` | `-o/--text_out`, `--html_out`, `--json_out` |
 | plot_contigs | `--html` | `-o/--html_out` |
+| | | new: `--color_table`, colors for `--color_by` values |
 | rotate_contigs | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `-r/--references` | `-r/--reference` |
 | | `--where` | `--anchor` |
@@ -169,6 +184,7 @@ Options not listed are unchanged.
 | | `--lb` | `--threshold` |
 | | `--input_type`, `--reference_type` | `--input_format`, `--reference_format` |
 | | `--params '"-c":4'` | `--diamond_args="-c 4"` |
+| | | new: `--diamond_path` |
 | sort_contigs | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | split_by_cluster | `--outdir` | `--output_dir` |
 | | `--lb` | `--threshold` |
@@ -192,6 +208,8 @@ Options not listed are unchanged.
 | trim_contigs | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `--kb_both`, `--cds_both` | `--kb_range`, `--cds_range` |
 | | `--no_domain` | `--unannotated` |
+| | | new: `-e/--evalue` and `--databases` limit which domain annotations count when trimming by domain |
+| | `--unannotated` on its own did nothing | trims unannotated CDSs from both ends |
 | format_db | `--log` | `--log_out` |
 | | `--compress` / `--bgzf` | `--compress` |
 | | `--cpu` (default 1) | `--cpu` (default 0: all physical cores) |

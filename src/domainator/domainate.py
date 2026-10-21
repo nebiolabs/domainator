@@ -15,10 +15,11 @@ import warnings
 warnings.filterwarnings("ignore", module='numpy')
 import sys
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 from typing import NamedTuple, List, Dict, Optional, Union
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
-from domainator.output_guardrails import OutputSizeLimitExceeded, add_max_output_gb_argument, max_output_gb_to_bytes
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
 from domainator import utils, DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
@@ -433,7 +434,7 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     
     return out
 
-def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None):
+def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None, foldseek_path=None):
     """
     Args:
         proteins: list
@@ -484,7 +485,7 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
                 hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **varargs)
                 hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "phmmer", out)
             elif algorithm == "foldseek":
-                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue, device = foldseek_device)
+                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue, device = foldseek_device, foldseek_path = foldseek_path)
                 foldseek_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "foldseek", out)
             elif algorithm == "nhmmer":
                 hits = pyhmmer.hmmer.nhmmer(db_dict[db_name].values(), nucleic_acids, cpus=cpu, E=evalue, incE=evalue)
@@ -939,7 +940,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None, foldseek_path=None):
     """
 
     Args:
@@ -963,7 +964,7 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
     Returns:
         : 
     """
-    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
+    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device, foldseek_path=foldseek_path) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
@@ -1114,7 +1115,7 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         feature.qualifiers['cds_id'] = [get_cds_unique_name(feature)]
         rec.features.append(feature)
 
-def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, partial="include"):
+def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3Di_weights=None, esm2_3Di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, partial="include", foldseek_path=None):
     """
     The main function of the hmmer domain annotation algorithm
 
@@ -1176,6 +1177,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
 
         foldseek_device: device to run the foldseek search on. "cpu" (or None) for CPU search,
             or a CUDA device string ("cuda", "cuda:0", ...) for GPU-accelerated search. [default: None]
+        foldseek_path: the foldseek executable, if it is not on the PATH. [default: None]
 
     """
 
@@ -1266,7 +1268,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path)
             for contig_id in return_contigs:
                 yield contigs_list[contig_id]
             contigs_list = list()
@@ -1276,7 +1278,7 @@ def domainate(seq_iterator, references, z, evalue=10, max_hits=sys.maxsize, max_
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path)
     for contig_id in return_contigs:
         yield contigs_list[contig_id]
 
@@ -1284,9 +1286,8 @@ def build_parser():
     parser = tool_parser(__doc__)
 
 
-    add_input(parser, "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.", stdin=False)
-    parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
-                        help="Whether the sequences in fasta files are protein or nucleotide sequences.")
+    add_input(parser, "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which.", stdin=False)
+    add_alphabet(parser)
     
     # TODO: might be better to allow user to have different command line arguments for different kinds of databases? Particularly for precompiled databases like hhsuite and foldseek.
     parser.add_argument('-r', '--reference', required=False, type=str,
@@ -1303,21 +1304,23 @@ def build_parser():
                         help="device to use for the foldseek search. 'cpu' for a CPU-only search, "
                         "or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) to enable GPU-accelerated search. "
                         "GPU search requires a recent foldseek and a GPU-compatible (padded) target database "
-                        "(see 'foldseek makepaddedseqdb'). [default: cpu]")
+                        "(see 'foldseek makepaddedseqdb').")
+    parser.add_argument("--foldseek_path", default=None, type=str, required=False,
+                        help="path to the foldseek executable, if it is not on the PATH.")
     
     add_seq_outputs(parser)
 
 
     parser.add_argument('-Z', default=1000, type=int, 
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
-                        "Default: 1000\n"
-                        "Set to 0 to use the number actual target sequences (currently this does does not account for taxonomic filtering)." # TODO: account for taxonomy filtering
+                        "\n"
+                        "Set to 0 to use the number actual target sequences (currently this does not account for taxonomic filtering). " # TODO: account for taxonomy filtering
                         "Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.")
 
-    parser.add_argument('-e', '--evalue', type=float, default=0.001, 
-                        help="threshold E value for the domain hit. Must be <=10. [default 0.001]")
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001, 
+                        help="threshold E value for the domain hit. Must be <=10.")
     
-    parser.add_argument('--min_evalue', type=float, default=0.0,
+    parser.add_argument('--min_evalue', type=NonNegativeFloat, default=0.0,
                         help="hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. [default 0]")
 
     parser.add_argument('--max_hits_per_cds', type=int, default=None,
@@ -1334,7 +1337,7 @@ def build_parser():
     parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
     parser.add_argument('--cpu', type=int, default=0,
-                        help="the number of cores of the cpu which are used at a time to run the search [default: use all available cores]")
+                        help="the number of cores of the cpu which are used at a time to run the search (0: one thread per physical core)")
     parser.add_argument('--max_overlap', type=float, default=1,
                         help="the maximum fractional of overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.")
     parser.add_argument("--overlap_by_db", action='store_true', default=False,
@@ -1350,8 +1353,8 @@ def build_parser():
  
 
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
-                        help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None]. "
-                        "If you supply a nucleotide fasta file, be sure to also specify --fasta_type nucleotide. "
+                        help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. "
+                        "If you supply a nucleotide fasta file, be sure to also specify --alphabet nucleotide. "
                         "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
 
     add_max_output_gb_argument(parser)
@@ -1363,10 +1366,8 @@ def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
 
-    if params.evalue >10:
-        raise ValueError("evalue must be <= 10.")
-    if params.min_evalue < 0:
-        raise ValueError("min_evalue must be >= 0.")
+    if params.evalue > 10:
+        parser.error("-e/--evalue must be <= 10.")
 
     if params.reference is None and params.foldseek is None:
         parser.error("You must specify at least one reference database (-r/--reference or --foldseek).")
@@ -1376,7 +1377,7 @@ def main(argv):
     reject_stdin(parser, params.input, "it reads its input more than once (to detect sequence types and count proteins)")
 
     reference_groups = read_references(params.reference, foldseek=params.foldseek)
-    molecule_types = get_input_molecule_types(params.input, default_molecule_type=params.fasta_type)
+    molecule_types = get_input_molecule_types(params.input, default_molecule_type=params.alphabet)
     validate_input_molecule_types(molecule_types, reference_groups)
 
     ## figure out if we are using every contig or just certain, named contigs ##
@@ -1405,7 +1406,7 @@ def main(argv):
 
     # Run
     annotated = domainate(
-            parse_seqfiles(params.input, None, filetype_override=None, default_molecule_type=params.fasta_type),
+            parse_seqfiles(params.input, None, filetype_override=None, default_molecule_type=params.alphabet),
             references=None,
             z=Z,
             evalue=params.evalue,
@@ -1427,12 +1428,10 @@ def main(argv):
             esm2_3Di_weights=params.esm2_3di_weights,
             esm2_3Di_device=params.esm2_3di_device,
             foldseek_device=params.foldseek_device,
+            foldseek_path=params.foldseek_path,
             overlap_by_db=params.overlap_by_db,
             partial=params.partial,
         )
-    try:
-        write_seq_outputs(annotated, genbank=params.genbank_out, fasta=params.fasta_out,
-                          max_output_bytes=max_output_gb_to_bytes(params.max_output_gb),
-                          mitigation_options=["--hits_only", "--max_hits_per_cds", "--evalue"])
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    write_seq_outputs(annotated, genbank=params.genbank_out, fasta=params.fasta_out,
+                      max_output_bytes=max_output_gb_to_bytes(params.max_output_gb),
+                      mitigation_options=["--hits_only", "--max_hits_per_cds", "--evalue"])

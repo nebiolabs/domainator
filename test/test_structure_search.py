@@ -1,4 +1,5 @@
 """Tests for structure_search.py, the structure-input counterpart of domain_search.py."""
+from domainator.errors import OutputSizeLimitExceeded
 import shutil
 
 import pytest
@@ -180,7 +181,7 @@ def test_max_seqs_saturation_warns(database, references, tmp_path):
 
 def test_max_output_gb(database, references, tmp_path):
     out = tmp_path / "toobig.gb"
-    with pytest.raises(SystemExit, match="max_output_gb"):
+    with pytest.raises(OutputSizeLimitExceeded, match="max_output_gb"):
         structure_search.main(["-i", database, "-r", references, "-o", str(out),
                                "--max_output_gb", "0.000000001", "--cpu", "2"])
     assert not out.exists()

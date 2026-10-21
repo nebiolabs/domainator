@@ -10,7 +10,7 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.",
+      "help": "the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which.",
       "type": "file",
       "multiple": true,
       "flags": [
@@ -30,7 +30,7 @@
     },
     {
       "name": "Fasta Type",
-      "parameter": "fasta_type",
+      "parameter": "alphabet",
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
@@ -39,7 +39,7 @@
       ],
       "default": "protein",
       "flags": [
-        "--fasta_type"
+        "--alphabet"
       ]
     },
     {

@@ -42,11 +42,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, Iterator, List, NamedTuple, Optional, Sequence, Tuple
 
+from domainator.errors import InputError
 from domainator.Bio.Seq import Seq
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator import utils
 from domainator.domainate import SearchResult
-from domainator.output_guardrails import OutputSizeLimitExceeded
 
 # Structure file extensions, taken from the shared extension map so there is one source of
 # truth. All of these are accepted by foldseek; reseek documents pdb/cif/mmcif/ent, and
@@ -80,7 +80,7 @@ RESEEK_DB_EXTENSIONS = {"bcb", "bca"}
 RESEEK_MIN_CHAIN_LENGTH = 32
 
 
-class StructureInputError(ValueError):
+class StructureInputError(InputError):
     """Raised when a -i/-r value cannot be interpreted as structures or a database."""
 
 
@@ -1202,7 +1202,7 @@ def add_backend_arguments(parser, include_search_arguments: bool = True) -> None
         parser.add_argument('--max_seqs', type=int, default=None,
                             help="maximum number of hits to keep per reference, keeping the most significant ones. Defaults to the backend's own default: 1000 for foldseek, no cap for reseek. For foldseek this bounds the search itself, so raising it costs time but improves coverage; for reseek it bounds only the output, since reseek has no native cap and does the full search either way. A warning is printed whenever a reference saturates the cap.")
         parser.add_argument('--device', default="cpu", type=str,
-                            help="where to run the search. 'cpu' for a CPU-only search, or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) for a GPU-accelerated search. GPU search requires a recent foldseek. [default: cpu]")
+                            help="where to run the search. 'cpu' for a CPU-only search, or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) for a GPU-accelerated search. GPU search requires a recent foldseek.")
 
 
 # Backend-specific options, passed through to the aligner as `options`. Named with the
@@ -1371,8 +1371,5 @@ def write_records(records, genbank_out, fasta_out, max_output_bytes, mitigation_
     """
     from domainator.outputs import write_seq_outputs
 
-    try:
-        write_seq_outputs(records, genbank_out, fasta_out, max_output_bytes=max_output_bytes,
-                          mitigation_options=mitigation_options, default_molecule_type="protein")
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    write_seq_outputs(records, genbank_out, fasta_out, max_output_bytes=max_output_bytes,
+                      mitigation_options=mitigation_options, default_molecule_type="protein")

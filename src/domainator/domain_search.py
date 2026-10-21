@@ -16,7 +16,8 @@ If neither is set, then hits will be written on the fly and not sorted.
 """
 
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_seq_outputs, add_switch, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from jsonargparse.typing import NonNegativeFloat, PositiveFloat
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.utils import parse_seqfiles, partition_seqfile, i_partition_seqfiles, list_and_file_to_dict_keys, make_pool, compile_taxonomy_allowed, index_total_cds, native_parser_available, PARTIAL_CHOICES, WHERE_CHOICES, sequence_hashes
 from domainator import select_by_cds
@@ -28,7 +29,7 @@ from domainator import extract_peptides
 import warnings
 from pathlib import Path
 from domainator.Taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
-from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 
 
 # Per-process taxonomy filter, populated by the pool initializer. The include/
@@ -339,9 +340,8 @@ def build_parser():
                          "See the README 'Native (Rust) acceleration' section to build it.")
     parser = tool_parser(f"{parser_status}\n\n" + __doc__)
 
-    add_input(parser, "the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.", stdin=False)
-    parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
-                        help="Whether the sequences in fasta files are protein or nucleotide sequences.")
+    add_input(parser, "the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which.", stdin=False)
+    add_alphabet(parser)
     parser.add_argument('-r', '--reference', required=True, type=str,
                         default=None, nargs='+',
                         help="reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.") 
@@ -355,14 +355,14 @@ def build_parser():
 
     parser.add_argument('-Z', default=1000, type=int, 
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
-                        "Default: 1000\n"
-                        "Set to 0 to use the number actual target sequences (currently this does does not account for taxonomic filtering)." # TODO: account for taxonomy filtering
+                        "\n"
+                        "Set to 0 to use the number actual target sequences (currently this does not account for taxonomic filtering). " # TODO: account for taxonomy filtering
                         "Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.")
 
-    parser.add_argument('-e', '--evalue', type=float, default=0.001,
-                        help="threshold E value for the domain hit. Must be <=10. [default 0.001]")
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001,
+                        help="threshold E value for the domain hit. Must be <=10.")
     
-    parser.add_argument('--min_evalue', type=float, default=0.0,
+    parser.add_argument('--min_evalue', type=NonNegativeFloat, default=0.0,
                         help="hits with E value lower than this will be filtered out. Not frequently used. Use only if you want to eliminate close matches. Must be >=0. [default 0]")
 
     parser.add_argument('--max_mode', action="store_true", default=False,
@@ -392,9 +392,9 @@ def build_parser():
     #TODO: add max_domains option
 
     parser.add_argument('--cpu', type=int, default=0,
-                        help="the number of cores of the cpu which are used at a time to run the search [default: use all available cores]")
+                        help="the number of cores of the cpu which are used at a time to run the search (0: one thread per physical core)")
     parser.add_argument('--max_overlap', type=float, default=1,
-                        help="the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. [default 1]")
+                        help="the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.")
     parser.add_argument('--add_annotations', action='store_true', default=False,
                         help="When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.")
     add_switch(parser, "deduplicate", default=False,
@@ -451,7 +451,7 @@ def build_parser():
                         "partition boundaries regardless of this value.")
 
     parser.add_argument('--gene_call', type=str, default=None, choices = {"all", "unannotated"}, required=False,
-                        help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None] "
+                        help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. "
                         "Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.")
 
     add_max_output_gb_argument(parser)
@@ -470,7 +470,7 @@ def main(argv):
     reject_stdin(parser, params.input, "it reads its input more than once (to count and partition it)")
 
     if params.evalue > 10:
-        raise ValueError("evalue must be <= 10.")
+        parser.error("-e/--evalue must be <= 10.")
     
     if params.batch_size < 1:
         raise ValueError("batch_size must be > 0")
@@ -501,7 +501,7 @@ def main(argv):
     # Done once here so every downstream consumer sees the real per-shard files.
     input_files = [shard for db in params.input for shard in db_index.resolve_database_shards(db)]
 
-    molecule_types = get_input_molecule_types(input_files, default_molecule_type=params.fasta_type)
+    molecule_types = get_input_molecule_types(input_files, default_molecule_type=params.alphabet)
     reference_groups = domainate.read_references(params.reference, foldseek=None)
     domainate.validate_input_molecule_types(molecule_types, reference_groups)
     if len(molecule_types) > 1 and "protein" in molecule_types and not translate:
@@ -555,50 +555,47 @@ def main(argv):
     records = list()
     outputs = SeqOutputs(params.genbank_out, params.fasta_out, max_output_bytes=max_output_bytes,
                          mitigation_options=mitigation_options, extra_guidance=extra_guidance)
-    try:
-        with outputs:
-            hits = domain_search(
-            partitions,
-            references=params.reference,
-            z=Z,
-            evalue=params.evalue,
-            max_hits=max_hits,
-            max_overlap=params.max_overlap,
-            cpu=cpus,
-            add_annotations=params.add_annotations,
-            cds_range=cds_range,
-            kb_range=kb_range,
-            whole_contig=whole_contig,
-            normalize_direction=normalize_direction,
-            translate=translate,
-            gene_call=params.gene_call,
-            min_evalue=params.min_evalue,
-            ncbi_taxonomy=ncbi_taxonomy,
-            include_taxids=params.include_taxids,
-            exclude_taxids=params.exclude_taxids,
-            taxonomy_expr=params.taxonomy_expr,
-            fasta_type=params.fasta_type,
-            max_mode=params.max_mode,
-            max_region_overlap=params.max_region_overlap,
-            strand=params.strand,
-            decoy_names=decoy_names,
-            max_hits_per_contig=params.max_hits_per_contig,
-            partial=params.partial,
-            deduplicate_by_sequence=params.deduplicate_by_sequence,
-            dedup_both_strands=params.both_strands,
-            )
-            for record in hits:
-                if deduplicate and record.id in seen:
-                    continue
-                if deduplicate:
-                    seen.add(record.id)
-                if pad:
-                    records.append(record)
-                else:
-                    outputs.write(record)
+    with outputs:
+        hits = domain_search(
+        partitions,
+        references=params.reference,
+        z=Z,
+        evalue=params.evalue,
+        max_hits=max_hits,
+        max_overlap=params.max_overlap,
+        cpu=cpus,
+        add_annotations=params.add_annotations,
+        cds_range=cds_range,
+        kb_range=kb_range,
+        whole_contig=whole_contig,
+        normalize_direction=normalize_direction,
+        translate=translate,
+        gene_call=params.gene_call,
+        min_evalue=params.min_evalue,
+        ncbi_taxonomy=ncbi_taxonomy,
+        include_taxids=params.include_taxids,
+        exclude_taxids=params.exclude_taxids,
+        taxonomy_expr=params.taxonomy_expr,
+        fasta_type=params.alphabet,
+        max_mode=params.max_mode,
+        max_region_overlap=params.max_region_overlap,
+        strand=params.strand,
+        decoy_names=decoy_names,
+        max_hits_per_contig=params.max_hits_per_contig,
+        partial=params.partial,
+        deduplicate_by_sequence=params.deduplicate_by_sequence,
+        dedup_both_strands=params.both_strands,
+        )
+        for record in hits:
+            if deduplicate and record.id in seen:
+                continue
+            if deduplicate:
+                seen.add(record.id)
             if pad:
-                records.sort(reverse=True)
-                select_by_cds.pad_records(records, where=params.anchor)
-                outputs.write_all(records)
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+                records.append(record)
+            else:
+                outputs.write(record)
+        if pad:
+            records.sort(reverse=True)
+            select_by_cds.pad_records(records, where=params.anchor)
+            outputs.write_all(records)

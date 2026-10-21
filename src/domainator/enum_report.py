@@ -6,7 +6,6 @@ Takes a genbank file which has been annotated using Domainate, write tabulated d
 
 import contextlib
 import os
-import sys
 import warnings
 import argparse
 from jsonargparse import ActionConfigFile
@@ -204,11 +203,8 @@ class EnumTSVWriter():
                     out_vals.append(v)
                 if data_type == "float":
                     out_vals.append(f"%0.1f" % float(v))
-        except TypeError:
-            print(values, file=sys.stderr)
-            print(self.columns, file=sys.stderr)
-            print(self.columns[i], file=sys.stderr)
-            print(self.column_types, file=sys.stderr)
+        except TypeError as exc:
+            exc.add_note(f"while writing column {self.columns[i]!r} of {self.columns} (types {self.column_types}) from values {values}")
             raise
         print("\t".join(out_vals), file=self.out_handle)
 
@@ -960,7 +956,7 @@ def build_parser():
                         help="only examine contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
     parser.add_argument('--by', type=str.lower, default="contig", choices=SELECT_CATEGORIES,
-                        help="One line in output for every by contig, cds or domain. For protein genbanks, contig and cds are treated the same. default: by contig")
+                        help="One line in output for every by contig, cds or domain. For protein genbanks, contig and cds are treated the same.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES,
                         help=partial_help("Which rows to report") + " By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.")
 

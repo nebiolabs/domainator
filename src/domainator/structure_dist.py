@@ -28,7 +28,7 @@ remain meaningful, but the values are not comparable to foldseek's and efi_score
 assumes a bit score in its 2^(-score) term, is rejected.
 """
 
-import sys
+import logging
 import warnings
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -36,6 +36,7 @@ import numpy as np
 import scipy.sparse
 import tqdm
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 
 from domainator.cli.common import add_input, tool_parser
 from domainator import structure_lib
@@ -48,7 +49,6 @@ from domainator.matrix_output import (
     write_matrix_outputs,
 )
 from domainator.output_guardrails import (
-    OutputSizeLimitExceeded,
     add_max_output_gb_argument,
     max_output_gb_to_bytes,
 )
@@ -65,6 +65,8 @@ from domainator.transform_matrix import (
     MODES,
     transform_matrix,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # The seven score-based modes, taken from transform_matrix so the two tools cannot drift.
@@ -298,13 +300,11 @@ def structure_dist(input_values: Sequence[str],
         # cap that cannot truncate anything.
         effective_max_seqs = max_seqs if max_seqs is not None else len(col_names)
         if max_seqs is None and effective_max_seqs > SATURATION_PREFLIGHT_THRESHOLD:
-            print(
+            logger.info(
                 f"Comparing {len(row_names)} structures against {len(col_names)}, with no "
                 "--max_seqs cap so that no row is truncated. If this is too slow, bound "
                 "the search with --evalue, or cap it with --max_seqs and accept that "
-                "rows reaching the cap are incomplete.",
-                file=sys.stderr, flush=True,
-            )
+                "rows reaching the cap are incomplete.")
 
         hits = aligner.search(
             prepared.input_db, prepared.reference_db,
@@ -384,15 +384,12 @@ def structure_dist(input_values: Sequence[str],
         matrix = _apply_mode(matrix, mode, row_lengths_array, col_lengths_array,
                              self_comparison)
 
-    try:
-        write_matrix_outputs(
-            matrix, row_names, col_names,
-            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--max_hits_per_query", "--threshold", "-e/--evalue", "--mst", "--knn"],
-            row_lengths=row_lengths_array, col_lengths=col_lengths_array, data_type=mode,
-        )
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    write_matrix_outputs(
+        matrix, row_names, col_names,
+        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+        mitigation_options=["--max_hits_per_query", "--threshold", "-e/--evalue", "--mst", "--knn"],
+        row_lengths=row_lengths_array, col_lengths=col_lengths_array, data_type=mode,
+    )
 
 
 def build_parser():
@@ -404,11 +401,11 @@ def build_parser():
 
     add_matrix_output_arguments(parser, noun="similarity (or, for *_dist modes, distance) matrix")
 
-    parser.add_argument('-e', '--evalue', type=float, default=0.001,
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001,
                         help="only pairs with an E-value strictly below this become non-zero cells. E-values are computed against the reference set, as they are in seq_dist. Raise it to fill in weaker relationships; lower it to shrink the matrix.")
 
     parser.add_argument('--mode', type=str, default="score", choices=sorted(ALL_MODES),
-                        help="what kind of values should be in the matrix. Score-based, from the aligner's alignment score, exactly as in seq_dist: score: raw score, bool: 1 if a hit otherwise 0, norm_score: score/min(row_max, col_max), row_norm_score: score/row_max, score_dist: 1 - norm_score, efi_score: -log10[2^(-score) * (row_len * col_len)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Structural, already in [0,1] so the distance forms are just 1 - value: tmscore, lddt, fident, tmscore_dist, lddt_dist, fident_dist. tmscore and lddt require --algorithm foldseek and C-alpha coordinates in both databases; fident works with either backend. efi_score and efi_score_dist require a real bit score, so they are rejected with --algorithm reseek. Default: score")
+                        help="what kind of values should be in the matrix. Score-based, from the aligner's alignment score, exactly as in seq_dist: score: raw score, bool: 1 if a hit otherwise 0, norm_score: score/min(row_max, col_max), row_norm_score: score/row_max, score_dist: 1 - norm_score, efi_score: -log10[2^(-score) * (row_len * col_len)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Structural, already in [0,1] so the distance forms are just 1 - value: tmscore, lddt, fident, tmscore_dist, lddt_dist, fident_dist. tmscore and lddt require --algorithm foldseek and C-alpha coordinates in both databases; fident works with either backend. efi_score and efi_score_dist require a real bit score, so they are rejected with --algorithm reseek.")
 
     add_symmetrize_argument(parser, extra_help="Requires a square self-comparison (no -r). Cannot be combined with --mst/--knn, whose output is always max-symmetric.")
 
@@ -444,8 +441,6 @@ def main(argv):
             "changes the matrix."
         )
 
-    if params.evalue <= 0:
-        raise ValueError("--evalue must be greater than 0.")
     if params.max_hits_per_query is not None and params.max_hits_per_query < 0:
         raise ValueError("--max_hits_per_query must be >= 0")
     hdf, dense_text = resolve_matrix_outputs(params)

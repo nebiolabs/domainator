@@ -13,7 +13,7 @@ from domainator.cli.common import add_input, add_output, check_outputs, tool_par
 from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix, MaxTree, mst_edge_index_dict
 from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_edge_index_dict
-from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, make_temporary_output_path
 import scipy.sparse
 from scipy.sparse.csgraph import connected_components
 import pandas as pd
@@ -415,13 +415,10 @@ def main(argv):
     
     # Run
     # params.metric,
-    try:
-        # The MST paths need the unthresholded matrix; --threshold is applied later by the tree
-        # walk. Pure --knn and the default path can prune on load and save the memory.
-        load_lower_bound = None if params.mst else params.threshold
-        build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.threshold, params.metadata, params.color_by, color_table,
-                  params.xgmml_out, cluster, params.cluster_tsv_out, params.no_cluster_header, params.color_table_out,
-                  params.mst, params.knn, subset_labels, max_output_bytes=max_output_bytes,
-                  max_color_groups=params.max_color_groups, mark_mst=params.mark_mst)
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    # The MST paths need the unthresholded matrix; --threshold is applied later by the tree
+    # walk. Pure --knn and the default path can prune on load and save the memory.
+    load_lower_bound = None if params.mst else params.threshold
+    build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), params.threshold, params.metadata, params.color_by, color_table,
+              params.xgmml_out, cluster, params.cluster_tsv_out, params.no_cluster_header, params.color_table_out,
+              params.mst, params.knn, subset_labels, max_output_bytes=max_output_bytes,
+              max_color_groups=params.max_color_groups, mark_mst=params.mark_mst)

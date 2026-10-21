@@ -49,7 +49,7 @@
     },
     {
       "name": "Fasta Type",
-      "parameter": "fasta_type",
+      "parameter": "alphabet",
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
@@ -58,7 +58,7 @@
       ],
       "default": "protein",
       "flags": [
-        "--fasta_type"
+        "--alphabet"
       ]
     },
     {
@@ -157,15 +157,6 @@
       "type": "output",
       "flags": [
         "--log_out"
-      ]
-    },
-    {
-      "name": "Bin Path",
-      "parameter": "bin_path",
-      "help": "If the executable for the algorithm you're using isn't in the system path, you can provide the full path to the executable here.",
-      "type": "string",
-      "flags": [
-        "--bin_path"
       ]
     }
   ]

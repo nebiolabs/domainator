@@ -156,7 +156,7 @@ def test_deduplicate_genbank_hash_both_strands(shared_datadir):
             "-i", input_fasta,
             "--identity", "1",
             "--algorithm", "hash",
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "--both_strands",
             "--prefix_count",
             "--fasta_out", out,
@@ -275,7 +275,7 @@ def test_deduplicate_genbank_diamond():
         deduplicate_genbank.main([
             "-i", str(input_fasta),
             "--algorithm", "diamond",
-            "--bin_path", "diamond",
+            "--diamond_path", "diamond",
             "--identity", "0.9999",
             "--cpu", "1",
             "--prefix_count",
@@ -318,7 +318,7 @@ def test_deduplicate_genbank_diamond_single_centroid():
         deduplicate_genbank.main([
             "-i", str(input_fasta),
             "--algorithm", "diamond",
-            "--bin_path", "diamond",
+            "--diamond_path", "diamond",
             "--identity", "0",
             "--cpu", "1",
             "--prefix_count",
@@ -416,7 +416,7 @@ def test_deduplicate_genbank_cdhit_fasta_input_2(shared_datadir):
         out = output_dir + "/deduplicate_out.fasta"
         log = output_dir + "/deduplicate_out.log"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi.fasta"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "--fasta_out", out, "--prefix_count", "--fasta_type", "nucleotide", "--log_out", log])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "pDONR201_multi.fasta"), "--algorithm", "cd-hit", "--identity", "0.8", "--cpu", "1", "--fasta_out", out, "--prefix_count", "--alphabet", "nucleotide", "--log_out", log])
         assert Path(out).is_file()
         recs  = list(utils.parse_seqfiles([out]))
         assert recs[0].id[:2] == "4-"

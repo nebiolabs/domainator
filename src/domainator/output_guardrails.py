@@ -7,14 +7,12 @@ import os
 from pathlib import Path
 import tempfile
 
+from domainator.errors import OutputSizeLimitExceeded
+
 
 DEFAULT_MAX_OUTPUT_GB = 25.0
 BYTES_PER_GB = 1_000_000_000
 DEFAULT_MAX_OUTPUT_BYTES = int(DEFAULT_MAX_OUTPUT_GB * BYTES_PER_GB)
-
-
-class OutputSizeLimitExceeded(RuntimeError):
-    """Raised when a projected output exceeds the configured size limit."""
 
 
 def max_output_gb_to_bytes(max_output_gb: float) -> int | None:

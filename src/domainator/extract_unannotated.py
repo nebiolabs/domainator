@@ -8,6 +8,7 @@ can write a fasta or a genbank file
 """
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, slice_record_from_location, region_id
@@ -98,7 +99,7 @@ def build_parser():
     parser.add_argument('--contigs_file', default=None, 
                         help="only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
-    parser.add_argument('-e', '--evalue', default=None, type=float,
+    parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="the evalue cutoff (max) for domain annotations to be considered. default: no cutoff.")
     
     parser.add_argument("--min_score", type=float, default=None, required=False, 

@@ -18,11 +18,11 @@ the same alphabet (DNA and RNA count as different alphabets). Profile-profile sc
 on the scale of whichever alphabet is in use, so the default --min_score differs
 between amino acid and nucleotide profiles.
 """
+import logging
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='numpy') # suppress "UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero."
 from jsonargparse import ActionConfigFile
 from dataclasses import dataclass
-import sys
 import io
 import os
 import numpy as np
@@ -31,9 +31,11 @@ from typing import Iterable, Tuple, Optional, BinaryIO
 import heapq
 from domainator.cli.common import STDOUT_PATHS, add_input, add_output, check_outputs, resolve_cpu, tool_parser
 from domainator.utils import make_pool, pyhmmer_decode, read_hmms, alphabet_name, alphabet_score_scale, common_hmm_alphabet, iter_hmms_with_alphabet, open_writable_hmm_file, is_compressed_path, check_writable_hmm_path, OUTPUT_COMPRESSION_HELP
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded, make_temporary_output_path
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, make_temporary_output_path
 from numba import jit
 import numba as nb
+
+logger = logging.getLogger(__name__)
 
 
 def _input_display_name(input_file) -> str:
@@ -463,7 +465,7 @@ def hmmer_search(input_files:Iterable[str], reference_files:Iterable[str], hmmer
     if score_cutoff is None:
         score_cutoff = default_score_cutoff(reference_alphabet)
         alphabet_label = alphabet_name(reference_alphabet) if reference_alphabet is not None else "amino"
-        print(f"Using --min_score {score_cutoff:g} (the default for {alphabet_label} profiles).", file=sys.stderr)
+        logger.info(f"Using --min_score {score_cutoff:g} (the default for {alphabet_label} profiles).")
 
     worker = _hmmer_search_worker(references, score_cutoff)
 
@@ -569,8 +571,6 @@ def main(argv):
         out.close()
         if temp_output_path is not None and os.path.exists(temp_output_path):
             os.remove(temp_output_path)
-        if isinstance(exc, OutputSizeLimitExceeded):
-            raise SystemExit(str(exc)) from None
         raise
 
     out.close()

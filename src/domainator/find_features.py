@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore", module='numpy')
 from typing import List, Dict, Tuple, Optional, NamedTuple, Iterator
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.Bio.SeqRecord import SeqRecord
 from domainator.Bio.SeqFeature import SeqFeature, FeatureLocation
@@ -745,11 +745,7 @@ def build_parser():
     add_input(parser, "The genbank or fasta files to annotate. Genbank files can be "
                       "nucleotide (with CDS annotations) or peptide. Fasta files must be peptide.")
     
-    parser.add_argument(
-        "--fasta_type", type=str, default="protein",
-        choices={"protein", "nucleotide"},
-        help="Whether the sequences in fasta files are protein or nucleotide sequences."
-    )
+    add_alphabet(parser)
     
     add_seq_outputs(parser)
     
@@ -764,9 +760,9 @@ def build_parser():
         help="When activated, new CDS annotations will be added with Prodigal in "
              "Metagenomic mode. If 'all', then any existing CDS annotations will be "
              "deleted and all contigs will be re-annotated. If 'unannotated', then "
-             "only contigs without CDS annotations will be annotated. [default: None]. "
+             "only contigs without CDS annotations will be annotated. "
              "If you supply a nucleotide fasta file, be sure to also specify "
-             "--fasta_type nucleotide."
+             "--alphabet nucleotide."
     )
     
     parser.add_argument(
@@ -836,7 +832,7 @@ def main(argv):
         find_features(
             parse_seqfiles(
                 params.input,
-                default_molecule_type=params.fasta_type
+                default_molecule_type=params.alphabet
             ),
             tmbed=params.tmbed,
             gpu_device=gpu_device,

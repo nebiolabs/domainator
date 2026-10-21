@@ -19,7 +19,7 @@ from domainator.Bio.SeqRecord import SeqRecord
 from collections import defaultdict
 import html
 import json
-from domainator.color_genbank import normalize_color_hex
+from domainator.color_genbank import normalize_color_hex, read_color_table
 import pandas as pd
 from domainator.utils import get_palette
 
@@ -184,6 +184,7 @@ def add_z_order(features:List[Dict[str, Union[int, str]]],
 def create_d3_html(output_file, contigs:List[SeqRecord],
                    metadata_files:List[Union[str, PathLike]]=None,
                    color_by:str=None,
+                   color_table:Optional[Dict[str, str]]=None,
                    window_height=2400, window_width=1200,
                    feature_types:Optional[List[str]] = None,
                    arrow_height=50, arrow_width=20,
@@ -224,7 +225,10 @@ def create_d3_html(output_file, contigs:List[SeqRecord],
 
     palette = None
     if color_by is not None:
-        palette = get_palette(metadata[color_by].unique())
+        if color_table is None:
+            palette = get_palette(metadata[color_by].unique())
+        else:  # values missing from the table keep the default contig color
+            palette = {value: color_table.get(str(value), "#000000") for value in metadata[color_by].unique()}
 
     # Preparing data for D3
     contigs_data = []
@@ -484,7 +488,9 @@ def build_parser():
     parser.add_argument('--color_by', type=str, required=False, default=None,
                         help="Color the contig lines in the plot based on this column of the metadata table.")
     
-    # TODO: allow user to supply a color table, like domainator build_ssn
+    parser.add_argument("--color_table", required=False, default=None, type=str,
+                        help="tab separated file with two columns and no header: a --color_by value and a hex color, for example: CCDB   cc0000. "
+                             "Without it, colors are assigned automatically.")
     #TODO: option to embed d3.js (v7) in the html file for offline use
     # TODO: change defaults for proteins?
     
@@ -508,11 +514,15 @@ def main(argv):
         
 
 
+    if params.color_table is not None and params.color_by is None:
+        parser.error("--color_table requires --color_by.")
+    color_table = read_color_table(params.color_table) if params.color_table is not None else None
+
     ### Run
     recs = list(parse_seqfiles(params.input))
     
     with output_file(params.html_out) as html_handle:
-        create_d3_html(html_handle, recs, metadata_files=params.metadata, color_by=params.color_by,
+        create_d3_html(html_handle, recs, metadata_files=params.metadata, color_by=params.color_by, color_table=color_table,
                        arrow_height=params.feature_height,
                        feature_label_px=params.feature_font_size,
                        window_height=params.height, window_width=params.width, feature_types=feature_types)

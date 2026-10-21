@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 from domainator import compare_contigs, utils
 import os
 import warnings
@@ -112,7 +113,7 @@ def test_compare_contigs_max_output_gb_blocks_dense_output(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_dense = output_dir + "/dense.hdf5"
 
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             compare_contigs.main([
                 "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
                 "--ji", "0.5",
@@ -754,7 +755,7 @@ def test_compare_contigs_sort_memory_check_fails_early(shared_datadir, monkeypat
     with tempfile.TemporaryDirectory() as output_dir:
         out_gb = output_dir + "/sorted.gb"
         out_sparse = output_dir + "/sparse.hdf5"
-        with pytest.raises(SystemExit, match="--skip_sort_memory_check"):
+        with pytest.raises(compare_contigs.SortMemoryLimitExceeded, match="--skip_sort_memory_check"):
             compare_contigs.main(["-i", input_path, "--genbank_out", out_gb, "--hdf_out", out_sparse])
         assert not os.path.exists(out_gb)
         assert not os.path.exists(out_sparse)

@@ -285,7 +285,7 @@ def test_domainator_nucleotide_fasta_query_uses_nhmmer(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "--genbank_out", str(out),
             "--evalue", "0.1",
@@ -320,7 +320,7 @@ def test_domainator_nucleotide_hmm_query_uses_nhmmer(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(hmm_path),
             "--genbank_out", str(out),
             "--evalue", "0.1",
@@ -341,7 +341,7 @@ def test_domainator_infernal_cm_query(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(cm_reference),
             "--genbank_out", str(out),
             "--hits_only",
@@ -467,7 +467,7 @@ def test_domainator_nucleotide_multi_hit_annotations(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "--genbank_out", str(out),
             "--evalue", "0.1",
@@ -622,7 +622,7 @@ def test_domainator_gene_annotate_fasta_1(shared_datadir):
         # output_dir = "test_out"
         out1 = output_dir + "/out1.gb"
         query_seqs = shared_datadir / "pDONR201.fasta"
-        args = ['--input'] + [str(query_seqs)] + [ "-r"] + [hmms] + ["-o", str(out1)] + ["--gene_call", "all", "-Z", "1000", "--fasta_type", "nucleotide"]
+        args = ['--input'] + [str(query_seqs)] + [ "-r"] + [hmms] + ["-o", str(out1)] + ["--gene_call", "all", "-Z", "1000", "--alphabet", "nucleotide"]
         main(args) # This should run gene calling and domain prediction on the unannotated file
 
         f_txt = open(out1).read()

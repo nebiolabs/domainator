@@ -1,4 +1,5 @@
 """Tests for structure_domainate.py, the structure-input counterpart of domainate.py."""
+from domainator.errors import OutputSizeLimitExceeded
 import shutil
 
 import pytest
@@ -174,7 +175,7 @@ def test_no_annotations_requires_hits_only(inputs, references, tmp_path):
 
 def test_max_output_gb(inputs, references, tmp_path):
     out = tmp_path / "toobig.gb"
-    with pytest.raises(SystemExit, match="max_output_gb"):
+    with pytest.raises(OutputSizeLimitExceeded, match="max_output_gb"):
         structure_domainate.main(["-i", inputs, "-r", references, "-o", str(out),
                                   "--max_output_gb", "0.000000001", "--cpu", "2"])
     assert not out.exists(), "a size-limited run must not leave a partial output file"

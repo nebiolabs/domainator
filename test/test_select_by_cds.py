@@ -388,7 +388,7 @@ def test_select_by_cds_include_nucleic_acids_flag(shared_datadir):
 
         domainate_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "--genbank_out", annotated,
             "--evalue", "0.1",
@@ -413,7 +413,7 @@ def test_select_by_cds_search_hits_selects_nucleic_acid_annotations(shared_datad
 
         domain_search_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "-o", annotated,
             "--whole_contig",

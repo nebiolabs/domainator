@@ -19,7 +19,7 @@ from domainator.cli.common import add_input, add_output, check_outputs, resolve_
 from domainator.outputs import output_file
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit, check_alphabets_match
 from domainator.utils import make_pool, pyhmmer_decode, common_hmm_alphabet, iter_hmms_with_alphabet
-from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes
 
 
 def _format_hmmer_compare_hit(hit: HmmerHit, alignments: bool, sep: str = "\t") -> str:
@@ -132,9 +132,6 @@ def main(argv):
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     output_description = f"hmmer_compare TSV output '{params.tsv_out}'"
-    try:
-        with output_file(params.tsv_out) as out:
-            hmmer_compare(params.input, params.reference, out, params.min_score, params.alignments, params.max_hits_per_query,
-                          resolve_cpu(params.cpu), max_output_bytes=max_output_bytes, output_description=output_description)
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    with output_file(params.tsv_out) as out:
+        hmmer_compare(params.input, params.reference, out, params.min_score, params.alignments, params.max_hits_per_query,
+                      resolve_cpu(params.cpu), max_output_bytes=max_output_bytes, output_description=output_description)

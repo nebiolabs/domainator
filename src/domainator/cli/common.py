@@ -7,10 +7,15 @@ Conventions (see MIGRATION.md):
 - Every output file has its own option ending in ``_out`` (``--genbank_out``, ``--fasta_out``,
   ``--tsv_out``, ...), and the main one also has ``-o``. Standard output is written only when
   asked for, with ``-``; at most one output can go there.
+- Every command takes ``-v/--verbose`` and ``-q/--quiet``. Progress messages go to the
+  ``domainator`` logger, which a command line run shows on stderr at INFO level.
 """
 
 import argparse
+import logging
 import os
+import sys
+import warnings
 from typing import Iterable, Optional, Sequence
 
 from jsonargparse import ArgumentParser
@@ -19,8 +24,70 @@ from domainator import __version__
 from domainator.utils import STDIN_PATHS, STDOUT_PATHS
 
 
+LOGGER_NAME = "domainator"
+
+
 class RawAndDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
-    """Keeps the line breaks of descriptions and help strings, and appends each option's default."""
+    """Keeps the line breaks of descriptions and help strings, and appends each option's default.
+
+    Empty defaults (None, False, an empty list) are left out: the help text says what leaving
+    the option out means.
+    """
+
+    def _get_help_string(self, action):
+        default = action.default
+        if default is None or default is False or (isinstance(default, (list, tuple, str)) and len(default) == 0):
+            return action.help
+        return super()._get_help_string(action)
+
+
+class _StderrHandler(logging.StreamHandler):
+    """Writes to whatever ``sys.stderr`` is when a message is logged, so redirection and capture work."""
+
+    def __init__(self):
+        super().__init__(sys.stderr)
+
+    @property
+    def stream(self):
+        return sys.stderr
+
+    @stream.setter
+    def stream(self, value):
+        pass
+
+
+class _MessageFormatter(logging.Formatter):
+    """Plain messages for progress; ``warning: ...`` and ``error: ...`` for problems."""
+
+    def format(self, record):
+        message = super().format(record)
+        if record.levelno >= logging.WARNING:
+            return f"{record.levelname.lower()}: {message}"
+        return message
+
+
+def configure_logging(verbose: bool = False, quiet: bool = False) -> None:
+    """Show the ``domainator`` logger on stderr: INFO by default, DEBUG with verbose, errors only with quiet.
+
+    quiet also hides Python warnings raised by Domainator modules.
+    """
+    logger = logging.getLogger(LOGGER_NAME)
+    if not any(isinstance(handler, _StderrHandler) for handler in logger.handlers):
+        handler = _StderrHandler()
+        handler.setFormatter(_MessageFormatter("%(message)s"))
+        logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if verbose else logging.ERROR if quiet else logging.INFO)
+    if quiet:
+        warnings.filterwarnings("ignore", module=r"domainator(\.|$)")
+
+
+class ToolParser(ArgumentParser):
+    """ArgumentParser that applies -v/--verbose and -q/--quiet once the arguments are parsed."""
+
+    def parse_args(self, *args, **kwargs):
+        params = super().parse_args(*args, **kwargs)
+        configure_logging(getattr(params, "verbose", False), getattr(params, "quiet", False))
+        return params
 
 
 def tool_parser(description: str) -> ArgumentParser:
@@ -29,12 +96,18 @@ def tool_parser(description: str) -> ArgumentParser:
     Abbreviated options are rejected, so a typo or a removed option is an error rather than a
     silent match to a longer option (``--name`` used to match ``--named_domain_count``).
     """
-    return ArgumentParser(
+    parser = ToolParser(
         description=description,
         epilog=f"Domainator {__version__}",
         formatter_class=RawAndDefaultsFormatter,
         allow_abbrev=False,
     )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument("-v", "--verbose", action="store_true",
+                           help="show debug output, and a traceback for errors.")
+    verbosity.add_argument("-q", "--quiet", action="store_true",
+                           help="show errors only: no progress messages or warnings.")
+    return parser
 
 
 def add_input(parser, help: str, *, multiple: bool = True, required: bool = True, stdin: bool = True):
@@ -86,6 +159,13 @@ def add_annotation_type(parser, *, choices: Sequence[str] = ANNOTATION_TYPES[:2]
                                help=(help or "Which annotations to use.") + " domainator: domain annotations (from domainate). "
                                     "domain_search: best-hit annotations (from domain_search)."
                                     + (" all: both." if "all" in choices else ""))
+
+
+def add_alphabet(parser):
+    """Add ``--alphabet {nucleotide,protein}``: the molecule type of FASTA input. GenBank records declare their own."""
+    return parser.add_argument("--alphabet", type=str, default="protein", choices=["nucleotide", "protein"],
+                               help="Whether the sequences in FASTA inputs are protein or nucleotide. "
+                                    "GenBank records declare their own molecule type.")
 
 
 def check_outputs(parser, params, dests: Sequence[str], *, required: bool = True):

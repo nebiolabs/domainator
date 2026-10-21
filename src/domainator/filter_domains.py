@@ -6,6 +6,7 @@ based on percentage overlap between domains and evalues of domains.
 """
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.utils import list_and_file_to_dict_keys, parse_seqfiles
@@ -170,7 +171,7 @@ def build_parser():
     
     add_seq_outputs(parser)
 
-    parser.add_argument('-e', '--evalue', type=float, default=None,
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=None,
                        help="threshold (max) E value for the domain hit. Default: no cutoff.")
     parser.add_argument('--max_overlap', type=float, default=1.0,
                        help="the maximum fraction of overlap between domains to be included in the annotated genbank.")

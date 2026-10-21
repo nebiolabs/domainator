@@ -170,7 +170,7 @@ def test_filter_domainator_2(shared_datadir):
 def test_filter_domainator_3(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         outfile = output_dir + "/out.gb"
-        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", str("-1000"), "--annotation_type", "domainator"]
+        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", "1e-300", "--annotation_type", "domainator"]
         main(arguments)
         assert Path(outfile).is_file()
         recs = list(SeqIO.parse(outfile, "genbank"))
@@ -188,7 +188,7 @@ def test_filter_domainator_3(shared_datadir):
 def test_filter_domainator_4(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         outfile = output_dir + "/out.gb"
-        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", str("-1000"), "--annotation_type", "domain_search"]
+        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", "1e-300", "--annotation_type", "domain_search"]
         main(arguments)
         assert Path(outfile).is_file()
         recs = list(SeqIO.parse(outfile, "genbank"))
@@ -205,7 +205,7 @@ def test_filter_domainator_4(shared_datadir):
 def test_filter_domainator_5(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         outfile = output_dir + "/out.gb"
-        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", str("-1000"), "--annotation_type", "all"]
+        arguments = ["-i", str(shared_datadir / "color_domain_search_test.gb"),"-o", outfile, "--evalue", "1e-300", "--annotation_type", "all"]
         main(arguments)
         assert Path(outfile).is_file()
         recs = list(SeqIO.parse(outfile, "genbank"))
@@ -224,7 +224,7 @@ def test_filter_domainator_nucleotide_annotations(shared_datadir):
 
         domainate_main([
             "--input", str(shared_datadir / "simple_dna_target.fna"),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(shared_datadir / "simple_dna_queries.fna"),
             "--genbank_out", annotated,
             "--evalue", "0.1",

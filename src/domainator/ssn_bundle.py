@@ -27,6 +27,7 @@ from typing import Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
+from domainator.errors import FormatVersionError
 from domainator.ssn_hierarchy import (
     DEFAULT_MAX_MERGE_EVENTS,
     MERGE_IMPACT_MIN_CHILD,
@@ -84,7 +85,7 @@ def load_bundle(path: Union[str, PathLike]) -> dict:
     version = bundle.get("version")
     if version not in SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
         supported = ", ".join(str(v) for v in SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS)
-        raise ValueError(
+        raise FormatVersionError(
             f"Unsupported Domainator Similarity Network Viewer bundle version {version}; "
             f"this build understands version(s) {supported}."
         )

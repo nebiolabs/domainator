@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
 from domainator import transform_matrix
@@ -308,7 +309,7 @@ def test_transform_matrix_max_output_gb_blocks_dense_output():
         matrix = DataMatrix(input_data, rows, columns, data_type="score")
         matrix.write(input_file, "hdf")
 
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             transform_matrix.main(["-i", input_file, "--hdf_out", dense_out, "--max_output_gb", "0.000001"])
 
 
@@ -695,6 +696,6 @@ def test_transform_matrix_score_dist_round_trips_through_hdf(tmp_path):
 def test_transform_matrix_max_output_gb_applies_to_distance_hdf(tmp_path):
     input_file = tmp_path / "in.hdf5"
     _write_score_matrix(input_file, ASYMMETRIC_SCORES)
-    with pytest.raises(SystemExit, match="--max_output_gb"):
+    with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
         transform_matrix.main(["-i", str(input_file), "--mode", "score_dist", "--hdf_out", str(tmp_path / "out.hdf5"),
                                "--max_output_gb", "0.000000001"])

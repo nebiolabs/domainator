@@ -1,4 +1,5 @@
 """Tests for structure_dist.py."""
+from domainator.errors import OutputSizeLimitExceeded
 import shutil
 
 import numpy as np
@@ -412,7 +413,7 @@ def test_max_seqs_saturation_warns(inputs, tmp_path):
 @needs_foldseek
 def test_max_output_gb(inputs, tmp_path):
     out = tmp_path / "d.hdf5"
-    with pytest.raises(SystemExit, match="--max_output_gb"):
+    with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
         structure_dist.main(["-i", inputs, "--hdf_out", str(out), "--cpu", "2",
                              "--max_output_gb", "0.000000001"])
     assert not out.exists()

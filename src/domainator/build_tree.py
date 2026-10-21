@@ -195,9 +195,6 @@ def build_parser():
     add_output(parser, "newick", "Write the tree to this Newick file.", primary=True)
     add_output(parser, "xgmml", "Write the tree to this Cytoscape xgmml file.", stdout=False)
     
-    parser.add_argument('--quiet', action="store_true", required=False, default=False, 
-                        help="Suppress warnings.")
-
     parser.add_argument('--config', action=ActionConfigFile)
     return parser
 

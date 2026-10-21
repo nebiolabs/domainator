@@ -199,7 +199,7 @@ def build_parser():
                                  f"for example --{algorithm}_args=\"n_components=2\". Values are read as Python literals where possible.")
     
     parser.add_argument('--scale', type=float, required=False, default=1000,
-                        help="scale the largest axis so that the difference between the largest and smallest value is this. Default: 1000")
+                        help="scale the largest axis so that the difference between the largest and smallest value is this.")
     
     parser.add_argument('--three_d', action='store_true', default=False,
                         help="if set, then makes 3d projections. default: 2d projections.")

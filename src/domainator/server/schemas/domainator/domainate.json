@@ -10,7 +10,7 @@
     {
       "name": "Input",
       "parameter": "input",
-      "help": "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --fasta_type to specify which.",
+      "help": "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which.",
       "type": "file",
       "multiple": true,
       "flags": [
@@ -30,7 +30,7 @@
     },
     {
       "name": "Fasta Type",
-      "parameter": "fasta_type",
+      "parameter": "alphabet",
       "help": "Whether the sequences in fasta files are protein or nucleotide sequences.",
       "type": "string",
       "choices": [
@@ -39,7 +39,7 @@
       ],
       "default": "protein",
       "flags": [
-        "--fasta_type"
+        "--alphabet"
       ]
     },
     {
@@ -157,7 +157,7 @@
     {
       "name": "Gene Call",
       "parameter": "gene_call",
-      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None]. If you supply a nucleotide fasta file, be sure to also specify --fasta_type nucleotide. Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
+      "help": "When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: None]. If you supply a nucleotide fasta file, be sure to also specify --alphabet nucleotide. Note that if you do gene calling, it is STRONGLY recommended that you also supply -Z, because database size is pre-calcuated at the beginning of the execution, whereas gene-calling is done on the fly. Not supplying Z may become an error in the future.",
       "type": "string",
       "choices": [
         "all",

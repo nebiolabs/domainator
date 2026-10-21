@@ -37,6 +37,8 @@ import pandas as pd
 import scipy.sparse
 import numpy as np
 import h5py
+
+from domainator.errors import FormatVersionError
 from typing import Dict, List, Tuple, Union, Optional, Iterator
 
 # SortedUndirectedEdges / CompactNeighborRankings live in edge_types to avoid an
@@ -435,7 +437,8 @@ class DataMatrix:
         attribute names for backward compatibility.
 
         Raises:
-            ValueError: If required attributes are missing or the major version is unknown
+            ValueError: If required attributes are missing
+            FormatVersionError: If the major version is unknown
         """
         version = f.attrs.get(cls._MATRIX_FILE_VERSION_ATTR, f.attrs.get(cls._LEGACY_MATRIX_FILE_VERSION_ATTR))
         if version is None:
@@ -444,7 +447,7 @@ class DataMatrix:
             version = version.decode("utf-8")
         if str(version).split(".")[0] not in cls._SUPPORTED_MATRIX_FILE_MAJOR_VERSIONS:
             supported = ", ".join(f"{major}.x" for major in cls._SUPPORTED_MATRIX_FILE_MAJOR_VERSIONS)
-            raise ValueError(f"Unsupported matrix file version '{version}'. This version of Domainator reads "
+            raise FormatVersionError(f"Unsupported matrix file version '{version}'. This version of Domainator reads "
                              f"version {supported} matrix files.")
 
         for attribute in (cls._ARRAY_TYPE_ATTR, cls._SYMMETRIC_LABELS_ATTR):

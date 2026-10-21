@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 import tempfile
 from domainator import hmmer_search
 from pathlib import Path
@@ -38,7 +39,7 @@ def test_hmmer_search_2(shared_datadir):
 def test_hmmer_search_max_output_gb_blocks_large_hmm_output(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out_scores.hmm"
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             hmmer_search.main([
                 "-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
                 "-r", str(shared_datadir / "pdonr_hmms.hmm"),
@@ -180,7 +181,7 @@ def test_hmmer_search_compressed_input(shared_datadir, tmp_path, compressor, suf
 def test_hmmer_search_max_output_gb_counts_uncompressed(shared_datadir, tmp_path):
     """The guardrail measures profile bytes before compression, so it still trips."""
     out = tmp_path / "out.hmm.gz"
-    with pytest.raises(SystemExit):
+    with pytest.raises(OutputSizeLimitExceeded):
         hmmer_search.main(["-i", str(shared_datadir / "pdonr_hmms_1.hmm"),
                            "-r", str(shared_datadir / "pdonr_hmms.hmm"),
                            "-o", str(out), "--min_score", "13",

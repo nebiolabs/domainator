@@ -10,7 +10,7 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, tool_parser
 from domainator.data_matrix import DataMatrix, is_distance_data_type, symmetrize_matrix
 from domainator.matrix_output import add_matrix_output_arguments, add_symmetrize_argument, resolve_matrix_outputs, write_matrix_outputs
-from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, OutputSizeLimitExceeded
+from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 import scipy.sparse
 import numpy as np
 from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_matrix, sparsify_option_label, sparsify_requested
@@ -150,7 +150,7 @@ def build_parser():
     add_matrix_output_arguments(parser, noun="transformed matrix")
 
     parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=set(MODES.keys()).union({PASS_THROUGH_MODE}), 
-                        help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)). Default: none")
+                        help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)).")
 
     parser.add_argument('--threshold', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")
@@ -233,13 +233,10 @@ def main(argv):
         matrix.data = apply_lower_bound(matrix.data, params.threshold)
 
     ### Run
-    try:
-        write_matrix_outputs(
-            matrix.data, matrix.rows, matrix.columns,
-            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--threshold", "--mst", "--knn"],
-            row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths, data_type=matrix.data_type,
-            symmetric=matrix.exactly_symmetric,
-        )
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    write_matrix_outputs(
+        matrix.data, matrix.rows, matrix.columns,
+        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+        mitigation_options=["--threshold", "--mst", "--knn"],
+        row_lengths=matrix.row_lengths, col_lengths=matrix.column_lengths, data_type=matrix.data_type,
+        symmetric=matrix.exactly_symmetric,
+    )

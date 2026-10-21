@@ -27,6 +27,7 @@ import heapq
 import sys
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator import domainate
@@ -222,9 +223,9 @@ def build_parser():
     parser.add_argument('-r', '--reference', default=None, required=True, nargs='+', type=str,
                         help="reference structures to search with. Same accepted forms as --input.")
     add_seq_outputs(parser)
-    parser.add_argument('-e', '--evalue', type=float, default=0.001,
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001,
                         help="threshold E value for a hit. E values are computed against the searched database.")
-    parser.add_argument('--min_evalue', type=float, default=0.0,
+    parser.add_argument('--min_evalue', type=NonNegativeFloat, default=0.0,
                         help="minimum E value for a hit. Useful for excluding a reference's match to its own copy in the database.")
     parser.add_argument('--max_hits', type=int, default=None,
                         help="return at most this many records, the best-scoring ones. Applies to the whole search, not per reference. When set, output is sorted best-first and written after the search completes.")
@@ -251,10 +252,6 @@ def main(argv):
     params = parser.parse_args(argv)
     check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
-    if params.evalue <= 0:
-        raise RuntimeError("--evalue must be greater than 0.")
-    if params.min_evalue < 0:
-        raise RuntimeError("--min_evalue must be greater than or equal to 0.")
     if params.max_hits is not None and params.max_hits < 1:
         raise RuntimeError("--max_hits must be at least 1.")
 

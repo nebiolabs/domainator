@@ -13,11 +13,13 @@ term: it narrows whatever the text criteria matched.
 """
 #subset an hmm file based on name, description or other properties. use pyhmmer.
 from jsonargparse import ActionConfigFile
+import logging
 import re
-import sys
 from domainator.cli.common import add_input, add_output, check_outputs, tool_parser
 from domainator.utils import pyhmmer_decode, ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file, OUTPUT_COMPRESSION_HELP
 from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 def hmmer_select(hmm_path=None, query_regex:Optional[List[str]]=None, query_exact:Optional[List[str]]=None, query_contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False, match_all=False):
     """
@@ -210,7 +212,7 @@ def main(argv):
             if file_alphabet is None: # no profiles in this file
                 continue
             if requested_alphabet is not None and file_alphabet != requested_alphabet:
-                print(f"Skipping '{source}': its profiles are {alphabet_name(file_alphabet)}, not the requested {alphabet_name(requested_alphabet)}.", file=sys.stderr)
+                logger.info(f"Skipping '{source}': its profiles are {alphabet_name(file_alphabet)}, not the requested {alphabet_name(requested_alphabet)}.")
                 skipped_files += 1
                 continue
             if selected_alphabet is None:
@@ -231,6 +233,6 @@ def main(argv):
     finally:
         output_handle.close()
 
-    print(f"Found {found_count} matching profiles.", file=sys.stderr)
+    logger.info(f"Found {found_count} matching profiles.")
     if skipped_files:
-        print(f"Skipped {skipped_files} input file(s) whose alphabet did not match --alphabet.", file=sys.stderr)
+        logger.info(f"Skipped {skipped_files} input file(s) whose alphabet did not match --alphabet.")

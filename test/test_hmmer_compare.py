@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 import tempfile
 from domainator import hmmer_compare
 from helpers import compare_files
@@ -16,7 +17,7 @@ def test_hmmer_compare_1(shared_datadir):
 def test_hmmer_compare_max_output_gb_blocks_large_tsv_output(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out_path = output_dir + "/out_scores.tsv"
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             hmmer_compare.main([
                 "-i", str(shared_datadir / "pdonr_hmms.hmm"),
                 "-r", str(shared_datadir / "pdonr_hmms.hmm"),

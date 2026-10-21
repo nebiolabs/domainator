@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import sys
 from jsonargparse import ActionConfigFile
 from typing import List
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.Bio import SeqIO, Seq
 from domainator.utils import append_extra_args, parse_seqfiles, sequence_hashes
@@ -39,7 +39,7 @@ class ClusterProgram(ABC):
         try:
             out = subprocess.run(self.search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
         except FileNotFoundError:
-            raise RuntimeError(f"Clustering program not found: {self.search_args[0]}. Install it or give its path with --bin_path.") from None
+            raise RuntimeError(f"Clustering program not found: {self.search_args[0]}. Install it or give its path with --{self.path_option}_path.") from None
 
         if out.returncode != 0:
             raise RuntimeError(f"Clustering program failed (exit code {out.returncode}): {' '.join(map(str, self.search_args))}\n"
@@ -58,6 +58,7 @@ class ClusterProgram(ABC):
 
 class USearch(ClusterProgram):
     args_option = "usearch"
+    path_option = "usearch"
     def __init__(self, input_fasta_path, id, extra_args, bin_path=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "usearch"
         self.input_fasta_path = input_fasta_path
@@ -85,6 +86,7 @@ class USearch(ClusterProgram):
 
 class CdHit(ClusterProgram, ABC):
     args_option = "cdhit"
+    path_option = "cdhit"
     def __init__(self, input_fasta_path, id, extra_args, bin_path=None, cpus=1, word_size=10, log_handle=sys.stderr):
         self.input_fasta_path = input_fasta_path
         self.cluster_output_fasta_path = Path(input_fasta_path).parents[0] / "output.fasta"
@@ -134,6 +136,7 @@ class CdHitProtein(CdHit):
 class CdHitEST(CdHit):
     def __init__(self, input_fasta_path, id, extra_args, bin_path=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "cd-hit-est"
+        self.path_option = "cdhit_est"
         word_size = 10
         if id > 0.95:
             word_size = 10
@@ -153,6 +156,7 @@ class CdHitEST(CdHit):
 
 class Diamond(ClusterProgram):
     args_option = "diamond"
+    path_option = "diamond"
     def __init__(self, input_fasta_path, id, extra_args, bin_path=None, cpus=1, log_handle=sys.stderr):
         self.bin_path = "diamond"
         self.input_fasta_path = input_fasta_path
@@ -247,12 +251,14 @@ class DeduplicateGenbank():
         else:
             return self._cluster_members
 
-    def deduplicate_genbank(self, genbanks, algorithm, extra_args, id, bin_path, add_count, cpus, fasta_type="protein", both_strands=False, log_handle=sys.stderr):
+    def deduplicate_genbank(self, genbanks, algorithm, extra_args, id, bin_paths, add_count, cpus, fasta_type="protein", both_strands=False, log_handle=sys.stderr):
         """
         input: 
                 genbanks: list of genbank files to cluster sequences from
                 algorithm: which program to use for clustering
                 extra_args: a list of additional command line arguments to pass to the clustering algorithm
+                bin_paths: None, or a dict of program name ("cd-hit", "cd-hit-est", "usearch", "diamond") to the path of its executable,
+                           for programs that are not on the PATH
         """
 
         #dict of algorithm names to functions that will run the algorithm, the functions must take three arguments, input_fasta_path,cluster_output_fasta_path,params
@@ -311,6 +317,7 @@ class DeduplicateGenbank():
                         extra_args += ["-strand", "both"]
                     elif algorithm == "cd-hit-est" and "-r" not in extra_args:
                         extra_args += ["-r", "1"]
+                bin_path = (bin_paths or {}).get(algorithm)
                 reduced_names, cluster_members = run_clustering(algorithm, input_fasta_path, id, extra_args, bin_path, add_count, cpus, log_handle=log_handle)
 
         #write reduced set of sequences to a genbank file
@@ -349,14 +356,14 @@ def build_parser():
     parser.add_argument('--log_out', default=None, required=False,
                         help="Write the log to this file. If not supplied, writes it to stderr.")
 
-    parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
-                        help="Whether the sequences in fasta files are protein or nucleotide sequences.")
+    add_alphabet(parser)
 
     parser.add_argument("--algorithm", type=str, default="cd-hit", choices={"cd-hit", "usearch", "hash", "diamond"},
                         help="Which clustering algorithm to use.")
 
-    parser.add_argument("--bin_path", type=str, default=None,
-                        help="If the executable for the algorithm you're using isn't in the system path, you can provide the full path to the executable here.")
+    for option, program in (("cdhit", "cd-hit"), ("cdhit_est", "cd-hit-est"), ("usearch", "usearch"), ("diamond", "diamond")):
+        parser.add_argument(f"--{option}_path", type=str, default=None,
+                            help=f"path to the {program} executable, if it is not on the PATH.")
 
     parser.add_argument("--identity", type=float, required=True, default=None,
                         help="Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent.")
@@ -383,7 +390,7 @@ def build_parser():
                         help="If supplied, then write a tab separated table with columns: representative, contigs.")
     
     parser.add_argument('--cluster_sep', default=' ; ', required=False,
-                        help="Separator to separate individual contig names in the second column of the cluster table. Default: ' ; '")
+                        help="Separator to separate individual contig names in the second column of the cluster table.")
 
     parser.add_argument('--config', action=ActionConfigFile)
     return parser
@@ -428,10 +435,10 @@ def main(argv):
             params.algorithm, 
             extra_args,
             params.identity,
-            params.bin_path,
+            {"cd-hit": params.cdhit_path, "cd-hit-est": params.cdhit_est_path, "usearch": params.usearch_path, "diamond": params.diamond_path},
             add_count,
             cpus,
-            params.fasta_type,
+            params.alphabet,
             params.both_strands,
             log_handle=log)
 

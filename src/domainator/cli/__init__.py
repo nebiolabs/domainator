@@ -7,11 +7,13 @@ even though some tools import heavy dependencies.
 
 import difflib
 import importlib
+import logging
 import sys
 from typing import List, Optional
 
 from domainator import __version__
 from domainator.cli.registry import CATEGORIES, TOOLS
+from domainator.errors import DomainatorError
 
 BUILTIN_COMMANDS = {
     "completion": "Print a shell completion script: domainator completion {bash,zsh,tcsh}.",
@@ -33,18 +35,29 @@ def _help_text() -> str:
     lines += ["", "Other commands:"]
     lines += [f"  {name:<{width}}  {summary}" for name, summary in BUILTIN_COMMANDS.items()]
     lines += ["", "options:", "  -h, --help     show this message and exit", "  --version      print the Domainator version and exit",
+              "", "Every command also takes -v/--verbose (debug output, and tracebacks for errors) and",
+              "-q/--quiet (errors only).",
               "", f"Domainator {__version__}"]
     return "\n".join(lines)
 
 
 def run_tool(command: str, argv: List[str]) -> int:
-    """Run one registered command with an explicit argument list and return its exit code."""
+    """Run one registered command with an explicit argument list and return its exit code.
+
+    A :class:`~domainator.errors.DomainatorError` is reported as a one-line message with exit
+    code 1, unless -v/--verbose asked for debug output, which keeps the traceback.
+    """
     module = importlib.import_module(f"domainator.{TOOLS[command].module}")
     original_prog = sys.argv[0] if sys.argv else None
     # argparse names the program in usage and error messages after sys.argv[0].
     sys.argv[0:1] = [f"domainator {command}"]
     try:
         status = module.main(argv)
+    except DomainatorError as exc:
+        if logging.getLogger("domainator").isEnabledFor(logging.DEBUG):
+            raise
+        print(f"domainator {command}: error: {exc}", file=sys.stderr)
+        return 1
     finally:
         sys.argv[0:1] = [] if original_prog is None else [original_prog]
     return 0 if status is None else status

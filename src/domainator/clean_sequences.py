@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from jsonargparse import ActionConfigFile
 import sys
 
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.utils import parse_seqfiles, slice_record
 from domainator.Bio.Data import IUPACData
@@ -200,8 +200,7 @@ def build_parser():
 
     add_input(parser, 'Names of input genbank files.')
 
-    parser.add_argument("--fasta_type", type=str, default="protein", choices={"protein", "nucleotide"}, 
-                        help="Whether the sequences in fasta files are protein or nucleotide sequences.")
+    add_alphabet(parser)
 
     add_seq_outputs(parser)
 
@@ -236,8 +235,8 @@ def main(argv):
 
     # Run
     cleaned_contigs_iterator = clean_sequences(
-        parse_seqfiles(params.input, default_molecule_type=params.fasta_type),
-        fasta_type=params.fasta_type,
+        parse_seqfiles(params.input, default_molecule_type=params.alphabet),
+        fasta_type=params.alphabet,
         clean_name=params.clean_name,
         deduplicate_names=params.deduplicate_names,
         strip=params.strip,

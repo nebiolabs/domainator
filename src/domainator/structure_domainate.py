@@ -24,6 +24,7 @@ structure, not original PDB residue numbers.
 import sys
 
 from jsonargparse import ActionConfigFile
+from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator import domainate
@@ -111,9 +112,9 @@ def build_parser():
     parser.add_argument('-r', '--reference', default=None, required=True, nargs='+', type=str,
                         help="reference structures to annotate the input with. Same accepted forms as --input.")
     add_seq_outputs(parser)
-    parser.add_argument('-e', '--evalue', type=float, default=0.001,
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001,
                         help="threshold E value for a hit. E values are computed against the input database.")
-    parser.add_argument('--min_evalue', type=float, default=0.0,
+    parser.add_argument('--min_evalue', type=NonNegativeFloat, default=0.0,
                         help="minimum E value for a hit. Useful for excluding near-identical matches, such as a structure's hit to itself.")
     parser.add_argument('--max_hits_per_cds', type=int, default=None,
                         help="maximum number of annotations to add per record. If not supplied, there is no limit.")
@@ -142,10 +143,6 @@ def main(argv):
     params = parser.parse_args(argv)
     check_outputs(parser, params, ["genbank_out", "fasta_out"])
 
-    if params.evalue <= 0:
-        raise RuntimeError("--evalue must be greater than 0.")
-    if params.min_evalue < 0:
-        raise RuntimeError("--min_evalue must be greater than or equal to 0.")
     if params.no_annotations and not params.hits_only:
         raise RuntimeError("--no_annotations only makes sense together with --hits_only, "
                            "otherwise the output would carry no information at all.")

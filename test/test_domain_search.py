@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 import os
 from domainator.domain_search import main
 import domainator.domain_search as domain_search_module
@@ -71,7 +72,7 @@ def test_domain_search_whole_contig_nucleotide_query(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--whole_contig",
@@ -95,7 +96,7 @@ def test_domain_search_whole_contig_nucleotide_query_without_add_annotations(sha
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--whole_contig",
@@ -118,7 +119,7 @@ def test_domain_search_translate_ignores_nucleotide_annotations(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--translate",
@@ -135,7 +136,7 @@ def test_domain_search_max_output_gb_blocks_large_genbank_output(shared_datadir)
     hmms = shared_datadir / "pdonr_peptides.fasta"
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.gb"
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             main([
                 "--input", str(gb),
                 "-r", str(hmms),
@@ -156,7 +157,7 @@ def test_domain_search_nucleotide_query_defaults_to_annotation_span(shared_datad
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--add_annotations",
@@ -179,7 +180,7 @@ def test_domain_search_nucleotide_query_kb_range_uses_annotation_boundaries(shar
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--add_annotations",
@@ -204,7 +205,7 @@ def test_domain_search_nucleotide_multi_hit_whole_contig(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--whole_contig",
@@ -229,7 +230,7 @@ def test_domain_search_nucleotide_multi_hit_max_hits_per_contig(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(nucleotide_reference),
             "-o", str(out),
             "--whole_contig",
@@ -253,7 +254,7 @@ def test_domain_search_whole_contig_infernal_query(shared_datadir):
         out = output_dir + "/out.gb"
         main([
             "--input", str(nucleotide_input),
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "-r", str(cm_reference),
             "-o", str(out),
             "--whole_contig",
@@ -594,7 +595,7 @@ def test_domain_search_gene_annotate_fasta_1(shared_datadir):
         # output_dir = "test_out"
         out1 = output_dir + "/out1.gb"
         query_seqs = shared_datadir / "pDONR201.fasta"
-        args = ['--input'] + [str(query_seqs)] + [ "-r"] + [hmms] + ["-o", str(out1)] + ["--gene_call", "all", "-Z", "1000", "--fasta_type", "nucleotide"]
+        args = ['--input'] + [str(query_seqs)] + [ "-r"] + [hmms] + ["-o", str(out1)] + ["--gene_call", "all", "-Z", "1000", "--alphabet", "nucleotide"]
         main(args) # This should run gene calling and domain prediction on the unannotated file
 
         f_txt = open(out1).read()

@@ -13,7 +13,7 @@ otherwise:
 
 """
 from jsonargparse import ActionConfigFile
-import sys
+from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, add_switch, check_outputs, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.utils import parse_seqfiles, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, pad_location, slice_record_from_location, FeatureLocation, get_non_domainator_features, circular_dist, region_id, fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES, partial_help, WHERE_CHOICES
@@ -278,11 +278,8 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
         if contig.annotations.get("topology") == "circular" and len(slice_location) == len(contig): # the whole circular contig, rotated
             record.annotations["topology"] = "circular"
     except Exception as e:
-        print(f"contig: {contig.id}", file=sys.stderr)
-        print(f"slice_location: {slice_location}", file=sys.stderr)
-        print(f"focus_cds: {focus_cds}", file=sys.stderr)
-        
-        raise e
+        e.add_note(f"while slicing contig {contig.id} at {slice_location} around CDS {focus_cds}")
+        raise
 
 
     # slice_from_location will flip the strand if the domain is on the reverse strand, so we need to flip it back if we want to keep the direction.
@@ -564,7 +561,7 @@ def build_parser():
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")
 
 
-    parser.add_argument('-e', '--evalue', default=None, type=float,
+    parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="the evalue cutoff (max) for domain annotations to be considered when selecting CDSs. Default: no cutoff.")
 
     parser.add_argument('--invert', action='store_true',

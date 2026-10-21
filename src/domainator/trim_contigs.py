@@ -7,13 +7,16 @@ Typically used for nucleotide sequences, but can be used for protein sequences a
 """
 
 from jsonargparse import ActionConfigFile
-import sys
+from jsonargparse.typing import PositiveFloat
+import logging
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.utils import parse_seqfiles, slice_record, list_and_file_to_dict_keys, BooleanEvaluator, DomainatorCDS, FeatureLocation, region_id
 from domainator.Bio.SeqRecord import SeqRecord
-from typing import Tuple, List, Optional, Set, Iterable, Union
+from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 from domainator.select_by_cds import validate_range
+
+logger = logging.getLogger(__name__)
 
 class StripDomainsError(Exception):
     """
@@ -21,12 +24,10 @@ class StripDomainsError(Exception):
     """
     pass
 
-def strip_domains_from_ends(cds_list:List[DomainatorCDS], left_cds, right_cds, strip_domains: Optional[Set[str]], domain_expr:Optional[Union[str, BooleanEvaluator]], no_domain:bool=False) -> SeqRecord:
-
+def strip_domains_from_ends(cds_domain_names: List[Set[str]], left_cds, right_cds, strip_domains: Optional[Set[str]], domain_expr:Optional[Union[str, BooleanEvaluator]], no_domain:bool=False) -> Tuple[int, int]:
+    """Move left_cds right and right_cds left past CDSs to strip, given each CDS's domain names in contig order."""
     if strip_domains is None:
         strip_domains = set()
-
-
 
     if domain_expr is not None:
         if type(domain_expr) is not BooleanEvaluator:
@@ -35,73 +36,76 @@ def strip_domains_from_ends(cds_list:List[DomainatorCDS], left_cds, right_cds, s
     if left_cds > right_cds:
         raise ValueError("left_cds must be <= right_cds")
 
-    if left_cds < 0 or right_cds >= len(cds_list):
-        raise ValueError("left_cds and right_cds must be >= 0 and < len(cds_list)")
+    if left_cds < 0 or right_cds >= len(cds_domain_names):
+        raise ValueError("left_cds and right_cds must be >= 0 and < len(cds_domain_names)")
 
-    if len(strip_domains) == 0 and domain_expr is None:
+    if len(strip_domains) == 0 and domain_expr is None and not no_domain:
         return left_cds, right_cds
-    
-    while (left_cds < len(cds_list) and 
-           (len(cds_list[left_cds].domain_names.intersection(strip_domains)) > 0  
-            or (domain_expr is not None and domain_expr.check_expression(cds_list[left_cds].domain_names)) 
-            or (no_domain and len(cds_list[left_cds].domain_names) == 0)
-           )
-        ):
+
+    def strip(names):
+        return (len(names.intersection(strip_domains)) > 0
+                or (domain_expr is not None and domain_expr.check_expression(names))
+                or (no_domain and len(names) == 0))
+
+    while left_cds < len(cds_domain_names) and strip(cds_domain_names[left_cds]):
         left_cds += 1
-    
-    while (right_cds >= 0 and 
-            (len(cds_list[right_cds].domain_names.intersection(strip_domains)) > 0 
-             or (domain_expr is not None and domain_expr.check_expression(cds_list[right_cds].domain_names)) 
-             or (no_domain and len(cds_list[right_cds].domain_names) == 0)
-            )
-        ):
+
+    while right_cds >= 0 and strip(cds_domain_names[right_cds]):
         right_cds -= 1
 
     if left_cds > right_cds:
         raise StripDomainsError("All CDSs in the contig are composed of domains to be stripped.")
-    
+
     return left_cds, right_cds
 
 
-def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], cds_truncation:Optional[Tuple[int, int]], strip_domains:Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False) -> SeqRecord:
-    if kb_truncation is None and cds_truncation is None and strip_domains is None and domain_expr is None:
+def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], cds_truncation:Optional[Tuple[int, int]], strip_domains:Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> SeqRecord:
+    """Trim one contig. Domain criteria only count domain annotations from databases (if given) with E-values at most evalue (if given)."""
+    by_domain = strip_domains is not None or domain_expr is not None or no_domain
+    if kb_truncation is None and cds_truncation is None and not by_domain:
         return record # TODO: should this be a copy?
 
     if domain_expr is not None:
         if type(domain_expr) is not BooleanEvaluator:
             domain_expr = BooleanEvaluator(domain_expr)
-    
+
     left = 0
     right = len(record)
     if kb_truncation is not None:
         left += int(kb_truncation[0] * 1000)
         right -= int(kb_truncation[1] * 1000)
-    
+
     cdss = DomainatorCDS.list_from_contig(record)
     cdss.sort(key=lambda x: x.feature.location.start)
 
     left_cds = 0
-    right_cds = len(cdss) - 1    
-    if len(cdss) > 0 and strip_domains is not None or domain_expr is not None or cds_truncation is not None or no_domain:
+    right_cds = len(cdss) - 1
+    if len(cdss) > 0 and (by_domain or cds_truncation is not None):
         if cds_truncation is not None:
             left_cds = cds_truncation[0]
             right_cds = (len(cdss) - 1) - cds_truncation[1]
+            if left_cds > right_cds:
+                return None
 
-        if strip_domains is not None or domain_expr is not None or no_domain:
+        if by_domain:
+            if evalue is None and databases is None:
+                cds_domain_names = [cds.domain_names for cds in cdss]
+            else:
+                cds_domain_names = [cds.get_domain_names(databases, evalue) for cds in cdss]
             try:
-                domain_left_cds, domain_right_cds = strip_domains_from_ends(cdss, left_cds, right_cds, strip_domains, domain_expr, no_domain)
+                domain_left_cds, domain_right_cds = strip_domains_from_ends(cds_domain_names, left_cds, right_cds, strip_domains, domain_expr, no_domain)
                 if domain_left_cds > left_cds:
                     left_cds = domain_left_cds
                 if domain_right_cds < right_cds:
                     right_cds = domain_right_cds
             except StripDomainsError:
-                print(f"WARNING: All CDSs in contig {record.id} are composed of domains to be stripped. Skipping contig.", file=sys.stderr)
+                logger.warning(f"All CDSs in contig {record.id} are composed of domains to be stripped. Skipping contig.")
                 return None
 
         if cdss[left_cds].feature.location.start > cdss[right_cds].feature.location.end:
-            print(f"WARNING: CDSs in contig {record.id} overlap after trimming. Skipping contig.", file=sys.stderr)
+            logger.warning(f"CDSs in contig {record.id} overlap after trimming. Skipping contig.")
             return None
-        
+
         if (left_cds > 0) and (cdss[left_cds].feature.location.start > left):
             left = cdss[left_cds].feature.location.start
         if (right_cds < len(cdss) - 1 ) and (cdss[right_cds].feature.location.end < right):
@@ -113,11 +117,11 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
         new_id = region_id(record, FeatureLocation(left, right))
         record = slice_record(record, left, right)
         record.id = new_id
-    
+
     return record
 
 
-def trim_contigs(records: Iterable[SeqRecord], kb_truncation: Optional[Tuple[float, float]], cds_truncation: Optional[Tuple[int, int]], strip_domains: Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False) -> List[SeqRecord]:
+def trim_contigs(records: Iterable[SeqRecord], kb_truncation: Optional[Tuple[float, float]], cds_truncation: Optional[Tuple[int, int]], strip_domains: Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
     if strip_domains is not None:
         strip_domains = set(strip_domains)
 
@@ -125,7 +129,7 @@ def trim_contigs(records: Iterable[SeqRecord], kb_truncation: Optional[Tuple[flo
         domain_expr = BooleanEvaluator(domain_expr)
 
     for record in records:
-        trimmed = trim_contig(record, kb_truncation, cds_truncation, strip_domains, domain_expr, no_domain)
+        trimmed = trim_contig(record, kb_truncation, cds_truncation, strip_domains, domain_expr, no_domain, evalue, databases)
         if trimmed is not None:
             yield trimmed
 
@@ -166,6 +170,10 @@ def build_parser():
                         help="text file containing names of domains to trim contigs containing.")
     parser.add_argument('--domain_expr', type=str, default=None,
                         help="a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains for CDSs to trim")
+    parser.add_argument('-e', '--evalue', type=PositiveFloat, default=None,
+                        help="the evalue cutoff (max) for domain annotations to be considered when trimming by domain. Default: no cutoff.")
+    parser.add_argument('--databases', type=str, default=None, nargs='+',
+                        help="Only consider domain annotations from these databases when trimming by domain.")
     
     parser.add_argument('--config', action=ActionConfigFile)
     return parser
@@ -197,4 +205,6 @@ def main(argv):
         selected_domains,
         domain_expr,
         params.unannotated,
+        params.evalue,
+        set(params.databases) if params.databases is not None else None,
         ), genbank=params.genbank_out, fasta=params.fasta_out)

@@ -1,3 +1,4 @@
+import pytest
 from domainator import plot_contigs
 import tempfile
 
@@ -57,3 +58,23 @@ def test_plot_contigs_protein_1(shared_datadir):
         assert "<title>Domainator Contigs Plot</title>" in output_text
         assert "FeSOD_A0A1F4ZT98|unreviewed|Superoxide" in output_text
         assert not ('"type": "source"' in output_text)
+
+def test_plot_contigs_color_table(shared_datadir, tmp_path):
+    color_table = tmp_path / "colors.tsv"
+    color_table.write_text("1219\tAB12CD\n")
+    output = str(tmp_path / "contigs.html")
+    plot_contigs.main(["-i", str(shared_datadir / "MT_nbs.gb"), "--html_out", output,
+                       "--metadata", str(shared_datadir / "MT_nbs.enum_report.tsv"), "--color_by", "taxid_species",
+                       "--color_table", str(color_table)])
+    output_text = open(output).read()
+    assert '"color": "#AB12CD"' in output_text  # taxid 1219 comes from the table
+    assert '"color": "#000000"' in output_text  # taxids missing from the table keep the default
+
+
+def test_plot_contigs_color_table_requires_color_by(shared_datadir, tmp_path, capsys):
+    color_table = tmp_path / "colors.tsv"
+    color_table.write_text("1219\tAB12CD\n")
+    with pytest.raises(SystemExit):
+        plot_contigs.main(["-i", str(shared_datadir / "MT_nbs.gb"), "--html_out", str(tmp_path / "out.html"),
+                           "--color_table", str(color_table)])
+    assert "--color_table requires --color_by" in capsys.readouterr().err

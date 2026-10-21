@@ -16,7 +16,7 @@ import scipy.sparse
 import tqdm
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, reject_stdin, resolve_cpu, tool_parser
 from domainator.compare_contigs import (
     _StreamingCSRChunkBuilder,
     _feed_chunk_to_accumulator,
@@ -31,7 +31,6 @@ from domainator.domainate import (
     prodigal_CDS_annotate,
 )
 from domainator.output_guardrails import (
-    OutputSizeLimitExceeded,
     add_max_output_gb_argument,
     max_output_gb_to_bytes,
 )
@@ -659,15 +658,12 @@ def kmer_dist(
         col_lengths=reference_representation.lengths,
     )
 
-    try:
-        write_matrix_outputs(
-            matrix, query_representation.names, reference_representation.names,
-            hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
-            mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
-            row_lengths=query_representation.lengths, col_lengths=reference_representation.lengths, data_type=mode,
-        )
-    except OutputSizeLimitExceeded as exc:
-        raise SystemExit(str(exc)) from None
+    write_matrix_outputs(
+        matrix, query_representation.names, reference_representation.names,
+        hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,
+        mitigation_options=["--max_hits_per_query", "--threshold", "--mst", "--knn"],
+        row_lengths=query_representation.lengths, col_lengths=reference_representation.lengths, data_type=mode,
+    )
 
 
 def build_parser():
@@ -679,8 +675,7 @@ def build_parser():
                         help="Reference file. If not provided, the input file will be used as the reference.")
     parser.add_argument('--reference_format', type=str, required=False, default=None, choices=["fasta", "genbank"],
                         help="File format of the reference, if it cannot be told from the file extension.")
-    parser.add_argument('--fasta_type', type=str, default="protein", choices={"protein", "nucleotide"},
-                        help="Whether fasta inputs should be interpreted as protein or nucleotide sequences.")
+    add_alphabet(parser)
     parser.add_argument('--gene_call', type=str, default=None, choices={"all", "unannotated"}, required=False,
                         help="When activated, new CDS annotations will be added with Prodigal in Metagenomic mode before translated-CDS k-mer extraction. "
                         "If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. "
@@ -744,7 +739,7 @@ def main(argv):
         hdf,
         dense_text,
         params.threshold,
-        fasta_type=params.fasta_type,
+        fasta_type=params.alphabet,
         ksize=params.ksize,
         nucleotide_kmers=params.nucleotide_kmers,
         gene_call=params.gene_call,

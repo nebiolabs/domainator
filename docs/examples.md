@@ -31,7 +31,7 @@ domainator plot_contigs -i annotated.gb --html_out contigs_plot.html
 
 nucleotide fasta input
 ```bash
-domainator domainate  --fasta_type nucleotide --gene_call all --cpu 4 -i example_files/pDONR201_multi.fasta -r example_files/example_hmms.hmm -o annotated.gb --max_overlap 0.6
+domainator domainate  --alphabet nucleotide --gene_call all --cpu 4 -i example_files/pDONR201_multi.fasta -r example_files/example_hmms.hmm -o annotated.gb --max_overlap 0.6
 domainator plot_contigs -i annotated.gb --html_out contigs_plot.html
 ```
 
@@ -48,7 +48,7 @@ domainator plot_contigs -i annotated.gb --html_out contigs_plot.html
 You can have multiple input files. 
 In this example, one of the inputs is a nucleotide genbank file with CDS annotations already present and the other is a fasta file with no annotations. setting `--gene_call unannotated` will find CDSs in any contig that doesn't have at least one CDS annotation already.
 ```bash
-domainator domainate --fasta_type nucleotide --gene_call unannotated --cpu 4 -o annotated.gb -r example_files/example_hmms.hmm --max_overlap 0.6 -i example_files/pDONR201_genemark.gb example_files/pDONR201_multi.fasta
+domainator domainate --alphabet nucleotide --gene_call unannotated --cpu 4 -o annotated.gb -r example_files/example_hmms.hmm --max_overlap 0.6 -i example_files/pDONR201_genemark.gb example_files/pDONR201_multi.fasta
 ```
 
 You can also search multiple domain databases at once by supplying multiple hmm or protein fasta files via the `-r` option. Not all of the reference sequences have to be of the same type. Some can be protein sequences and some can be hmm files in the same call to domainate.
@@ -65,7 +65,7 @@ domainator plot_contigs -i annotated_colored.gb --html_out contigs_plot.html
 
 ## Searching a database of genomes
 
-Input can be CDS-annotated genbank files, protein genbank files, protein fasta files, or even nucleotide fasta files (if `--fasta_type nucleotide` and `--gene_call` are specified). 
+Input can be CDS-annotated genbank files, protein genbank files, protein fasta files, or even nucleotide fasta files (if `--alphabet nucleotide` and `--gene_call` are specified). 
 
 References (queries) can be either protein hmm profiles or protein fasta files.
 ```bash

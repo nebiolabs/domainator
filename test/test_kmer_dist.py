@@ -1,3 +1,4 @@
+from domainator.errors import OutputSizeLimitExceeded
 import tempfile
 
 import numpy as np
@@ -129,7 +130,7 @@ def test_kmer_dist_nucleotide_kmers_are_strand_invariant(shared_datadir):
             "-i", str(shared_datadir / "kmer_dist_dna.fna"),
             "--hdf_out", out,
             "--metric", "jaccard",
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "--nucleotide_kmers",
             "--ksize", "3",
         ])
@@ -145,7 +146,7 @@ def test_kmer_dist_nucleotide_fasta_requires_gene_call_or_nucleotide_kmers(share
             kmer_dist.main([
                 "-i", str(shared_datadir / "pDONR201.fasta"),
                 "--hdf_out", out,
-                "--fasta_type", "nucleotide",
+                "--alphabet", "nucleotide",
             ])
 
 
@@ -155,7 +156,7 @@ def test_kmer_dist_gene_call_all_for_nucleotide_fasta(shared_datadir):
         kmer_dist.main([
             "-i", str(shared_datadir / "pDONR201.fasta"),
             "--hdf_out", out,
-            "--fasta_type", "nucleotide",
+            "--alphabet", "nucleotide",
             "--gene_call", "all",
         ])
 
@@ -206,7 +207,7 @@ def test_kmer_dist_max_output_gb_blocks_dense_output(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"
 
-        with pytest.raises(SystemExit, match="--max_output_gb"):
+        with pytest.raises(OutputSizeLimitExceeded, match="--max_output_gb"):
             kmer_dist.main([
                 "-i", str(shared_datadir / "kmer_dist_proteins.faa"),
                 "--hdf_out", out,
