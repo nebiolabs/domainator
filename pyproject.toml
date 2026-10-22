@@ -111,7 +111,7 @@ dev = ["domainator[test,browser,projection,docs]", "coverage"]
 
 [project.urls]
 Homepage = "https://github.com/nebiolabs/domainator"
-Documentation = "https://github.com/nebiolabs/domainator/tree/main/docs"
+Documentation = "https://nebiolabs.github.io/domainator/"
 Changelog = "https://github.com/nebiolabs/domainator/blob/main/CHANGELOG.md"
 Issues = "https://github.com/nebiolabs/domainator/issues"
 Paper = "https://doi.org/10.1093/nar/gkae1175"

@@ -40,7 +40,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--cds` | STRING ... |  | only look for peptides on cdss with these names |
 | `--cds_file` | FILE |  | only look for peptides on cdss with names listed in this text file. |
 | `--keep_name` |  |  | by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names. |
-| `--name_field` | STRING |  | The CDS qualifier to preferentially use as the name of the peptide. If not supplied, then qualifiers will be checked in order of: ["protein_id", "gene_id", "locus_tag", "gene"] |
+| `--name_field` | STRING |  | The CDS qualifier to preferentially use as the name of the peptide. If not supplied, then qualifiers will be checked in order of: \["protein_id", "gene_id", "locus_tag", "gene"\] |
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be put onto the new genbank file. Default: no cutoff. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

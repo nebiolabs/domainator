@@ -34,10 +34,10 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--fasta_out` | FILE |  | Write the hits to this FASTA file. Use - for standard output. |
 | `-Z` | INTEGER | 1000 | Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen.  Set to 0 to use the number of target sequences in the input, counted before any taxonomy filter, so filtering does not change E-values. Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful. |
 | `-e`, `--evalue` | NUMBER | 0.001 | threshold E value for the domain hit. Must be <=10. |
-| `--min_evalue` | NUMBER | 0.0 | hits with E value lower than this will be filtered out. Not frequently used. Use only if you want to eliminate close matches. Must be >=0. [default 0] |
+| `--min_evalue` | NUMBER | 0.0 | hits with E value lower than this will be filtered out. Not frequently used. Use only if you want to eliminate close matches. Must be >=0. \[default 0\] |
 | `--max_mode` |  |  | Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive. |
 | `--max_hits` | INTEGER |  | the maximum number of CDSs returned by the search, keeping the best-scoring ones by the bitscore of their best scoring profile. If not supplied, return all hits passing the evalue threshold. |
-| `--max_hits_per_contig` | INTEGER |  | the maximum number of independent hits per contig. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit. [default: unlimited] |
+| `--max_hits_per_contig` | INTEGER |  | the maximum number of independent hits per contig. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit. \[default: unlimited\] |
 | `--include_taxids` | INTEGER ... |  | Space separated list of taxids to include |
 | `--exclude_taxids` | INTEGER ... |  | Space separated list of taxids to exclude |
 | `--taxonomy_expr` | STRING |  | A boolean expression over taxids using operators & (AND), \| (OR), ~ (NOT), and parentheses, e.g. "2 & ~1224" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids. |

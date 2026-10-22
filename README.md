@@ -28,6 +28,7 @@ domainator --help
  - [Credits](#Credits)
 
 ## Detailed documentation
+- [The documentation website](https://nebiolabs.github.io/domainator/): these pages and the Python API reference
 - [Index](docs/README.md)
   - [File Formats](docs/file_formats.md)
   - [Basic Examples](docs/examples.md)

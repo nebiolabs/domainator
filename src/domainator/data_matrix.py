@@ -36,7 +36,7 @@ import numpy as np
 import h5py
 
 from domainator.errors import FormatVersionError
-from typing import Dict, List, Tuple, Union, Optional, Iterator
+from typing import Callable, Dict, List, Tuple, Union, Optional, Iterator
 
 from .edge_types import SortedUndirectedEdges
 
@@ -287,9 +287,10 @@ class DataMatrix:
     _SUPPORTED_MATRIX_FILE_MAJOR_VERSIONS = ("1", "2")
     """Major versions this reader accepts. See "Matrix file versions" in docs/file_formats.md."""
 
-    def __init__(self, data, row_names: List[str], col_names: List[str],
+    def __init__(self, data: Union[np.ndarray, scipy.sparse.sparray, scipy.sparse.spmatrix],
+                 row_names: List[str], col_names: List[str],
                  row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None,
-                 data_type: str = None, *, copy_data: bool = True):
+                 data_type: Optional[str] = None, *, copy_data: bool = True):
         """
         Args:
             data: 2D numpy array, scipy sparse array/matrix, or array-like. Converted to a
@@ -450,7 +451,7 @@ class DataMatrix:
                 raise ValueError(f"Required attribute '{attribute}' not found in HDF5 file")
 
     @classmethod
-    def from_file(cls, matrix_file, lower_bound=None) -> 'DataMatrix':
+    def from_file(cls, matrix_file: Union[PathLike, str], lower_bound: Optional[float] = None) -> 'DataMatrix':
         """Load a matrix from a Domainator hdf5 file or a tab-separated dense text file.
 
         Args:
@@ -583,7 +584,8 @@ class DataMatrix:
         symmetrized.sort_indices()
         return symmetrized
 
-    def iter_data(self, index_style="name", skip_zeros=True):
+    def iter_data(self, index_style: str = "name", skip_zeros: bool = True
+                  ) -> Iterator[Tuple[Union[str, int], Union[str, int], float]]:
         """
         Iterate over matrix values in row-major order, yielding (row_identifier, col_identifier, value).
 
@@ -613,7 +615,9 @@ class DataMatrix:
                     else:
                         yield r, c, row[c]
 
-    def triangular_iter(self, include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+    def triangular_iter(self, include_diagonal: bool = False, skip_zeros: bool = False, index_style: str = "name",
+                        agg: Optional[Callable[[float, float], float]] = None
+                        ) -> Iterator[Tuple[Union[str, int], Union[str, int], float]]:
         """
         Iterate over the lower triangle of a square matrix, in row-major order.
 
@@ -627,7 +631,7 @@ class DataMatrix:
                 when the result is 0 (which only happens with negative values).
 
         Yields:
-            tuple: (row_identifier, col_identifier, value)
+            (row_identifier, col_identifier, value) tuples.
 
         Raises:
             NotImplementedError: If matrix is not square
@@ -678,7 +682,9 @@ class DataMatrix:
                         value = agg(value, transpose_row[c])
                     yield emit(r, c, value)
 
-    def triangular(self, include_diagonal=False, skip_zeros=False, index_style="name", agg=None):
+    def triangular(self, include_diagonal: bool = False, skip_zeros: bool = False, index_style: str = "name",
+                   agg: Optional[Callable[[float, float], float]] = None
+                   ) -> List[Tuple[Union[str, int], Union[str, int], float]]:
         """Return the lower triangle of the matrix as a list of tuples (see ``triangular_iter``)."""
         return list(self.triangular_iter(
             include_diagonal=include_diagonal,
@@ -687,7 +693,8 @@ class DataMatrix:
             agg=agg,
         ))
 
-    def sorted_undirected_edges(self, skip_zeros: bool = False, agg=None) -> SortedUndirectedEdges:
+    def sorted_undirected_edges(self, skip_zeros: bool = False,
+                                agg: Optional[Callable[[float, float], float]] = None) -> SortedUndirectedEdges:
         """Return lower-triangular undirected edges sorted by descending score.
 
         ``agg=None`` or the builtin ``max`` take a vectorized path; any other callable is
@@ -859,8 +866,10 @@ class DataMatrix:
         return csr, cls._SPARSE_CSR, symmetric_labels
 
     @classmethod
-    def write_hdf(cls, matrix, file_name, row_names, col_names, row_lengths: Optional[np.ndarray] = None,
-                  col_lengths: Optional[np.ndarray] = None, data_type: str = "", symmetric: Optional[bool] = None):
+    def write_hdf(cls, matrix: Union[np.ndarray, scipy.sparse.sparray, scipy.sparse.spmatrix],
+                  file_name: Union[PathLike, str], row_names: List[str], col_names: List[str],
+                  row_lengths: Optional[np.ndarray] = None, col_lengths: Optional[np.ndarray] = None,
+                  data_type: str = "", symmetric: Optional[bool] = None) -> None:
         """Writes a matrix to a Domainator hdf5 file in CSR format.
 
         Zeros are dropped and indices sorted. When the row and column labels (and lengths)

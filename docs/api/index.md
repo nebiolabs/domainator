@@ -15,5 +15,8 @@ functions' signatures and docstrings:
 
 ```bash
 pip install -e ".[docs]"
-mkdocs serve      # or: mkdocs build, which writes site/
+mkdocs serve      # or: mkdocs build --strict, which writes site/
 ```
+
+The site is published at https://nebiolabs.github.io/domainator/ from `main` (see
+`.github/workflows/docs.yml`).

@@ -15,7 +15,7 @@ Two markers are registered in `pyproject.toml`:
 
 Domainator's own `FutureWarning`s are turned into errors in the test suite, so tests can't rely on deprecated usage.
 
-CI (`.github/workflows/tests.yml`) runs `pytest -m "not network"` on every push and pull request. The `pip` jobs have no external programs, so binary-dependent tests skip; the `conda` job installs them from bioconda and runs everything.
+CI (`.github/workflows/tests.yml`) runs `pytest -m "not network"` on pull requests, and when started by hand from the Actions tab (Tests > Run workflow). The `pip` jobs have no external programs, so binary-dependent tests skip; the `conda` job installs them from bioconda and runs everything. `.github/workflows/docs.yml` builds the documentation site with `mkdocs build --strict` (a broken link, a missing `#heading` or an unparsable docstring fails it), and on pushes to `main` publishes it to GitHub Pages at https://nebiolabs.github.io/domainator/.
 
 examine test coverage
 ```

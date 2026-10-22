@@ -1193,8 +1193,9 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
             domain_search uses; see ``get_prot_list``).
         max_mode: turn off HMMER's heuristic filters: much slower, but more sensitive.
         foldseek: Foldseek databases to search.
-        esm2_3di_weights, esm2_3di_device: the ESM-2 3Di checkpoint and the device to run it on,
-            for predicting the 3Di sequences that the Foldseek search needs.
+        esm2_3di_weights: the ESM-2 3Di checkpoint that predicts the 3Di sequences the Foldseek
+            search needs.
+        esm2_3di_device: the device to run the ESM-2 3Di model on.
         overlap_by_db: apply ``max_overlap`` within each database separately.
         max_hits_per_contig: with ``best_annotation``, the most best-hit features to add per
             contig for contig-level (nhmmer or Infernal) hits. None: all.

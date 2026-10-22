@@ -526,8 +526,10 @@ def compare_contigs(records: Iterable[SeqRecord], *, metrics: Iterable[ContigMet
         threshold: round combined scores less than or equal to this down to zero.
         progress: show progress bars.
         cpu: number of worker processes (0: one per physical core).
-        mst, knn: keep only the maximum spanning tree and/or k-nearest-neighbor edges,
-            computed while streaming (see ``domainator compare_contigs --mst/--knn``).
+        mst: keep the maximum spanning tree edges, computed while streaming (see
+            ``domainator compare_contigs --mst``). With ``knn``, keep the edges either one keeps.
+        knn: keep each row's ``knn`` strongest edges (its k nearest neighbors), computed while
+            streaming.
 
     Returns:
         A square DataMatrix of "score" values, with a row and column per unique contig id.

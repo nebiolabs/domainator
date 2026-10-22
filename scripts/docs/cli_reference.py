@@ -19,7 +19,10 @@ API_COMMANDS = DOCS / "api" / "commands.md"
 
 
 def _cell(text) -> str:
-    return str(text).replace("%%", "%").replace("|", "\\|").replace("\n", " ").strip()
+    """Help text as one table cell. Brackets are escaped so that text such as a PROSITE motif's
+    ``[DE](2)`` doesn't render as a link."""
+    text = str(text).replace("%%", "%").replace("|", "\\|").replace("[", "\\[").replace("]", "\\]")
+    return text.replace("\n", " ").strip()
 
 
 def _value(parameter) -> str:

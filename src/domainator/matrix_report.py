@@ -1205,8 +1205,9 @@ def matrix_report(matrix:DataMatrix, *, text_out_handle: Optional[TextIO] = None
     how its clusters merge as the threshold falls.
 
     Args:
-        knn_projection, merge_impact_metric, max_merge_events: as the options of
-            ``domainator matrix_report``.
+        knn_projection: also project the edge counts of ``build_ssn --mst --knn K`` for each K.
+        merge_impact_metric: how split events are measured, "min_child" or "product".
+        max_merge_events: how many of the strongest merge events to embed (0: all).
         stage_timings: a list to append each stage's (stage, seconds, metrics) timing to.
         progress_callback: called with the name of each stage as it starts.
     """

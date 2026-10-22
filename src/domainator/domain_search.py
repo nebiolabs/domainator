@@ -259,7 +259,9 @@ def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: Lis
         whole_contig: extract the whole contig of each hit (once, if it has several hits).
         normalize_direction: reverse-complement regions whose hit CDS is on the reverse strand.
         translate: translate nucleotide hits into proteins.
-        gene_call, min_evalue, max_mode: as for domainate.
+        gene_call: as for domainate.
+        min_evalue: as for domainate.
+        max_mode: as for domainate.
         ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy filters.
         include_taxids: keep only contigs with a taxid in this list (or below it).
         exclude_taxids: drop contigs with a taxid in this list (or below it).

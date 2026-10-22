@@ -36,7 +36,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
 | `-Z` | INTEGER | 1000 | Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen.  Set to 0 to use the number of target sequences in the input, counted before any taxonomy filter, so filtering does not change E-values. Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful. |
 | `-e`, `--evalue` | NUMBER | 0.001 | threshold E value for the domain hit. Must be <=10. |
-| `--min_evalue` | NUMBER | 0.0 | hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. [default 0] |
+| `--min_evalue` | NUMBER | 0.0 | hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. \[default 0\] |
 | `--max_hits_per_cds` | INTEGER |  | the maximum number of domains to be reported per CDS. If not specified, then all hits are reported. |
 | `--max_mode` |  |  | Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive. |
 | `--include_taxids` | INTEGER ... |  | Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped. |

@@ -121,7 +121,8 @@ def build_ssn_viewer(
         metadata: tab-separated tables of node metadata, keyed by their first column.
         subset_labels: only include these matrix labels (all of them if None).
         merge_impact_metric: how the split chart measures a merge (MERGE_IMPACT_CHOICES).
-        color_by, label_by: the metadata columns the viewer colors and labels nodes by at first.
+        color_by: the metadata column the viewer colors nodes by at first.
+        label_by: the metadata column the viewer labels nodes by at first.
         categorical: numeric metadata columns to color as categories rather than as a gradient.
         name: the network's name, shown in the viewer.
     """

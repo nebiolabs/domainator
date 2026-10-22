@@ -61,8 +61,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--email` | STRING |  | Contact email included in the User-Agent header sent to NCBI (politeness; not an API key). Falls back to the NCBI_EMAIL environment variable. |
 | `--ncbi_api_key` | STRING |  | NCBI API key passed to the 'datasets' backend (does not affect the raw FTP server / 'direct' backend). Falls back to the NCBI_API_KEY environment variable. |
 | `--datasets_workdir` | DIR |  | For the 'datasets' backend: working directory for the dehydrated package and rehydrated files. Required when --download_backend is 'datasets'. |
-| `--datasets_include` | STRING | gbff | For the 'datasets' backend: value passed to `datasets ... --include`. Only the GenBank flat file (gbff) is used downstream, so the genomic FASTA is not requested by default. [default: gbff] |
-| `--datasets_max_workers` | INTEGER | 10 | For the 'datasets' backend: value passed to `datasets rehydrate --max-workers` (allowed range 1-30). 10 is the NCBI Datasets default and matches the 10 req/s API-key limit. [default: 10] |
+| `--datasets_include` | STRING | gbff | For the 'datasets' backend: value passed to `datasets ... --include`. Only the GenBank flat file (gbff) is used downstream, so the genomic FASTA is not requested by default. \[default: gbff\] |
+| `--datasets_max_workers` | INTEGER | 10 | For the 'datasets' backend: value passed to `datasets rehydrate --max-workers` (allowed range 1-30). 10 is the NCBI Datasets default and matches the 10 req/s API-key limit. \[default: 10\] |
 | `--datasets_path` | PROGRAM |  | Path to the `datasets` (NCBI Datasets CLI) binary. If not given, it is looked up on PATH. |
 | `--datasets_gzip` |  |  | For the 'datasets' backend: pass `--gzip` to `datasets rehydrate` so the rehydrated genomic.gbff files are stored gzip-compressed (much smaller scratch dir; read transparently). Recommended for very large downloads. |
 

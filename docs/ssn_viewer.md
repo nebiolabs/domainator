@@ -5,7 +5,7 @@
 A guide to using the interactive viewer. For the on-disk `.dsnv` bundle schema see
 [File Formats](file_formats.md#domainator-similarity-network-viewer-bundles-dsnv); for the
 scriptable, read-only companion see `domainator ssn_navigator` in the
-[program table](../README.md).
+[program table](https://github.com/nebiolabs/domainator#program-descriptions).
 
 - [What it is](#what-it-is)
 - [Building a viewer](#building-a-viewer)

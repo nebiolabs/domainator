@@ -1,8 +1,19 @@
 # The documentation site: mkdocs build (pip install -e ".[docs]"). The pages are docs/*.md,
 # readable on GitHub as they are; docs/api/ adds the API reference from the docstrings.
+# Published to GitHub Pages by .github/workflows/docs.yml.
 site_name: Domainator
+site_url: https://nebiolabs.github.io/domainator/
 repo_url: https://github.com/nebiolabs/domainator
 docs_dir: docs
+markdown_extensions:
+  - toc:
+      # GitHub's heading anchors, so links to #headings work both on GitHub and on the site.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+validation:
+  anchors: warn  # a link to a missing #heading fails `mkdocs build --strict`
+# One page per command, reached from cli/README.md rather than the sidebar.
+not_in_nav: |
+  /cli/*.md
 theme:
   name: material
 plugins:

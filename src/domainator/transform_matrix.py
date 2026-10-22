@@ -137,8 +137,8 @@ def transform_matrix(array: scipy.sparse.csr_array, *, mode: str = PASS_THROUGH_
         mode: "none" or "score" (unchanged), "bool" (1 for every hit), "norm_score", "row_norm_score",
             "score_dist", "efi_score" or "efi_score_dist"; see ``domainator transform_matrix
             --help``.
-        row_lengths, col_lengths: the lengths of the row and column sequences, which the efi
-            modes need.
+        row_lengths: the lengths of the row sequences, which the efi modes need.
+        col_lengths: the lengths of the column sequences, which the efi modes need.
 
     Returns:
         The transformed matrix: a dense array for the distance modes (score_dist,

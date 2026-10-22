@@ -484,11 +484,14 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
 
     Args:
         records: the annotated contigs or proteins (SeqRecords).
-        text_out_handle, html_out_handle, json_out_handle: open text handles for the reports.
+        text_out_handle: an open text handle for the text report.
+        html_out_handle: an open text handle for the HTML report.
+        json_out_handle: an open text handle for the JSON report.
         domains: focus domains: the report gives how often each other domain occurs with them,
             and how far apart they are.
-        co_occurrence_fraction_out, co_occurrence_count_out: paths for domain-by-domain
-            co-occurrence matrices (fractions of contigs, or counts).
+        co_occurrence_fraction_out: a path for the domain-by-domain co-occurrence matrix, as
+            fractions of contigs.
+        co_occurrence_count_out: a path for the co-occurrence matrix as counts of contigs.
         taxonomy: also summarize the records' taxonomy, using ``ncbi_taxonomy`` (an NCBITaxonomy).
         domains_tsv_out: a path for the domain table as TSV.
         databases: count only domains from these databases.

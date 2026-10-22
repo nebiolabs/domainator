@@ -1,5 +1,5 @@
 # Documentation
-- [Home](../README.md)
+- [Project README](https://github.com/nebiolabs/domainator#readme) (overview, installation, quickstart)
 - [File Formats](file_formats.md)
 - [What 1.x keeps stable](stability.md)
 - [Similarity Network Viewer (DSNV)](ssn_viewer.md)

@@ -22,8 +22,8 @@ lists every change from 0.x.
 - hmmer_compare `--alignments_out`.
 - `domainator describe`: a JSON description of every command and its options (the tool
   manifest, docs/tool_manifest.md), for GUIs and workflow systems.
-- A command-line reference generated from the parsers (docs/cli/), and an API reference site
-  (`mkdocs build`, with the `docs` extra).
+- A command-line reference generated from the parsers (docs/cli/), and a documentation site
+  with the Python API reference, published at https://nebiolabs.github.io/domainator/.
 - Python extras: `projection` (UMAP), `structure` (torch), `dev`.
 - `scripts/bench/bench.py`, a benchmark of common steps.
 

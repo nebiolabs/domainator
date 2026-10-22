@@ -38,7 +38,7 @@ edges, so once it is computed, every threshold question is answered against some
 that scales with the node count instead of the edge count.
 
 Domainator computes that forest once, in `MaxTree`
-([ssn_edges.py:650](../src/domainator/ssn_edges.py#L650), re-exported from
+([ssn_edges.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_edges.py), re-exported from
 `data_matrix`), and everything downstream — `domainator build_ssn --mst`, the `domainator matrix_report`
 plots, the `.dsnv` bundle written by `domainator build_ssn_viewer`, `domainator ssn_navigator` — reads
 that one structure.
@@ -51,7 +51,7 @@ component, which is the desired answer rather than a degenerate case.
 
 ## Batch MST: Kruskal over a sorted edge table
 
-`MaxTree.__init__` ([ssn_edges.py:708](../src/domainator/ssn_edges.py#L708)) takes either
+`MaxTree.__init__` ([ssn_edges.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_edges.py)) takes either
 a `DataMatrix` or an already-sorted `SortedUndirectedEdges` table. From a matrix it calls
 `sorted_undirected_edges(skip_zeros=..., agg=max)`, which takes the strict lower triangle
 and sorts it by descending score. `agg=max` is how asymmetry is resolved: an undirected
@@ -62,7 +62,7 @@ Two details of the sort are load-bearing:
 
 - The fast path packs source, target and score into **one structured array** and
   sorts it in place (`DataMatrix.sorted_undirected_edges` in
-  [data_matrix.py](../src/domainator/data_matrix.py)), rather than `argsort`-ing a score
+  [data_matrix.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/data_matrix.py)), rather than `argsort`-ing a score
   array and applying the permutation. On an n² edge list the separate index array is the
   difference between fitting in memory and not.
 - The sort is **stable** and the fast path is keyed on the builtin `max` object
@@ -91,7 +91,7 @@ matrix sat between two consecutive merges.
 
 ## Threshold tables
 
-`_build_threshold_tables` ([ssn_edges.py:825](../src/domainator/ssn_edges.py#L825)) turns
+`_build_threshold_tables` ([ssn_edges.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_edges.py)) turns
 those counters into the tables every consumer actually queries: `thresholds`,
 `edges_above_threshold`, `mst_edges_above_threshold`, `edges_by_threshold`,
 `cluster_count_by_threshold`, `cluster_count_by_edge_count`.
@@ -126,14 +126,14 @@ the kNN part gives each node its local context, and the MST guarantees the resul
 same connected components as the full graph at every threshold. Every tool that prunes a
 graph (`build_ssn`, `transform_matrix`, `seq_dist`, `compare_contigs`, `structure_dist`,
 `kmer_dist`) takes the same two independent options, `--mst` and `--knn k`, from
-[sparsify.py](../src/domainator/sparsify.py). In batch form the selection is
+[sparsify.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/sparsify.py). In batch form the selection is
 `sparsify.sparsify_matrix`, which needs the full matrix in memory.
 
-`StreamingMstKnnAccumulator` ([ssn_edges.py:370](../src/domainator/ssn_edges.py#L370))
+`StreamingMstKnnAccumulator` ([ssn_edges.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_edges.py))
 computes the same selection from a stream of edges fed in one at a time via `add_edge`,
 never materializing the matrix. `domainator compare_contigs` and `domainator kmer_dist` use it to sparsify
 while they compute chunks of the similarity matrix, discarding each chunk after feeding it in
-([compare_contigs.py:304](../src/domainator/compare_contigs.py#L304)); `domainator seq_dist` and
+([compare_contigs.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/compare_contigs.py)); `domainator seq_dist` and
 `domainator structure_dist` feed it each hit as the aligner reports it.
 
 The metrics of `domainator compare_contigs` (weighted Jaccard and adjacency indices) and
@@ -196,7 +196,7 @@ batch paths agree on values as well as on membership.
 emit, for every threshold in the table and every k in `[1, max_k]`. Computing that by re-running the
 selection per (threshold, k) pair would be quadratic in the table size.
 
-`mst_knn_edge_counts_by_threshold` ([ssn_edges.py:555](../src/domainator/ssn_edges.py#L555))
+`mst_knn_edge_counts_by_threshold` ([ssn_edges.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_edges.py))
 instead does one descending sweep. Every (node, rank) pair from the neighbor rankings
 becomes an **activation event** carrying `(score, rank, source, target)`, packed into a
 single structured array and sorted in place by score. Sweeping thresholds from high to low:
@@ -226,7 +226,7 @@ called `split_events`.
 ### Pass 1: replay the merges
 
 `component_size_summary_by_threshold`
-([ssn_hierarchy.py:95](../src/domainator/ssn_hierarchy.py#L95)) replays the MST edges in
+([ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py)) replays the MST edges in
 order through a union-find, emitting one summary row per edge (plus a row 0 at
 `threshold = ∞`, all singletons). Each row records the threshold, the largest component
 size, the mean size over non-singleton components, this edge's merge impact, and the
@@ -250,7 +250,7 @@ maintaining a heap. The Python and browser implementations both use this invaria
 
 ### Pass 2: group by threshold
 
-`threshold_merge_event_rows` ([ssn_hierarchy.py:191](../src/domainator/ssn_hierarchy.py#L191))
+`threshold_merge_event_rows` ([ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py))
 collapses the per-edge rows into one event row per **distinct threshold**, for the same
 reason the threshold tables are keyed that way: a cut cannot separate edges that share a
 weight.
@@ -269,7 +269,7 @@ MST edge scoring *strictly above* this threshold — the edge index that reprodu
 ### Capping without blanking the axis
 
 A large network has far more threshold groups than are worth plotting, so
-`filter_merge_event_rows` ([ssn_hierarchy.py:341](../src/domainator/ssn_hierarchy.py#L341))
+`filter_merge_event_rows` ([ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py))
 caps the series at `max_merge_events` (default 500) ranked by impact.
 
 The cap is applied **where the series is displayed**, never where a file is written: the
@@ -330,7 +330,7 @@ the chart caption reports a count somewhere between N and N + 20.
 The per-threshold stems show the largest single split; the moving sum answers the
 complementary question, "how much of the graph is coming apart around here in total?".
 
-`merge_event_moving_sum` ([ssn_hierarchy.py:251](../src/domainator/ssn_hierarchy.py#L251))
+`merge_event_moving_sum` ([ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py))
 evaluates a centered window of 5% of the threshold range at 800 grid points. A nested loop
 would be O(n · grid); instead the impacts are sorted by threshold once, a prefix sum is
 built, and each grid point's window becomes two `searchsorted` calls and a subtraction —
@@ -342,14 +342,14 @@ sum taken afterwards undercounts exactly the small events this series exists to 
 
 ### Slider stops and the floor
 
-`threshold_slider_stops` ([ssn_hierarchy.py:434](../src/domainator/ssn_hierarchy.py#L434))
+`threshold_slider_stops` ([ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py))
 emits `∞`, one stop per event row, and then a **floor stop**. The floor is what makes the
 fully merged network reachable at all: under the strictly-above `--threshold` convention every
 other stop excludes its own tie group, so the lowest event stop still splits the weakest
 merge back apart.
 
 The floor sits 1% of the MST weight range *below* the weakest merge rather than at 0
-(`floor_threshold_value`, [ssn_hierarchy.py:413](../src/domainator/ssn_hierarchy.py#L413)).
+(`floor_threshold_value`, [ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py)).
 A network whose scores run 350–650 would otherwise spend more than half its slider track
 on empty space below the data, and negative scores are not cleared by 0 at all. It is
 derived from the tree rather than from the event rows, which the cap may have thinned.
@@ -369,12 +369,12 @@ feel instant while a slider is dragged. They do it two different ways.
 **`domainator matrix_report` checkpoints a union-find.** Replaying MST edges from scratch per
 stop is O(stops · edges). Instead `buildClusterCheckpoints` walks the stops once and
 snapshots the union-find's `parent`/`size` arrays every `CLUSTER_CHECKPOINT_STRIDE` (50)
-stops ([matrix_report.py:913](../src/domainator/matrix_report.py#L913)). A query copies
+stops ([matrix_report.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/matrix_report.py)). A query copies
 the nearest preceding checkpoint and replays at most 50 stops' worth of edges from there,
 trading `stops / stride` snapshots of memory for bounded per-query work.
 
 **The viewer cuts a precomputed dendrogram.** `build_mst_component_hierarchy`
-([ssn_hierarchy.py:491](../src/domainator/ssn_hierarchy.py#L491)) turns the merge order
+([ssn_hierarchy.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_hierarchy.py)) turns the merge order
 into a binary tree: `n` leaves plus one internal node per merge, each recording the
 threshold at which it formed, its size, and — via a post-order pass that assigns
 `leaf_start` / `leaf_count` into a shared `leaf_order` array — a contiguous slice naming
@@ -382,7 +382,7 @@ its members. Children are ordered by minimum leaf index so the layout is determi
 
 Cutting is then a descent from the roots: recurse into a cluster whose `threshold ≤ cut`,
 otherwise keep it whole (`activeClustersAtThreshold`,
-[ssn_viewer/js/viewer.js](../src/domainator/ssn_viewer/js/viewer.js)). The `≤` is the
+[ssn_viewer/js/viewer.js](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_viewer/js/viewer.js)). The `≤` is the
 strictly-above `--threshold` convention again — a component that merged exactly *at* the
 threshold is split back apart. Membership needs no traversal at all, just the
 `leaf_order` slice. This is what lets the `.dsnv` bundle scale with the node count rather

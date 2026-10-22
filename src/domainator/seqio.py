@@ -10,6 +10,7 @@ import gzip
 import os
 import sys
 import warnings
+from typing import IO, Container, Iterable, Iterator, Optional, Union
 
 from domainator import lean_record
 from Bio import SeqIO
@@ -432,22 +433,30 @@ def _iter_raw_fasta_records(file, seek_to, backend="biopython", default_molecule
             handle.close()
 
 
-def parse_seqfiles(seqfiles, contigs=None, filetype_override=None, seek_to=None, max_recs=float("inf"), default_molecule_type='protein', genbank_parser=None):
-    """
-        args:
-            seqfiles: genbank or fasta paths or handles. "-" or "/dev/stdin" reads standard input,
-                as genbank unless filetype_override says otherwise.
-            contigs: a dict where keys are the names of desired contigs, and values are None. Or None.
-            filetype_override: if supplied then don't try to guess filetype from the extension, just use the supplied filetype
-            seek_to: seek to this position in the file before reading any records
-            max_recs: stop reading each file after returning this many of its sequences
-            genbank_parser: which GenBank backend to use, "lean" or "biopython".
-                Defaults to Biopython. The "lean" backend uses the optional native (Rust) parser
-                (yielding LeanContig objects) and is much faster, but falls back
-                to Biopython for records it cannot parse and when the native
-                extension is not built.
-        output:
-            yields genbank records one at a time
+def parse_seqfiles(seqfiles: Iterable[Union[str, os.PathLike, IO]], contigs: Optional[Container[str]] = None,
+                   filetype_override: Optional[str] = None, seek_to: Optional[int] = None,
+                   max_recs: float = float("inf"), default_molecule_type: str = 'protein',
+                   genbank_parser: Optional[str] = None) -> Iterator[SeqRecord]:
+    """Read the records of GenBank and FASTA files, one at a time.
+
+    Args:
+        seqfiles: GenBank or FASTA paths or open handles. "-" or "/dev/stdin" reads standard
+            input, as GenBank unless ``filetype_override`` says otherwise.
+        contigs: yield only the records with these ids (any container, such as a set or the
+            keys of a dict). None yields every record.
+        filetype_override: "genbank" or "fasta", instead of guessing the format from the file
+            extension. Required for handles.
+        seek_to: seek to this byte offset in the file before reading any records.
+        max_recs: stop reading each file after yielding this many of its records.
+        default_molecule_type: the molecule_type of records that don't declare one, such as
+            FASTA records.
+        genbank_parser: which GenBank backend to use, "lean" or "biopython" (the default).
+            "lean" uses the optional native (Rust) parser and yields LeanContig objects; it is
+            much faster, but falls back to Biopython for records it cannot parse and when the
+            native extension is not built.
+
+    Yields:
+        The records, as SeqRecords (or LeanContigs with ``genbank_parser="lean"``).
     """
 
 

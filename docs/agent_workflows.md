@@ -3,7 +3,7 @@
 
 Copy-paste recipes for AI agents (or scripted pipelines) that need
 **low-token, high-signal** output from Domainator. For orientation and the
-CLI conventions, read [AGENTS.md](../AGENTS.md) first.
+CLI conventions, read [AGENTS.md](https://github.com/nebiolabs/domainator/blob/main/AGENTS.md) first.
 
 The guiding idea: Domainator's HTML reports and binary artifacts (HDF5
 matrices, XGMML, the `.dsnv` SSN bundle) are meant for humans and browsers.
