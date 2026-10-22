@@ -5,6 +5,7 @@ An hmm file can also be used as a reference to make a table of profile scores fo
 An hmm file can also be used as both input and reference to compare profile similarity.
 
 """
+import functools
 import logging
 import warnings
 
@@ -26,7 +27,7 @@ import tqdm
 from typing import Iterator, List, Optional
 from domainator.seqio import get_file_type, parse_seqfiles
 from domainator.hmmio import open_hmm_file
-from domainator._mp import make_pool, resolve_cpu
+from domainator._mp import Shared, make_pool, resolve_cpu
 from domainator.ssn_edges import StreamingMstKnnAccumulator
 from domainator.data_matrix import DataMatrix, symmetrize_matrix
 from domainator.hmmer_search import compare_hmmer
@@ -651,25 +652,19 @@ def run_hmmsearch(hmmer_seqs, hmmer_models, k, threads, search_type, min_score: 
         yield from _iter_top_k_results(top_k_by_input)
 
 
-class _run_hmmer_compare_worker():
-    def __init__(self, hmmer_targets, k=None, min_score: float = 0.0):
-        self.k = k
-        self.hmmer_targets = hmmer_targets
-        self.min_score = min_score
-        # Parsed on first use inside the worker process, not here: pyhmmer objects
-        # are not picklable, and this instance is sent to every worker. Caching it
-        # trades memory (the whole target set stays resident per worker) for not
-        # re-parsing the target file once per query profile.
-        self._targets = None
+def _read_profiles(hmm_path):
+    return list(open_hmm_file(hmm_path))
 
-    def _target_profiles(self):
-        if self._targets is None:
-            self._targets = list(open_hmm_file(self.hmmer_targets))
-        return self._targets
+
+class _run_hmmer_compare_worker():
+    def __init__(self, target_profiles: Shared, k=None, min_score: float = 0.0):
+        self.k = k
+        self.target_profiles = target_profiles
+        self.min_score = min_score
 
     def __call__(self, input_profile):
         out_heap = []
-        for target_profile in self._target_profiles():
+        for target_profile in self.target_profiles.get():
             
             score, _traceback, _max_index, _match_scores = compare_hmmer(input_profile, target_profile)
             score = round(score,2)
@@ -684,8 +679,10 @@ class _run_hmmer_compare_worker():
 
 def run_hmmer_compare(hmmer_queries, hmmer_targets, k, threads, min_score: float = 0.0, progress: bool = False, query_count=None):
     
-    worker = _run_hmmer_compare_worker(hmmer_targets, k, min_score=min_score)
-    with make_pool(processes=threads) as pool:
+    # Each worker process reads the targets once (threads share one copy).
+    target_profiles = Shared(build=functools.partial(_read_profiles, hmmer_targets))
+    worker = _run_hmmer_compare_worker(target_profiles, k, min_score=min_score)
+    with make_pool(processes=threads, shared=[target_profiles]) as pool:
         for hits in _progress(pool.imap_unordered(worker, open_hmm_file(hmmer_queries)), progress, total=query_count, desc="hmmer_compare queries"):
             for hit in sorted(hits, key=lambda item: (-item.score, item.reference)):
                 yield hit

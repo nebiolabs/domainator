@@ -5,6 +5,7 @@ Protein inputs use protein k-mers. Nucleotide inputs use translated CDS protein 
 or strand-invariant nucleotide k-mers when --nucleotide_kmers is supplied.
 """
 
+import functools
 import warnings
 
 from dataclasses import dataclass
@@ -43,7 +44,7 @@ from domainator.sparsify import (
 )
 from domainator.transform_matrix import transform_matrix
 from domainator.seqio import get_file_type, parse_seqfiles
-from domainator._mp import get_multiprocessing_context, resolve_cpu
+from domainator._mp import Shared, make_pool, resolve_cpu
 
 
 DEFAULT_PROTEIN_KSIZE = 5
@@ -64,14 +65,6 @@ _NUCLEOTIDE_COMPLEMENT_INT = {
     _NUCLEOTIDE_CHAR_TO_INT[char]: _NUCLEOTIDE_CHAR_TO_INT[complement]
     for char, complement in zip(_NUCLEOTIDE_ALPHABET, _NUCLEOTIDE_COMPLEMENTS)
 }
-
-_QUERY_FEATURE_MATRIX = None
-_REFERENCE_FEATURE_MATRIX = None
-_QUERY_ROW_COUNTS = None
-_REFERENCE_ROW_COUNTS = None
-_METRIC_NAME = None
-_SELF_COMPARISON = None
-
 
 @dataclass(frozen=True)
 class SequenceRepresentation:
@@ -413,41 +406,16 @@ def _compute_metric_chunk(
     return chunk_matrix
 
 
-def _init_metric_chunk_worker(
-    query_feature_matrix,
-    reference_feature_matrix,
-    query_row_counts,
-    reference_row_counts,
-    metric,
-    self_comparison,
-):
-    global _QUERY_FEATURE_MATRIX, _REFERENCE_FEATURE_MATRIX, _QUERY_ROW_COUNTS, _REFERENCE_ROW_COUNTS, _METRIC_NAME, _SELF_COMPARISON
-    _QUERY_FEATURE_MATRIX = query_feature_matrix
-    _REFERENCE_FEATURE_MATRIX = reference_feature_matrix
-    _QUERY_ROW_COUNTS = query_row_counts
-    _REFERENCE_ROW_COUNTS = reference_row_counts
-    _METRIC_NAME = metric
-    _SELF_COMPARISON = self_comparison
-
-
-def _compute_metric_chunk_worker(args):
+def _compute_metric_chunk_worker(shared, args):
+    """Pool task: ``shared`` holds (query_feature_matrix, reference_feature_matrix,
+    query_row_counts, reference_row_counts, metric, self_comparison)."""
     start, end, k, lb, upper_only = args
+    query_matrix, reference_matrix, query_counts, reference_counts, metric, self_comparison = shared.get()
     return (
         start,
         end,
-        _compute_metric_chunk(
-            _QUERY_FEATURE_MATRIX,
-            _REFERENCE_FEATURE_MATRIX,
-            _QUERY_ROW_COUNTS,
-            _REFERENCE_ROW_COUNTS,
-            start,
-            end,
-            _METRIC_NAME,
-            _SELF_COMPARISON,
-            k,
-            lb,
-            upper_only,
-        ),
+        _compute_metric_chunk(query_matrix, reference_matrix, query_counts, reference_counts,
+                              start, end, metric, self_comparison, k, lb, upper_only),
     )
 
 
@@ -500,20 +468,11 @@ def _compute_sparse_metric_matrix(
     _progress_checkpoint(progress, f"Scoring {matrix_shape[0]} query records against {matrix_shape[1]} reference records")
 
     if cpu > 1 and len(query_chunks) > 1:
-        with get_multiprocessing_context().Pool(
-            processes=min(cpu, len(query_chunks)),
-            initializer=_init_metric_chunk_worker,
-            initargs=(
-                query_feature_matrix,
-                reference_feature_matrix,
-                query_row_counts,
-                reference_row_counts,
-                metric,
-                self_comparison,
-            ),
-        ) as pool:
+        shared = Shared((query_feature_matrix, reference_feature_matrix, query_row_counts,
+                         reference_row_counts, metric, self_comparison))
+        with make_pool(processes=min(cpu, len(query_chunks)), shared=[shared]) as pool:
             for start, end, chunk_matrix in _progress(
-                pool.imap(_compute_metric_chunk_worker, query_chunks),
+                pool.imap(functools.partial(_compute_metric_chunk_worker, shared), query_chunks),
                 progress,
                 total=len(query_chunks),
                 desc="Scoring",

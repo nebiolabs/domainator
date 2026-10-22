@@ -12,15 +12,12 @@ binding = "PyO3"
 optional = true
 # Always build optimized (release), including for editable installs.
 debug = false
-# Built against the stable ABI (see rust/Cargo.toml), so one wheel per platform serves every
-# Python from 3.12 on.
-py-limited-api = "cp312"
-
-[tool.distutils.bdist_wheel]
-py-limited-api = "cp312"
+# Built against the stable ABI when setup.py asks for it (every Python from 3.12 on, except
+# free-threaded builds, which the stable ABI doesn't cover before 3.15).
+py-limited-api = "auto"
 
 [tool.cibuildwheel]
-# One abi3 wheel per platform (see py-limited-api above); skip 32-bit and musl.
+# One abi3 wheel per platform (see setup.py); skip 32-bit and musl.
 build = "cp312-*"
 skip = "*_i686 *-musllinux_*"
 # Verify the native extension actually compiled into the wheel. domainator's

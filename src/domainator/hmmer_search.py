@@ -28,7 +28,7 @@ import pyhmmer
 from typing import Iterable, Tuple, Optional, BinaryIO
 import heapq
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDOUT_PATHS, tool_parser
-from domainator._mp import make_pool, resolve_cpu
+from domainator._mp import Shared, make_pool, resolve_cpu
 from domainator.hmmio import (
     read_hmms,
     alphabet_name,
@@ -287,13 +287,13 @@ class HmmerHit():
 
 
 class _hmmer_search_worker():
-    def __init__(self, hmmer_targets, score_cutoff=float("-inf")):
+    def __init__(self, hmmer_targets: Shared, score_cutoff=float("-inf")):
         self.hmmer_targets = hmmer_targets
         self.score_cutoff = score_cutoff
     
     def __call__(self, input_profile):
         best_result = None
-        for target_dataset in self.hmmer_targets.values():
+        for target_dataset in self.hmmer_targets.get().values():
             for target_profile in target_dataset.values():
                 score, _, _, _ = compare_hmmer(input_profile, target_profile)
                 if score >= self.score_cutoff:
@@ -309,7 +309,7 @@ def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmm_out
     ``references`` profiles to ``hmm_out_handle``; with ``max_hits``, only that many, the best-scoring first.
 
     The input and reference profiles must share an alphabet. ``min_score`` None means the default
-    for the alphabet (see hmmer_compare). ``cpu`` 0 means one process per physical core. Raises
+    for the alphabet (see hmmer_compare). ``cpu`` 0 means one worker per physical core. Raises
     OutputSizeLimitExceeded past ``max_output_bytes``.
     """
     cpu = resolve_cpu(cpu)
@@ -321,7 +321,8 @@ def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmm_out
         alphabet_label = alphabet_name(reference_alphabet) if reference_alphabet is not None else "amino"
         logger.info(f"Using --min_score {min_score:g} (the default for {alphabet_label} profiles).")
 
-    worker = _hmmer_search_worker(reference_hmms, min_score)
+    shared_references = Shared(reference_hmms)
+    worker = _hmmer_search_worker(shared_references, min_score)
 
     
     def run_comparison():
@@ -332,7 +333,7 @@ def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmm_out
             if input_alphabet is None:
                 continue
             check_alphabets_match(input_alphabet, reference_alphabet, _input_display_name(input_file), "domainator hmmer_search")
-            with make_pool(processes=cpu) as pool:
+            with make_pool(processes=cpu, shared=[shared_references]) as pool:
                 for hit in pool.imap(worker, input_profiles, chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                     if hit is not None:
                         yield hit

@@ -26,6 +26,10 @@ lists every change from 0.x.
   with the Python API reference, published at https://nebiolabs.github.io/domainator/.
 - Python extras: `projection` (UMAP), `structure` (torch), `dev`.
 - `scripts/bench/bench.py`, a benchmark of common steps.
+- The `domain_search` function searches SeqRecords as well as file partitions, reading a stream
+  of records only a few batches ahead of the search; it has a `batch_size` parameter.
+- On free-threaded Python with the GIL off, parallel work runs in threads instead of processes
+  (`DOMAINATOR_MP_START_METHOD` overrides this). Domainator builds on free-threaded Python.
 
 ### Changed
 - Commands run as `domainator <command>`; the `<command>.py` scripts are gone.
@@ -36,7 +40,7 @@ lists every change from 0.x.
   (`--columns domains length taxid:genus`) instead of one flag per column.
 - Domainator uses upstream Biopython (1.85 to 1.88) instead of a bundled fork.
 - Python 3.12 or newer is required; wheels use the stable ABI, so one wheel serves every
-  Python from 3.12 on.
+  Python from 3.12 on (free-threaded Python builds its own).
 - Matrix files are version 2.0 (symmetric matrices are stored as their upper triangle).
 - The conda environment no longer installs TMbed and PyTorch; the README's "Optional: TMbed"
   section says how to add them for `find_features --tmbed`.
@@ -62,3 +66,8 @@ lists every change from 0.x.
   ignored by some commands; a missing-qualifier error that printed a record to standard output;
   matrix_report's kNN edge counts with long neighbor lists; build_projection with
   `--color_table_out` and no colors, and `--pca_args` on sparse matrices.
+- seq_dist's hmmer modes read the target profiles again for every query profile, and
+  hmmer_search and hmmer_compare sent every reference profile with every query; each worker
+  now gets them once.
+- domain_search's `--batch_size` set the partition size but not how many CDSs were searched at
+  once.

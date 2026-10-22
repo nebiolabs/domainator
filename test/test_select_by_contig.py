@@ -103,7 +103,7 @@ def test_select_by_conting_domain_expression_config_file(shared_datadir):
         out = output_dir + "/extraction_pept.gb"
         config_file = output_dir + "/config.yml"
         with open(config_file, "w") as fh:
-            subprocess.run([sys.executable, "-m", "domainator", "select_by_contig", "-i", str(shared_datadir / "simple_genpept.gb"), "--domain_expr", "(CcdB) | (CAT & Condensation)", "-o", out, '--print_config'], stdout=fh, stderr=fh, check=True)
+            subprocess.run([sys.executable, "-m", "domainator", "select_by_contig", "-i", str(shared_datadir / "simple_genpept.gb"), "--domain_expr", "(CcdB) | (CAT & Condensation)", "-o", out, '--print_config'], stdout=fh, check=True)
         select_by_contig.main(["--config", config_file])
         seqs = list(parse_seqfiles([out]))
         assert len(seqs) == 2

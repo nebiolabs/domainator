@@ -19,7 +19,7 @@ import heapq
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit, check_alphabets_match
-from domainator._mp import make_pool, resolve_cpu
+from domainator._mp import Shared, make_pool, resolve_cpu
 from domainator.hmmio import common_hmm_alphabet, iter_hmms_with_alphabet
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes
 
@@ -28,7 +28,7 @@ def _format_hmmer_compare_hit(hit: HmmerHit) -> str:
     return "\t".join((hit.query_name, hit.reference_name, f"{round(hit.score, 2):.2f}")) + "\n"
 
 class _hmmer_compare_worker():
-    def __init__(self, hmmer_targets, alignment=False, k=None, score_cutoff=float("-inf")):
+    def __init__(self, hmmer_targets: Shared, alignment=False, k=None, score_cutoff=float("-inf")):
         self.k = k
         self.hmmer_targets = hmmer_targets
         self.alignment = alignment
@@ -36,7 +36,7 @@ class _hmmer_compare_worker():
     
     def __call__(self, input_profile):
         out_heap = []
-        for target_dataset in self.hmmer_targets.values():
+        for target_dataset in self.hmmer_targets.get().values():
             for target_profile in target_dataset.values():
                 score, backtrace, max_index, match_scores = compare_hmmer(input_profile, target_profile)
                 if score >= self.score_cutoff:
@@ -60,12 +60,13 @@ def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_ou
     row followed by the alignment and a blank line to alignments_out_handle. Either handle can be None.
 
     Hits score at least ``min_score``; with ``max_hits_per_query``, only that many per query are
-    kept. ``cpu`` 0 means one process per physical core."""
+    kept. ``cpu`` 0 means one worker per physical core."""
     cpu = resolve_cpu(cpu)
     reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
     reference_alphabet = common_hmm_alphabet(references, role="reference")
 
-    worker = _hmmer_compare_worker(reference_hmms, alignments_out_handle is not None, max_hits_per_query, min_score)
+    shared_references = Shared(reference_hmms)
+    worker = _hmmer_compare_worker(shared_references, alignments_out_handle is not None, max_hits_per_query, min_score)
 
     header = "" if tsv_out_handle is None else "\t".join(("query", "reference", "score")) + "\n"
     header_bytes = len(header.encode("utf-8"))
@@ -85,7 +86,7 @@ def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_ou
         if file_alphabet is None:  # no profiles in this file
             continue
         check_alphabets_match(file_alphabet, reference_alphabet, str(file), "domainator hmmer_compare")
-        with make_pool(processes=cpu) as pool:
+        with make_pool(processes=cpu, shared=[shared_references]) as pool:
             for hits in pool.imap(worker, query_profiles, chunksize=1): # I tested some chunk sizes and it didn't seem to make a difference
                 for hit in hits:
                     row = _format_hmmer_compare_hit(hit)

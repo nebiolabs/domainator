@@ -697,7 +697,7 @@ layout change; a newer minor with the same major stays readable.
 ### How `domain_search` uses these files
 
 On every run `domain_search` turns each input database into **partitions** —
-`(file, offset, n_records)` tuples that worker processes seek to and parse
+`(file, offset, n_records)` tuples that workers seek to and parse
 independently. The offsets come from `domainator.offsets.get_offsets`/`i_get_offsets`, which read a
 valid, fresh `.didx` when one exists and otherwise scan the file (Rust scanner, or
 Biopython fallback). Two facts about this drive the layout choices below:

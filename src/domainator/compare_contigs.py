@@ -5,12 +5,13 @@ Takes a genbank file annotated with domainator and calculates similarities betwe
 ji, ai, and dss metrics are similar to and inspired by the metrics used in the BigScape method:
 Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Kautsar, James H. Tryon, Elizabeth I. Parkinson, Emmanuel L. C. De Los Santos, et al. "A Computational Framework to Explore Large-Scale Biosynthetic Diversity from Large-Scale Genomic Data." Nature Chemical Biology 16, no. 1 (January 2020): 60–68. https://doi.org/10.1038/s41589-019-0400-9.
 """
+import functools
 import warnings
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles, write_genbank, copy_SeqRecord, open_writable_seqfile
-from domainator._mp import make_pool, resolve_cpu
+from domainator._mp import Shared, make_pool, resolve_cpu
 from collections import OrderedDict
 import scipy.cluster.hierarchy
 import math
@@ -29,11 +30,6 @@ import numpy as np
 import scipy.sparse
 import psutil
 import tqdm
-
-_SIMILARITY_FEATURE_MATRIX = None
-_SIMILARITY_ROW_COUNTS = None
-_PREPARED_SIMILARITY_METRICS = None
-
 
 def _progress(iterable, enabled, **kwargs):
     if not enabled:
@@ -72,17 +68,6 @@ class _PreparedSimilarityMetric:
         self.feature_matrix = scipy.sparse.csr_array(feature_matrix, dtype=np.float64)
         self.row_counts = np.diff(self.feature_matrix.indptr)
         self.label = label
-
-
-def _init_similarity_chunk_worker(feature_matrix, row_counts):
-    global _SIMILARITY_FEATURE_MATRIX, _SIMILARITY_ROW_COUNTS
-    _SIMILARITY_FEATURE_MATRIX = feature_matrix
-    _SIMILARITY_ROW_COUNTS = row_counts
-
-
-def _init_combined_similarity_chunk_worker(prepared_metrics):
-    global _PREPARED_SIMILARITY_METRICS
-    _PREPARED_SIMILARITY_METRICS = prepared_metrics
 
 
 def _compute_similarity_chunk(feature_matrix, row_counts, start, end, upper_only=False):
@@ -156,14 +141,17 @@ def _compute_combined_similarity_chunk(prepared_metrics, start, end, k, lb, uppe
     return combined_chunk
 
 
-def _compute_similarity_chunk_worker(args):
+def _compute_similarity_chunk_worker(shared, args):
+    """Pool task: ``shared`` holds (feature_matrix, row_counts)."""
     start, end = args
-    return start, end, _compute_similarity_chunk(_SIMILARITY_FEATURE_MATRIX, _SIMILARITY_ROW_COUNTS, start, end)
+    feature_matrix, row_counts = shared.get()
+    return start, end, _compute_similarity_chunk(feature_matrix, row_counts, start, end)
 
 
-def _compute_combined_similarity_chunk_worker(args):
+def _compute_combined_similarity_chunk_worker(shared, args):
+    """Pool task: ``shared`` holds the prepared metrics."""
     start, end, k, lb, upper_only = args
-    return start, end, _compute_combined_similarity_chunk(_PREPARED_SIMILARITY_METRICS, start, end, k, lb, upper_only)
+    return start, end, _compute_combined_similarity_chunk(shared.get(), start, end, k, lb, upper_only)
 
 
 def _compute_sparse_similarity_matrix(contig_data, cpu=1, progress=False, desc=None):
@@ -178,12 +166,10 @@ def _compute_sparse_similarity_matrix(contig_data, cpu=1, progress=False, desc=N
     chunk_builder = StreamingCSRChunkBuilder(matrix_shape)
 
     if cpu > 1 and len(query_chunks) > 1:
-        with make_pool(
-            processes=min(cpu, len(query_chunks)),
-            initializer=_init_similarity_chunk_worker,
-            initargs=(feature_matrix, row_counts),
-        ) as pool:
-            for start, end, chunk_matrix in _progress(pool.imap(_compute_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
+        shared = Shared((feature_matrix, row_counts))
+        with make_pool(processes=min(cpu, len(query_chunks)), shared=[shared]) as pool:
+            task = functools.partial(_compute_similarity_chunk_worker, shared)
+            for start, end, chunk_matrix in _progress(pool.imap(task, query_chunks), progress, total=len(query_chunks), desc=desc):
                 chunk_builder.append_chunk(start, end, chunk_matrix)
     else:
         for start, end in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
@@ -212,12 +198,10 @@ def _compute_combined_sparse_similarity_matrix(prepared_metrics, k, lb, cpu=1, p
     chunk_builder = StreamingCSRChunkBuilder(matrix_shape)
 
     if cpu > 1 and len(query_chunks) > 1:
-        with make_pool(
-            processes=min(cpu, len(query_chunks)),
-            initializer=_init_combined_similarity_chunk_worker,
-            initargs=(prepared_metrics,),
-        ) as pool:
-            for start, end, chunk_matrix in _progress(pool.imap(_compute_combined_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
+        shared = Shared(prepared_metrics)
+        with make_pool(processes=min(cpu, len(query_chunks)), shared=[shared]) as pool:
+            task = functools.partial(_compute_combined_similarity_chunk_worker, shared)
+            for start, end, chunk_matrix in _progress(pool.imap(task, query_chunks), progress, total=len(query_chunks), desc=desc):
                 chunk_builder.append_chunk(start, end, chunk_matrix)
     else:
         for chunk_args in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
@@ -242,12 +226,10 @@ def _compute_sparsified_similarity_matrix(prepared_metrics, *, mst, knn, k, lb, 
     query_chunks = [(start, end, k, lb, upper_only) for start, end in iter_query_chunks(n, cpu)]
 
     if cpu > 1 and len(query_chunks) > 1:
-        with make_pool(
-            processes=min(cpu, len(query_chunks)),
-            initializer=_init_combined_similarity_chunk_worker,
-            initargs=(prepared_metrics,),
-        ) as pool:
-            for start, end, chunk_matrix in _progress(pool.imap(_compute_combined_similarity_chunk_worker, query_chunks), progress, total=len(query_chunks), desc=desc):
+        shared = Shared(prepared_metrics)
+        with make_pool(processes=min(cpu, len(query_chunks)), shared=[shared]) as pool:
+            task = functools.partial(_compute_combined_similarity_chunk_worker, shared)
+            for start, end, chunk_matrix in _progress(pool.imap(task, query_chunks), progress, total=len(query_chunks), desc=desc):
                 feed_chunk_to_accumulator(accumulator, start, chunk_matrix)
     else:
         for chunk_args in _progress(query_chunks, progress, total=len(query_chunks), desc=desc):
@@ -525,7 +507,7 @@ def compare_contigs(records: Iterable[SeqRecord], *, metrics: Iterable[ContigMet
         max_hits_per_query: keep this many of the top combined scores per contig (None: all).
         threshold: round combined scores less than or equal to this down to zero.
         progress: show progress bars.
-        cpu: number of worker processes (0: one per physical core).
+        cpu: number of workers (0: one per physical core).
         mst: keep the maximum spanning tree edges, computed while streaming (see
             ``domainator compare_contigs --mst``). With ``knn``, keep the edges either one keeps.
         knn: keep each row's ``knn`` strongest edges (its k nearest neighbors), computed while

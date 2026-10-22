@@ -25,6 +25,12 @@ coverage html
 ```
 then open htmlcov/index.html in a browser to see coverage
 
+## parallel workers
+
+Every pool of workers comes from `domainator._mp.make_pool`. On free-threaded Python with the GIL off, its workers are threads, which share memory; otherwise they are processes started with spawn. A task gets large read-only data (parsed references, matrices) through `_mp.Shared`, never through module globals or attributes of the task's function: a process pool sends the function and its arguments with every task, but a `Shared` reaches each worker once, and threads read the parent's copy. A task must not change anything it shares with other tasks.
+
+`DOMAINATOR_MP_START_METHOD` overrides the choice: `threads`, or a multiprocessing start method (`spawn`, `forkserver`, `fork`). Running the tests with `DOMAINATOR_MP_START_METHOD=threads` checks the thread path on an ordinary Python. On free-threaded Python, pyhmmer, pyinfernal and pyrodigal still turn the GIL back on when imported (they haven't declared that they can run without it), so pools are processes there too unless you start Python with `PYTHON_GIL=0`.
+
 ## the SSN viewer
 
 The viewer page is built from files in `src/domainator/ssn_viewer/`: `viewer.html`, `viewer.css` and the scripts in `js/`. `js/viewer.js` is the page's one script; each `// @include <file>` line pulls in a file from `js/`, which then shares its scope. Values from Python (versions, palettes, an embedded bundle) reach the page through its `dsnv-config` JSON block (`DSNV_CONFIG` in the script), set in `ssn_viewer_html.py`. `test/test_ssn_viewer_js.py` checks the assembled script with `node --check` and tests the layout worker in Node; `test/test_ssn_viewer_browser.py` drives the page in Chromium (see "Browser/SSN-viewer tests" in CLAUDE.md).

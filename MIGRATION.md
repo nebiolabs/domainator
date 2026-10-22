@@ -333,7 +333,7 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | infernal_build | `informat` | `input_format` |
 | rotate_contigs | `where` | `anchor` |
 | domainate | `max_hits`, `esm2_3Di_weights`, `esm2_3Di_device` | `max_hits_per_cds`, `esm2_3di_weights`, `esm2_3di_device` |
-| domain_search | `decoy_names`, `dedup_both_strands` | `decoys`, `both_strands` |
+| domain_search | `partitions` (the input), `decoy_names`, `dedup_both_strands` | `targets` (SeqRecords, or the same partitions), `decoys`, `both_strands` |
 | find_features | `gpu_device` | `device` |
 | hmmer_search, hmmer_compare | `reference_files`, `score_cutoff` | `references`, `min_score` |
 | hmmer_compare | `out_handle`, `alignments` | `tsv_out_handle`, `alignments_out_handle` (either can be None) |

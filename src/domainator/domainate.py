@@ -13,6 +13,7 @@ NOTES: genbank files that contain translation annotations in their CDS features 
 """
 import warnings
 import sys
+import threading
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 from typing import NamedTuple, List, Dict, Optional, Union, AbstractSet, Any, Iterable, Iterator
@@ -118,17 +119,28 @@ class HMMDatabase(dict):
     """The HMMs of one reference database, by name, that also keeps them as optimized profiles.
 
     pyhmmer's hmmsearch converts each HMM query to an optimized profile on every call, which is
-    once per batch of targets; converting once and passing the profiles saves that.
+    once per batch of targets; converting once and passing the profiles saves that. HMMER
+    changes an optimized profile while searching with it (it is reconfigured for each target's
+    length), so each thread gets its own.
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._per_thread = threading.local()
+
+    def __reduce__(self):
+        return (HMMDatabase, (dict(self),))
+
     def optimized_profiles(self):
-        if not hasattr(self, "_optimized"):
-            self._optimized = []
+        optimized = getattr(self._per_thread, "optimized", None)
+        if optimized is None:
+            optimized = []
             for hmm in self.values():
                 background = pyhmmer.plan7.Background(hmm.alphabet)
                 profile = pyhmmer.plan7.Profile(hmm.M, hmm.alphabet)
                 profile.configure(hmm, background)
-                self._optimized.append(profile.to_optimized())
-        return self._optimized
+                optimized.append(profile.to_optimized())
+            self._per_thread.optimized = optimized
+        return optimized
 
 
 class SearchResult(NamedTuple):

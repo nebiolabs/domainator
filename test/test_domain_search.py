@@ -8,10 +8,11 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio import SeqIO
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.model import DomainatorCDS, set_hit_best_score, set_hit_names
+from domainator.model import DomainatorCDS, get_hit_best_score, set_hit_best_score, set_hit_names
 from domainator.offsets import count_peptides_in_record
 from domainator.partial import get_fragment_status
 from domainator.seqio import parse_seqfiles, write_genbank
+from domainator._mp import Shared
 import pytest
 from helpers import compare_seqfiles, compare_seqrecords
 
@@ -718,14 +719,12 @@ def test_domain_search_passes_allowed_taxids_to_domainate(shared_datadir, monkey
         captured.update(kwargs)
         return iter(matched_records)
 
-    monkeypatch.setattr(domain_search_module, "_WORKER_ALLOWED_TAXIDS", frozenset({2, 198538}))
     monkeypatch.setattr(domain_search_module.domainate, "domainate", fake_domainate)
 
     worker = domain_search_module._domain_search_worker(
-        references=[str(input)], z=1000, evalue=0.1, max_overlap=1, add_annotations=False,
-        cds_range=None, kb_range=None, whole_contig=False, normalize_direction=True,
-        translate=False, batch_size=100, include_taxids={2}, exclude_taxids={1224},
-        fasta_type="protein",
+        references=Shared({}), allowed_taxids=Shared(frozenset({2, 198538})), z=1000, evalue=0.1,
+        max_overlap=1, add_annotations=False, cds_range=None, kb_range=None, whole_contig=False,
+        normalize_direction=True, translate=False, batch_size=100, fasta_type="protein",
     )
     out = worker((str(input), 0, total_records))
 
@@ -1059,3 +1058,64 @@ def test_domain_search_mgnify_fragment_filter(shared_datadir):
         assert "MGYP000000000000" in hits["include"]
         assert hits["only"] == {"MGYP000000000000"}
         assert "MGYP000000000000" not in hits["exclude"]
+
+
+def _hit_summary(records):
+    # Not the ids: with max_hits, which of several identical, equal-scoring contigs is kept
+    # depends on the order the batches finish.
+    return sorted((str(rec.seq), len(rec.features), get_hit_best_score(rec)) for rec in records)
+
+
+@pytest.mark.parametrize("input_name,options", [
+    ("pdonr_peptides.fasta", {}),
+    ("pDONR201_multi_genemark.gb", {"cds_range": (1, 1)}),
+    ("pDONR201_multi_genemark.gb", {"whole_contig": True, "max_hits": 2}),
+])
+def test_domain_search_records_match_partitions(shared_datadir, input_name, options):
+    from domainator.domain_search import domain_search
+    from domainator.offsets import i_partition_seqfiles
+    input_path = str(shared_datadir / input_name)
+    common = dict(references=[str(shared_datadir / "pdonr_hmms.hmm")], z=1000, evalue=0.1, cpu=3, batch_size=2, **options)
+
+    from_partitions = list(domain_search(i_partition_seqfiles([input_path], 2), **common))
+    from_records = list(domain_search(parse_seqfiles([input_path]), **common))
+
+    assert len(from_partitions) > 0
+    assert _hit_summary(from_records) == _hit_summary(from_partitions)
+
+
+def test_domain_search_records_without_molecule_type(shared_datadir):
+    # Records straight from Bio.SeqIO have no molecule_type; alphabet supplies it.
+    from domainator.domain_search import domain_search
+    fasta = str(shared_datadir / "pdonr_peptides.fasta")
+    common = dict(references=[str(shared_datadir / "pdonr_hmms.hmm")], z=1000, evalue=0.1, cpu=2)
+    expected = _hit_summary(domain_search(parse_seqfiles([fasta]), **common))
+    assert _hit_summary(domain_search(SeqIO.parse(fasta, "fasta"), alphabet="protein", **common)) == expected
+
+
+def test_domain_search_reads_records_only_a_few_batches_ahead(shared_datadir):
+    from domainator.domain_search import domain_search
+    proteins = list(parse_seqfiles([str(shared_datadir / "pdonr_peptides.fasta")]))
+    total = 40 * len(proteins)
+    consumed = 0
+
+    def stream():
+        nonlocal consumed
+        for copy in range(40):
+            for rec in proteins:
+                consumed += 1
+                yield SeqRecord(rec.seq, id=f"{rec.id}_{copy}", annotations={"molecule_type": "protein"})
+
+    hits = domain_search(stream(), references=[str(shared_datadir / "pdonr_hmms.hmm")], z=1000, evalue=0.1,
+                         cpu=2, batch_size=1)
+    next(hits)
+    assert consumed < total / 4
+    assert len(list(hits)) > 0
+
+
+def test_domain_search_rejects_mixed_targets(shared_datadir):
+    from domainator.domain_search import domain_search
+    fasta = str(shared_datadir / "pdonr_peptides.fasta")
+    record = next(iter(parse_seqfiles([fasta])))
+    with pytest.raises(TypeError, match="not both"):
+        list(domain_search([record, (fasta, 0, 1)], references=[str(shared_datadir / "pdonr_hmms.hmm")], z=1000, cpu=2))

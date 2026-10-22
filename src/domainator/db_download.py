@@ -507,7 +507,7 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
         output_file_path (str): Combined output GenBank file (records are appended).
         gene_call (str): None, 'all', or 'unannotated' (see process_local_gbff).
         num_recs (int): Optional cap on the number of genomes to write.
-        cpus (int): Number of processes for the local parse/gene-call/append pass (network is done).
+        cpus (int): Number of workers for the local parse/gene-call/append pass (network is done).
         success_rec_log (str): Optional path to log successfully written versionless accessions.
         datasets_workdir (str): Working directory for the dehydrated package and rehydrated files.
         datasets_include (str): Value for `datasets ... --include` (default "gbff"; the genomic

@@ -253,7 +253,7 @@ def test_select_by_cds_domain_expr_config_file(shared_datadir):
         out = output_dir + "/extraction.gb"
         config_file = output_dir + "/config.yml"
         with open(config_file, "w") as fh:
-            subprocess.run([sys.executable, "-m", "domainator", "select_by_cds", "-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), '--cds_range', '1', "-o", out, "--domain_expr", "CAT", "--pad", '--print_config'], stdout=fh, stderr=fh, check=True)
+            subprocess.run([sys.executable, "-m", "domainator", "select_by_cds", "-i", str(shared_datadir / "pDONR201_multi_genemark_clipped_domainator.gb"), '--cds_range', '1', "-o", out, "--domain_expr", "CAT", "--pad", '--print_config'], stdout=fh, check=True)
         select_by_cds.main(["--config", config_file])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 4

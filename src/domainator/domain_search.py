@@ -20,9 +20,9 @@ from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, reject_stdin, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles, native_parser_available
-from domainator.offsets import partition_seqfile, i_partition_seqfiles, index_total_cds
+from domainator.offsets import count_peptides_in_record, partition_seqfile, i_partition_seqfiles, index_total_cds
 from domainator.cli.common import list_and_file_to_dict_keys
-from domainator._mp import make_pool, resolve_cpu
+from domainator._mp import Shared, imap_unordered_bounded, make_pool, resolve_cpu
 from domainator.taxonomy.records import compile_taxonomy_allowed
 from domainator.partial import PARTIAL_CHOICES
 from domainator.locations import WHERE_CHOICES
@@ -30,26 +30,14 @@ from domainator.model import sequence_hashes, get_hit_best_score, get_hit_names,
 from domainator import select_by_cds
 from domainator import db_index
 from domainator import domainate
+import functools
 import heapq
-from typing import List, Tuple, Set, Optional, Iterable, Iterator
+from typing import List, Tuple, Set, Optional, Iterable, Iterator, Union
 from domainator import extract_peptides
 from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from Bio.SeqRecord import SeqRecord
-
-
-# Per-process taxonomy filter, populated by the pool initializer. The include/
-# exclude filter is "compiled" once in the parent into a frozenset of allowed
-# taxids (NCBITaxonomy.compile_taxonomy_filter); filtering is then a single O(1)
-# membership test and the set is pickled once per process, not per partition.
-_WORKER_ALLOWED_TAXIDS = None
-
-# Per-process parsed references, populated by the pool initializer. References are
-# parsed once per worker (from path strings passed through initargs) rather than
-# re-parsed for every partition. Only path strings cross the spawn boundary, so no
-# pyhmmer/pyinfernal object is ever pickled (see R4 in speed_up_plan.md).
-_WORKER_REFERENCES = None
 
 
 def _is_new_sequence(record, seen: Set[bytes], both_strands: bool) -> bool:
@@ -61,24 +49,17 @@ def _is_new_sequence(record, seen: Set[bytes], both_strands: bool) -> bool:
     return True
 
 
-def _init_search_worker(reference_paths, foldseek_paths, allowed_taxids):
-    """Pool initializer: parse references once per worker, install the taxonomy filter.
-
-    Args:
-        reference_paths: list of reference file paths (parsed inside the worker).
-        foldseek_paths: list of foldseek database paths, or None.
-        allowed_taxids: frozenset of taxids that pass the taxonomy filter, or None
-            if no taxonomy filtering is active.
-    """
-    global _WORKER_REFERENCES, _WORKER_ALLOWED_TAXIDS
-    _WORKER_REFERENCES = domainate.read_references(reference_paths, foldseek=foldseek_paths)
-    _WORKER_ALLOWED_TAXIDS = allowed_taxids
-
-
 class _domain_search_worker():
+    """Pool task: search one partition or batch of records, and return its hit regions.
 
-    def __init__(self, references: List, z: int , evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, include_taxids: Optional[Set[int]] = None, exclude_taxids: Optional[Set[int]] = None, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include", deduplicate_by_sequence: bool = False, dedup_both_strands: bool = False):
+    ``references`` and ``allowed_taxids`` are Shared (see domainator._mp), so each worker gets them
+    once: the parsed references, and the compiled taxonomy filter (None: no filter).
+    """
 
+    def __init__(self, *, references: Shared, allowed_taxids: Shared, z: int, evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include", deduplicate_by_sequence: bool = False, dedup_both_strands: bool = False):
+
+        self.references = references
+        self.allowed_taxids = allowed_taxids
         self.z = z
         self.evalue = evalue
         self.max_overlap = max_overlap
@@ -88,14 +69,9 @@ class _domain_search_worker():
         self.whole_contig = whole_contig
         self.normalize_direction = normalize_direction
         self.batch_size = batch_size
-        self.references = references
         self.translate = translate
         self.gene_call = gene_call
         self.min_evalue = min_evalue
-        # Kept for the constructor contract; the actual filter is the compiled
-        # frozenset of allowed taxids installed per worker process (_WORKER_ALLOWED_TAXIDS).
-        self.include_taxids = include_taxids
-        self.exclude_taxids = exclude_taxids
         self.fasta_type = fasta_type
         self.max_mode = max_mode
         self.max_region_overlap = max_region_overlap
@@ -103,39 +79,31 @@ class _domain_search_worker():
         self.decoy_names = decoy_names
         self.max_hits_per_contig = max_hits_per_contig
         self.partial = partial
-        # When max_hits is set, each worker keeps only its own top-max_hits records
+        # When max_hits is set, each task keeps only its own top-max_hits records
         # (by best domain score) before returning, so the parent receives at most
-        # O(workers * max_hits) records to merge instead of every hit. The global
-        # top-max_hits is unchanged: a single worker can contribute at most max_hits
-        # records to a global top-max_hits, so trimming per worker is lossless.
+        # O(tasks * max_hits) records to merge instead of every hit. The global
+        # top-max_hits is unchanged: a single task can contribute at most max_hits
+        # records to a global top-max_hits, so trimming per task is lossless.
         self.max_hits = max_hits
-        # Sequence dedup is also done per partition so that, with max_hits set, the
-        # per-worker top-max_hits isn't crowded out by copies of one sequence (which
-        # would make the per-worker trim lossy). domain_search dedups again globally.
+        # Sequence dedup is also done per task so that, with max_hits set, the
+        # per-task top-max_hits isn't crowded out by copies of one sequence (which
+        # would make the per-task trim lossy). domain_search dedups again globally.
         self.deduplicate_by_sequence = deduplicate_by_sequence
         self.dedup_both_strands = dedup_both_strands
-        # References are no longer parsed per-partition here; the pool initializer
-        # (_init_search_worker) parses them once per worker into _WORKER_REFERENCES.
 
-    def __call__(self, partition):
-        """
-            a single thread worker for domain_search
+    def __call__(self, task):
+        """Search one task: a (sequence file path, file offset, number of records) partition, or a
+        list of SeqRecords.
 
-            input:
-                partition: (sequence_file_path, file_offset, records_to_read)
-                references: A list of hmm or protein fasta file paths, the input HMM databases to be searched against the sequences using hmmsearch or phmmer.
-                z: Z parameter to pass to hmmsearch/phmmer
-                evalue: The threshold E value for hmmer hit
-                max_overlap: The maximum fractional of overlap to be allowed between domains
-                add_annotations: When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.
-                cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the CDS hits
-                kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends.
-                whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
-                normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
-            returns:
-                list of SeqRecords. When max_hits is set, at most max_hits records
-                (the highest scoring for this partition) are returned.
+        Returns:
+            list of SeqRecords. When max_hits is set, at most max_hits records (the highest
+            scoring of this task) are returned.
         """
+        if isinstance(task, list):
+            records = task
+        else:
+            path, offset, count = task
+            records = parse_seqfiles((path,), None, filetype_override=None, seek_to=offset, max_recs=count, default_molecule_type=self.fasta_type, genbank_parser="lean")
         out = list()
         max_hits = self.max_hits
         seen = set() if self.deduplicate_by_sequence else None
@@ -159,9 +127,9 @@ class _domain_search_worker():
                 heapq.heappushpop(out, entry)
 
         for rec in domainate.domainate(
-                parse_seqfiles((partition[0],), None, filetype_override=None, seek_to=partition[1], max_recs=partition[2], default_molecule_type=self.fasta_type, genbank_parser="lean"), #TODO: clear best_domain_hit ?
-                references=None,  # references are parsed once per worker by _init_search_worker (R4)
-                pre_parsed_references=_WORKER_REFERENCES,
+                records, #TODO: clear best_domain_hit ?
+                references=None,
+                pre_parsed_references=self.references.get(),
                 z=self.z,
                 evalue=self.evalue,
                 max_overlap=self.max_overlap,
@@ -174,7 +142,7 @@ class _domain_search_worker():
                 min_evalue=self.min_evalue,
                 max_mode=self.max_mode,
                 max_hits_per_contig=self.max_hits_per_contig,
-                allowed_taxids=_WORKER_ALLOWED_TAXIDS,  # per-CDS / per-region pre-hmmer taxonomy filter
+                allowed_taxids=self.allowed_taxids.get(),  # per-CDS / per-region pre-hmmer taxonomy filter
                 partial=self.partial,
             ):
             try:
@@ -228,8 +196,33 @@ class _partition_seqfile_worker():
         return partition_seqfile(input_file, self.cdss_per_partition)
     
 
-def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: List[str], z: int, evalue: float = 0.001,
-                  max_hits: Optional[int] = None, max_overlap: float = 1, cpu: int = 0, add_annotations: bool = False,
+def _search_tasks(targets, batch_size, alphabet):
+    """The pool tasks for ``targets``: each partition as it is, and records in lists of about
+    ``batch_size`` CDSs. A record without a molecule type gets ``alphabet``, as parse_seqfiles
+    gives FASTA records."""
+    kind = None
+    batch, batch_cdss = [], 0
+    for target in targets:
+        target_kind = "partitions" if isinstance(target, tuple) else "records"
+        if kind is None:
+            kind = target_kind
+        elif target_kind != kind:
+            raise TypeError("domain_search targets must be all SeqRecords or all (path, offset, count) partitions, not both.")
+        if kind == "partitions":
+            yield target
+            continue
+        target.annotations.setdefault("molecule_type", alphabet)
+        batch.append(target)
+        batch_cdss += max(1, count_peptides_in_record(target))  # a contig without CDSs still counts
+        if batch_cdss >= batch_size:
+            yield batch
+            batch, batch_cdss = [], 0
+    if batch:
+        yield batch
+
+
+def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, references: List[str], z: int, evalue: float = 0.001,
+                  max_hits: Optional[int] = None, max_overlap: float = 1, cpu: int = 0, batch_size: int = 10000, add_annotations: bool = False,
                   cds_range: Optional[Tuple[int, int]] = None, kb_range: Optional[Tuple[float, float]] = None,
                   whole_contig: bool = False, normalize_direction: bool = True, translate: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
                   ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
@@ -237,21 +230,26 @@ def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: Lis
                   alphabet: str = "protein", max_mode: bool = False, max_region_overlap: float = 1.0,
                   strand: Optional[str] = None, decoys: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None,
                   partial: str = "include", deduplicate_by_sequence: bool = False, both_strands: bool = False) -> Iterator[SeqRecord]:
-    """Search ``references`` against database partitions in parallel and yield the hit regions.
+    """Search ``references`` against ``targets`` in parallel and yield the hit regions.
 
-    Each partition is annotated as by domainate, and the region around each hit is extracted as
-    by select_by_cds.
+    The targets are searched in batches, each annotated as by domainate, and the region around
+    each hit is extracted as by select_by_cds.
 
     Args:
-        partitions: (sequence file path, file offset, number of records) tuples; each is searched
-            by one worker.
+        targets: the sequences to search: SeqRecords (as parse_seqfiles reads them), or
+            (sequence file path, file offset, number of records) partitions of sequence files
+            (as offsets.i_partition_seqfiles makes them), but not both. Records are grouped into
+            batches of about ``batch_size`` CDSs, and read only a few batches ahead of the
+            search, so they can be a stream; a partition is one batch, read by the worker that
+            searches it.
         references: HMM or protein FASTA files to search with (hmmsearch or phmmer).
         z: the database size for e-values (hmmsearch's Z), as ``-Z``.
         evalue: keep hits with an e-value at most this.
         max_hits: keep only this many hits, the best-scoring. None: all.
         max_overlap: the largest fraction of a hit that may overlap a better hit on the same CDS.
-        cpu: number of processes (0: one per physical core); values below 2 are raised to 2 (one
+        cpu: number of workers (0: one per physical core); values below 2 are raised to 2 (one
             merges the results, the others search).
+        batch_size: about how many CDSs (or proteins) a worker searches at once.
         add_annotations: also add Domainator features for the hits.
         cds_range: (upstream, downstream) numbers of CDSs to extract around each hit CDS.
         kb_range: (upstream, downstream) kb to extract around each hit CDS. Partially enclosed
@@ -299,39 +297,40 @@ def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: Lis
         raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
 
     # "Compile" the taxonomy filter once in the parent into a frozenset of allowed
-    # taxids (a single O(N) pass over the tree), then hand it to each worker process
-    # via the pool initializer. Filtering in workers is then an O(1) membership test,
-    # and the set -- not the full NCBITaxonomy -- is pickled once per process. The
-    # full NCBITaxonomy is released afterward so the parent does not hold it.
+    # taxids (a single O(N) pass over the tree), then share it with the workers.
+    # Filtering in workers is then an O(1) membership test, and the set -- not the
+    # full NCBITaxonomy -- reaches each worker once. The full NCBITaxonomy is
+    # released afterward so the parent does not hold it.
     allowed_taxids = None
     if ncbi_taxonomy is not None:
         allowed_taxids = compile_taxonomy_allowed(ncbi_taxonomy, include_taxids, exclude_taxids, taxonomy_expr)
         ncbi_taxonomy = None
 
-    # Always use the pool initializer: it parses references once per worker (R4) and,
-    # when present, installs the compiled taxonomy filter.
-    pool_kwargs = dict(initializer=_init_search_worker, initargs=(references, None, allowed_taxids))
+    # Each worker process parses the references itself, which is cheaper than
+    # pickling the parsed pyhmmer/pyinfernal objects; threads share one parsed copy.
+    shared_references = Shared(build=functools.partial(domainate.read_references, references, foldseek=None))
+    shared_taxids = Shared(allowed_taxids)
 
     out_heap = []
     arrivals = 0
-    worker = _domain_search_worker(references, z, evalue, max_overlap, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call, min_evalue, include_taxids=include_taxids, exclude_taxids=exclude_taxids, fasta_type=alphabet, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoys, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=both_strands)
+    worker = _domain_search_worker(references=shared_references, allowed_taxids=shared_taxids, z=z, evalue=evalue, max_overlap=max_overlap, add_annotations=add_annotations, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, translate=translate, gene_call=gene_call, min_evalue=min_evalue, batch_size=batch_size, fasta_type=alphabet, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoys, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=both_strands)
     seen = set() if deduplicate_by_sequence else None
 
-    # Pool tuning notes (speed_up_plan.md Q4):
-    #   - No maxtasksperchild: workers must persist so the references parsed once
-    #     by _init_search_worker (R4) stay loaded. Recycling workers would re-parse
-    #     references on every restart, defeating R4.
-    #   - No chunksize on imap_unordered: partitions are already large (~batch_size
-    #     CDSs each), so per-task dispatch overhead is negligible; chunking would
-    #     only coarsen load balancing. (domainator hmmer_search reaches the same conclusion.)
-    #   - cpu - 1 workers: the parent process does the heap merge and GenBank
-    #     writing, so it is reserved one core rather than oversubscribing.
-    with make_pool(processes=cpu - 1, **pool_kwargs) as pool:
+    # Pool tuning notes:
+    #   - Workers persist for the whole search, so the references parsed once per
+    #     worker stay loaded.
+    #   - Tasks are large (~batch_size CDSs each), so per-task dispatch overhead is
+    #     negligible. Two tasks per worker are in flight, which keeps the workers busy
+    #     while reading records only that far ahead.
+    #   - cpu - 1 workers: the parent does the heap merge and GenBank writing, so it
+    #     is reserved one core rather than oversubscribing.
+    workers = cpu - 1
+    with make_pool(processes=workers, shared=[shared_references, shared_taxids]) as pool:
         # hits are lists of SeqRecords. When max_hits is set, each list is already
-        # trimmed to that worker's own top-max_hits (see _domain_search_worker), so
-        # the parent merges O(workers * max_hits) records rather than every hit; the
+        # trimmed to that task's own top-max_hits (see _domain_search_worker), so
+        # the parent merges O(tasks * max_hits) records rather than every hit; the
         # central heap below still selects the global top-max_hits.
-        for hits in pool.imap_unordered(worker, partitions):
+        for hits in imap_unordered_bounded(pool, worker, _search_tasks(targets, batch_size, alphabet), max_pending=2 * workers):
 
             for rec in hits:
                 if seen is not None and not _is_new_sequence(rec, seen, both_strands):
@@ -603,6 +602,7 @@ def main(argv):
         max_hits=max_hits,
         max_overlap=params.max_overlap,
         cpu=cpus,
+        batch_size=params.batch_size,
         add_annotations=params.add_annotations,
         cds_range=cds_range,
         kb_range=kb_range,
