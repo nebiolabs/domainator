@@ -23,7 +23,7 @@ import numpy as np
 import scipy.sparse
 import pyhmmer
 import tqdm
-from typing import Iterator
+from typing import Iterator, List, Optional
 from domainator.seqio import get_file_type, parse_seqfiles
 from domainator.hmmio import open_hmm_file
 from domainator._mp import make_pool
@@ -735,7 +735,10 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path, *, input_format, reference, reference_format, max_hits_per_query, algorithm, mode, cpu, threshold, progress: bool = False, mst: bool = False, knn=None, diamond_args=None, symmetrize: str = "none", diamond_path=None) -> DataMatrix:
+def seq_dist(input_path: str, *, input_format: str, reference: str, reference_format: str,
+             max_hits_per_query: Optional[int], algorithm: str, mode: str, cpu: int, threshold: float,
+             progress: bool = False, mst: bool = False, knn: Optional[int] = None, diamond_args: Optional[List[str]] = None,
+             symmetrize: str = "none", diamond_path: Optional[str] = None) -> DataMatrix:
     """Compare every sequence or profile in ``input_path`` with every one in ``reference``.
 
     Returns a DataMatrix of ``mode`` values with a row per input and a column per reference;

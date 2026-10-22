@@ -10,6 +10,7 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 
 """
 
+from typing import Dict, Iterable, Iterator, Optional, Set
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
@@ -18,6 +19,7 @@ from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.model import feature_score
+from Bio.SeqRecord import SeqRecord
 
 #TODO: color gradient based on bit score
 
@@ -87,7 +89,9 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
                 if feature.qualifiers['cds_id'][0] in new_cds_colors:
                     feature.qualifiers['Color'] = [new_cds_colors[feature.qualifiers['cds_id'][0]]]
 
-def color_genbank(records, *, color_table, targets, search_hit_color=None, clear=False, color_table_out=None, databases=None, color_feature="name"):
+def color_genbank(records: Iterable[SeqRecord], *, color_table: Optional[Dict[str, str]], targets: Set[str],
+                  search_hit_color: Optional[str] = None, clear: bool = False, color_table_out: Optional[str] = None,
+                  databases: Optional[Set[str]] = None, color_feature: str = "name") -> Iterator[SeqRecord]:
     """
       input: 
         records: an iterator of SeqRecords

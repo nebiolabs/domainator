@@ -7,6 +7,7 @@ This module provides functionality to:
 - Filter out sequences containing non-canonical residues
 
 """
+from typing import Iterable, Iterator, Optional
 from dataclasses import dataclass
 from jsonargparse import ActionConfigFile
 import sys
@@ -16,6 +17,7 @@ from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.locations import slice_record
 from Bio.Data import IUPACData
+from Bio.SeqRecord import SeqRecord
 
 
 @dataclass
@@ -123,8 +125,9 @@ def has_non_canonical(sequence, canonical_chars):
     return False
 
 
-def clean_sequences(records, *, alphabet="protein", clean_name=False, deduplicate_names=False, 
-                    strip=False, filter_by_aa=False, stats=None):
+def clean_sequences(records: Iterable[SeqRecord], *, alphabet: str = "protein", clean_name: bool = False,
+                    deduplicate_names: bool = False, strip: bool = False, filter_by_aa: bool = False,
+                    stats: Optional[CleaningStats] = None) -> Iterator[SeqRecord]:
     """
     Clean and filter sequences based on specified criteria.
     

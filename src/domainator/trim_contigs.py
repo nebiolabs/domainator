@@ -126,7 +126,16 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
     return record
 
 
-def trim_contigs(records: Iterable[SeqRecord], *, kb_truncation: Optional[Tuple[float, float]], cds_truncation: Optional[Tuple[int, int]], domains: Optional[Set[str]], domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
+def trim_contigs(records: Iterable[SeqRecord], *, kb_range: Optional[Tuple[float, float]], cds_range: Optional[Tuple[int, int]], domains: Optional[Set[str]], domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
+    """Yield ``records`` with their ends trimmed.
+
+    kb_range: (left, right) kb to trim from each end, or None.
+    cds_range: (left, right) number of CDSs to trim from each end, or None.
+    domains, domain_expr, unannotated: also trim CDSs from each end while they have one of these
+        domains, match this expression, or (with unannotated) have no domains; evalue and
+        databases limit which domain annotations count.
+    Circular contigs are linearized first. A record trimmed to nothing is dropped.
+    """
     if domains is not None:
         domains = set(domains)
 
@@ -134,7 +143,7 @@ def trim_contigs(records: Iterable[SeqRecord], *, kb_truncation: Optional[Tuple[
         domain_expr = BooleanEvaluator(domain_expr)
 
     for record in records:
-        trimmed = trim_contig(record, kb_truncation, cds_truncation, domains, domain_expr, unannotated, evalue, databases)
+        trimmed = trim_contig(record, kb_range, cds_range, domains, domain_expr, unannotated, evalue, databases)
         if trimmed is not None:
             yield trimmed
 
@@ -206,8 +215,8 @@ def main(argv):
     #TODO: resolve code duplication with domainator domain_search
     write_seq_outputs(trim_contigs(
         parse_seqfiles(params.input, target_contigs),
-        kb_truncation=kb_truncation,
-        cds_truncation=cds_truncation,
+        kb_range=kb_truncation,
+        cds_range=cds_truncation,
         domains=selected_domains,
         domain_expr=domain_expr,
         unannotated=params.unannotated,

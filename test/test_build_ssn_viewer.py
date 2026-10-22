@@ -887,7 +887,7 @@ def test_load_bundle_accepts_every_supported_version():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
         matrix.write(input_file, output_type="hdf")
-        bundle = build_ssn_viewer.build_ssn_viewer_bundle(
+        bundle = build_ssn_viewer.build_ssn_viewer(
             DataMatrix.from_file(input_file), name="versions"
         )
 
@@ -962,7 +962,7 @@ def test_lowest_slider_stop_reaches_the_fully_merged_network():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
         matrix.write(input_file, output_type="hdf")
-        bundle = build_ssn_viewer.build_ssn_viewer_bundle(
+        bundle = build_ssn_viewer.build_ssn_viewer(
             DataMatrix.from_file(input_file), name="floor"
         )
 

@@ -3,6 +3,7 @@
     output can be images, coordinates, or Cytoscape xgmml files.
 
 """
+from typing import Any, Dict, List, Optional
 import warnings
 from jsonargparse import ActionConfigFile
 from pathlib import Path
@@ -61,7 +62,10 @@ def check_coords(n_components, data_matrix: DataMatrix):
 
 
 
-def build_projection(data_matrix: DataMatrix, *, algorithm, metadata, color_by, png_out, coords_out, xgmml_out, scale, three_d=False, algorithm_parameters=None, color_table=None, color_table_out=None):
+def build_projection(data_matrix: DataMatrix, *, algorithm: str, metadata: Optional[List[str]], color_by: Optional[str],
+                     png_out: Optional[str], coords_out: Optional[str], xgmml_out: Optional[str], scale: Optional[float],
+                     three_d: bool = False, algorithm_parameters: Optional[Dict[str, Any]] = None,
+                     color_table: Optional[Dict[str, str]] = None, color_table_out: Optional[str] = None) -> None:
     """
 
         algorithm:

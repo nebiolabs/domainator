@@ -7,7 +7,9 @@ written GenBank file.
 """
 
 import heapq
-from typing import Iterable, Optional, Set
+from typing import Iterable, Iterator, Optional, Set
+
+from Bio.SeqRecord import SeqRecord
 
 from jsonargparse import ActionConfigFile
 
@@ -76,7 +78,15 @@ def set_record_best_score(record, domains: Optional[Set[str]] = None, databases:
     set_hit_best_score(record, best_score)
 
 
-def sort_contigs(records: Iterable, *, max_hits: Optional[int] = None, domains: Optional[Set[str]] = None, databases: Optional[Set[str]] = None):
+def sort_contigs(records: Iterable[SeqRecord], *, max_hits: Optional[int] = None, domains: Optional[Set[str]] = None,
+                 databases: Optional[Set[str]] = None) -> Iterator[SeqRecord]:
+    """Yield ``records`` sorted by their best score, highest first, keeping the best ``max_hits``.
+
+    The score is the best Domain_Search hit's, as domain_search orders its output, or with
+    ``domains`` the best score among Domainator domains with those names (and, with
+    ``databases``, from those databases). Records with equal scores keep their input order.
+    Raises ValueError for a record with nothing to score.
+    """
     out_heap = []  # (best score, -input order, record), so of equal scores the earlier record ranks higher
 
     for index, record in enumerate(records):

@@ -15,7 +15,7 @@ import warnings
 import sys
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
-from typing import NamedTuple, List, Dict, Optional, Union
+from typing import NamedTuple, List, Dict, Optional, Union, AbstractSet, Any, Iterable, Iterator
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
@@ -1145,7 +1145,16 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         feature.qualifiers['cds_id'] = [get_cds_unique_name(feature)]
         rec.features.append(feature)
 
-def domainate(records, *, references, z, evalue=10, max_hits_per_cds=sys.maxsize, max_overlap=1, cpu=0,  batch_size=10000, hits_only=False, no_annotations=False, pre_parsed_references=None, best_annotation=False, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, allowed_taxids=None, max_mode=False, foldseek=None, esm2_3di_weights=None, esm2_3di_device=None, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, partial="include", foldseek_path=None):
+def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str]], z: int, evalue: float = 10,
+              max_hits_per_cds: int = sys.maxsize, max_overlap: float = 1, cpu: int = 0, batch_size: int = 10000,
+              hits_only: bool = False, no_annotations: bool = False, pre_parsed_references: Optional[Dict[str, Dict[str, Any]]] = None,
+              best_annotation: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
+              ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
+              exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
+              allowed_taxids: Optional[AbstractSet[int]] = None, max_mode: bool = False, foldseek: Optional[List[str]] = None,
+              esm2_3di_weights: Optional[str] = None, esm2_3di_device: Optional[str] = None, overlap_by_db: bool = False,
+              max_hits_per_contig: Optional[int] = None, foldseek_device: Optional[str] = None, partial: str = "include",
+              foldseek_path: Optional[str] = None) -> Iterator[SeqRecord]:
     """
     The main function of the hmmer domain annotation algorithm
 

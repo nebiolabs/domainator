@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Set, Union
 
 import pandas as pd
 from jsonargparse import ActionConfigFile
@@ -99,16 +99,32 @@ def _json_ready(value):
     return value
 
 
-def build_ssn_viewer_bundle(
+def build_ssn_viewer(
     matrix: DataMatrix,
-    metadata_files: List[Union[str, PathLike]] = None,
-    subset_labels=None,
+    *,
+    metadata: Optional[List[Union[str, PathLike]]] = None,
+    subset_labels: Optional[Set[str]] = None,
     merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
-    color_by: str = None,
-    label_by: str = None,
-    categorical_columns: List[str] = None,
-    name: str = None,
-):
+    color_by: Optional[str] = None,
+    label_by: Optional[str] = None,
+    categorical: Optional[List[str]] = None,
+    name: Optional[str] = None,
+) -> dict:
+    """Build a Domainator Similarity Network Viewer bundle from a symmetric similarity matrix.
+
+    Returns the bundle as a dict (see the .dsnv section of docs/file_formats.md);
+    write_ssn_viewer_bundle writes it to a .dsnv file, and ssn_viewer_html.write_ssn_viewer_html
+    writes a viewer page that can embed it.
+
+    Args:
+        matrix: a similarity matrix with the same row and column labels.
+        metadata: tab-separated tables of node metadata, keyed by their first column.
+        subset_labels: only include these matrix labels (all of them if None).
+        merge_impact_metric: how the split chart measures a merge (MERGE_IMPACT_CHOICES).
+        color_by, label_by: the metadata columns the viewer colors and labels nodes by at first.
+        categorical: numeric metadata columns to color as categories rather than as a gradient.
+        name: the network's name, shown in the viewer.
+    """
     if merge_impact_metric not in MERGE_IMPACT_CHOICES:
         raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
 
@@ -118,9 +134,9 @@ def build_ssn_viewer_bundle(
     matrix.require_similarity("build_ssn_viewer")
 
     node_data = pd.DataFrame(index=matrix.rows)
-    if metadata_files is not None:
+    if metadata is not None:
         with ThreadPoolExecutor() as exe:
-            dfs = list(exe.map(lambda f: pd.read_csv(f, sep="\t", index_col=0), metadata_files))
+            dfs = list(exe.map(lambda f: pd.read_csv(f, sep="\t", index_col=0), metadata))
         for df in dfs:
             node_data = node_data.merge(df, how="left", left_index=True, right_index=True)
 
@@ -128,7 +144,7 @@ def build_ssn_viewer_bundle(
         raise ValueError(f"Requested color_by column '{color_by}' was not found in the merged metadata.")
     if label_by is not None and label_by not in node_data.columns:
         raise ValueError(f"Requested label_by column '{label_by}' was not found in the merged metadata.")
-    categorical_columns = list(categorical_columns) if categorical_columns else []
+    categorical_columns = list(categorical) if categorical else []
     for column_name in categorical_columns:
         if column_name not in node_data.columns:
             raise ValueError(f"Requested categorical column '{column_name}' was not found in the merged metadata.")
@@ -270,14 +286,14 @@ def main(argv):
     else:
         bundle_name = VIEWER_APP_NAME
 
-    bundle = build_ssn_viewer_bundle(
+    bundle = build_ssn_viewer(
         DataMatrix.from_file(params.input),
-        metadata_files=params.metadata,
+        metadata=params.metadata,
         subset_labels=subset_labels,
         merge_impact_metric=params.merge_impact_metric,
         color_by=params.color_by,
         label_by=params.label_by,
-        categorical_columns=params.categorical,
+        categorical=params.categorical,
         name=bundle_name,
     )
     # Serialize once; reuse bytes for both file output and HTML embedding.

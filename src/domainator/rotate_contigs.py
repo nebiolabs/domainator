@@ -22,7 +22,7 @@ infernal CM files) are searched against the whole contig.
 
 import warnings
 from itertools import islice
-from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
@@ -218,7 +218,7 @@ def _pick_anchor(candidates:List[SeqFeature]) -> SeqFeature:
     return min(candidates, key=lambda f: (-_qualifier_float(f, "score", float("-inf")), _qualifier_float(f, "evalue", float("inf")), int(f.location.start)))
 
 
-def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre_parsed_references=None, z:int=1000, evalue:float=0.001,
+def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre_parsed_references:Optional[Dict[str, Dict[str, Any]]]=None, z:int=1000, evalue:float=0.001,
                    domains:Optional[Iterable[str]]=None, databases:Optional[Iterable[str]]=None, annotation_type:str="domainator", anchor:str="start",
                    keep_direction:bool=False, circularize:bool=False, keep_name:bool=False, keep_annotation:bool=False,
                    gene_call:Optional[str]=None, cpu:int=0, max_mode:bool=False, batch_size:int=1000) -> Iterator[SeqRecord]:

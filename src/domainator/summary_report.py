@@ -35,12 +35,13 @@ from domainator.model import get_cds_unique_name, feature_score
 from domainator.data_matrix import DataMatrix
 from domainator import DOMAIN_FEATURE_NAME
 import numpy as np
-from typing import Dict
+from typing import Dict, Iterable, Optional, Set, TextIO
 from domainator.text_plot import text_histogram
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
 from domainator import web_libs
+from Bio.SeqRecord import SeqRecord
 
 
 class SummaryTextWriter():
@@ -471,7 +472,12 @@ def tax_data_to_hierarchy(tax_data):
 
     
 
-def summary_report(records, *, out_text_handle, out_html_handle, focus_domains=None, co_occurrence_fraction_outfile=None, co_occurrence_count_outfile=None, report_taxonomy=False, ncbi_taxonomy=None, domains_table=None, databases=None, out_json_handle=None, partial="include"):
+def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[TextIO], out_html_handle: Optional[TextIO],
+                   focus_domains: Optional[Set[str]] = None, co_occurrence_fraction_outfile: Optional[str] = None,
+                   co_occurrence_count_outfile: Optional[str] = None, report_taxonomy: bool = False,
+                   ncbi_taxonomy: Optional[NCBITaxonomy] = None, domains_table: Optional[str] = None,
+                   databases: Optional[Set[str]] = None, out_json_handle: Optional[TextIO] = None,
+                   partial: str = "include") -> None:
     """
 
         Args:

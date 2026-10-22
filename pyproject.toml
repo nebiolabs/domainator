@@ -105,7 +105,9 @@ test = ["pytest >=7.4",
 # The tests in test/test_ssn_viewer_browser.py skip automatically when the
 # `playwright` package is not importable.
 browser = ["pytest-playwright >=0.4.0"]
-dev = ["domainator[test,browser,projection]", "coverage"]
+# The documentation site (mkdocs.yml): mkdocs build
+docs = ["mkdocs >=1.6,<2", "mkdocs-material >=9.5", "mkdocstrings[python] >=0.26"]
+dev = ["domainator[test,browser,projection,docs]", "coverage"]
 
 [project.urls]
 Homepage = "https://github.com/nebiolabs/domainator"

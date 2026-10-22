@@ -44,7 +44,7 @@ from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator._mp import make_pool, make_manager
 from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import __version__
-from typing import Dict, Set, Optional, Iterator
+from typing import Dict, Set, Optional, Iterator, Iterable
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
 from domainator.errors import ExternalToolError
 from domainator.external import resolve_binary
@@ -698,8 +698,23 @@ FASTA_DBS = {"swissprot", "trembl", "uniprot"}
 GENBANK_DBS = (UNIPROT_DBS - FASTA_DBS) | {"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks",
                                         "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all"}
 
-def db_download(ncbi_taxonomy, *, output_file_path, include_taxids, exclude_taxids, db, gene_call, num_recs, ncbi_summary, before:datetime, after:datetime, cpu:int=1, success_rec_log=None, exclude_accessions:Optional[Set[str]]=None, download_backend:str="direct", download_workers:int=1, user_agent=None, datasets_workdir=None, datasets_include:str="gbff", datasets_max_workers:int=1, api_key=None, datasets_path=None, datasets_gzip=False, taxonomy_expr=None, partial="include"):
+def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_taxids: Optional[Iterable[int]],
+                exclude_taxids: Optional[Iterable[int]], db: str, gene_call: Optional[str], max_records: Optional[int],
+                ncbi_summary: Optional[str], before: Optional[datetime.date], after: Optional[datetime.date], cpu: int = 1,
+                success_log_out: Optional[str] = None, exclude_accessions: Optional[Set[str]] = None,
+                download_backend: str = "direct", download_workers: int = 1, user_agent: Optional[str] = None,
+                datasets_workdir: Optional[str] = None, datasets_include: str = "gbff", datasets_max_workers: int = 1,
+                api_key: Optional[str] = None, datasets_path: Optional[str] = None, datasets_gzip: bool = False,
+                taxonomy_expr: Optional[str] = None, partial: str = "include") -> None:
 
+    """Download a database (``db``: a UniProt or NCBI genome database) and write it to ``output``.
+
+    UniProt databases are written as FASTA, or GenBank for the _gb ones; NCBI genome databases as
+    GenBank. include_taxids, exclude_taxids and taxonomy_expr filter by taxonomy (with
+    ``ncbi_taxonomy``, an NCBITaxonomy); max_records stops after that many records; before and
+    after filter NCBI genomes by release date; success_log_out lists the accessions written. The
+    other options are those of ``domainator db_download``.
+    """
     if taxonomy_expr and (include_taxids or exclude_taxids):
         raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
     if partial != "include" and db.lower() not in UNIPROT_DBS:
@@ -739,51 +754,51 @@ def db_download(ncbi_taxonomy, *, output_file_path, include_taxids, exclude_taxi
     if db.lower() in {"swissprot_gb", "uniprot_gb"}:
         download_and_convert_uniprot_dat(
             "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz",
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
-            num_recs=num_recs,
+            num_recs=max_records,
             taxonomy_expr=taxonomy_expr,
             partial=partial,
         )
     if db.lower() in {"trembl_gb", "uniprot_gb"}:
         download_and_convert_uniprot_dat(
             "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.dat.gz",
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
-            num_recs=num_recs,
+            num_recs=max_records,
             taxonomy_expr=taxonomy_expr,
             partial=partial,
         )
     if db.lower() in {"swissprot", "uniprot"}:
         download_uniprot_fasta(
             "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz",
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
-            num_recs=num_recs,
+            num_recs=max_records,
             taxonomy_expr=taxonomy_expr,
             partial=partial,
         )
     if db.lower() in {"trembl", "uniprot"}:
         download_uniprot_fasta(
             "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz",
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
-            num_recs=num_recs,
+            num_recs=max_records,
             taxonomy_expr=taxonomy_expr,
             partial=partial,
         )
 
     if db.lower() == "ncbi_complete_genome_proks":
         download_ncbi(
-            output_file_path,
+            output,
             prok_include,
             prok_exclude,
             ncbi_taxonomy,
@@ -791,19 +806,19 @@ def db_download(ncbi_taxonomy, *, output_file_path, include_taxids, exclude_taxi
             no_na=False,
             filter_by_complete_genome=True,
             gene_call=gene_call,
-            num_recs=num_recs,
+            num_recs=max_records,
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
             cpus=cpu,
-            success_rec_log=success_rec_log,
+            success_rec_log=success_log_out,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=prok_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_complete_genome_nonredundant_proks":
             download_ncbi(
-                output_file_path,
+                output,
                 prok_include,
                 prok_exclude,
                 ncbi_taxonomy,
@@ -811,12 +826,12 @@ def db_download(ncbi_taxonomy, *, output_file_path, include_taxids, exclude_taxi
                 no_na=False,
                 filter_by_complete_genome=True,
                 gene_call=gene_call,
-                num_recs=num_recs,
+                num_recs=max_records,
                 ncbi_summary=ncbi_summary,
                 before=before,
                 after=after,
                 cpus=cpu,
-                success_rec_log=success_rec_log,
+                success_rec_log=success_log_out,
                 exclude_accessions=exclude_accessions,
                 taxonomy_expr=prok_expr,
                 **ncbi_friendly_kwargs,
@@ -824,95 +839,95 @@ def db_download(ncbi_taxonomy, *, output_file_path, include_taxids, exclude_taxi
 
     if db.lower() == "ncbi_representative_proks":
         download_ncbi(
-            output_file_path,
+            output,
             prok_include,
             prok_exclude,
             ncbi_taxonomy,
             filter_by_uniqueness=False,
             no_na=True,
             gene_call=gene_call,
-            num_recs=num_recs,
+            num_recs=max_records,
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
             cpus=cpu,
-            success_rec_log=success_rec_log,
+            success_rec_log=success_log_out,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=prok_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_representative_all":
         download_ncbi(
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
             filter_by_uniqueness=False,
             no_na=False,
             gene_call=gene_call,
-            num_recs=num_recs,
+            num_recs=max_records,
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
             cpus=cpu,
-            success_rec_log=success_rec_log,
+            success_rec_log=success_log_out,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=taxonomy_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_nonredundant_proks":
         download_ncbi(
-            output_file_path,
+            output,
             prok_include,
             prok_exclude,
             ncbi_taxonomy,
             filter_by_uniqueness=True,
             no_na=False,
             gene_call=gene_call,
-            num_recs=num_recs,
+            num_recs=max_records,
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
             cpus=cpu,
-            success_rec_log=success_rec_log,
+            success_rec_log=success_log_out,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=prok_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_nonredundant_all":
         download_ncbi(
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
             filter_by_uniqueness=True,
             no_na=False,
             gene_call=gene_call,
-            num_recs=num_recs,
+            num_recs=max_records,
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
             cpus=cpu,
-            success_rec_log=success_rec_log,
+            success_rec_log=success_log_out,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=taxonomy_expr,
             **ncbi_friendly_kwargs,
         )
     if db.lower() == "ncbi_all":
         download_ncbi(
-            output_file_path,
+            output,
             include_taxids,
             exclude_taxids,
             ncbi_taxonomy,
             filter_by_uniqueness=False,
             no_na=False,
             gene_call=gene_call,
-            num_recs=num_recs,
+            num_recs=max_records,
             ncbi_summary=ncbi_summary,
             before=before,
             after=after,
             cpus=cpu,
-            success_rec_log=success_rec_log,
+            success_rec_log=success_log_out,
             exclude_accessions=exclude_accessions,
             taxonomy_expr=taxonomy_expr,
             **ncbi_friendly_kwargs,
@@ -1041,7 +1056,7 @@ def main(argv):
     api_key = params.ncbi_api_key or os.environ.get("NCBI_API_KEY")
     user_agent = f"domainator/{__version__}" + (f" ({email})" if email else "")
 
-    db_download(ncbi_taxonomy, output_file_path=output, include_taxids=params.include_taxids, exclude_taxids=params.exclude_taxids, db=params.db, gene_call=params.gene_call, num_recs=params.max_records, ncbi_summary=params.ncbi_summary, before=before, after=after, cpu=cpus, success_rec_log=params.success_log_out, exclude_accessions=exclude_accessions,
+    db_download(ncbi_taxonomy, output=output, include_taxids=params.include_taxids, exclude_taxids=params.exclude_taxids, db=params.db, gene_call=params.gene_call, max_records=params.max_records, ncbi_summary=params.ncbi_summary, before=before, after=after, cpu=cpus, success_log_out=params.success_log_out, exclude_accessions=exclude_accessions,
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
                            datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,

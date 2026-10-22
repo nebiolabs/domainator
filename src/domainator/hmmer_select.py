@@ -18,11 +18,17 @@ import re
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.hmmio import ALPHABET_NAMES, get_alphabet, alphabet_name, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file
 from domainator.cli.common import OUTPUT_COMPRESSION_HELP
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional, List, Iterable, Iterator
+
+if TYPE_CHECKING:
+    import pyhmmer
 
 logger = logging.getLogger(__name__)
 
-def hmmer_select(hmm_path=None, *, regex:Optional[List[str]]=None, exact:Optional[List[str]]=None, contains:Optional[List[str]]=None, hmm_iterator=None, search_name=True, search_description=True, search_accession=True, case_sensitive=False, match_all=False):
+def hmmer_select(hmm_path: Optional[str] = None, *, regex: Optional[List[str]] = None, exact: Optional[List[str]] = None,
+                 contains: Optional[List[str]] = None, hmm_iterator: Optional[Iterable["pyhmmer.plan7.HMM"]] = None,
+                 search_name: bool = True, search_description: bool = True, search_accession: bool = True,
+                 case_sensitive: bool = False, match_all: bool = False) -> Iterator["pyhmmer.plan7.HMM"]:
     """
         hmm_path: path to an hmmer file
         regex: regular expression to try to find in the hmmer profiles

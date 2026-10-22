@@ -185,19 +185,19 @@ def add_z_order(features:List[Dict[str, Union[int, str]]],
         current_feature["z_order"] = current_level
         z_orders.append((current_feature, current_level))
 
-def plot_contigs(records:List[SeqRecord], *,
-                 html_out,
-                 metadata:List[Union[str, PathLike]]=None,
-                 color_by:str=None,
-                 color_table:Optional[Dict[str, str]]=None,
-                 height=2400, width=1200,
-                 types:Optional[List[str]] = None,
-                 feature_height=50, arrow_width=20,
-                 contig_thickness=20,
-                 contig_label_font="sans-serif", contig_label_px=32,
-                 feature_label_font="sans-serif", feature_font_size=26,
-                 details_height=100, details_width=None
-                 ):
+def plot_contigs(records: List[SeqRecord], *,
+                 html_out: str,
+                 metadata: List[Union[str, PathLike]] = None,
+                 color_by: str = None,
+                 color_table: Optional[Dict[str, str]] = None,
+                 height: int = 2400, width: int = 1200,
+                 types: Optional[List[str]] = None,
+                 feature_height: int = 50, arrow_width: int = 20,
+                 contig_thickness: int = 20,
+                 contig_label_font: str = "sans-serif", contig_label_px: int = 32,
+                 feature_label_font: str = "sans-serif", feature_font_size: int = 26,
+                 details_height: int = 100, details_width: Optional[int] = None
+                 ) -> None:
     """Write an interactive HTML plot of ``records`` to ``html_out`` (a path or a text handle).
 
     The options mean the same as the ``domainator plot_contigs`` options with the same names;

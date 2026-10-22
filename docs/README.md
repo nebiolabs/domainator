@@ -11,4 +11,5 @@
 - [Structure search and annotation](structure_search.md)
 - [ESM-2 3B 3Di and foldseek integration](esm_3b_foldseek.md)
 - [Limitations and FAQ](limitations_and_FAQ.md)
+- [Command-line reference](cli/README.md): every command's options, generated from its parser
 - [Tool manifest](tool_manifest.md): `domainator describe`, for GUIs and other programs that drive Domainator

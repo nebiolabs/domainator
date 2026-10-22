@@ -14,11 +14,12 @@ from domainator.output_guardrails import enforce_matrix_output_limit
 
 def add_matrix_output_arguments(parser, *, noun: str = "matrix") -> None:
     """Add -o/--hdf_out and --dense_text_out."""
-    parser.add_argument("-o", "--hdf_out", type=str, default=None,
-                        help=f"Write the {noun} to this Domainator hdf5 file. Values are stored sparse; "
-                             "a matrix with exactly symmetric values is stored as its upper triangle.")
-    parser.add_argument("--dense_text_out", type=str, default=None,
-                        help=f"Write the {noun} to this tab-separated text file, every cell included. Use - for standard output.")
+    hdf = parser.add_argument("-o", "--hdf_out", type=str, default=None,
+                              help=f"Write the {noun} to this Domainator hdf5 file. Values are stored sparse; "
+                                   "a matrix with exactly symmetric values is stored as its upper triangle.")
+    dense_text = parser.add_argument("--dense_text_out", type=str, default=None,
+                                     help=f"Write the {noun} to this tab-separated text file, every cell included. Use - for standard output.")
+    hdf.stdout, dense_text.stdout = False, True
     declare_outputs(parser, ["hdf_out", "dense_text_out"])
 
 

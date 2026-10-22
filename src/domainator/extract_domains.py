@@ -10,6 +10,7 @@ can write a fasta or a genbank file
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
 
+from typing import Iterable, Iterator, Optional, Set
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
@@ -22,8 +23,12 @@ from domainator.partial import cds_fragment_status, fragment_status_allowed, PAR
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.location_ops import merge_parts
+from Bio.SeqRecord import SeqRecord
 
-def extract_domains(records, *, evalue=None, min_score=None, domains=None, extend_up=0, extend_down=0, combine=False, keep_direction=False, keep_name=False, annotation_type:str="domainator", databases=None, splice=False, partial="include"):
+def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
+                    domains: Optional[Set[str]] = None, extend_up: int = 0, extend_down: int = 0, combine: bool = False,
+                    keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
+                    databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include") -> Iterator[SeqRecord]:
     """
 
       input: 

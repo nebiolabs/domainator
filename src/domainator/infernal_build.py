@@ -88,12 +88,20 @@ def infernal_build(
     name: str,
     acc: Optional[str] = None,
     desc: Optional[str] = None,
-    informat: Optional[str] = None,
+    input_format: Optional[str] = None,
     cmbuild_path: Optional[str] = None,
     noss: bool = False,
     hand: bool = False,
     symfrac: Optional[float] = None,
 ) -> str:
+    """Build a covariance model with Infernal's cmbuild and return it as text.
+
+    file: an alignment (Stockholm, or FASTA with ``noss``), as a path or a binary handle.
+    name, acc, desc: the model's NAME, ACC and DESC.
+    input_format: cmbuild's --informat, if it can't tell the format itself.
+    noss, hand, symfrac: cmbuild's --noss, --hand and --symfrac.
+    Raises ExternalToolError if cmbuild is missing or fails.
+    """
     cmbuild = resolve_binary("cmbuild", cmbuild_path, install_hint="Install Infernal.")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -111,8 +119,8 @@ def infernal_build(
                 input_handle.write(input_content)
 
         args = [cmbuild, "-F", "-o", summary_path, "-n", sanitize_string(name)]
-        if informat is not None:
-            args.extend(["--informat", informat])
+        if input_format is not None:
+            args.extend(["--informat", input_format])
         if noss:
             args.append("--noss")
         if hand:
@@ -168,7 +176,7 @@ def main(argv):
         name=params.name,
         acc=params.acc,
         desc=params.desc,
-        informat=params.input_format,
+        input_format=params.input_format,
         cmbuild_path=params.cmbuild_path,
         noss=params.noss,
         hand=params.hand,

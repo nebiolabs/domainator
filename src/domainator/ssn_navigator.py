@@ -21,6 +21,7 @@ Queries (--query):
   node        a node's metadata and the cluster it falls in at each cut-point.
 """
 
+from typing import Any, Dict, Optional, Union
 import json
 import math
 
@@ -157,9 +158,10 @@ def _cluster_for_node(hierarchy, node_index, threshold):
         current = parent
 
 
-def ssn_navigator(bundle, *, mode, threshold=None, cluster_id=None, node=None,
-                  min_size=1, top_n=50, members=False,
-                  max_merge_events=DEFAULT_MAX_MERGE_EVENTS):
+def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Union[str, float]] = None,
+                  cluster_id: Optional[int] = None, node: Optional[str] = None,
+                  min_size: int = 1, top_n: int = 50, members: bool = False,
+                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS) -> Dict[str, Any]:
     """Answer a single navigation query against a loaded ``.dsnv`` bundle dict.
 
     Returns a JSON-serializable dict. See the module docstring for modes.

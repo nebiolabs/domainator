@@ -6,6 +6,7 @@ import math
 from time import perf_counter
 import base64
 import gzip
+from typing import Callable, List, Optional, TextIO
 
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
@@ -1193,10 +1194,11 @@ class SummaryHTMLWriter():
     def write_footer(self):
         print("</body></html>", file=self.out_handle)
 
-def matrix_report(matrix:DataMatrix, *, out_text_handle, out_html_handle, knn_projection: bool = False,
+def matrix_report(matrix:DataMatrix, *, out_text_handle: Optional[TextIO], out_html_handle: Optional[TextIO], knn_projection: bool = False,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
-                  profile_stages: bool = False, stage_timings=None, progress_callback=None,
-                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, out_json_handle=None):
+                  profile_stages: bool = False, stage_timings: Optional[List[tuple]] = None,
+                  progress_callback: Optional[Callable[[str], None]] = None,
+                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, out_json_handle: Optional[TextIO] = None) -> None:
     """
         Write a report on the matrix to the given handles.
     """

@@ -15,7 +15,7 @@ Criteria are combined with the following logic:
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from typing import Optional, Set
+from typing import Optional, Set, Iterable, Iterator
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio.Seq import Seq
@@ -59,7 +59,12 @@ def dna_to_peptide_location(location, offset=0):
     end = _dna_to_peptide_position(location.end, offset)
     return FeatureLocation(start, end, strand=location.strand)
 
-def extract_peptides(records, *, evalue, domains:Optional[Set], cds_ids, keep_cds_feature=True, cds_id_type="name", annotation_type:str="domainator", strand=None, unannotated=False, _from_domain_search=False, extract_all=False, invert=False, _domain_search_negatives:Optional[Set[str]]=None, databases=None, keep_name=False, name_field=None, partial="include"):
+def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float], domains: Optional[Set], cds_ids: Optional[Set[str]],
+                     keep_cds_feature: bool = True, cds_id_type: str = "name", annotation_type: str = "domainator",
+                     strand: Optional[str] = None, unannotated: bool = False, _from_domain_search: bool = False,
+                     extract_all: bool = False, invert: bool = False, _domain_search_negatives: Optional[Set[str]] = None,
+                     databases: Optional[Set[str]] = None, keep_name: bool = False, name_field: Optional[str] = None,
+                     partial: str = "include") -> Iterator[SeqRecord]:
     """
         Extracts all peptide sequences from each SeqRecord in records.
         Yields the extracted peptides as SeqRecord objects.

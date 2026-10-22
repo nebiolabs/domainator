@@ -17,7 +17,7 @@ import scipy.sparse
 from scipy.sparse.csgraph import connected_components
 import pandas as pd
 from pathlib import Path
-from typing import List, Union, Dict
+from typing import Collection, List, Optional, Union, Dict
 import numpy as np
 from domainator.colors import get_palette, sort_palette_values
 from domainator.cli.common import list_and_file_to_dict_keys
@@ -194,7 +194,7 @@ def iter_edge_dict_ssn_edges(edge_dict, rows, mst_edges=None):
 
 
 def build_ssn(matrix: DataMatrix, *, threshold:float=0, metadata:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml_out:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv_out:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, knn: int = None, subset_labels=None, max_output_bytes=None, max_color_groups:int=None, mark_mst:bool=False):
+              xgmml_out:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv_out:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, knn: int = None, subset_labels: Optional[Collection[str]] = None, max_output_bytes: Optional[int] = None, max_color_groups:int=None, mark_mst:bool=False) -> None:
     """build a sequence similarity network from a matrix
 
     Args:

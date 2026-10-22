@@ -39,12 +39,13 @@ from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.expr import BooleanEvaluator
 from domainator.taxonomy.records import filter_by_taxonomy
 from domainator.partial import filter_by_partial, PARTIAL_CHOICES
-from typing import Set, Optional
+from typing import Set, Optional, Iterable, Iterator
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.model import feature_evalue, feature_score
+from Bio.SeqRecord import SeqRecord
 
 # TODO: account for different domain databases
 # TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
@@ -94,7 +95,16 @@ def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
 
 
 
-def select_by_contig(records, *, domains: Set[str] = None, domain_expr: str =None, evalue=float("inf"), max_records=None, min_length=None, max_length=None, min_cds=None, max_cds=None, definition_regex=None, sequence_regex=None, contigs=None, contigs_regex=None, invert=False, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, databases:Optional[Set[str]]=None, unannotated=False, min_search_score=None, max_search_score=None, annotation_type="domainator", partial="include"):
+def select_by_contig(records: Iterable[SeqRecord], *, domains: Set[str] = None, domain_expr: str = None,
+                     evalue: float = float("inf"), max_records: Optional[int] = None, min_length: Optional[int] = None,
+                     max_length: Optional[int] = None, min_cds: Optional[int] = None, max_cds: Optional[int] = None,
+                     definition_regex: Optional[str] = None, sequence_regex: Optional[str] = None,
+                     contigs: Optional[Set[str]] = None, contigs_regex: Optional[str] = None, invert: bool = False,
+                     ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
+                     exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
+                     databases: Optional[Set[str]] = None, unannotated: bool = False,
+                     min_search_score: Optional[float] = None, max_search_score: Optional[float] = None,
+                     annotation_type: str = "domainator", partial: str = "include") -> Iterator[SeqRecord]:
     """
 
         Args:

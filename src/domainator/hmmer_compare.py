@@ -55,7 +55,7 @@ class _hmmer_compare_worker():
 
 
 
-def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_out_handle:Optional[TextIO], min_score:float, max_hits_per_query:int, cpu:int, alignments_out_handle:Optional[TextIO]=None, max_output_bytes=None, output_description: str = "hmmer_compare output"):
+def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_out_handle:Optional[TextIO], min_score:float, max_hits_per_query:int, cpu:int, alignments_out_handle:Optional[TextIO]=None, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_compare output") -> None:
     """For each hit, write a TSV row (query, reference, score) to tsv_out_handle, and the same
     row followed by the alignment and a blank line to alignments_out_handle. Either handle can be None."""
     reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects

@@ -209,13 +209,20 @@ def _center_record_on_search_hit(record):
 def split_by_cluster(
     input_path: Union[str, PathLike],
     *,
-    matrix_path: Union[str, PathLike],
+    matrix: Union[str, PathLike],
     output_dir: Union[str, PathLike],
     threshold: float = 0,
     min_cluster_size: int = 1,
     write_small_clusters: bool = False,
     pad_on_search_hits: bool = False,
 ) -> Dict[str, Union[Dict[int, Path], Optional[Path]]]:
+    """Write one file per cluster of ``matrix`` into ``output_dir``, holding the records (or
+    profiles) of ``input_path`` that are in that cluster.
+
+    Clusters are the connected components of the matrix's entries above ``threshold``. Clusters
+    smaller than ``min_cluster_size`` are skipped, or written together into one file with
+    ``write_small_clusters``. Returns {"clusters": {cluster number: path}, "small_clusters": path or None}.
+    """
     input_type = _get_supported_input_type(input_path)
     if input_type == "cm" and is_compressed_path(input_path):
         raise ValueError(
@@ -228,7 +235,7 @@ def split_by_cluster(
     if pad_on_search_hits and input_type != "genbank":
         raise ValueError("--pad_on_search_hits is only supported for GenBank inputs.")
 
-    matrix, label_to_cluster, cluster_sizes = _load_cluster_membership(matrix_path, threshold)
+    matrix, label_to_cluster, cluster_sizes = _load_cluster_membership(matrix, threshold)
     input_labels = _read_input_labels(input_path, input_type)
     _validate_label_reconciliation(matrix.rows, input_labels)
 
@@ -356,7 +363,7 @@ def main(argv):
     reject_stdin(parser, params.input)
     split_by_cluster(
         input_path=params.input,
-        matrix_path=params.matrix,
+        matrix=params.matrix,
         output_dir=params.output_dir,
         threshold=params.threshold,
         min_cluster_size=params.min_cluster_size,

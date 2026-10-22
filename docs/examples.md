@@ -202,3 +202,74 @@ domainator color_table_to_legend -i clusters_colors.tsv --svg_out cluster_legend
 ## Parallelizing domainate or domain_search over multiple nodes of a compute cluster
 
 Split the database into shards and index them with `domainator format_db --shards N --index`, then run one `domainator domainate` or `domainator domain_search` job per shard. Within a single machine, `domainator domain_search` already parallelizes over partitions of each input file (`--cpu`), and an index lets it skip the offset scan.
+
+## More commands, one example each
+
+These assume `annotated.gb` is the output of `domainator domainate` on nucleotide contigs,
+and `annotated_proteins.gb` the same for proteins. Every command's options are listed in the
+[command-line reference](cli/README.md).
+
+Select, filter and edit records:
+
+```bash
+# Keep only the contigs that have both a CcdA and a CcdB domain, and no CAT domain
+domainator select_by_contig -i annotated.gb --domain_expr "CcdA & CcdB & ~CAT" -o selected.gb
+
+# Keep domain hits with E-values of 1e-10 or less that overlap a better hit by at most 50%
+domainator filter_domains -i annotated.gb -e 1e-10 --max_overlap 0.5 -o filtered.gb
+
+# Trim 5 kb from both ends of each contig
+domainator trim_contigs -i annotated.gb --kb_range 5 -o trimmed.gb
+
+# Trim CDSs that have a CcdB domain off the ends of each contig
+domainator trim_contigs -i annotated.gb --domains CcdB -o trimmed.gb
+
+# Extract the regions listed in a table of contig, start, end (1-based and inclusive), and optionally strand
+domainator select_by_coord -i annotated.gb --coords regions.tsv -o regions.gb
+
+# Write the 10 best domain_search hits, best first (for domain_search output written without --max_hits)
+domainator sort_contigs -i hits.gb --max_hits 10 -o top_hits.gb
+
+# Make sequence names safe for Newick trees and drop sequences with non-canonical residues, logging what changed
+domainator clean_sequences -i proteins.fasta --alphabet protein --clean_name --filter_by_aa -o clean.gb --log_out clean.log
+```
+
+Extract sequences:
+
+```bash
+# The proteins with a CcdB domain, as a protein GenBank file and a FASTA file
+domainator extract_peptides -i annotated.gb --domains CcdB -o ccdb_proteins.gb --fasta_out ccdb_proteins.fasta
+
+# The parts of each protein at least 50 residues long that no domain covers (linkers, unknown domains)
+domainator extract_unannotated -i annotated_proteins.gb --min_length 50 -o unannotated.gb
+
+# Every record as FASTA
+domainator genbank_to_fasta -i annotated.gb --fasta_out annotated.fasta
+```
+
+Annotate features other than domains:
+
+```bash
+# Mark every match to a PROSITE pattern (here two cysteines two residues apart)
+domainator find_features -i annotated_proteins.gb --motif "CX(2)C" -o motifs.gb
+```
+
+Compare and project:
+
+```bash
+# k-mer similarity between every pair of proteins
+domainator kmer_dist -i proteins.fasta -r proteins.fasta -o kmer_scores.hdf5
+
+# Similarity of contigs by their domain content, and the contigs sorted by it
+domainator compare_contigs -i annotated.gb --ji 0.5 --ai 0.5 -o contig_scores.hdf5 --genbank_out sorted_contigs.gb
+
+# A 2D projection of a similarity matrix, as a Cytoscape network and a picture
+domainator build_projection -i scores.hdf5 --algorithm pca -o projection.xgmml --png_out projection.png
+```
+
+Build a covariance model:
+
+```bash
+# From a Stockholm alignment with a consensus secondary structure (experimental; needs Infernal)
+domainator infernal_build -i my_rna.sto --name my_rna -o my_rna.cm
+```

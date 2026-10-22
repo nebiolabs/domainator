@@ -5,10 +5,12 @@
     1 - (score / min(row_max, col_max)), so a pair with no score has distance 1.
     The two directions of each pair are reconciled by taking the smaller distance.
 """
+from typing import List, Optional
 import warnings
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.cytoscape import write_cytoscape_xgmml
+from domainator.outputs import output_file
 from domainator.data_matrix import DataMatrix, is_distance_data_type
 from domainator.transform_matrix import score_dist
 import numpy as np
@@ -140,7 +142,8 @@ def condensed_distances(data_matrix: DataMatrix, distance: str = "auto") -> np.n
     return squareform(dense, checks=False)
 
 
-def build_tree(data_matrix, *, algorithm, metadata, xgmml_out, newick_out, quiet=False, distance="auto"):
+def build_tree(data_matrix: DataMatrix, *, algorithm: str, metadata: Optional[List[str]], xgmml_out: Optional[str],
+               newick_out: Optional[str], quiet: bool = False, distance: str = "auto") -> None:
     """ 
         Build a tree from a distance or similarity matrix.
 
@@ -162,7 +165,7 @@ def build_tree(data_matrix, *, algorithm, metadata, xgmml_out, newick_out, quiet
 
         newick_string = get_newick(tree, tree.dist, names)
 
-        with open(newick_out, "w") as outfile:
+        with output_file(newick_out) as outfile:
             print(newick_string, file=outfile)
 
     if xgmml_out is not None:

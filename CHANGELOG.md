@@ -20,6 +20,10 @@ lists every change from 0.x.
   `docs/file_formats.md`.
 - A `schema_version` key in the `--json_out` of summary_report, matrix_report and ssn_navigator.
 - hmmer_compare `--alignments_out`.
+- `domainator describe`: a JSON description of every command and its options (the tool
+  manifest, docs/tool_manifest.md), for GUIs and workflow systems.
+- A command-line reference generated from the parsers (docs/cli/), and an API reference site
+  (`mkdocs build`, with the `docs` extra).
 - Python extras: `projection` (UMAP), `structure` (torch), `dev`.
 - `scripts/bench/bench.py`, a benchmark of common steps.
 
@@ -28,6 +32,8 @@ lists every change from 0.x.
 - Every output is an explicit `--<content>_out` option, and nothing reads standard input or
   writes standard output unless given `-`.
 - Options with the same meaning have the same name everywhere (see MIGRATION.md).
+- enum_report and hmmer_report choose their columns with one ordered `--columns` list
+  (`--columns domains length taxid:genus`) instead of one flag per column.
 - Domainator uses upstream Biopython (1.85 to 1.88) instead of a bundled fork.
 - Python 3.12 or newer is required; wheels use the stable ABI, so one wheel serves every
   Python from 3.12 on.
@@ -42,6 +48,8 @@ lists every change from 0.x.
   input themselves), and `--offset`/`--recs_to_read` (index the database with
   `domainator format_db --index` instead).
 - The `bashplotlib` dependency; `umap-learn` is now an optional extra.
+- The bundled web GUI (`domainator_server`) and its Flask dependency; a separate GUI project is
+  being built on `domainator describe`.
 
 ### Fixed
 - Many bugs found in the 1.0 review, including: `-e` cutoffs that dropped hits equal to the

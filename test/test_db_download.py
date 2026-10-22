@@ -396,4 +396,4 @@ def test_uniprot_download_partial(monkeypatch, tmp_path, db, payload, partial, e
 
 def test_uniprot_download_partial_rejects_ncbi(tmp_path):
     with pytest.raises(ValueError, match="UniProt"):
-        db_download.db_download(None, output_file_path=str(tmp_path / "out.gb"), include_taxids=None, exclude_taxids=None, db="ncbi_all", gene_call=None, num_recs=None, ncbi_summary=None, before=None, after=None, partial="exclude")
+        db_download.db_download(None, output=str(tmp_path / "out.gb"), include_taxids=None, exclude_taxids=None, db="ncbi_all", gene_call=None, max_records=None, ncbi_summary=None, before=None, after=None, partial="exclude")

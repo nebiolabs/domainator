@@ -22,7 +22,8 @@ from domainator.sparsify import MAX_HITS_PER_QUERY_SPARSIFY_NOTE, add_sparsify_a
 from domainator.matrix_output import add_matrix_output_arguments, resolve_matrix_outputs, write_matrix_outputs
 from domainator.errors import DomainatorError
 from domainator.output_guardrails import add_max_output_gb_argument, format_bytes, max_output_gb_to_bytes
-from typing import Optional
+from typing import Iterable, Optional
+from Bio.SeqRecord import SeqRecord
 from abc import ABC, abstractmethod
 import numpy as np
 import scipy.sparse
@@ -514,7 +515,7 @@ def unique_records(records, progress=False):
     return out
 
 
-def compare_contigs(records, *, metrics, max_hits_per_query=None, threshold: float = 0.0, progress: bool = False,
+def compare_contigs(records: Iterable[SeqRecord], *, metrics: Iterable[ContigMetric], max_hits_per_query: Optional[int] = None, threshold: float = 0.0, progress: bool = False,
                     cpu: int = 1, mst: bool = False, knn: Optional[int] = None) -> DataMatrix:
     """Score every pair of contigs by their domain content.
 

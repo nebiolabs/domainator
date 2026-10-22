@@ -31,11 +31,12 @@ from domainator import select_by_cds
 from domainator import db_index
 from domainator import domainate
 import heapq
-from typing import List, Tuple, Set, Optional
+from typing import List, Tuple, Set, Optional, Iterable, Iterator
 from domainator import extract_peptides
 from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
+from Bio.SeqRecord import SeqRecord
 
 
 # Per-process taxonomy filter, populated by the pool initializer. The include/
@@ -227,7 +228,15 @@ class _partition_seqfile_worker():
         return partition_seqfile(input_file, self.cdss_per_partition)
     
 
-def domain_search(partitions, *, references, z, evalue, max_hits, max_overlap, cpu, add_annotations, cds_range, kb_range, whole_contig, normalize_direction, translate, gene_call=None, min_evalue=0.0, ncbi_taxonomy=None, include_taxids=None, exclude_taxids=None, taxonomy_expr=None, alphabet="protein", max_mode:bool=False, max_region_overlap=1.0, strand=None, decoys=None, max_hits_per_contig=None, partial="include", deduplicate_by_sequence=False, both_strands=False):
+def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: List[str], z: int, evalue: float,
+                  max_hits: Optional[int], max_overlap: float, cpu: int, add_annotations: bool,
+                  cds_range: Optional[Tuple[int, int]], kb_range: Optional[Tuple[float, float]], whole_contig: bool,
+                  normalize_direction: bool, translate: bool, gene_call: Optional[str] = None, min_evalue: float = 0.0,
+                  ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
+                  exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
+                  alphabet: str = "protein", max_mode: bool = False, max_region_overlap: float = 1.0,
+                  strand: Optional[str] = None, decoys: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None,
+                  partial: str = "include", deduplicate_by_sequence: bool = False, both_strands: bool = False) -> Iterator[SeqRecord]:
     """
     runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
 

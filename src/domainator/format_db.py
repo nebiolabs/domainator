@@ -18,6 +18,7 @@ Shard content is produced by byte-exact range copy of the (decompressed) record
 stream, so records are preserved exactly. Compressed inputs are decompressed to a
 temporary working file first; uncompressed inputs are read in place.
 """
+from typing import List, Optional, TextIO
 import os
 import sys
 import warnings
@@ -207,8 +208,9 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, name, level,
     return tasks, working_temp
 
 
-def format_db(inputs, *, shards=None, compress=False, index=False, output_dir=None,
-              name=None, cpu=1, level=6, force=False, log=sys.stderr):
+def format_db(inputs: List[str], *, shards: Optional[int] = None, compress: bool = False, index: bool = False,
+              output_dir: Optional[str] = None, name: Optional[str] = None, cpu: int = 1, level: int = 6,
+              force: bool = False, log: TextIO = sys.stderr) -> List[str]:
     """Shard / compress / index domain_search databases. Returns the list of final
     output paths produced (or confirmed). At least one of ``shards``, ``compress``,
     or ``index`` must be requested. ``name`` renames the output database (its format

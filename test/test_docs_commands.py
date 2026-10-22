@@ -91,3 +91,32 @@ def test_documented_options_exist(command, options, tokens):
     if outputs:
         assert any(getattr(params, dest, None) is not None for dest in outputs), \
             f"{command} names none of its outputs ({', '.join(outputs)}); use - to write to stdout"
+
+
+def test_readme_program_table_lists_every_command_and_its_streaming():
+    """Every command has a row in the README's program table, and the row's streaming input and
+    output columns say what the command's parser does (from the tool manifest)."""
+    import re
+    from domainator.cli.manifest import manifest
+
+    rows = {}
+    for line in (REPO / "README.md").read_text().splitlines():
+        match = re.match(r"^\|\s*domainator (\w+)\s*\|", line)
+        if match:
+            rows[match.group(1)] = [cell.strip().lower() for cell in line.strip().strip("|").split("|")]
+    tools = {tool["name"]: tool for tool in manifest()["tools"]}
+    assert sorted(rows) == sorted(tools)
+    for name, tool in tools.items():
+        parameters = {p["name"]: p for p in tool["parameters"]}
+        stdin = "n/a" if "input" not in parameters else "yes" if parameters["input"].get("stdin") else "no"
+        stdout = "yes" if any(p.get("stdout") for p in tool["parameters"] if p.get("role") == "output") else "no"
+        assert (rows[name][4], rows[name][5]) == (stdin, stdout), name
+
+
+def test_cli_reference_is_up_to_date():
+    """docs/cli/ is generated from the parsers; regenerate it with python scripts/docs/cli_reference.py."""
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, str(REPO / "scripts" / "docs" / "cli_reference.py"), "--check"],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

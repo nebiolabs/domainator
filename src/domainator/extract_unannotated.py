@@ -7,6 +7,7 @@ This tool is currently only supports protein sequences, support for nucleic acid
 can write a fasta or a genbank file
 """
 
+from typing import Iterable, Iterator, Optional, Set
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
@@ -18,10 +19,13 @@ from domainator.model import region_id, check_annotation_type, feature_score, ev
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from Bio.SeqFeature import FeatureLocation
 from domainator.location_ops import inverted
+from Bio.SeqRecord import SeqRecord
 
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
-def extract_unannotated(records, *, evalue=None, min_score=None, keep_direction=False, keep_name=False, annotation_type:str="domainator", databases=None, largest=False, min_length=0):
+def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
+                        keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
+                        databases: Optional[Set[str]] = None, largest: bool = False, min_length: int = 0) -> Iterator[SeqRecord]:
     """
 
       input: 

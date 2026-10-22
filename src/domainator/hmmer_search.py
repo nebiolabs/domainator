@@ -304,7 +304,13 @@ class _hmmer_search_worker():
         return best_result
 
 
-def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmmer_handle:BinaryIO, min_score:Optional[float], max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output"):
+def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmmer_handle:BinaryIO, min_score:Optional[float], max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output") -> None:
+    """Write the profiles of ``input_files`` that score at least ``min_score`` against any of the
+    ``references`` profiles to ``hmmer_handle``; with ``max_hits``, only that many, the best-scoring first.
+
+    The input and reference profiles must share an alphabet. ``min_score`` None means the default
+    for the alphabet (see hmmer_compare). Raises OutputSizeLimitExceeded past ``max_output_bytes``.
+    """
     reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
     reference_alphabet = common_hmm_alphabet(references, role="reference")
 

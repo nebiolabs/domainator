@@ -10,12 +10,13 @@ from domainator.cli.common import add_input, add_output, check_outputs, declare_
 from domainator.outputs import output_file
 from domainator.hmmio import alphabet_name, iter_hmms_with_alphabet
 from domainator.seqio import db_name_from_path
-from typing import Tuple, Union, Iterable
+from typing import Tuple, Union, Iterable, List, Optional, TextIO
 from domainator.report_columns import Column, add_columns_argument, parse_columns
 from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
 import pyhmmer
 import os
 from io import IOBase
+from domainator.report_columns import Analysis
 
 
 
@@ -67,7 +68,9 @@ def append_factory(spec):
     }
 
 
-def hmmer_report(records:Tuple[str, Iterable[pyhmmer.plan7.Profile]], *, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, json_out_handle=None):
+def hmmer_report(records: Tuple[str, Iterable[pyhmmer.plan7.Profile]], *, analyses: List[Analysis],
+                 tsv_out_handle: Optional[TextIO], html_out_handle: Optional[TextIO], column_names: Optional[List[str]],
+                 html_max_height: Optional[int], json_out_handle: Optional[TextIO] = None) -> None:
     """
       input:
         records: a list of tuples of tuple of (database_name, iterator of pyhmmer.plan7.HMM)

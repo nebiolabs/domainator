@@ -3,6 +3,7 @@
    For matrices with any data type, can convert between hdf5 and dense text, or change the datatype.
 """
 
+from typing import Optional
 import warnings
 from jsonargparse import ActionConfigFile
 
@@ -127,7 +128,8 @@ def apply_lower_bound(array, lower_bound):
     return out
 
 
-def transform_matrix(array, *, mode, row_lengths=None, col_lengths=None):
+def transform_matrix(array: scipy.sparse.csr_array, *, mode: str, row_lengths: Optional[np.ndarray] = None,
+                     col_lengths: Optional[np.ndarray] = None) -> scipy.sparse.csr_array:
     """
     Transform an array to a different mode.
     """

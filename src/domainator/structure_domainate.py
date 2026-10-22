@@ -21,6 +21,7 @@ Record coordinates are indices into the *observed* residue sequence extracted fr
 structure, not original PDB residue numbers.
 """
 
+from typing import Iterator, List, Optional
 import sys
 
 from jsonargparse import ActionConfigFile
@@ -30,16 +31,19 @@ from domainator.cli.common import add_input, add_seq_outputs, check_outputs, dec
 from domainator import domainate
 from domainator import structure_lib
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
+from Bio.SeqRecord import SeqRecord
 
 
 MITIGATION_OPTIONS = ["--hits_only", "--max_hits_per_cds", "-e/--evalue", "--no_annotations"]
 
 
-def structure_domainate(input_values, *, references, aligner, evalue=0.001, min_evalue=0.0,
-                        max_hits_per_cds=sys.maxsize, max_overlap=1.0, overlap_by_db=False,
-                        hits_only=False, no_annotations=False, alignment_type=2, metrics=None,
-                        max_seqs=None, tmp_dir=None, keep_db=None, database_name=None,
-                        hits_tsv_out=None):
+def structure_domainate(input_values: List[str], *, references: List[str], aligner: structure_lib.StructureAligner,
+                        evalue: float = 0.001, min_evalue: float = 0.0,
+                        max_hits_per_cds: int = sys.maxsize, max_overlap: float = 1.0, overlap_by_db: bool = False,
+                        hits_only: bool = False, no_annotations: bool = False, alignment_type: Optional[int] = 2,
+                        metrics: Optional[List[str]] = None, max_seqs: Optional[int] = None, tmp_dir: Optional[str] = None,
+                        keep_db: Optional[str] = None, database_name: Optional[str] = None,
+                        hits_tsv_out: Optional[str] = None) -> Iterator[SeqRecord]:
     """Yield annotated protein SeqRecords, one per input structure chain.
 
     Args:

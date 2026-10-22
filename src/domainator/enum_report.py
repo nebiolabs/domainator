@@ -22,7 +22,7 @@ from domainator.find_features import search_motif
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.SeqUtils import molecular_weight
 from pathlib import Path
-from typing import List, Tuple, Union, Dict, Any
+from typing import List, Tuple, Union, Dict, Any, Iterable, Optional, Set, TextIO
 from Bio.SeqFeature import FeatureLocation, CompoundLocation
 from Bio.SeqRecord import SeqRecord
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
@@ -31,6 +31,7 @@ from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableW
 from domainator.report_columns import VARIADIC, Column, add_columns_argument, parse_columns
 from domainator.location_ops import stranded_end_human_readable, stranded_start, stranded_start_human_readable
 import re
+from domainator.report_columns import Analysis
 
 SELECT_CATEGORIES = ("contig", "cds", "domain")
 COLUMNS = (
@@ -707,7 +708,10 @@ def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None
             rec.annotations["_source_filename"] = filename
             yield rec
 
-def enum_report(records, *, by, analyses, tsv_out_handle, html_out_handle, column_names, html_max_height, ncbi_taxonomy, databases=None, json_out_handle=None, partial="include"):
+def enum_report(records: Iterable[SeqRecord], *, by: str, analyses: List[Analysis], tsv_out_handle: Optional[TextIO],
+                html_out_handle: Optional[TextIO], column_names: Optional[List[str]], html_max_height: Optional[int],
+                ncbi_taxonomy: Optional[NCBITaxonomy], databases: Optional[Set[str]] = None,
+                json_out_handle: Optional[TextIO] = None, partial: str = "include") -> None:
     """
       input:
         records: an iterator of SeqRecords

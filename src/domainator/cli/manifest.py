@@ -101,7 +101,8 @@ def describe_parameter(action, columns=None) -> Dict[str, Any]:
     if role == "input" and dest == "input":
         parameter["stdin"] = getattr(action, "stdin", False)
     if role == "output":
-        parameter["stdout"] = getattr(action, "stdout", True)
+        # add_output records it; an output defined otherwise is taken to need a file
+        parameter["stdout"] = getattr(action, "stdout", False)
     if columns is not None:
         parameter["columns"] = [{"name": c.name, "args": [a for a in c.args if a != "..."],
                                  "repeat_last": bool(c.args) and c.args[-1] == "...", "help": c.help} for c in columns]

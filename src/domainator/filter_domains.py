@@ -12,10 +12,11 @@ from domainator.outputs import write_seq_outputs
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from typing import Optional, Set, Dict
+from typing import Optional, Set, Dict, Iterable, Iterator
 from Bio.SeqFeature import SeqFeature
 from domainator.model import feature_evalue, feature_score
 from domainator.location_ops import overlap_size
+from Bio.SeqRecord import SeqRecord
 
 #TODO: parallelize input parsing
 #TODO: the logic of this program is a bit confusing, in terms of interplay between different filters.
@@ -126,7 +127,9 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
             kept_annotations[cds_id][feature_id] = overlap_annotations[cds_id][feature_id]
     return kept_annotations
 
-def filter_domains(records, *, evalue, max_overlap, keep_databases:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, domains=None, annotation_type="all"):
+def filter_domains(records: Iterable[SeqRecord], *, evalue: Optional[float], max_overlap: float,
+                   keep_databases: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
+                   domains: Optional[Set[str]] = None, annotation_type: str = "all") -> Iterator[SeqRecord]:
     """
     The main function which iterates through genbank files to find the domainator annotations
     to be removed

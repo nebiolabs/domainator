@@ -24,6 +24,7 @@ If a file column is supplied, it must contain basenames only (with extension).
 Rows without a file value match any input file.
 """
 
+from typing import Iterable, Iterator
 from collections import defaultdict
 from dataclasses import dataclass
 import csv
@@ -37,6 +38,7 @@ from Bio.SeqFeature import CompoundLocation, FeatureLocation
 from domainator.seqio import parse_seqfiles
 from domainator.model import region_id
 from domainator.locations import slice_record_from_location
+from Bio.SeqRecord import SeqRecord
 
 
 ALLOWED_COLUMNS = {"contig", "start", "end", "strand", "file"}
@@ -190,7 +192,14 @@ def extract_coordinate_region(contig, selection):
     return record
 
 
-def select_by_coord(records, *, coordinate_selections):
+def select_by_coord(records: Iterable[SeqRecord], *, coordinate_selections: Iterable[CoordinateSelection]) -> Iterator[SeqRecord]:
+    """Yield the regions of ``records`` that ``coordinate_selections`` lists.
+
+    coordinate_selections: CoordinateSelection rows, as load_coordinate_table reads them from a
+        table of contig, start, end (1-based, inclusive) and optionally strand and file. Each row
+        that names a record gives one region, named like the regions of the other tools
+        (model.region_id); a reverse-strand region is reverse complemented.
+    """
     selections_by_contig = defaultdict(list)
     for selection in coordinate_selections:
         selections_by_contig[selection.contig].append(selection)

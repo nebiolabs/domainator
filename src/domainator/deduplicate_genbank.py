@@ -7,7 +7,7 @@ The "hash" algorithm is a faster way to deduplicate exact duplicates, by hashing
 from dataclasses import dataclass, field
 import sys
 from jsonargparse import ActionConfigFile
-from typing import List
+from typing import List, Dict, Iterator, Optional, TextIO, Tuple
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio import SeqIO, Seq
@@ -18,6 +18,7 @@ import shlex
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
+from Bio.SeqRecord import SeqRecord
 
 
 class ClusterProgram(ABC):
@@ -232,8 +233,10 @@ class HashHit():
     rep_name: str
     cluster_members: list[str] = field(default_factory=list)
 
-def deduplicate_genbank(inputs, *, identity, algorithm="cd-hit", extra_args=None, bin_paths=None, add_count=None, cpu=1,
-                        alphabet="protein", both_strands=False, log_handle=sys.stderr, clusters=None):
+def deduplicate_genbank(inputs: List[str], *, identity: float, algorithm: str = "cd-hit", extra_args: Optional[List[str]] = None,
+                        bin_paths: Optional[Dict[str, str]] = None, add_count: Optional[str] = None, cpu: int = 1,
+                        alphabet: str = "protein", both_strands: bool = False, log_handle: TextIO = sys.stderr,
+                        clusters: Optional[List[Tuple[str, List[str]]]] = None) -> Iterator[SeqRecord]:
     """Yield one representative record of each cluster of similar sequences.
 
     Args:

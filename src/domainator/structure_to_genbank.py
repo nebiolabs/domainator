@@ -21,7 +21,9 @@ sequence shorter than its residue-number span.
 
 import os
 import tempfile
+from typing import Iterator, List, Optional
 
+from Bio.SeqRecord import SeqRecord
 from jsonargparse import ActionConfigFile
 
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
@@ -29,7 +31,8 @@ from domainator.output_guardrails import add_max_output_gb_argument, max_output_
 from domainator import structure_lib
 
 
-def structure_to_genbank(inputs, *, aligner, db_out=None, store_3di=False, tmp_dir=None):
+def structure_to_genbank(inputs: List[str], *, aligner: structure_lib.StructureAligner, db_out: Optional[str] = None,
+                         store_3di: bool = False, tmp_dir: Optional[str] = None) -> Iterator[SeqRecord]:
     """Yield one protein SeqRecord per structure chain.
 
     Args:

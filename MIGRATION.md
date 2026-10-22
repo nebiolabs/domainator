@@ -281,6 +281,8 @@ internal; see `docs/stability.md`.
 | `domainator.domainator_format_db` | `domainator.format_db` |
 | `domainator.plot_contigs.create_d3_html(output_file, contigs, ...)` | `domainator.plot_contigs.plot_contigs(records, html_out=..., ...)` |
 | `DeduplicateGenbank().deduplicate_genbank(...)` and `.cluster_members` | `deduplicate_genbank(inputs, identity=..., clusters=[])`, which appends the clusters to the list |
+| `build_ssn_viewer.build_ssn_viewer_bundle(matrix, metadata_files=..., categorical_columns=...)` | `build_ssn_viewer.build_ssn_viewer(matrix, metadata=..., categorical=...)` |
+| (none) | `genbank_to_fasta.genbank_to_fasta(input, fasta_out=...)` |
 | `MaxTree` and the edge functions imported from `domainator.data_matrix` | import them from `domainator.ssn_edges` (`SortedUndirectedEdges`, `CompactNeighborRankings` from `domainator.edge_types`) |
 | `utils.pyhmmer_decode(x)` | `x` (pyhmmer 0.12 returns `str`) |
 | `write_genbank(records, path, preserve_original=..., add_domain_cds_annotations=..., replace_space_with=...)` | `write_genbank(records, path)`; it never changes the records, so `preserve_original` is not needed |
@@ -316,7 +318,10 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | filter_domains | `databases_keep`, `databases_filter`, `selected_domains` | `keep_databases`, `databases`, `domains` |
 | extract_domains | `score`, `pad_up`, `pad_down` | `min_score`, `extend_up`, `extend_down` |
 | extract_unannotated | `score`, `lb` | `min_score`, `min_length` |
-| trim_contigs | `strip_domains`, `no_domain` | `domains`, `unannotated` |
+| trim_contigs | `strip_domains`, `no_domain`, `kb_truncation`, `cds_truncation` | `domains`, `unannotated`, `kb_range`, `cds_range` |
+| db_download | `output_file_path`, `num_recs`, `success_rec_log` | `output`, `max_records`, `success_log_out` |
+| split_by_cluster | `matrix_path` | `matrix` |
+| infernal_build | `informat` | `input_format` |
 | rotate_contigs | `where` | `anchor` |
 | domainate | `max_hits`, `esm2_3Di_weights`, `esm2_3Di_device` | `max_hits_per_cds`, `esm2_3di_weights`, `esm2_3di_device` |
 | domain_search | `decoy_names`, `dedup_both_strands` | `decoys`, `both_strands` |

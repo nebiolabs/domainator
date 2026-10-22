@@ -25,7 +25,8 @@ from domainator.locations import FeatureIndex, pad_location, slice_record_from_l
 from Bio.SeqFeature import FeatureLocation
 from domainator.partial import fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES
 from domainator.location_ops import circular_envelope, copy_location, overlap_size, stranded_end, stranded_start
-from typing import Tuple, Optional, Set
+from typing import Tuple, Optional, Set, Iterable, Iterator
+from Bio.SeqRecord import SeqRecord
 #TODO: account for different domain databases
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
 #       https://www.ebi.ac.uk/interpro/search/ida/
@@ -338,12 +339,14 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
     set_focus_strand(record, -1 if flip else 1)
     return record, slice_location
 
-def select_by_cds(records, *, cds_ids=None, domains=None, domain_expr=None, cds_range: Tuple[int, int]=None,
-                  kb_range:Tuple[float, float]=None, whole_contig=False, normalize_direction=True, evalue=float("inf"),
-                  invert=False, annotation_type:str="domainator", max_region_overlap=1.0, strand=None, _from_domain_search=False,
-                  _domain_search_negatives:Optional[Set[str]]=None, databases:Optional[Set[str]]=None, unannotated=False,
-                  include_nucleic_acids:bool = False, partial:str = "include",
-                  ):
+def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] = None, domains: Optional[Set[str]] = None,
+                  domain_expr: Optional[str] = None, cds_range: Tuple[int, int] = None,
+                  kb_range: Tuple[float, float] = None, whole_contig: bool = False, normalize_direction: bool = True,
+                  evalue: float = float("inf"), invert: bool = False, annotation_type: str = "domainator",
+                  max_region_overlap: float = 1.0, strand: Optional[str] = None, _from_domain_search: bool = False,
+                  _domain_search_negatives: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
+                  unannotated: bool = False, include_nucleic_acids: bool = False, partial: str = "include",
+                  ) -> Iterator[SeqRecord]:
     """
 
         Args:

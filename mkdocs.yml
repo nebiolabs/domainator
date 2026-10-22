@@ -1,0 +1,37 @@
+# The documentation site: mkdocs build (pip install -e ".[docs]"). The pages are docs/*.md,
+# readable on GitHub as they are; docs/api/ adds the API reference from the docstrings.
+site_name: Domainator
+repo_url: https://github.com/nebiolabs/domainator
+docs_dir: docs
+theme:
+  name: material
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_root_heading: true
+            show_source: false
+            docstring_style: google
+            merge_init_into_class: true
+nav:
+  - Home: README.md
+  - Command-line reference: cli/README.md
+  - Python API:
+      - api/index.md
+      - api/package.md
+      - api/commands.md
+  - File formats: file_formats.md
+  - What 1.x keeps stable: stability.md
+  - Examples: examples.md
+  - Similarity Network Viewer: ssn_viewer.md
+  - Tool manifest: tool_manifest.md
+  - Structure search: structure_search.md
+  - ESM-2 3Di and foldseek: esm_3b_foldseek.md
+  - Agent-driven workflows: agent_workflows.md
+  - Key algorithms: algorithms.md
+  - Limitations and FAQ: limitations_and_FAQ.md
+  - Developing Domainator: developing_domainator.md
+  - 1.0 release plan: v1_release_plan.md
