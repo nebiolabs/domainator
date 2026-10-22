@@ -6,10 +6,10 @@ Build a UPGMA tree from a distance or similarity matrix.
 ```
 Generates trees from distance or similarity matrices
 
-    Distance matrices (data types ending in _dist, or dense text with no data type) are used
-    as is. Similarity matrices (e.g. score, efi_score) are first converted to distances with
-    1 - (score / min(row_max, col_max)), so a pair with no score has distance 1.
-    The two directions of each pair are reconciled by taking the smaller distance.
+Distance matrices (data types ending in _dist, or dense text with no data type) are used
+as is. Similarity matrices (e.g. score, efi_score) are first converted to distances with
+1 - (score / min(row_max, col_max)), so a pair with no score has distance 1.
+The two directions of each pair are reconciled by taking the smaller distance.
 ```
 
 Give at least one of these outputs: `--newick_out`, `--xgmml_out`. `-` as an input or output means standard input or output, where the option says it is allowed.

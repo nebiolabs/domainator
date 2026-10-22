@@ -38,6 +38,8 @@ lists every change from 0.x.
 - Python 3.12 or newer is required; wheels use the stable ABI, so one wheel serves every
   Python from 3.12 on.
 - Matrix files are version 2.0 (symmetric matrices are stored as their upper triangle).
+- The conda environment no longer installs TMbed and PyTorch; the README's "Optional: TMbed"
+  section says how to add them for `find_features --tmbed`.
 - The command functions take only their main input positionally and are importable as
   `from domainator.<command> import <command>`; their keyword parameters are named like the
   command's options and default like them (domainate's e-value 0.001, not 10; `cpu=0`, all

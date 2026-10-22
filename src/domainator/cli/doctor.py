@@ -38,7 +38,7 @@ OPTIONAL_PACKAGES = (
     Requirement("torch", "domainate --foldseek on sequences (ESM-2), find_features --tmbed",
                 'pip install "domainator[structure]"'),
     Requirement("esmologs", "domainate --foldseek on sequences (ESM-2)", "see docs/esm_3b_foldseek.md"),
-    Requirement("tmbed", "find_features --tmbed", "pip install git+https://github.com/BernhoferM/TMbed.git"),
+    Requirement("tmbed", "find_features --tmbed", 'see "Optional: TMbed" in README.md (needs Python 3.14 or older)'),
 )
 
 

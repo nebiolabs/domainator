@@ -189,7 +189,7 @@ def test_parse_seqfiles(files,offset,read_count,expected_record_ct,rec0_name,sha
 @pytest.mark.parametrize("file,offsets,num_proteins",
 [("pDONR201.gb",[0],[3]),
 ("pDONR201_multigenemark_partition.gb",[0,8191,16382,24573],[6,6,6,6]),
-("pdonr_peptides.fasta",[0,50,169,226,465],[1,1,1,1,1]),
+("pdonr_peptides.fasta",[0,48,164,219,454],[1,1,1,1,1]),
 ("pDONR201_empty.gb",[0],[0]),
 ("simple_genpept.gb",[0,296,987,1620,3904],[1,1,1,1,1]),
 ])

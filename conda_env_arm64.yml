@@ -14,5 +14,3 @@ dependencies:
   - ncbi-datasets-cli
   - pip:
     - -e .[test,projection]
-    # find_features --tmbed; not on PyPI, so pinned to a commit
-    - git+https://github.com/BernhoferM/TMbed.git@8cee893523eb655bc9485c00c65336d27a236191

@@ -150,7 +150,7 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 
 Domainator is developed on Linux, and has been tested on Mac. It probably won't work on Windows, except through WSL. It needs Python 3.12 or newer.
 
-A few commands also need an external program or an optional Python package. The conda environment below installs all of them; `domainator doctor` lists which ones your installation has.
+A few commands also need an external program or an optional Python package. The conda environment below installs all of them except esmologs and TMbed; `domainator doctor` lists which ones your installation has.
 
 | Program or package | Needed by | Install |
 |---|---|---|
@@ -163,7 +163,7 @@ A few commands also need an external program or an optional Python package. The 
 | datasets | `db_download` of NCBI genomes | `conda install -c conda-forge ncbi-datasets-cli` |
 | umap-learn | `build_projection --algorithm umap` | `pip install "domainator[projection]"` |
 | torch, esmologs | `domainate --foldseek` on sequences (ESM-2 to 3Di) | `pip install "domainator[structure]"`; esmologs: see [docs/esm_3b_foldseek.md](docs/esm_3b_foldseek.md) |
-| torch, TMbed | `find_features --tmbed` | `pip install "domainator[structure]" git+https://github.com/BernhoferM/TMbed.git` |
+| TMbed (and torch) | `find_features --tmbed` | see [TMbed](#optional-tmbed-for-find_features---tmbed) |
 
 Domainator ships an optional native (Rust) extension that greatly speeds up GenBank/FASTA parsing and offset scanning. Building it requires a **Rust toolchain (≥ 1.83)** — which the conda environment installs for you — and a **C compiler/linker** (`gcc`/`clang`). If either is unavailable the extension is skipped and Domainator falls back to a slower pure-Python parser; results are identical either way. See [Native (Rust) acceleration](#native-rust-acceleration) below.
 
@@ -172,7 +172,7 @@ Domainator ships an optional native (Rust) extension that greatly speeds up GenB
 There are two ways to install Domainator:
 
 - **The released version, from bioconda:** `conda create -n domainator -c conda-forge -c bioconda domainator`, as in the [Quickstart](#quickstart). Install any optional programs you need into the same environment (see [Requirements](#requirements)).
-- **From this repository**, with the conda environment below, which also installs every optional program. Use this for the newest code or to develop Domainator.
+- **From this repository**, with the conda environment below, which also installs the optional programs except esmologs and [TMbed](#optional-tmbed-for-find_features---tmbed). Use this for the newest code or to develop Domainator.
 
 __NOTE:__ For Installation with ESM-2 3B 3Di and foldseek integration, see [here](docs/esm_3b_foldseek.md)
 
@@ -215,6 +215,33 @@ This will create a new conda environment called "domainator".
 ```bash
 conda activate domainator
 ```
+
+### Optional: TMbed, for `find_features --tmbed`
+
+`find_features --tmbed` predicts transmembrane regions and signal peptides with
+[TMbed](https://github.com/BernhoferM/TMbed). The conda environment does not install it: TMbed is
+not on PyPI, and it brings in PyTorch, which is several GB. To use it, install it into the
+activated environment (or wherever you installed Domainator with pip):
+
+```bash
+conda activate domainator
+pip install "transformers<5" "tmbed @ git+https://github.com/BernhoferM/TMbed.git@8cee893523eb655bc9485c00c65336d27a236191"
+domainator doctor   # should now list torch and tmbed as found
+```
+
+- **Python 3.14 or older.** PyTorch has no Python 3.15 builds yet, so on 3.15 pip reports
+  `No matching distribution found for torch`. Check with `python --version`; to make the
+  environment on 3.14 instead, run `conda create -n domainator python=3.14` and then
+  `conda env update -n domainator -f conda_env.yml` in place of Step 1's `conda env create`.
+- **`transformers<5`**: TMbed uses tokenizer methods that transformers 5 removed.
+- **The TMbed commit is pinned** because TMbed has no releases; this is the version Domainator is
+  tested with.
+- **GPU or CPU.** `--device` (default `cuda:0`) falls back to the CPU when CUDA is not available.
+  pip's default PyTorch on Linux includes CUDA libraries. For a smaller CPU-only install, install
+  PyTorch first with `pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+- **Model download.** The first run downloads TMbed's ProtT5 encoder (about 2.25 GB), by default
+  into the installed `tmbed` package. Use `--tmbed_model_dir` (or `--model_dir`, or the `HF_HOME`
+  environment variable) to keep it somewhere else, such as a shared directory.
 
 ### Native (Rust) acceleration
 

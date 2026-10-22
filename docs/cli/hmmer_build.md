@@ -5,9 +5,9 @@ Build an HMM profile from a multiple sequence alignment.
 
 ```
 Build an HMM profile from a multiple sequence alignment (MSA)
-    
-    Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.
-    Some of these options are not available in the standard hmmbuild tool from HMMER.
+
+Allows the user to specify the ACC, NAME, and DESC fields of the HMM profile.
+Some of these options are not available in the standard hmmbuild tool from HMMER.
 ```
 
 Give at least one of these outputs: `--hmm_out`. `-` as an input or output means standard input or output, where the option says it is allowed.

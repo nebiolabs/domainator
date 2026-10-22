@@ -270,7 +270,8 @@ def get_tmbed_predictor(gpu_device: Optional[str] = "cuda:0", cpu_threads: int =
     Returns:
         Tuple of (encoder, models, decoder, device, use_gpu)
     """
-    hint = 'Install it with: pip install "domainator[structure]" git+https://github.com/BernhoferM/TMbed.git'
+    hint = ('Install it with: pip install "transformers<5" "tmbed @ git+https://github.com/BernhoferM/TMbed.git@8cee893523eb655bc9485c00c65336d27a236191" '
+            '(on Python 3.14 or older; see "Optional: TMbed" in the README)')
     torch = import_optional("torch", hint)
     tmbed = import_optional("tmbed.tmbed", hint)
     load_models, load_encoder, init = tmbed.load_models, tmbed.load_encoder, tmbed.init

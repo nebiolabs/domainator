@@ -2,7 +2,7 @@ import pytest
 import tempfile
 from domainator.build_tree import get_newick
 from domainator import build_tree
-from helpers import compare_files
+from helpers import compare_files, compare_xgmml
 
 # Simple tree structure for testing purposes
 class TreeNode:
@@ -83,7 +83,7 @@ def test_newick_output(shared_datadir):
 
         build_tree.main(['--input', str(shared_datadir / 'FeSOD_score_dist.tsv'), '--newick_out', newick_out, '--xgmml_out', xgmm_out, "--metadata", metadata])
         compare_files(newick_out, str(shared_datadir / 'FeSOD_score_dist.newick'))
-        compare_files(xgmm_out, str(shared_datadir / 'FeSOD_score_dist.xgmml'))
+        compare_xgmml(xgmm_out, str(shared_datadir / 'FeSOD_score_dist.xgmml'))
 
 
 def _condensed_to_square(condensed):

@@ -5,30 +5,30 @@ Download sequence databases in formats Domainator reads.
 
 ```
 Download sequence databases from the internet in formats appropriate for Domainator
+
+Including the following databases:
+- Uniprot (includes Trembl and SwissProt) (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
+- Trembl (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
+- SwissProt (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
+- ncbi_complete_genome_proks: NCBI genomes where assembly_level is "Complete Genome". (excluding eukaryotes)
+- ncbi_complete_genome_nonredundant_proks: non-redundant NCBI genomes where assembly_level is "Complete Genome". (excluding eukaryotes)
+- ncbi_representative_proks : representative and reference genomes from the NCBI database (excluding eukaryotes)
+- ncbi_representative_all : representative and reference genomes from the NCBI database (all taxa, including eukaryotes)
+- ncbi_nonredundant_proks : non-redundant genomes from the NCBI database (excluding eukaryotes)
+- ncbi_nonredundant_all : non-redundant genomes from the NCBI database (all taxa, including eukaryotes)
+- ncbi_all : all genomes from the NCBI database including duplicates of the same species (all taxa, including eukaryotes). Can produce very large files, up to 10 TB or more, so use with caution.
+
+
+Key taxa:
+    81490 : prokaryotic environmental samples
+    408169 : metagenomes
+    2 : bacteria
+    2157 : archaea
+    10239 : viruses
     
-    Including the following databases:
-    - Uniprot (includes Trembl and SwissProt) (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
-    - Trembl (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
-    - SwissProt (downloads fasta by default, use _gb suffix to download genbank file with addtional annotations)
-    - ncbi_complete_genome_proks: NCBI genomes where assembly_level is "Complete Genome". (excluding eukaryotes)
-    - ncbi_complete_genome_nonredundant_proks: non-redundant NCBI genomes where assembly_level is "Complete Genome". (excluding eukaryotes)
-    - ncbi_representative_proks : representative and reference genomes from the NCBI database (excluding eukaryotes)
-    - ncbi_representative_all : representative and reference genomes from the NCBI database (all taxa, including eukaryotes)
-    - ncbi_nonredundant_proks : non-redundant genomes from the NCBI database (excluding eukaryotes)
-    - ncbi_nonredundant_all : non-redundant genomes from the NCBI database (all taxa, including eukaryotes)
-    - ncbi_all : all genomes from the NCBI database including duplicates of the same species (all taxa, including eukaryotes). Can produce very large files, up to 10 TB or more, so use with caution.
- 
+    2759 : eukaryota
 
-    Key taxa:
-        81490 : prokaryotic environmental samples
-        408169 : metagenomes
-        2 : bacteria
-        2157 : archaea
-        10239 : viruses
-        
-        2759 : eukaryota
-
-    WARNING: Downloading large databases can take a long time and use a lot of disk space!
+WARNING: Downloading large databases can take a long time and use a lot of disk space!
 ```
 
 Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an input or output means standard input or output, where the option says it is allowed.

@@ -209,6 +209,23 @@ def test_lean_backend_matches_biopython_on_every_fixture(shared_datadir):
 
 
 @native_only
+@pytest.mark.parametrize("parser", ["lean", "biopython"])
+@pytest.mark.parametrize("fixture", ["pDONR201_multi_genemark_domainator.gb", "MT_nbs.gb", "pDONR201_multi.fasta"])
+def test_crlf_files_parse_like_lf_files(shared_datadir, tmp_path, parser, fixture):
+    """Files saved with Windows (CRLF) line endings give the same records."""
+    lf = shared_datadir / fixture
+    crlf = tmp_path / fixture
+    crlf.write_bytes(lf.read_bytes().replace(b"\n", b"\r\n"))
+    expected = [_as_seqrecord(r) for r in parse_seqfiles([str(lf)], genbank_parser=parser)]
+    actual = [_as_seqrecord(r) for r in parse_seqfiles([str(crlf)], genbank_parser=parser)]
+    assert len(actual) == len(expected) > 0
+    for a, b in zip(actual, expected):
+        assert (a.id, a.description, str(a.seq)) == (b.id, b.description, str(b.seq))
+        assert [(f.type, str(f.location), f.qualifiers) for f in a.features] == \
+               [(f.type, str(f.location), f.qualifiers) for f in b.features]
+
+
+@native_only
 def test_native_translation_matches_biopython(shared_datadir):
     """Rust CDS translation (used for search peptides when /translation is absent
     or empty) must match Biopython's feature.translate, so hits are identical."""

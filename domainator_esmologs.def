@@ -55,5 +55,8 @@ if not so:
 PY
 pip install --no-deps --force-reinstall /tmp/dwheel/domainator-*.whl
 
+# find_features --tmbed. conda_env.yml leaves TMbed out; see "Optional: TMbed" in README.md.
+pip install "transformers<5" "tmbed @ git+https://github.com/BernhoferM/TMbed.git@8cee893523eb655bc9485c00c65336d27a236191"
+
 # Final guard: the extension must import from the installed package.
 python -c "import domainator._gbfast; print('native _gbfast OK:', domainator._gbfast.__file__)"

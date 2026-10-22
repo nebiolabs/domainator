@@ -7,7 +7,9 @@ that names it, so nothing changes silently. This guide lists every change.
 ## Installation
 
 - Python 3.12 or newer is required. Recreate the conda environment (`conda env create --yes -f
-  conda_env.yml`), which now also installs Infernal and no longer installs HMMER.
+  conda_env.yml`), which now also installs Infernal and no longer installs HMMER or TMbed.
+  TMbed (for `find_features --tmbed`) is installed separately; see "Optional: TMbed" in the
+  README.
 - UMAP is an optional extra: `pip install "domainator[projection]"` for
   `build_projection --algorithm umap`. `torch` (for the ESM-2 and TMbed features) is the
   `structure` extra. The `core` extra is gone (its packages are ordinary dependencies), and so is

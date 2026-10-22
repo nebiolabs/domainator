@@ -1,0 +1,2 @@
+# Check text files out and in with LF line endings, even when an editor on Windows writes CRLF.
+* text=auto eol=lf

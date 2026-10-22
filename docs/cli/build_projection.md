@@ -6,7 +6,7 @@ Project a matrix into 2D or 3D with UMAP, t-SNE, or PCA.
 ```
 Generates 2d or 3d umap, tsne, or pca projections from matrices
 
-    output can be images, coordinates, or Cytoscape xgmml files.
+output can be images, coordinates, or Cytoscape xgmml files.
 ```
 
 Give at least one of these outputs: `--xgmml_out`, `--png_out`, `--coords_out`. `-` as an input or output means standard input or output, where the option says it is allowed.

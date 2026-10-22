@@ -6,7 +6,7 @@ Convert score matrices into normalized scores or distances.
 ```
 Transforms a score matrix into various kinds of normalized matrices
 
-   For matrices with any data type, can convert between hdf5 and dense text, or change the datatype.
+For matrices with any data type, can convert between hdf5 and dense text, or change the datatype.
 ```
 
 Give at least one of these outputs: `--hdf_out`, `--dense_text_out`. `-` as an input or output means standard input or output, where the option says it is allowed.

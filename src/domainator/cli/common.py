@@ -12,6 +12,7 @@ Conventions (see MIGRATION.md):
 """
 
 import argparse
+import inspect
 import logging
 import os
 import sys
@@ -97,9 +98,11 @@ def tool_parser(description: str) -> ArgumentParser:
 
     Abbreviated options are rejected, so a typo or a removed option is an error rather than a
     silent match to a longer option (``--name`` used to match ``--named_domain_count``).
+    The description is dedented, as Python 3.13+ does to docstrings, so help is the same on
+    every Python version.
     """
     parser = ToolParser(
-        description=description,
+        description=inspect.cleandoc(description),
         epilog=f"Domainator {__version__}",
         formatter_class=RawAndDefaultsFormatter,
         allow_abbrev=False,

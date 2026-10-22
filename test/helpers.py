@@ -1,3 +1,6 @@
+import re
+
+import pytest
 from Bio import SeqIO
 
 def compare_files(f1,f2, skip_lines=0):
@@ -6,6 +9,19 @@ def compare_files(f1,f2, skip_lines=0):
             newfile.readline()
             oldfile.readline()
         assert newfile.read() == oldfile.read()
+
+def compare_xgmml(f1, f2):
+    """Like compare_files, but "real" attribute values need only be close: their last digits
+    vary with the numpy and scipy versions."""
+    real = re.compile(r'(<att type="real" name="[^"]*" value=")([^"]*)(")')
+    with open(f1) as newfile, open(f2) as oldfile:
+        new_lines, old_lines = newfile.read().splitlines(), oldfile.read().splitlines()
+    assert len(new_lines) == len(old_lines)
+    for new, old in zip(new_lines, old_lines):
+        new_values, old_values = [float(m[2]) for m in real.finditer(new)], [float(m[2]) for m in real.finditer(old)]
+        assert real.sub(r"\1\3", new) == real.sub(r"\1\3", old)
+        assert new_values == pytest.approx(old_values, rel=1e-12)
+
 
 def compare_iterables(i1, i2):
     assert all(a == b for a,b in zip(i1, i2))

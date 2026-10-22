@@ -7,6 +7,7 @@ and run ``domainator <command> --config <file>``. Its schema is in docs/tool_man
 """
 import argparse
 import importlib
+import inspect
 import json
 import os
 import sys
@@ -132,7 +133,7 @@ def describe_tool(name: str) -> Dict[str, Any]:
         "name": name,
         "category": tool.category,
         "summary": tool.summary,
-        "description": (module.__doc__ or "").strip(),
+        "description": inspect.cleandoc(module.__doc__ or ""),  # dedented as on Python 3.13+
         "parameters": parameters,
         "required_outputs": getattr(parser, "required_outputs", None),
         "mutually_exclusive": exclusive,
