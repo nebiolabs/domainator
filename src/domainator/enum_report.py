@@ -708,21 +708,27 @@ def parse_seqfiles_with_filenames(seqfiles, contigs=None, filetype_override=None
             rec.annotations["_source_filename"] = filename
             yield rec
 
-def enum_report(records: Iterable[SeqRecord], *, by: str, analyses: List[Analysis], tsv_out_handle: Optional[TextIO],
-                html_out_handle: Optional[TextIO], column_names: Optional[List[str]], html_max_height: Optional[int],
-                ncbi_taxonomy: Optional[NCBITaxonomy], databases: Optional[Set[str]] = None,
+def enum_report(records: Iterable[SeqRecord], *, by: str = "contig", analyses: List[Analysis],
+                tsv_out_handle: Optional[TextIO] = None, html_out_handle: Optional[TextIO] = None,
+                column_names: Optional[List[str]] = None, html_max_height: Optional[int] = None,
+                ncbi_taxonomy: Optional[NCBITaxonomy] = None, databases: Optional[Set[str]] = None,
                 json_out_handle: Optional[TextIO] = None, partial: str = "include") -> None:
-    """
-      input:
-        records: an iterator of SeqRecords
-        by: One line in output for every by contig, cds or domain. default: by contig
-        analyses: what data to report
-        tsv_out_handle: a file handle to write the analysis table to.
-        html_out_handle: a file handle to write html formatted output to.
-        column_names: If supplied, then this list will be used instead of the default column names.
-        html_max_height: Max height in pixels to set the html output to.
-        json_out_handle: a file handle to write streaming NDJSON (one object per record) to.
-        partial: which rows to report, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments). See process_record.
+    """Write a table with one row per contig, CDS or domain of ``records``.
+
+    Args:
+        records: the contigs or proteins (SeqRecords).
+        by: what each row describes: "contig", "cds" or "domain". For proteins, contig and cds
+            are the same.
+        analyses: the columns to report (from report_columns.parse_columns).
+        tsv_out_handle: an open text handle for the TSV table, or None.
+        html_out_handle: an open text handle for the HTML table, or None.
+        column_names: use these column names instead of the default ones.
+        html_max_height: the largest height of the HTML table, in pixels.
+        ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy columns.
+        databases: report only domains from these databases. None: all.
+        json_out_handle: an open text handle for NDJSON (one object per row), or None.
+        partial: which rows to report, by fragment status: "include" (all, the default),
+            "exclude" (skip fragments), or "only" (only fragments). See process_record.
     """
     
     # {command_line_variable: {"columns":[names_to_appear_in_output], "function": function_mapping_SeqRec_to_table_value} }
@@ -802,7 +808,7 @@ def enum_report(records: Iterable[SeqRecord], *, by: str, analyses: List[Analysi
 
     for rec in records:
         if databases is not None:
-            rec = tuple(filter_domains((rec,), evalue=float("inf"), max_overlap=1, keep_databases=databases))[0]
+            rec = tuple(filter_domains((rec,), keep_databases=databases))[0]
         for out_line in process_record(rec, by, analyses_to_run, ncbi_taxonomy, partial=partial):
             for writer in writers:
                 writer.write_row(out_line)

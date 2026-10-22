@@ -201,7 +201,7 @@ Options not listed are unchanged.
 | sort_contigs | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | split_by_cluster | `--outdir` | `--output_dir` |
 | | `--lb` | `--threshold` |
-| ssn_navigator | `-o/--output` | `-o/--json_out` |
+| ssn_navigator | `-o/--output`; config key `cluster_id` | `-o/--json_out`; config key `cluster` (the option is still `--cluster`) |
 | | `--mode` | `--query` |
 | | `--id` | `--cluster` |
 | structure_dist | `--hdf`, `--dense_text`, `--hits_tsv`, `--keep_db` | `-o/--hdf_out`, `--dense_text_out`, `--hits_tsv_out`, `--db_out` |
@@ -283,6 +283,13 @@ internal; see `docs/stability.md`.
 | `DeduplicateGenbank().deduplicate_genbank(...)` and `.cluster_members` | `deduplicate_genbank(inputs, identity=..., clusters=[])`, which appends the clusters to the list |
 | `build_ssn_viewer.build_ssn_viewer_bundle(matrix, metadata_files=..., categorical_columns=...)` | `build_ssn_viewer.build_ssn_viewer(matrix, metadata=..., categorical=...)` |
 | (none) | `genbank_to_fasta.genbank_to_fasta(input, fasta_out=...)` |
+| `summary_report(records, out_text_handle=..., out_html_handle=..., out_json_handle=..., focus_domains=..., report_taxonomy=..., domains_table=..., co_occurrence_fraction_outfile=..., co_occurrence_count_outfile=...)` | `summary_report(records, text_out_handle=..., html_out_handle=..., json_out_handle=..., domains=..., taxonomy=..., domains_tsv_out=..., co_occurrence_fraction_out=..., co_occurrence_count_out=...)` |
+| `matrix_report(matrix, out_text_handle=..., out_html_handle=..., out_json_handle=..., profile_stages=...)` | `matrix_report(matrix, text_out_handle=..., html_out_handle=..., json_out_handle=...)` (pass `stage_timings=[]` to collect timings) |
+| `ssn_navigator(bundle, mode=..., cluster_id=...)` | `ssn_navigator(bundle, query=..., cluster=...)` |
+| `format_db(inputs, log=...)`, `deduplicate_genbank(inputs, log_handle=...)` | `log_out_handle=...` |
+| `db_download(..., api_key=...)` | `db_download(..., ncbi_api_key=...)` |
+| `hmmer_search(input_files, hmmer_handle=...)` | `hmmer_search(input_files, hmm_out_handle=...)` |
+| Keyword defaults that differed from the command's (`domainate(evalue=10)`, `cpu=1`, required keywords) | Every keyword named like an option defaults like the option: notably `domainate` evalue 0.001, not 10; `cpu` 0 (all physical cores) everywhere; e-value, length and hit-count limits default to None (no limit), as on the command line |
 | `MaxTree` and the edge functions imported from `domainator.data_matrix` | import them from `domainator.ssn_edges` (`SortedUndirectedEdges`, `CompactNeighborRankings` from `domainator.edge_types`) |
 | `utils.pyhmmer_decode(x)` | `x` (pyhmmer 0.12 returns `str`) |
 | `write_genbank(records, path, preserve_original=..., add_domain_cds_annotations=..., replace_space_with=...)` | `write_genbank(records, path)`; it never changes the records, so `preserve_original` is not needed |

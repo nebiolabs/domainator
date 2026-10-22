@@ -193,15 +193,21 @@ def iter_edge_dict_ssn_edges(edge_dict, rows, mst_edges=None):
             yield source, target, score, _normalized_pair(source_idx, target_idx) in mst_edges
 
 
-def build_ssn(matrix: DataMatrix, *, threshold:float=0, metadata:List[Union[str, PathLike]]=None, color_by:str=None, color_table:Dict[str,str]=None, 
-              xgmml_out:Union[str, PathLike]=None, cluster:bool=False, cluster_tsv_out:Union[str, PathLike]=None, no_cluster_header:bool=False, color_table_out:str = None, mst:bool = False, knn: int = None, subset_labels: Optional[Collection[str]] = None, max_output_bytes: Optional[int] = None, max_color_groups:int=None, mark_mst:bool=False) -> None:
-    """build a sequence similarity network from a matrix
+def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[List[Union[str, PathLike]]] = None,
+              color_by: Optional[str] = None, color_table: Optional[Dict[str, str]] = None,
+              xgmml_out: Optional[Union[str, PathLike]] = None, cluster: bool = False,
+              cluster_tsv_out: Optional[Union[str, PathLike]] = None, no_cluster_header: bool = False,
+              color_table_out: Optional[str] = None, mst: bool = False, knn: Optional[int] = None,
+              subset_labels: Optional[Collection[str]] = None, max_output_bytes: Optional[int] = None,
+              max_color_groups: Optional[int] = None, mark_mst: bool = False) -> None:
+    """Write a sequence similarity network built from ``matrix``.
 
     Args:
         matrix (DataMatrix): symmetric matrix of edge values
         threshold (float, optional): ignore scores lower than or equal to this. Defaults to 0.
-        metadata (List[Union[str, PathLike]], optional): tab separated text files containg node annotations. Defaults to None.
+        metadata (List[Union[str, PathLike]], optional): tab-separated text files containing node annotations. Defaults to None.
         color_by (str, optional): color the nodes based on their value in this metadata field. Set to SSN_cluster to color by cluster. Defaults to None.
+        color_table (Dict[str, str], optional): maps ``color_by`` values to hex colors. Defaults to None, meaning colors are assigned automatically.
         xgmml_out (Union[str, PathLike], optional): write a Cytoscape XGMML file to this path. Defaults to None.
         cluster (bool, optional): If True, then add new annotations with connected cluster IDs. Defaults to False.
         cluster_tsv_out (Union[str, PathLike], optional): write a metadata tab-separated file with the cluster ids to this path. Defaults to None.
@@ -210,6 +216,7 @@ def build_ssn(matrix: DataMatrix, *, threshold:float=0, metadata:List[Union[str,
         mst (bool, optional): If True, emit only maximum spanning tree edges, which preserves the input's connected components. Defaults to False.
         knn (int, optional): If set, emit OR-symmetric k-nearest-neighbor edges. Combined with mst=True the result is the union of the two; on its own the emitted graph need not preserve the input's connected components. Defaults to None.
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
+        max_output_bytes (int, optional): raise OutputSizeLimitExceeded before writing an XGMML file larger than this. Defaults to None, meaning no limit.
         max_color_groups (int, optional): if set, only this many of the largest color_by groups get distinct colors, the rest share a neutral gray. Defaults to None, meaning every group gets a color.
         mark_mst (bool, optional): If True, give every edge a boolean MST property saying whether it belongs to the maximum spanning tree. Defaults to False.
 

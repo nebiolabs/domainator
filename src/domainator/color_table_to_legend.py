@@ -15,7 +15,7 @@ from collections import OrderedDict
 import html
 
 
-def color_table_to_legend(table: Dict[str, str], *, svg_out: str, title: str) -> None:
+def color_table_to_legend(table: Dict[str, str], *, svg_out: str, title: str = "Legend") -> None:
     """Write an SVG legend of ``table`` (annotation -> hex color) to ``svg_out``, a path (``-`` for stdout)."""
     # Constants for layout and styling
     title_font_size = 24

@@ -16,10 +16,10 @@ from jsonargparse import ActionConfigFile
 from contextlib import ExitStack
 from typing import Iterable, Optional, TextIO
 import heapq
-from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.hmmer_search import read_hmms, compare_hmmer, traceback, HmmerHit, check_alphabets_match
-from domainator._mp import make_pool
+from domainator._mp import make_pool, resolve_cpu
 from domainator.hmmio import common_hmm_alphabet, iter_hmms_with_alphabet
 from domainator.output_guardrails import add_max_output_gb_argument, enforce_output_limit, max_output_gb_to_bytes
 
@@ -55,9 +55,13 @@ class _hmmer_compare_worker():
 
 
 
-def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_out_handle:Optional[TextIO], min_score:float, max_hits_per_query:int, cpu:int, alignments_out_handle:Optional[TextIO]=None, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_compare output") -> None:
+def hmmer_compare(query_files:Iterable[str], *, references:Iterable[str], tsv_out_handle:Optional[TextIO], min_score:float = 0, max_hits_per_query:Optional[int] = None, cpu:int = 0, alignments_out_handle:Optional[TextIO]=None, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_compare output") -> None:
     """For each hit, write a TSV row (query, reference, score) to tsv_out_handle, and the same
-    row followed by the alignment and a blank line to alignments_out_handle. Either handle can be None."""
+    row followed by the alignment and a blank line to alignments_out_handle. Either handle can be None.
+
+    Hits score at least ``min_score``; with ``max_hits_per_query``, only that many per query are
+    kept. ``cpu`` 0 means one process per physical core."""
+    cpu = resolve_cpu(cpu)
     reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
     reference_alphabet = common_hmm_alphabet(references, role="reference")
 

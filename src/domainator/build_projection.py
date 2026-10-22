@@ -4,6 +4,7 @@
 
 """
 from typing import Any, Dict, List, Optional
+import inspect
 import warnings
 from jsonargparse import ActionConfigFile
 from pathlib import Path
@@ -62,25 +63,34 @@ def check_coords(n_components, data_matrix: DataMatrix):
 
 
 
-def build_projection(data_matrix: DataMatrix, *, algorithm: str, metadata: Optional[List[str]], color_by: Optional[str],
-                     png_out: Optional[str], coords_out: Optional[str], xgmml_out: Optional[str], scale: Optional[float],
+def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadata: Optional[List[str]] = None,
+                     color_by: Optional[str] = None, png_out: Optional[str] = None, coords_out: Optional[str] = None,
+                     xgmml_out: Optional[str] = None, scale: Optional[float] = 1000,
                      three_d: bool = False, algorithm_parameters: Optional[Dict[str, Any]] = None,
                      color_table: Optional[Dict[str, str]] = None, color_table_out: Optional[str] = None) -> None:
-    """
+    """Project the rows of ``data_matrix`` into 2D or 3D and write the projection.
 
-        algorithm:
-        metadata:
-        color_by:
-        png_out:
-        coords_out:
-        xgmml_out:
-        scale:
-        three_d:
-        algorithm_parameters: extra parameters to pass to the dimensionality reduction algorithm.
-        color_table: dictionary mapping values in the color_by column to colors.
-        color_table_out: tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.
-
+    Args:
+        data_matrix: rows are the points (typically sequences), columns their features
+            (typically scores against other sequences or profiles).
+        algorithm: "pca", "tsne", "umap", or "coords" (the matrix already holds the
+            coordinates).
+        metadata: tab-separated metadata files, joined to the points by their first column.
+        color_by: color the points by this metadata column.
+        png_out: write a picture of the projection to this path (2D only).
+        coords_out: write the coordinates to this tab-separated file.
+        xgmml_out: write the projection to this Cytoscape XGMML file.
+        scale: scale the coordinates so that the widest axis spans this much.
+        three_d: project into 3D instead of 2D.
+        algorithm_parameters: keyword arguments for the projection algorithm. For "pca" on a sparse
+            matrix, which is projected with scikit-learn's TruncatedSVD instead of PCA, only the
+            keywords the two share apply.
+        color_table: maps ``color_by`` values to colors. None: assign colors automatically.
+        color_table_out: write the color table, with any colors assigned, to this path: two
+            tab-separated columns (annotation, hex color) and no header.
     """
+    if color_table_out is not None and color_by is None and color_table is None:
+        raise ValueError("--color_table_out requires either --color_by or --color_table, otherwise there are no colors to write.")
     # Mostly-filled matrices (e.g. profile scores, distances) are projected densely; mostly-empty
     # ones (e.g. similarity networks) stay sparse, which changes PCA to TruncatedSVD.
     is_sparse = data_matrix.nnz < DENSE_PROJECTION_MIN_FILL * data_matrix.size
@@ -114,7 +124,10 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str, metadata: Optio
         from sklearn.decomposition import PCA, TruncatedSVD
         if is_sparse:
             #TODO: maybe warn that we're doing TruncatedSVD instead of PCA
-            embedded = TruncatedSVD(n_components=n_components).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
+            unsupported = sorted(set(algorithm_parameters) - set(inspect.signature(TruncatedSVD).parameters))
+            if unsupported:
+                raise ValueError(f"A sparse matrix is projected with TruncatedSVD instead of PCA, which does not take {', '.join(unsupported)}.")
+            embedded = TruncatedSVD(n_components=n_components, **algorithm_parameters).fit_transform(sp.sparse.csr_matrix(data_matrix.data)) #TODO: when sklearn is updated to support sparse arrays instead of matrices, delete the cast.
         else:
             embedded = PCA(n_components=n_components, **algorithm_parameters).fit_transform(data_matrix.toarray())
     elif algorithm == "umap":
@@ -231,7 +244,6 @@ def main(argv):
         color_table = read_color_table(params.color_table)
 
     # Run
-    # def build_projection(data_matrix: DataMatrix, algorithm, metadata_files, color_by, png_out, coords_out, xgmml, scale, three_dee=False, algorithm_parameters=None)
     build_projection(data_matrix=DataMatrix.from_file(input_file), algorithm=params.algorithm, metadata=params.metadata, color_by=params.color_by, 
                      png_out=params.png_out, coords_out=params.coords_out, xgmml_out=params.xgmml_out, scale=params.scale, three_d=params.three_d, 
                      algorithm_parameters=algorithm_parameters,

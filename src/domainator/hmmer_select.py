@@ -29,38 +29,33 @@ def hmmer_select(hmm_path: Optional[str] = None, *, regex: Optional[List[str]] =
                  contains: Optional[List[str]] = None, hmm_iterator: Optional[Iterable["pyhmmer.plan7.HMM"]] = None,
                  search_name: bool = True, search_description: bool = True, search_accession: bool = True,
                  case_sensitive: bool = False, match_all: bool = False) -> Iterator["pyhmmer.plan7.HMM"]:
-    """
-        hmm_path: path to an hmmer file
-        regex: regular expression to try to find in the hmmer profiles
-        exact: exact string to try to find in the hmmer profiles
-        contains: string to try to find in the hmmer profiles
-        hmm_iterator: instead of an hmm file path, you can supply an iterator over pyhmmer HMM objects
-        search_name: If True then search in the NAME field of the hmm profiles
-        search_description: If True then search in the DESC field of the hmm profiles
-        search_accession: If True then search in the ACC field of the hmm profiles
-        case_sensitive: If True then the search is case sensitive
-        match_all: If True then every profile is selected regardless of the text criteria.
-            Used by the CLI's --alphabet, which selects whole input files rather than
-            individual profiles within a file.
-    """
+    """Yield the profiles of an HMM file whose name, description or accession matches.
 
-    # match_types = 0
-    # if query_regex is not None:
-    #     match_types += 1
-    # if query_exact is not None:
-    #     match_types += 1
-    # if query_contains is not None:
-    #     match_types += 1
-    # if match_types != 1:
-    #     raise RuntimeError("Exactly one of query_regex or query_exact or query_contains must be specified.")
+    A profile is selected if any of the ``regex``, ``exact`` and ``contains`` strings matches
+    any of the fields searched.
+
+    Args:
+        hmm_path: the HMM file to read.
+        regex: regular expressions to search the fields for.
+        exact: strings that a field must equal.
+        contains: strings that a field must contain.
+        hmm_iterator: pyhmmer HMMs to select from, instead of ``hmm_path``.
+        search_name: search the profiles' NAME field.
+        search_description: search the profiles' DESC field.
+        search_accession: search the profiles' ACC field.
+        case_sensitive: match case.
+        match_all: select every profile, whatever the text criteria. The command uses it for
+            ``--alphabet``, which selects whole input files rather than profiles.
+
+    Yields:
+        The selected pyhmmer HMMs.
+    """
 
     if not case_sensitive:
         if exact is not None:
-            for i in range(len(exact)):
-                exact[i] = exact[i].lower()
+            exact = [text.lower() for text in exact]
         if contains is not None:
-            for i in range(len(contains)):
-                contains[i] = contains[i].lower()
+            contains = [text.lower() for text in contains]
 
     if regex is not None:
         regexes = []

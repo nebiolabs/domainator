@@ -118,7 +118,6 @@ fn _gbfast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bgzf_scan::genbank_offsets_bgzf, m)?)?;
     m.add_function(wrap_pyfunction!(bgzf_scan::fasta_offsets_bgzf, m)?)?;
     m.add_function(wrap_pyfunction!(bgzf_compress::bgzf_compress_file, m)?)?;
-    m.add_function(wrap_pyfunction!(parser::parse_lean, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_lean_search, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_fasta_search, m)?)?;
     m.add_class::<parser::LeanSearchContig>()?;

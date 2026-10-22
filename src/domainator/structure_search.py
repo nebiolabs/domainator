@@ -43,7 +43,7 @@ MITIGATION_OPTIONS = ["--max_hits", "-e/--evalue", "--no_annotations"]
 def structure_search(input_values: List[str], *, references: List[str], aligner: structure_lib.StructureAligner,
                      evalue: float = 0.001, min_evalue: float = 0.0,
                      max_hits: Optional[int] = None, max_overlap: float = 1.0, overlap_by_db: bool = False,
-                     add_annotations: bool = False, alignment_type: Optional[int] = 2, metrics: Optional[List[str]] = None,
+                     add_annotations: bool = False, alignment_type: Optional[int] = None, metrics: Optional[List[str]] = None,
                      max_seqs: Optional[int] = None, tmp_dir: Optional[str] = None, keep_db: Optional[str] = None,
                      database_name: Optional[str] = None, hits_tsv_out: Optional[str] = None) -> Iterator[SeqRecord]:
     """Yield protein SeqRecords for database records that matched a reference.
@@ -61,7 +61,7 @@ def structure_search(input_values: List[str], *, references: List[str], aligner:
         overlap_by_db: filter overlaps within each database rather than across all.
         add_annotations: also write a Domainator feature per hit, not just the
             Domain_Search best-hit feature.
-        alignment_type: backend alignment type.
+        alignment_type: the foldseek alignment type (None: the backend's default).
         metrics: extra structural metrics to compute and store as qualifiers.
         max_seqs: maximum hits the backend keeps per reference.
         tmp_dir: parent directory for temporary databases and scratch files.

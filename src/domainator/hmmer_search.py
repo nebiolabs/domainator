@@ -27,8 +27,8 @@ import numpy as np
 import pyhmmer
 from typing import Iterable, Tuple, Optional, BinaryIO
 import heapq
-from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, resolve_cpu, STDOUT_PATHS, tool_parser
-from domainator._mp import make_pool
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDOUT_PATHS, tool_parser
+from domainator._mp import make_pool, resolve_cpu
 from domainator.hmmio import (
     read_hmms,
     alphabet_name,
@@ -304,13 +304,15 @@ class _hmmer_search_worker():
         return best_result
 
 
-def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmmer_handle:BinaryIO, min_score:Optional[float], max_hits:int, cpu:int, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output") -> None:
+def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmm_out_handle:BinaryIO, min_score:Optional[float] = None, max_hits:Optional[int] = None, cpu:int = 0, max_output_bytes: Optional[int] = None, output_description: str = "hmmer_search HMM output") -> None:
     """Write the profiles of ``input_files`` that score at least ``min_score`` against any of the
-    ``references`` profiles to ``hmmer_handle``; with ``max_hits``, only that many, the best-scoring first.
+    ``references`` profiles to ``hmm_out_handle``; with ``max_hits``, only that many, the best-scoring first.
 
     The input and reference profiles must share an alphabet. ``min_score`` None means the default
-    for the alphabet (see hmmer_compare). Raises OutputSizeLimitExceeded past ``max_output_bytes``.
+    for the alphabet (see hmmer_compare). ``cpu`` 0 means one process per physical core. Raises
+    OutputSizeLimitExceeded past ``max_output_bytes``.
     """
+    cpu = resolve_cpu(cpu)
     reference_hmms = read_hmms(hmm_files=references) # list of lists of pyhmmer hmm objects
     reference_alphabet = common_hmm_alphabet(references, role="reference")
 
@@ -347,7 +349,7 @@ def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmmer_h
                 output_description=output_description,
                 mitigation_options=mitigation_options,
             )
-            hit.profile.write(hmmer_handle)
+            hit.profile.write(hmm_out_handle)
             written_bytes += profile_bytes
     else:
         out_heap = []
@@ -365,7 +367,7 @@ def hmmer_search(input_files:Iterable[str], *, references:Iterable[str], hmmer_h
                 output_description=output_description,
                 mitigation_options=mitigation_options,
             )
-            hit.profile.write(hmmer_handle)
+            hit.profile.write(hmm_out_handle)
             written_bytes += profile_bytes
 
 
@@ -419,7 +421,7 @@ def main(argv):
         out = open_writable_hmm_file(temp_output_path, compressed=is_compressed_path(params.hmm_out))
 
     try:
-        hmmer_search(params.input, references=params.reference, hmmer_handle=out, min_score=params.min_score, max_hits=params.max_hits, cpu=cpus, max_output_bytes=max_output_bytes, output_description=output_description)
+        hmmer_search(params.input, references=params.reference, hmm_out_handle=out, min_score=params.min_score, max_hits=params.max_hits, cpu=cpus, max_output_bytes=max_output_bytes, output_description=output_description)
     except BaseException:
         out.close()
         if temp_output_path is not None and os.path.exists(temp_output_path):

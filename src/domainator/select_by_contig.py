@@ -44,7 +44,7 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
-from domainator.model import feature_evalue, feature_score
+from domainator.model import evalue_passes, feature_score
 from Bio.SeqRecord import SeqRecord
 
 # TODO: account for different domain databases
@@ -95,8 +95,8 @@ def cds_count_filter(contigs, cds_count_lb=None, cds_count_ub=None):
 
 
 
-def select_by_contig(records: Iterable[SeqRecord], *, domains: Set[str] = None, domain_expr: str = None,
-                     evalue: float = float("inf"), max_records: Optional[int] = None, min_length: Optional[int] = None,
+def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]] = None, domain_expr: Optional[str] = None,
+                     evalue: Optional[float] = None, max_records: Optional[int] = None, min_length: Optional[int] = None,
                      max_length: Optional[int] = None, min_cds: Optional[int] = None, max_cds: Optional[int] = None,
                      definition_regex: Optional[str] = None, sequence_regex: Optional[str] = None,
                      contigs: Optional[Set[str]] = None, contigs_regex: Optional[str] = None, invert: bool = False,
@@ -105,61 +105,45 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Set[str] = None, 
                      databases: Optional[Set[str]] = None, unannotated: bool = False,
                      min_search_score: Optional[float] = None, max_search_score: Optional[float] = None,
                      annotation_type: str = "domainator", partial: str = "include") -> Iterator[SeqRecord]:
-    """
+    """Yield the records of ``records`` that are selected.
 
-        Args:
-            records: an iterable/iterator of SeqRecords
+    A record is selected if it matches any of the name, definition, sequence, domain and
+    search-score criteria (or with none of them, every record), and it must also pass the
+    length, CDS-count, taxonomy and ``partial`` filters.
 
-            domains: Select all records containing domains with these names
+    Args:
+        records: the contigs or proteins (SeqRecords).
+        domains: select records with a domain of one of these names.
+        domain_expr: select records whose domain names satisfy this boolean expression.
+        evalue: consider only domains with an e-value at most this (None: no cutoff).
+        max_records: yield at most this many records.
+        min_length: keep only records at least this long.
+        max_length: keep only records at most this long.
+        min_cds: keep only records with at least this many CDSs.
+        max_cds: keep only records with at most this many CDSs.
+        definition_regex: select records whose definition matches this regular expression.
+        sequence_regex: select records whose sequence matches this regular expression.
+        contigs: select records with these names.
+        contigs_regex: select records whose names match this regular expression.
+        invert: invert the selection criteria (not the filters).
+        ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy filters.
+        include_taxids: keep only records with a taxid in this list (or below it).
+        exclude_taxids: drop records with a taxid in this list (or below it).
+        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g.
+            "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
+        databases: consider only domains from these databases. None: all.
+        unannotated: select records with no domain annotations.
+        min_search_score: select records whose domain_search best hit scores at least this.
+        max_search_score: select records whose domain_search best hit scores at most this.
+        annotation_type: which annotations count as domains: "domainator", "domain_search", or
+            "all".
+        partial: "include" (the default) keeps all records, "exclude" drops fragments, "only"
+            keeps only fragments. A protein record is a fragment if
+            partial.get_fragment_status says so (e.g. a UniProt " (Fragment)" header); a
+            nucleotide contig is a fragment if it has a CDS with '<' or '>' in its location.
 
-            domain_expr: Use boolean expressions for domain names to select CDSs
-
-            definition_regex: only keep records with a definition that matches this regex.
-
-            sequence_regex: only keep records with a sequence that matches this regex.
-
-            contigs: only keep records with these names
-
-            contigs_regex: only keep records with names matching this regex.
-
-            evalue: consider only domains with evalues less than this
-
-            max_records: only keep the first max_records records
-
-            min_length: only keep records with length greater than this
-
-            max_length: only keep records with length less than this
-
-            min_cds: only keep records with CDS count greater than or equal to this
-
-            max_cds: only keep records with CDS count less than or equal to this
-
-            invert: invert the selection criteria
-
-            ncbi_taxonomy: an NCBITaxonomy object (needed for filtering by taxonomy, otherwise not needed)
-
-            include_taxids: only keep records with a taxonomy id in this list
-
-            exclude_taxids: only keep records with a taxonomy id not in this list
-
-            taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
-
-            databases: only consider domains from these databases
-
-            unannotated: keep records with no domain annotations
-
-            min_search_score: only keep records with a domain_search annotation score greater than this
-
-            max_search_score: only keep records with a domain_search annotation score less than this
-
-            annotation_type: which annotations to consider: "domainator", "domain_search", or "all".
-            partial: "include" (default) keeps all records, "exclude" drops fragments, "only" keeps only fragments.
-                A protein record is a fragment if utils.get_fragment_status says so (e.g. a UniProt " (Fragment)" header);
-                a nucleotide contig is a fragment if it contains a CDS with '<' or '>' in its location.
-
-        Yields:
-            SeqRecords of the selected records
-
+    Yields:
+        The selected records.
     """
 
     databases = set(databases) if databases is not None else None
@@ -231,10 +215,10 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Set[str] = None, 
             domain_search_feature = None
             at_least_one_test = True
             for feature in contig.features:
-                if feature.type == DOMAIN_FEATURE_NAME and feature_evalue(feature) <= evalue and (databases is None or feature.qualifiers["database"][0] in databases):
+                if feature.type == DOMAIN_FEATURE_NAME and evalue_passes(feature, evalue) and (databases is None or feature.qualifiers["database"][0] in databases):
                     if annotation_type in ("domainator", "all"):
                         contig_domains.add(feature.qualifiers["name"][0])
-                if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME and feature_evalue(feature) <= evalue and (databases is None or feature.qualifiers["database"][0] in databases):
+                if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME and evalue_passes(feature, evalue) and (databases is None or feature.qualifiers["database"][0] in databases):
                     domain_search_feature = feature
                     if annotation_type in ("domain_search", "all"):
                         contig_domains.add(feature.qualifiers["name"][0])
@@ -380,7 +364,7 @@ def main(argv):
                     parse_seqfiles(genbanks), 
                     domains=selected_domains, 
                     domain_expr=domain_expr, 
-                    evalue=float("inf") if params.evalue is None else params.evalue,
+                    evalue=params.evalue,
                     max_records=params.max_records,
                     min_length=params.min_length,
                     max_length=params.max_length,

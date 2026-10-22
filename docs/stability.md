@@ -15,8 +15,8 @@ error.
   `write_genbank`, `DataMatrix`, the exceptions in `domainator.errors`, the feature-type
   constants `DOMAIN_FEATURE_NAME` and `DOMAIN_SEARCH_BEST_HIT_NAME`, and `__version__`.
 - Each command's function, `from domainator.<command> import <command>`. Its first parameter
-  is positional and the rest are keyword-only, named like the command's options, so new
-  parameters can be added without breaking callers. What it returns (records, a `DataMatrix`,
+  is positional and the rest are keyword-only, named like the command's options and with
+  the same defaults, so new parameters can be added without breaking callers. What it returns (records, a `DataMatrix`,
   ...) is part of the contract.
 - The other modules (`seqio`, `hmmio`, `model`, `locations`, `partial`, `taxonomy`, `expr`,
   `colors`, `offsets`, `external`, `cli`, ...) and every name that starts with `_` are internal.

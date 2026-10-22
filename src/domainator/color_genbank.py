@@ -10,7 +10,7 @@ If a color_table is provided, then the colors in the table will be used, otherwi
 
 """
 
-from typing import Dict, Iterable, Iterator, Optional, Set
+from typing import AbstractSet, Dict, Iterable, Iterator, Optional, Set
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
@@ -89,20 +89,22 @@ def color_seqrecord_by_domain(record, color_map, color_targets, disable_warnings
                 if feature.qualifiers['cds_id'][0] in new_cds_colors:
                     feature.qualifiers['Color'] = [new_cds_colors[feature.qualifiers['cds_id'][0]]]
 
-def color_genbank(records: Iterable[SeqRecord], *, color_table: Optional[Dict[str, str]], targets: Set[str],
+def color_genbank(records: Iterable[SeqRecord], *, color_table: Optional[Dict[str, str]] = None,
+                  targets: AbstractSet[str] = frozenset({"cdss"}),
                   search_hit_color: Optional[str] = None, clear: bool = False, color_table_out: Optional[str] = None,
                   databases: Optional[Set[str]] = None, color_feature: str = "name") -> Iterator[SeqRecord]:
-    """
-      input: 
-        records: an iterator of SeqRecords
-        contigs: collection if not None, then only . if None then don't filter out any contigs (most common).
-        color_table: a dict mapping domain names or database ids to color hex.
-        targets: a set or list containing "domains", "cdss", or both. Specifying which type of feature to color.
-        search_hit_color: if not None, then color search_hit annotations with this color.
-        clear: if True, then remove all color annotations from the genbank file before adding any new ones.
-        color_table_out: if not None, then write the updated color table to this file.
-        databases: if not None, then only use domains from these databases for determining color.
-        color_feature: qualifier name to use for assigning colors. Either "name" or "database".
+    """Yield ``records`` with color qualifiers on their domains and/or CDSs.
+
+    Args:
+        records: the contigs or proteins (SeqRecords).
+        color_table: maps domain names (or database names, with ``color_feature="database"``)
+            to hex colors. None: assign colors automatically.
+        targets: what to color: a set holding "domains", "cdss" (the default), or both.
+        search_hit_color: color the Domain_Search best-hit features this color.
+        clear: remove all existing colors first.
+        color_table_out: write the color table, with any colors assigned, to this path.
+        databases: color only by domains from these databases. None: all.
+        color_feature: the qualifier that picks the color: "name" or "database".
     """
     disable_multiple_colors_warning = False
     if color_table is not None:

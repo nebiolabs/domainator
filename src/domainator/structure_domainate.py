@@ -39,8 +39,8 @@ MITIGATION_OPTIONS = ["--hits_only", "--max_hits_per_cds", "-e/--evalue", "--no_
 
 def structure_domainate(input_values: List[str], *, references: List[str], aligner: structure_lib.StructureAligner,
                         evalue: float = 0.001, min_evalue: float = 0.0,
-                        max_hits_per_cds: int = sys.maxsize, max_overlap: float = 1.0, overlap_by_db: bool = False,
-                        hits_only: bool = False, no_annotations: bool = False, alignment_type: Optional[int] = 2,
+                        max_hits_per_cds: Optional[int] = None, max_overlap: float = 1.0, overlap_by_db: bool = False,
+                        hits_only: bool = False, no_annotations: bool = False, alignment_type: Optional[int] = None,
                         metrics: Optional[List[str]] = None, max_seqs: Optional[int] = None, tmp_dir: Optional[str] = None,
                         keep_db: Optional[str] = None, database_name: Optional[str] = None,
                         hits_tsv_out: Optional[str] = None) -> Iterator[SeqRecord]:
@@ -52,13 +52,13 @@ def structure_domainate(input_values: List[str], *, references: List[str], align
         aligner: a structure_lib.StructureAligner.
         evalue: keep hits with E-value strictly below this.
         min_evalue: keep hits with E-value at or above this.
-        max_hits_per_cds: maximum annotations to add per record.
+        max_hits_per_cds: maximum annotations to add per record (None: all).
         max_overlap: maximum fractional overlap between kept annotations. >= 1 disables
             overlap filtering.
         overlap_by_db: filter overlaps within each database rather than across all.
         hits_only: write only records that had at least one hit.
         no_annotations: do not write Domainator features (only meaningful with hits_only).
-        alignment_type: backend alignment type.
+        alignment_type: the foldseek alignment type (None: the backend's default).
         metrics: extra structural metrics to compute and store as qualifiers.
         max_seqs: maximum hits the backend keeps per reference.
         tmp_dir: parent directory for temporary databases and scratch files.
@@ -104,7 +104,7 @@ def structure_domainate(input_values: List[str], *, references: List[str], align
             record = structure_lib.build_protein_record(name, sequence, source_path)
             if record_hits:
                 domainate.add_protein_annotations(
-                    record, record_hits, max_hits_per_cds, max_overlap,
+                    record, record_hits, sys.maxsize if max_hits_per_cds is None else max_hits_per_cds, max_overlap,
                     no_annotations, False, overlap_by_db)
             yield record
 
@@ -153,7 +153,6 @@ def main(argv):
                            "otherwise the output would carry no information at all.")
     if params.max_hits_per_cds is not None and params.max_hits_per_cds < 1:
         parser.error("--max_hits_per_cds must be at least 1. Leave it out to add every annotation.")
-    max_domains = sys.maxsize if params.max_hits_per_cds is None else params.max_hits_per_cds
 
     aligner = structure_lib.build_aligner(params)
     # Validate the backend-capability arguments before any database is built, so an
@@ -165,7 +164,7 @@ def main(argv):
 
     records = structure_domainate(
         params.input, references=params.reference, aligner=aligner,
-        evalue=params.evalue, min_evalue=params.min_evalue, max_hits_per_cds=max_domains,
+        evalue=params.evalue, min_evalue=params.min_evalue, max_hits_per_cds=params.max_hits_per_cds,
         max_overlap=params.max_overlap, overlap_by_db=params.overlap_by_db,
         hits_only=params.hits_only, no_annotations=params.no_annotations,
         alignment_type=params.alignment_type, metrics=params.metrics,

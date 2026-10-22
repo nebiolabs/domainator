@@ -17,7 +17,7 @@ the rare records that produce a hit (the "hit-conversion boundary"):
 A lean location is stored inline on ``LeanFeature`` as primitive data (no
 ``FeatureLocation``/position objects):
 
-    parts:    tuple of (start:int, end:int, strand:int, before:bool, after:bool),
+    parts:    tuple of (start:int, end:int, strand:int or None, before:bool, after:bool),
               already in final Biopython part order (complement(join) parts
               pre-reversed); strand is per-part so mixed-strand (trans-spliced)
               joins are represented faithfully
@@ -347,7 +347,7 @@ def seqrecord_to_lean(record):
             (
                 int(p.start),
                 int(p.end),
-                p.strand if p.strand is not None else 0,
+                p.strand,
                 type(p.start).__name__ == "BeforePosition",
                 type(p.end).__name__ == "AfterPosition",
             )
@@ -416,25 +416,6 @@ def lean_to_seqrecord(lean):
         features=[_lean_feature_to_seqfeature(f) for f in lean.features],
     )
     return record
-
-
-def iter_lean_genbank_native(path, seek_to=0, max_recs=-1, default_molecule_type=None, compressed=False):
-    """Yield LeanContigs for a GenBank partition using the native (Rust) parser.
-
-    The Rust side parses up to ``max_recs`` records into prebuilt LeanFeature lists
-    + header fields; this wraps each into a LeanContig (header normalization stays
-    in Python). When the Rust parser stops early (an unparseable/unreliable record),
-    this raises LeanParseError carrying the count already yielded, so the caller
-    falls back to Biopython for the remaining records. ``compressed`` indicates a
-    BGZF input, in which case ``seek_to`` is a 64-bit virtual offset.
-    """
-    records, stopped_early, n_emitted = _gbfast.parse_lean(str(path), int(seek_to), int(max_recs), bool(compressed))
-    for rec in records:
-        yield _build_lean_from_fields(rec, default_molecule_type)
-    if stopped_early:
-        raise LeanParseError(
-            f"native parser stopped after {n_emitted} record(s); falling back to Biopython"
-        )
 
 
 def _build_lean_from_fields(fields, default_molecule_type):

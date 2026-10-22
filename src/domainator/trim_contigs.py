@@ -126,7 +126,8 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
     return record
 
 
-def trim_contigs(records: Iterable[SeqRecord], *, kb_range: Optional[Tuple[float, float]], cds_range: Optional[Tuple[int, int]], domains: Optional[Set[str]], domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
+def trim_contigs(records: Iterable[SeqRecord], *, kb_range: Optional[Tuple[float, float]] = None,
+                 cds_range: Optional[Tuple[int, int]] = None, domains: Optional[Set[str]] = None, domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
     """Yield ``records`` with their ends trimmed.
 
     kb_range: (left, right) kb to trim from each end, or None.

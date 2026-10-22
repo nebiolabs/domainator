@@ -16,7 +16,8 @@ import sys
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
 from typing import NamedTuple, List, Dict, Optional, Union, AbstractSet, Any, Iterable, Iterator
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, tool_parser
+from domainator._mp import resolve_cpu
 from domainator.outputs import write_seq_outputs
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from Bio.SeqRecord import SeqRecord
@@ -1145,81 +1146,73 @@ def prodigal_CDS_annotate(rec:SeqRecord):
         feature.qualifiers['cds_id'] = [get_cds_unique_name(feature)]
         rec.features.append(feature)
 
-def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str]], z: int, evalue: float = 10,
-              max_hits_per_cds: int = sys.maxsize, max_overlap: float = 1, cpu: int = 0, batch_size: int = 10000,
+def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str]], z: int, evalue: float = 0.001,
+              max_hits_per_cds: Optional[int] = None, max_overlap: float = 1, cpu: int = 0, batch_size: int = 10000,
               hits_only: bool = False, no_annotations: bool = False, pre_parsed_references: Optional[Dict[str, Dict[str, Any]]] = None,
               best_annotation: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
               ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
               exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
               allowed_taxids: Optional[AbstractSet[int]] = None, max_mode: bool = False, foldseek: Optional[List[str]] = None,
-              esm2_3di_weights: Optional[str] = None, esm2_3di_device: Optional[str] = None, overlap_by_db: bool = False,
-              max_hits_per_contig: Optional[int] = None, foldseek_device: Optional[str] = None, partial: str = "include",
+              esm2_3di_weights: Optional[str] = None, esm2_3di_device: str = "cuda:0", overlap_by_db: bool = False,
+              max_hits_per_contig: Optional[int] = None, foldseek_device: str = "cpu", partial: str = "include",
               foldseek_path: Optional[str] = None) -> Iterator[SeqRecord]:
-    """
-    The main function of the hmmer domain annotation algorithm
+    """Annotate the CDSs (or proteins) of ``records`` with their domain hits, yielding each record.
 
-    yields annotated SeqRecords
+    Searches the proteins, and with nucleotide references the contigs, against ``references``
+    (hmmsearch, phmmer, nhmmer, Infernal or Foldseek) and adds a Domainator feature for each hit
+    kept.
 
     Args:
-        sequence_groups: an iterator yielding SeqRecord objects
-            
-        references: list of str, path-like
-            A list of hmm or protein fasta file paths, the input HMM databases to be searched against the sequences using hmmsearch or phmmer.
-            If you pass None to references, you can supply your own pre-parsed references via pre_parsed_references.
+        records: the contigs or proteins (SeqRecords).
+        references: HMM, covariance model or protein FASTA files to search with. With None (and
+            no ``foldseek``), ``pre_parsed_references`` is used instead.
+        z: the database size for e-values (hmmsearch's Z), as ``-Z``.
+        evalue: keep hits with an e-value at most this.
+        max_hits_per_cds: keep at most this many hits per CDS or protein (None: all).
+        max_overlap: the largest fraction of a hit that may overlap a better hit on the same CDS
+            (1: no overlap filter).
+        cpu: threads for the search (0: all cores).
+        batch_size: how many proteins to search at a time.
+        hits_only: yield only records with at least one hit.
+        no_annotations: add no Domainator features (with ``best_annotation``, record only the
+            best hits).
+        pre_parsed_references: references already read with ``read_references``, used when
+            ``references`` is None.
+        best_annotation: also add a Domain_Search feature for the best hit of each CDS or
+            protein, as domain_search does.
+        gene_call: "all" deletes the existing CDS and Domainator annotations and calls genes on
+            every contig; "unannotated" calls genes only on contigs without CDSs; None keeps the
+            existing CDSs.
+        min_evalue: keep hits with an e-value at least this.
+        ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy filters.
+        include_taxids: keep only records with a taxid in this list (or below it).
+        exclude_taxids: drop records with a taxid in this list (or below it).
+        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g.
+            "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
+        allowed_taxids: search only the CDSs whose taxid is in this set (the per-CDS filter
+            domain_search uses; see ``get_prot_list``).
+        max_mode: turn off HMMER's heuristic filters: much slower, but more sensitive.
+        foldseek: Foldseek databases to search.
+        esm2_3di_weights, esm2_3di_device: the ESM-2 3Di checkpoint and the device to run it on,
+            for predicting the 3Di sequences that the Foldseek search needs.
+        overlap_by_db: apply ``max_overlap`` within each database separately.
+        max_hits_per_contig: with ``best_annotation``, the most best-hit features to add per
+            contig for contig-level (nhmmer or Infernal) hits. None: all.
+        foldseek_device: "cpu" to run the Foldseek search on the CPU, or a CUDA
+            device ("cuda", "cuda:0", ...).
+        partial: which proteins/CDSs to search, by fragment status: "include" (all, the
+            default), "exclude" (skip fragments), or "only" (only fragments). CDSs with '<' or
+            '>' location markers are fragments, as are protein records with a UniProt
+            " (Fragment)" header. See partial.get_fragment_status.
+        foldseek_path: the foldseek program, if it is not on the PATH.
 
-        z: Z parameter to pass to hmmsearch
-
-        evalue: float
-            The threshold E value for hmmer hit
-
-        max_hits_per_cds: int
-            The maximum number of hits per CDS to be reported
-
-        max_overlap: float
-            The maximum fractional of overlap to be allowed between domains
-
-        cpu: int
-            The number of CPU cores that should be used to run hmmsearch
-        
-        batch_size: how many protein sequences at a time to pass to pymmer hmmsearch
-
-        hits_only: if True, then only output contigs with at least one domain annotation
-
-        no_annotations: if True, then don't add any new annotations to the sequences, just return the hits with existing annotations.
-
-        pre_parsed_references: dict, the output of read_references
-
-        best_annotation: if True then add a special Domain_search annotation to each peptide or CDS with the best hit from this search.
-
-        gene_call: If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. [default: keep existing annotations]
-
-        min_evalue: only report hits with evalue >= min_evalue. [default: 0.0]
-
-        ncbi_taxonomy: an NCBITaxonomy object (needed for filtering by taxonomy, otherwise not needed)
-        
-        include_taxids: only keep contigs with a taxonomy id in this list
-        
-        exclude_taxids: only keep contigs with a taxonomy id not in this list
-
-        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
-
-        partial: which proteins/CDSs to search, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments).
-            CDSs with '<' or '>' location markers are fragments, as are protein records with a UniProt " (Fragment)" header. See utils.get_fragment_status.
-
-        max_mode: if True, then run hmmsearch/phmmer in maximum sensitivity mode, which is much slower, but more sensitive.
-
-        foldseek: paths to foldseek database files. [default: None]
-
-        esm2_3di_weights: path to esm2_3Di checkpoint file. [default: None]
-
-        esm2_3di_device: device to run esm2_3Di on. [default: None]
-
-        foldseek_device: device to run the foldseek search on. "cpu" (or None) for CPU search,
-            or a CUDA device string ("cuda", "cuda:0", ...) for GPU-accelerated search. [default: None]
-        foldseek_path: the foldseek executable, if it is not on the PATH. [default: None]
-
+    Yields:
+        The annotated records (with ``hits_only``, only those with hits).
     """
 
+    cpu = resolve_cpu(cpu)
+    if max_hits_per_cds is None:
+        max_hits_per_cds = sys.maxsize
     if references is None and foldseek is None:
         reference_groups = pre_parsed_references
     else:
@@ -1431,8 +1424,6 @@ def main(argv):
         for file_path in params.input: 
             Z += count_peptides(file_path)
 
-    max_domains = sys.maxsize if params.max_hits_per_cds is None else params.max_hits_per_cds
-
     if params.no_annotations and not params.hits_only:
         raise RuntimeError(f"You've specified no_annotations, without specifying hits_only. This seems like a useless thing to do. If you want to select a subset of contigs, please use domainator select_by_contig.")
 
@@ -1453,9 +1444,9 @@ def main(argv):
             z=Z,
             evalue=params.evalue,
             min_evalue=params.min_evalue,
-            max_hits_per_cds=max_domains,
+            max_hits_per_cds=params.max_hits_per_cds,
             max_overlap=params.max_overlap,
-            cpu=resolve_cpu(params.cpu),
+            cpu=params.cpu,
             batch_size=params.batch_size,
             hits_only=params.hits_only,
             no_annotations=params.no_annotations,

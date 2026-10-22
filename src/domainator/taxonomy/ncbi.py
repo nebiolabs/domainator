@@ -335,7 +335,7 @@ class NCBITaxonomy:
             taxid and returns a frozenset of all taxids that pass the filter (a
             taxid passes when its lineage intersects include_taxids -- if any --
             and does not intersect exclude_taxids). This matches the semantics of
-            utils.record_matches_taxonomy / NCBITaxonomy.lineage-based filtering,
+            filtering on NCBITaxonomy.lineage,
             but lets callers replace a per-record lineage walk with a single set
             membership test.
 

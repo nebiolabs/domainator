@@ -6107,7 +6107,7 @@
    "required": false
   },
   {
-   "name": "cluster_id",
+   "name": "cluster",
    "flags": [
     "--cluster"
    ],

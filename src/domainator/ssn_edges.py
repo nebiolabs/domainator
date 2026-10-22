@@ -6,51 +6,96 @@ split out of ``data_matrix`` to keep that module focused on the matrix abstracti
 """
 from __future__ import annotations
 
-import heapq
 import warnings
 from typing import Dict, Iterator, List, Optional, Tuple, Union
 
+import numba as nb
 import numpy as np
 import scipy.sparse
 
 from .data_matrix import DataMatrix
 from .edge_types import (
     CompactNeighborRankings,
-    NeighborRankings,
     SortedUndirectedEdges,
     _empty_compact_neighbor_rankings,
     _iter_neighbor_ranking_rows,
     _score_passes_lower_bound,
 )
 
-try:
-    import numba as nb
-except ImportError:
-    nb = None
+
+@nb.njit(cache=True)
+def _is_better_top_k_candidate(candidate_score: float, candidate_target: int,
+                               current_score: float, current_target: int) -> bool:
+    if candidate_score > current_score:
+        return True
+    if candidate_score < current_score:
+        return False
+    return candidate_target < current_target
 
 
-def _build_top_k_neighbor_rankings_heap(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
-    top_k_by_row = [[] for _ in range(edges.n_nodes)]
+@nb.njit(cache=True)
+def _insert_top_k_candidate(top_targets: np.ndarray, top_scores: np.ndarray, row_counts: np.ndarray,
+                            row_idx: int, candidate_target: int, candidate_score: float, max_k: int) -> None:
+    count = int(row_counts[row_idx])
+    if count == max_k and not _is_better_top_k_candidate(
+        candidate_score,
+        candidate_target,
+        top_scores[row_idx, max_k - 1],
+        top_targets[row_idx, max_k - 1],
+    ):
+        return
 
-    def add_candidate(row_idx: int, target_idx: int, score: float):
-        heap = top_k_by_row[row_idx]
-        candidate = (score, -target_idx, target_idx)
-        if len(heap) < max_k:
-            heapq.heappush(heap, candidate)
-            return
-        if candidate > heap[0]:
-            heapq.heapreplace(heap, candidate)
+    insert_pos = count
+    if insert_pos >= max_k:
+        insert_pos = max_k - 1
 
-    for source_idx, target_idx, score in zip(edges.source, edges.target, edges.score):
-        add_candidate(int(source_idx), int(target_idx), float(score))
-        add_candidate(int(target_idx), int(source_idx), float(score))
+    while insert_pos > 0 and _is_better_top_k_candidate(
+        candidate_score,
+        candidate_target,
+        top_scores[row_idx, insert_pos - 1],
+        top_targets[row_idx, insert_pos - 1],
+    ):
+        if insert_pos < max_k:
+            top_scores[row_idx, insert_pos] = top_scores[row_idx, insert_pos - 1]
+            top_targets[row_idx, insert_pos] = top_targets[row_idx, insert_pos - 1]
+        insert_pos -= 1
+
+    top_scores[row_idx, insert_pos] = candidate_score
+    top_targets[row_idx, insert_pos] = candidate_target
+
+    if count < max_k:
+        row_counts[row_idx] = count + 1
+
+
+@nb.njit(cache=True)
+def _build_top_k_neighbor_arrays(source: np.ndarray, target: np.ndarray, score: np.ndarray,
+                                 n_nodes: int, max_k: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    top_targets = np.full((n_nodes, max_k), -1, dtype=np.int32)
+    top_scores = np.empty((n_nodes, max_k), dtype=np.float64)
+    row_counts = np.zeros(n_nodes, dtype=np.int32)
+
+    for edge_idx in range(source.shape[0]):
+        source_idx = int(source[edge_idx])
+        target_idx = int(target[edge_idx])
+        edge_score = float(score[edge_idx])
+        _insert_top_k_candidate(top_targets, top_scores, row_counts, source_idx, target_idx, edge_score, max_k)
+        _insert_top_k_candidate(top_targets, top_scores, row_counts, target_idx, source_idx, edge_score, max_k)
+
+    return top_targets, top_scores, row_counts
+
+
+def _build_top_k_neighbor_rankings_numba(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
+    top_targets, top_scores, row_counts = _build_top_k_neighbor_arrays(
+        edges.source,
+        edges.target,
+        edges.score,
+        edges.n_nodes,
+        max_k,
+    )
 
     offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
-    total_kept = 0
-    for row_idx, heap in enumerate(top_k_by_row):
-        total_kept += len(heap)
-        offsets[row_idx + 1] = total_kept
-
+    offsets[1:] = np.cumsum(row_counts, dtype=np.int64)
+    total_kept = int(offsets[-1])
     if total_kept == 0:
         return _empty_compact_neighbor_rankings(edges.n_nodes)
 
@@ -58,14 +103,14 @@ def _build_top_k_neighbor_rankings_heap(edges: SortedUndirectedEdges, max_k: int
     scores = np.empty(total_kept, dtype=float)
 
     out_idx = 0
-    for heap in top_k_by_row:
-        if len(heap) == 0:
+    for row_idx in range(edges.n_nodes):
+        keep_count = int(row_counts[row_idx])
+        if keep_count == 0:
             continue
-        heap.sort(key=lambda item: (-item[0], item[2]))
-        for score, _, target_idx in heap:
-            targets[out_idx] = target_idx
-            scores[out_idx] = score
-            out_idx += 1
+        next_idx = out_idx + keep_count
+        targets[out_idx:next_idx] = top_targets[row_idx, :keep_count]
+        scores[out_idx:next_idx] = top_scores[row_idx, :keep_count]
+        out_idx = next_idx
 
     return CompactNeighborRankings(
         offsets=offsets,
@@ -73,105 +118,6 @@ def _build_top_k_neighbor_rankings_heap(edges: SortedUndirectedEdges, max_k: int
         score=scores,
     )
 
-
-if nb is not None:
-    @nb.njit(cache=True)
-    def _is_better_top_k_candidate(candidate_score: float, candidate_target: int,
-                                   current_score: float, current_target: int) -> bool:
-        if candidate_score > current_score:
-            return True
-        if candidate_score < current_score:
-            return False
-        return candidate_target < current_target
-
-
-    @nb.njit(cache=True)
-    def _insert_top_k_candidate(top_targets: np.ndarray, top_scores: np.ndarray, row_counts: np.ndarray,
-                                row_idx: int, candidate_target: int, candidate_score: float, max_k: int) -> None:
-        count = int(row_counts[row_idx])
-        if count == max_k and not _is_better_top_k_candidate(
-            candidate_score,
-            candidate_target,
-            top_scores[row_idx, max_k - 1],
-            top_targets[row_idx, max_k - 1],
-        ):
-            return
-
-        insert_pos = count
-        if insert_pos >= max_k:
-            insert_pos = max_k - 1
-
-        while insert_pos > 0 and _is_better_top_k_candidate(
-            candidate_score,
-            candidate_target,
-            top_scores[row_idx, insert_pos - 1],
-            top_targets[row_idx, insert_pos - 1],
-        ):
-            if insert_pos < max_k:
-                top_scores[row_idx, insert_pos] = top_scores[row_idx, insert_pos - 1]
-                top_targets[row_idx, insert_pos] = top_targets[row_idx, insert_pos - 1]
-            insert_pos -= 1
-
-        top_scores[row_idx, insert_pos] = candidate_score
-        top_targets[row_idx, insert_pos] = candidate_target
-
-        if count < max_k:
-            row_counts[row_idx] = count + 1
-
-
-    @nb.njit(cache=True)
-    def _build_top_k_neighbor_arrays(source: np.ndarray, target: np.ndarray, score: np.ndarray,
-                                     n_nodes: int, max_k: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        top_targets = np.full((n_nodes, max_k), -1, dtype=np.int32)
-        top_scores = np.empty((n_nodes, max_k), dtype=np.float64)
-        row_counts = np.zeros(n_nodes, dtype=np.int32)
-
-        for edge_idx in range(source.shape[0]):
-            source_idx = int(source[edge_idx])
-            target_idx = int(target[edge_idx])
-            edge_score = float(score[edge_idx])
-            _insert_top_k_candidate(top_targets, top_scores, row_counts, source_idx, target_idx, edge_score, max_k)
-            _insert_top_k_candidate(top_targets, top_scores, row_counts, target_idx, source_idx, edge_score, max_k)
-
-        return top_targets, top_scores, row_counts
-
-
-    def _build_top_k_neighbor_rankings_numba(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
-        top_targets, top_scores, row_counts = _build_top_k_neighbor_arrays(
-            edges.source,
-            edges.target,
-            edges.score,
-            edges.n_nodes,
-            max_k,
-        )
-
-        offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
-        offsets[1:] = np.cumsum(row_counts, dtype=np.int64)
-        total_kept = int(offsets[-1])
-        if total_kept == 0:
-            return _empty_compact_neighbor_rankings(edges.n_nodes)
-
-        targets = np.empty(total_kept, dtype=np.int32)
-        scores = np.empty(total_kept, dtype=float)
-
-        out_idx = 0
-        for row_idx in range(edges.n_nodes):
-            keep_count = int(row_counts[row_idx])
-            if keep_count == 0:
-                continue
-            next_idx = out_idx + keep_count
-            targets[out_idx:next_idx] = top_targets[row_idx, :keep_count]
-            scores[out_idx:next_idx] = top_scores[row_idx, :keep_count]
-            out_idx = next_idx
-
-        return CompactNeighborRankings(
-            offsets=offsets,
-            target=targets,
-            score=scores,
-        )
-else:
-    def _build_top_k_neighbor_rankings_numba(edges: SortedUndirectedEdges, max_k: int) -> CompactNeighborRankings:
-        return _build_top_k_neighbor_rankings_heap(edges, max_k)
 
 
 def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max_k: Optional[int] = None) -> CompactNeighborRankings:
@@ -205,36 +151,10 @@ def _build_neighbor_rankings_from_sorted_edges(edges: SortedUndirectedEdges, max
     row_offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
     row_offsets[1:] = np.cumsum(np.bincount(row_indices, minlength=edges.n_nodes))
 
-    if max_k is None:
-        return CompactNeighborRankings(
-            offsets=row_offsets,
-            target=targets,
-            score=scores,
-        )
-
-    keep_counts = np.minimum(np.diff(row_offsets), max_k)
-    kept_offsets = np.zeros(edges.n_nodes + 1, dtype=np.int64)
-    kept_offsets[1:] = np.cumsum(keep_counts)
-    kept_total = int(kept_offsets[-1])
-    kept_targets = np.empty(kept_total, dtype=np.int32)
-    kept_scores = np.empty(kept_total, dtype=float)
-
-    dest_start = 0
-    for row_idx in range(edges.n_nodes):
-        keep_count = int(keep_counts[row_idx])
-        if keep_count == 0:
-            continue
-        src_start = int(row_offsets[row_idx])
-        src_end = src_start + keep_count
-        dest_end = dest_start + keep_count
-        kept_targets[dest_start:dest_end] = targets[src_start:src_end]
-        kept_scores[dest_start:dest_end] = scores[src_start:src_end]
-        dest_start = dest_end
-
     return CompactNeighborRankings(
-        offsets=kept_offsets,
-        target=kept_targets,
-        score=kept_scores,
+        offsets=row_offsets,
+        target=targets,
+        score=scores,
     )
 
 
@@ -251,7 +171,7 @@ def build_symmetric_neighbor_rankings(matrix: Union[DataMatrix, SortedUndirected
 
 
 def symmetric_knn_edge_index_dict(matrix: DataMatrix, k: int, lower_bound: float = 0, include_equal: bool = False,
-                                  neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
+                                  neighbor_rankings: Optional[CompactNeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return OR-symmetric kNN edges keyed by undirected index pairs."""
     if k < 0:
         raise ValueError("k must be >= 0")
@@ -287,7 +207,7 @@ def mst_edge_index_dict(tree: 'MaxTree', lower_bound: float = 0, include_equal: 
 
 def mst_knn_edge_index_dict(matrix: DataMatrix, k: int, lower_bound: float = 0, include_equal: bool = False,
                             tree: Optional['MaxTree'] = None,
-                            neighbor_rankings: Optional[NeighborRankings] = None) -> Dict[Tuple[int, int], float]:
+                            neighbor_rankings: Optional[CompactNeighborRankings] = None) -> Dict[Tuple[int, int], float]:
     """Return the union of MST and OR-symmetric kNN edges keyed by undirected index pair.
 
     ``k = 0`` selects no kNN edges, so the result is just the MST.
@@ -516,7 +436,7 @@ class StreamingMstKnnAccumulator:
 
 def mst_knn_edge_counts_by_threshold(matrix: DataMatrix, tree: 'MaxTree', max_k: int,
                                      include_equal: bool = False,
-                                     neighbor_rankings: Optional[NeighborRankings] = None) -> np.ndarray:
+                                     neighbor_rankings: Optional[CompactNeighborRankings] = None) -> np.ndarray:
     """Return exact MST + kNN edge counts for each threshold of ``tree`` and k in [1, max_k].
 
     Row ``i`` corresponds to ``tree.thresholds[i]`` and column ``k - 1`` counts the edges a
@@ -535,10 +455,8 @@ def mst_knn_edge_counts_by_threshold(matrix: DataMatrix, tree: 'MaxTree', max_k:
     if len(thresholds) == 0:
         return counts
 
-    if isinstance(neighbor_rankings, CompactNeighborRankings):
-        total_events = len(neighbor_rankings.target)
-    else:
-        total_events = sum(min(len(ranked_neighbors), max_k) for ranked_neighbors in neighbor_rankings)
+    # Each row contributes its first max_k neighbors (the rankings may hold more).
+    total_events = int(np.minimum(np.diff(neighbor_rankings.offsets), max_k).sum())
     # Pack all activation fields into one structured array so the sort is in-place
     # and avoids a separate O(total_events) argsort index array.
     act_dtype = np.dtype([('score', np.float64), ('rank', np.int16),

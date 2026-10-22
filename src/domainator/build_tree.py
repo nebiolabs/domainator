@@ -142,8 +142,8 @@ def condensed_distances(data_matrix: DataMatrix, distance: str = "auto") -> np.n
     return squareform(dense, checks=False)
 
 
-def build_tree(data_matrix: DataMatrix, *, algorithm: str, metadata: Optional[List[str]], xgmml_out: Optional[str],
-               newick_out: Optional[str], quiet: bool = False, distance: str = "auto") -> None:
+def build_tree(data_matrix: DataMatrix, *, algorithm: str = "upgma", metadata: Optional[List[str]] = None,
+               xgmml_out: Optional[str] = None, newick_out: Optional[str] = None, quiet: bool = False, distance: str = "auto") -> None:
     """ 
         Build a tree from a distance or similarity matrix.
 

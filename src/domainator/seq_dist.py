@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
-from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, reject_stdin, tool_parser
 from Bio import SeqIO
 from collections import OrderedDict,namedtuple, defaultdict
 import numpy as np
@@ -26,7 +26,7 @@ import tqdm
 from typing import Iterator, List, Optional
 from domainator.seqio import get_file_type, parse_seqfiles
 from domainator.hmmio import open_hmm_file
-from domainator._mp import make_pool
+from domainator._mp import make_pool, resolve_cpu
 from domainator.ssn_edges import StreamingMstKnnAccumulator
 from domainator.data_matrix import DataMatrix, symmetrize_matrix
 from domainator.hmmer_search import compare_hmmer
@@ -735,8 +735,9 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
-def seq_dist(input_path: str, *, input_format: str, reference: str, reference_format: str,
-             max_hits_per_query: Optional[int], algorithm: str, mode: str, cpu: int, threshold: float,
+def seq_dist(input_path: str, *, input_format: Optional[str] = None, reference: Optional[str] = None,
+             reference_format: Optional[str] = None, max_hits_per_query: Optional[int] = None,
+             algorithm: str = "diamond_us", mode: str = "score", cpu: int = 0, threshold: float = 0,
              progress: bool = False, mst: bool = False, knn: Optional[int] = None, diamond_args: Optional[List[str]] = None,
              symmetrize: str = "none", diamond_path: Optional[str] = None) -> DataMatrix:
     """Compare every sequence or profile in ``input_path`` with every one in ``reference``.
@@ -744,8 +745,17 @@ def seq_dist(input_path: str, *, input_format: str, reference: str, reference_fo
     Returns a DataMatrix of ``mode`` values with a row per input and a column per reference;
     pass the same path as ``input_path`` and ``reference`` for a self-comparison. The options
     mean the same as the ``domainator seq_dist`` options with the same names; ``diamond_args``
-    is the parsed form of ``--diamond_args`` (see :func:`parse_diamond_args`).
+    is the parsed form of ``--diamond_args`` (see :func:`parse_diamond_args`). A format of None
+    is read from the file name; a ``reference`` of None compares ``input_path`` with itself; ``cpu``
+    0 means one thread per physical core.
     """
+    if input_format is None:
+        input_format = get_file_type(input_path)
+    if reference is None:
+        reference, reference_format = input_path, input_format
+    elif reference_format is None:
+        reference_format = get_file_type(reference)
+    cpu = resolve_cpu(cpu)
     sparsify = sparsify_requested(mst, knn)
     if sparsify:
         option = sparsify_option_label(mst, knn)
@@ -954,22 +964,7 @@ def main(argv):
     ### make output directory
 
     reject_stdin(parser, [params.input, params.reference] if params.reference else [params.input])
-    input_type = params.input_format
-    if params.input_format is None:
-        input_type = get_file_type(params.input)
-
-    if params.reference is None:
-        reference_path = params.input
-        reference_type = input_type
-    else:
-        reference_path = params.reference
-        reference_type = params.reference_format
-        if params.reference_format is None:
-            reference_type = get_file_type(reference_path)
-
     hdf, dense_text = resolve_matrix_outputs(params)
-
-    cpus = resolve_cpu(params.cpu)
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
 
@@ -977,8 +972,9 @@ def main(argv):
     if diamond_params and not params.algorithm.startswith("diamond"):
         raise ValueError(f"--diamond_args only applies to the diamond_* algorithms, but --algorithm is '{params.algorithm}'.")
 
-    matrix = seq_dist(params.input, input_format=input_type, reference=reference_path, reference_format=reference_type,
-                      max_hits_per_query=params.max_hits_per_query, algorithm=params.algorithm, mode=params.mode, cpu=cpus,
+    matrix = seq_dist(params.input, input_format=params.input_format, reference=params.reference,
+                      reference_format=params.reference_format, max_hits_per_query=params.max_hits_per_query,
+                      algorithm=params.algorithm, mode=params.mode, cpu=params.cpu,
                       threshold=params.threshold, progress=params.progress, mst=params.mst, knn=params.knn,
                       diamond_args=diamond_params, symmetrize=params.symmetrize, diamond_path=params.diamond_path)
     write_matrix_outputs(matrix, hdf=hdf, dense_text=dense_text, max_output_bytes=max_output_bytes,

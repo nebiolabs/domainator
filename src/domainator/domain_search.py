@@ -17,12 +17,12 @@ If neither is set, then hits will be written on the fly and not sorted.
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, reject_stdin, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles, native_parser_available
 from domainator.offsets import partition_seqfile, i_partition_seqfiles, index_total_cds
 from domainator.cli.common import list_and_file_to_dict_keys
-from domainator._mp import make_pool
+from domainator._mp import make_pool, resolve_cpu
 from domainator.taxonomy.records import compile_taxonomy_allowed
 from domainator.partial import PARTIAL_CHOICES
 from domainator.locations import WHERE_CHOICES
@@ -228,53 +228,65 @@ class _partition_seqfile_worker():
         return partition_seqfile(input_file, self.cdss_per_partition)
     
 
-def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: List[str], z: int, evalue: float,
-                  max_hits: Optional[int], max_overlap: float, cpu: int, add_annotations: bool,
-                  cds_range: Optional[Tuple[int, int]], kb_range: Optional[Tuple[float, float]], whole_contig: bool,
-                  normalize_direction: bool, translate: bool, gene_call: Optional[str] = None, min_evalue: float = 0.0,
+def domain_search(partitions: Iterable[Tuple[str, int, int]], *, references: List[str], z: int, evalue: float = 0.001,
+                  max_hits: Optional[int] = None, max_overlap: float = 1, cpu: int = 0, add_annotations: bool = False,
+                  cds_range: Optional[Tuple[int, int]] = None, kb_range: Optional[Tuple[float, float]] = None,
+                  whole_contig: bool = False, normalize_direction: bool = True, translate: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
                   ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
                   exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
                   alphabet: str = "protein", max_mode: bool = False, max_region_overlap: float = 1.0,
                   strand: Optional[str] = None, decoys: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None,
                   partial: str = "include", deduplicate_by_sequence: bool = False, both_strands: bool = False) -> Iterator[SeqRecord]:
-    """
-    runs hmmsearch in parallel on multiple sections of genbank or fasta files. 
+    """Search ``references`` against database partitions in parallel and yield the hit regions.
 
-    input:
-        partitions: list of tuples (sequence_file_path, file_offset, records_to_read), each tuple will be passed to the threadpool and hmmsearch and select_by_cds will be run on it.
-        references: A list of hmm or protein fasta file paths, the input HMM databases to be searched against the sequences using hmmsearch or phmmer.
-        z: Z parameter to pass to hmmsearch/phmmer
-        evalue: The threshold E value for hmmer hit
-        max_hits: The maximum number of CDSs to be returned
-        max_overlap: The maximum fractional of overlap to be allowed between domains
-        cpu: number of threads to use. Must be at least 2.
-        add_annotations: if True, then add new domainate annotations .
-        cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the CDS hits
-        kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends.
-        whole_contig: extract the whole contigs of containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
-        normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
-        translate: if True then translate nucleotide hits into proteins before returning.
-        ncbi_taxonomy: an NCBITaxonomy object (needed for filtering by taxonomy, otherwise not needed)
-        include_taxids: only keep contigs with a taxonomy id in this list
-        exclude_taxids: only keep contigs with a taxonomy id not in this list
-        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses) used to filter contigs by lineage, e.g. "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
-        alphabet: "protein" or "nucleotide", the type of fasta file to be searched.
-        max_mode: if True, then only the best hit for each hmm will be returned, otherwise all hits will be returned
-        max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. [default 1]
-        strand: only extract regions around CDSs on the specified strand. If None, then extract regions around CDSs on both strands.
-        decoys: a set of names of decoy domains. A decoy domain is a domain that is not expected to be found in the input sequences. If the best hit for a CDS/protein is a domain from the decoys list, it will be not be returned as a hit.
-        max_hits_per_contig: the maximum number of independent hits per contig. If None, then all hits will be returned. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit.
-        partial: which proteins/CDSs to search, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments). See domainate.domainate.
-        deduplicate_by_sequence: if True, drop hits whose output sequence is identical (case-insensitive, ignoring terminal '*') to an earlier hit.
-            The first copy to arrive is kept; partitions finish in arbitrary order, so which of several identical copies is kept is arbitrary.
-            Only a set of 32-byte hashes is held, not the duplicate records.
-        both_strands: with deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.
-    yields:
-        SeqRecords of the selected regions
+    Each partition is annotated as by domainate, and the region around each hit is extracted as
+    by select_by_cds.
+
+    Args:
+        partitions: (sequence file path, file offset, number of records) tuples; each is searched
+            by one worker.
+        references: HMM or protein FASTA files to search with (hmmsearch or phmmer).
+        z: the database size for e-values (hmmsearch's Z), as ``-Z``.
+        evalue: keep hits with an e-value at most this.
+        max_hits: keep only this many hits, the best-scoring. None: all.
+        max_overlap: the largest fraction of a hit that may overlap a better hit on the same CDS.
+        cpu: number of processes (0: one per physical core); values below 2 are raised to 2 (one
+            merges the results, the others search).
+        add_annotations: also add Domainator features for the hits.
+        cds_range: (upstream, downstream) numbers of CDSs to extract around each hit CDS.
+        kb_range: (upstream, downstream) kb to extract around each hit CDS. Partially enclosed
+            features are truncated, with '<' or '>' marking the cut ends.
+        whole_contig: extract the whole contig of each hit (once, if it has several hits).
+        normalize_direction: reverse-complement regions whose hit CDS is on the reverse strand.
+        translate: translate nucleotide hits into proteins.
+        gene_call, min_evalue, max_mode: as for domainate.
+        ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy filters.
+        include_taxids: keep only contigs with a taxid in this list (or below it).
+        exclude_taxids: drop contigs with a taxid in this list (or below it).
+        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g.
+            "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
+        alphabet: "protein" or "nucleotide", the molecule type of FASTA databases.
+        max_region_overlap: the largest fraction of overlap allowed between two output regions
+            (1 or more: no filter). Regions are kept greedily in order of CDS start, if less than
+            this fraction of them overlaps a region already kept.
+        strand: "f" or "r" to extract only regions around CDSs on that strand. None: both.
+        decoys: names of decoy domains: a CDS or protein whose best hit is a decoy is not a hit.
+        max_hits_per_contig: the most independent hits per contig. None: all. For contig-level
+            nucleotide hits, each non-overlapping hit region is an independent hit.
+        partial: which proteins/CDSs to search, by fragment status: "include" (all, the
+            default), "exclude" (skip fragments), or "only" (only fragments). See
+            domainate.domainate.
+        deduplicate_by_sequence: drop hits whose output sequence is identical (ignoring case and
+            a terminal '*') to an earlier hit. Partitions finish in any order, so which of
+            several identical copies is kept is arbitrary. Only 32-byte hashes are held.
+        both_strands: with deduplicate_by_sequence, also treat complement and
+            reverse-complement nucleotide sequences as duplicates.
+
+    Yields:
+        SeqRecords of the hit regions.
     """
 
-    if cpu < 2: 
-        cpu=2
+    cpu = max(2, resolve_cpu(cpu))
 
     if include_taxids is not None:
         include_taxids = set(include_taxids)

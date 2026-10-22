@@ -49,7 +49,7 @@ def test_matrix_report_rejects_invalid_merge_impact_metric():
     matrix = DataMatrix(np.array([[0.0, 1.0], [1.0, 0.0]]), ['A', 'B'], ['A', 'B'])
 
     with pytest.raises(ValueError, match="merge_impact_metric must be one of"):
-        matrix_report.matrix_report(matrix, out_text_handle=io.StringIO(), out_html_handle=None, merge_impact_metric="bad")
+        matrix_report.matrix_report(matrix, text_out_handle=io.StringIO(), html_out_handle=None, merge_impact_metric="bad")
 
 
 
@@ -142,6 +142,20 @@ def test_mst_knn_edge_counts_by_threshold_monotonic():
     assert np.all(counts[:, 0] >= tree.mst_edges_above_threshold)
     assert np.all(counts[:, 1] >= counts[:, 0])
     assert np.all(counts[:, 2] >= counts[:, 1])
+
+
+def test_mst_knn_edge_counts_use_the_first_max_k_of_longer_rankings():
+    from domainator.ssn_edges import build_symmetric_neighbor_rankings
+
+    rng = np.random.default_rng(3)
+    upper = np.triu(rng.integers(1, 9, size=(12, 12)).astype(float), k=1)
+    data = upper + upper.T
+    names = [str(i) for i in range(12)]
+    matrix = DataMatrix(data, names, names)
+    tree = MaxTree(matrix)
+    expected = mst_knn_edge_counts_by_threshold(matrix, tree, 3)
+    full_rankings = build_symmetric_neighbor_rankings(matrix)  # 11 neighbors per row
+    assert np.array_equal(mst_knn_edge_counts_by_threshold(None, tree, 3, neighbor_rankings=full_rankings), expected)
 
 
 def test_mst_knn_edge_counts_by_threshold_sparse_matches_dense_bruteforce():

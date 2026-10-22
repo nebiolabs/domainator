@@ -311,7 +311,7 @@ def _resolve_genbank_parser(requested):
 
     Two tiers: "lean" uses the optional native (Rust) ``_gbfast`` extension and yields
     lean record objects, so only callers that handle those request it; "biopython" uses
-    the vendored Biopython parser (no build dependency). "lean" downgrades to "biopython"
+    the Biopython parser (no build dependency). "lean" downgrades to "biopython"
     when the native extension is absent.
     """
     backend = (requested or "biopython").lower()

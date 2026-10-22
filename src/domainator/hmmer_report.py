@@ -10,7 +10,7 @@ from domainator.cli.common import add_input, add_output, check_outputs, declare_
 from domainator.outputs import output_file
 from domainator.hmmio import alphabet_name, iter_hmms_with_alphabet
 from domainator.seqio import db_name_from_path
-from typing import Tuple, Union, Iterable, List, Optional, TextIO
+from typing import Tuple, Union, Iterable, Iterator, List, Optional, TextIO
 from domainator.report_columns import Column, add_columns_argument, parse_columns
 from domainator.table_writers import HTMLTableWriter, JSONTableWriter, TSVTableWriter
 import pyhmmer
@@ -30,12 +30,12 @@ COLUMNS = (
     Column("append", "a column with this name and type (str, int or float) holding this value in every row.", ("name", "type", "value")),
 )
 
-def read_hmms_to_iterators(hmm_files:Iterable[Union[str,os.PathLike, IOBase]]) -> Tuple[str, Iterable[pyhmmer.plan7.HMM]]:
+def read_hmms_to_iterators(hmm_files:Iterable[Union[str,os.PathLike, IOBase]]) -> List[Tuple[str, Iterator[pyhmmer.plan7.HMM]]]:
     """
         hmm_files: a list of paths to .hmm files
 
         returns:
-            a tuple of (name, iterator of pyhmmer.plan7.HMM)
+            a list of (name, iterator of pyhmmer.plan7.HMM) tuples, one per file
 
     """
     out = list()
@@ -68,19 +68,20 @@ def append_factory(spec):
     }
 
 
-def hmmer_report(records: Tuple[str, Iterable[pyhmmer.plan7.Profile]], *, analyses: List[Analysis],
-                 tsv_out_handle: Optional[TextIO], html_out_handle: Optional[TextIO], column_names: Optional[List[str]],
-                 html_max_height: Optional[int], json_out_handle: Optional[TextIO] = None) -> None:
-    """
-      input:
-        records: a list of tuples of tuple of (database_name, iterator of pyhmmer.plan7.HMM)
-        by: One line in output for every by contig, cds or domain. default: by contig
-        analyses: what data to report
-        tsv_out_handle: a file handle to write the analysis table to.
-        html_out_handle: a file handle to write html formatted output to.
-        column_names: If supplied, then this list will be used instead of the default column names.
-        html_max_height: Max height in pixels to set the html output to.
-        json_out_handle: a file handle to write streaming NDJSON (one object per profile) to.
+def hmmer_report(records: Iterable[Tuple[str, Iterable[pyhmmer.plan7.HMM]]], *, analyses: List[Analysis],
+                 tsv_out_handle: Optional[TextIO] = None, html_out_handle: Optional[TextIO] = None,
+                 column_names: Optional[List[str]] = None, html_max_height: Optional[int] = None, json_out_handle: Optional[TextIO] = None) -> None:
+    """Write a table with one row per profile of ``records``.
+
+    Args:
+        records: (source name, iterator of pyhmmer HMMs) pairs, one per file, as
+            read_hmms_to_iterators returns.
+        analyses: the columns to report (from report_columns.parse_columns).
+        tsv_out_handle: an open text handle for the TSV table, or None.
+        html_out_handle: an open text handle for the HTML table, or None.
+        column_names: use these column names instead of the default ones.
+        html_max_height: the largest height of the HTML table, in pixels.
+        json_out_handle: an open text handle for NDJSON (one object per profile), or None.
     """
     
     STATIC_ANALYSES = {"source": {"columns": ["source"], "column_types": ["str"], "function": lambda source,rec: source},

@@ -3,7 +3,7 @@
 Produces standard BGZF output (gunzip-readable, and seekable/partitionable by the
 native ``genbank_offsets_bgzf`` scanner and ``Bio.bgzf.BgzfReader``). Uses the
 native parallel Rust compressor (``_gbfast.bgzf_compress_file``) when available,
-falling back to the vendored single-threaded ``BgzfWriter`` otherwise.
+falling back to Biopython's single-threaded ``BgzfWriter`` otherwise.
 """
 import shutil
 

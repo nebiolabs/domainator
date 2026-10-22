@@ -90,6 +90,29 @@ def test_python_dash_m_runs_the_dispatcher():
     assert result.stdout.strip() == f"domainator {__version__}"
 
 
+# Optional or slow to import; a command imports them only when it runs.
+_HEAVY_MODULES = ["torch", "esmologs", "umap", "seaborn", "matplotlib", "sklearn"]
+_BUILD_EVERY_PARSER = f"""
+import importlib, sys, time
+start = time.perf_counter()
+from domainator.cli.registry import TOOLS
+for tool in TOOLS.values():
+    importlib.import_module("domainator." + tool.module).build_parser()
+print(time.perf_counter() - start)
+print(" ".join(m for m in {_HEAVY_MODULES!r} if m in sys.modules))
+"""
+
+
+def test_help_stays_within_the_import_budget():
+    """Building every command's parser (what --help, completion and describe do) imports no
+    heavy library and stays fast: about 0.8 s in all today, 0.6 s or less per command."""
+    subprocess.run([sys.executable, "-c", _BUILD_EVERY_PARSER], check=True, capture_output=True)  # compile .pyc files
+    result = subprocess.run([sys.executable, "-c", _BUILD_EVERY_PARSER], check=True, capture_output=True, text=True)
+    seconds, heavy = (result.stdout.splitlines() + [""])[:2]
+    assert heavy == ""
+    assert float(seconds) < 5
+
+
 @pytest.mark.parametrize("shell", ["bash", "zsh", "tcsh"])
 def test_completion_script_is_deterministic(shell):
     pytest.importorskip("shtab")
@@ -99,6 +122,17 @@ def test_completion_script_is_deterministic(shell):
     assert script == completion_script(shell)
     for command in TOOLS:
         assert command in script
+
+
+def test_completion_command_prints_the_script(capsys, monkeypatch):
+    pytest.importorskip("shtab")
+    from domainator.cli.completion import completion_script
+
+    assert cli.main(["completion", "zsh"]) == 0
+    assert capsys.readouterr().out == completion_script("zsh")
+    monkeypatch.setitem(sys.modules, "shtab", None)  # not installed
+    assert cli.main(["completion", "bash"]) == 1
+    assert "pip install shtab" in capsys.readouterr().err
 
 
 def test_bash_completion_completes_commands_and_choices(tmp_path):

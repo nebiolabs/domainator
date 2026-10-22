@@ -146,9 +146,10 @@ class DomainatorCDS():
     is_nucleic_acid:bool = False
 
     @classmethod
-    def list_from_contig(cls, contig, domain_evalue=float("inf"), domain_score=float("-inf"), skip_pseudo=False, name_precedence=None, include_nucleic_acid_annotations=False):
+    def list_from_contig(cls, contig, domain_evalue=None, domain_score=float("-inf"), skip_pseudo=False, name_precedence=None, include_nucleic_acid_annotations=False):
         """
-            returns a list of DomainatorCDS objects from a contig SeqRecord
+            returns a list of DomainatorCDS objects from a contig SeqRecord, with the domain
+            annotations whose e-value is at most domain_evalue (None: no cutoff)
         """
         cdss: List[DomainatorCDS] = list()
         name_to_idx: Dict[str,int] = dict()
@@ -169,7 +170,7 @@ class DomainatorCDS():
                     warnings.warn(f"multiple cdss found with contig id: {contig.id}, CDS num: {cds_num}, so only the first one is kept.")
         for i, feature in enumerate(contig.features): #get the domainator features
             if feature.type == DOMAIN_FEATURE_NAME or feature.type == DOMAIN_SEARCH_BEST_HIT_NAME:
-                if feature_evalue(feature) <= domain_evalue and feature_score(feature) > domain_score:
+                if evalue_passes(feature, domain_evalue) and feature_score(feature) > domain_score:
                     if include_nucleic_acid_annotations and feature.qualifiers.get("cds_id", [None])[0] == ".":
                         cds_num = f"nuc_{nuc_idx}"
                         nuc_idx += 1

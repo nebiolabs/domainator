@@ -84,8 +84,7 @@ def test_config_with_manifest_defaults_parses(manifest, tool_name, tmp_path):
 def test_interface_snapshot(manifest):
     """The command-line interface is part of the 1.x stability contract (docs/stability.md).
 
-    If you changed an option on purpose, regenerate the snapshot:
-        python -c "import json; from test.test_manifest import _interface; from domainator.cli.manifest import manifest; print(json.dumps(_interface(manifest()), indent=1))" > test/data/manifest_snapshot.json
+    If you changed an option on purpose, regenerate the snapshot: python test/test_manifest.py
     """
     assert _interface(manifest) == json.loads(SNAPSHOT.read_text())
 
@@ -101,3 +100,7 @@ def test_describe_command(capsys):
     assert parameters["input"]["role"] == "input" and parameters["input"]["stdin"] is True
     assert parameters["genbank_out"]["flags"] == ["-o", "--genbank_out"]
     assert parameters["max_hits"]["type"] == "integer"
+
+
+if __name__ == "__main__":  # regenerate the snapshot
+    SNAPSHOT.write_text(json.dumps(_interface(manifest_module.manifest()), indent=1) + "\n")

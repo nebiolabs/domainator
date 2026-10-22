@@ -58,8 +58,8 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
     Finds all the annotations in a contig of the genbank which meet 
     the new evalue and max overlap requirements
     Args:
-        evalue: float
-            the max evalue which will be accepted in the filtered genbank
+        evalue: float or None
+            the max evalue which will be accepted in the filtered genbank (None: no cutoff)
         max_overlap: float
             the max overlap between domains which will be accepted
             in the filtered genbank
@@ -104,7 +104,7 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
             # we're filtering by domain name, and this domain is not in the list, so skip it.
             continue
 
-        if annot_evalue > evalue:
+        if evalue is not None and annot_evalue > evalue:
             # skip over domainator features which have a higher evalue than the new evalue
             continue  
 
@@ -127,21 +127,23 @@ def find_kept_annotations(evalue, max_overlap, rec, databases_keep:Optional[Set[
             kept_annotations[cds_id][feature_id] = overlap_annotations[cds_id][feature_id]
     return kept_annotations
 
-def filter_domains(records: Iterable[SeqRecord], *, evalue: Optional[float], max_overlap: float,
+def filter_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, max_overlap: float = 1.0,
                    keep_databases: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
                    domains: Optional[Set[str]] = None, annotation_type: str = "all") -> Iterator[SeqRecord]:
-    """
-    The main function which iterates through genbank files to find the domainator annotations
-    to be removed
+    """Yield ``records`` without the domain annotations that fail the filters.
+
     Args:
-        records: list of lists of SeqRecords
-        evalue: float
-            The new upper limit for evalues on domainator annotations
-        max_overlap: float
-            The new upper limit for max overlap between domainator annotations
-        database: 
-            database to filter from, if None, then filter all databases together
-        domains: set of strings or None. If not None, then only keep domains with names in this set.
+        records: the contigs or proteins (SeqRecords).
+        evalue: drop annotations with an e-value above this (None: no cutoff).
+        max_overlap: the largest fraction of an annotation that may overlap a higher-scoring
+            annotation on the same CDS (1: no overlap filter).
+        keep_databases: first drop the annotations from every other database.
+        databases: apply ``evalue``, ``domains`` and ``max_overlap`` only to annotations from
+            these databases; the others are kept as they are. None: all databases.
+        domains: drop the filtered annotations whose names are not in this set. None: keep any
+            name.
+        annotation_type: which annotations to filter: "domainator", "domain_search" (the best
+            hits written by domain_search), or "all".
     """
     feature_types = set()
     if annotation_type == "domain_search":
@@ -215,8 +217,6 @@ def main(argv):
     selected_domains = list_and_file_to_dict_keys(
         params.domains, params.domains_file, as_set=True)
 
-    evalue = float("inf") if params.evalue is None else params.evalue
-    max_overlap = params.max_overlap
 
     genbanks = params.input
 
@@ -233,8 +233,8 @@ def main(argv):
     # Run
     write_seq_outputs(filter_domains(
                 parse_seqfiles(genbanks, target_contigs), 
-                evalue=evalue,
-                max_overlap=max_overlap,
+                evalue=params.evalue,
+                max_overlap=params.max_overlap,
                 keep_databases=databases_keep,
                 databases=databases_filter,
                 domains=selected_domains,

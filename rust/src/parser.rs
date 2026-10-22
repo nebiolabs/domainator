@@ -1,16 +1,12 @@
 //! Native GenBank record parser (increments 3a/3b).
 //!
-//! Parses a partition of a GenBank file with the `gb-io` crate. Two modes:
-//!
-//! * `parse_lean` (3a): builds the full per-feature `LeanFeature` objects in Rust
-//!   and returns header tuples. Used by `iter_lean_genbank_native`.
-//!
-//! * `parse_lean_search` (3b): returns `LeanSearchContig` pyclasses that HOLD the
-//!   parsed record in Rust and expose only what `domainate`'s scan needs
-//!   (molecule_type, seq, cds peptides). No per-feature Python objects are built
-//!   for the bulk of records; the full record is materialized (`.materialize()`)
-//!   only when a contig produces a hit. This removes the per-feature
-//!   object-construction floor from the ~99% of records that don't hit.
+//! Parses a partition of a GenBank file with the `gb-io` crate. `parse_lean_search`
+//! returns `LeanSearchContig` pyclasses that HOLD the parsed record in Rust and
+//! expose only what `domainate`'s scan needs (molecule_type, seq, cds peptides).
+//! No per-feature Python objects are built for the bulk of records; the full
+//! record is materialized (`.materialize()`, which builds the `LeanFeature`
+//! objects and header fields) only when a contig produces a hit. This removes the
+//! per-feature object-construction floor from the ~99% of records that don't hit.
 //!
 //! Records whose LOCUS line gb-io could not parse (molecule_type None), parse
 //! errors, unmodeled location kinds, or (for search mode) a CDS lacking a
@@ -605,41 +601,6 @@ fn header_tuple<'py>(py: Python<'py>, seq: &Seq, features: Bound<'py, PyList>) -
     ])
 }
 
-#[pyfunction]
-#[pyo3(signature = (path, seek_to, max_recs, compressed=false))]
-pub fn parse_lean<'py>(
-    py: Python<'py>,
-    path: &str,
-    seek_to: u64,
-    max_recs: i64,
-    compressed: bool,
-) -> PyResult<(Bound<'py, PyList>, bool, usize)> {
-    let reader = SeqReader::new(open_at(path, seek_to, compressed)?);
-    let records = PyList::empty(py);
-    let mut n_emitted = 0usize;
-    let mut stopped_early = false;
-    let empty: HashSet<String> = HashSet::new();
-    for rec_result in reader {
-        if max_recs >= 0 && (n_emitted as i64) >= max_recs {
-            break;
-        }
-        let seq = match rec_result {
-            Ok(s) => s,
-            Err(_) => { stopped_early = true; break; }
-        };
-        if seq.molecule_type.is_none() {
-            stopped_early = true;
-            break;
-        }
-        match record_fields(py, &seq, &empty)? {
-            Some(t) => records.append(t)?,
-            None => { stopped_early = true; break; }
-        }
-        n_emitted += 1;
-    }
-    Ok((records, stopped_early, n_emitted))
-}
-
 /// A parsed GenBank record held in Rust, exposing only what domainate's bulk scan
 /// needs. The full record is built lazily via `materialize` (hit-only).
 #[pyclass]
@@ -768,7 +729,8 @@ impl LeanSearchContig {
     }
 
     /// Build the full record header tuple + LeanFeature list (hit path only),
-    /// dropping cleared feature kinds. Returns the same 14-tuple as parse_lean.
+    /// dropping cleared feature kinds: the 14-tuple that
+    /// lean_record._build_lean_from_fields takes.
     fn materialize<'py>(&self, py: Python<'py>, dropped: HashSet<String>) -> PyResult<Bound<'py, PyTuple>> {
         match record_fields(py, &self.seq, &dropped)? {
             Some(t) => Ok(t),

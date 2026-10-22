@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 import sys
 from jsonargparse import ActionConfigFile
 from typing import List, Dict, Iterator, Optional, TextIO, Tuple
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, tool_parser
+from domainator._mp import resolve_cpu
 from domainator.outputs import write_seq_outputs
 from Bio import SeqIO, Seq
 from domainator.external import append_extra_args, resolve_binary, run_command
@@ -234,8 +235,8 @@ class HashHit():
     cluster_members: list[str] = field(default_factory=list)
 
 def deduplicate_genbank(inputs: List[str], *, identity: float, algorithm: str = "cd-hit", extra_args: Optional[List[str]] = None,
-                        bin_paths: Optional[Dict[str, str]] = None, add_count: Optional[str] = None, cpu: int = 1,
-                        alphabet: str = "protein", both_strands: bool = False, log_handle: TextIO = sys.stderr,
+                        bin_paths: Optional[Dict[str, str]] = None, add_count: Optional[str] = None, cpu: int = 0,
+                        alphabet: str = "protein", both_strands: bool = False, log_out_handle: TextIO = sys.stderr,
                         clusters: Optional[List[Tuple[str, List[str]]]] = None) -> Iterator[SeqRecord]:
     """Yield one representative record of each cluster of similar sequences.
 
@@ -247,15 +248,16 @@ def deduplicate_genbank(inputs: List[str], *, identity: float, algorithm: str = 
         bin_paths: None, or a dict of program name ("cd-hit", "cd-hit-est", "usearch", "diamond") to the path
             of its executable, for programs that are not on the PATH.
         add_count: None, "prefix" or "suffix": add the cluster size to the representative's id.
-        cpu: number of threads for the clustering program.
+        cpu: number of threads for the clustering program (0: one per physical core).
         alphabet: "protein" or "nucleotide", for FASTA inputs.
         both_strands: for nucleotide inputs, cluster each sequence with its reverse complement.
-        log_handle: where the clustering program's output, and the input and output sizes, go.
+        log_out_handle: where the clustering program's output, and the input and output sizes, go.
         clusters: if a list, the (representative id, member ids) of every cluster are appended to it
             once the records have all been yielded.
     """
     if both_strands and alphabet != "nucleotide":
         raise ValueError("--both_strands is only supported for nucleotide input.")
+    cpu = resolve_cpu(cpu)
 
     if algorithm == "hash": #TODO: multiprocessing
         if identity != 1:
@@ -307,7 +309,7 @@ def deduplicate_genbank(inputs: List[str], *, identity: float, algorithm: str = 
                 elif algorithm == "cd-hit-est" and "-r" not in extra_args:
                     extra_args += ["-r", "1"]
             bin_path = (bin_paths or {}).get(algorithm)
-            reduced_names, cluster_members = run_clustering(algorithm, input_fasta_path, identity, extra_args, bin_path, add_count, cpu, log_handle=log_handle)
+            reduced_names, cluster_members = run_clustering(algorithm, input_fasta_path, identity, extra_args, bin_path, add_count, cpu, log_handle=log_out_handle)
 
     #write reduced set of sequences to a genbank file
     input_ct = 0
@@ -331,7 +333,7 @@ def deduplicate_genbank(inputs: List[str], *, identity: float, algorithm: str = 
             member_names = [idx_to_original_name[int(i)] for i in members_i_strs]
             clusters.append((idx_to_center_name[int(center_i_str)], member_names))
 
-    print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=log_handle)
+    print(f"Input  size: {input_ct}\nOutput size: {len(reduced_names)}", file=log_out_handle)
 
 
 
@@ -429,7 +431,7 @@ def main(argv):
             cpu=cpus,
             alphabet=params.alphabet,
             both_strands=params.both_strands,
-            log_handle=log,
+            log_out_handle=log,
             clusters=clusters)
 
     write_seq_outputs(deduplicate_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

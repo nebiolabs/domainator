@@ -33,7 +33,7 @@ import os
 import subprocess
 import time
 import requests
-from domainator.cli.common import add_output, add_switch, check_outputs, declare_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_output, add_switch, check_outputs, declare_outputs, tool_parser
 from Bio import SeqIO
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from pathlib import Path
@@ -41,7 +41,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
 from domainator.seqio import write_genbank, parse_seqfiles
 from domainator.taxonomy.records import filter_by_taxonomy, compile_taxonomy_allowed
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
-from domainator._mp import make_pool, make_manager
+from domainator._mp import make_pool, make_manager, resolve_cpu
 from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import __version__
 from typing import Dict, Set, Optional, Iterator, Iterable
@@ -698,13 +698,14 @@ FASTA_DBS = {"swissprot", "trembl", "uniprot"}
 GENBANK_DBS = (UNIPROT_DBS - FASTA_DBS) | {"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks",
                                         "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all"}
 
-def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_taxids: Optional[Iterable[int]],
-                exclude_taxids: Optional[Iterable[int]], db: str, gene_call: Optional[str], max_records: Optional[int],
-                ncbi_summary: Optional[str], before: Optional[datetime.date], after: Optional[datetime.date], cpu: int = 1,
+def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_taxids: Optional[Iterable[int]] = None,
+                exclude_taxids: Optional[Iterable[int]] = None, db: str, gene_call: Optional[str] = None,
+                max_records: Optional[int] = None, ncbi_summary: Optional[str] = None,
+                before: Optional[datetime.date] = None, after: Optional[datetime.date] = None, cpu: int = 0,
                 success_log_out: Optional[str] = None, exclude_accessions: Optional[Set[str]] = None,
-                download_backend: str = "direct", download_workers: int = 1, user_agent: Optional[str] = None,
-                datasets_workdir: Optional[str] = None, datasets_include: str = "gbff", datasets_max_workers: int = 1,
-                api_key: Optional[str] = None, datasets_path: Optional[str] = None, datasets_gzip: bool = False,
+                download_backend: str = "datasets", download_workers: int = 3, user_agent: Optional[str] = None,
+                datasets_workdir: Optional[str] = None, datasets_include: str = "gbff", datasets_max_workers: int = 10,
+                ncbi_api_key: Optional[str] = None, datasets_path: Optional[str] = None, datasets_gzip: bool = False,
                 taxonomy_expr: Optional[str] = None, partial: str = "include") -> None:
 
     """Download a database (``db``: a UniProt or NCBI genome database) and write it to ``output``.
@@ -715,6 +716,7 @@ def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_t
     after filter NCBI genomes by release date; success_log_out lists the accessions written. The
     other options are those of ``domainator db_download``.
     """
+    cpu = resolve_cpu(cpu)
     if taxonomy_expr and (include_taxids or exclude_taxids):
         raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
     if partial != "include" and db.lower() not in UNIPROT_DBS:
@@ -745,7 +747,7 @@ def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_t
         datasets_workdir=datasets_workdir,
         datasets_include=datasets_include,
         datasets_max_workers=datasets_max_workers,
-        api_key=api_key,
+        api_key=ncbi_api_key,
         datasets_path=datasets_path,
         datasets_gzip=datasets_gzip,
     )
@@ -1059,5 +1061,5 @@ def main(argv):
     db_download(ncbi_taxonomy, output=output, include_taxids=params.include_taxids, exclude_taxids=params.exclude_taxids, db=params.db, gene_call=params.gene_call, max_records=params.max_records, ncbi_summary=params.ncbi_summary, before=before, after=after, cpu=cpus, success_log_out=params.success_log_out, exclude_accessions=exclude_accessions,
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
-                           datasets_max_workers=params.datasets_max_workers, api_key=api_key, datasets_path=params.datasets_path,
+                           datasets_max_workers=params.datasets_max_workers, ncbi_api_key=api_key, datasets_path=params.datasets_path,
                            datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr, partial=params.partial)

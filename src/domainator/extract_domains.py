@@ -26,28 +26,43 @@ from domainator.location_ops import merge_parts
 from Bio.SeqRecord import SeqRecord
 
 def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
-                    domains: Optional[Set[str]] = None, extend_up: int = 0, extend_down: int = 0, combine: bool = False,
+                    domains: Optional[Set[str]] = None, extend_range: Optional[int] = None,
+                    extend_up: Optional[int] = None, extend_down: Optional[int] = None, combine: bool = False,
                     keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
                     databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include") -> Iterator[SeqRecord]:
-    """
+    """Yield the regions of ``records`` covered by their domain annotations.
 
-      input: 
-        records: iterator of SeqRecords
-        evalue: if not None then only select domains with evalue <= this parameter
-        min_score: if not None then only select domains with min_score >= this parameter
-        domains: collection if not None then only select domains with names in this list.
-        extend_up: extract this many additional residues (or bases) upstream of the hit region.
-        extend_down: extract this many additional residues (or bases) downstream of the hit region.
-        combine: if True, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. Will raise an error if the contig is circular, because the envelope cannot be determined.
-        keep_direction: by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything.
-        keep_name: by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
-        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best hits written by domain_search).
-        databases: if not None, then only select domains from these databases. default: all databases.
-        splice: if True, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together, in the order they are read on the strand of the domain with the lowest start coordinate.
-        partial: select domains by the fragment status of the CDS (or protein record) they are on: "include" (default, all), "exclude" (skip domains on fragments), or "only" (only domains on fragments).
-            Contig-level nucleotide hits are never on fragments. See utils.get_fragment_status.
-    
-      yields the extracted regions as SeqRecord objects
+    Args:
+        records: the contigs or proteins (SeqRecords).
+        evalue: select only domains with an e-value at most this. None: no cutoff.
+        min_score: select only domains with a score at least this. None: no cutoff.
+        domains: select only domains with these names. None: all.
+        extend_range: the default of extend_up and extend_down (None: 0).
+        extend_up: also extract this many residues (or bases) upstream of each domain. None:
+            extend_range.
+        extend_down: also extract this many residues (or bases) downstream of each domain. None:
+            extend_range.
+        combine: when a contig has several selected domains, extract one region enclosing them
+            all. Raises an error for a circular contig, whose enclosing region is ambiguous.
+        keep_direction: don't reverse-complement regions. By default, regions are flipped so
+            that the domain (with ``combine`` or ``splice``, the one with the lowest start) is on
+            the forward strand.
+        keep_name: keep the contigs' names. By default, regions are renamed for their original
+            coordinates and whether they were reverse-complemented. Careful: this can easily
+            give duplicate names.
+        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best
+            hits written by domain_search).
+        databases: select only domains from these databases. None: all.
+        splice: when a contig has several selected domains, delete the sequence between them and
+            join the domains, in the order they are read on the strand of the domain with the
+            lowest start.
+        partial: select domains by the fragment status of their CDS (or protein record):
+            "include" (all, the default), "exclude" (skip domains on fragments), or "only" (only
+            domains on fragments). Contig-level nucleotide hits are never on fragments.
+            See partial.get_fragment_status.
+
+    Yields:
+        The extracted regions.
     """
     search_hits = check_annotation_type(annotation_type) == "domain_search"
 
@@ -55,6 +70,9 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         raise ValueError("Cannot use --splice and --combine at the same time.")
 
     databases = set(databases) if databases is not None else None
+    extend_default = extend_range if extend_range is not None else 0
+    extend_up = extend_up if extend_up is not None else extend_default
+    extend_down = extend_down if extend_down is not None else extend_default
     #TODO: ensure naming consistency with select_by_cds.
     for rec in records:
         feature_index = FeatureIndex(rec.features)
@@ -234,10 +252,6 @@ def main(argv):
     genbanks = params.input
 
     check_outputs(parser, params)
-    extend_default = params.extend_range if params.extend_range is not None else 0
-    extend_up = params.extend_up if params.extend_up is not None else extend_default
-    extend_down = params.extend_down if params.extend_down is not None else extend_default
-
     target_contigs = list_and_file_to_dict_keys(
         params.contigs, params.contigs_file, as_set=True)
     selected_domains = list_and_file_to_dict_keys(
@@ -249,8 +263,9 @@ def main(argv):
         evalue=params.evalue, 
         min_score=params.min_score, 
         domains=selected_domains, 
-        extend_up=extend_up,
-        extend_down=extend_down,
+        extend_range=params.extend_range,
+        extend_up=params.extend_up,
+        extend_down=params.extend_down,
         combine=params.combine, 
         keep_direction=params.keep_direction, 
         keep_name=params.keep_name,

@@ -39,7 +39,9 @@ lists every change from 0.x.
   Python from 3.12 on.
 - Matrix files are version 2.0 (symmetric matrices are stored as their upper triangle).
 - The command functions take only their main input positionally and are importable as
-  `from domainator.<command> import <command>`.
+  `from domainator.<command> import <command>`; their keyword parameters are named like the
+  command's options and default like them (domainate's e-value 0.001, not 10; `cpu=0`, all
+  cores). Every one has a docstring and type hints.
 - Faster: neighborhood extraction (select_by_cds, domain_search) and extract_domains look only
   at nearby features; HMM databases are prepared once per search, not once per batch.
 
@@ -55,4 +57,6 @@ lists every change from 0.x.
 - Many bugs found in the 1.0 review, including: `-e` cutoffs that dropped hits equal to the
   cutoff; XGMML values escaped twice; Newick branch lengths rounded to two decimals;
   build_tree crashing on deep trees; extract_peptides `-e` parsed as text; compressed output
-  ignored by some commands; a missing-qualifier error that printed a record to standard output.
+  ignored by some commands; a missing-qualifier error that printed a record to standard output;
+  matrix_report's kNN edge counts with long neighbor lists; build_projection with
+  `--color_table_out` and no colors, and `--pca_args` on sparse matrices.

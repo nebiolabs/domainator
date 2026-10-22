@@ -2,6 +2,7 @@
 resolution (db_index.py), plus the get_offsets/i_get_offsets index fast-path."""
 import os
 import shutil
+import struct
 import warnings
 from array import array
 
@@ -135,6 +136,27 @@ def test_index_corrupt_returns_none(shared_datadir, tmp_path):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         assert db_index.read_index(str(f), filetype="fasta", compression=None) is None
+
+
+@pytest.mark.parametrize("major,minor,readable", [
+    (db_index._VER_MAJOR, db_index._VER_MINOR + 1, True),  # an additive change
+    (db_index._VER_MAJOR + 1, 0, False),
+])
+def test_index_versions(shared_datadir, tmp_path, major, minor, readable):
+    """A newer minor version is read; a newer major version is ignored (offsets are recomputed)."""
+    f = tmp_path / "versioned.gb"
+    shutil.copy(shared_datadir / "pDONR201.gb", f)
+    off, npr = get_offsets(str(f))
+    idx = db_index.write_index(str(f), off, npr, filetype="genbank", compression=None)
+    with open(idx, "r+b") as fh:
+        fh.seek(4)
+        fh.write(struct.pack("<HH", major, minor))
+    db_index._warned_index_paths.clear()
+    if readable:
+        assert db_index.read_index(str(f), filetype="genbank", compression=None) == (off, npr)
+    else:
+        with pytest.warns(RuntimeWarning, match="incompatible"):
+            assert db_index.read_index(str(f), filetype="genbank", compression=None) is None
 
 
 def test_index_missing_returns_none_silently(shared_datadir, tmp_path):

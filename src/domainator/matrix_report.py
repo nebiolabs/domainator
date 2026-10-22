@@ -1194,13 +1194,21 @@ class SummaryHTMLWriter():
     def write_footer(self):
         print("</body></html>", file=self.out_handle)
 
-def matrix_report(matrix:DataMatrix, *, out_text_handle: Optional[TextIO], out_html_handle: Optional[TextIO], knn_projection: bool = False,
+def matrix_report(matrix:DataMatrix, *, text_out_handle: Optional[TextIO] = None, html_out_handle: Optional[TextIO] = None,
+                  knn_projection: bool = False,
                   merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
-                  profile_stages: bool = False, stage_timings: Optional[List[tuple]] = None,
+                  stage_timings: Optional[List[tuple]] = None,
                   progress_callback: Optional[Callable[[str], None]] = None,
-                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, out_json_handle: Optional[TextIO] = None) -> None:
-    """
-        Write a report on the matrix to the given handles.
+                  max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS, json_out_handle: Optional[TextIO] = None) -> None:
+    """Write a report on ``matrix``, a similarity matrix, to any of the text, HTML and JSON
+    handles (each can be None): its size and value distribution, and for a symmetric matrix,
+    how its clusters merge as the threshold falls.
+
+    Args:
+        knn_projection, merge_impact_metric, max_merge_events: as the options of
+            ``domainator matrix_report``.
+        stage_timings: a list to append each stage's (stage, seconds, metrics) timing to.
+        progress_callback: called with the name of each stage as it starts.
     """
     if merge_impact_metric not in MERGE_IMPACT_CHOICES:
         raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
@@ -1208,12 +1216,12 @@ def matrix_report(matrix:DataMatrix, *, out_text_handle: Optional[TextIO], out_h
         raise ValueError("max_merge_events must be >= 0")
 
     longform_outputs = list()
-    if out_text_handle is not None:
-        longform_outputs.append(SummaryTextWriter(out_text_handle))
-    if out_html_handle is not None:
-        longform_outputs.append(SummaryHTMLWriter(out_html_handle))
-    if out_json_handle is not None:
-        longform_outputs.append(SummaryJSONWriter(out_json_handle, max_merge_events=max_merge_events))
+    if text_out_handle is not None:
+        longform_outputs.append(SummaryTextWriter(text_out_handle))
+    if html_out_handle is not None:
+        longform_outputs.append(SummaryHTMLWriter(html_out_handle))
+    if json_out_handle is not None:
+        longform_outputs.append(SummaryJSONWriter(json_out_handle, max_merge_events=max_merge_events))
 
     if stage_timings is None:
         stage_timings = []
@@ -1308,8 +1316,8 @@ def main(argv):
         def open_output(path):
             return None if path is None else output_stack.enter_context(output_file(path))
         out = open_output(params.text_out)
-        out_html_handle = open_output(params.html_out)
-        out_json_handle = open_output(params.json_out)
+        html_out_handle = open_output(params.html_out)
+        json_out_handle = open_output(params.json_out)
 
         progress_callback = None
         if params.progress or params.profile_stages:
@@ -1324,19 +1332,18 @@ def main(argv):
             _record_stage_timing(stage_timings, "load_matrix", stage_start, shape=matrix.shape, matrix_type=type(matrix).__name__)
 
         ### Run
-        if out is not None or out_html_handle is not None or out_json_handle is not None:
+        if out is not None or html_out_handle is not None or json_out_handle is not None:
             stage_start = perf_counter()
             matrix_report(
                 matrix,
-                out_text_handle=out,
-                out_html_handle=out_html_handle,
+                text_out_handle=out,
+                html_out_handle=html_out_handle,
                 knn_projection=params.knn_projection,
                 merge_impact_metric=params.merge_impact_metric,
-                profile_stages=params.profile_stages,
                 stage_timings=stage_timings,
                 progress_callback=progress_callback,
                 max_merge_events=params.max_merge_events,
-                out_json_handle=out_json_handle,
+                json_out_handle=json_out_handle,
             )
             if params.profile_stages:
                 _record_stage_timing(stage_timings, "matrix_report_total", stage_start)

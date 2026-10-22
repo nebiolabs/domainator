@@ -118,3 +118,45 @@ def test_streaming_matches_batch_on_negative_scores(lb, k, mst):
         ).to_csr().toarray()
 
         np.testing.assert_allclose(result, expected)
+
+
+@pytest.mark.parametrize("kwargs,message", [
+    ({"knn": 0}, "knn must be >= 1"),
+    ({}, "Select mst, knn, or both"),
+])
+def test_streaming_rejects_settings_that_keep_nothing(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        StreamingMstKnnAccumulator(3, **kwargs)
+
+
+def test_streaming_with_small_caps_matches_batch():
+    """Flushing the forest and trimming the neighbor lists early must not change the result."""
+    rng = np.random.default_rng(11)
+    n = 25
+    upper = np.triu(rng.integers(1, 20, size=(n, n)).astype(float), k=1)
+    data = upper + upper.T + np.diag(rng.integers(0, 3, size=n).astype(float))
+    accumulator = StreamingMstKnnAccumulator(n, mst=True, knn=2, mst_buffer_cap=3, knn_soft_cap=2)
+    for i in range(n):
+        for j in range(n):
+            if data[i, j] != 0:
+                accumulator.add_edge(i, j, float(data[i, j]))
+    expected = sparsify_matrix(_as_matrix(data), mst=True, knn=2).toarray()
+    np.testing.assert_array_equal(accumulator.to_csr().toarray(), expected)
+
+
+def test_streaming_keeps_the_largest_self_edge_on_the_diagonal():
+    accumulator = StreamingMstKnnAccumulator(2, mst=True)
+    for score in (3.0, 5.0, 4.0, 0.0):
+        accumulator.add_edge(1, 1, score)
+    accumulator.add_edge(0, 1, 2.0)
+    np.testing.assert_array_equal(accumulator.to_csr().toarray(), [[0.0, 2.0], [2.0, 5.0]])
+
+
+def test_symmetric_knn_edge_index_dict_k_bounds():
+    from domainator.ssn_edges import symmetric_knn_edge_index_dict
+
+    matrix = _as_matrix(np.array([[0.0, 1.0], [1.0, 0.0]]))
+    assert symmetric_knn_edge_index_dict(matrix, 0) == {}
+    assert symmetric_knn_edge_index_dict(matrix, 1) == {(0, 1): 1.0}
+    with pytest.raises(ValueError, match="k must be >= 0"):
+        symmetric_knn_edge_index_dict(matrix, -1)

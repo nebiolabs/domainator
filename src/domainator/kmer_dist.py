@@ -15,7 +15,7 @@ import scipy.sparse
 import tqdm
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_alphabet, add_input, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_alphabet, add_input, reject_stdin, tool_parser
 from domainator.sparse_scores import (
     StreamingCSRChunkBuilder,
     feed_chunk_to_accumulator,
@@ -43,7 +43,7 @@ from domainator.sparsify import (
 )
 from domainator.transform_matrix import transform_matrix
 from domainator.seqio import get_file_type, parse_seqfiles
-from domainator._mp import get_multiprocessing_context
+from domainator._mp import get_multiprocessing_context, resolve_cpu
 
 
 DEFAULT_PROTEIN_KSIZE = 5
@@ -572,19 +572,19 @@ def _resolve_ksize(molecule_type: str, nucleotide_kmers: bool, ksize: Optional[i
 def kmer_dist(
     input_path: str,
     *,
-    input_format: str,
-    reference: str,
-    reference_format: str,
-    max_hits_per_query: Optional[int],
-    metric: str,
-    mode: str,
-    cpu: int,
-    threshold: float,
-    alphabet: str,
-    ksize: Optional[int],
-    nucleotide_kmers: bool,
-    gene_call: Optional[str],
-    progress: bool,
+    input_format: Optional[str] = None,
+    reference: Optional[str] = None,
+    reference_format: Optional[str] = None,
+    max_hits_per_query: Optional[int] = None,
+    metric: str = "max_containment",
+    mode: str = "score",
+    cpu: int = 0,
+    threshold: float = 0,
+    alphabet: str = "protein",
+    ksize: Optional[int] = None,
+    nucleotide_kmers: bool = False,
+    gene_call: Optional[str] = None,
+    progress: bool = False,
     mst: bool = False,
     knn: Optional[int] = None,
 ) -> DataMatrix:
@@ -592,8 +592,16 @@ def kmer_dist(
 
     Returns a DataMatrix of ``mode`` values with a row per input and a column per reference;
     pass the same path as ``input_path`` and ``reference`` for a self-comparison. The options
-    mean the same as the ``domainator kmer_dist`` options with the same names.
+    mean the same as the ``domainator kmer_dist`` options with the same names. A format of None
+    is read from the file name; a ``reference`` of None compares ``input_path`` with itself; ``cpu``
+    0 means one thread per physical core.
     """
+    input_format = _resolve_sequence_file_type(input_path, input_format, "Input")
+    if reference is None:
+        reference, reference_format = input_path, input_format
+    else:
+        reference_format = _resolve_sequence_file_type(reference, reference_format, "Reference")
+    cpu = resolve_cpu(cpu)
     input_molecule_type = _resolve_molecule_type(input_path, input_format, alphabet)
     reference_molecule_type = _resolve_molecule_type(reference, reference_format, alphabet)
     if input_molecule_type != reference_molecule_type:
@@ -707,14 +715,6 @@ def main(argv):
     params = parser.parse_args(argv)
 
     reject_stdin(parser, [params.input, params.reference] if params.reference else [params.input])
-    input_type = _resolve_sequence_file_type(params.input, params.input_format, "Input")
-    if params.reference is None:
-        reference_path = params.input
-        reference_type = input_type
-    else:
-        reference_path = params.reference
-        reference_type = _resolve_sequence_file_type(reference_path, params.reference_format, "Reference")
-
     hdf, dense_text = resolve_matrix_outputs(params)
     if not 0 <= params.threshold <= 1:
         raise ValueError("--threshold must be between 0 and 1 for k-mer similarities.")
@@ -723,18 +723,16 @@ def main(argv):
     if params.gene_call is not None and params.nucleotide_kmers:
         warnings.warn("--gene_call has no effect when --nucleotide_kmers is supplied.")
 
-    cpu = resolve_cpu(params.cpu)
-
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     matrix = kmer_dist(
         params.input,
-        input_format=input_type,
-        reference=reference_path,
-        reference_format=reference_type,
+        input_format=params.input_format,
+        reference=params.reference,
+        reference_format=params.reference_format,
         max_hits_per_query=params.max_hits_per_query,
         metric=params.metric,
         mode=params.mode,
-        cpu=cpu,
+        cpu=params.cpu,
         threshold=params.threshold,
         alphabet=params.alphabet,
         ksize=params.ksize,

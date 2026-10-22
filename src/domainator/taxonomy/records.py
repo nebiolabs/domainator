@@ -8,6 +8,9 @@ from domainator.model import get_sources
 from domainator.taxonomy.ncbi import NCBITaxonomy
 
 
+_UNIDENTIFIED_TAXID = 32644  # "unidentified", get_taxid's default for records lacking a taxid
+
+
 class TaxonomyData:
     """
     Dataclass for storing pre_computed taxonomy data
@@ -37,11 +40,8 @@ class TaxonomyData:
     def __repr__(self):
         return str(self)
 
-def get_taxid(record:SeqRecord) -> Optional[int]:
-    """
-        returns 32644, "unidentified" if no taxid is found
-    """
-    taxid = 32644
+def get_taxid(record:SeqRecord) -> int:
+    """The record's NCBI taxid, or 32644 ("unidentified") if it has none."""
     if "ncbi_taxid" in record.annotations: # from SwissProt-style text file
         return int(record.annotations["ncbi_taxid"][0])
     elif " OX=" in record.description: # from SwissProt-style fasta file
@@ -59,10 +59,7 @@ def get_taxid(record:SeqRecord) -> Optional[int]:
                             return int(xref.split(":")[-1])
                         except ValueError:
                             pass
-    return taxid
-
-_UNIDENTIFIED_TAXID = 32644  # "unidentified", get_taxid's default for records lacking a taxid
-
+    return _UNIDENTIFIED_TAXID
 
 def _feature_taxon(feature) -> Optional[int]:
     for xref in feature.qualifiers.get("db_xref", []):
@@ -109,19 +106,6 @@ def source_taxids(record):
     return [t for t in (_feature_taxon(s) for s in get_sources(record)) if t is not None]
 
 
-def record_matches_taxonomy(record: SeqRecord, include_taxids, exclude_taxids, ncbi_taxonomy) -> bool:
-    taxid = get_taxid(record)
-    if taxid is None:
-        return False
-
-    lineage = set(ncbi_taxonomy.lineage(taxid))
-    if include_taxids and not lineage.intersection(include_taxids):
-        return False
-    if exclude_taxids and lineage.intersection(exclude_taxids):
-        return False
-    return True
-
-
 def compile_taxonomy_allowed(ncbi_taxonomy, include_taxids=None, exclude_taxids=None, taxonomy_expr=None):
     """Compile taxonomy filtering criteria into a frozenset of allowed taxids.
 
@@ -147,5 +131,5 @@ def filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, t
         return
     for record in records:
         taxid = get_taxid(record)
-        if taxid is not None and taxid in allowed:
+        if taxid in allowed:
             yield record

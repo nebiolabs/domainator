@@ -158,8 +158,8 @@ def _cluster_for_node(hierarchy, node_index, threshold):
         current = parent
 
 
-def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Union[str, float]] = None,
-                  cluster_id: Optional[int] = None, node: Optional[str] = None,
+def ssn_navigator(bundle: Dict[str, Any], *, query: str = "overview", threshold: Optional[Union[str, float]] = None,
+                  cluster: Optional[int] = None, node: Optional[str] = None,
                   min_size: int = 1, top_n: int = 50, members: bool = False,
                   max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS) -> Dict[str, Any]:
     """Answer a single navigation query against a loaded ``.dsnv`` bundle dict.
@@ -195,7 +195,7 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
             )
         return derived["stops"]
 
-    if mode == "overview":
+    if query == "overview":
         return {
             "name": bundle.get("name"),
             "domainator_version": bundle.get("domainator_version"),
@@ -208,7 +208,7 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
             **_merge_event_coverage(event_rows(), selected_rows(), max_merge_events),
         }
 
-    if mode == "thresholds":
+    if query == "thresholds":
         # The cut-points are one per selected merge event, so they inherit the cap. Say
         # so: picking a cut-point from a silently truncated list is the failure this
         # guards against. Raise --max_merge_events (0 for all of them) to see more.
@@ -217,7 +217,7 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
             **_merge_event_coverage(event_rows(), selected_rows(), max_merge_events),
         }
 
-    if mode == "clusters":
+    if query == "clusters":
         active = clusters_at_threshold(hierarchy, threshold)
         records = _cluster_records(hierarchy, active, min_size=min_size)
         singletons = sum(1 for r in records if r["size"] == 1)
@@ -232,8 +232,9 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
             result["truncated"] = len(records) - top_n
         return result
 
-    if mode == "cluster":
+    if query == "cluster":
         active = clusters_at_threshold(hierarchy, threshold)
+        cluster_id = cluster
         if node is not None:
             index_by_name = node_index_by_name(bundle)
             if node not in index_by_name:
@@ -248,7 +249,7 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
                     f"threshold {threshold}; use --query clusters to list valid ids."
                 )
         else:
-            raise ValueError("cluster mode requires either --cluster or --node.")
+            raise ValueError("--query cluster requires either --cluster or --node.")
 
         member_indices = component_members(hierarchy, cluster_id)
         result = {
@@ -263,9 +264,9 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
             result["members"] = [node_names[i] for i in member_indices]
         return result
 
-    if mode == "node":
+    if query == "node":
         if node is None:
-            raise ValueError("node mode requires --node.")
+            raise ValueError("--query node requires --node.")
         index_by_name = node_index_by_name(bundle)
         if node not in index_by_name:
             raise ValueError(f"Node '{node}' not found in the bundle.")
@@ -289,7 +290,7 @@ def ssn_navigator(bundle: Dict[str, Any], *, mode: str, threshold: Optional[Unio
             "memberships": memberships,
         }
 
-    raise ValueError(f"Unknown mode '{mode}'. Choose one of {MODES}.")
+    raise ValueError(f"Unknown query '{query}'. Choose one of {MODES}.")
 
 
 def build_parser():
@@ -303,7 +304,7 @@ def build_parser():
                              "clusters), matching the viewer's slider. Pass 'inf' for the "
                              "slider's fine end, where every node is its own cluster. Omit "
                              "it for the coarse end: one cluster per connected component.")
-    parser.add_argument("--cluster", type=int, default=None, dest="cluster_id",
+    parser.add_argument("--cluster", type=int, default=None,
                         help="Cluster id to describe (see --query clusters). For --query cluster.")
     parser.add_argument("--node", type=str, default=None,
                         help="Node id/name to describe or locate. For --query cluster/node.")
@@ -328,9 +329,9 @@ def main(argv):
     bundle = load_bundle(params.input)
     result = ssn_navigator(
         bundle,
-        mode=params.query,
+        query=params.query,
         threshold=params.threshold,
-        cluster_id=params.cluster_id,
+        cluster=params.cluster,
         node=params.node,
         min_size=params.min_size,
         top_n=params.top_n,

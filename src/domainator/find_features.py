@@ -22,6 +22,7 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.external import import_optional
+from domainator._mp import resolve_cpu
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 from domainator import DOMAIN_FEATURE_NAME
@@ -546,26 +547,27 @@ def find_features(
     motifs: Optional[List[str]] = None,
     partial: str = "include",
 ) -> Iterator[SeqRecord]:
-    """
-    Main function for feature detection.
-    
-    Yields annotated SeqRecords.
-    
+    """Annotate the CDSs (or proteins) of ``records`` with predicted features, yielding each record.
+
+    The features are TMbed's transmembrane regions and signal peptides, and matches to PROSITE
+    patterns. With neither, the records are still processed, which normalizes CDS translations.
+
     Args:
-        records: Iterator yielding SeqRecord objects
-        tmbed: Whether to run TMbed prediction
-        device: GPU device to use (None or "None" for CPU only)
-        cpu: Number of CPU threads (0 = use all available)
-        batch_size: Batch size for processing
-        gene_call: Gene calling mode ("all", "unannotated", or None)
-        model_dir: Base directory for all algorithm models (can be overridden per-algorithm)
-        tmbed_model_dir: Directory for TMbed's ProtT5 model (overrides model_dir if set)
-        motifs: List of PROSITE pattern strings to search for
-        partial: which CDSs/proteins to annotate, by fragment status: "include" (all, the default), "exclude" (skip fragments),
-            or "only" (only fragments). See utils.get_fragment_status. Records are written either way.
-    
+        records: the contigs or proteins (SeqRecords).
+        tmbed: run the TMbed prediction.
+        device: the device to run TMbed on (None or "None": the CPU).
+        cpu: number of CPU threads (0: one per physical core).
+        batch_size: how many residues to embed at a time.
+        gene_call: "all", "unannotated" or None, as for domainate.
+        model_dir: the directory for every algorithm's models (each can be overridden).
+        tmbed_model_dir: the directory for TMbed's ProtT5 model (overrides ``model_dir``).
+        motifs: PROSITE patterns to search for, e.g. "CX(2)C".
+        partial: which CDSs/proteins to annotate, by fragment status: "include" (all, the
+            default), "exclude" (skip fragments), or "only" (only fragments). See
+            partial.get_fragment_status. Records are yielded either way.
+
     Yields:
-        Annotated SeqRecord objects
+        The annotated records.
     """
     # Determine which algorithms to run
     run_tmbed = tmbed
@@ -595,7 +597,7 @@ def find_features(
             else:
                 effective_tmbed_model_dir = None
                 
-            tmbed_components = get_tmbed_predictor(device, cpu, effective_tmbed_model_dir)
+            tmbed_components = get_tmbed_predictor(device, resolve_cpu(cpu), effective_tmbed_model_dir)
             from tmbed.utils import get_md5
         except ImportError as e:
             warnings.warn(str(e))

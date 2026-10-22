@@ -293,12 +293,36 @@ def test_build_symmetric_neighbor_rankings_top_k_tie_order():
     assert np.allclose(rankings.score[start:end], np.array([10.0, 10.0, 8.0]))
 
 
+@pytest.mark.parametrize("max_k", [1, 2, 5, 40])
+def test_top_k_neighbor_rankings_are_the_full_rankings_cut_at_k(max_k):
+    """The top-k kernel keeps each row's first k neighbors of the full ranking, ties included."""
+    rng = np.random.default_rng(7)
+    n = 30
+    upper = np.triu(rng.integers(0, 6, size=(n, n)).astype(float), k=1)  # few distinct scores: many ties
+    upper[rng.random((n, n)) < 0.4] = 0
+    data = upper + upper.T
+    names = [str(i) for i in range(n)]
+    matrix = DataMatrix(data, names, names)
+
+    full = build_symmetric_neighbor_rankings(matrix)
+    top_k = build_symmetric_neighbor_rankings(matrix, max_k=max_k)
+    for row in range(n):
+        full_start, full_end = full.row_bounds(row)
+        start, end = top_k.row_bounds(row)
+        keep = min(max_k, full_end - full_start)
+        assert np.array_equal(top_k.target[start:end], full.target[full_start:full_start + keep])
+        assert np.array_equal(top_k.score[start:end], full.score[full_start:full_start + keep])
+
+
 @pytest.mark.parametrize(
     "kwargs,error_message",
     [
         ({"n_nodes": -1, "source": np.array([], dtype=np.int32), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "n_nodes must be >= 0"),
         ({"n_nodes": 2, "source": np.array([0], dtype=np.int32), "target": np.array([2], dtype=np.int32), "score": np.array([1.0])}, "less than n_nodes"),
         ({"n_nodes": 2, "source": np.array([1], dtype=np.int32), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "self edges"),
+        ({"n_nodes": 2, "source": np.array([[0]], dtype=np.int32), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "1-dimensional"),
+        ({"n_nodes": 2, "source": np.array([0, 0], dtype=np.int32), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "same length"),
+        ({"n_nodes": 2, "source": np.array([-1], dtype=np.int32), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, ">= 0"),
         ({"n_nodes": 3, "source": np.array([0, 1], dtype=np.int32), "target": np.array([1, 2], dtype=np.int32), "score": np.array([1.0, 2.0])}, "descending"),
     ],
 )
@@ -314,6 +338,10 @@ def test_sorted_undirected_edges_validates_invariants(kwargs, error_message):
         ({"offsets": np.array([1], dtype=np.int64), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "start at 0"),
         ({"offsets": np.array([0, 2, 1], dtype=np.int64), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "monotonically"),
         ({"offsets": np.array([0, 1], dtype=np.int64), "target": np.array([1], dtype=np.int32), "score": np.array([1.0])}, "less than the number of rows"),
+        ({"offsets": np.array([[0]], dtype=np.int64), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "1-dimensional"),
+        ({"offsets": np.array([0, -1, 0], dtype=np.int64), "target": np.array([], dtype=np.int32), "score": np.array([], dtype=float)}, "non-negative"),
+        ({"offsets": np.array([0, 2], dtype=np.int64), "target": np.array([0], dtype=np.int32), "score": np.array([1.0])}, "end at the length"),
+        ({"offsets": np.array([0, 1], dtype=np.int64), "target": np.array([-1], dtype=np.int32), "score": np.array([1.0])}, "target indices must be >= 0"),
     ],
 )
 def test_compact_neighbor_rankings_validates_invariants(kwargs, error_message):

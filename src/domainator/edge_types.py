@@ -4,7 +4,7 @@ These types have no dependency on :class:`~domainator.data_matrix.DataMatrix` an
 imported by both ``data_matrix`` and ``ssn_edges`` to avoid an import cycle.
 """
 from dataclasses import dataclass
-from typing import List, Tuple, Union
+from typing import Tuple
 
 import numpy as np
 
@@ -74,9 +74,6 @@ class CompactNeighborRankings:
         return int(self.offsets[row_idx]), int(self.offsets[row_idx + 1])
 
 
-NeighborRankings = Union[CompactNeighborRankings, List[List[Tuple[int, float]]]]
-
-
 def _empty_compact_neighbor_rankings(n_rows: int) -> CompactNeighborRankings:
     return CompactNeighborRankings(
         offsets=np.zeros(n_rows + 1, dtype=np.int64),
@@ -85,20 +82,10 @@ def _empty_compact_neighbor_rankings(n_rows: int) -> CompactNeighborRankings:
     )
 
 
-def _iter_neighbor_ranking_rows(neighbor_rankings: NeighborRankings):
-    if isinstance(neighbor_rankings, CompactNeighborRankings):
-        for row_idx in range(len(neighbor_rankings)):
-            start, end = neighbor_rankings.row_bounds(row_idx)
-            yield row_idx, neighbor_rankings.target[start:end], neighbor_rankings.score[start:end]
-        return
-
-    for row_idx, ranked_neighbors in enumerate(neighbor_rankings):
-        if len(ranked_neighbors) == 0:
-            yield row_idx, np.empty(0, dtype=np.int32), np.empty(0, dtype=float)
-            continue
-        row_target = np.fromiter((target_idx for target_idx, _ in ranked_neighbors), dtype=np.int32, count=len(ranked_neighbors))
-        row_score = np.fromiter((score for _, score in ranked_neighbors), dtype=float, count=len(ranked_neighbors))
-        yield row_idx, row_target, row_score
+def _iter_neighbor_ranking_rows(neighbor_rankings: CompactNeighborRankings):
+    for row_idx in range(len(neighbor_rankings)):
+        start, end = neighbor_rankings.row_bounds(row_idx)
+        yield row_idx, neighbor_rankings.target[start:end], neighbor_rankings.score[start:end]
 
 
 def _score_passes_lower_bound(score: float, lower_bound: float, include_equal: bool = False) -> bool:

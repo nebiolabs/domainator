@@ -3,7 +3,7 @@
    For matrices with any data type, can convert between hdf5 and dense text, or change the datatype.
 """
 
-from typing import Optional
+from typing import Optional, Union
 import warnings
 from jsonargparse import ActionConfigFile
 
@@ -128,12 +128,23 @@ def apply_lower_bound(array, lower_bound):
     return out
 
 
-def transform_matrix(array: scipy.sparse.csr_array, *, mode: str, row_lengths: Optional[np.ndarray] = None,
-                     col_lengths: Optional[np.ndarray] = None) -> scipy.sparse.csr_array:
+def transform_matrix(array: scipy.sparse.csr_array, *, mode: str = PASS_THROUGH_MODE, row_lengths: Optional[np.ndarray] = None,
+                     col_lengths: Optional[np.ndarray] = None) -> Union[scipy.sparse.csr_array, np.ndarray]:
+    """Return ``array`` with its scores converted to the values of ``mode``.
+
+    Args:
+        array: a matrix of scores.
+        mode: "none" or "score" (unchanged), "bool" (1 for every hit), "norm_score", "row_norm_score",
+            "score_dist", "efi_score" or "efi_score_dist"; see ``domainator transform_matrix
+            --help``.
+        row_lengths, col_lengths: the lengths of the row and column sequences, which the efi
+            modes need.
+
+    Returns:
+        The transformed matrix: a dense array for the distance modes (score_dist,
+        efi_score_dist), where pairs without a score are at the maximum distance, else sparse.
     """
-    Transform an array to a different mode.
-    """
-    if mode == "score":
+    if mode in (PASS_THROUGH_MODE, "score"):
         return array
     elif mode == "bool":
         return (array > 0).astype(np.int8)
@@ -151,7 +162,7 @@ def build_parser():
     add_matrix_output_arguments(parser, noun="transformed matrix")
 
     parser.add_argument("--mode", type=str, required=False, default=PASS_THROUGH_MODE, choices=[PASS_THROUGH_MODE] + list(MODES),
-                        help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)).")
+                        help="what kind of values should be in the output matrix. none: preserve the input values and data type, score: raw score, bool: 1 if a hit otherwise 0, score_dist: 1 - (score / min(row_max, col_max)), norm_score: score/min(row_max, col_max), row_norm_score: score/row_max, efi_score: -log10[2^(-score) * (input_seq_length * reference_seq_length)], efi_score_dist: 1 - (efi_score / min(row_max, col_max)).")
 
     parser.add_argument('--threshold', type=float, default=None, required=False,
                         help="Zero out all values less than or equal to this threshold after any mode transformation.")

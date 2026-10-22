@@ -472,29 +472,38 @@ def tax_data_to_hierarchy(tax_data):
 
     
 
-def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[TextIO], out_html_handle: Optional[TextIO],
-                   focus_domains: Optional[Set[str]] = None, co_occurrence_fraction_outfile: Optional[str] = None,
-                   co_occurrence_count_outfile: Optional[str] = None, report_taxonomy: bool = False,
-                   ncbi_taxonomy: Optional[NCBITaxonomy] = None, domains_table: Optional[str] = None,
-                   databases: Optional[Set[str]] = None, out_json_handle: Optional[TextIO] = None,
+def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[TextIO] = None,
+                   html_out_handle: Optional[TextIO] = None,
+                   domains: Optional[Set[str]] = None, co_occurrence_fraction_out: Optional[str] = None,
+                   co_occurrence_count_out: Optional[str] = None, taxonomy: bool = False,
+                   ncbi_taxonomy: Optional[NCBITaxonomy] = None, domains_tsv_out: Optional[str] = None,
+                   databases: Optional[Set[str]] = None, json_out_handle: Optional[TextIO] = None,
                    partial: str = "include") -> None:
-    """
+    """Write a summary of ``records``: contig and CDS counts, contig lengths and a table of the
+    domains found, to any of the text, HTML and JSON handles (each can be None).
 
-        Args:
-            partial: which CDSs/proteins to count, by fragment status: "include" (all, the default), "exclude" (skip fragments), or "only" (only fragments).
-                Protein records that are filtered out are skipped entirely. On nucleotide contigs, filtered CDSs and the domains on them are not counted,
-                but the contig is. See utils.get_fragment_status.
-
-        Returns:
-
+    Args:
+        records: the annotated contigs or proteins (SeqRecords).
+        text_out_handle, html_out_handle, json_out_handle: open text handles for the reports.
+        domains: focus domains: the report gives how often each other domain occurs with them,
+            and how far apart they are.
+        co_occurrence_fraction_out, co_occurrence_count_out: paths for domain-by-domain
+            co-occurrence matrices (fractions of contigs, or counts).
+        taxonomy: also summarize the records' taxonomy, using ``ncbi_taxonomy`` (an NCBITaxonomy).
+        domains_tsv_out: a path for the domain table as TSV.
+        databases: count only domains from these databases.
+        partial: which CDSs/proteins to count, by fragment status: "include" (all, the default),
+            "exclude" (skip fragments), or "only" (only fragments). Protein records that are
+            filtered out are skipped entirely. On nucleotide contigs, filtered CDSs and the
+            domains on them are not counted, but the contig is. See partial.get_fragment_status.
     """
     longform_outputs = list()
-    if out_text_handle is not None:
-        longform_outputs.append(SummaryTextWriter(out_text_handle))
-    if out_html_handle is not None:
-        longform_outputs.append(SummaryHTMLWriter(out_html_handle))
-    if out_json_handle is not None:
-        longform_outputs.append(SummaryJSONWriter(out_json_handle))
+    if text_out_handle is not None:
+        longform_outputs.append(SummaryTextWriter(text_out_handle))
+    if html_out_handle is not None:
+        longform_outputs.append(SummaryHTMLWriter(html_out_handle))
+    if json_out_handle is not None:
+        longform_outputs.append(SummaryJSONWriter(json_out_handle))
     
 
     num_contigs = 0
@@ -502,19 +511,19 @@ def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[Te
     num_partial_cdss = 0 # CDSs with '<' or '>' in their location
     num_fragment_proteins = 0 # protein records that are fragments (see utils.get_fragment_status)
     lengths = list() # contig lengths
-    domains = dict() # dict of dicts, domain_name: {count: int, description: str, correlations: dict, average_score: float, database: str} 
-    if focus_domains is None:
-        focus_domains = list()
+    domain_stats = dict() # dict of dicts, domain_name: {count: int, description: str, correlations: dict, average_score: float, database: str} 
+    if domains is None:
+        domains = list()
 
     domain_dists = dict() # dict of dicts of lists. focus_domain: other_domain: list_of_dists
-    for focus_domain in focus_domains:
+    for focus_domain in domains:
         domain_dists[focus_domain] = dict() # domain:list_of_dists
 
     taxa_data = dict() # dict of dicts, taxid: {count: int, data: TaxonomyData}
 
     for contig in records:
         if databases is not None:
-            contig = tuple(filter_domains((contig,), evalue=float("inf"), max_overlap=1, keep_databases=databases))[0]
+            contig = tuple(filter_domains((contig,), keep_databases=databases))[0]
 
         excluded_cds_ids = set() # cds_ids of CDSs filtered out by partial
         if partial != "include":
@@ -530,7 +539,7 @@ def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[Te
             num_fragment_proteins += 1
         contig_domains = dict() #dict of lists of locations.
         
-        if report_taxonomy:
+        if taxonomy:
             taxid = ncbi_taxonomy.normalized_taxid(get_taxid(contig))
             
             if taxid in taxa_data:
@@ -555,24 +564,24 @@ def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[Te
                     contig_domains[id] = list()
                 contig_domains[id].append(location)
                 
-                if id not in domains:
-                    domains[id] = {'count': 0, 'description': set(), 'correlations':dict(), 'avg score':0, 'database': set()}
+                if id not in domain_stats:
+                    domain_stats[id] = {'count': 0, 'description': set(), 'correlations':dict(), 'avg score':0, 'database': set()}
                 
-                domains[id]['database'].add(db) # TODO: maybe there is a better way to handle the same domain name occuring in different databases.
-                domains[id]['description'].add(description)
+                domain_stats[id]['database'].add(db) # TODO: maybe there is a better way to handle the same domain name occuring in different databases.
+                domain_stats[id]['description'].add(description)
 
-                domains[id]['count'] += 1                
+                domain_stats[id]['count'] += 1                
                 
                 # compute online avg score
-                inv_count = 1/domains[id]['count']
-                domains[id]['avg score'] = (inv_count * score) + ((1 - inv_count)*domains[id]['avg score'])
+                inv_count = 1/domain_stats[id]['count']
+                domain_stats[id]['avg score'] = (inv_count * score) + ((1 - inv_count)*domain_stats[id]['avg score'])
         
         # calculate correlations
         for domain1 in contig_domains:
             for domain2 in contig_domains:
-                if domain2 not in domains[domain1]['correlations']:
-                    domains[domain1]['correlations'][domain2] = 0
-                domains[domain1]['correlations'][domain2] += 1
+                if domain2 not in domain_stats[domain1]['correlations']:
+                    domain_stats[domain1]['correlations'][domain2] = 0
+                domain_stats[domain1]['correlations'][domain2] += 1
         
         # calculate domain distances
         for focus_domain in domain_dists:
@@ -586,19 +595,19 @@ def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[Te
                                 domain_dists[focus_domain][other_domain].append(domain_dist(focus_location, other_location))
     
     # convert database set to string
-    for domain in domains:
-        domains[domain]['database'] = '; '.join(domains[domain]['database'])
-        domains[domain]['description'] = '; '.join(domains[domain]['description'])
+    for domain in domain_stats:
+        domain_stats[domain]['database'] = '; '.join(domain_stats[domain]['database'])
+        domain_stats[domain]['description'] = '; '.join(domain_stats[domain]['description'])
     # Only calculate correlations for focus domains
     correlations_dict = {}
-    for domain1 in focus_domains:
-        if domain1 in domains:
+    for domain1 in domains:
+        if domain1 in domain_stats:
             # A new dict: the raw counts are still needed for the co-occurrence matrix outputs.
-            original_count = domains[domain1]['correlations'][domain1]
+            original_count = domain_stats[domain1]['correlations'][domain1]
             correlations_dict[domain1] = {domain2: 100 * (count / original_count)
-                                          for domain2, count in domains[domain1]['correlations'].items()}
+                                          for domain2, count in domain_stats[domain1]['correlations'].items()}
 
-    domain_table_df = pd.DataFrame.from_dict(domains, orient='index', columns=['database', 'count', "description", 'avg score']).sort_values("count", ascending=False)
+    domain_table_df = pd.DataFrame.from_dict(domain_stats, orient='index', columns=['database', 'count', "description", 'avg score']).sort_values("count", ascending=False)
     domain_table_df.reset_index(inplace=True, names='domain')
     domain_cooccurence_df = None
     if len(correlations_dict) > 0:
@@ -607,18 +616,18 @@ def summary_report(records: Iterable[SeqRecord], *, out_text_handle: Optional[Te
     for output in longform_outputs:
         output.write_header(num_contigs, num_cdss, lengths, num_partial_cdss=num_partial_cdss, num_fragment_proteins=num_fragment_proteins)
         output.write_domain_table(domain_table_df, domain_cooccurence_df)
-        if report_taxonomy:
+        if taxonomy:
             output.write_taxonomy(taxa_data)
         output.write_footer()
 
-    if co_occurrence_fraction_outfile is not None:
-        write_cooccurence_matrix(domains, co_occurrence_fraction_outfile, row_norm=True)
+    if co_occurrence_fraction_out is not None:
+        write_cooccurence_matrix(domain_stats, co_occurrence_fraction_out, row_norm=True)
     
-    if co_occurrence_count_outfile is not None:
-        write_cooccurence_matrix(domains, co_occurrence_count_outfile, row_norm=False)
+    if co_occurrence_count_out is not None:
+        write_cooccurence_matrix(domain_stats, co_occurrence_count_out, row_norm=False)
 
-    if domains_table is not None:
-        domain_table_df.to_csv(domains_table, sep="\t", index=False)
+    if domains_tsv_out is not None:
+        domain_table_df.to_csv(domains_tsv_out, sep="\t", index=False)
 
 def build_parser():
     parser = tool_parser(__doc__)
@@ -690,15 +699,15 @@ def main(argv):
             return None if path is None else outputs.enter_context(output_file(path))
         summary_report(
             parse_seqfiles(params.input, target_contigs),
-            out_text_handle=open_output(params.text_out),
-            out_html_handle=open_output(params.html_out),
-            focus_domains=selected_domains,
-            co_occurrence_fraction_outfile=params.co_occurrence_fraction_out,
-            co_occurrence_count_outfile=params.co_occurrence_count_out,
-            report_taxonomy=params.taxonomy,
+            text_out_handle=open_output(params.text_out),
+            html_out_handle=open_output(params.html_out),
+            domains=selected_domains,
+            co_occurrence_fraction_out=params.co_occurrence_fraction_out,
+            co_occurrence_count_out=params.co_occurrence_count_out,
+            taxonomy=params.taxonomy,
             ncbi_taxonomy=ncbi_taxonomy,
-            domains_table=params.domains_tsv_out,
+            domains_tsv_out=params.domains_tsv_out,
             databases=databases,
-            out_json_handle=open_output(params.json_out),
+            json_out_handle=open_output(params.json_out),
             partial=params.partial,
         )

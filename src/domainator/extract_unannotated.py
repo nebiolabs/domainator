@@ -25,21 +25,26 @@ from Bio.SeqRecord import SeqRecord
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
 def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
                         keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
-                        databases: Optional[Set[str]] = None, largest: bool = False, min_length: int = 0) -> Iterator[SeqRecord]:
-    """
+                        databases: Optional[Set[str]] = None, largest: bool = False, min_length: Optional[int] = None) -> Iterator[SeqRecord]:
+    """Yield the regions of the proteins in ``records`` that have no domain annotation.
 
-      input: 
-        records: iterator of SeqRecords
-        evalue: if not None then only select domains with evalue <= this parameter
-        min_score: if not None then only select domains with min_score >= this parameter
-        keep_direction: has no effect, because only protein sequences are supported. Kept for compatibility with extract_domains.
-        keep_name: by default, extracted regions will be renamed to note their original coordinates (see utils.region_id). set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.
-        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best hits written by domain_search).
-        databases: if not None, then only select domains from these databases. default: all databases.
-        largest: if True, then only select the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_length
-        min_length: if largest is True, then only select unannotated regions of at least this length from each protein. default: no cutoff.
+    Args:
+        records: protein SeqRecords (only proteins are supported).
+        evalue: count only domains with an e-value at most this as annotations. None: all.
+        min_score: count only domains with a score at least this as annotations. None: all.
+        keep_direction: has no effect, since only proteins are supported; kept for
+            compatibility with extract_domains.
+        keep_name: keep the proteins' names. By default, regions are renamed for their original
+            coordinates (see model.region_id). Careful: this can easily give duplicate names.
+        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best
+            hits written by domain_search).
+        databases: count only domains from these databases as annotations. None: all.
+        largest: yield only the largest unannotated region of each protein that is at least
+            ``min_length`` long.
+        min_length: yield only regions at least this long.
 
-      yields the extracted regions as SeqRecord objects
+    Yields:
+        The unannotated regions.
     """
     search_hits = check_annotation_type(annotation_type) == "domain_search"
     databases = set(databases) if databases is not None else None

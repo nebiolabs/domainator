@@ -340,57 +340,53 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
     return record, slice_location
 
 def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] = None, domains: Optional[Set[str]] = None,
-                  domain_expr: Optional[str] = None, cds_range: Tuple[int, int] = None,
-                  kb_range: Tuple[float, float] = None, whole_contig: bool = False, normalize_direction: bool = True,
-                  evalue: float = float("inf"), invert: bool = False, annotation_type: str = "domainator",
+                  domain_expr: Optional[str] = None, cds_range: Optional[Tuple[int, int]] = None,
+                  kb_range: Optional[Tuple[float, float]] = None, whole_contig: bool = False, normalize_direction: bool = True,
+                  evalue: Optional[float] = None, invert: bool = False, annotation_type: str = "domainator",
                   max_region_overlap: float = 1.0, strand: Optional[str] = None, _from_domain_search: bool = False,
                   _domain_search_negatives: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
                   unannotated: bool = False, include_nucleic_acids: bool = False, partial: str = "include",
                   ) -> Iterator[SeqRecord]:
-    """
+    """Yield the regions of ``records`` around the CDSs (or proteins) that are selected.
 
-        Args:
-            records: an interator over SeqRecord objects
+    A CDS is selected if it matches any of ``cds_ids``, ``domains``, ``domain_expr`` and
+    ``unannotated`` (or with none of them, every CDS), and then the ``strand`` and ``partial``
+    filters.
 
-            target_contigs: only extract regions from contigs with these names
+    Args:
+        records: the contigs or proteins (SeqRecords).
+        cds_ids: select the CDSs with these names.
+        domains: select the CDSs with a domain of one of these names.
+        domain_expr: select the CDSs whose domain names satisfy this boolean expression.
+        cds_range: (upstream, downstream) numbers of CDSs to extract around each selected CDS.
+        kb_range: (upstream, downstream) kb to extract around each selected CDS. Partially
+            enclosed features are truncated, with '<' or '>' marking the cut ends; partially
+            enclosed domain annotations are dropped.
+        whole_contig: extract the whole contig of each selected CDS (once, if it has several).
+        normalize_direction: reverse-complement regions whose selected CDS is on the reverse
+            strand.
+        evalue: ignore domains with an e-value above this (None: no cutoff).
+        invert: invert the ``cds_ids``, ``domains``, ``domain_expr`` and ``unannotated``
+            selection (the ranges are still applied as usual).
+        annotation_type: "domainator", or "domain_search" to also select the CDSs marked as
+            domain_search hits ("domain_search" turns on include_nucleic_acids).
+        max_region_overlap: the largest fraction of overlap allowed between two output regions
+            (1 or more: no filter).
+        strand: "f" or "r" to select only CDSs on that strand. None: both.
+        _from_domain_search: internal (domain_search): select the CDSs recorded as hits on the
+            record.
+        _domain_search_negatives: internal (domain_search): with _from_domain_search, domain
+            names to select against.
+        databases: consider only domains from these databases. None: all.
+        unannotated: select the CDSs with no domain annotations.
+        include_nucleic_acids: treat nucleotide (contig-level) annotations as CDSs, so they can
+            be selected too.
+        partial: select CDSs by fragment status: "include" (all, the default), "exclude" (skip
+            fragments), or "only" (only fragments). A CDS is a fragment if its location has '<'
+            or '>' (see partial.get_fragment_status). Not affected by invert.
 
-            cds_ids: extract CDSs with these names
-
-            domains: Select all CDSs containing domains with these names
-
-            domain_expr: Use boolean expressions for domain names to select CDSs
-            
-            cds_range: extract a contig region enclosing this many CDSs upstream and downstream of the selected CDSs
-
-            kb_range: extract a contig region enclosing this many kb upstream and downstream of the selected CDSs. Partially enclosed features are truncated, with '<' or '>' marking the cut ends; partially enclosed domain annotations are dropped.
-
-            whole_contig: extract the whole contigs containing the selected CDSs (if a single contig contains multiple selected CDSs, only one copy of the contig will be returned)
-
-            normalize_direction: if True then if a target cds occurs on the reverse strand, reverse-complement the extracted region before returning
-
-            evalue: ignore domains with evalue higher than this.
-
-            invert: if True then invert the cds_ids, domains, and domain_expr selection criteria (contigs and ranges are still selected normally, only CDS selection is inverted)
-
-            annotation_type: "domainator", or "domain_search" to also select CDSs marked as domain_search hits. "domain_search" activates include_nucleic_acids.
-
-            max_region_overlap: the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done.
-
-            strand: only extract regions around CDSs on the specified strand. If None, then extract regions around CDSs on both strands. forward strand is "f", reverse strand is "r".
-
-            _from_domain_search: if True then read cds_ids from rec.get_hit_scores
-
-            _domain_search_negatives (Optional[Set[str]]): if _from_domain_search is True, then this is a set of domain names to negatively select on.
-
-            databases: a set of database names to consider when filtering by domain. If None, then all databases will be considered.
-
-            include_nucleic_acids: if True, then pretend nucleic acid annotations are CDSs, and include them in the output if they match the selection criteria.
-
-            partial: select focus CDSs by fragment status: "include" (default, all), "exclude" (skip fragments), or "only" (only fragments).
-                A CDS is a fragment if its location has '<' or '>' (see utils.get_fragment_status). Not affected by invert.
-
-        Yields:
-            SeqRecords of the selected regions
+    Yields:
+        SeqRecords of the selected regions.
     """ 
     search_hits = check_annotation_type(annotation_type) == "domain_search"
     databases = set(databases) if databases is not None else None
@@ -656,7 +652,7 @@ def main(argv):
         kb_range=kb_range, 
         whole_contig=whole_contig, 
         normalize_direction=normalize_direction,
-        evalue=float("inf") if params.evalue is None else params.evalue,
+        evalue=params.evalue,
         annotation_type = params.annotation_type,
         invert = params.invert,
         max_region_overlap = params.max_region_overlap,

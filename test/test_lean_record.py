@@ -10,7 +10,7 @@ import warnings
 import pytest
 
 from domainator.partial import get_fragment_status
-from domainator.seqio import native_parser_available, parse_seqfiles, swap_name_id
+from domainator.seqio import get_file_type, native_parser_available, parse_seqfiles, swap_name_id
 from domainator import lean_record
 from domainator.lean_record import (
     LeanContig,
@@ -157,27 +157,55 @@ def test_native_lean_location_matches_biopython(loc, tmp_path):
 
 
 @native_only
-def test_lean_search_native_matches_parse_lean(shared_datadir):
-    """The peptides-only search path must materialize to the SAME record the native
-    per-feature parser builds (both are the Rust record builder), and its
-    cds_peptides indices must point at CDS features in the materialized record."""
+def test_lean_search_cds_peptides_index_cds_features(shared_datadir):
+    """The search path's cds_peptides indices point at CDS features of the materialized record."""
+    checked = 0
     for fn in ("206.gb", "pDONR201.gb", "Staph_phages.gb", "MT_nbs.gb"):
-        path = str(shared_datadir / fn)
-        ref = _collect_partial(lean_record.iter_lean_genbank_native(path, 0, -1, "protein"))
-        search = _collect_partial(lean_record.iter_lean_search_native(path, 0, -1, "protein"))
-        n = min(len(ref), len(search))
-        if n == 0:
+        for contig in _collect_partial(lean_record.iter_lean_search_native(str(shared_datadir / fn), 0, -1, "protein")):
+            materialized = lean_record.search_contig_to_lean(contig, set(), "protein")
+            for fidx, _peptide in contig.cds_peptides(set()):
+                assert materialized.features[fidx].type == "CDS"
+                checked += 1
+    assert checked > 0
+
+
+def _sequence_fixtures(datadir):
+    for path in sorted(datadir.rglob("*")):
+        try:
+            file_type = get_file_type(str(path)) if path.is_file() else None
+        except ValueError:
             continue
-        for i in range(n):
-            mat = lean_record.search_contig_to_lean(search[i], set(), "protein")
-            # parse_lean yields pre-swap; the search path is post-swap.
-            r = ref[i]
-            r.id, r.name = r.name, r.id
-            assert mat.id == r.id
-            assert mat.seq == r.seq
-            assert [_feat_key_lean(f) for f in mat.features] == [_feat_key_lean(f) for f in r.features]
-            for fidx, pep in search[i].cds_peptides(set()):
-                assert mat.features[fidx].type == "CDS"
+        if file_type in ("genbank", "fasta"):
+            yield path
+
+
+def _as_seqrecord(record):
+    if isinstance(record, lean_record.LEAN_SEARCH_TYPES):
+        record = lean_record.materialize_lean_search(record, None)
+    return lean_to_seqrecord(record) if isinstance(record, LeanContig) else record
+
+
+@native_only
+def test_lean_backend_matches_biopython_on_every_fixture(shared_datadir):
+    """parse_seqfiles gives the same records with the native parser (genbank_parser="lean",
+    including its Biopython fallback) as with Biopython, for every GenBank and FASTA fixture."""
+    warnings.simplefilter("ignore")
+    checked = 0
+    for path in _sequence_fixtures(shared_datadir):
+        try:
+            expected = list(parse_seqfiles([str(path)], genbank_parser="biopython"))
+        except Exception:
+            continue  # not a valid file for either parser
+        actual = [_as_seqrecord(r) for r in parse_seqfiles([str(path)], genbank_parser="lean")]
+        assert len(actual) == len(expected), path
+        for a, b in zip(actual, expected):
+            assert (a.id, a.name, a.description, str(a.seq)) == (b.id, b.name, b.description, str(b.seq)), path
+            assert [(f.type, str(f.location), f.qualifiers) for f in a.features] == \
+                   [(f.type, str(f.location), f.qualifiers) for f in b.features], (path, a.id)
+            for key in _LEAN_ANNOTATION_KEYS & b.annotations.keys():
+                assert a.annotations.get(key) == b.annotations[key], (path, a.id, key)
+            checked += 1
+    assert checked > 100
 
 
 @native_only

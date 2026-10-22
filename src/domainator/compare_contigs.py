@@ -7,10 +7,10 @@ Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Ka
 """
 import warnings
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles, write_genbank, copy_SeqRecord, open_writable_seqfile
-from domainator._mp import make_pool
+from domainator._mp import make_pool, resolve_cpu
 from collections import OrderedDict
 import scipy.cluster.hierarchy
 import math
@@ -516,7 +516,7 @@ def unique_records(records, progress=False):
 
 
 def compare_contigs(records: Iterable[SeqRecord], *, metrics: Iterable[ContigMetric], max_hits_per_query: Optional[int] = None, threshold: float = 0.0, progress: bool = False,
-                    cpu: int = 1, mst: bool = False, knn: Optional[int] = None) -> DataMatrix:
+                    cpu: int = 0, mst: bool = False, knn: Optional[int] = None) -> DataMatrix:
     """Score every pair of contigs by their domain content.
 
     Args:
@@ -525,13 +525,14 @@ def compare_contigs(records: Iterable[SeqRecord], *, metrics: Iterable[ContigMet
         max_hits_per_query: keep this many of the top combined scores per contig (None: all).
         threshold: round combined scores less than or equal to this down to zero.
         progress: show progress bars.
-        cpu: number of worker processes.
+        cpu: number of worker processes (0: one per physical core).
         mst, knn: keep only the maximum spanning tree and/or k-nearest-neighbor edges,
             computed while streaming (see ``domainator compare_contigs --mst/--knn``).
 
     Returns:
         A square DataMatrix of "score" values, with a row and column per unique contig id.
     """
+    cpu = resolve_cpu(cpu)
     sparsify = sparsify_requested(mst, knn)
     recs = unique_records(records, progress)
     row_names = [rec.id for rec in recs]

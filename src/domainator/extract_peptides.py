@@ -59,7 +59,8 @@ def dna_to_peptide_location(location, offset=0):
     end = _dna_to_peptide_position(location.end, offset)
     return FeatureLocation(start, end, strand=location.strand)
 
-def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float], domains: Optional[Set], cds_ids: Optional[Set[str]],
+def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, domains: Optional[Set] = None,
+                     cds_ids: Optional[Set[str]] = None,
                      keep_cds_feature: bool = True, cds_id_type: str = "name", annotation_type: str = "domainator",
                      strand: Optional[str] = None, unannotated: bool = False, _from_domain_search: bool = False,
                      extract_all: bool = False, invert: bool = False, _domain_search_negatives: Optional[Set[str]] = None,
@@ -70,7 +71,7 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float], d
         Yields the extracted peptides as SeqRecord objects.
         Args:
             records: an iterable of SeqRecords
-            evalue: the evalue cutoff for domain annotations to be put onto the new genbank file
+            evalue: the evalue cutoff for domain annotations to be put onto the new genbank file (None: no cutoff)
             domains: only extract peptides containing these domains
             cds_ids: only consider peptides from cdss with these names
             keep_cds_feature: if True, keep the CDS feature on the peptide record. If False, remove it.
@@ -258,7 +259,7 @@ def main(argv):
     # Run
     extracted_peptides_iterator = extract_peptides(
                     parse_seqfiles(genbanks, target_contigs),
-                    evalue=float("inf") if params.evalue is None else params.evalue,
+                    evalue=params.evalue,
                     domains=target_domains,
                     cds_ids=target_cdss,
                     keep_cds_feature=True,

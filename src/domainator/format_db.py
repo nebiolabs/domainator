@@ -26,9 +26,9 @@ from collections import namedtuple
 
 from jsonargparse import ActionConfigFile
 
-from domainator.cli.common import add_input, reject_stdin, resolve_cpu, tool_parser
+from domainator.cli.common import add_input, reject_stdin, tool_parser
 from domainator import db_index, bgzf_compress
-from domainator._mp import make_pool
+from domainator._mp import make_pool, resolve_cpu
 from domainator.offsets import get_offsets
 from domainator.seqio import detect_compression, get_file_type, open_seqfile
 from domainator.output_guardrails import make_temporary_output_path
@@ -209,12 +209,30 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, name, level,
 
 
 def format_db(inputs: List[str], *, shards: Optional[int] = None, compress: bool = False, index: bool = False,
-              output_dir: Optional[str] = None, name: Optional[str] = None, cpu: int = 1, level: int = 6,
-              force: bool = False, log: TextIO = sys.stderr) -> List[str]:
-    """Shard / compress / index domain_search databases. Returns the list of final
-    output paths produced (or confirmed). At least one of ``shards``, ``compress``,
-    or ``index`` must be requested. ``name`` renames the output database (its format
-    and compression extensions are preserved); it requires a single input."""
+              output_dir: Optional[str] = None, name: Optional[str] = None, cpu: int = 0, level: int = 6,
+              force: bool = False, log_out_handle: TextIO = sys.stderr) -> List[str]:
+    """Shard, compress and/or index domain_search databases, and return the output paths.
+
+    At least one of ``shards``, ``compress`` and ``index`` must be requested.
+
+    Args:
+        inputs: GenBank or FASTA database files (plain, gzip or BGZF).
+        shards: split each input into this many shards, balanced by record count.
+        compress: write BGZF (block-gzip) output.
+        index: write a .didx offset index for each output file.
+        output_dir: write the outputs here. None: next to each input.
+        name: a new base name for the output database (its format and compression extensions
+            are kept). Requires a single input.
+        cpu: number of parallel workers (also the BGZF compressor's threads). 0: one per physical
+            core.
+        level: the BGZF compression level (1-12).
+        force: overwrite existing outputs and rebuild indexes instead of skipping them.
+        log_out_handle: where to write the log.
+
+    Returns:
+        The output paths written (or found up to date).
+    """
+    cpu = resolve_cpu(cpu)
     if shards is None and not compress and not index:
         raise ValueError("Nothing to do: request at least one of --shards, --compress, or --index.")
     if name is not None:
@@ -231,7 +249,7 @@ def format_db(inputs: List[str], *, shards: Optional[int] = None, compress: bool
         for input_path in inputs:
             tasks, working_temp = _plan_input(
                 input_path, shards=shards, compress=compress, index=index,
-                output_dir=output_dir, name=name, level=level, force=force, log=log)
+                output_dir=output_dir, name=name, level=level, force=force, log=log_out_handle)
             all_tasks.extend(tasks)
             if working_temp:
                 working_temps.append(working_temp)
@@ -252,7 +270,7 @@ def format_db(inputs: List[str], *, shards: Optional[int] = None, compress: bool
                 os.remove(tmp)
 
     for path, status in results:
-        print(f"{status}\t{path}", file=log)
+        print(f"{status}\t{path}", file=log_out_handle)
     return [path for path, _ in results]
 
 
@@ -296,7 +314,7 @@ def main(argv):
         format_db(
             params.input, shards=params.shards, compress=params.compress, index=params.index,
             output_dir=params.output_dir, name=params.name, cpu=cpu, level=params.level,
-            force=params.force, log=log,
+            force=params.force, log_out_handle=log,
         )
     finally:
         if params.log_out is not None:
