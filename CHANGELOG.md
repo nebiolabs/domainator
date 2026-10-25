@@ -71,3 +71,6 @@ lists every change from 0.x.
   now gets them once.
 - domain_search's `--batch_size` set the partition size but not how many CDSs were searched at
   once.
+- db_download `--db uniprot` and `--db uniprot_gb` wrote only TrEMBL: the TrEMBL download
+  overwrote the SwissProt records already written. `--max_records` now caps the total across
+  both rather than each.

@@ -645,55 +645,59 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
 
 ##### Uniprot #####
 
-def download_and_convert_uniprot_dat(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
+def download_and_convert_uniprot_dat(url, output_handle, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
+    """Append the records of a UniProt .dat.gz file to output_handle as GenBank. Returns the number of records written."""
+    recs_written = 0
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
-        with open(output_file_path, "w") as output_handle:
-            with gzip.open(response.raw, "rt") as gzipped_file:
-                recs_written = 0
-                records = tqdm.tqdm(SeqIO.parse(gzipped_file, "swiss"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
-                if include_taxids or exclude_taxids or taxonomy_expr:
-                    records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
-                
-                for record in records:
-                    # fragment status from the "Flags: Fragment" description and NON_TER features
-                    if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial):
-                        continue
-                    features = [SeqFeature(FeatureLocation(0, len(record)), type="source", qualifiers={"db_xref": f"taxon:{record.annotations['ncbi_taxid'][0]}"})]
-                    for feature in record.features:
-                        skip = False
-                        for part in feature.location.parts:
-                            if isinstance(part.start, UnknownPosition) or isinstance(part.end, UnknownPosition):
-                                skip = True
-                                break
-                        if not skip:
-                            features.append(feature)
-                    record.features = features
-                    write_genbank((record,), output_handle)
-                    recs_written += 1
-                    if num_recs is not None and recs_written >= num_recs:
-                        break
+        with gzip.open(response.raw, "rt") as gzipped_file:
+            records = tqdm.tqdm(SeqIO.parse(gzipped_file, "swiss"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
+            if include_taxids or exclude_taxids or taxonomy_expr:
+                records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
 
-def download_uniprot_fasta(url, output_file_path, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
+            for record in records:
+                # fragment status from the "Flags: Fragment" description and NON_TER features
+                if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial):
+                    continue
+                features = [SeqFeature(FeatureLocation(0, len(record)), type="source", qualifiers={"db_xref": f"taxon:{record.annotations['ncbi_taxid'][0]}"})]
+                for feature in record.features:
+                    skip = False
+                    for part in feature.location.parts:
+                        if isinstance(part.start, UnknownPosition) or isinstance(part.end, UnknownPosition):
+                            skip = True
+                            break
+                    if not skip:
+                        features.append(feature)
+                record.features = features
+                write_genbank((record,), output_handle)
+                recs_written += 1
+                if num_recs is not None and recs_written >= num_recs:
+                    break
+    return recs_written
+
+def download_uniprot_fasta(url, output_handle, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
+    """Append the records of a UniProt .fasta.gz file to output_handle. Returns the number of records written."""
+    recs_written = 0
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
-        with open(output_file_path, "w") as output_handle:
-            with gzip.open(response.raw, "rt") as gzipped_file:
-                recs_written = 0
-                records = tqdm.tqdm(parse_seqfiles([gzipped_file], filetype_override="fasta"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
-                if include_taxids or exclude_taxids or taxonomy_expr:
-                    records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
-                for record in records:
-                    if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial): # " (Fragment)" header
-                        continue
-                    SeqIO.write(record, output_handle, "fasta")
-                    recs_written += 1
-                    if num_recs is not None and recs_written >= num_recs:
-                        break
+        with gzip.open(response.raw, "rt") as gzipped_file:
+            records = tqdm.tqdm(parse_seqfiles([gzipped_file], filetype_override="fasta"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
+            if include_taxids or exclude_taxids or taxonomy_expr:
+                records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
+            for record in records:
+                if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial): # " (Fragment)" header
+                    continue
+                SeqIO.write(record, output_handle, "fasta")
+                recs_written += 1
+                if num_recs is not None and recs_written >= num_recs:
+                    break
+    return recs_written
 
 
 UNIPROT_DBS = {"swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}
 FASTA_DBS = {"swissprot", "trembl", "uniprot"}
+UNIPROT_PARTS = {"swissprot": ["sprot"], "trembl": ["trembl"], "uniprot": ["sprot", "trembl"]}
+"""The UniProt release files (uniprot_<part>.dat.gz / .fasta.gz) that make up each UniProt database."""
 """Databases downloaded as FASTA; all others are downloaded as GenBank."""
 GENBANK_DBS = (UNIPROT_DBS - FASTA_DBS) | {"ncbi_complete_genome_proks", "ncbi_complete_genome_nonredundant_proks", "ncbi_representative_proks",
                                         "ncbi_representative_all", "ncbi_nonredundant_proks", "ncbi_nonredundant_all", "ncbi_all"}
@@ -753,50 +757,30 @@ def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_t
     )
 
 
-    if db.lower() in {"swissprot_gb", "uniprot_gb"}:
-        download_and_convert_uniprot_dat(
-            "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz",
-            output,
-            include_taxids,
-            exclude_taxids,
-            ncbi_taxonomy,
-            num_recs=max_records,
-            taxonomy_expr=taxonomy_expr,
-            partial=partial,
-        )
-    if db.lower() in {"trembl_gb", "uniprot_gb"}:
-        download_and_convert_uniprot_dat(
-            "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.dat.gz",
-            output,
-            include_taxids,
-            exclude_taxids,
-            ncbi_taxonomy,
-            num_recs=max_records,
-            taxonomy_expr=taxonomy_expr,
-            partial=partial,
-        )
-    if db.lower() in {"swissprot", "uniprot"}:
-        download_uniprot_fasta(
-            "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz",
-            output,
-            include_taxids,
-            exclude_taxids,
-            ncbi_taxonomy,
-            num_recs=max_records,
-            taxonomy_expr=taxonomy_expr,
-            partial=partial,
-        )
-    if db.lower() in {"trembl", "uniprot"}:
-        download_uniprot_fasta(
-            "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz",
-            output,
-            include_taxids,
-            exclude_taxids,
-            ncbi_taxonomy,
-            num_recs=max_records,
-            taxonomy_expr=taxonomy_expr,
-            partial=partial,
-        )
+    if db.lower() in UNIPROT_DBS:
+        # uniprot and uniprot_gb are SwissProt followed by TrEMBL, written to the same file.
+        parts = UNIPROT_PARTS[db.lower().removesuffix("_gb")]
+        if db.lower() in FASTA_DBS:
+            download, extension = download_uniprot_fasta, "fasta"
+        else:
+            download, extension = download_and_convert_uniprot_dat, "dat"
+        remaining = max_records
+        with open(output, "w") as output_handle:
+            for part in parts:
+                if remaining is not None and remaining <= 0:
+                    break
+                written = download(
+                    f"https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_{part}.{extension}.gz",
+                    output_handle,
+                    include_taxids,
+                    exclude_taxids,
+                    ncbi_taxonomy,
+                    num_recs=remaining,
+                    taxonomy_expr=taxonomy_expr,
+                    partial=partial,
+                )
+                if remaining is not None:
+                    remaining -= written
 
     if db.lower() == "ncbi_complete_genome_proks":
         download_ncbi(

@@ -394,6 +394,29 @@ def test_uniprot_download_partial(monkeypatch, tmp_path, db, payload, partial, e
         assert get_fragment_status(records[0]) == "N" # NON_TER on residue 1 survives the conversion to GenBank
 
 
+def _split_uniprot_payload(payload):
+    """The first record of a mocked UniProt payload for SwissProt, the second for TrEMBL."""
+    if payload.startswith(">"):
+        sprot, trembl = payload.split("\n>")
+        return sprot + "\n", ">" + trembl
+    sprot, trembl, _ = payload.split("//\n")
+    return sprot + "//\n", trembl + "//\n"
+
+
+@pytest.mark.parametrize("db,payload", [("uniprot", _UNIPROT_FASTA), ("uniprot_gb", _UNIPROT_DAT)])
+@pytest.mark.parametrize("max_records,expected", [(None, ["A0A001", "A0A002"]), (1, ["A0A001"]), (2, ["A0A001", "A0A002"])])
+def test_uniprot_download_includes_swissprot_and_trembl(monkeypatch, tmp_path, db, payload, max_records, expected):
+    sprot, trembl = _split_uniprot_payload(payload)
+    monkeypatch.setattr(db_download.requests, "get", lambda url, stream=True: _FakeResponse(sprot if "uniprot_sprot" in url else trembl))
+    outfile = tmp_path / ("out.gb" if db.endswith("_gb") else "out.fasta")
+    args = ["--db", db, "--genbank_out" if db.endswith("_gb") else "--fasta_out", str(outfile), "--no_taxonomy_update"]
+    if max_records is not None:
+        args += ["--max_records", str(max_records)]
+    db_download.main(args)
+    records = list(parse_seqfiles([str(outfile)]))
+    assert [accession for record in records for accession in ("A0A001", "A0A002") if accession in record.id + record.name] == expected
+
+
 def test_uniprot_download_partial_rejects_ncbi(tmp_path):
     with pytest.raises(ValueError, match="UniProt"):
         db_download.db_download(None, output=str(tmp_path / "out.gb"), include_taxids=None, exclude_taxids=None, db="ncbi_all", gene_call=None, max_records=None, ncbi_summary=None, before=None, after=None, partial="exclude")
