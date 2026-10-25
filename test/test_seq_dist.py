@@ -220,6 +220,26 @@ def test_seq_dist_progress_flag(shared_datadir):
         assert (dense_matrix.toarray() > 0).sum() == 20
 
 
+def test_seq_phmmer_all_vs_all(shared_datadir):
+    # phmmer runs the references as queries, so hits arrive grouped by reference, not by input.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.hdf5"
+
+        seq_dist.main([
+            "-i", str(shared_datadir / "FeSOD_20.fasta"),
+            "-r", str(shared_datadir / "FeSOD_20.fasta"),
+            "--hdf_out", out,
+            "--algorithm", "hmmer",
+            "--mode", "score",
+            "--cpu", "2",
+        ])
+
+        out_table = DataMatrix.from_file(out)
+        assert out_table.shape == (20, 20)
+        assert (out_table.toarray() > 0).sum() > 20
+        assert (out_table.toarray().diagonal() > 0).all()
+
+
 def test_seq_hmmsearch_progress_flag(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.hdf5"

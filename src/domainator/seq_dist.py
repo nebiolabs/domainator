@@ -705,7 +705,7 @@ def _fasta_and_index(input_path, input_format, output_path):
     return output_path, convert_to_fasta(input_path, output_path)
 
 
-def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_type=None, query_order=None):
+def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, query_order=None):
     if algorithm.startswith("diamond"):
         return _GroupedQuerySparseMaxResultBuilder(
             query_name_to_idx,
@@ -721,14 +721,8 @@ def _make_result_builder(algorithm, query_name_to_idx, db_name_to_idx, search_ty
             stream_name="hmmer_compare result stream",
         )
 
-    if algorithm == "hmmer" and search_type == "phmmer":
-        return _GroupedQuerySparseMaxResultBuilder(
-            query_name_to_idx,
-            db_name_to_idx,
-            stream_name="phmmer result stream",
-            expected_query_order=query_order,
-        )
-
+    # hmmsearch and phmmer run the references as queries, so their hits arrive grouped by
+    # reference rather than by input.
     return _SparseMaxResultBuilder(query_name_to_idx, db_name_to_idx)
 
 
@@ -776,7 +770,6 @@ def seq_dist(input_path: str, *, input_format: Optional[str] = None, reference: 
         if algorithm != "hmmer_compare":
             algorithm = "hmmer_compare"
             warnings.warn(f"Input and reference are both hmm files, but algorithm is not hmmer_compare. Changing algorithm to hmmer_compare.")
-    search_type = None
     with tempfile.TemporaryDirectory() as tmpdir:
         # each of these needs to set query_names, db_names, and results_table
         
@@ -875,7 +868,6 @@ def seq_dist(input_path: str, *, input_format: Optional[str] = None, reference: 
                 algorithm,
                 query_name_to_idx,
                 db_name_to_idx,
-                search_type=search_type,
                 query_order=query_idx_to_name,
             )
 
