@@ -57,7 +57,7 @@ def _build_embedded_viewer(out_dir):
     return html_file
 
 
-def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical=None):
+def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical=None, color_table=None):
     """Build a viewer carrying metadata so coloring can be exercised.
 
     The matrix is the same 6-node A-F graph as ``_build_embedded_viewer``; a
@@ -100,6 +100,10 @@ def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical
     ]
     if categorical:
         args += ["--categorical", *categorical]
+    if color_table:
+        color_table_file = out_dir / "colors.tsv"
+        color_table_file.write_text(color_table)
+        args += ["--color_table", str(color_table_file)]
     build_ssn_viewer.main(args)
     return html_file
 
@@ -158,6 +162,15 @@ def numeric_categorical_viewer_html(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
+def color_table_viewer_html(tmp_path_factory):
+    """A viewer built with --color_table; gamma is left out of the table."""
+    return _build_embedded_viewer_with_metadata(
+        tmp_path_factory.mktemp("ssn_viewer_color_table"),
+        color_table="alpha\tcc0000\nbeta\t00cc00\n",
+    )
+
+
+@pytest.fixture(scope="module")
 def many_cat_viewer_html(tmp_path_factory):
     return _build_embedded_viewer_many_categories(
         tmp_path_factory.mktemp("ssn_viewer_many")
@@ -212,6 +225,12 @@ def meta_page(meta_viewer_html):
 def numeric_categorical_page(numeric_categorical_viewer_html):
     """A loaded page whose numeric column defaults to discrete coloring."""
     yield from _yield_loaded_page(numeric_categorical_viewer_html)
+
+
+@pytest.fixture
+def color_table_page(color_table_viewer_html):
+    """A loaded page whose color column starts from a --color_table."""
+    yield from _yield_loaded_page(color_table_viewer_html)
 
 
 @pytest.fixture
@@ -525,6 +544,26 @@ def test_default_color_by_paints_on_load(meta_page):
     colors = page.evaluate("state.nodeColorCache.slice()")
     assert len(set(colors)) == 3, colors
     assert colors == page.evaluate("state.bundle.graph.nodes.map((_, i) => nodeColor(i))")
+    assert page.pageerrors == []
+
+
+def test_bundle_color_table_colors_on_load(color_table_page):
+    """--color_table colors the --color_by column on load; values it leaves out are gray,
+    and "Reset to defaults" returns to the table rather than the named palette."""
+    page = color_table_page
+    expected = {"alpha": "#CC0000", "beta": "#00CC00", "gamma": "#BFBFBF"}
+    families = page.evaluate("state.bundle.graph.nodes.map((_, i) => metadataValue(i, 'family'))")
+    assert page.evaluate("state.nodeColorCache.slice()") == [expected[f] for f in families]
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert _saved_color_table(page) == expected
+
+    swatch = page.locator("#color-picker-swatch-list input[type=color]").first
+    swatch.fill("#0000ff")
+    swatch.dispatch_event("input")
+    assert _saved_color_table(page) != expected
+    page.click("#color-picker-reset")
+    assert _saved_color_table(page) == expected
     assert page.pageerrors == []
 
 

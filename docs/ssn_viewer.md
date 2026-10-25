@@ -67,6 +67,7 @@ domainator build_ssn_viewer -i scores.hdf5 \
 | `-o PATH` | Write the `.dsnv` bundle on its own (for `domainator ssn_navigator`, or to load into an existing shell page). |
 | `--metadata A.tsv B.tsv` | Tab-separated tables keyed by node id in the first column. Several are merged left-to-right. Column types are inferred as text, integer or float. |
 | `--color_by`, `--label_by` | The columns the viewer selects on open. Both are changeable in the UI. |
+| `--color_table PATH` | A two-column TSV (value, hex color; no header), the same file `build_ssn --color_table` reads, giving the `--color_by` column its starting colors. Values not in the table are gray, and a numeric column is colored as categories. Recorded in the bundle as `defaults.color_table`; "Reset to defaults" in the color picker returns to it. |
 | `--categorical COL ...` | Numeric columns to color as discrete categories rather than a gradient — cluster numbers, plasmid groups, anything where the number is a name. Toggleable per column later. |
 | `--subset`, `--subset_file` | Restrict to a list of node ids before building. This is the right way to narrow a network when the subset is not MST-connected (see [Saving an extraction](#saving-an-extraction)). |
 | `--merge_impact_metric` | What the split plot's y-axis measures: `min_child` (default; the node count of the smaller piece) or `product` (the product of the two piece sizes). Recorded as the bundle's default. |

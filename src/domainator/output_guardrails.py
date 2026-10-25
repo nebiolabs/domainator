@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import tempfile
+import secrets
 
 from domainator.errors import OutputSizeLimitExceeded
 
@@ -140,13 +140,18 @@ def enforce_matrix_output_limit(
     return projected_bytes
 
 
-def make_temporary_output_path(target_path: str) -> str:
-    """Create a temporary output path in the target directory."""
+def make_temporary_output_path(target_path: str, suffix: str = ".tmp") -> str:
+    """Create an empty temporary file next to ``target_path`` and return its path.
+
+    Unlike ``tempfile.mkstemp`` (always mode 0600), the file gets the permissions a newly created
+    output would (0666 minus the umask), so they survive the rename into place.
+    """
     target = Path(target_path)
-    file_descriptor, temp_path = tempfile.mkstemp(
-        prefix=f".{target.name}.",
-        suffix=".tmp",
-        dir=str(target.parent),
-    )
-    os.close(file_descriptor)
-    return temp_path
+    while True:
+        temp_path = target.parent / f".{target.name}.{secrets.token_hex(4)}{suffix}"
+        try:
+            file_descriptor = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        except FileExistsError:
+            continue
+        os.close(file_descriptor)
+        return str(temp_path)

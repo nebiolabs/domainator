@@ -5999,6 +5999,16 @@
    "required": false
   },
   {
+   "name": "color_table",
+   "flags": [
+    "--color_table"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
    "name": "label_by",
    "flags": [
     "--label_by"

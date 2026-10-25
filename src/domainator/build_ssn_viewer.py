@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 from pathlib import Path
-from typing import List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Union
 
 import pandas as pd
 from jsonargparse import ActionConfigFile
@@ -14,6 +14,7 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator import __version__
 from domainator.build_ssn import subset_matrix_by_labels
+from domainator.colors import normalize_color_hex, read_color_table
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import MaxTree
 from domainator.output_guardrails import (
@@ -106,6 +107,7 @@ def build_ssn_viewer(
     subset_labels: Optional[Set[str]] = None,
     merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
     color_by: Optional[str] = None,
+    color_table: Optional[Dict[str, str]] = None,
     label_by: Optional[str] = None,
     categorical: Optional[List[str]] = None,
     name: Optional[str] = None,
@@ -122,6 +124,9 @@ def build_ssn_viewer(
         subset_labels: only include these matrix labels (all of them if None).
         merge_impact_metric: how the split chart measures a merge (MERGE_IMPACT_CHOICES).
         color_by: the metadata column the viewer colors nodes by at first.
+        color_table: maps ``color_by`` values to hex colors, the column's starting palette in
+            the viewer. Values not in it are colored gray, as in build_ssn. Requires color_by,
+            and a numeric color_by column is colored as categories.
         label_by: the metadata column the viewer labels nodes by at first.
         categorical: numeric metadata columns to color as categories rather than as a gradient.
         name: the network's name, shown in the viewer.
@@ -149,6 +154,13 @@ def build_ssn_viewer(
     for column_name in categorical_columns:
         if column_name not in node_data.columns:
             raise ValueError(f"Requested categorical column '{column_name}' was not found in the merged metadata.")
+    if color_table is not None:
+        if color_by is None:
+            raise ValueError("color_table requires color_by, the metadata column the table colors.")
+        color_table = {str(value): normalize_color_hex(color) for value, color in color_table.items()}
+        # A color table is a discrete mapping, so a numeric column it colors is a categorical one.
+        if _infer_metadata_type(node_data[color_by]) != "str" and color_by not in categorical_columns:
+            categorical_columns.append(color_by)
 
     tree = MaxTree(matrix)
     rows = list(matrix.rows)  # save label names before freeing matrix
@@ -183,6 +195,10 @@ def build_ssn_viewer(
             "categorical_columns": categorical_columns,
         },
     }
+    if color_table is not None:
+        # value -> "#RRGGBB" for the color_by column; the viewer starts from it in place of
+        # its default palette. Optional, so bundles built without one are unchanged.
+        bundle["defaults"]["color_table"] = color_table
     return _json_ready(bundle)
 
 
@@ -243,6 +259,8 @@ def build_parser():
                         help="Text file containing matrix labels to retain.")
     parser.add_argument("--color_by", type=str, default=None,
                         help="Record a default metadata field for node coloring in the viewer bundle.")
+    parser.add_argument("--color_table", type=str, default=None,
+                        help="tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000. Sets the starting colors of the --color_by column in the viewer; values not in the table are gray. Requires --color_by.")
     parser.add_argument("--label_by", type=str, default=None,
                         help="Record a default metadata field for node labels in the viewer bundle.")
     parser.add_argument("--categorical", type=str, nargs="+", required=False, default=None,
@@ -274,6 +292,8 @@ def main(argv):
         parser.error("--embed_data requires --html_out.")
     if params.dsnv_out is None and not params.embed_data:
         parser.error("When -i/--input is supplied, provide -o/--dsnv_out or --embed_data.")
+    if params.color_table is not None and params.color_by is None:
+        parser.error("--color_table requires --color_by.")
     check_outputs(parser, params, ["dsnv_out", "html_out"])
 
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
@@ -293,6 +313,7 @@ def main(argv):
         subset_labels=subset_labels,
         merge_impact_metric=params.merge_impact_metric,
         color_by=params.color_by,
+        color_table=read_color_table(params.color_table) if params.color_table is not None else None,
         label_by=params.label_by,
         categorical=params.categorical,
         name=bundle_name,

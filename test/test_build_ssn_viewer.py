@@ -147,6 +147,64 @@ def test_build_ssn_viewer_records_categorical_columns():
         assert {"name": "count", "type": "int"} in bundle["metadata"]["columns"]
 
 
+def test_build_ssn_viewer_records_color_table():
+    """--color_table is stored, normalized, as the color_by column's starting palette."""
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D"]
+    matrix = DataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        metadata_file = os.path.join(output_dir, "metadata.tsv")
+        color_table_file = os.path.join(output_dir, "colors.tsv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+
+        matrix.write(input_file, output_type="hdf")
+        _write_metadata(metadata_file, row_names)
+        with open(color_table_file, "w") as handle:
+            handle.write("alpha\tcc0000\nbeta\t#00Cc00\n")
+
+        build_ssn_viewer.main([
+            "-i", input_file,
+            "-o", bundle_file,
+            "--metadata", metadata_file,
+            "--color_by", "category",
+            "--color_table", color_table_file,
+        ])
+        bundle = _read_bundle(bundle_file)
+        assert bundle["defaults"]["color_table"] == {"alpha": "#CC0000", "beta": "#00CC00"}
+        assert bundle["defaults"]["categorical_columns"] == []
+
+        # A table is a discrete mapping, so a numeric column it colors becomes categorical.
+        with open(color_table_file, "w") as handle:
+            handle.write("1\tcc0000\n2\t00cc00\n")
+        build_ssn_viewer.main([
+            "-i", input_file,
+            "-o", bundle_file,
+            "--metadata", metadata_file,
+            "--color_by", "count",
+            "--color_table", color_table_file,
+        ])
+        bundle = _read_bundle(bundle_file)
+        assert bundle["defaults"]["color_table"] == {"1": "#CC0000", "2": "#00CC00"}
+        assert bundle["defaults"]["categorical_columns"] == ["count"]
+
+        with pytest.raises(SystemExit):
+            build_ssn_viewer.main([
+                "-i", input_file,
+                "-o", bundle_file,
+                "--metadata", metadata_file,
+                "--color_table", color_table_file,
+            ])
+        with pytest.raises(ValueError, match="color_table requires color_by"):
+            build_ssn_viewer.build_ssn_viewer(matrix, color_table={"alpha": "#CC0000"})
+
+
 def test_build_ssn_viewer_rejects_unknown_categorical_column():
     data = np.array([
         [0, 10],

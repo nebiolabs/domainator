@@ -345,7 +345,7 @@ name: str                               # display name
 domainator_version: str                 # the build that wrote the file
 graph: dict                             # nodes, mst_edges, hierarchy, merge_impact_metric
 metadata: dict                          # positional node metadata table (see below)
-defaults: dict                          # color_by, label_by, categorical_columns
+defaults: dict                          # color_by, label_by, categorical_columns, optional color_table
 (v4, optional) app_state: dict          # viewer UI state -- see below
 ```
 

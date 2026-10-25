@@ -997,6 +997,12 @@
         if (cached) {
             return cached;
         }
+        const bundleTable = state.bundle.defaults.color_table;
+        if (bundleTable && columnName === state.bundle.defaults.color_by) {
+            const palette = bundleColorTablePalette(columnName, bundleTable);
+            state.defaultPalettes.set(key, palette);
+            return palette;
+        }
         const scheme = paletteSchemeByName(DEFAULT_CATEGORICAL_PALETTE);
         const colors = {};
         if (scheme) {
@@ -1016,6 +1022,24 @@
         };
         state.defaultPalettes.set(key, palette);
         return palette;
+    }
+
+    // The palette from build_ssn_viewer --color_table. Like build_ssn, values the table
+    // leaves out are gray; the em-dash row is the no-value color, as in loadColorTableText.
+    function bundleColorTablePalette(columnName, table) {
+        const colors = {};
+        distinctColumnValues(columnName, Infinity).values.forEach(entry => {
+            colors[entry.key] = PALETTE_NO_VALUE_COLOR;
+        });
+        let nullColor = null;
+        Object.keys(table).forEach(value => {
+            if (value === '—') {
+                nullColor = table[value];
+            } else {
+                colors[value] = table[value];
+            }
+        });
+        return {type: 'categorical', colors, nullColor, scheme: null};
     }
 
     // `palette` is a categorical palette ({colors, nullColor}) -- normally the
@@ -4812,10 +4836,14 @@
         select.value = scheme ? scheme.name : '';
         if (!scheme) {
             const fallback = paletteSchemeByName(DEFAULT_CATEGORICAL_PALETTE);
+            const builtWithTable = !!state.bundle.defaults.color_table
+                && columnName === state.bundle.defaults.color_by;
             note.textContent = (hasCustomColors
                 ? 'Colors were set by hand or loaded from a color table.'
                 : 'No palette assigned.') +
-                (fallback ? ' Reset to defaults returns this column to ' + fallback.label + '.' : '');
+                (builtWithTable
+                    ? ' Reset to defaults returns this column to the color table it was built with.'
+                    : (fallback ? ' Reset to defaults returns this column to ' + fallback.label + '.' : ''));
             return;
         }
         const cycles = valueCount > scheme.colors.length;

@@ -71,6 +71,10 @@ lists every change from 0.x.
   now gets them once.
 - domain_search's `--batch_size` set the partition size but not how many CDSs were searched at
   once.
+- Output files were created readable only by their owner (mode 0600); they now get the usual
+  permissions from the umask.
+- format_db `--shards` failed on compressed (gzip or BGZF) input, and format_db left an empty
+  temporary file next to the output whenever its input was compressed.
 - db_download `--db uniprot` and `--db uniprot_gb` wrote only TrEMBL: the TrEMBL download
   overwrote the SwissProt records already written. `--max_records` now caps the total across
   both rather than each.

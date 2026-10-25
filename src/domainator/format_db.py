@@ -158,7 +158,8 @@ def _plan_input(input_path, *, shards, compress, index, output_dir, name, level,
     if in_comp is None:
         working = input_path
     else:
-        working_temp = make_temporary_output_path(base) + ".plain"
+        # Name it with the format's extension: get_offsets infers the file type from it.
+        working_temp = make_temporary_output_path(base, suffix=".gb" if filetype == "genbank" else ".fasta")
         print(f"Decompressing {input_path} -> temporary working file", file=log)
         _decompress_to_temp(input_path, working_temp)
         working = working_temp

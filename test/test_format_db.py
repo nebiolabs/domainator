@@ -80,6 +80,17 @@ def test_shard_reassembles_to_original(shared_datadir, tmp_path):
     assert reassembled == original
 
 
+def test_compressed_input_leaves_no_temp_files(shared_datadir, tmp_path):
+    """Sharding a gzip input decompresses it to a temporary file that is removed afterward."""
+    src = tmp_path / "z.gb.gz"
+    with open(shared_datadir / "MT_nbs.gb", "rb") as plain, gzip.open(src, "wb") as compressed:
+        shutil.copyfileobj(plain, compressed)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        format_db.format_db([str(src)], shards=2, compress=False, index=False, cpu=1)
+    assert glob.glob(str(tmp_path / ".*")) == []
+
+
 def test_compose_shard_compress_index(shared_datadir, tmp_path):
     """plain .gb -> --shards 3 --compress --index produces 3 valid BGZF shards each
     with a usable .didx, covering all records."""

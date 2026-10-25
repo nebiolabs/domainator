@@ -22,6 +22,7 @@ Give at least one of these outputs: `--dsnv_out`, `--html_out`. `-` as an input 
 | `--subset` | STRING ... |  | Only consider matrix labels in this list. Additive with --subset_file. |
 | `--subset_file` | FILE |  | Text file containing matrix labels to retain. |
 | `--color_by` | STRING |  | Record a default metadata field for node coloring in the viewer bundle. |
+| `--color_table` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000. Sets the starting colors of the --color_by column in the viewer; values not in the table are gray. Requires --color_by. |
 | `--label_by` | STRING |  | Record a default metadata field for node labels in the viewer bundle. |
 | `--categorical` | STRING ... |  | Numeric metadata columns (for example integer cluster numbers) that the viewer should color as discrete categories instead of a gradient. Can be toggled per column in the viewer's color picker. |
 | `--merge_impact_metric` | {product,min_child} | min_child | Metric the viewer uses for split events: min_child (node count of the smaller piece) or product (the two piece sizes multiplied). Recorded in the bundle as the default; switchable in the viewer. |
