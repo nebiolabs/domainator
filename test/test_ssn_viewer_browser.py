@@ -2573,6 +2573,27 @@ def test_extraction_carries_session_state_for_surviving_nodes_only(meta_page, tm
     assert app_state["selection"]["presets"]["1"]["node_ids"] == ["E", "F"]
     # Slot 2 held only A and B, so it is dropped rather than saved empty.
     assert "2" not in app_state["selection"]["presets"]
+    # The pan/zoom frames the source's layout, not the extraction's.
+    assert "view_transform" not in app_state["view"]
+    assert page.pageerrors == []
+
+
+def test_extraction_loads_over_its_source_under_the_force_layout(meta_page, tmp_path):
+    """The canvas repaints while the worker lays out the new bundle, and must not
+    draw the old bundle's clusters then: their ids index the old hierarchy, which is
+    larger than the extraction's, so the repaint threw and aborted the load."""
+    page = meta_page
+    page.select_option("#layout-algorithm", "force")
+    page.wait_for_function("() => !state.layoutComputing && state.visibleLayout.length > 0")
+    assert page.evaluate("() => state.layoutWorker !== null")
+    # The whole network is one cluster here, hierarchy node 10; A-B-C has five.
+    assert page.evaluate("() => state.visibleLayout.map(item => item.componentId)") == [10]
+    _select_nodes(page, [0, 1, 2])
+    saved = _save_extraction(page, tmp_path, "force.dsnv")
+
+    _load_bundle_file(page, saved)
+    page.wait_for_function("() => !state.layoutComputing")
+    assert page.evaluate("() => state.bundle.graph.nodes") == ["A", "B", "C"]
     assert page.pageerrors == []
 
 

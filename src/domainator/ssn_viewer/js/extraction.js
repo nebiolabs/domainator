@@ -482,9 +482,12 @@
     }
 
     // The session state, with every saved node id that did not survive dropped, so
-    // the extraction opens without complaining about ids it does not contain.
+    // the extraction opens without complaining about ids it does not contain. The
+    // pan/zoom is dropped too: it frames this network's layout, and the extraction
+    // is laid out afresh, so it would open looking at an arbitrary patch of canvas.
     function extractionAppState(keptIds) {
         const appState = collectSessionState();
+        delete appState.view.view_transform;
         const keep = ids => (ids || []).filter(id => keptIds.has(id));
         appState.selection.node_ids = keep(appState.selection.node_ids);
         const presets = appState.selection.presets || {};

@@ -222,6 +222,18 @@
         state.pendingRestoreViewTransform = null;
         state.dotLayoutCache = new Map();
         state.layoutCache = new Map();
+        state.latticeGlobal = null;
+        // The previous bundle's drawing indexes its own hierarchy, and a force layout
+        // is computed off the main thread, so the canvas repaints at least once before
+        // this bundle has a layout: drop the old one rather than draw its cluster ids
+        // against the new hierarchy. Bumping the request id discards a worker reply
+        // still in flight for the old bundle.
+        state.visibleLayout = [];
+        state.splitLinks = [];
+        state.latticeNodeItem = null;
+        state.activeClusters = [];
+        state.visibleClusters = [];
+        state.pendingLayoutRequestId++;
         // A window onto the previous bundle's threshold range means nothing here; a
         // session restore sets its own afterwards. Cleared before the series is built,
         // because the selection is taken against whatever window is in force.
