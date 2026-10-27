@@ -179,3 +179,30 @@ body.resizing-column { cursor: col-resize; user-select: none; }
 .report-table td.number { text-align: right; }
 .report-table tbody tr:nth-child(even) td { background: var(--row-alt); }
 .report-table tbody tr:hover td { background: var(--accent-soft); }
+
+/* charts.js and the summary page */
+.chart { overflow-x: auto; }
+.chart rect[data-tip]:not([fill-opacity="0"]):hover { fill-opacity: 1; }
+.chart-tooltip {
+    position: fixed;
+    z-index: 10;
+    max-width: 420px;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    font-size: 0.85rem;
+    white-space: pre-line;
+    pointer-events: none;
+}
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px 18px;
+    margin: 0 0 16px;
+}
+.stat-grid div { display: flex; flex-direction: column-reverse; gap: 2px; }
+.stat-grid dt { color: var(--muted); font-size: 0.85rem; }
+.stat-grid dd { margin: 0; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.panel p.note { color: var(--muted); font-size: 0.9rem; margin: 0 0 12px; }

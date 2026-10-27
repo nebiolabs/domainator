@@ -5,7 +5,8 @@
 //
 // columns: [{name, type}], type "str", "int" or "float". rows: objects keyed by column name,
 // null for a missing value. Floats are shown to one decimal place, as the TSV report writes
-// them; the saved files keep the full values.
+// them; the saved files keep the full values. idPrefix goes before the ids of the table's
+// controls, so a page can hold more than one table.
 
 const TABLE_PAGE_SIZES = [25, 50, 100, 1000];
 const TABLE_COLUMN_WIDTH = 150;
@@ -88,7 +89,7 @@ function compareTableValues(a, b, type) {
     return Number(a) - Number(b);
 }
 
-function createReportTable(container, {columns, rows, maxHeight = null, fileStem = "data"}) {
+function createReportTable(container, {columns, rows, maxHeight = null, fileStem = "data", idPrefix = ""}) {
     const state = {
         order: columns.map((_, index) => index),
         filters: columns.map(() => ""),
@@ -105,7 +106,7 @@ function createReportTable(container, {columns, rows, maxHeight = null, fileStem
     const downloads = [["CSV", "csv"], ["TSV", "tsv"], ["JSON", "json"]].map(([label, kind]) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.id = `download-${kind}`;
+        button.id = `${idPrefix}download-${kind}`;
         button.textContent = `Download ${label}`;
         button.addEventListener("click", () => download(kind));
         return button;
@@ -120,7 +121,7 @@ function createReportTable(container, {columns, rows, maxHeight = null, fileStem
     const pagerButton = (id, label, text) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.id = id;
+        button.id = idPrefix + id;
         button.textContent = text;
         button.setAttribute("aria-label", label);
         return button;
@@ -133,21 +134,21 @@ function createReportTable(container, {columns, rows, maxHeight = null, fileStem
     const pageInput = document.createElement("input");
     pageInput.type = "text";
     pageInput.inputMode = "numeric";
-    pageInput.id = "page-input";
+    pageInput.id = `${idPrefix}page-input`;
     pageInput.className = "page-input";
     pageInput.setAttribute("aria-label", "Page number");
     const pageCountLabel = document.createElement("span");
     pageCountLabel.className = "status";
-    pageCountLabel.id = "page-count";
+    pageCountLabel.id = `${idPrefix}page-count`;
     const pager = document.createElement("span");
     pager.className = "pager";
     pager.append(first, previous, "Page", pageInput, pageCountLabel, next, last);
     const counter = document.createElement("span");
     counter.className = "status";
-    counter.id = "table-counter";
+    counter.id = `${idPrefix}table-counter`;
     const copyStatus = document.createElement("span");
     copyStatus.className = "status";
-    copyStatus.id = "table-copy-status";
+    copyStatus.id = `${idPrefix}table-copy-status`;
     copyStatus.setAttribute("role", "status");
     toolbar.append(...downloads, copyStatus, spacer, counter, pager, pageSizeSelect);
 

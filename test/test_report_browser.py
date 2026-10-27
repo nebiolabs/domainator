@@ -249,3 +249,58 @@ def test_table_context_menu_copies_the_cell_value(open_page, tmp_path):
     assert not page.is_visible(".context-menu")
     assert page.evaluate("navigator.clipboard.readText()") == "72.5"
     assert page.pageerrors == []
+
+
+def _summary_page(path, *extra):
+    from domainator import summary_report
+    summary_report.main(["-i", *extra, "--html_out", str(path)])
+    return path
+
+
+def test_summary_page_draws_every_section(open_page, tmp_path, shared_datadir):
+    page = open_page(_summary_page(tmp_path / "summary.html", str(shared_datadir / "FeSOD_20_pfam.gb"), "--domains", "Sod_Fe_C", "Sod_Fe_N"))
+    page.wait_for_selector("#domain-table .report-table tbody tr")
+    assert page.pageerrors == [] and page.requests == []
+    stats = page.eval_on_selector_all(".stat-grid div", "items => items.map(i => [i.querySelector('dt').textContent, i.querySelector('dd').textContent])")
+    assert ["contigs", "20"] in stats
+    # One bar per bin, and the bars hold every contig.
+    data = page.evaluate("JSON.parse(document.getElementById('report-data').textContent).data")
+    bars = page.eval_on_selector_all("#length-histogram svg rect[data-tip]", "bars => bars.map(b => b.dataset.tip)")
+    assert len(bars) == len(data["length_histogram"]["counts"])
+    page.hover("#length-histogram svg rect[data-tip]:not([fill-opacity='0'])")
+    assert "contigs" in page.text_content(".chart-tooltip")
+    # The two tables keep their controls apart.
+    assert page.text_content("#domains-table-counter").startswith("Showing 1-")
+    assert page.text_content("#cooccurrence-table-counter") == "Showing 1-2 of 2 rows"
+    cooccurrence = page.eval_on_selector_all("#cooccurrence-table thead th .column-title span:first-child", "s => s.map(x => x.textContent)")
+    assert cooccurrence[:3] == ["domain", "Sod_Fe_C", "Sod_Fe_N"] or cooccurrence[:3] == ["domain", "Sod_Fe_N", "Sod_Fe_C"]
+    with page.expect_download() as download:
+        page.click("#lengths-download-svg")
+    assert download.value.suggested_filename == "summary_report_lengths.svg"
+    assert open(download.value.path()).read().count("<rect") == len(bars)
+    assert page.query_selector("#taxonomy-chart") is None
+
+
+def test_summary_page_taxonomy_zooms(open_page, tmp_path, shared_datadir):
+    page = open_page(_summary_page(tmp_path / "summary.html", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "--taxonomy", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp")))
+    page.wait_for_selector("#taxonomy-chart svg")
+    assert page.pageerrors == [] and page.requests == []
+    labels = page.eval_on_selector_all("#taxonomy-chart svg text[visibility='visible']", "t => t.map(x => x.textContent)")
+    assert any(label.startswith("All") for label in labels)
+    assert any(label.startswith("Bacteria") for label in labels)
+    before = page.get_attribute("#taxonomy-chart svg g:nth-of-type(2)", "transform")
+    page.evaluate("window.taxonomyChart.zoom('Bacteria')")
+    page.wait_for_timeout(800)
+    # Bacteria now fills the chart, at the left edge.
+    assert page.get_attribute("#taxonomy-chart svg g:nth-of-type(2)", "transform") != before
+    assert page.get_attribute("#taxonomy-chart svg g:nth-of-type(2)", "transform") == "translate(0,0)"
+    assert page.text_content("#taxa-table-counter").startswith("Showing 1-")
+    assert page.pageerrors == []
+
+
+def test_summary_page_with_no_contigs(open_page, tmp_path, shared_datadir):
+    page = open_page(_summary_page(tmp_path / "summary.html", str(shared_datadir / "empty.gb")))
+    page.wait_for_selector("#domain-table .report-table")
+    assert page.text_content("#length-histogram") == "No contigs."
+    assert page.text_content("#domains-table-counter") == "No rows"
+    assert page.pageerrors == [] and page.requests == []

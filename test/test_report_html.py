@@ -10,7 +10,9 @@ import pytest
 from domainator import report_html, table_writers
 from helpers import report_data, report_rows
 
-REPORTS = ["table_report"]
+REPORTS = ["table_report", "summary_report"]
+# Pages that stream rows into a report-rows block.
+TABLE_PAGES = {"table_report"}
 
 
 def test_table_writer_streams_the_ndjson_rows():
@@ -64,13 +66,20 @@ def test_compressed_data_round_trips():
 @pytest.mark.parametrize("name", REPORTS)
 def test_shell_has_each_token_where_the_page_has_its_value(name):
     shell = report_html.report_shell(name)
-    head, tail = report_html.report_parts(name, "T & <T>", "enum_report", {"columns": []})
-    envelope = report_html.report_envelope("enum_report", {"columns": []})
+    envelope = report_html.report_envelope(name, {"columns": []})
     filled = (shell.replace(report_html.TITLE_TOKEN, "T &amp; &lt;T&gt;")
                    .replace(report_html.DATA_TOKEN, envelope))
-    assert filled == head + report_html.ROWS_TOKEN + tail
+    if name in TABLE_PAGES:
+        head, tail = report_html.report_parts(name, "T & <T>", name, {"columns": []})
+        assert filled == head + report_html.ROWS_TOKEN + tail
+        assert shell.count(report_html.ROWS_TOKEN) == 1
+    else:
+        assert filled == report_html.render_report(name, "T & <T>", name, {"columns": []})
+        assert report_html.ROWS_TOKEN not in shell
+        with pytest.raises(ValueError):
+            report_html.report_parts(name, "T", name, {})
+    assert shell.count(report_html.TITLE_TOKEN) == 2
     assert shell.count(report_html.DATA_TOKEN) == 1
-    assert shell.count(report_html.ROWS_TOKEN) == 1
     assert "{{" not in shell
 
 
@@ -78,6 +87,8 @@ def test_shell_has_each_token_where_the_page_has_its_value(name):
 def test_pages_use_no_external_resources(name):
     shell = report_html.report_shell(name)
     assert not re.search(r'<(script|link)[^>]+(src|href)=', shell)
+    # The SVG namespace is a name, never fetched.
+    shell = shell.replace('"http://www.w3.org/2000/svg"', "")
     assert "http://" not in shell and "https://" not in shell
 
 

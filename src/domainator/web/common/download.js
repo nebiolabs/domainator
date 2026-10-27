@@ -2,7 +2,11 @@
 // and text copied to the clipboard.
 
 function downloadText(fileName, mimeType, text) {
-    const url = URL.createObjectURL(new Blob([text], {type: mimeType}));
+    downloadBlob(fileName, new Blob([text], {type: mimeType}));
+}
+
+function downloadBlob(fileName, blob) {
+    const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = fileName;

@@ -60,6 +60,12 @@ lists every change from 0.x.
   "Copy cell value", CSV/TSV/JSON downloads) is Domainator's own JavaScript
   instead of Tabulator from a CDN. The page carries the same rows as `--json_out`, so the
   downloads keep full precision; the table still shows floats to one decimal place.
+- summary_report's `--html_out` page works offline and no longer needs matplotlib or seaborn:
+  the contig length histogram (with hover counts and SVG/PNG downloads) and the zoomable
+  taxonomy icicle are drawn by Domainator's own JavaScript instead of a seaborn PNG and d3
+  from a CDN, and the domain frequency and co-occurrence tables are sortable, filterable
+  tables like enum_report's. The page carries the `--json_out` document, so it shows the
+  same numbers. The taxonomy tree's children are now in a fixed order (most contigs first).
 
 ### Removed
 - `partition_seqfile` and `partition_seqids` (domainate and domain_search partition their

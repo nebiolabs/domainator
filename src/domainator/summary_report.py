@@ -22,9 +22,7 @@ from jsonargparse import ActionConfigFile
 import contextlib
 from pathlib import Path
 import pandas as pd
-from io import BytesIO
-import base64
-import html
+import math
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
@@ -40,7 +38,7 @@ from domainator.text_plot import text_histogram
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
-from domainator import web_libs
+from domainator import report_html
 from Bio.SeqRecord import SeqRecord
 
 
@@ -152,207 +150,111 @@ class SummaryJSONWriter():
         json.dump(self.payload, self.out_handle, separators=(",", ":"), default=str)
         self.out_handle.write("\n")
 
-class SummaryHTMLWriter():
+class SummaryHTMLWriter(SummaryJSONWriter):
+    """The interactive page (web/reports/summary_report.*): the --json_out document, and the
+    contig length histogram and taxonomy tree the page draws."""
     def __init__(self, out_handle):
-        self.out_handle = out_handle
-    
+        super().__init__(out_handle)
+        self.length_histogram = None
+        self.taxonomy_tree = None
+
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
-        print(f"""<!doctype html><html lang="en"><head><meta charset="utf-8" name="viewport" content="width=device-width"/><title>Summary Report</title>{web_libs.D3}</head><body>
-<div>
-<h1>Contig Stats</h1>
-<table>
-<tbody>
-    <tr> <th>contigs</th> <td>{num_contigs}</td> </tr> 
-    <tr> <th>CDSs</th> <td>{num_cdss}</td> </tr> 
-    <tr> <th>partial CDSs</th> <td>{num_partial_cdss}</td> </tr> 
-    <tr> <th>protein fragments</th> <td>{num_fragment_proteins}</td> </tr> 
-    <tr> <th>CDSs per 10 kb</th> <td>{num_cdss / ((sum(lengths)+0.01)/10000) : .2f}</td> </tr>
-</tbody>
-</table>
-<h2>contig lengths</h2>
-    <img alt="Contig lengths histogram" src="data:image/png;base64, {histplot_base64(lengths)}" />
-</div>""", file=self.out_handle)
-    
-    def write_domain_table(self, domain_table_df, domain_cooccurence_df):
-        print(f"""<div>
-<h1>Domain Stats</h1>
-<div>
-    <h2>Domain Frequency</h2>
-    <table border="1">
-    <thead>
-    {"<th>" + "</th><th>".join(domain_table_df.columns) + "</th>"}
-    </thead>
-    <tbody>
-"""
-        , file=self.out_handle)
-        for index, row in domain_table_df.iterrows():
-            print(f"""<tr>
-        <td>{html.escape(row['domain'])}</td>
-        <td>{html.escape(row['database'])}</td>
-        <td align="right">{html.escape(str(row['count']))}</td>
-        <td>{html.escape(row['description'])}</td>
-        <td align="right">{html.escape(str(round(row['avg score']) ))}</td>
-        </tr>
-"""
-            , file=self.out_handle)
-        print(f"""</tbody>
-            </table>
-        </div>""", file=self.out_handle)
-        if domain_cooccurence_df is not None and len(domain_cooccurence_df) > 0:
-            print(f"""<div>
-        <h2>Domain Co-occurence (what percent of the time when the row-domain occurs does the column domain occur on the same contig)</h2>
-            {domain_cooccurence_df.to_html(float_format='{:.1f}'.format)}
-        </div>
-            """
-            , file=self.out_handle)
-        print("</div>", file=self.out_handle)
+        super().write_header(num_contigs, num_cdss, lengths, num_partial_cdss=num_partial_cdss,
+                             num_fragment_proteins=num_fragment_proteins)
+        self.length_histogram = length_histogram(lengths)
 
     def write_taxonomy(self, taxa_data):
+        super().write_taxonomy(taxa_data)
+        self.taxonomy_tree = taxonomy_tree(taxa_data)
 
-        print("""<div id="taxonomy_chart">
-<h2>Taxonomy</h2>
-</div>
-<script type=module>
-// icicle plot code modified from code here: https://observablehq.com/@d3/zoomable-icicle
-// Copyright 2018–2023 Observable, Inc.
-// Permission to use, copy, modify, and/or distribute this software for any
-// purpose with or without fee is hereby granted, provided that the above
-// copyright notice and this permission notice appear in all copies.
-
-function chart(data) {
-// Specify the chart’s dimensions.
-const width = 928;
-const height = 1000;
-
-// Create the color scale.
-const color = d3.scaleOrdinal(d3.quantize(d3.interpolateRainbow, data.children.length + 1));
-
-// Compute the layout.
-const hierarchy = d3.hierarchy(data)
-    .sum(d => d.value)
-    .sort((a, b) => b.height - a.height || b.value - a.value);
-const root = d3.partition()
-    .size([height, (hierarchy.height + 1) * width / 3])
-    (hierarchy);
-
-// Create the SVG container.
-const svg = d3.create("svg")
-    .attr("viewBox", [0, 0, width, height])
-    .attr("width", width)
-    .attr("height", height)
-    .attr("style", "max-width: 100%; height: auto; font: 10px sans-serif;");
-
-// Append cells.
-const cell = svg
-    .selectAll("g")
-    .data(root.descendants())
-    .join("g")
-    .attr("transform", d => `translate(${d.y0},${d.x0})`);
-
-const rect = cell.append("rect")
-    .attr("width", d => d.y1 - d.y0 - 1)
-    .attr("height", d => rectHeight(d))
-    .attr("fill-opacity", 0.6)
-    .attr("fill", d => {
-        if (!d.depth) return "#ccc";
-        while (d.depth > 1) d = d.parent;
-        return color(d.data.name);
-    })
-    .style("cursor", "pointer")
-    .on("click", clicked);
-
-const text = cell.append("text")
-    .style("user-select", "none")
-    .attr("pointer-events", "none")
-    .attr("x", 4)
-    .attr("y", 13)
-    .attr("fill-opacity", d => +labelVisible(d));
-
-text.append("tspan")
-    .text(d => d.data.name);
-
-const format = d3.format(",d");
-const tspan = text.append("tspan")
-    .attr("fill-opacity", d => labelVisible(d) * 0.7)
-    .text(d => ` ${format(d.value)}`);
-
-cell.append("title")
-    .text(d => `${d.ancestors().map(d => d.data.name).reverse().join("/")}\n${format(d.value)}`);
-
-// On click, change the focus and transitions it into view.
-let focus = root;
-function clicked(event, p) {
-    focus = focus === p ? p = p.parent : p;
-
-    root.each(d => d.target = {
-    x0: (d.x0 - p.x0) / (p.x1 - p.x0) * height,
-    x1: (d.x1 - p.x0) / (p.x1 - p.x0) * height,
-    y0: d.y0 - p.y0,
-    y1: d.y1 - p.y0
-    });
-
-    const t = cell.transition().duration(750)
-        .attr("transform", d => `translate(${d.target.y0},${d.target.x0})`);
-
-    rect.transition(t).attr("height", d => rectHeight(d.target));
-    text.transition(t).attr("fill-opacity", d => +labelVisible(d.target));
-    tspan.transition(t).attr("fill-opacity", d => labelVisible(d.target) * 0.7);
-}
-
-function rectHeight(d) {
-    return d.x1 - d.x0 - Math.min(1, (d.x1 - d.x0) / 2);
-}
-
-function labelVisible(d) {
-    return d.y1 <= width && d.y0 >= 0 && d.x1 - d.x0 > 16;
-}
-
-document.getElementById("taxonomy_chart").append(svg.node());
-}""" , file=self.out_handle)
-        
-        
-        print(f"const taxa_data = {json.dumps(tax_data_to_hierarchy(taxa_data))};", file=self.out_handle)
-        #print(f"const taxa_data = {taxa_data};", file=self.out_handle)
-
-        print(f"chart(taxa_data);\n</script>", file=self.out_handle)
-                        
     def write_footer(self):
-        print("</body></html>", file=self.out_handle)
+        # Read back, so the page holds exactly what --json_out writes.
+        summary = json.loads(json.dumps(self.payload, default=str))
+        data = {"summary": summary, "length_histogram": self.length_histogram, "taxonomy_tree": self.taxonomy_tree}
+        self.out_handle.write(report_html.render_report("summary_report", "Summary Report", "summary_report", data))
 
+
+# A histogram aims for about sqrt(n) bins, at least Sturges' ceil(log2(n)) + 1 and at most this.
+MAX_HISTOGRAM_BINS = 50
+
+
+def _nice_bin_width(raw: int) -> int:
+    """The smallest 1, 2 or 5 times a power of ten that is at least ``raw`` (>= 1)."""
+    power = 1
+    while True:
+        for factor in (1, 2, 5):
+            if factor * power >= raw:
+                return factor * power
+        power *= 10
+
+
+def length_histogram(lengths) -> Optional[Dict]:
+    """Integer lengths binned for the page: ``{"bin_edges": [...], "counts": [...]}``, bin i
+    counting the lengths in [bin_edges[i], bin_edges[i + 1]), or None for no lengths.
+
+    Integer arithmetic only, so other implementations can give the same bins: n lengths from lo
+    to hi aim for ``target = min(50, max((n - 1).bit_length() + 1, isqrt(n)))`` bins; the bin
+    width is the smallest 1, 2 or 5 times a power of ten that is at least
+    ``ceil((hi - lo + 1) / target)``, and the first edge is lo rounded down to a multiple of it.
+    """
+    if len(lengths) == 0:
+        return None
+    lo, hi, n = min(lengths), max(lengths), len(lengths)
+    target = min(MAX_HISTOGRAM_BINS, max((n - 1).bit_length() + 1, math.isqrt(n)))
+    width = _nice_bin_width(-(-(hi - lo + 1) // target))
+    start = lo // width * width
+    bins = (hi - start) // width + 1
+    counts = [0] * bins
+    for length in lengths:
+        counts[(length - start) // width] += 1
+    return {"bin_edges": [start + i * width for i in range(bins + 1)], "counts": counts}
+
+
+# Ranks kept in the taxonomy tree even when they add nothing (one child, no contigs of their own).
+TREE_KEPT_RANKS = {"superkingdom", "domain", "realm", "kingdom"}
+
+
+def taxonomy_tree(taxa_data) -> Dict:
+    """The taxa as a tree for the page: nodes ``{"taxid", "name", "rank", "count", "children"}``,
+    ``count`` being the contigs assigned to that taxon itself; the root is taxid 1, "All".
+
+    A taxon hangs from its nearest ancestor that has a rank (not "no rank"). A node with one
+    child and no contigs of its own is replaced by that child, unless its rank is in
+    TREE_KEPT_RANKS. Children are ordered by their total contigs, most first, then by name and
+    taxid.
+
+    Args:
+        taxa_data: taxid: {"count": int, "data": TaxonomyData}.
+    """
+    root = {"taxid": 1, "name": "All", "rank": "no rank", "count": 0, "children": {}}
+    for count_and_data in taxa_data.values():
+        data = count_and_data["data"]
+        last = len(data.lineage) - 1
+        node = root
+        for i, taxid in enumerate(data.lineage):
+            if taxid == 1 or (i < last and data.ranks[i] == "no rank"):
+                continue
+            children = node["children"]
+            if taxid not in children:
+                children[taxid] = {"taxid": taxid, "name": data.names[i], "rank": data.ranks[i], "count": 0, "children": {}}
+            node = children[taxid]
+        node["count"] += count_and_data["count"]
+
+    def finish(node):
+        """(the node with its children as a sorted list, its total count)"""
+        children = []
+        for child in node["children"].values():
+            while len(child["children"]) == 1 and child["count"] == 0 and child["rank"] not in TREE_KEPT_RANKS:
+                child = next(iter(child["children"].values()))
+            children.append(finish(child))
+        children.sort(key=lambda pair: (-pair[1], pair[0]["name"], pair[0]["taxid"]))
+        total = node["count"] + sum(total for _, total in children)
+        return {**node, "children": [child for child, _ in children]}, total
+
+    return finish(root)[0]
 
 
 #TODO: only print correlation table for focus domains. Otherwise it ends up being a huge, sparse table, and the output files are enormous.
-def plt_to_base64_png():
-    import matplotlib.pyplot as plt
-    bytes = BytesIO()
-    plt.savefig(bytes, format='png')
-    bytes.seek(0)
-    png_string = base64.b64encode(bytes.read()).decode("utf-8")
-    return png_string
-
-def histplot_base64(items_list, zero_center=False):
-    binwidth=None
-    if zero_center:
-        bound = max(abs(min(items_list)),  abs(max(items_list)))
-        if bound < 20:
-            bound = 20
-        binwidth = int(bound/10)
-    if len(items_list) == 1:
-        binwidth = None
-    
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    old_backend = plt.get_backend()
-    plt.switch_backend('agg') # this is necessary to run on a headless server
-    sns.histplot(items_list, binwidth=binwidth)
-    
-    if zero_center:
-        plt.xlim(-1*bound, bound)
-    out = plt_to_base64_png()
-    plt.switch_backend(old_backend)
-    plt.close()
-    return out
-
 def write_cooccurence_matrix(domains:Dict[str, Dict], dense_text_file: str, row_norm: bool):
     """
         calculates and writes a co-occurence frequency matrix.
@@ -407,70 +309,6 @@ def domain_dist(domain1_coords, domain2_coords):
         out = -1 * out
     
     return out
-
-def tax_data_to_hierarchy(tax_data):
-    """
-        creates a data structure that can be used to create a d3 sunburst chart
-        input: 
-            tax_data: dict of dicts, taxid: {count: int, data: TaxonomyData}
-        output:
-            list of dicts, each dict has keys 'name', 'children', and 'size'
-            where 'name' is the name of the taxon, 'children' is a list of dicts with the same structure, and 'size' is the number of contigs assigned to that taxon.
-    """
-
-    hierarchy = dict() # taxid: {name: str, children: set, size: int}
-
-    hierarchy[1] = {'name': 'All', 'children': set(), 'size': 0}
-
-    for taxid, count_and_data in tax_data.items():
-        count = count_and_data['count']
-        data = count_and_data['data']
-        ranks_count = len(data.ranks)
-        if taxid not in hierarchy:
-            hierarchy[taxid] = {'name': data.names[-1], 'children': set(), 'size': count}
-        else:
-            hierarchy[taxid]['size'] += count
-        prev_taxid = data.lineage[-1]
-        for i in range(ranks_count-2, -1, -1): # iterate from the second to last rank to the first rank
-            if data.ranks[i] != 'no rank':
-                rank_taxid = data.lineage[i]
-                if rank_taxid not in hierarchy:
-                    hierarchy[rank_taxid] = {'name': data.names[i], 'rank': data.ranks[i], 'children': set(), 'size': 0}
-                hierarchy[rank_taxid]['children'].add(prev_taxid)
-                prev_taxid = rank_taxid
-        hierarchy[1]['children'].add(prev_taxid)
-    
-
-    formatted_hierarchy = {"name": "All", "children": list(), "value": hierarchy[1]["size"]} # define the root node
-    
-    queue = list() #deque()
-    for child in hierarchy[1]['children']:
-        queue.append((child, formatted_hierarchy))
-    #queue.append((1, formatted_hierarchy))
-
-    #depth first traversal of the hierarchy
-    while len(queue) > 0:
-
-        taxid, parent_node = queue.pop()
-        while len(hierarchy[taxid]['children']) == 1 and hierarchy[taxid]['size'] == 0 and hierarchy[taxid]['rank'] not in {"superkingdom", "kingdom"}: # skip nodes where (len(children) == 1 and size == 0), except for superkingdom and kingdom
-            taxid = next(iter(hierarchy[taxid]['children']))
-        
-        node = {'name': hierarchy[taxid]['name'], 'value': hierarchy[taxid]['size']}
-        if len(hierarchy[taxid]['children']) > 0:
-            node['children'] = list()
-            for child in hierarchy[taxid]['children']:
-                queue.append((child, node))
-        parent_node['children'].append(node)
-    
-    return formatted_hierarchy
-
-
-
-
-
-
-
-    
 
 def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[TextIO] = None,
                    html_out_handle: Optional[TextIO] = None,
