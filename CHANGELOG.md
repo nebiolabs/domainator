@@ -55,6 +55,11 @@ lists every change from 0.x.
   cores). Every one has a docstring and type hints.
 - Faster: neighborhood extraction (select_by_cds, domain_search) and extract_domains look only
   at nearby features; HMM databases are prepared once per search, not once per batch.
+- enum_report and hmmer_report `--html_out` pages work offline: the table (sort, per-column
+  filters, paging with first/last and go-to-page, movable and resizable columns, a right-click
+  "Copy cell value", CSV/TSV/JSON downloads) is Domainator's own JavaScript
+  instead of Tabulator from a CDN. The page carries the same rows as `--json_out`, so the
+  downloads keep full precision; the table still shows floats to one decimal place.
 
 ### Removed
 - `partition_seqfile` and `partition_seqids` (domainate and domain_search partition their

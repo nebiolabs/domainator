@@ -1,7 +1,7 @@
 """Writers for the tabular reports (enum_report, hmmer_report): TSV, NDJSON and HTML."""
 import json
 
-from domainator import web_libs
+from domainator import report_html
 
 
 class TableWriter:
@@ -70,88 +70,34 @@ class JSONTableWriter(TableWriter):
         print(json.dumps(record, separators=(",", ":")), file=self.out_handle)
 
 
-class HTMLTableWriter(TableWriter):
-    """An interactive (tabulator) HTML table."""
-    sorters = {"str": "string", "int": "number", "float": "number"}
-    def __init__(self, columns, column_types, out_handle, max_height):
+class HTMLTableWriter(JSONTableWriter):
+    """An interactive HTML table (report_html.py's ``table_report`` page).
+
+    The rows are the ones JSONTableWriter writes, streamed into the page; the page shows floats
+    to one decimal place, as the TSV does, and its downloads keep the full values.
+    """
+    def __init__(self, columns, column_types, out_handle, max_height, title="Enum Report", report="enum_report"):
         super().__init__(columns, column_types, out_handle)
         self.max_height = max_height
-        self.id_counter = 0
+        self.title = title
+        self.report = report
+        self._tail = None
 
-    def _format_cell(self, value, data_type):
-        if data_type == "str":
-            return json.dumps("" if value is None else value)
-        if value is None:
-            return "null"
-        if data_type == "int":
-            return str(int(value))
-        if data_type == "float":
-            return f"%0.1f" % float(value)
-        raise ValueError(f"Unsupported column type: {data_type}")
-    
     def write_header(self):
-        print("""<!doctype html><html lang='en'>
-<head>
-<meta charset="UTF-8" />
-<title>Enum Report</title>
-""" + web_libs.TABULATOR + """
-</head>
-
-<body>
-<div>
-    <button id="download-csv">Download CSV</button>
-    <button id="download-html">Download HTML</button>
-    <button id="download-json">Download JSON</button>
-</div>
-<div id="enum_report_table"></div>
-<script>
-var tabledata = [""",
-        file=self.out_handle)
-        self.id_counter = 0
-        
+        data = {
+            "columns": [{"name": column, "type": data_type} for column, data_type in zip(self.columns, self.column_types)],
+            "max_height": self.max_height,
+            "file_stem": self.report,
+        }
+        head, self._tail = report_html.report_parts("table_report", self.title, self.report, data)
+        self.out_handle.write(head)
 
     def write_row(self, values):
-        out_vals = list()
-        for i, v in enumerate(values):
-            data_type = self.column_types[i]
-            out_vals.append(self._format_cell(v, data_type))
-        self.out_handle.write("{id:" + str(self.id_counter) + ",")
-        for i,c in enumerate(out_vals):
-            self.out_handle.write(f"""{json.dumps(self.columns[i])}:{c}, """)
-        self.out_handle.write("},\n")
-        self.id_counter += 1
+        record = {
+            column: self._coerce(value, self.column_types[i])
+            for i, (column, value) in enumerate(zip(self.columns, values))
+        }
+        self.out_handle.write(report_html.report_row(record))
 
     def write_footer(self):
-        print("""];
-    var table = new Tabulator("#enum_report_table", {
-    data:tabledata,
-    pagination:"local",
-    paginationSize:25,
-    paginationSizeSelector:[25, 50, 100, 1000],
-    movableColumns:true,
-    paginationCounter:"rows",""", file=self.out_handle)
-        if self.max_height is not None:
-            print(f"    maxHeight:{self.max_height},", file=self.out_handle)
-        print("    columns:[", file=self.out_handle)
-        for i, column in enumerate(self.columns):
-            print(json.dumps({"title":column, "field":column, "width":150, "sorter": self.sorters[self.column_types[i]], "tooltip":True}) + ",", file=self.out_handle)
-        print("    ],", file=self.out_handle)
-        print("""});
-
-//trigger download of data.csv file
-document.getElementById("download-csv").addEventListener("click", function(){
-    table.download("csv", "data.csv");
-});
-
-//trigger download of data.json file
-document.getElementById("download-json").addEventListener("click", function(){
-    table.download("json", "data.json");
-});
-
-//trigger download of data.html file
-document.getElementById("download-html").addEventListener("click", function(){
-    table.download("html", "data.html", {style:true});
-});
-
-</script>
-</body></html>""", file=self.out_handle)
+        self.out_handle.write(self._tail)

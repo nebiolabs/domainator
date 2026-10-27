@@ -126,3 +126,23 @@ def write_uniprot_fragment_fasta(shared_datadir, path):
             description = record.description.replace(" OS=", " (Fragment) OS=", 1) if i == 0 else record.description
             handle.write(f">{description}\n{str(record.seq)}\n")
     return records[0].id
+
+
+def report_data(html):
+    """The data embedded in an HTML report written by report_html.py, as the full envelope
+    ({"report", "payload_version", "encoding", "data"}) with "data" decoded."""
+    import base64, gzip, json
+    match = re.search(r'<script type="application/json" id="report-data">(.*?)</script>', html, re.S)
+    assert match is not None
+    envelope = json.loads(match.group(1))
+    if envelope["encoding"] == "gzip+base64":
+        envelope["data"] = json.loads(gzip.decompress(base64.b64decode(envelope["data"])))
+    return envelope
+
+
+def report_rows(html):
+    """The rows streamed into a table report (enum_report, hmmer_report --html_out)."""
+    import json
+    match = re.search(r'<script type="application/x-ndjson" id="report-rows">\n(.*?)</script>', html, re.S)
+    assert match is not None
+    return [json.loads(line) for line in match.group(1).splitlines()]

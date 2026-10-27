@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{title}}</title>
+<style>
+{{css}}
+</style>
+</head>
+<body>
+<div class="shell">
+    <h1>{{title}}</h1>
+    <section class="panel">
+        <div id="report-table"><div class="status">Loading the table...</div></div>
+    </section>
+</div>
+<script type="application/json" id="report-data">{{data}}</script>
+<script type="application/x-ndjson" id="report-rows">
+{{rows}}</script>
+<script>
+{{script}}
+</script>
+</body>
+</html>

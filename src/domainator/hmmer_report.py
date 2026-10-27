@@ -120,7 +120,7 @@ def hmmer_report(records: Iterable[Tuple[str, Iterable[pyhmmer.plan7.HMM]]], *, 
     if tsv_out_handle is not None:
         writers.append(TSVTableWriter(headers, column_types, tsv_out_handle))
     if html_out_handle is not None:
-        writers.append(HTMLTableWriter(headers, column_types, html_out_handle, html_max_height))
+        writers.append(HTMLTableWriter(headers, column_types, html_out_handle, html_max_height, title="HMMER Report", report="hmmer_report"))
     if json_out_handle is not None:
         writers.append(JSONTableWriter(headers, column_types, json_out_handle))
 

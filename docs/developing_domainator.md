@@ -35,6 +35,10 @@ Every pool of workers comes from `domainator._mp.make_pool`. On free-threaded Py
 
 The viewer page is built from files in `src/domainator/ssn_viewer/`: `viewer.html`, `viewer.css` and the scripts in `js/`. `js/viewer.js` is the page's one script; each `// @include <file>` line pulls in a file from `js/`, which then shares its scope. Values from Python (versions, palettes, an embedded bundle) reach the page through its `dsnv-config` JSON block (`DSNV_CONFIG` in the script), set in `ssn_viewer_html.py`. `test/test_ssn_viewer_js.py` checks the assembled script with `node --check` and tests the layout worker in Node; `test/test_ssn_viewer_browser.py` drives the page in Chromium (see "Browser/SSN-viewer tests" in CLAUDE.md).
 
+## the HTML reports
+
+The `--html_out` pages are built by `report_html.py` from files in `src/domainator/web/`: `reports/<name>.html` and `reports/<name>.js` for each page, and `common/` for the stylesheet and the scripts the pages share (`payload.js`, `download.js`, `table.js`). As in the viewer, `// @include <path>` (relative to `web/`) pulls a file into the page's script. There is no third-party JavaScript, so the pages work offline. A page's data goes in its `report-data` JSON block (an envelope with `payload_version`, which changes whenever the data a page reads changes shape); a table page streams its rows into a `report-rows` NDJSON block. `report_html.report_shell(name)` renders a page with tokens in place of its title, data and rows, for programs that write these pages without Python (domainatoredux vendors them). `test/test_report_html.py` checks the data and runs `node --check` on each page's script; `test/test_report_browser.py` drives the pages in Chromium with the network blocked.
+
 ## benchmarks
 
 `scripts/bench/bench.py` times parsing, writing, `domainate`, `domain_search` and `extract_domains` on a test genome. Save timings before a change and compare after:

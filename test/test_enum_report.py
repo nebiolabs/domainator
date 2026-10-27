@@ -3,7 +3,8 @@ from pathlib import Path
 import tempfile
 from io import StringIO
 from glob import glob
-from helpers import compare_files
+from helpers import compare_files, report_data, report_rows
+import json
 import pytest
 
 from domainator import enum_report
@@ -416,45 +417,45 @@ def test_enum_report_rename_columns_error_1(shared_datadir):
             out = output_dir + "/enum_report.tsv"
             enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score", "--column_names"] + new_column_names)
         
-def test_enum_report_html_1(shared_datadir):
-    
-    reference = shared_datadir / "enum_report_html_out.html"
+def _enum_report_html(shared_datadir, output_dir, genbank, *extra):
+    columns = ["--columns", "domains", "sequence", "length", "architecture", "score"]
+    html_out, tsv_out, json_out = (output_dir + "/enum_report" + suffix for suffix in (".html", ".tsv", ".json"))
+    enum_report.main(["-i", str(shared_datadir / genbank), "--by", "domain", "--html_out", html_out,
+                      "-o", tsv_out, "--json_out", json_out, *columns, *extra])
+    return open(html_out).read(), open(tsv_out).read(), open(json_out).read()
 
+
+def test_enum_report_html_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        # output_dir = "test_out"
-        out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
-        assert Path(out).is_file()
-        
-        compare_files(out, reference)
+        html, tsv, ndjson = _enum_report_html(shared_datadir, output_dir, "simple_genpept.gb")
+
+    assert "<title>Enum Report</title>" in html
+    envelope = report_data(html)
+    assert envelope["report"] == "enum_report"
+    columns = envelope["data"]["columns"]
+    assert [c["name"] for c in columns] == tsv.splitlines()[0].split("\t")
+    assert [c["type"] for c in columns] == ["str", "str", "str", "str", "str", "int", "str", "float"]
+    assert envelope["data"]["max_height"] is None
+    # The page's rows are --json_out's rows.
+    assert report_rows(html) == [json.loads(line) for line in ndjson.splitlines()]
+    assert len(report_rows(html)) == len(tsv.splitlines()) - 1
 
 
 def test_enum_report_html_max_height_1(shared_datadir):
-    
-    reference = shared_datadir / "enum_report_html_max_size_out.html"
-
     with tempfile.TemporaryDirectory() as output_dir:
-        # output_dir = "test_out"
-        out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", out, "--html_max_height", "100", "--columns", "domains", "sequence", "length", "architecture", "score"])
-        assert Path(out).is_file()
-        
-        compare_files(out, reference)
-        
+        html, _, _ = _enum_report_html(shared_datadir, output_dir, "simple_genpept.gb", "--html_max_height", "100")
+    assert report_data(html)["data"]["max_height"] == 100
+
+
 def test_enum_report_html_quote_escape_1(shared_datadir):
-    
-    reference = shared_datadir / "enum_report_html_out_quote_escape.html"
-
     with tempfile.TemporaryDirectory() as output_dir:
-        # output_dir = "test_out"
-        out = output_dir + "/enum_report.html"
-        enum_report.main(["-i", str(shared_datadir / "simple_genpept_quote_name.gb"), "--by", "domain", "--html_out", out, "--columns", "domains", "sequence", "length", "architecture", "score"])
-        assert Path(out).is_file()
-        
-        compare_files(out, reference)
+        html, _, ndjson = _enum_report_html(shared_datadir, output_dir, "simple_genpept_quote_name.gb")
+    rows = report_rows(html)
+    assert rows == [json.loads(line) for line in ndjson.splitlines()]
+    assert any('"' in row["domain"] for row in rows)
 
 
-def test_enum_html_writer_missing_values_are_valid_javascript():
+def test_enum_html_writer_missing_values_are_null():
     out = StringIO()
     writer = table_writers.HTMLTableWriter(
         ["taxname_superkingdom", "taxid_superkingdom", "taxname_domain"],
@@ -467,10 +468,7 @@ def test_enum_html_writer_missing_values_are_valid_javascript():
     writer.write_row([None, None, "Eukaryota"])
     writer.write_footer()
 
-    html = out.getvalue()
-    assert '"taxname_superkingdom":""' in html
-    assert '"taxid_superkingdom":null' in html
-    assert '"taxname_domain":"Eukaryota"' in html
+    assert report_rows(out.getvalue()) == [{"taxname_superkingdom": None, "taxid_superkingdom": None, "taxname_domain": "Eukaryota"}]
 
 
 def test_enum_report_taxonomy_1(shared_datadir):

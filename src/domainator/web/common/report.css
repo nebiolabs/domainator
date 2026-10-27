@@ -1,0 +1,181 @@
+:root {
+    color-scheme: light;
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #1e2a2f;
+    --muted: #5c6a70;
+    --accent: #c8553d;
+    --accent-soft: #f3cdb9;
+    --line: #d8dce2;
+    --row-alt: #f8f9fa;
+    --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    color: var(--ink);
+    min-height: 100vh;
+    background: linear-gradient(180deg, #ffffff 0%, var(--bg) 100%) fixed;
+}
+.shell {
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 24px;
+}
+h1 {
+    margin: 0 0 16px;
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+h2 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 18px;
+}
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+}
+.toolbar .spacer { flex: 1; }
+.pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.toolbar input.page-input {
+    width: 4.5em;
+    text-align: center;
+    font-size: 0.9rem;
+    padding: 3px 4px;
+}
+.status { color: var(--muted); font-size: 0.9rem; }
+button, select {
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--ink);
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { color: var(--muted); cursor: default; }
+input[type="search"], input[type="text"] {
+    font: inherit;
+    font-size: 0.85rem;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+.error {
+    color: #8f1d1d;
+    background: #fdecec;
+    border: 1px solid #f2b8b8;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+/* table.js */
+.report-table-wrap {
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+table.report-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    table-layout: fixed;
+}
+.report-table th, .report-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+}
+.report-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #eef0f3;
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-weight: 600;
+    vertical-align: top;
+}
+.report-table th .column-title {
+    display: flex;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.report-table th .column-title span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.report-table th .sort-mark { color: var(--accent); }
+.report-table th.drop-target { box-shadow: inset 3px 0 0 var(--accent); }
+.report-table th .resize-handle {
+    position: absolute;
+    top: 0;
+    right: -1px;
+    width: 7px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 2;
+}
+.report-table th .resize-handle:hover,
+.report-table th .resize-handle:focus-visible,
+.report-table th.resizing .resize-handle {
+    background: var(--accent-soft);
+    outline: none;
+}
+body.resizing-column { cursor: col-resize; user-select: none; }
+.context-menu {
+    position: fixed;
+    z-index: 10;
+    min-width: 160px;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    font-size: 0.9rem;
+}
+.context-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: transparent;
+}
+.context-menu button:hover, .context-menu button:focus {
+    background: var(--accent-soft);
+    outline: none;
+}
+.report-table th input { margin-top: 4px; font-weight: normal; }
+.report-table td.number { text-align: right; }
+.report-table tbody tr:nth-child(even) td { background: var(--row-alt); }
+.report-table tbody tr:hover td { background: var(--accent-soft); }
