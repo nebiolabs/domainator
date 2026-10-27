@@ -417,17 +417,19 @@ def test_enum_report_rename_columns_error_1(shared_datadir):
             out = output_dir + "/enum_report.tsv"
             enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "-o", out, "--columns", "domains", "sequence", "length", "architecture", "score", "--column_names"] + new_column_names)
         
-def _enum_report_html(shared_datadir, output_dir, genbank, *extra):
-    columns = ["--columns", "domains", "sequence", "length", "architecture", "score"]
-    html_out, tsv_out, json_out = (output_dir + "/enum_report" + suffix for suffix in (".html", ".tsv", ".json"))
-    enum_report.main(["-i", str(shared_datadir / genbank), "--by", "domain", "--html_out", html_out,
-                      "-o", tsv_out, "--json_out", json_out, *columns, *extra])
-    return open(html_out).read(), open(tsv_out).read(), open(json_out).read()
+def _read(*paths):
+    return tuple(Path(path).read_text() for path in paths)
 
 
+# The main([...]) calls stay literal lists so scripts that replay upstream's test invocations
+# against other implementations can read them.
 def test_enum_report_html_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        html, tsv, ndjson = _enum_report_html(shared_datadir, output_dir, "simple_genpept.gb")
+        html_out = output_dir + "/enum_report.html"
+        tsv_out = output_dir + "/enum_report.tsv"
+        json_out = output_dir + "/enum_report.json"
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", html_out, "-o", tsv_out, "--json_out", json_out, "--columns", "domains", "sequence", "length", "architecture", "score"])
+        html, tsv, ndjson = _read(html_out, tsv_out, json_out)
 
     assert "<title>Enum Report</title>" in html
     envelope = report_data(html)
@@ -443,13 +445,18 @@ def test_enum_report_html_1(shared_datadir):
 
 def test_enum_report_html_max_height_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        html, _, _ = _enum_report_html(shared_datadir, output_dir, "simple_genpept.gb", "--html_max_height", "100")
+        html_out = output_dir + "/enum_report.html"
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept.gb"), "--by", "domain", "--html_out", html_out, "--html_max_height", "100", "--columns", "domains", "sequence", "length", "architecture", "score"])
+        html, = _read(html_out)
     assert report_data(html)["data"]["max_height"] == 100
 
 
 def test_enum_report_html_quote_escape_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        html, _, ndjson = _enum_report_html(shared_datadir, output_dir, "simple_genpept_quote_name.gb")
+        html_out = output_dir + "/enum_report.html"
+        json_out = output_dir + "/enum_report.json"
+        enum_report.main(["-i", str(shared_datadir / "simple_genpept_quote_name.gb"), "--by", "domain", "--html_out", html_out, "--json_out", json_out, "--columns", "domains", "sequence", "length", "architecture", "score"])
+        html, ndjson = _read(html_out, json_out)
     rows = report_rows(html)
     assert rows == [json.loads(line) for line in ndjson.splitlines()]
     assert any('"' in row["domain"] for row in rows)

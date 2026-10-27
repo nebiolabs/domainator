@@ -1,7 +1,7 @@
 from pathlib import Path
 import tempfile
 from glob import glob
-from helpers import compare_files
+from helpers import compare_files, report_data, report_rows
 import json
 import pytest
 
@@ -45,6 +45,22 @@ def test_hmmer_report_alphabet_column_json(shared_datadir):
         assert [rec["name"] for rec in records] == ["dna_prof_1", "dna_prof_2", "dna_prof_3"]
         assert {rec["alphabet"] for rec in records} == {"DNA"}
 
+
+
+def test_hmmer_report_html_out(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        html_out = output_dir + "/hmmer_report.html"
+        json_out = output_dir + "/hmmer_report.ndjson"
+        hmmer_report.main(["-i", str(shared_datadir / "pdonr_hmms.hmm"), str(shared_datadir / "dna_profiles.hmm"), "--html_out", html_out, "--json_out", json_out, "--html_max_height", "400", "--columns", "source", "acc", "desc", "length", "alphabet", "consensus"])
+        html = Path(html_out).read_text()
+        ndjson = Path(json_out).read_text()
+    assert "<title>HMMER Report</title>" in html
+    envelope = report_data(html)
+    assert envelope["report"] == "hmmer_report"
+    assert envelope["data"]["max_height"] == 400
+    assert [c["name"] for c in envelope["data"]["columns"]] == ["name", "source", "acc", "desc", "length", "alphabet", "consensus"]
+    assert [c["type"] for c in envelope["data"]["columns"]] == ["str", "str", "str", "str", "int", "str", "str"]
+    assert report_rows(html) == [json.loads(line) for line in ndjson.splitlines()]
 
 def test_hmmer_report_dna_consensus_and_length(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
