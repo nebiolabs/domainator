@@ -84,6 +84,9 @@ lists every change from 0.x.
   input themselves), and `--offset`/`--recs_to_read` (index the database with
   `domainator format_db --index` instead).
 - The `bashplotlib` dependency; `umap-learn` is now an optional extra.
+- The matplotlib and seaborn dependencies. No HTML page needs them; `build_projection
+  --png_out` still does and takes them from the `projection` extra
+  (`pip install "domainator[projection]"`).
 - The bundled web GUI (`domainator_server`) and its Flask dependency; a separate GUI project is
   being built on `domainator describe`.
 

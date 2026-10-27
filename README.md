@@ -163,6 +163,7 @@ A few commands also need an external program or an optional Python package. The 
 | cmbuild (Infernal) | `infernal_build` | `conda install -c bioconda infernal` |
 | datasets | `db_download` of NCBI genomes | `conda install -c conda-forge ncbi-datasets-cli` |
 | umap-learn | `build_projection --algorithm umap` | `pip install "domainator[projection]"` |
+| matplotlib, seaborn | `build_projection --png_out` | `pip install "domainator[projection]"` |
 | torch, esmologs | `domainate --foldseek` on sequences (ESM-2 to 3Di) | `pip install "domainator[structure]"`; esmologs: see [docs/esm_3b_foldseek.md](docs/esm_3b_foldseek.md) |
 | TMbed (and torch) | `find_features --tmbed` | see [TMbed](#optional-tmbed-for-find_features---tmbed) |
 

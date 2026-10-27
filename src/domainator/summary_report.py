@@ -8,9 +8,7 @@
 ### cds_density
 ### raw domain counts
 ### domain co-occurence table
-### (optional) domain distance density from "focus" CDSs (or focus domains)
-### TODO: a ridge plot (joy plot) https://www.python-graph-gallery.com/ridgeline-graph-seaborn
-###       https://www.python-graph-gallery.com/ridgeline-graph-plotly
+### TODO: (optional) domain distance density from "focus" CDSs (or focus domains)
 ### (optional) hierarchical tree of domain co-occurence
 ### (optional) score cutoffs
 
@@ -278,38 +276,6 @@ def write_cooccurence_matrix(domains:Dict[str, Dict], dense_text_file: str, row_
 
     DataMatrix.write_dense_text(corr_mat, dense_text_file, domain_names, domain_names)
 
-def domain_dist(domain1_coords, domain2_coords):
-    """
-        input:
-            tuples of start, end, strand
-
-        
-        if domain1 and domain2 overlap, return 0
-        otherwise return the distance between the closest edges
-    """
-
-    assert domain1_coords[0] <= domain1_coords[1]
-    assert domain2_coords[0] <= domain2_coords[1]
-    
-    out = 0
-    # domain2 has an edge inside domain1
-    if (domain2_coords[0] >= domain1_coords[0] and domain2_coords[0] <= domain1_coords[1]) or (domain2_coords[1] >= domain1_coords[0] and domain2_coords[1] <= domain1_coords[1]):
-        pass
-    # domain1 has an edge inside domain2
-    elif (domain1_coords[0] >= domain2_coords[0] and domain1_coords[0] <= domain2_coords[1]) or (domain1_coords[1] >= domain2_coords[0] and domain1_coords[1] <= domain2_coords[1]):
-        pass
-    # domain2 is before domain1 on the contig
-    elif (domain2_coords[1] < domain1_coords[0]):
-        out = -1 * (domain1_coords[0] - domain2_coords[1])
-    # domain2 is after domain1 on the contig
-    elif (domain2_coords[0] > domain1_coords[1]):
-        out = domain2_coords[0] - domain1_coords[1]
-    
-    if domain1_coords[2] == -1 and out != 0: #TODO: test this
-        out = -1 * out
-    
-    return out
-
 def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[TextIO] = None,
                    html_out_handle: Optional[TextIO] = None,
                    domains: Optional[Set[str]] = None, co_occurrence_fraction_out: Optional[str] = None,
@@ -355,10 +321,6 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
     domain_stats = dict() # dict of dicts, domain_name: {count: int, description: str, correlations: dict, average_score: float, database: str} 
     if domains is None:
         domains = list()
-
-    domain_dists = dict() # dict of dicts of lists. focus_domain: other_domain: list_of_dists
-    for focus_domain in domains:
-        domain_dists[focus_domain] = dict() # domain:list_of_dists
 
     taxa_data = dict() # dict of dicts, taxid: {count: int, data: TaxonomyData}
 
@@ -423,17 +385,6 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
                 if domain2 not in domain_stats[domain1]['correlations']:
                     domain_stats[domain1]['correlations'][domain2] = 0
                 domain_stats[domain1]['correlations'][domain2] += 1
-        
-        # calculate domain distances
-        for focus_domain in domain_dists:
-            if focus_domain in contig_domains:
-                for focus_location in contig_domains[focus_domain]:
-                    for other_domain in contig_domains:
-                        for other_location in contig_domains[other_domain]:
-                            if (focus_domain, focus_location) != (other_domain, other_location):
-                                if other_domain not in domain_dists[focus_domain]:
-                                   domain_dists[focus_domain][other_domain] = list()
-                                domain_dists[focus_domain][other_domain].append(domain_dist(focus_location, other_location))
     
     # convert database set to string
     for domain in domain_stats:

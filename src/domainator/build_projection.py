@@ -78,7 +78,8 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
             coordinates).
         metadata: tab-separated metadata files, joined to the points by their first column.
         color_by: color the points by this metadata column.
-        png_out: write a picture of the projection to this path (2D only).
+        png_out: write a picture of the projection to this path (2D only). Needs matplotlib
+            and seaborn, from the "projection" extra.
         coords_out: write the coordinates to this tab-separated file.
         xgmml_out: write the projection to this Cytoscape XGMML file.
         scale: scale the coordinates so that the widest axis spans this much.
@@ -94,6 +95,11 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
     """
     if color_table_out is not None and color_by is None and color_table is None:
         raise ValueError("--color_table_out requires either --color_by or --color_table, otherwise there are no colors to write.")
+    if png_out is not None and not three_d:
+        # Checked before projecting, so a missing package doesn't cost a long umap run.
+        hint = 'Install them with: pip install "domainator[projection]" (or pip install matplotlib seaborn).'
+        sns = import_optional("seaborn", hint)
+        plt = import_optional("matplotlib.pyplot", hint)
     # Mostly-filled matrices (e.g. profile scores, distances) are projected densely; mostly-empty
     # ones (e.g. similarity networks) stay sparse, which changes PCA to TruncatedSVD.
     is_sparse = data_matrix.nnz < DENSE_PROJECTION_MIN_FILL * data_matrix.size
@@ -165,8 +171,6 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
         if three_d:
             warnings.warn("png output for 3d graphs not supported yet.")
         else:
-            import seaborn as sns
-            from matplotlib import pyplot as plt
             # change matplotlib backend
             old_backend = plt.get_backend()
             plt.switch_backend('agg') # this is necessary to run on a headless server

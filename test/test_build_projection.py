@@ -1,5 +1,7 @@
 from domainator import build_projection
 from domainator.colors import DISTINCT_COLORS
+from domainator.errors import ExternalToolError
+import sys
 import tempfile
 import pandas as pd
 from pathlib import Path
@@ -12,6 +14,7 @@ import pytest
     "scorefull.dense.hdf5"
 ])
 def test_build_projection_1(input_file, shared_datadir):
+    pytest.importorskip("seaborn", reason="--png_out needs the projection extra (matplotlib, seaborn)")
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "tmp_out"
         out_png = output_dir + "/out.png"
@@ -24,6 +27,15 @@ def test_build_projection_1(input_file, shared_datadir):
         assert Path(out_png).is_file()
         assert Path(out_cytoscape).is_file()
         #assert (out_mat.diagonal() == [410., 429., 405., 425., 411., 410., 400., 434., 426., 414., 398., 424., 430., 413., 402., 417., 451., 419., 429., 422.]).all()
+
+def test_png_out_without_the_projection_extra(shared_datadir, tmp_path, monkeypatch):
+    """--png_out says how to install seaborn, and fails before writing anything."""
+    monkeypatch.setitem(sys.modules, "seaborn", None)  # makes `import seaborn` fail
+    out_coords = tmp_path / "out.tsv"
+    with pytest.raises(ExternalToolError, match=r'domainator\[projection\]'):
+        build_projection.main(["-i", str(shared_datadir / "scorefull.tsv"), "--png_out", str(tmp_path / "out.png"),
+                               "--coords_out", str(out_coords)])
+    assert not out_coords.exists()
 
 @pytest.mark.parametrize("input_file",
 [

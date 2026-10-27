@@ -1,7 +1,6 @@
 """Categorical color palettes, and reading color tables.
 """
 import math
-import random
 import re
 
 import pandas as pd
@@ -245,20 +244,26 @@ def read_color_table(color_table):
     return out
 
 
-class AutoColormap:
-    """Assigns colors to names on first use, cycling through ``num_colors`` shuffled husl colors."""
-    def __init__(self, num_colors=30):
-        self.next_color = 0
-        self.num_colors = num_colors
-        import seaborn as sns
-        self.color_list = [x.upper() for x in sns.color_palette('husl', n_colors=self.num_colors).as_hex()]
+AUTO_COLORS = (
+    "#3BA3EC", "#38A9C5", "#34AF8C", "#AE9D31", "#F77468", "#B287F4", "#39A7D5", "#DC8932",
+    "#37AAB9", "#9591F4", "#BB9832", "#F560E4", "#F37A32", "#77AB31", "#50B131", "#E866F4",
+    "#9FA131", "#35AE99", "#F66AB7", "#F66DA2", "#CC7AF4", "#F77189", "#33B07A", "#CA9232",
+    "#32B25C", "#F565CC", "#36ACAE", "#6E9BF4", "#8EA631", "#36ADA4",
+)
+"""The colors AutoColormap hands out, in order: seaborn's 30-color husl palette
+(``color_palette('husl', n_colors=30)``), upper-cased and shuffled with ``random.Random(12)``."""
 
+
+class AutoColormap:
+    """Assigns colors to names on first use, cycling through the 30 AUTO_COLORS."""
+    def __init__(self):
+        self.next_color = 0
+        self.color_list = list(AUTO_COLORS)
         self.color_map = dict()
-        random.Random(12).shuffle(self.color_list)
     def __getitem__(self, key: str) -> str:
         if key not in self.color_map:
             self.color_map[key] = self.color_list[self.next_color]
-            self.next_color = (self.next_color + 1)  % self.num_colors
+            self.next_color = (self.next_color + 1) % len(self.color_list)
         return self.color_map[key]
     def __contains__(self, key: str) -> bool:
         self[key]  # every name gets a color

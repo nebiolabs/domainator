@@ -35,6 +35,7 @@ EXTERNAL_PROGRAMS = (
 
 OPTIONAL_PACKAGES = (
     Requirement("umap", "build_projection --algorithm umap", 'pip install "domainator[projection]"'),
+    Requirement("seaborn", "build_projection --png_out (with matplotlib)", 'pip install "domainator[projection]"'),
     Requirement("torch", "domainate --foldseek on sequences (ESM-2), find_features --tmbed",
                 'pip install "domainator[structure]"'),
     Requirement("esmologs", "domainate --foldseek on sequences (ESM-2)", "see docs/esm_3b_foldseek.md"),
