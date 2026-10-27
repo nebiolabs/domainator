@@ -218,3 +218,30 @@ body.resizing-column { cursor: col-resize; user-select: none; }
 .slider-controls label { display: block; margin: 10px 0 6px; font-size: 0.95rem; }
 .slider-track input[type="range"] { width: 100%; margin: 0; accent-color: #d62728; }
 #threshold-slider { direction: rtl; }
+
+/* The contig plot */
+.contig-details {
+    max-width: 100%;
+    overflow: auto;
+    resize: vertical;
+    padding: 6px 10px;
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+.contig-details .details-heading { font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+.contig-details dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+.contig-details dt { font-weight: 600; }
+.contig-details dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.color-swatch {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-right: 6px;
+    border-radius: 2px;
+    vertical-align: -0.05em;
+}
+svg.contig-plot { border: 1px solid var(--line); border-radius: 8px; cursor: grab; touch-action: none; }
+svg.contig-plot.panning { cursor: grabbing; }
+svg.contig-plot [data-contig] > line, svg.contig-plot [data-contig] text, svg.contig-plot [data-feature] { cursor: pointer; }

@@ -10,7 +10,7 @@ import pytest
 from domainator import report_html, table_writers
 from helpers import report_data, report_rows
 
-REPORTS = ["table_report", "summary_report", "matrix_report"]
+REPORTS = ["table_report", "summary_report", "matrix_report", "plot_contigs"]
 # Pages that stream rows into a report-rows block.
 TABLE_PAGES = {"table_report"}
 

@@ -72,6 +72,12 @@ lists every change from 0.x.
   and clicking it moves the threshold there; the arrow keys step the slider from stop to stop;
   and each chart, the 100-largest-clusters bubble chart included, downloads as SVG or PNG. The
   page carries the `--json_out` document, so its summary shows the same numbers.
+- plot_contigs works offline: the plot is Domainator's own JavaScript instead of d3 from a CDN,
+  with zoom buttons, SVG/PNG downloads and a details box that lists every value in full. Each
+  part of a multi-part feature is now drawn where it is, not all at the feature's start. A
+  contig's details list a fixed set of record annotations (references and structured comments
+  are left out), and its metadata as the text in the file. `--color_by` needs `--metadata`
+  and must name one of its columns; a contig with no value is drawn gray instead of failing.
 
 ### Removed
 - `partition_seqfile` and `partition_seqids` (domainate and domain_search partition their

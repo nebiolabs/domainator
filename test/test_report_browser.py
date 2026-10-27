@@ -13,6 +13,7 @@ import json
 import pytest
 
 from domainator import table_writers
+from helpers import report_data
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -445,3 +446,106 @@ def test_matrix_page_with_too_few_edges(open_page, tmp_path, values):
     assert page.pageerrors == [] and page.requests == []
     assert _figures(page)["clusters"] == str(len(values))
     assert page.is_disabled("#threshold-slider") == (len(values) < 2 or values[0][1] == 0)
+
+
+def _contig_page(path, *extra):
+    from domainator import plot_contigs
+    plot_contigs.main(["--html_out", str(path), *extra])
+    return path
+
+
+def _view(page):
+    return page.evaluate("window.contigPlot.view.view()")
+
+
+def test_contig_plot_draws_every_contig_and_feature(open_page, tmp_path, shared_datadir):
+    path = _contig_page(tmp_path / "contigs.html", "-i", str(shared_datadir / "MT_nbs.gb"))
+    page = open_page(path)
+    page.wait_for_selector("svg.contig-plot")
+    assert page.pageerrors == [] and page.requests == []
+    data = report_data(path.read_text())["data"]
+    labels = page.eval_on_selector_all("svg.contig-plot [data-contig] > text", "t => t.map(x => x.textContent)")
+    assert labels == [contig["name"] for contig in data["contigs"]]
+    parts = sum(len(feature["parts"]) for contig in data["contigs"] for feature in contig["features"])
+    assert page.locator("svg.contig-plot [data-feature] path").count() == parts
+    # Each contig is below the one before, and its CDSs share the level next to it.
+    offsets = page.evaluate("window.contigPlot.contigs.map(c => c.offset)")
+    assert offsets == sorted(offsets) and len(set(offsets)) == len(offsets)
+    levels = page.evaluate("window.contigPlot.contigs.flatMap(c => c.features.filter(f => f.type === 'CDS').map(f => f.level))")
+    assert set(levels) == {0}
+    # The widest contig is shrunk to fit, but to no less than a tenth.
+    widest = max(contig["length"] for contig in data["contigs"])
+    assert _view(page)["k"] == max(0.1, min(1, 1200 / widest))
+
+
+def test_contig_plot_stacks_overlapping_features(open_page, tmp_path, shared_datadir):
+    page = open_page(_contig_page(tmp_path / "contigs.html", "-i", str(shared_datadir / "FeSOD_20_pfam.gb")))
+    page.wait_for_selector("svg.contig-plot")
+    features = [
+        {"name": "a", "type": "Domainator", "parts": [[0, 100, "+"]]},
+        {"name": "c", "type": "Domainator", "parts": [[120, 200, "+"]]},
+        {"name": "b", "type": "Domainator", "parts": [[50, 150, "+"]]},
+        {"name": "y", "type": "CDS", "parts": [[400, 500, "-"]]},
+        {"name": "x", "type": "CDS", "parts": [[0, 300, "+"]]},
+        {"name": "split", "type": "misc_feature", "parts": [[350, 360, "+"], [0, 10, "+"]]},
+    ]
+    stacked = page.evaluate("features => stackFeatures(features, ['CDS', 'Domainator']).map(f => [f.name, f.level])", features)
+    # By type, then start; CDSs share a level, and every other feature takes the lowest
+    # level free of the features it overlaps.
+    assert stacked == [["x", 0], ["y", 0], ["a", 1], ["b", 2], ["c", 1], ["split", 2]]
+
+
+def test_contig_plot_hover_click_zoom_pan_and_download(open_page, tmp_path, shared_datadir):
+    page = open_page(_contig_page(tmp_path / "contigs.html", "-i", str(shared_datadir / "FeSOD_20_pfam.gb"),
+                                  "--metadata", str(shared_datadir / "metadata_FeSOD_20.tsv"), "--color_by", "group"))
+    page.wait_for_selector("svg.contig-plot")
+    assert page.pageerrors == [] and page.requests == []
+    feature = page.locator("svg.contig-plot [data-contig='0'] [data-feature]").first
+    feature.hover()
+    assert page.text_content(".chart-tooltip").startswith("Domainator\nstart: ")
+    feature.click()
+    assert page.text_content("#details .details-heading") == "Domainator"
+    assert "evalue" in page.eval_on_selector_all("#details dt", "terms => terms.map(t => t.textContent)")
+
+    page.click("svg.contig-plot [data-contig='0'] > text")
+    assert page.text_content("#details .details-heading") == "Contig"
+    terms = page.eval_on_selector_all("#details dt", "terms => terms.map(t => t.textContent)")
+    assert terms[:3] == ["Name", "Description", "Length"] and terms[-1] == "group"
+    # The --color_by value is marked with the contig's color.
+    line_color = page.get_attribute("svg.contig-plot [data-contig='0'] > line", "stroke")
+    swatch = page.eval_on_selector("#details .color-swatch", "s => getComputedStyle(s).backgroundColor")
+    assert swatch == "rgb({}, {}, {})".format(*(int(line_color[i:i + 2], 16) for i in (1, 3, 5)))
+
+    page.click("#zoom-in")
+    assert _view(page)["k"] == pytest.approx(1.5)
+    page.click("#reset-view")
+    assert _view(page) == {"k": 1, "x": 0, "y": 0}
+    box = page.locator("svg.contig-plot").bounding_box()
+    page.mouse.move(box["x"] + 300, box["y"] + 300)
+    page.mouse.wheel(0, -200)
+    assert _view(page)["k"] > 1
+    page.click("#reset-view")
+
+    # A drag pans, and does not select what it started on.
+    page.click("svg.contig-plot [data-contig='0'] > text")
+    start = feature.bounding_box()
+    page.mouse.move(start["x"] + 5, start["y"] + 5)
+    page.mouse.down()
+    page.mouse.move(start["x"] + 105, start["y"] + 45, steps=5)
+    page.mouse.up()
+    view = _view(page)
+    assert view["x"] > 0 and view["y"] > 0
+    assert page.text_content("#details .details-heading") == "Contig"
+
+    with page.expect_download() as download:
+        page.click("#download-svg")
+    assert download.value.suggested_filename == "contigs.svg"
+    assert open(download.value.path()).read().count("<path") == page.locator("svg.contig-plot path").count()
+    assert page.pageerrors == []
+
+
+def test_contig_plot_with_no_contigs(open_page, tmp_path, shared_datadir):
+    page = open_page(_contig_page(tmp_path / "contigs.html", "-i", str(shared_datadir / "empty.gb")))
+    page.wait_for_selector(".panel .status")
+    assert page.text_content(".panel .status") == "No contigs to plot."
+    assert page.pageerrors == [] and page.requests == []

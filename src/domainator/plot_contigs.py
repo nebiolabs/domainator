@@ -3,112 +3,65 @@
 It works best for relatively small datasets, of a few megabases or a few hundred contigs.
 
 """
+# The page is web/reports/plot_contigs.html and .js (see report_html.py). This module builds its
+# data, and the page lays the plot out: it stacks each contig's features and spaces the contigs.
 
-# TODO: more command line options
-# TODO: better support for eukaryotic genomes
-
-from jsonargparse import ActionConfigFile
-from typing import List, Optional, Set, Union, Dict
-from os import PathLike
-from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
-from domainator.outputs import output_file
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
-from domainator.seqio import parse_seqfiles, open_if_is_name
-from domainator.model import get_cds_name
-from Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
-from Bio.SeqRecord import SeqRecord
+import csv
 from collections import defaultdict
-import html
-import json
-from domainator.colors import normalize_color_hex, read_color_table
-import pandas as pd
-from domainator.colors import get_palette
-from domainator.location_ops import overlaps
-from domainator import web_libs
+from os import PathLike
+from typing import Dict, List, Optional, Tuple, Union
 
-def normalize_strand(strand:int) -> str:
-    if strand is None:
-        return "+"
-    elif int(strand) == -1:
-        return "-"
-    else:
-        return "+"
+from Bio.SeqFeature import SeqFeature
+from Bio.SeqRecord import SeqRecord
+from jsonargparse import ActionConfigFile
 
-def location_to_list_of_dicts(location:Union[SimpleLocation, CompoundLocation]) -> dict:
-    out = []
-    for part in location.parts:
-        out.append({
-            "start": part.start,
-            "end": part.end,
-            "strand": normalize_strand(location.strand)
-        })
-    return out
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, report_html
+from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
+from domainator.colors import OTHER_COLOR, get_palette, normalize_color_hex, read_color_table
+from domainator.errors import InputError
+from domainator.model import get_cds_name
+from domainator.outputs import output_file
+from domainator.seqio import open_if_is_name, parse_seqfiles
 
-def get_feature_mouseover(feature:SeqFeature) -> str:
-    return "<br>".join([f'<b style="color:#AA2222;">{html.escape(feature.type)}</b>', 
-                        f'<b>start</b>: {html.escape(str(feature.location.start))}',
-                        f'<b>end</b>: {html.escape(str(feature.location.end))}',
-                        f'<b>strand</b>: {html.escape(normalize_strand(feature.location.strand))}',]
-                       + [f"<b>{html.escape(k)}</b>: {html.escape(';'.join(v))}" for k, v in feature.qualifiers.items()]
-                       )
+#: The feature types drawn by default, in stacking order.
+DEFAULT_TYPES = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
 
-def get_contig_mouseover(rec:SeqRecord, metadata=None, color_by=None, palette=None) -> str:
-    annots = [("Name", rec.id), 
-              ("Description", rec.description),
-              ("Length", len(rec)),
-             ]
-    annots += [(k, v) for k, v in rec.annotations.items()]
-    for xref in rec.dbxrefs:
-        if ":" in xref:
-            db, id = xref.split(":", 1)
-            annots.append((db, id))
-        else:
-            annots.append(("dbxref", xref))
-    html_escaped = [f"<b>{html.escape(str(k))}</b>: {html.escape(str(v))}" for (k, v) in annots]
+#: The color of a contig's line when it is not colored by metadata, and of a value a color
+#: table does not list.
+DEFAULT_CONTIG_COLOR = "#000000"
+
+#: The record annotations a contig's details list, in this order, when they have a value.
+#: References and structured comments are left out.
+CONTIG_ANNOTATIONS = ("molecule_type", "topology", "data_file_division", "date", "accessions", "sequence_version",
+                      "keywords", "source", "organism", "taxonomy", "comment")
 
 
-    if metadata is not None:
-        if rec.id in metadata.index:
-            row = metadata.loc[rec.id]
-            for k, v in row.items():
-                if color_by is not None and k == color_by:
-                    html_escaped.append(f'<b>{html.escape(str(k))}</b>: <span style="color:{palette[v]};">{html.escape(str(v))} </span>')
-                else:
-                    html_escaped.append(f"<b>{html.escape(k)}</b>: {html.escape(str(v))}")
+def _strand(strand: Optional[int]) -> str:
+    return "-" if strand == -1 else "+"
 
-        #html_escaped.append(f"<b>{html.escape(k)}</b>: {html.escape(str(v))}")
-    return "<br>".join(
-        [f'<b style="color:#AA2222;">Contig</b>'] + html_escaped
-        )
 
-def get_feature_name(feature:SeqFeature) -> str:
-    name = ""
+def get_feature_name(feature: SeqFeature) -> str:
     if feature.type == "CDS" or feature.type == "gene":
-        name += get_cds_name(feature)
-    elif feature.type == "source" and "organism" in feature.qualifiers:
-        name += feature.qualifiers["organism"][0]
-    elif "name" in feature.qualifiers:
-        name += feature.qualifiers["name"][0]
-    elif "product" in feature.qualifiers:
-        name += feature.qualifiers["product"][0]
-    elif "gene" in feature.qualifiers:
-        name += feature.qualifiers["gene"][0]
-    elif "locus_tag" in feature.qualifiers:
-        name += feature.qualifiers["locus_tag"][0]
-    else:
-        name += feature.type
-    return name
+        return get_cds_name(feature)
+    if feature.type == "source" and "organism" in feature.qualifiers:
+        return feature.qualifiers["organism"][0]
+    for key in ("name", "product", "gene", "locus_tag"):
+        if key in feature.qualifiers:
+            return feature.qualifiers[key][0]
+    return feature.type
 
 
-# same thing as above but as a dict initialized with the Feature fields
-def feature_to_dict(feature: SeqFeature, default_color:Optional[Union[str, Dict[str, str]]]=None) -> dict:
-    """
-    Convert a SeqFeature to a dictionary that can be serialized to JSON.
+def feature_to_dict(feature: SeqFeature, default_color: Optional[Union[str, Dict[str, str]]] = None) -> dict:
+    """A feature as the page draws it: {name, type, color, parts, qualifiers}.
+
+    parts are [start, end, strand], 0-based and end-exclusive, strand "+" or "-"; qualifiers
+    are [key, [values]] pairs.
 
     Args:
         feature: The SeqFeature to convert
-        default_color: The default color to use for the feature. Can be a hex string, eg "CC00CC". 
-                        Or a dict of feature type to hex string, eg {"CDS": "CCCCCC", "exon": "00FF00", "repeat_region": "0000FF",}.
+        default_color: The color of a feature with no color or Color qualifier. Can be a hex
+            string, eg "CC00CC", or a dict of feature type to hex string, eg
+            {"CDS": "CCCCCC", "exon": "00FF00"}, types missing from it being "#CCCCCC".
     """
     if default_color is None:
         default_color = defaultdict(lambda: "#CCCCCC", {"CDS": "#CCCCCC", "exon": "#CCCCCC", "repeat_region": "#0000FF", DOMAIN_FEATURE_NAME: "#00FFFF", DOMAIN_SEARCH_BEST_HIT_NAME: "#06FF0D", "source": "#2626FF"})
@@ -130,60 +83,60 @@ def feature_to_dict(feature: SeqFeature, default_color:Optional[Union[str, Dict[
 
     return {
         "name": get_feature_name(feature),
-        "start": feature.location.start,
-        "end": feature.location.end,
-        "parts": location_to_list_of_dicts(feature.location),
-        "location": feature.location,
         "type": feature.type,
         "color": color,
-        "mouseover": get_feature_mouseover(feature),
-        "z_order": 0
+        "parts": [[int(part.start), int(part.end), _strand(part.strand)] for part in feature.location.parts],
+        "qualifiers": [[key, [str(value) for value in values]] for key, values in feature.qualifiers.items()],
     }
 
-def add_z_order(features:List[Dict[str, Union[int, str]]], 
-                precedence:List[str] = None,
-                squash:Set[str] = None,
-                ):
+
+def _annotation_text(value) -> str:
+    if isinstance(value, (list, tuple)):
+        return "; ".join(str(item) for item in value)
+    return str(value)
+
+
+def contig_details(record: SeqRecord, metadata: Optional[List[Tuple[str, str]]] = None) -> List[List[str]]:
+    """What the page lists for a contig, as [label, text] pairs: its name, description and
+    length, the CONTIG_ANNOTATIONS that have a value, its cross-references, and ``metadata``."""
+    details = [["Name", record.id], ["Description", record.description], ["Length", str(len(record))]]
+    for key in CONTIG_ANNOTATIONS:
+        text = _annotation_text(record.annotations[key]) if key in record.annotations else ""
+        if text != "":
+            details.append([key, text])
+    for xref in record.dbxrefs:
+        db, colon, identifier = xref.partition(":")
+        details.append([db.strip(), identifier.strip()] if colon else ["dbxref", xref])
+    details.extend([column, value] for column, value in metadata or [])
+    return details
+
+
+def read_metadata(paths: List[Union[str, PathLike]]) -> Tuple[List[str], Dict[str, Dict[str, str]]]:
+    """Tab-separated tables of contig metadata, as (columns, {contig id: {column: value}}).
+
+    Each table's first column is the contig id and its first row the column names. Values are
+    kept as the text in the file, and an empty cell is no value. Within a table the first row
+    for an id counts; when tables share a column, a contig gets the value of the first table
+    that has one. Columns are listed in the order they are first seen.
     """
-        features is a list of features
-        precedence is a list of feature types in order of precedence, e.g. ["source", "CDS", "repeat_region", "ncRNA", "rRNA", "tRNA"] will put "CDS" features closer to the bottom of the plot than "repeat_region" features.
-        squash is a set of feature types that should be squashed together, e.g. {"CDS"} will put all CDS features on the same level as all other CDS features, regardless of their start and end positions.
+    columns = []
+    values = {}
+    for path in paths:
+        with open(path, newline="") as handle:
+            reader = csv.reader(handle, delimiter="\t", quoting=csv.QUOTE_NONE)
+            names = next(reader, [])[1:]
+            columns.extend(name for name in names if name not in columns)
+            seen = set()
+            for row in reader:
+                if not row or row[0] in seen:
+                    continue
+                seen.add(row[0])
+                contig = values.setdefault(row[0], {})
+                for name, value in zip(names, row[1:]):
+                    if value != "" and name not in contig:
+                        contig[name] = value
+    return columns, values
 
-        Adds a z_order attribute to each feature in the list, which is used to determine the vertical position of the feature in the plot.
-    """
-
-    if precedence is None:
-        precedence = ["source", "CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
-    if squash is None:
-        squash = {"CDS", "exon"}
-
-
-    type_order = defaultdict(lambda: len(precedence) + 1)
-    type_order.update({t: i for i, t in enumerate(precedence)})
-
-    features.sort(key=lambda x: (type_order[x["type"]], x["start"])) # sort by start position and then by type, so that features of the same type are grouped together
-
-    # Initialize z_order calculation
-    z_orders = []
-    for current_feature in features:
-        occupied_levels = set()
-        level_override = None
-        for other_feature, other_level in z_orders:
-            if current_feature["type"] in squash:
-                if other_feature["type"] in squash:
-                    level_override = other_level
-                    break
-            if overlaps(current_feature["location"], other_feature["location"]):
-                occupied_levels.add(other_level)
-
-        if level_override is not None:
-            current_level = level_override
-        else:
-            current_level = 0
-            while current_level in occupied_levels:
-                current_level += 1
-        current_feature["z_order"] = current_level
-        z_orders.append((current_feature, current_level))
 
 def plot_contigs(records: List[SeqRecord], *,
                  html_out: str,
@@ -203,256 +156,52 @@ def plot_contigs(records: List[SeqRecord], *,
 
     The options mean the same as the ``domainator plot_contigs`` options with the same names;
     ``types`` is the feature types to draw, and ``palette_offset`` is ignored when
-    ``color_table`` is given.
+    ``color_table`` is given. A contig with no ``color_by`` value is drawn in OTHER_COLOR, and
+    one whose value ``color_table`` does not list in DEFAULT_CONTIG_COLOR.
     """
-    # Convert input to correct types
-    feature_height = int(feature_height)
-    arrow_width = int(arrow_width)
-    contig_label_font = html.escape(contig_label_font)
-    feature_label_font = html.escape(feature_label_font)
-    contig_label_px = int(contig_label_px)
-    feature_font_size = int(feature_font_size)
-    height = int(height)
-    width = int(width)
-    details_height = int(details_height)
-    if details_width is None:
-        details_width = width
-    else:
-        details_width = int(details_width)
-
     if types is None:
-        types = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
+        types = DEFAULT_TYPES
+    columns, values = read_metadata(metadata) if metadata is not None else ([], {})
+    if color_by is not None and color_by not in columns:
+        raise InputError(f"--color_by {color_by} is not a column of the --metadata tables.")
 
-    offset_padding = contig_label_px + (contig_thickness / 2) + 5 # Adjust this value as needed
-
-    metadata_table = pd.DataFrame()
-    metadata_table.index = [rec.id for rec in records]
-    if metadata is not None:
-        for file in metadata:
-            df = pd.read_csv(file, sep="\t", index_col=0)
-            metadata_table = metadata_table.merge(df,how="left", left_index=True, right_index=True)
-        # drop duplicate indexes
-        metadata_table = metadata_table[~metadata_table.index.duplicated(keep='first')]
-
-    palette = None
+    contig_metadata = [[(column, values[record.id][column]) for column in columns if column in values.get(record.id, {})]
+                       for record in records]
+    colors = [DEFAULT_CONTIG_COLOR] * len(records)
     if color_by is not None:
+        by = [dict(row).get(color_by) for row in contig_metadata]
+        present = list(dict.fromkeys(value for value in by if value is not None))
         if color_table is None:
-            palette = get_palette(metadata_table[color_by].unique(), offset=palette_offset)
-        else:  # values missing from the table keep the default contig color
-            palette = {value: color_table.get(str(value), "#000000") for value in metadata_table[color_by].unique()}
+            palette = get_palette(present, offset=palette_offset)
+        else:
+            palette = {value: color_table.get(value, DEFAULT_CONTIG_COLOR) for value in present}
+        colors = [OTHER_COLOR if value is None else palette[value] for value in by]
 
-    # Preparing data for D3
-    contigs_data = []
-    current_offset = 0  # Start with the initial offset for the first contig
-    
-    for contig in records:
-        features = [feature_to_dict(feature) for feature in contig.features if feature.type in types]
-        add_z_order(features, types)
-        max_z_order = max([feature["z_order"] for feature in features], default=0)
-        for feature in features:
-            del feature["location"]  # Remove the location attribute, which is not JSON serializable
-
-        current_offset += (max_z_order + 1) * feature_height + offset_padding
-        contigs_data.append({
-            'name': contig.id,
-            'length': len(contig),
-            'features': features,
-            'offset': current_offset,  # Add an offset for each contig based on its content
-            'mouseover': get_contig_mouseover(contig, metadata=metadata_table, color_by=color_by, palette=palette),
-            'color': "#000000",
-        })
-        if color_by is not None:
-            contigs_data[-1]["color"] = palette[metadata_table.loc[contig.id, color_by]]
-
-        # Update current_offset for the next contig, accounting for the maximum z_order of the current contig's features
-        # current_offset += (max_z_order + 1) * arrow_height + offset_padding  # Adjust padding as needed for additional spacing
-    
-    widest_contig_length = max(contig['length'] for contig in contigs_data)
-    scale_factor = min(1, width / widest_contig_length)
-    if scale_factor < 0.1:
-        scale_factor = 0.1
-
-
-    arrow_width = int(arrow_width)
-    feature_height = int(feature_height)
-    # Write to file
+    data = {
+        "types": list(types),
+        "color_by": color_by,
+        "layout": {
+            "width": int(width), "height": int(height), "feature_height": int(feature_height),
+            "arrow_width": int(arrow_width), "contig_thickness": int(contig_thickness),
+            "contig_label_font": contig_label_font, "contig_label_px": int(contig_label_px),
+            "feature_label_font": feature_label_font, "feature_font_size": int(feature_font_size),
+            "details_width": int(width if details_width is None else details_width),
+            "details_height": int(details_height),
+        },
+        "contigs": [{
+            "name": record.id,
+            "length": len(record),
+            "color": color,
+            "details": contig_details(record, row),
+            "features": [feature_to_dict(feature) for feature in record.features if feature.type in types],
+        } for record, row, color in zip(records, contig_metadata, colors)],
+    }
+    page = report_html.render_report("plot_contigs", "Contig Plot", "plot_contigs", data, encoding="gzip+base64")
     outfile_handle, file_type = open_if_is_name(html_out, "w")
-    outfile_handle.write(f"""
-    <html>
-    <head>
-        <title>Domainator Contigs Plot</title>
-        {web_libs.D3}
-        <style>
-            .tooltip {{
-                position: absolute;
-                text-align: left;
-                padding: 8px;
-                font: 12px sans-serif;
-                background: lightblue;
-                border: 0px;
-                border-radius: 8px;
-                pointer-events: none;
-                opacity: 0;
-            }}
-            .contig-label {{
-                font: {contig_label_px}px {contig_label_font};
-            }}
-            .feature-label {{
-                font: {feature_font_size}px {feature_label_font};
-            }}
-        </style>
-    </head>
-    <body>
-        <div id="details" style="padding: 5px; border: 1px solid #ccc; margin-top: 5;  margin-bottom: 15px; width: {details_width}; height: {details_height}; overflow: scroll; font: 10px sans-serif;"></div>
-        <div> Zoom with mousewheel, left-click to move annotations to the upper box, left-click and drag to pan </div>
-        <div id="tooltip" class="tooltip"></div>
-        <div>
-        <svg width="{width}" height="{height}" style="padding: 5px; border: 1px solid #ccc; margin-top: 2px; overflow: scroll;"></svg>
-        </div>
-        <script>
-            var svg = d3.select("svg");
-            var detailsDiv = d3.select("#details");
-            var tooltip = d3.select("#tooltip");
-    
-            var zoomContainer = svg.append("g");
-
-            var zoom = d3.zoom()
-                .on("zoom", function(event) {{
-                    zoomContainer.attr("transform", event.transform);
-                    
-                }});
-            var initialTransform = d3.zoomIdentity.translate(0, 0).scale({scale_factor});
-            svg.call(zoom)
-                .call(zoom.transform, initialTransform); // Apply the initial zoom transform correctly
-
-            
-                    
-            var contigs = {json.dumps(contigs_data)};
-            var contigGroup = zoomContainer.selectAll(".contig")
-                .data(contigs)
-                .enter()
-                .append("g")
-                .attr("class", "contig")
-                .attr("transform", function(d, i) {{ return "translate(0," + d.offset + ")"; }});
-            
-    
-            contigGroup.append("line")
-                .attr("x1", 0)
-                .attr("x2", function(d) {{ return d.length; }})
-                .attr("stroke", function(d) {{ return d.color; }})
-                .attr("stroke-width", {contig_thickness})
-                .on("click", function(event, d) {{
-                        detailsDiv.html(d.mouseover);
-                }})            
-                .on("mouseover", function(event, d) {{
-                    tooltip.html(d.mouseover)
-                        .style("opacity", 1)
-                        .style("left", (event.pageX + 5) + "px")
-                        .style("top", (event.pageY + 5) + "px");
-
-                }})
-                .on("mousemove", function(event, d) {{
-                    tooltip.style("left", (event.pageX + 5) + "px")
-                    .style("top", (event.pageY + 5) + "px");
-                }})
-                .on("mouseout", function() {{
-                    tooltip.style("opacity", 0);
-                }});
-
-    
-            var featureGroup = contigGroup.selectAll(".feature")
-                .data(function(d) {{ return d.features; }})
-                .enter()
-                .append("g")
-                .attr("class", "feature")
-                .attr("transform", function(d) {{ return "translate(" + d.start + "," + (-{feature_height} * d.z_order) + ")"; }});
-    
-            featureGroup.each(function(featureData) {{
-                d3.select(this).selectAll(".part")
-                    .data(featureData.parts)
-                    .enter().append("path")
-                    .attr("d", function(d) {{
-                        var length = d.end - d.start;
-                        var arrow_width = {arrow_width};  // Width of the arrow part
-                        var arrow_height = {feature_height};  // Height of the arrow part
-                        if (d.strand === "-") {{
-                            return `M${{arrow_width}},0 L${{length}},0 L${{length}},${{-arrow_height}} L${{arrow_width}},${{-arrow_height}} L0,${{-arrow_height/2}} Z`;
-                        }} else {{
-                            return `M0,0 L${{length - arrow_width}},0 L${{length}},${{-arrow_height/2}} L${{length - arrow_width}},${{-arrow_height}} L0,${{-arrow_height}} Z`;
-                        }}
-                    }})
-                    .attr("fill", d => featureData.color)
-                    .attr("stroke", "black")
-                    .on("click", function(event, d) {{
-                        detailsDiv.html(featureData.mouseover);
-                    }})            
-                    .on("mouseover", function(event, d) {{
-                        tooltip.html(featureData.mouseover)
-                            .style("opacity", 1)
-                            .style("left", (event.pageX + 5) + "px")
-                            .style("top", (event.pageY + 5) + "px");
-
-                    }})
-                    .on("mousemove", function(event, d) {{
-                        tooltip.style("left", (event.pageX + 5) + "px")
-                        .style("top", (event.pageY + 5) + "px");
-                    }})
-                    .on("mouseout", function() {{
-                        tooltip.style("opacity", 0);
-                    }});
-            }});
-    
-            featureGroup.append("text")
-                .attr("class", "feature-label")
-                .attr("x", {arrow_width})
-                .attr("y", -7)
-                .attr("text-anchor", "start")
-                .text(d => d.name)
-                .on("click", function(event, d) {{
-                    detailsDiv.html(d.mouseover);
-                }})            
-                .on("mouseover", function(event, d) {{
-                    tooltip.html(d.mouseover)
-                        .style("opacity", 1)
-                        .style("left", (event.pageX + 5) + "px")
-                        .style("top", (event.pageY + 5) + "px");
-                }})
-                .on("mousemove", function(event, d) {{
-                    tooltip.style("left", (event.pageX + 5) + "px")
-                    .style("top", (event.pageY + 5) + "px");
-                }})
-                .on("mouseout", function() {{
-                    tooltip.style("opacity", 0);
-                }});
-
-            contigGroup.append("text")
-                .attr("class", "contig-label")
-                .attr("y", {contig_label_px} + {contig_thickness / 2})
-                .attr("x", 0)
-                .attr("text-anchor", "top")
-                .text(function(d) {{ return d.name; }})
-                .on("click", function(event, d) {{
-                    detailsDiv.html(d.mouseover);
-                }})
-                .on("mouseover", function(event, d) {{
-                    tooltip.html(d.mouseover)
-                        .style("opacity", 1)
-                        .style("left", (event.pageX + 5) + "px")
-                        .style("top", (event.pageY + 5) + "px");
-                }})
-                .on("mousemove", function(event) {{
-                    tooltip.style("left", (event.pageX + 5) + "px")
-                        .style("top", (event.pageY + 5) + "px");
-                }})
-                .on("mouseout", function() {{
-                    tooltip.style("opacity", 0);
-                }});
-        </script>
-    </body>
-    </html>
-    """)
+    outfile_handle.write(page)
     if file_type == "name":
         outfile_handle.close()
+
 
 def show_contigs(recs:Union[str,List[SeqRecord]], window_height=600, window_width=1200, **kwargs):
     """
@@ -506,7 +255,6 @@ def build_parser():
                         help="Skip this many colors at the start of the palette before assigning colors to --color_by values. "
                              "For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another "
                              "column without reusing them. Ignored with --color_table.")
-    #TODO: option to embed d3.js (v7) in the html file for offline use
     # TODO: change defaults for proteins?
     
 
@@ -524,14 +272,10 @@ def main(argv):
 
     check_outputs(parser, params)
 
-    feature_types = params.types
-    if params.types is None:
-        feature_types = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
-        
-
-
     if params.color_table is not None and params.color_by is None:
         parser.error("--color_table requires --color_by.")
+    if params.color_by is not None and params.metadata is None:
+        parser.error("--color_by requires --metadata.")
     color_table = read_color_table(params.color_table) if params.color_table is not None else None
 
     ### Run
@@ -541,4 +285,4 @@ def main(argv):
         plot_contigs(recs, html_out=html_handle, metadata=params.metadata, color_by=params.color_by, color_table=color_table,
                      palette_offset=params.palette_offset,
                      feature_height=params.feature_height, feature_font_size=params.feature_font_size,
-                     height=params.height, width=params.width, types=feature_types)
+                     height=params.height, width=params.width, types=params.types)
