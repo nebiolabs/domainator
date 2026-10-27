@@ -1,5 +1,7 @@
+import pandas as pd
 import pytest
 from domainator import plot_contigs
+from domainator.colors import DISTINCT_COLORS, get_palette
 import tempfile
 
 def test_plot_contigs_1(shared_datadir):
@@ -69,6 +71,22 @@ def test_plot_contigs_color_table(shared_datadir, tmp_path):
     output_text = open(output).read()
     assert '"color": "#AB12CD"' in output_text  # taxid 1219 comes from the table
     assert '"color": "#000000"' in output_text  # taxids missing from the table keep the default
+
+
+def test_plot_contigs_palette_offset(shared_datadir, tmp_path):
+    """--palette_offset skips that many palette colors before coloring the values."""
+    metadata = shared_datadir / "MT_nbs.enum_report.tsv"
+    output = tmp_path / "contigs.html"
+    plot_contigs.main(["-i", str(shared_datadir / "MT_nbs.gb"), "--html_out", str(output),
+                       "--metadata", str(metadata), "--color_by", "taxid_species", "--palette_offset", "3"])
+    output_text = output.read_text()
+    species = pd.read_csv(metadata, sep="\t", index_col=0)["taxid_species"].unique()
+    assert len(species) == 7
+    for color in get_palette(species, offset=3).values():
+        assert f'"color": "{color}"' in output_text
+    # The first three colors are the ones skipped.
+    for color in DISTINCT_COLORS[:3]:
+        assert f'"color": "{color}"' not in output_text
 
 
 def test_plot_contigs_color_table_requires_color_by(shared_datadir, tmp_path, capsys):

@@ -130,6 +130,10 @@
                         <label for="min-cluster-size">Minimum cluster size</label>
                         <input id="min-cluster-size" type="number" min="1" value="1" step="1" />
                     </div>
+                    <div class="control" title="Canvas pixels per layout unit. Copy this number into another viewer to show its network at the same zoom.">
+                        <label for="zoom-level">Zoom</label>
+                        <input id="zoom-level" type="text" inputmode="decimal" value="1" disabled />
+                    </div>
                     <div class="control">
                         <label for="color-by">Color by</label>
                         <select id="color-by"></select>
@@ -340,9 +344,16 @@
             </div>
             <p class="note" id="color-categorical-note" hidden></p>
             <div id="color-picker-discrete" hidden>
-                <div class="control">
-                    <label for="color-palette">Color palette</label>
-                    <select id="color-palette"></select>
+                <div class="cp-palette-row">
+                    <div class="control cp-palette-select">
+                        <label for="color-palette">Color palette</label>
+                        <select id="color-palette"></select>
+                    </div>
+                    <div class="control cp-palette-offset">
+                        <label for="color-palette-offset">Start offset</label>
+                        <input id="color-palette-offset" type="number" min="0" step="1" value="0"
+                            title="Skip this many colors at the start of the palette, e.g. to avoid the colors another column already uses." />
+                    </div>
                 </div>
                 <p class="note" id="color-palette-note"></p>
                 <div class="cp-pager" id="color-picker-pager" hidden>

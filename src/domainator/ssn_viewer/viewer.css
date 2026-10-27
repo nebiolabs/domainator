@@ -231,6 +231,17 @@
         overflow-y: auto;
         flex: 1 1 auto;
     }
+    .cp-palette-row {
+        display: flex;
+        gap: 10px;
+    }
+    .cp-palette-select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .cp-palette-offset {
+        flex: 0 0 7.5rem;
+    }
     .cp-pager {
         display: flex;
         align-items: center;

@@ -1,6 +1,7 @@
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.colors import DISTINCT_COLORS, OTHER_COLOR, get_palette, sort_palette_values
+from domainator.errors import InputError
 from domainator.expr import BooleanEvaluator
 from domainator.hmmio import alphabet_name, alphabet_score_scale, common_hmm_alphabet, get_alphabet, is_nucleic_acid_alphabet, iter_hmm_names, iter_hmms, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file, peek_hmm_alphabet, read_hmms
 from domainator.locations import location_covers, regions_overlap, slice_record_from_location
@@ -233,6 +234,20 @@ def test_get_palette_max_groups():
     assert palette["c"] == palette["d"] == OTHER_COLOR
     # max_groups at or above the group count changes nothing
     assert get_palette(values, max_groups=4) == get_palette(values)
+
+
+def test_get_palette_offset():
+    """The offset skips colors at the start of the palette, and still cycles."""
+    assert get_palette(["A", "B", "C"], offset=5) == {
+        "A": DISTINCT_COLORS[5], "B": DISTINCT_COLORS[6], "C": DISTINCT_COLORS[7]}
+    assert get_palette(["A", "B"], offset=len(DISTINCT_COLORS) - 1) == {
+        "A": DISTINCT_COLORS[-1], "B": DISTINCT_COLORS[0]}
+    # Grays for the groups past max_groups and for missing values take no slot.
+    values = pd.Series(["a"] * 3 + ["b"] * 2 + ["c"] + [None])
+    assert get_palette(values, max_groups=2, offset=1) == {
+        "a": DISTINCT_COLORS[1], "b": DISTINCT_COLORS[2], "c": OTHER_COLOR, None: OTHER_COLOR}
+    with pytest.raises(InputError):
+        get_palette(["A"], offset=-1)
 
 
 def test_get_palette_missing_values():

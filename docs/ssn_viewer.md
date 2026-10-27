@@ -256,6 +256,10 @@ drop the labels that have no room — and the SVG export shows exactly what the 
 if it does not already fit) and **Reset view** (re-fit everything) move the camera without
 changing the selection.
 
+**Zoom** shows the current zoom as a number (screen pixels per layout unit) and sets it when
+you type one and press Enter, keeping the center of the view in place. Copy it from one
+viewer into another to draw two networks, or two layouts of one network, at the same scale.
+
 ## Selecting nodes
 
 The selection is the viewer's central idea: almost everything else — the metadata table,

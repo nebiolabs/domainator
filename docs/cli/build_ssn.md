@@ -23,6 +23,7 @@ Give at least one of these outputs: `--xgmml_out`. `-` as an input or output mea
 | `--color_by` | STRING |  | Color the points in the output image based on this column of the metadata table. |
 | `--color_table` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000 |
 | `--max_color_groups` | INTEGER |  | Give distinct colors only to this many of the largest --color_by groups, all remaining groups share a neutral gray. By default every group gets a color, cycling over a palette of 64 distinguishable colors. |
+| `--palette_offset` | INTEGER | 0 | Skip this many colors at the start of the palette before assigning colors to --color_by groups. For example, if a network colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table. |
 | `--mark_mst` |  |  | Give every edge a boolean 'MST' property saying whether it belongs to the maximum spanning tree. Useful for styling or filtering the MST backbone within a larger network in Cytoscape. |
 | `--color_table_out` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table. |
 | `-o`, `--xgmml_out` | FILE | required | Write the network to this Cytoscape xgmml file. |

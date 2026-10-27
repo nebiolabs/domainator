@@ -25,5 +25,6 @@ Give at least one of these outputs: `--html_out`. `-` as an input or output mean
 | `--metadata` | FILE ... |  | tab separated files of additional contig metadata. |
 | `--color_by` | STRING |  | Color the contig lines in the plot based on this column of the metadata table. |
 | `--color_table` | FILE |  | tab separated file with two columns and no header: a --color_by value and a hex color, for example: CCDB   cc0000. Without it, colors are assigned automatically. |
+| `--palette_offset` | INTEGER | 0 | Skip this many colors at the start of the palette before assigning colors to --color_by values. For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

@@ -862,6 +862,57 @@ def test_named_palette_matches_get_palette(meta_page):
     assert page.pageerrors == []
 
 
+def test_palette_offset_matches_get_palette_and_persists(meta_page, tmp_path):
+    """The start offset skips colors exactly as get_palette(offset=...) does, applies
+    to whichever palette the menu holds, and is saved with the column's palette."""
+    from domainator.colors import NAMED_CATEGORICAL_PALETTES, get_palette
+
+    page = meta_page
+    _open_color_picker(page)
+    page.wait_for_selector("#color-picker-discrete:not([hidden])")
+    assert page.input_value("#color-palette-offset") == "0"
+
+    page.fill("#color-palette-offset", "5")
+    page.dispatch_event("#color-palette-offset", "change")
+    page.wait_for_function("() => state.customPalettes.family?.offset === 5")
+    expected = get_palette(pd.Series(["alpha", "beta", "gamma"]), offset=5)
+    saved = _saved_color_table(page)
+    assert {key: value.upper() for key, value in saved.items() if key != "—"} == expected
+    assert "starting at color 6" in page.locator("#color-palette-note").inner_text()
+
+    # Switching palettes keeps the offset; Okabe-Ito's 8 colors wrap around.
+    page.select_option("#color-palette", "okabe_ito")
+    okabe_ito = next(p["colors"] for p in NAMED_CATEGORICAL_PALETTES if p["name"] == "okabe_ito")
+    saved = _saved_color_table(page)
+    assert {key: value.upper() for key, value in saved.items() if key != "—"} == {
+        "alpha": okabe_ito[5], "beta": okabe_ito[6], "gamma": okabe_ito[7]}
+
+    page.click("#color-picker-close")
+    session = _save_session(page, tmp_path)
+    assert _read_session_bundle(session)["app_state"]["colors"]["custom_palettes"]["family"]["offset"] == 5
+
+    # Reset to defaults goes back to the default palette from its first color.
+    _open_color_picker(page)
+    page.click("#color-picker-reset")
+    assert page.input_value("#color-palette") == "domainator"
+    assert page.input_value("#color-palette-offset") == "0"
+    page.click("#color-picker-close")
+
+    _load_bundle_file(page, session)
+    _open_color_picker(page)
+    assert page.input_value("#color-palette") == "okabe_ito"
+    assert page.input_value("#color-palette-offset") == "5"
+
+    # Hand-picked colors have no position in a palette to offset from.
+    swatch = page.locator("#color-picker-swatch-list input[type=color]").first
+    swatch.fill("#123456")
+    swatch.dispatch_event("input")
+    page.click("#color-picker-close")
+    _open_color_picker(page)
+    assert page.eval_on_selector("#color-palette-offset", "e => e.disabled") is True
+    assert page.pageerrors == []
+
+
 def test_named_palette_orders_numeric_values_numerically(meta_page):
     """A numeric column colored as categories matches get_palette's sorted assignment."""
     from domainator.colors import get_palette
@@ -1270,6 +1321,39 @@ def test_session_restores_pan_and_zoom(meta_page, tmp_path):
     )
     assert transform == {"scale": 2.5, "offsetX": 123, "offsetY": -45}
     assert page.evaluate("() => state.pendingRestoreViewTransform") is None
+    assert page.input_value("#zoom-level") == "2.5"
+    assert page.pageerrors == []
+
+
+def test_zoom_box_shows_and_sets_the_zoom(meta_page):
+    """The zoom box follows the wheel, and a typed zoom keeps the canvas center in place."""
+    page = meta_page
+    box = page.locator("#cluster-view").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 3, box["y"] + box["height"] / 3)
+    page.mouse.wheel(0, -300)
+    page.wait_for_function(
+        "() => document.getElementById('zoom-level').value"
+        " === String(Number(state.viewTransform.scale.toPrecision(4)))"
+    )
+
+    center = "() => screenToWorldPoint(clusterCanvas.width / 2, clusterCanvas.height / 2)"
+    before = page.evaluate(center)
+    page.fill("#zoom-level", "1.234")
+    page.press("#zoom-level", "Enter")
+    assert page.evaluate("() => state.viewTransform.scale") == 1.234
+    after = page.evaluate(center)
+    assert after["x"] == pytest.approx(before["x"])
+    assert after["y"] == pytest.approx(before["y"])
+
+    # Clamped to the zoom range, and bad input puts the current zoom back.
+    page.fill("#zoom-level", "1000")
+    page.press("#zoom-level", "Enter")
+    assert page.evaluate("() => state.viewTransform.scale") == page.evaluate(
+        "() => state.viewTransform.maxScale")
+    assert page.input_value("#zoom-level") == "10"
+    page.fill("#zoom-level", "abc")
+    page.press("#zoom-level", "Enter")
+    assert page.input_value("#zoom-level") == "10"
     assert page.pageerrors == []
 
 

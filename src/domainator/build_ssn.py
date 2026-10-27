@@ -199,7 +199,8 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
               cluster_tsv_out: Optional[Union[str, PathLike]] = None, no_cluster_header: bool = False,
               color_table_out: Optional[str] = None, mst: bool = False, knn: Optional[int] = None,
               subset_labels: Optional[Collection[str]] = None, max_output_bytes: Optional[int] = None,
-              max_color_groups: Optional[int] = None, mark_mst: bool = False) -> None:
+              max_color_groups: Optional[int] = None, palette_offset: int = 0,
+              mark_mst: bool = False) -> None:
     """Write a sequence similarity network built from ``matrix``.
 
     Args:
@@ -218,6 +219,7 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
         max_output_bytes (int, optional): raise OutputSizeLimitExceeded before writing an XGMML file larger than this. Defaults to None, meaning no limit.
         max_color_groups (int, optional): if set, only this many of the largest color_by groups get distinct colors, the rest share a neutral gray. Defaults to None, meaning every group gets a color.
+        palette_offset (int, optional): skip this many colors at the start of the palette when assigning colors to color_by groups. Ignored when color_table is given. Defaults to 0.
         mark_mst (bool, optional): If True, give every edge a boolean MST property saying whether it belongs to the maximum spanning tree. Defaults to False.
 
     Raises:
@@ -307,7 +309,7 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
 
     if color_by is not None:
         if color_table is None:
-            color_table = get_palette(node_data[color_by], max_groups=max_color_groups)
+            color_table = get_palette(node_data[color_by], max_groups=max_color_groups, offset=palette_offset)
 
     if xgmml_out is not None:
         temp_xgmml_path = make_temporary_output_path(xgmml_out)
@@ -366,6 +368,7 @@ def build_parser():
                         help="Color the points in the output image based on this column of the metadata table.")
     parser.add_argument("--color_table", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000")
     parser.add_argument("--max_color_groups", required=False, default=None, type=int, help="Give distinct colors only to this many of the largest --color_by groups, all remaining groups share a neutral gray. By default every group gets a color, cycling over a palette of 64 distinguishable colors.")
+    parser.add_argument("--palette_offset", required=False, default=0, type=int, help="Skip this many colors at the start of the palette before assigning colors to --color_by groups. For example, if a network colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table.")
     parser.add_argument("--mark_mst", action="store_true", default=False, help=f"Give every edge a boolean '{MST_COLUMN}' property saying whether it belongs to the maximum spanning tree. Useful for styling or filtering the MST backbone within a larger network in Cytoscape.")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
 
@@ -424,4 +427,5 @@ def main(argv):
     build_ssn(DataMatrix.from_file(input_file, lower_bound=load_lower_bound), threshold=params.threshold, metadata=params.metadata, color_by=params.color_by, color_table=color_table,
               xgmml_out=params.xgmml_out, cluster=cluster, cluster_tsv_out=params.cluster_tsv_out, no_cluster_header=params.no_cluster_header, color_table_out=params.color_table_out,
               mst=params.mst, knn=params.knn, subset_labels=subset_labels, max_output_bytes=max_output_bytes,
-              max_color_groups=params.max_color_groups, mark_mst=params.mark_mst)
+              max_color_groups=params.max_color_groups, palette_offset=params.palette_offset,
+              mark_mst=params.mark_mst)

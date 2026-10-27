@@ -21,6 +21,7 @@ Give at least one of these outputs: `--xgmml_out`, `--png_out`, `--coords_out`. 
 | `--color_by` | STRING |  | Color the points in the output image based on this column of the metadata table. |
 | `--color_table` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000 |
 | `--color_table_out` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table. |
+| `--palette_offset` | INTEGER | 0 | Skip this many colors at the start of the palette before assigning colors to --color_by values. For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table. |
 | `-o`, `--xgmml_out` | FILE |  | Write the projection to this Cytoscape xgmml file. |
 | `--png_out` | FILE |  | Write a picture of the projection to this png file. |
 | `--coords_out` | FILE |  | Write the projected coordinates to this tab-separated file. |

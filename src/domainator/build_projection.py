@@ -67,7 +67,8 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
                      color_by: Optional[str] = None, png_out: Optional[str] = None, coords_out: Optional[str] = None,
                      xgmml_out: Optional[str] = None, scale: Optional[float] = 1000,
                      three_d: bool = False, algorithm_parameters: Optional[Dict[str, Any]] = None,
-                     color_table: Optional[Dict[str, str]] = None, color_table_out: Optional[str] = None) -> None:
+                     color_table: Optional[Dict[str, str]] = None, color_table_out: Optional[str] = None,
+                     palette_offset: int = 0) -> None:
     """Project the rows of ``data_matrix`` into 2D or 3D and write the projection.
 
     Args:
@@ -88,6 +89,8 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
         color_table: maps ``color_by`` values to colors. None: assign colors automatically.
         color_table_out: write the color table, with any colors assigned, to this path: two
             tab-separated columns (annotation, hex color) and no header.
+        palette_offset: skip this many colors at the start of the palette when assigning
+            colors to color_by values. Ignored when color_table is given.
     """
     if color_table_out is not None and color_by is None and color_table is None:
         raise ValueError("--color_table_out requires either --color_by or --color_table, otherwise there are no colors to write.")
@@ -156,7 +159,7 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
 
     if color_by is not None:
         if color_table is None:
-            color_table = get_palette(projection[color_by].unique())
+            color_table = get_palette(projection[color_by].unique(), offset=palette_offset)
 
     if png_out is not None:
         if three_d:
@@ -203,6 +206,7 @@ def build_parser():
                         help="Color the points in the output image based on this column of the metadata table.")
     parser.add_argument("--color_table", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
+    parser.add_argument("--palette_offset", required=False, default=0, type=int, help="Skip this many colors at the start of the palette before assigning colors to --color_by values. For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table.")
     
     add_output(parser, "xgmml", "Write the projection to this Cytoscape xgmml file.", primary=True, stdout=False)
     add_output(parser, "png", "Write a picture of the projection to this png file.", stdout=False)
@@ -247,4 +251,5 @@ def main(argv):
     build_projection(data_matrix=DataMatrix.from_file(input_file), algorithm=params.algorithm, metadata=params.metadata, color_by=params.color_by, 
                      png_out=params.png_out, coords_out=params.coords_out, xgmml_out=params.xgmml_out, scale=params.scale, three_d=params.three_d, 
                      algorithm_parameters=algorithm_parameters,
-                     color_table=color_table, color_table_out=params.color_table_out)
+                     color_table=color_table, color_table_out=params.color_table_out,
+                     palette_offset=params.palette_offset)

@@ -144,7 +144,7 @@ def sort_palette_values(values):
     return [item[2] for item in numeric] + other + missing
 
 
-def get_palette(values, max_groups=None):
+def get_palette(values, max_groups=None, offset=0):
     """Map values to distinct colors.
 
     Colors are assigned in sort_palette_values order and cycle over
@@ -159,11 +159,20 @@ def get_palette(values, max_groups=None):
             color and every remaining group shares OTHER_COLOR. Groups are ranked
             by frequency when values is a Series, otherwise by sort order.
             Defaults to None, meaning every group gets a color.
+        offset (int, optional): skip this many colors at the start of
+            DISTINCT_COLORS, so that a second column can be colored without
+            reusing the colors given to a first column with that many values.
+            Defaults to 0.
 
     Returns:
         dict mapping each distinct value to an "#RRGGBB" string. Missing values
         are collected under the key None and colored OTHER_COLOR.
+
+    Raises:
+        InputError: if offset is negative.
     """
+    if offset < 0:
+        raise InputError(f"The palette offset must be 0 or more, not {offset}.")
     if isinstance(values, pd.Series):
         unique_values = list(values.unique())
         ranked = list(values.value_counts().index)  # most common first, missing dropped
@@ -184,7 +193,7 @@ def get_palette(values, max_groups=None):
     colored = 0
     for value in sort_palette_values(present):
         if keep is None or value in keep:
-            out[value] = DISTINCT_COLORS[colored % len(DISTINCT_COLORS)]
+            out[value] = DISTINCT_COLORS[(offset + colored) % len(DISTINCT_COLORS)]
             colored += 1
         else:
             out[value] = OTHER_COLOR

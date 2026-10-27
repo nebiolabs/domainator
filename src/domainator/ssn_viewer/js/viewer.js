@@ -258,6 +258,7 @@
         document.getElementById('sort-components-by-size').disabled = false;
         document.getElementById('focus-largest-cluster').disabled = false;
         document.getElementById('reset-view').disabled = false;
+        document.getElementById('zoom-level').disabled = false;
         document.getElementById('export-png').disabled = false;
         document.getElementById('export-png-scale').disabled = false;
         document.getElementById('export-svg').disabled = false;
@@ -973,22 +974,33 @@
     // Fill a column's palette from a named scheme: colors are handed out in
     // sort_palette_values order and cycle once the scheme runs out, exactly like
     // get_palette. Values keep their assigned color afterwards, so individual swatches,
-    // the color-table TSV and the legend all stay editable/exportable.
-    function applyNamedPalette(columnName, schemeName) {
+    // the color-table TSV and the legend all stay editable/exportable. `offset` skips
+    // that many of the scheme's colors first, like get_palette's offset, so a second
+    // column can avoid the colors a first one with that many values used.
+    function applyNamedPalette(columnName, schemeName, offset = 0) {
         const scheme = paletteSchemeByName(schemeName);
         if (!scheme) {
             return null;
         }
+        const start = paletteOffsetValue(offset);
         const distinct = distinctColumnValues(columnName, Infinity);
         const colors = {};
         sortPaletteKeys(distinct.values.map(entry => entry.key)).forEach((key, index) => {
-            colors[key] = scheme.colors[index % scheme.colors.length];
+            colors[key] = scheme.colors[(start + index) % scheme.colors.length];
         });
         const palette = ensureCategoricalPalette(columnName);
         palette.colors = colors;
         palette.nullColor = PALETTE_NO_VALUE_COLOR;
         palette.scheme = scheme.name;
+        palette.offset = start;
         return {scheme, assigned: distinct.values.length};
+    }
+
+    // A whole number of colors to skip; anything else (blank, negative, fractional,
+    // or missing from a palette saved before offsets existed) is clamped into one.
+    function paletteOffsetValue(value) {
+        const number = Math.floor(Number(value));
+        return Number.isFinite(number) && number > 0 ? number : 0;
     }
 
     // The palette a column has before anyone customizes it. Values used to be
@@ -2909,6 +2921,41 @@
         return true;
     }
 
+    // The zoom box shows the scale (canvas pixels per layout unit) and sets it, so a
+    // zoom can be copied from one viewer into another. A typed zoom keeps the center of
+    // the canvas in place, as the wheel keeps the point under the pointer.
+    function formatZoomLevel(scale) {
+        return String(Number(scale.toPrecision(4)));
+    }
+
+    function updateZoomLevelControl() {
+        const input = document.getElementById('zoom-level');
+        // Not while the user is typing in it: the force layout repaints on its own.
+        if (document.activeElement === input) {
+            return;
+        }
+        input.value = formatZoomLevel(state.viewTransform.scale);
+    }
+
+    function changeZoomLevel() {
+        const input = document.getElementById('zoom-level');
+        const scale = Number(input.value);
+        // Number('') is 0, so a cleared box is refused here too.
+        if (state.bundle && Number.isFinite(scale) && scale > 0) {
+            const transform = state.viewTransform;
+            const nextScale = Math.max(transform.minScale, Math.min(transform.maxScale, scale));
+            const centerX = clusterCanvas.width / 2;
+            const centerY = clusterCanvas.height / 2;
+            const anchor = screenToWorldPoint(centerX, centerY);
+            transform.scale = nextScale;
+            transform.offsetX = centerX - (anchor.x * nextScale);
+            transform.offsetY = centerY - (anchor.y * nextScale);
+            renderClusterView();
+        }
+        // Shows the clamped scale, or puts back the current one after bad input.
+        input.value = formatZoomLevel(state.viewTransform.scale);
+    }
+
     function drawBadge(ctx, text, x, y) {
         const clusterContext = ctx;
         clusterContext.save();
@@ -3138,6 +3185,9 @@
         // every draw call. Defaults render to the on-screen canvas.
         const clusterContext = ctx;
         const clusterCanvas = {width: viewWidth, height: viewHeight};
+        // Every pan and zoom ends in a repaint. An export repaints the same transform,
+        // so refreshing the box then too is harmless.
+        updateZoomLevelControl();
         clusterContext.clearRect(0, 0, clusterCanvas.width, clusterCanvas.height);
         clusterContext.fillStyle = '#ffffff';
         clusterContext.fillRect(0, 0, clusterCanvas.width, clusterCanvas.height);
@@ -4562,6 +4612,7 @@
                 colors: {...base.colors},
                 nullColor: base.nullColor,
                 scheme: base.scheme,
+                offset: 0,
             };
             state.customPalettes[paletteKey(columnName)] = palette;
         }
@@ -4846,6 +4897,12 @@
         const scheme = palette && palette.scheme ? paletteSchemeByName(palette.scheme) : null;
         const hasCustomColors = !!(palette && palette.colors && Object.keys(palette.colors).length > 0);
         select.value = scheme ? scheme.name : '';
+        // An offset only means something for a named palette; hand-picked colors
+        // have no position in one to start from.
+        const offsetInput = document.getElementById('color-palette-offset');
+        const offset = scheme ? paletteOffsetValue(palette.offset) : 0;
+        offsetInput.value = String(offset);
+        offsetInput.disabled = !scheme;
         if (!scheme) {
             const fallback = paletteSchemeByName(DEFAULT_CATEGORICAL_PALETTE);
             const builtWithTable = !!state.bundle.defaults.color_table
@@ -4859,11 +4916,16 @@
             return;
         }
         const cycles = valueCount > scheme.colors.length;
+        const startNote = offset > 0
+            ? ', starting at color ' + ((offset % scheme.colors.length) + 1).toLocaleString()
+            : '';
         note.textContent = scheme.note + ' ' + scheme.colors.length.toLocaleString() + ' colors for ' +
-            valueCount.toLocaleString() + ' value' + (valueCount === 1 ? '' : 's') +
+            valueCount.toLocaleString() + ' value' + (valueCount === 1 ? '' : 's') + startNote +
             (cycles ? ', so colors repeat.' : '.');
     }
 
+    // Serves both the palette menu and the start offset: either one re-applies the
+    // menu's palette from the offset.
     function changeColorPalette() {
         const columnName = currentColorField();
         if (!columnName) {
@@ -4871,7 +4933,8 @@
         }
         // Every entry in the menu is a named palette now, so there is no
         // pseudo-scheme to special-case; "Reset to defaults" handles going back.
-        if (!applyNamedPalette(columnName, document.getElementById('color-palette').value)) {
+        if (!applyNamedPalette(columnName, document.getElementById('color-palette').value,
+            document.getElementById('color-palette-offset').value)) {
             return;
         }
         rebuildNodeColorCache();
@@ -5957,6 +6020,7 @@
         }
     });
     document.getElementById('color-palette').addEventListener('change', changeColorPalette);
+    document.getElementById('color-palette-offset').addEventListener('change', changeColorPalette);
     document.getElementById('color-as-categorical').addEventListener('change', toggleColorCategorical);
     document.getElementById('color-picker-reset').addEventListener('click', resetColorPicker);
     document.getElementById('color-picker-prev').addEventListener('click', () => changeColorPickerPage(-1));
@@ -6022,6 +6086,7 @@
         }
         scheduleClusterRender();
     });
+    document.getElementById('zoom-level').addEventListener('change', changeZoomLevel);
     document.getElementById('reset-view').addEventListener('click', () => {
         fitClusterViewToLayout();
         renderClusterView();

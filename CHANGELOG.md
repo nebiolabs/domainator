@@ -20,6 +20,11 @@ lists every change from 0.x.
   `docs/file_formats.md`.
 - A `schema_version` key in the `--json_out` of summary_report, matrix_report and ssn_navigator.
 - hmmer_compare `--alignments_out`.
+- `--palette_offset` on build_ssn, build_projection and plot_contigs, and a matching start
+  offset in the SSN viewer's color picker,
+  for coloring a second column without reusing the palette colors a first one used.
+- A Zoom box in the SSN viewer's View Settings that shows and sets the zoom, so a zoom can
+  be copied from one viewer into another.
 - `domainator describe`: a JSON description of every command and its options (the tool
   manifest, docs/tool_manifest.md), for GUIs and workflow systems.
 - A command-line reference generated from the parsers (docs/cli/), and a documentation site

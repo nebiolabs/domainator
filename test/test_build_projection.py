@@ -1,4 +1,5 @@
 from domainator import build_projection
+from domainator.colors import DISTINCT_COLORS
 import tempfile
 import pandas as pd
 from pathlib import Path
@@ -110,6 +111,17 @@ def test_build_projection_color_table_out(shared_datadir):
         assert Path(out_color_table).is_file()
         color_table_file = pd.read_csv(out_color_table, sep="\t", header=None)
         assert color_table_file.shape == (2,2)
+
+
+def test_build_projection_palette_offset(shared_datadir, tmp_path):
+    """--palette_offset skips that many palette colors before coloring the values."""
+    out_color_table = tmp_path / "color_table.tsv"
+    build_projection.main(["-i", str(shared_datadir / "bin3.sparse.hdf5"), "--algorithm", "pca",
+                           "--coords_out", str(tmp_path / "coords.tsv"), "--color_by", "active",
+                           "--color_table_out", str(out_color_table), "--palette_offset", "5",
+                           "--metadata", str(shared_datadir / "FeSOD_metadata.tsv")])
+    color_table = dict(line.split("\t") for line in out_color_table.read_text().splitlines())
+    assert color_table == {"0": DISTINCT_COLORS[5], "1": DISTINCT_COLORS[6]}
 
 
 def test_build_projection_from_coords_file(shared_datadir):

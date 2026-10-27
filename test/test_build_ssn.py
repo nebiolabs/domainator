@@ -1,6 +1,6 @@
 from domainator.errors import OutputSizeLimitExceeded
 from domainator import build_ssn
-from domainator.colors import OTHER_COLOR
+from domainator.colors import DISTINCT_COLORS, OTHER_COLOR
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import MaxTree, mst_knn_edge_index_dict
 import pytest
@@ -95,6 +95,20 @@ def test_build_ssn_max_color_groups(shared_datadir):
         assert len({color_table["1"], color_table["2"]}) == 2
         assert OTHER_COLOR not in {color_table["1"], color_table["2"]}
         assert color_table["3"] == OTHER_COLOR
+
+
+def test_build_ssn_palette_offset(shared_datadir):
+    """--palette_offset skips that many palette colors before coloring the groups."""
+    input_file = "FeSOD_dist.tsv"
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_color_table = output_dir + "/color_table.tsv"
+        build_ssn.main(["-i", str(shared_datadir / input_file), "--xgmml_out", output_dir + "/out.xgmml",
+                        "--threshold", "175", "--color_by", "SSN_cluster", "--cluster",
+                        "--color_table_out", out_color_table, "--palette_offset", "5"])
+
+        with open(out_color_table, "r") as f:
+            color_table = dict(line.strip().split("\t") for line in f)
+        assert color_table == {"1": DISTINCT_COLORS[5], "2": DISTINCT_COLORS[6], "3": DISTINCT_COLORS[7]}
 
 
 def test_build_ssn_4(shared_datadir):

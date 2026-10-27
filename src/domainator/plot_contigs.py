@@ -190,6 +190,7 @@ def plot_contigs(records: List[SeqRecord], *,
                  metadata: Optional[List[Union[str, PathLike]]] = None,
                  color_by: Optional[str] = None,
                  color_table: Optional[Dict[str, str]] = None,
+                 palette_offset: int = 0,
                  height: int = 2400, width: int = 1200,
                  types: Optional[List[str]] = None,
                  feature_height: int = 50, arrow_width: int = 20,
@@ -201,7 +202,8 @@ def plot_contigs(records: List[SeqRecord], *,
     """Write an interactive HTML plot of ``records`` to ``html_out`` (a path or a text handle).
 
     The options mean the same as the ``domainator plot_contigs`` options with the same names;
-    ``types`` is the feature types to draw.
+    ``types`` is the feature types to draw, and ``palette_offset`` is ignored when
+    ``color_table`` is given.
     """
     # Convert input to correct types
     feature_height = int(feature_height)
@@ -235,7 +237,7 @@ def plot_contigs(records: List[SeqRecord], *,
     palette = None
     if color_by is not None:
         if color_table is None:
-            palette = get_palette(metadata_table[color_by].unique())
+            palette = get_palette(metadata_table[color_by].unique(), offset=palette_offset)
         else:  # values missing from the table keep the default contig color
             palette = {value: color_table.get(str(value), "#000000") for value in metadata_table[color_by].unique()}
 
@@ -500,6 +502,10 @@ def build_parser():
     parser.add_argument("--color_table", required=False, default=None, type=str,
                         help="tab separated file with two columns and no header: a --color_by value and a hex color, for example: CCDB   cc0000. "
                              "Without it, colors are assigned automatically.")
+    parser.add_argument("--palette_offset", required=False, default=0, type=int,
+                        help="Skip this many colors at the start of the palette before assigning colors to --color_by values. "
+                             "For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another "
+                             "column without reusing them. Ignored with --color_table.")
     #TODO: option to embed d3.js (v7) in the html file for offline use
     # TODO: change defaults for proteins?
     
@@ -533,5 +539,6 @@ def main(argv):
     
     with output_file(params.html_out) as html_handle:
         plot_contigs(recs, html_out=html_handle, metadata=params.metadata, color_by=params.color_by, color_table=color_table,
+                     palette_offset=params.palette_offset,
                      feature_height=params.feature_height, feature_font_size=params.feature_font_size,
                      height=params.height, width=params.width, types=feature_types)

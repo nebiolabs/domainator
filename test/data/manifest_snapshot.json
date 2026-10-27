@@ -5809,6 +5809,15 @@
    "required": false
   },
   {
+   "name": "palette_offset",
+   "flags": [
+    "--palette_offset"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
    "name": "mark_mst",
    "flags": [
     "--mark_mst"
@@ -6427,6 +6436,15 @@
    "kind": "path",
    "type": "string",
    "role": "output",
+   "required": false
+  },
+  {
+   "name": "palette_offset",
+   "flags": [
+    "--palette_offset"
+   ],
+   "kind": "value",
+   "type": "integer",
    "required": false
   },
   {
@@ -7172,6 +7190,15 @@
    "kind": "path",
    "type": "string",
    "role": "input",
+   "required": false
+  },
+  {
+   "name": "palette_offset",
+   "flags": [
+    "--palette_offset"
+   ],
+   "kind": "value",
+   "type": "integer",
    "required": false
   }
  ],
