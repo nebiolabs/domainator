@@ -304,3 +304,144 @@ def test_summary_page_with_no_contigs(open_page, tmp_path, shared_datadir):
     assert page.text_content("#length-histogram") == "No contigs."
     assert page.text_content("#domains-table-counter") == "No rows"
     assert page.pageerrors == [] and page.requests == []
+
+
+def _matrix_page(path, matrix_path, *extra):
+    from domainator import matrix_report
+    matrix_report.main(["-i", str(matrix_path), "--html_out", str(path), *extra])
+    return path
+
+
+def _matrix_data(path):
+    from helpers import report_data
+    return report_data(path.read_text())["data"]
+
+
+def _figures(page):
+    return dict(page.eval_on_selector_all(".stat-grid div", "items => items.map(i => [i.querySelector('dt').textContent, i.querySelector('dd').textContent])"))
+
+
+def test_matrix_page_walks_the_slider_through_every_stop(open_page, tmp_path, shared_datadir):
+    path = _matrix_page(tmp_path / "matrix.html", shared_datadir / "scorefull.tsv", "--knn_projection")
+    data = _matrix_data(path)
+    page = open_page(path)
+    page.wait_for_selector("#cluster-bubbles svg circle")
+    assert page.pageerrors == [] and page.requests == []
+    figures = _figures(page)
+    assert figures["nodes"] == "20" and figures["non-zero edges"] == "190"
+    # One stem per split event, and the caption counts them.
+    events = data["summary"]["split_events"]
+    assert len(page.query_selector_all("#split-chart svg g[stroke='#a8d2cf'] line")) == len(events)
+    assert page.text_content("#split-event-count").startswith(f"All {len(events)} split events plotted")
+
+    # Each stop shows what its row of the threshold table says: the page's union-find over the
+    # MST agrees with Python's cluster counts.
+    table = data["threshold_table"]
+    knn = data["knn_projection"]
+    page.focus("#threshold-slider")
+    for i, stop in enumerate(data["slider_stops"]):
+        if i > 0:
+            page.keyboard.press("ArrowLeft")
+        row = stop["threshold_index"]
+        figures = _figures(page)
+        assert page.text_content("#threshold-number") == stop["threshold_label"]
+        assert figures["clusters"] == str(table["clusters"][row] if row >= 0 else 20)
+        assert figures["edges kept"] == f'{table["edges"][row] if row >= 0 else 0:,}'
+        assert figures["projected MST + kNN edges"] == f'{knn["counts"][row][knn["default_k"] - 1] if row >= 0 else 0:,}'
+        assert len(page.query_selector_all("#cluster-bubbles svg circle")) == min(100, int(figures["clusters"]))
+    assert page.text_content("#threshold-number") == data["slider_stops"][-1]["threshold_label"]
+    assert _figures(page)["clusters"] == "1"
+    page.keyboard.press("Home")
+    assert page.text_content("#threshold-number") == "∞"
+
+    # The k slider changes the projected MST + kNN edge count.
+    page.keyboard.press("End")
+    page.eval_on_selector("#mst-knn-k-slider", "s => { s.value = '2'; s.dispatchEvent(new Event('input')); }")
+    floor_row = data["slider_stops"][-1]["threshold_index"]
+    assert _figures(page)["projected MST + kNN edges"] == f'{knn["counts"][floor_row][1]:,}'
+    assert page.text_content("#mst-knn-k-number") == "2"
+    assert page.pageerrors == []
+
+
+def test_matrix_page_split_chart_hover_click_and_download(open_page, tmp_path, shared_datadir):
+    path = _matrix_page(tmp_path / "matrix.html", shared_datadir / "scorefull.tsv")
+    page = open_page(path)
+    page.wait_for_selector("#split-chart svg circle")
+    element = page.query_selector("#split-chart svg g[fill='#72b7b2'] circle")
+    element.scroll_into_view_if_needed()
+    bead = element.bounding_box()
+    page.mouse.move(bead["x"] + bead["width"] / 2, bead["y"] + bead["height"] / 2)
+    tip = page.text_content(".chart-tooltip")
+    assert "split(s) of" in tip and "nodes" in tip and "From:" in tip
+    # Clicking an event moves the threshold to it.
+    page.mouse.click(bead["x"] + bead["width"] / 2, bead["y"] + bead["height"] / 2)
+    assert page.text_content("#threshold-number") in tip
+    with page.expect_download() as download:
+        page.click("#split-chart-download-svg")
+    assert download.value.suggested_filename == "split_events.svg"
+    with page.expect_download() as download:
+        page.click("#split-chart-download-png")
+    assert download.value.suggested_filename == "split_events.png"
+    assert page.pageerrors == []
+
+
+def test_matrix_page_spaces_slider_stops_by_threshold(open_page, tmp_path):
+    import numpy as np
+    from domainator.data_matrix import DataMatrix
+    data = np.array([
+        [0, 10, 0, 0, 0],
+        [10, 0, 5, 0, 0],
+        [0, 5, 0, 4, 0],
+        [0, 0, 4, 0, 1],
+        [0, 0, 0, 1, 0],
+    ], dtype=float)
+    DataMatrix(data, list("ABCDE"), list("ABCDE")).write(str(tmp_path / "m.hdf5"), output_type="hdf")
+    path = _matrix_page(tmp_path / "matrix.html", tmp_path / "m.hdf5")
+    stops = _matrix_data(path)["slider_stops"]
+    assert [stop["threshold_label"] for stop in stops] == ["∞", "10.00", "5.00", "4.00", "1.00", "0.91"]
+    page = open_page(path)
+    page.wait_for_selector("#cluster-bubbles svg circle")
+    positions = page.evaluate("window.matrixReport.threshold.positions")
+    # Infinity at one end, then each stop as far along as its threshold is down the axis.
+    assert positions[0] == 0
+    finite = [(stop["threshold_value"], position) for stop, position in zip(stops[1:], positions[1:])]
+    (t0, p0), (t1, p1) = finite[0], finite[-1]
+    for threshold, position in finite:
+        assert position == pytest.approx(p0 + (t0 - threshold) / (t0 - t1) * (p1 - p0), abs=1)
+    assert 0 < p0 < p1 < 10000
+    assert page.pageerrors == []
+
+
+def test_matrix_page_threshold_chart_zooms(open_page, tmp_path, shared_datadir):
+    page = open_page(_matrix_page(tmp_path / "matrix.html", shared_datadir / "scorefull.tsv"))
+    page.wait_for_selector("#clusters-by-threshold svg path")
+    ticks = lambda: page.eval_on_selector_all("#clusters-by-threshold svg text[text-anchor='middle']", "t => t.map(x => x.textContent)")
+    before = ticks()
+    assert page.is_disabled("#threshold-chart-reset-zoom")
+    overlay = page.query_selector("#clusters-by-threshold svg rect[data-overlay]")
+    overlay.scroll_into_view_if_needed()
+    box = overlay.bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + box["width"] * 0.5, y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] * 0.7, y, steps=5)
+    page.mouse.up()
+    assert page.is_enabled("#threshold-chart-reset-zoom")
+    assert ticks() != before
+    page.dblclick("#clusters-by-threshold svg rect[data-overlay]")
+    assert page.is_disabled("#threshold-chart-reset-zoom")
+    assert ticks() == before
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("values", [[[0.0, 0.0, 0.0]] * 3, [[0.0]], [[0.0, 5.0], [5.0, 0.0]]])
+def test_matrix_page_with_too_few_edges(open_page, tmp_path, values):
+    import numpy as np
+    from domainator.data_matrix import DataMatrix
+    names = [f"n{i}" for i in range(len(values))]
+    DataMatrix(np.array(values), names, names).write(str(tmp_path / "m.hdf5"), output_type="hdf")
+    page = open_page(_matrix_page(tmp_path / "matrix.html", tmp_path / "m.hdf5", "--knn_projection"))
+    page.wait_for_selector("#cluster-bubbles svg circle")
+    assert page.pageerrors == [] and page.requests == []
+    assert _figures(page)["clusters"] == str(len(values))
+    assert page.is_disabled("#threshold-slider") == (len(values) < 2 or values[0][1] == 0)

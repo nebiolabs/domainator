@@ -1,10 +1,6 @@
 import warnings
 warnings.filterwarnings("ignore", module='numpy')
-import base64
-import gzip
 import io
-import json
-import re
 from domainator import matrix_report
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import mst_knn_edge_counts_by_threshold
@@ -14,12 +10,15 @@ import pytest
 import numpy as np
 import scipy.sparse
 import os
+from helpers import report_data
 
 
-def _embedded_report_payload(html_content):
-    match = re.search(r'const EMBEDDED_REPORT_DATA_GZIP_BASE64 = "([^"]+)";', html_content)
-    assert match is not None
-    return json.loads(gzip.decompress(base64.b64decode(match.group(1))).decode("utf-8"))
+def _page_data(html_path):
+    """The data the --html_out page was written with (see web/reports/matrix_report.js)."""
+    envelope = report_data(open(html_path).read())
+    assert envelope["report"] == "matrix_report"
+    assert envelope["encoding"] == "gzip+base64"
+    return envelope["data"]
 
 
 @pytest.mark.parametrize("input_file",
@@ -34,15 +33,17 @@ def test_matrix_report_1(shared_datadir, input_file):
         out_html = output_dir + "/matrix_report_test.html"
         out_txt = output_dir + "/matrix_report_test.txt"
         matrix_report.main(["-i", str(shared_datadir / input_file), "-o", out_txt, "--html_out", out_html])
-        for fh in (out_html, out_txt):
-            f_txt = open(fh).read()
-            assert "Matrix Report" in f_txt
-            assert "Min" in f_txt or "min" in f_txt.lower()
-            assert "Max" in f_txt or "max" in f_txt.lower()
-            # Check that we have nodes count (20 nodes in the test data)
-            assert "20" in f_txt
-        assert 'Projected MST + kNN edge counts' not in open(out_txt).read()
-        assert 'mst-knn-k-slider' not in open(out_html).read()
+        f_txt = open(out_txt).read()
+        assert "Matrix Report" in f_txt
+        assert "Min" in f_txt
+        assert "Max" in f_txt
+        # 20 nodes in the test data
+        assert "Nodes: 20" in f_txt
+        assert 'Projected MST + kNN edge counts' not in f_txt
+        assert "<title>Matrix Report</title>" in open(out_html).read()
+        data = _page_data(out_html)
+        assert data["summary"]["nodes"] == 20
+        assert data["knn_projection"] is None
 
 
 def test_matrix_report_rejects_invalid_merge_impact_metric():
@@ -113,15 +114,18 @@ class TestInteractiveHTML:
             with open(output_file, 'r') as f:
                 content = f.read()
             
-            # Check that the HTML output contains interactive dashboard elements
             assert 'Matrix Report' in content
-            assert 'VIZ_DATA' in content
-            assert 'Plotly' in content or 'plotly' in content
-            assert 'mst-knn-k-slider' in content
-            assert 'MST_KNN_COUNTS' in content
-            assert 'CLUSTER_CHECKPOINT_STRIDE' in content
-            assert 'buildClusterCheckpoints' in content
-            assert 'Projected MST + kNN Edges' in content
+            # Everything the page redraws the network from: the MST, the threshold
+            # tables, and the MST + kNN edge counts for each threshold and k.
+            data = _page_data(output_file)
+            assert data["summary"]["nodes"] == 4
+            assert len(data["mst_edges"]) == 3
+            table = data["threshold_table"]
+            assert len(table["threshold"]) == len(table["edges"]) == len(table["clusters"])
+            knn = data["knn_projection"]
+            assert (knn["min_k"], knn["max_k"], knn["default_k"]) == (1, 3, 3)
+            assert len(knn["counts"]) == len(table["threshold"])
+            assert all(len(row) == knn["max_k"] for row in knn["counts"])
 
 
 def test_mst_knn_edge_counts_by_threshold_monotonic():
@@ -223,11 +227,11 @@ def test_matrix_report_text_includes_mst_knn_projection(shared_datadir):
         matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html_out", out_html, "--knn_projection"])
 
         text_content = open(out_txt).read()
-        html_content = open(out_html).read()
 
         assert 'Projected MST + kNN edge counts' in text_content
         assert 'MST + kNN edges' in text_content
-        assert 'mst-knn-k-slider' in html_content
+        knn = _page_data(out_html)["knn_projection"]
+        assert (knn["min_k"], knn["max_k"], knn["default_k"]) == (1, 19, 5)
 
 
 def test_matrix_report_includes_merge_event_outputs():
@@ -253,66 +257,37 @@ def test_matrix_report_includes_merge_event_outputs():
         ])
 
         text_content = open(out_txt).read()
-        html_content = open(out_html).read()
 
         assert 'Strongest MST split events' in text_content
         assert '      From        To    Impact' in text_content
         assert 'Top-2 ratio' not in text_content
         assert 'Largest cluster changes (MST-derived)' not in text_content
-        assert 'Cluster Splits vs Threshold' in html_content
-        assert 'class="threshold-slider-track"' in html_content
-        assert 'padding-left: 45px;' in html_content
-        assert 'padding-right: 49px;' in html_content
-        assert "title: 'Cluster Splits vs Threshold',\n            xaxis: {title: 'Threshold', type: 'linear', autorange: true}" in html_content
-        assert 'Largest single split (nodes)' in html_content
-        assert 'Size of smallest new cluster' not in html_content
-        assert "shape: 'hv'" in html_content
-        assert 'MERGE_MOVING_SUM' in html_content
-        assert "updateHistogramFromSliderPosition(position, false);" in html_content
-        assert "document.getElementById('threshold-slider').addEventListener('change'" in html_content
-        assert "orientation: 'h'" in html_content
-        assert "y: 1.08" in html_content
-        assert 'Cumulative split fraction' not in html_content
-        assert 'range: [-0.2, 1.05]' not in html_content
-        assert "zerolinecolor: '#9ca3af'" not in html_content
-        assert 'Largest Merge Events (min_child)' not in html_content
-        assert 'merge-events-table' not in html_content
-        assert 'MERGE_EVENT_SERIES' in html_content
-        payload = _embedded_report_payload(html_content)
-        assert len(payload['merge_event_series']) == 3
-        for event in payload['merge_event_series']:
+        data = _page_data(out_html)
+        events = data['summary']['split_events']
+        assert len(events) == 3
+        for event in events:
             counts = event['merge_size_counts']
             assert sum(counts.values()) == event['merge_count']
             assert max(int(size) for size in counts) == event['largest_merge']
             assert sum(int(size) * n for size, n in counts.items()) == event['merge_impact']
-        moving_sum = payload['merge_moving_sum']
+        moving_sum = data['merge_moving_sum']
         assert len(moving_sum['x']) == len(moving_sum['y']) > 0
         assert moving_sum['window'] > 0
-        assert payload['slider_stops'][0]['edge_index'] == -1
+        assert data['slider_stops'][0]['edge_index'] == -1
         # A stop labeled T shows the `--lb T` cut, so it excludes T's own tie group:
         # edge_index is the last MST edge scoring strictly above T. The list ends with
         # the `--lb 0` floor cut, which keeps every MST edge -- without it the slider
         # stopped one merge short of the fully merged network.
-        assert [stop['threshold_label'] for stop in payload['slider_stops']] == [
+        assert [stop['threshold_label'] for stop in data['slider_stops']] == [
             '∞', '10.00', '7.00', '4.00', '3.94'
         ]
-        assert [stop['edge_index'] for stop in payload['slider_stops'][1:]] == [-1, 0, 1, 2]
-        # threshold_index points at the matching row of edges_by_thresh / mst_knn_counts
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3]
-        assert [row[1] for row in payload['edges_by_thresh']] == [10.0, 7.0, 4.0, 0.0]
-        assert 'Clusters and Edge Count vs Threshold' in html_content
-        assert 'id="edges-by-threshold"' not in html_content
-        assert '<div class="chart chart-wide">\n        <div id="cluster-discontinuity-by-threshold"></div>' in html_content
-        assert 'cdn.jsdelivr.net/npm/d3@7' in html_content
-        assert 'cluster-size-bubble' in html_content
-        assert 'updateClusterBubbleChart' in html_content
-        assert 'num-singletons' in html_content
-        assert 'Number of Singletons' in html_content
-        assert 'Cluster Size Summaries vs Threshold' not in html_content
-        assert 'cluster-size-hist' not in html_content
-        assert "''.join(" not in html_content
-        assert "row['threshold_from']" not in html_content
-        assert '{{' not in html_content
+        assert [stop['edge_index'] for stop in data['slider_stops'][1:]] == [-1, 0, 1, 2]
+        # threshold_index points at the matching row of threshold_table and the kNN counts
+        assert [stop['threshold_index'] for stop in data['slider_stops']] == [-1, 0, 1, 2, 3]
+        assert data['threshold_table'] == {
+            'threshold': [10.0, 7.0, 4.0, 0.0], 'edges': [0, 1, 3, 4], 'clusters': [4, 3, 2, 1],
+        }
+        assert data['mst_edges'] == [[1, 0, 10.0], [2, 1, 7.0], [3, 2, 4.0]]
 
 
 def test_matrix_report_supports_product_merge_impact_metric():
@@ -339,18 +314,13 @@ def test_matrix_report_supports_product_merge_impact_metric():
         ])
 
         text_content = open(out_txt).read()
-        html_content = open(out_html).read()
 
         assert 'Strongest MST split events (metric=product)' in text_content
-        assert 'Clusters and Edge Count vs Threshold' in html_content
-        assert 'Cluster Splits vs Threshold' in html_content
-        assert 'Largest Merge Events (product)' not in html_content
-        # A `product` impact is a product of two component sizes, not a count of nodes,
-        # so the split chart must not label its axes as though it were.
-        assert 'Largest single split (size product)' in html_content
-        assert 'Moving sum of split impact (5% window)' in html_content
-        assert 'Largest single split (nodes)' not in html_content
-        assert '{{' not in html_content
+        # The page labels the split chart by this metric (see test_report_html.py).
+        data = _page_data(out_html)
+        assert data['summary']['merge_impact_metric'] == 'product'
+        # A product impact is the product of the two sizes, so B-C (2 x 1) merges at 7.
+        assert {event['threshold_to']: event['merge_impact'] for event in data['summary']['split_events']}['7.00'] == 2
 
 
 def test_matrix_report_default_excludes_mst_knn(shared_datadir):
@@ -360,15 +330,10 @@ def test_matrix_report_default_excludes_mst_knn(shared_datadir):
         matrix_report.main(["-i", str(shared_datadir / "scorefull.tsv"), "-o", out_txt, "--html_out", out_html])
 
         text_content = open(out_txt).read()
-        html_content = open(out_html).read()
 
         assert 'Projected MST + kNN edge counts' not in text_content
         assert 'MST + kNN edges' not in text_content
-        assert 'mst-knn-k-slider' not in html_content
-        payload = _embedded_report_payload(html_content)
-        assert payload['has_mst_knn'] is False
-        assert payload['mst_knn_counts'] == []
-        assert 'Cluster Size Summaries vs Threshold' not in html_content
+        assert _page_data(out_html)['knn_projection'] is None
 
 
 def test_matrix_report_max_merge_events_filters_html_payload():
@@ -394,32 +359,28 @@ def test_matrix_report_max_merge_events_filters_html_payload():
             "--max_merge_events", "2",
         ])
 
-        html_content = open(out_html).read()
-        payload = _embedded_report_payload(html_content)
+        summary = _page_data(out_html)['summary']
+        stops = _page_data(out_html)['slider_stops']
 
-        # The payload says what the series was selected from, so the chart can caption
+        # The data says what the series was selected from, so the chart can caption
         # itself rather than leaving a filtered stretch of axis looking like a quiet one.
-        assert payload['merge_event_total'] == 5
-        assert payload['max_merge_events'] == 2
+        assert summary['split_event_total'] == 5
+        assert summary['max_merge_events'] == 2
         # This network's five events sit in five different bands of the axis, so the
         # density back-fill restores every one the cap dropped. The cap and the
         # back-fill are pitted against each other in test_ssn_hierarchy.py, where the
         # band layout can be set directly, and below on a network big enough to crowd
         # several events into one band.
-        assert [row['edge_index'] for row in payload['merge_event_series']] == [-1, 0, 1, 2, 3]
+        assert [row['edge_index'] for row in summary['split_events']] == [-1, 0, 1, 2, 3]
         # --max_merge_events caps the plotted events, but the floor stop is a cut
         # rather than an event, so it survives and the fully merged view stays reachable.
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, -1, 0, 1, 2, 3, 4]
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4, 5]
-        # The floor sits just below the weakest edge, so it no longer strands the
-        # other stops at the far left of the track.
-        assert [stop['slider_position'] for stop in payload['slider_stops']] == [
-            0, 500, 2728, 4955, 7183, 9411, 9500
-        ]
-        assert [stop['threshold_label'] for stop in payload['slider_stops']] == [
+        assert [stop['edge_index'] for stop in stops] == [-1, -1, 0, 1, 2, 3, 4]
+        assert [stop['threshold_index'] for stop in stops] == [-1, 0, 1, 2, 3, 4, 5]
+        # The floor sits just below the weakest edge, so it does not strand the other
+        # stops at one end of the track.
+        assert [stop['threshold_label'] for stop in stops] == [
             '∞', '10.00', '9.00', '8.00', '7.00', '6.00', '5.96'
         ]
-        assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
 
 
 
@@ -445,21 +406,15 @@ def test_matrix_report_caps_merge_events_on_a_network_large_enough_to_bite():
         matrix_report.main([
             "-i", input_file, "--html_out", out_html, "--max_merge_events", "5",
         ])
-        html_content = open(out_html).read()
-        payload = _embedded_report_payload(html_content)
+        summary = _page_data(out_html)['summary']
 
-        total = payload['merge_event_total']
-        plotted = len(payload['merge_event_series'])
-        assert payload['max_merge_events'] == 5
+        total = summary['split_event_total']
+        plotted = len(summary['split_events'])
+        assert summary['max_merge_events'] == 5
         assert total > 5 + MERGE_EVENT_DENSITY_BINS  # otherwise the cap proves nothing
         assert 5 <= plotted <= 5 + MERGE_EVENT_DENSITY_BINS
         assert plotted < total
-
-        # The chart captions itself with those two numbers.
-        assert 'id="split-event-count"' in html_content
-        assert 'merge events plotted' in html_content
-        assert 'MERGE_EVENT_TOTAL = reportData.merge_event_total;' in html_content
-        assert 'MAX_MERGE_EVENTS = reportData.max_merge_events;' in html_content
+        # The page captions the chart with those numbers (test_report_browser.py).
 
 
 def test_matrix_report_max_merge_events_zero_includes_all_html_events():
@@ -485,16 +440,11 @@ def test_matrix_report_max_merge_events_zero_includes_all_html_events():
             "--max_merge_events", "0",
         ])
 
-        html_content = open(out_html).read()
-        payload = _embedded_report_payload(html_content)
+        data = _page_data(out_html)
 
-        assert len(payload['merge_event_series']) == 5
-        assert [stop['edge_index'] for stop in payload['slider_stops']] == [-1, -1, 0, 1, 2, 3, 4]
-        assert [stop['threshold_index'] for stop in payload['slider_stops']] == [-1, 0, 1, 2, 3, 4, 5]
-        assert [stop['slider_position'] for stop in payload['slider_stops']] == [
-            0, 500, 2728, 4955, 7183, 9411, 9500
-        ]
-        assert 'id="threshold-slider" min="0" max="10000" value="0" step="1"' in html_content
+        assert len(data['summary']['split_events']) == 5
+        assert [stop['edge_index'] for stop in data['slider_stops']] == [-1, -1, 0, 1, 2, 3, 4]
+        assert [stop['threshold_index'] for stop in data['slider_stops']] == [-1, 0, 1, 2, 3, 4, 5]
 
 
 def test_matrix_report_text_merge_events_limited_to_top_25():
@@ -562,37 +512,6 @@ def test_matrix_report_text_merge_events_are_sorted_by_from_threshold():
             from_thresholds.append(line.split()[0])
 
         assert from_thresholds == ['∞', '10.00', '9.00', '8.00', '7.00']
-
-def test_matrix_report_slider_stops_are_proportionally_spaced():
-    data = np.array([
-        [0, 10, 0, 0, 0],
-        [10, 0, 5, 0, 0],
-        [0, 5, 0, 4, 0],
-        [0, 0, 4, 0, 1],
-        [0, 0, 0, 1, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D', 'E']
-    matrix = DataMatrix(data, row_names, row_names)
-
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        out_html = os.path.join(output_dir, "matrix_report_test.html")
-
-        matrix.write(input_file, output_type="hdf")
-        matrix_report.main([
-            "-i", input_file,
-            "--html_out", out_html,
-        ])
-
-        html_content = open(out_html).read()
-        payload = _embedded_report_payload(html_content)
-        slider_stops = payload['slider_stops']
-
-        assert [stop['threshold_label'] for stop in slider_stops] == [
-            '∞', '10.00', '5.00', '4.00', '1.00', '0.91'
-        ]
-        assert [stop['slider_position'] for stop in slider_stops] == [0, 500, 5450, 6441, 9411, 9500]
-
 
 def test_matrix_report_profile_stages_emits_timings(capsys):
     data = np.array([
@@ -759,11 +678,10 @@ def test_slider_reaches_the_fully_merged_network():
         out_html = os.path.join(output_dir, "matrix_report_test.html")
         DataMatrix(data, row_names, row_names).write(input_file, output_type="hdf")
         matrix_report.main(["-i", input_file, "--html_out", out_html])
-        payload = _embedded_report_payload(open(out_html).read())
+        stops = _page_data(out_html)['slider_stops']
         tree = MaxTree(DataMatrix.from_file(input_file))
 
     hierarchy = build_mst_component_hierarchy(tree)
-    stops = payload['slider_stops']
     finite = [stop['threshold_value'] for stop in stops if stop['threshold_value'] is not None]
     weakest_mst_edge = min(float(edge[2]) for edge in tree.mst_edges)
 
@@ -808,7 +726,7 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
         DataMatrix(data, row_names, row_names).write(input_file, output_type="hdf")
         matrix_report.main(["-i", input_file, "--html_out", out_html])
         build_ssn_viewer.main(["-i", input_file, "-o", bundle_path])
-        report_stops = _embedded_report_payload(open(out_html).read())['slider_stops']
+        report_stops = _page_data(out_html)['slider_stops']
         bundle_stops = ssn_bundle.slider_stops(load_bundle(bundle_path))
 
     keys = ('edge_index', 'threshold_label', 'threshold_value')
@@ -819,88 +737,3 @@ def test_slider_stops_match_the_ssn_viewer_bundle():
     # into them. A bundle's stops have no threshold_index at all.
     assert all(stop['threshold_index'] >= -1 for stop in report_stops)
     assert all('threshold_index' not in stop for stop in bundle_stops)
-
-
-def test_matrix_report_hover_labels_follow_the_merge_impact_metric():
-    """The split chart's hovertemplates used to hardcode "node(s)".
-
-    Under --merge_impact_metric product a merge impact is a product of two component
-    sizes, so calling it a node count is simply wrong. The strings come from
-    merge_impact_axis_labels, which the Domainator Similarity Network Viewer's own
-    hover readout reads too, so the two charts word it the same way.
-    """
-    data = np.array([
-        [0, 10, 0, 0, 0, 0],
-        [10, 0, 7, 0, 0, 0],
-        [0, 7, 0, 9, 0, 0],
-        [0, 0, 9, 0, 6, 0],
-        [0, 0, 0, 6, 0, 8],
-        [0, 0, 0, 0, 8, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DataMatrix(data, row_names, row_names)
-
-    expected = {
-        'min_child': ('split(s) of %{y} nodes', '%{customdata[2]} nodes total',
-                      'Nodes displaced within'),
-        'product': ('split(s) of impact %{y}', 'impact %{customdata[2]} total',
-                    'Split impact within'),
-    }
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        matrix.write(input_file, output_type="hdf")
-        for metric, (bead, total, moving_sum) in expected.items():
-            out_html = os.path.join(output_dir, f"report_{metric}.html")
-            matrix_report.main([
-                "-i", input_file, "--html_out", out_html,
-                "--merge_impact_metric", metric,
-            ])
-            html_content = open(out_html).read()
-            assert bead in html_content, metric
-            assert total in html_content, metric
-            assert moving_sum in html_content, metric
-            # The wording of the other metric must not leak in.
-            for other_metric, other in expected.items():
-                if other_metric == metric:
-                    continue
-                for phrase in other:
-                    assert phrase not in html_content, (metric, phrase)
-
-
-def test_matrix_report_split_chart_offers_png_and_svg_download():
-    """The split-event chart carries its own two download buttons.
-
-    Two, not Plotly's stock camera: that button exports whichever single format the
-    config names. They are wired only on this chart -- every other chart in the report
-    keeps `displayModeBar: false`, so the report does not sprout zoom/pan/lasso
-    toolbars everywhere.
-    """
-    data = np.array([
-        [0, 10, 0, 0, 0, 0],
-        [10, 0, 7, 0, 0, 0],
-        [0, 7, 0, 9, 0, 0],
-        [0, 0, 9, 0, 6, 0],
-        [0, 0, 0, 6, 0, 8],
-        [0, 0, 0, 0, 8, 0],
-    ], dtype=float)
-    row_names = ['A', 'B', 'C', 'D', 'E', 'F']
-    matrix = DataMatrix(data, row_names, row_names)
-
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        out_html = os.path.join(output_dir, "report.html")
-        matrix.write(input_file, output_type="hdf")
-        matrix_report.main(["-i", input_file, "--html_out", out_html])
-        html_content = open(out_html).read()
-
-    assert "const splitChartConfig = {" in html_content
-    assert "title: 'Download chart as PNG'" in html_content
-    assert "title: 'Download chart as SVG'" in html_content
-    assert "format: 'png'" in html_content
-    assert "format: 'svg'" in html_content
-    assert "filename: 'split_events'" in html_content
-    # Only the split chart gets the toolbar.
-    assert "}}, splitChartConfig);" not in html_content   # braces are doubled pre-render
-    assert "}, splitChartConfig);" in html_content
-    assert html_content.count("}, splitChartConfig);") == 1
-    assert html_content.count("displayModeBar: false") == 2

@@ -54,11 +54,11 @@ def merge_impact_axis_labels(metric: str) -> dict:
 
     Under ``min_child`` an impact is a count of nodes; under ``product`` it is a product of
     two component sizes, which is not a node count and must not be labeled as one. Both
-    the Plotly chart in matrix_report and the canvas chart in the Domainator Similarity
-    Network Viewer read these so the two cannot drift apart.
+    matrix_report's page (a copy, checked by test_report_html.py) and the canvas chart in the
+    Domainator Similarity Network Viewer use these so the two cannot drift apart.
 
     ``impact_amount`` is a one-placeholder template for naming an impact *value* in a
-    sentence -- a bare ``{}`` rather than Plotly's or JavaScript's interpolation syntax,
+    sentence -- a bare ``{}`` rather than any one language's interpolation syntax,
     since both charts' hover readouts fill it in their own way. ``moving_sum_hover``
     introduces the moving-sum readout, which measures the same quantity.
     """

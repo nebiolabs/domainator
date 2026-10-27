@@ -237,9 +237,9 @@ Merge impact is one of two metrics:
 - `min_child` (default) — `min(left_size, right_size)`, the node count of the smaller
   piece. This is what "how many nodes get displaced by this split" means.
 - `product` — `left_size * right_size`. Not a node count, which is why
-  `merge_impact_axis_labels` exists: both the Plotly chart in `matrix_report` and the
-  canvas chart in the viewer read their axis titles from it so neither can label a product
-  as a count.
+  `merge_impact_axis_labels` exists: the canvas chart in the viewer reads its axis titles
+  from it, and `matrix_report`'s page keeps a copy that `test/test_report_html.py` checks
+  against it, so neither can label a product as a count.
 
 Two running statistics need care. The mean over non-singletons is maintained as a
 running `(count, sum)` pair, adjusting for the two components leaving and one arriving.

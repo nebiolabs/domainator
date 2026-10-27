@@ -10,7 +10,7 @@ import pytest
 from domainator import report_html, table_writers
 from helpers import report_data, report_rows
 
-REPORTS = ["table_report", "summary_report"]
+REPORTS = ["table_report", "summary_report", "matrix_report"]
 # Pages that stream rows into a report-rows block.
 TABLE_PAGES = {"table_report"}
 
@@ -109,3 +109,26 @@ def test_float_cells_match_the_tsv_formatting(tmp_path):
     )
     shown = json.loads(subprocess.run(["node", "run.js"], capture_output=True, text=True, check=True, cwd=tmp_path).stdout)
     assert shown == ["%0.1f" % v for v in values]
+
+
+def _script_constant(name, constant):
+    """A literal `const <constant> = ...;` from a report's script, as JSON (via node)."""
+    import tempfile
+    match = re.search(rf"^const {constant} = (.*?);$", report_html._asset(f"reports/{name}.js"), re.M | re.S)
+    assert match is not None, constant
+    with tempfile.TemporaryDirectory() as tmp:
+        script = f"{tmp}/constant.js"
+        with open(script, "w") as handle:
+            handle.write(f"process.stdout.write(JSON.stringify({match.group(1)}));")
+        return json.loads(subprocess.run(["node", script], capture_output=True, text=True, check=True).stdout)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_matrix_page_words_splits_as_ssn_hierarchy_does():
+    """The split chart's titles and readouts name what an impact measures, which depends on
+    --merge_impact_metric: a product of two sizes is not a count of nodes. The page keeps its
+    own copy of the wording; it must be ssn_hierarchy's, which the SSN viewer uses too."""
+    from domainator.ssn_hierarchy import MERGE_EVENT_DENSITY_BINS, MERGE_IMPACT_CHOICES, merge_impact_axis_labels
+    labels = _script_constant("matrix_report", "SPLIT_AXIS_LABELS")
+    assert labels == {metric: merge_impact_axis_labels(metric) for metric in MERGE_IMPACT_CHOICES}
+    assert _script_constant("matrix_report", "MERGE_EVENT_DENSITY_BINS") == MERGE_EVENT_DENSITY_BINS

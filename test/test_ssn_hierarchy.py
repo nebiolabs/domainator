@@ -323,7 +323,7 @@ def test_axis_labels_never_call_a_product_impact_a_node_count():
     assert product["moving_sum_hover"] == "Split impact within"
 
     # Exactly one placeholder, so a caller can fill it with its own interpolation
-    # syntax -- Plotly's %{y} in matrix_report, a JS string in the viewer.
+    # syntax -- a JS string in matrix_report's page and in the viewer.
     for labels in (min_child, product):
         assert labels["impact_amount"].count("{}") == 1
         assert labels["impact_amount"].format(7) in ("7 nodes", "impact 7")

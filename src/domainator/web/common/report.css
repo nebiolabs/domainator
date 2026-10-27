@@ -206,3 +206,15 @@ body.resizing-column { cursor: col-resize; user-select: none; }
 .stat-grid dt { color: var(--muted); font-size: 0.85rem; }
 .stat-grid dd { margin: 0; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 .panel p.note { color: var(--muted); font-size: 0.9rem; margin: 0 0 12px; }
+
+/* The matrix report */
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 18px;
+}
+.chart-grid > div { min-width: 0; }
+.slider-controls { margin: 4px 0 16px; }
+.slider-controls label { display: block; margin: 10px 0 6px; font-size: 0.95rem; }
+.slider-track input[type="range"] { width: 100%; margin: 0; accent-color: #d62728; }
+#threshold-slider { direction: rtl; }

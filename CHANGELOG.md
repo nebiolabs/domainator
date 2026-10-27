@@ -66,6 +66,12 @@ lists every change from 0.x.
   from a CDN, and the domain frequency and co-occurrence tables are sortable, filterable
   tables like enum_report's. The page carries the `--json_out` document, so it shows the
   same numbers. The taxonomy tree's children are now in a fixed order (most contigs first).
+- matrix_report's `--html_out` page works offline: its charts are Domainator's own JavaScript
+  instead of Plotly and d3 from a CDN. The clusters-by-threshold and clusters-by-edges charts
+  zoom by dragging across them; the split chart lines up with the threshold slider under it,
+  and clicking it moves the threshold there; the arrow keys step the slider from stop to stop;
+  and each chart, the 100-largest-clusters bubble chart included, downloads as SVG or PNG. The
+  page carries the `--json_out` document, so its summary shows the same numbers.
 
 ### Removed
 - `partition_seqfile` and `partition_seqids` (domainate and domain_search partition their
