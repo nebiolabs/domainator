@@ -1,5 +1,6 @@
 from domainator.taxonomy import NCBITaxonomy
 import pytest
+import re
 import shutil
 
 
@@ -17,6 +18,18 @@ def test_NCBItaxonomy_2(shared_datadir):
     tx = NCBITaxonomy(shared_datadir / "taxdmp", overwrite=False)
     with pytest.warns(UserWarning):
         assert tx.lineage(1985417) == []
+
+
+def test_unknown_taxid_has_no_lineage(shared_datadir, caplog, monkeypatch):
+    """A taxid newer than the database is unknown, with one warning, rather than a crash."""
+    from domainator.taxonomy import ncbi
+    monkeypatch.setattr(ncbi, "_warned_unknown_taxids", set())
+    tx = NCBITaxonomy(shared_datadir / "taxdmp", overwrite=False)
+    assert tx.lineage(59919) == []
+    assert tx.lineage(59919) == []
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert re.match(r"taxid 59919 is not in the NCBI taxonomy database.*--taxonomy_update", warnings[0])
 
 
 def _lineage_match(tx, taxid, include, exclude):

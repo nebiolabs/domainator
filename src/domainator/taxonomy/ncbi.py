@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 import requests
@@ -10,6 +11,10 @@ import getpass
 import fcntl
 from contextlib import contextmanager
 from typing import Iterator, TextIO
+
+logger = logging.getLogger(__name__)
+
+_warned_unknown_taxids = set()
 
 
 def default_ncbi_taxonomy_path() -> str:
@@ -267,7 +272,8 @@ class NCBITaxonomy:
     @staticmethod
     def _lineage(nodes_tab, merged_tab, deleted_tab, tax_id):
         '''
-            returns all parent nodes of tax_id (starting with tax_id itself)
+            returns all parent nodes of tax_id (starting with tax_id itself); empty, with a
+            warning, for a deleted taxid or one the database does not have
         '''
         out_list = list()
 
@@ -277,7 +283,17 @@ class NCBITaxonomy:
         if tax_id in deleted_tab:
             warnings.warn(f"Attempted to calculate lineage for a deleted taxid: {tax_id}, lineage search prematurely stopped, which might confuse lineage exclusions.")
             return out_list
-        
+
+        if tax_id not in nodes_tab:
+            # NCBI deprecates taxids rather than removing them, so an unknown one is newer
+            # than the database.
+            if tax_id not in _warned_unknown_taxids:
+                _warned_unknown_taxids.add(tax_id)
+                logger.warning(f"taxid {tax_id} is not in the NCBI taxonomy database, which is probably older "
+                               f"than the sequences; it is treated as unknown (no lineage). "
+                               f"Update the database with --taxonomy_update.")
+            return out_list
+
         out_list.append(tax_id)
 
         while nodes_tab[tax_id]['parent_tax_id'] != "1":

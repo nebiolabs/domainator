@@ -31,13 +31,18 @@ from domainator.model import get_cds_unique_name, feature_score
 from domainator.data_matrix import DataMatrix
 from domainator import DOMAIN_FEATURE_NAME
 import numpy as np
-from typing import Dict, Iterable, Optional, Set, TextIO
+from typing import Dict, Iterable, Optional, Set, TextIO, Tuple
 from domainator.text_plot import text_histogram
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
 from domainator import report_html
 from Bio.SeqRecord import SeqRecord
+
+
+def _name_and_rank(data: TaxonomyData) -> Tuple[str, str]:
+    """A taxon's name and rank; blank for a taxid the taxonomy database does not have."""
+    return (data.names[-1], data.ranks[-1]) if data.lineage else ("", "")
 
 
 class SummaryTextWriter():
@@ -78,8 +83,9 @@ CDSs per 10 kb: {num_cdss / ((sum(lengths)+0.01)/10000) : .2f}
         table_data = {"taxid":[], "name":[], "rank":[], "count":[]}
         for taxid in taxa_data:
             table_data["taxid"].append(taxid)
-            table_data["name"].append(taxa_data[taxid]["data"].names[-1])
-            table_data["rank"].append(taxa_data[taxid]["data"].ranks[-1])
+            name, rank = _name_and_rank(taxa_data[taxid]["data"])
+            table_data["name"].append(name)
+            table_data["rank"].append(rank)
             table_data["count"].append(taxa_data[taxid]["count"])
             
         taxa_df = pd.DataFrame(table_data)
@@ -134,15 +140,11 @@ class SummaryJSONWriter():
             self.payload["domain_cooccurrence"] = None
 
     def write_taxonomy(self, taxa_data):
-        self.payload["taxonomy"] = [
-            {
-                "taxid": taxid,
-                "name": taxa_data[taxid]["data"].names[-1],
-                "rank": taxa_data[taxid]["data"].ranks[-1],
-                "count": taxa_data[taxid]["count"],
-            }
-            for taxid in taxa_data
-        ]
+        rows = []
+        for taxid, entry in taxa_data.items():
+            name, rank = _name_and_rank(entry["data"])
+            rows.append({"taxid": taxid, "name": name, "rank": rank, "count": entry["count"]})
+        self.payload["taxonomy"] = rows
 
     def write_footer(self):
         json.dump(self.payload, self.out_handle, separators=(",", ":"), default=str)
@@ -399,7 +401,7 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
             correlations_dict[domain1] = {domain2: 100 * (count / original_count)
                                           for domain2, count in domain_stats[domain1]['correlations'].items()}
 
-    domain_table_df = pd.DataFrame.from_dict(domain_stats, orient='index', columns=['database', 'count', "description", 'avg score']).sort_values("count", ascending=False)
+    domain_table_df = pd.DataFrame.from_dict(domain_stats, orient='index', columns=['database', 'count', "description", 'avg score']).sort_values("count", ascending=False, kind="stable")
     domain_table_df.reset_index(inplace=True, names='domain')
     domain_cooccurence_df = None
     if len(correlations_dict) > 0:

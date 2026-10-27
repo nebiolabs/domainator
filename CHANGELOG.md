@@ -91,6 +91,11 @@ lists every change from 0.x.
   being built on `domainator describe`.
 
 ### Fixed
+- A taxid missing from the NCBI taxonomy database (one newer than the database) crashed
+  summary_report and enum_report's taxonomy columns. It is now treated as unknown, with
+  blank names and ranks and one warning per taxid suggesting `--taxonomy_update`.
+- summary_report listed domains with equal counts in an arbitrary order once there were more
+  than 16 domains; they are now in the order they were first seen.
 - Many bugs found in the 1.0 review, including: `-e` cutoffs that dropped hits equal to the
   cutoff; XGMML values escaped twice; Newick branch lengths rounded to two decimals;
   build_tree crashing on deep trees; extract_peptides `-e` parsed as text; compressed output

@@ -232,3 +232,37 @@ def test_summary_report_output_dash_writes_stdout(shared_datadir, tmp_path, caps
     summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "-o", "-"])
     assert "Sod_Fe" in capsys.readouterr().out
     assert not (tmp_path / "-").exists()
+
+
+def test_tied_domain_counts_keep_first_seen_order(shared_datadir, tmp_path):
+    """Equal counts are listed in the order the domains were first seen. pandas' default
+    sort is unstable, which reordered them once there were more than 16 domains."""
+    import json
+    from domainator import DOMAIN_FEATURE_NAME
+    from domainator.seqio import parse_seqfiles
+
+    gb = shared_datadir / "MT_nbs.gb"
+    first_seen = dict()  # name -> count, in first-seen order
+    for record in parse_seqfiles([str(gb)]):
+        for feature in record.features:
+            if feature.type == DOMAIN_FEATURE_NAME:
+                name = feature.qualifiers["name"][0]
+                first_seen[name] = first_seen.get(name, 0) + 1
+    assert len(first_seen) > 16 and len(set(first_seen.values())) < len(first_seen)
+
+    out = tmp_path / "summary.json"
+    summary_report.main(["-i", str(gb), "--json_out", str(out)])
+    rows = json.loads(out.read_text())["domain_frequency"]
+    assert [row["domain"] for row in rows] == sorted(first_seen, key=lambda name: -first_seen[name])
+
+
+def test_summary_report_taxid_missing_from_the_database(shared_datadir, tmp_path):
+    """MT_nbs.gb has taxids the test taxonomy lacks; they are counted, as unknown."""
+    import json
+    out = tmp_path / "summary.json"
+    summary_report.main(["-i", str(shared_datadir / "MT_nbs.gb"), "--json_out", str(out),
+                         "--html_out", str(tmp_path / "summary.html"), "--taxonomy",
+                         "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp")])
+    data = json.loads(out.read_text())
+    assert data["contig_stats"]["contigs"] == 20
+    assert {"taxid": 59919, "name": "", "rank": "", "count": 1} in data["taxonomy"]
