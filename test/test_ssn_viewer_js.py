@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from domainator.ssn_viewer_html import _layout_worker_js, ssn_viewer_html
+from domainator.viewer_html import _layout_worker_js, viewer_html
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 
@@ -33,7 +33,7 @@ def _node(tmp_path, *args):
 
 
 def test_page_script_and_worker_parse(tmp_path):
-    page = ssn_viewer_html()
+    page = viewer_html()
     scripts = re.findall(r"<script>\n(.*?)\n</script>", page, re.S)
     assert len(scripts) == 1
     for name, source in (("page.js", scripts[0]), ("worker.js", _layout_worker_js())):

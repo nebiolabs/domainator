@@ -140,6 +140,15 @@ def report_data(html):
     return envelope
 
 
+def viewer_bundle(html):
+    """The bundle embedded in a Domainator Viewer page (viewer_html.py)."""
+    import base64, gzip, json
+    match = re.search(r'<script type="application/json" id="viewer-config">(.*?)</script>', html, re.S)
+    assert match is not None
+    config = json.loads(match.group(1))
+    return json.loads(gzip.decompress(base64.b64decode(config["embeddedBundleBase64"])))
+
+
 def report_rows(html):
     """The rows streamed into a table report (enum_report, hmmer_report --html_out)."""
     import json

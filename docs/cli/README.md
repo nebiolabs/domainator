@@ -50,12 +50,12 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 
 ## Build, explore, and split similarity networks, trees, and projections
 
-- [build_ssn](build_ssn.md): Build a sequence similarity network as a Cytoscape file.
-- [build_ssn_viewer](build_ssn_viewer.md): Build a Domainator Similarity Network Viewer bundle and HTML page.
+- [build_ssn](build_ssn.md): Build a sequence similarity network for Cytoscape or the Domainator Viewer.
 - [ssn_navigator](ssn_navigator.md): Query a similarity network bundle: clusters, members, and metadata.
 - [split_by_cluster](split_by_cluster.md): Split a sequence or profile file into one file per cluster of a similarity matrix.
 - [build_tree](build_tree.md): Build a UPGMA tree from a distance or similarity matrix.
 - [build_projection](build_projection.md): Project a matrix into 2D or 3D with UMAP, t-SNE, or PCA.
+- [viewer](viewer.md): Write the Domainator Viewer, empty or opening a network, tree, or projection bundle.
 
 ## Tables and summaries
 

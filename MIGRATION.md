@@ -25,6 +25,7 @@ that names it, so nothing changes silently. This guide lists every change.
 | `domainator_format_db.py ...` | `domainator format_db ...` |
 | `partition_seqfile.py`, `partition_seqids.py` | removed; index databases with `domainator format_db --index` instead |
 | `domainator_server` | removed; the browser GUI is becoming a separate project, built on `domainator describe` (see docs/tool_manifest.md) |
+| `build_ssn_viewer.py` | removed; `domainator build_ssn --html_out` / `--dvb_out` write the viewer and its bundle, and `domainator viewer` writes an empty viewer page (see below) |
 
 `domainator --help` lists all commands. `domainator completion bash` prints a tab-completion
 script (see the README).
@@ -58,7 +59,7 @@ domainator domainate -i in.gb -r pfam.hmm -o - | domainator select_by_cds -i - -
 Programs that read their input more than once refuse `-i -`: domainate, domain_search,
 seq_dist, kmer_dist, deduplicate_genbank, split_by_cluster, and format_db. So do the programs
 whose input is not a stream: the structure programs (structure files or directories) and the
-matrix and bundle readers (build_projection, build_ssn, build_tree, build_ssn_viewer,
+matrix and bundle readers (build_projection, build_ssn, build_tree, viewer,
 matrix_report, transform_matrix, ssn_navigator).
 
 **Every output file has its own option, ending in `_out`.** No input option ends in `_out`.
@@ -119,7 +120,9 @@ Options not listed are unchanged.
 | | `--params` | `--umap_args`, `--tsne_args`, `--pca_args`: `key=value` pairs, e.g. `--umap_args="n_neighbors=30 min_dist=0.1"` |
 | build_ssn | `--xgmml`, `--cluster_tsv` | `-o/--xgmml_out`, `--cluster_tsv_out` |
 | | `--lb` | `--threshold` |
-| build_ssn_viewer | `-o/--output`, `--html` | `-o/--dsnv_out`, `--html_out` |
+| build_ssn_viewer | `-o/--output` (a `.dsnv` bundle) | `build_ssn --dvb_out` (a `.dvb` bundle) |
+| | `--html --embed_data` | `build_ssn --html_out` |
+| | `--html` alone (an empty page) | `viewer --html_out` |
 | build_tree | `--xgmml`, `--newick` | `--xgmml_out`, `-o/--newick_out` |
 | clean_sequences | `-o/--output` + `--fasta_out` switch, `--log` | `-o/--genbank_out`, `--fasta_out`, `--log_out` |
 | color_genbank | `-o/--output` | `-o/--genbank_out` |
@@ -260,6 +263,9 @@ Options not listed are unchanged.
 - `DataMatrix.write()` no longer accepts the `"sparse"` and `"dense"` output types; use `"hdf"`.
 - The `--json_out` documents of summary_report, matrix_report and ssn_navigator start with a
   `schema_version` key; ssn_navigator's also has `query`, the mode that answered.
+- Networks for the viewer are `.dvb` bundles (`build_ssn --dvb_out`), the format trees and
+  projections use too, instead of `.dsnv` bundles. The viewer, `domainator viewer -i` and
+  ssn_navigator still read `.dsnv` files, and the viewer saves their sessions as `.dvb`.
 - build_tree writes Newick branch lengths to six significant digits instead of two decimals.
 - XGMML attribute values are no longer escaped twice: a node named `A&B` used to show up in
   Cytoscape as `A&amp;B`.
@@ -283,7 +289,7 @@ internal; see `docs/stability.md`.
 | `domainator.domainator_format_db` | `domainator.format_db` |
 | `domainator.plot_contigs.create_d3_html(output_file, contigs, ...)` | `domainator.plot_contigs.plot_contigs(records, html_out=..., ...)` |
 | `DeduplicateGenbank().deduplicate_genbank(...)` and `.cluster_members` | `deduplicate_genbank(inputs, identity=..., clusters=[])`, which appends the clusters to the list |
-| `build_ssn_viewer.build_ssn_viewer_bundle(matrix, metadata_files=..., categorical_columns=...)` | `build_ssn_viewer.build_ssn_viewer(matrix, metadata=..., categorical=...)` |
+| `build_ssn_viewer.build_ssn_viewer_bundle(matrix, metadata_files=..., categorical_columns=...)` | `build_ssn.build_ssn(matrix, dvb_out=..., metadata=..., categorical=...)`, which writes the bundle (`ssn_bundle.load_bundle` reads it back) |
 | (none) | `genbank_to_fasta.genbank_to_fasta(input, fasta_out=...)` |
 | `summary_report(records, out_text_handle=..., out_html_handle=..., out_json_handle=..., focus_domains=..., report_taxonomy=..., domains_table=..., co_occurrence_fraction_outfile=..., co_occurrence_count_outfile=...)` | `summary_report(records, text_out_handle=..., html_out_handle=..., json_out_handle=..., domains=..., taxonomy=..., domains_tsv_out=..., co_occurrence_fraction_out=..., co_occurrence_count_out=...)` |
 | `matrix_report(matrix, out_text_handle=..., out_html_handle=..., out_json_handle=..., profile_stages=...)` | `matrix_report(matrix, text_out_handle=..., html_out_handle=..., json_out_handle=...)` (pass `stage_timings=[]` to collect timings) |

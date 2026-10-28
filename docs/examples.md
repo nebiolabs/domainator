@@ -103,8 +103,9 @@ domainator enum_report -i example_files/FeSOD_20.gb --columns length sequence -o
 domainator seq_dist -i example_files/FeSOD_20.gb -r example_files/FeSOD_20.gb --hdf_out scores.hdf5 --mode score
 domainator transform_matrix -i scores.hdf5 --hdf_out efi_score_dist.hdf5 --mode efi_score_dist
 
-# Domainator doesn't have a newick renderer, but the xgmml output can be opened in cytoscape, you'll need to apply a layout after opening it.
-domainator build_tree -i efi_score_dist.hdf5 --newick_out tree.nwk --xgmml_out tree.xgmml --metadata metadata.tsv
+# --html_out draws the tree in the Domainator Viewer (add --msa with an aligned FASTA of the sequences to show it beside the tree);
+# the xgmml output opens in cytoscape already laid out as a tree.
+domainator build_tree -i efi_score_dist.hdf5 --newick_out tree.nwk --xgmml_out tree.xgmml --html_out tree.html --metadata metadata.tsv
 
 
 domainator transform_matrix -i scores.hdf5 --hdf_out efi_scores.hdf5 --mode efi_score

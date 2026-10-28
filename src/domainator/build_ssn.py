@@ -1,6 +1,7 @@
 """Generates Sequence Similarity Networks
-    
-Build a sequence similarity network and do analysis related to that.
+
+Build a sequence similarity network and do analysis related to that: write it for Cytoscape
+(--xgmml_out) or for the Domainator Viewer (--html_out, --dvb_out).
 """
 
 from jsonargparse import ActionConfigFile
@@ -10,7 +11,9 @@ import os
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.cytoscape import write_cytoscape_xgmml
 from domainator.data_matrix import DataMatrix
+from domainator.ssn_bundle import ssn_view
 from domainator.ssn_edges import MaxTree, mst_edge_index_dict
+from domainator.ssn_hierarchy import MERGE_IMPACT_CHOICES, MERGE_IMPACT_MIN_CHILD
 from domainator.sparsify import add_sparsify_arguments, check_sparsify_data_type, sparsify_edge_index_dict
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes, make_temporary_output_path
 import scipy.sparse
@@ -22,6 +25,8 @@ import numpy as np
 from domainator.colors import get_palette, sort_palette_values
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.colors import read_color_table
+from domainator.viewer_bundle import viewer_bundle, viewer_defaults
+from domainator.viewer_html import write_viewer_outputs
 
 SCORE_COLUMN="SSN_SCORE"
 CLUSTER_COLUMN="SSN_cluster"
@@ -200,7 +205,10 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
               color_table_out: Optional[str] = None, mst: bool = False, knn: Optional[int] = None,
               subset_labels: Optional[Collection[str]] = None, max_output_bytes: Optional[int] = None,
               max_color_groups: Optional[int] = None, palette_offset: int = 0,
-              mark_mst: bool = False) -> None:
+              mark_mst: bool = False, html_out: Optional[Union[str, PathLike]] = None,
+              dvb_out: Optional[Union[str, PathLike]] = None, merge_impact_metric: str = MERGE_IMPACT_MIN_CHILD,
+              label_by: Optional[str] = None, categorical: Optional[List[str]] = None,
+              name: Optional[str] = None) -> None:
     """Write a sequence similarity network built from ``matrix``.
 
     Args:
@@ -217,16 +225,25 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
         mst (bool, optional): If True, emit only maximum spanning tree edges, which preserves the input's connected components. Defaults to False.
         knn (int, optional): If set, emit OR-symmetric k-nearest-neighbor edges. Combined with mst=True the result is the union of the two; on its own the emitted graph need not preserve the input's connected components. Defaults to None.
         subset_labels (set, optional): keep only rows and columns with labels in this set. Defaults to None.
-        max_output_bytes (int, optional): raise OutputSizeLimitExceeded before writing an XGMML file larger than this. Defaults to None, meaning no limit.
+        max_output_bytes (int, optional): raise OutputSizeLimitExceeded before writing an XGMML, HTML or dvb file larger than this. Defaults to None, meaning no limit.
         max_color_groups (int, optional): if set, only this many of the largest color_by groups get distinct colors, the rest share a neutral gray. Defaults to None, meaning every group gets a color.
         palette_offset (int, optional): skip this many colors at the start of the palette when assigning colors to color_by groups. Ignored when color_table is given. Defaults to 0.
         mark_mst (bool, optional): If True, give every edge a boolean MST property saying whether it belongs to the maximum spanning tree. Defaults to False.
+        html_out (Union[str, PathLike], optional): write the Domainator Viewer, opening this network, to this HTML file. Defaults to None.
+        dvb_out (Union[str, PathLike], optional): write the viewer bundle (gzip-compressed JSON, .dvb) to this file. Defaults to None.
+        merge_impact_metric (str, optional): how the viewer's split chart measures a merge (MERGE_IMPACT_CHOICES). Defaults to "min_child".
+        label_by (str, optional): the metadata column the viewer labels nodes by at first. Defaults to None.
+        categorical (List[str], optional): numeric metadata columns the viewer colors as categories, not a gradient. Defaults to None.
+        name (str, optional): the network's name, shown in the viewer. Defaults to the html (or dvb) output's file name.
 
     Raises:
         ValueError: if the input does not have symmetric row and column labels
     """
     if knn is not None and knn < 1:
         raise ValueError("knn must be >= 1")
+    if merge_impact_metric not in MERGE_IMPACT_CHOICES:
+        raise ValueError(f"merge_impact_metric must be one of {sorted(MERGE_IMPACT_CHOICES)}")
+    viewer = html_out is not None or dvb_out is not None
     check_sparsify_data_type(matrix.data_type, mst, knn)
 
     matrix = subset_matrix_by_labels(matrix, subset_labels)
@@ -241,8 +258,8 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
     # input's components, so its clusters are read off the tree. --mark_mst only annotates
     # edges, so it must keep the graph-derived clustering: the two agree on the partition,
     # but rename_labels_by_frequency can number equal-sized clusters differently depending
-    # on which one produced the raw labels.
-    tree = MaxTree(matrix) if (mst or mark_mst) else None
+    # on which one produced the raw labels. The viewer's network is its spanning tree.
+    tree = MaxTree(matrix) if (mst or mark_mst or viewer) else None
 
     # A pure --knn graph has components of its own, so they have to be read off the
     # selected edges -- computed here, while matrix.data is still around.
@@ -307,9 +324,21 @@ def build_ssn(matrix: DataMatrix, *, threshold: float = 0, metadata: Optional[Li
         for df in dfs:
             node_data = node_data.merge(df, how="left", left_index=True, right_index=True)
 
+    given_color_table = color_table
     if color_by is not None:
         if color_table is None:
             color_table = get_palette(node_data[color_by], max_groups=max_color_groups, offset=palette_offset)
+
+    if viewer:
+        if name is None:
+            name = Path(html_out if html_out is not None else dvb_out).stem
+        # The viewer assigns default colors as get_palette does; an offset or capped palette goes in as a table.
+        viewer_colors = given_color_table if given_color_table is not None or (palette_offset == 0 and max_color_groups is None) else color_table
+        defaults = viewer_defaults(node_data, color_by=color_by, color_table=viewer_colors, label_by=label_by, categorical=categorical)
+        view = ssn_view(tree, threshold=threshold, merge_impact_metric=merge_impact_metric)
+        write_viewer_outputs(viewer_bundle(name, node_data.index, node_data, defaults, {"ssn": view}),
+                             html_out=html_out, dvb_out=dvb_out, max_output_bytes=max_output_bytes,
+                             mitigation_options=["--subset", "--subset_file"])
 
     if xgmml_out is not None:
         temp_xgmml_path = make_temporary_output_path(xgmml_out)
@@ -372,7 +401,17 @@ def build_parser():
     parser.add_argument("--mark_mst", action="store_true", default=False, help=f"Give every edge a boolean '{MST_COLUMN}' property saying whether it belongs to the maximum spanning tree. Useful for styling or filtering the MST backbone within a larger network in Cytoscape.")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
 
-    add_output(parser, "xgmml", "Write the network to this Cytoscape xgmml file.", primary=True, required=True, stdout=False)
+    add_output(parser, "xgmml", "Write the network to this Cytoscape xgmml file.", primary=True, stdout=False)
+    add_output(parser, "html", "Write the Domainator Viewer, showing this network, to this HTML file. The viewer shows the network's maximum spanning tree above --threshold, whatever --mst and --knn say.", stdout=False)
+    add_output(parser, "dvb", "Write the gzip-compressed JSON Domainator Viewer bundle (.dvb) to this file. The viewer opens it (domainator viewer), and saves sessions in the same format.", stdout=False)
+    parser.add_argument("--merge_impact_metric", choices=list(MERGE_IMPACT_CHOICES), default=MERGE_IMPACT_MIN_CHILD,
+                        help="How the viewer's split chart measures a merge: min_child (node count of the smaller piece) or product (the two piece sizes multiplied). Switchable in the viewer.")
+    parser.add_argument("--label_by", type=str, default=None,
+                        help="Label the nodes in the html viewer by this metadata column at first.")
+    parser.add_argument("--categorical", type=str, nargs="+", required=False, default=None,
+                        help="Numeric metadata columns (for example integer cluster numbers) that the html viewer should color as discrete categories instead of a gradient.")
+    parser.add_argument("--name", type=str, default=None,
+                        help="The network's name, shown in the html viewer. Defaults to the html (or dvb) output's file name.")
 
     parser.add_argument('--cluster', required=False, default=False, action="store_true",
                         help="Creates a new metadata column called 'SSN_cluster', replacing that column from the metadata file if already present. Finds clusters by following connectivity, assigns each cluster a distinct integer, based on size rank, bigger clusters get smaller numbers.")
@@ -394,7 +433,7 @@ def build_parser():
     # TODO: generate MSAs for connected clusters (write to files and make a cytoscape column with the alinged sequences)
     # TODO: generate hmms for connected clusters (write to files)
     # TODO: 
-    declare_outputs(parser, ["xgmml_out"])
+    declare_outputs(parser, ["xgmml_out", "html_out", "dvb_out"])
     return parser
 
 
@@ -415,6 +454,8 @@ def main(argv):
 
     color_table = None
     if params.color_table:
+        if params.color_by is None and (params.html_out is not None or params.dvb_out is not None):
+            parser.error("--color_table requires --color_by.")
         color_table = read_color_table(params.color_table)
 
     subset_labels = list_and_file_to_dict_keys(params.subset, params.subset_file, as_set=True)
@@ -428,4 +469,6 @@ def main(argv):
               xgmml_out=params.xgmml_out, cluster=cluster, cluster_tsv_out=params.cluster_tsv_out, no_cluster_header=params.no_cluster_header, color_table_out=params.color_table_out,
               mst=params.mst, knn=params.knn, subset_labels=subset_labels, max_output_bytes=max_output_bytes,
               max_color_groups=params.max_color_groups, palette_offset=params.palette_offset,
-              mark_mst=params.mark_mst)
+              mark_mst=params.mark_mst, html_out=params.html_out, dvb_out=params.dvb_out,
+              merge_impact_metric=params.merge_impact_metric, label_by=params.label_by,
+              categorical=params.categorical, name=params.name)

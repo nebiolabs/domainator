@@ -2,7 +2,7 @@
 - [Project README](https://github.com/nebiolabs/domainator#readme) (overview, installation, quickstart)
 - [File Formats](file_formats.md)
 - [What 1.x keeps stable](stability.md)
-- [Similarity Network Viewer (DSNV)](ssn_viewer.md)
+- [Networks in the Domainator Viewer](ssn_viewer.md)
 - [Examples](examples.md)
 - [Agent-driven workflows](agent_workflows.md)
 - [Key algorithms](algorithms.md)

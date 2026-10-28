@@ -1,9 +1,12 @@
 [index](README.md)
 
-# The Domainator Similarity Network Viewer (DSNV)
+# Networks in the Domainator Viewer
 
-A guide to using the interactive viewer. For the on-disk `.dsnv` bundle schema see
-[File Formats](file_formats.md#domainator-similarity-network-viewer-bundles-dsnv); for the
+A guide to using the interactive viewer with the similarity networks `domainator build_ssn`
+writes. The Domainator Viewer also opens the trees `domainator build_tree` writes and the
+projections `domainator build_projection` writes; this guide covers networks, and the table,
+colors, presets and sessions work the same way for the other two. For the on-disk `.dvb`
+bundle schema see [File Formats](file_formats.md#domainator-viewer-bundles-dvb); for the
 scriptable, read-only companion see `domainator ssn_navigator` in the
 [program table](https://github.com/nebiolabs/domainator#program-descriptions).
 
@@ -32,7 +35,7 @@ A sequence similarity network (SSN) is usually explored by picking a similarity 
 thresholding an all-vs-all matrix, and looking at the connected components. Picking the
 cutoff is the hard part, and re-thresholding a large matrix for each guess is slow.
 
-The DSNV inverts that. `domainator build_ssn_viewer` computes a **maximum spanning tree** of the
+The viewer inverts that. `domainator build_ssn --html_out` computes a **maximum spanning tree** of the
 similarity matrix once and records the order in which clusters merge along it. The
 viewer replays that merge order in the browser, so **moving the threshold slider is
 instant** and works the same on a 200-node network and a 200,000-node one — the bundle
@@ -52,9 +55,9 @@ lives in the browser tab until you explicitly save it back out.
 # domainator kmer_dist, domainator structure_dist, ...)
 domainator seq_dist -i proteins.fasta -r proteins.fasta --hdf_out scores.hdf5 --mode score
 
-# a bundle plus a standalone page with the data already inside it
-domainator build_ssn_viewer -i scores.hdf5 \
-    --html_out network.html --embed_data \
+# a standalone page with the network already inside it
+domainator build_ssn -i scores.hdf5 \
+    --html_out network.html \
     --metadata families.tsv taxonomy.tsv \
     --color_by family --label_by locus_tag \
     --name "Nuclease candidates"
@@ -62,15 +65,20 @@ domainator build_ssn_viewer -i scores.hdf5 \
 
 | Option | Why you want it |
 | --- | --- |
-| `--html_out PATH` | Write the viewer page. Without `--embed_data` it is an empty shell that opens bundles you pick from disk. |
-| `--embed_data` | Inline the bundle into the page, so opening the file shows the network immediately. This is the shareable artifact — one file, no dependencies. |
-| `-o PATH` | Write the `.dsnv` bundle on its own (for `domainator ssn_navigator`, or to load into an existing shell page). |
+| `--html_out PATH` | Write the viewer page, with the network inside it, so opening the file shows the network immediately. This is the shareable artifact — one file, no dependencies. |
+| `--dvb_out PATH` | Write the `.dvb` bundle on its own (for `domainator ssn_navigator`, to open in any viewer page, or to turn into a page later with `domainator viewer -i`). |
+| `--threshold T` | Leave out edges scoring T or less, as for `--xgmml_out`, so the slider reaches down only to the weakest edge above T. The default, 0, keeps every edge. `--mst` and `--knn` change only the xgmml: the viewer always shows the network's maximum spanning tree. |
 | `--metadata A.tsv B.tsv` | Tab-separated tables keyed by node id in the first column. Several are merged left-to-right. Column types are inferred as text, integer or float. |
 | `--color_by`, `--label_by` | The columns the viewer selects on open. Both are changeable in the UI. |
 | `--color_table PATH` | A two-column TSV (value, hex color; no header), the same file `build_ssn --color_table` reads, giving the `--color_by` column its starting colors. Values not in the table are gray, and a numeric column is colored as categories. Recorded in the bundle as `defaults.color_table`; "Reset to defaults" in the color picker returns to it. |
 | `--categorical COL ...` | Numeric columns to color as discrete categories rather than a gradient — cluster numbers, plasmid groups, anything where the number is a name. Toggleable per column later. |
 | `--subset`, `--subset_file` | Restrict to a list of node ids before building. This is the right way to narrow a network when the subset is not MST-connected (see [Saving an extraction](#saving-an-extraction)). |
 | `--merge_impact_metric` | What the split plot's y-axis measures: `min_child` (default; the node count of the smaller piece) or `product` (the product of the two piece sizes). Recorded as the bundle's default. |
+| `--name` | The network's name, shown in the heading and the browser tab. Defaults to the output's file name. |
+
+`build_ssn` writes `--xgmml_out` for Cytoscape alongside these, from the same options, and
+`domainator viewer --html_out viewer.html` writes an empty page that opens the bundles you
+choose in it.
 
 There is no `--max_merge_events`: how many split events reach the slider and the plot is
 a **viewer control**, not something the bundle is built with. See
@@ -78,9 +86,11 @@ a **viewer control**, not something the bundle is built with. See
 
 ## Opening a viewer
 
-- A page built with `--embed_data` loads its network on open. Nothing else to do.
-- A page built without it, or one where you want a different network, has a file picker at
-  the top. It accepts `.dsnv` bundles, gzipped or plain JSON, and saved sessions.
+- A page from `build_ssn --html_out` (or `domainator viewer -i`) loads its network on open.
+  Nothing else to do.
+- An empty page from `domainator viewer`, or one where you want a different network, has a
+  file picker at the top. It accepts `.dvb` bundles, gzipped or plain JSON, saved sessions,
+  and the `.dsnv` network bundles of earlier Domainator versions.
 - A **saved session** is just a bundle with an extra `app_state` section, so you open it
   exactly the same way and the UI state comes back with it.
 
@@ -529,7 +539,7 @@ measures, so they would only be noise in a figure.
 
 ## Saving a session
 
-**Save session…** writes a `.dsnv` file containing the bundle *and* an `app_state` section:
+**Save session…** writes a `.dvb` file containing the bundle *and* an `app_state` section:
 layout and view toggles, threshold, pan and zoom, `Color by`/`Label by`, custom palettes,
 table sort/filter/paging/column widths, the selection, and all ten presets. Metadata edits
 go into the bundle's own metadata table, not into `app_state`.
@@ -558,7 +568,7 @@ Nodes in different components of the original network are exempt, since they wer
 unrelated.
 
 If your subset is not MST-connected, subset the source matrix instead:
-`domainator build_ssn_viewer --subset` / `--subset_file`, which *measures* those relationships
+`domainator build_ssn --subset` / `--subset_file`, which *measures* those relationships
 rather than inferring them.
 
 An extraction is a complete bundle: it carries the node ids, the induced MST edges, the

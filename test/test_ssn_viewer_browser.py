@@ -1,11 +1,11 @@
-"""Browser-driven regression tests for the generated Domainator Similarity Network Viewer HTML.
+"""Browser-driven regression tests for the network view of the generated Domainator Viewer HTML.
 
-The other viewer tests (test_build_ssn_viewer.py) only assert that the
+The other viewer tests (test_viewer.py) only assert that the
 generated HTML *string* contains the expected markup and function names. They
 cannot catch runtime regressions -- e.g. a broken event listener that stops the
 viewport from repainting -- because nothing executes the JavaScript.
 
-These tests load the self-contained ``--embed_data`` viewer in a headless
+These tests load the self-contained ``build_ssn --html_out`` viewer in a headless
 Chromium via Playwright and assert on real rendered behavior. They are gated
 behind an optional dependency:
 
@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from domainator import build_ssn_viewer
+from domainator import build_ssn
 from domainator.data_matrix import DataMatrix
 
 # Skip the entire module if Playwright isn't installed (it lives in the
@@ -48,10 +48,9 @@ def _build_embedded_viewer(out_dir):
     html_file = out_dir / "viewer.html"
     matrix.write(str(input_file), output_type="hdf")
 
-    build_ssn_viewer.main([
+    build_ssn.main([
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Browser Test Viewer",
     ])
     return html_file
@@ -93,7 +92,6 @@ def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical
     args = [
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Color Test Viewer",
         "--metadata", str(meta_file),
         "--color_by", color_by,
@@ -104,7 +102,7 @@ def _build_embedded_viewer_with_metadata(out_dir, color_by="family", categorical
         color_table_file = out_dir / "colors.tsv"
         color_table_file.write_text(color_table)
         args += ["--color_table", str(color_table_file)]
-    build_ssn_viewer.main(args)
+    build_ssn.main(args)
     return html_file
 
 
@@ -128,10 +126,9 @@ def _build_embedded_viewer_many_categories(out_dir, node_count=120):
     lines += [f"n{i:03d}\tfam_{i:03d}" for i in range(node_count)]
     meta_file.write_text("\n".join(lines) + "\n")
 
-    build_ssn_viewer.main([
+    build_ssn.main([
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Many Category Viewer",
         "--metadata", str(meta_file),
         "--color_by", "family",
@@ -261,10 +258,9 @@ def _build_embedded_viewer_dense_random(out_dir, node_count=60):
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_dense.html"
     matrix.write(str(input_file), output_type="hdf")
-    build_ssn_viewer.main([
+    build_ssn.main([
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Dense Test Viewer",
     ])
     return html_file
@@ -304,10 +300,9 @@ def _build_embedded_viewer_capped(out_dir, node_count=60):
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_capped.html"
     matrix.write(str(input_file), output_type="hdf")
-    build_ssn_viewer.main([
+    build_ssn.main([
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Capped Test Viewer",
     ])
     return html_file
@@ -353,8 +348,8 @@ def _build_embedded_viewer_two_bead(out_dir):
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_two_bead.html"
     matrix.write(str(input_file), output_type="hdf")
-    build_ssn_viewer.main([
-        "-i", str(input_file), "--html_out", str(html_file), "--embed_data",
+    build_ssn.main([
+        "-i", str(input_file), "--html_out", str(html_file),
         "--name", "Two Bead Viewer",
     ])
     return html_file
@@ -390,8 +385,8 @@ def _build_embedded_viewer_product_metric(out_dir):
     input_file = out_dir / "matrix.hdf5"
     html_file = out_dir / "viewer_product.html"
     matrix.write(str(input_file), output_type="hdf")
-    build_ssn_viewer.main([
-        "-i", str(input_file), "--html_out", str(html_file), "--embed_data",
+    build_ssn.main([
+        "-i", str(input_file), "--html_out", str(html_file),
         "--name", "Product Metric Viewer", "--merge_impact_metric", "product",
     ])
     return html_file
@@ -543,7 +538,7 @@ def test_default_color_by_paints_on_load(meta_page):
     assert page.input_value("#color-by") == "family"
     colors = page.evaluate("state.nodeColorCache.slice()")
     assert len(set(colors)) == 3, colors
-    assert colors == page.evaluate("state.bundle.graph.nodes.map((_, i) => nodeColor(i))")
+    assert colors == page.evaluate("state.bundle.nodes.map((_, i) => nodeColor(i))")
     assert page.pageerrors == []
 
 
@@ -552,7 +547,7 @@ def test_bundle_color_table_colors_on_load(color_table_page):
     and "Reset to defaults" returns to the table rather than the named palette."""
     page = color_table_page
     expected = {"alpha": "#CC0000", "beta": "#00CC00", "gamma": "#BFBFBF"}
-    families = page.evaluate("state.bundle.graph.nodes.map((_, i) => metadataValue(i, 'family'))")
+    families = page.evaluate("state.bundle.nodes.map((_, i) => metadataValue(i, 'family'))")
     assert page.evaluate("state.nodeColorCache.slice()") == [expected[f] for f in families]
     _open_color_picker(page)
     page.wait_for_selector("#color-picker-discrete:not([hidden])")
@@ -1055,7 +1050,7 @@ def test_treemap_nodes_are_fixed_size(page):
             const radii = new Set();
             let tilesWithoutSquares = 0;
             state.visibleLayout.forEach(item => {
-                const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+                const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
                 const layout = componentMemberLayout(component, item);
                 if (layout.length === 0) tilesWithoutSquares += 1;
                 layout.forEach(dot => radii.add(Math.round(dot.radius * 1000)));
@@ -1104,14 +1099,14 @@ def test_treemap_min_size_never_hides_nodes(page):
             """() => {
                 let total = 0;
                 state.visibleLayout.forEach(item => {
-                    const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+                    const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
                     total += componentMemberLayout(component, item).length;
                 });
                 return total;
             }"""
         )
 
-    total_nodes = page.evaluate("() => state.bundle.graph.nodes.length")
+    total_nodes = page.evaluate("() => state.bundle.nodes.length")
     assert rendered_node_count() == total_nodes
     # Raising the minimum cluster size well past the largest cluster must not remove any nodes
     # from the layout (it only affects which outlines are drawn).
@@ -1144,7 +1139,7 @@ def test_treemap_click_selection(page):
     point = page.evaluate(
         """() => {
             const item = state.visibleLayout[0];
-            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
             const dot = componentMemberLayout(component, item)[0];
             const sp = worldToScreenPoint(dot.x, dot.y);
             const canvas = document.getElementById('cluster-view');
@@ -1175,7 +1170,7 @@ def test_treemap_click_in_node_gap_still_selects(page):
     point = page.evaluate(
         """() => {
             const item = state.visibleLayout[0];
-            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
             const dot = componentMemberLayout(component, item)[0];
             const sp = worldToScreenPoint(dot.x + 7.5, dot.y);
             const canvas = document.getElementById('cluster-view');
@@ -1200,7 +1195,7 @@ def test_treemap_click_in_node_gap_still_selects(page):
 # ---------------------------------------------------------------------------
 
 
-def _save_session(page, out_dir, filename="session.dsnv"):
+def _save_session(page, out_dir, filename="session.dvb"):
     """Click "Save session…" and return the path the download was saved to."""
     with page.expect_download() as download_info:
         page.click("#save-session")
@@ -1220,8 +1215,23 @@ def _load_bundle_file(page, path):
     )
 
 
+# The network a page has open, as _network returns a bundle's.
+NETWORK_JS = "() => ({nodes: state.bundle.nodes, ...state.bundle.views.ssn})"
+
+
+def _network(bundle):
+    """A bundle's network: its nodes, and its ssn view's mst_edges, merge_impact_metric
+    and hierarchy."""
+    return {"nodes": bundle["nodes"], **bundle["views"]["ssn"]}
+
+
+def _network_bundle(network):
+    """A bundle holding nothing but ``network`` (as _network returns it), for ssn_bundle."""
+    return {"nodes": network["nodes"], "views": {"ssn": {key: value for key, value in network.items() if key != "nodes"}}}
+
+
 def _read_session_bundle(path):
-    """Decompress a saved .dsnv session and return the parsed JSON."""
+    """Decompress a saved .dvb session and return the parsed JSON."""
     import gzip
     import json
 
@@ -1233,17 +1243,16 @@ def _read_session_bundle(path):
 
 def test_saved_session_is_a_valid_current_bundle(meta_page, tmp_path):
     """Saving produces a bundle Python readers accept, carrying an app_state."""
-    from domainator.ssn_bundle import (
-        SSN_VIEWER_BUNDLE_VERSION,
-        load_bundle,
-    )
+    from domainator.ssn_bundle import load_bundle
+    from domainator.viewer_bundle import VIEWER_BUNDLE_FORMAT, VIEWER_BUNDLE_VERSION
 
     page = meta_page
     saved = _save_session(page, tmp_path)
 
     bundle = load_bundle(saved)  # would raise on a bad format/version
-    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 6
-    assert bundle["graph"]["nodes"] == ["A", "B", "C", "D", "E", "F"]
+    assert bundle["format"] == VIEWER_BUNDLE_FORMAT
+    assert bundle["version"] == VIEWER_BUNDLE_VERSION == 1
+    assert bundle["nodes"] == ["A", "B", "C", "D", "E", "F"]
 
     app_state = bundle["app_state"]
     assert app_state["state_version"] == 1
@@ -1373,7 +1382,7 @@ def test_session_with_unknown_keys_loads_and_reports(meta_page, tmp_path):
     bundle["app_state"]["view"]["a_setting_from_the_future"] = 42
     bundle["app_state"]["view"]["color_by"] = "no_such_column"
     bundle["app_state"]["an_entire_unknown_section"] = {"x": 1}
-    edited = tmp_path / "edited.dsnv"
+    edited = tmp_path / "edited.dvb"
     edited.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, edited)
@@ -1396,7 +1405,7 @@ def test_session_reports_node_ids_missing_from_bundle(meta_page, tmp_path):
     saved = _save_session(page, tmp_path)
     bundle = _read_session_bundle(saved)
     bundle["app_state"]["selection"]["node_ids"] = ["A", "C", "GONE_1", "GONE_2"]
-    edited = tmp_path / "missing.dsnv"
+    edited = tmp_path / "missing.dvb"
     edited.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, edited)
@@ -1416,14 +1425,14 @@ def test_unknown_bundle_version_loads_with_a_warning(meta_page, tmp_path):
     saved = _save_session(page, tmp_path)
     bundle = _read_session_bundle(saved)
     bundle["version"] = 99
-    edited = tmp_path / "v99.dsnv"
+    edited = tmp_path / "v99.dvb"
     edited.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, edited)
 
     status = page.eval_on_selector("#bundle-status", "e => e.textContent")
     assert "bundle version 99 is not one this viewer knows about" in status
-    assert page.evaluate("() => state.bundle.graph.nodes.length") == 6
+    assert page.evaluate("() => state.bundle.nodes.length") == 6
     assert page.pageerrors == []
 
 
@@ -1567,7 +1576,7 @@ def test_presets_survive_a_session_round_trip(meta_page, tmp_path):
     _select_nodes(page, [1, 3])
     page.keyboard.press("Shift+Digit9")
 
-    saved = _save_session(page, tmp_path, "presets.dsnv")
+    saved = _save_session(page, tmp_path, "presets.dvb")
     presets = _read_session_bundle(saved)["app_state"]["selection"]["presets"]
     assert presets["9"]["node_ids"] == ["B", "D"]
 
@@ -1836,7 +1845,7 @@ def test_edit_panels_open_one_at_a_time(meta_page):
 def test_loading_a_bundle_collapses_the_edit_panels(meta_page, tmp_path):
     page = meta_page
     page.click("#metadata-panel-add")
-    saved = _save_session(page, tmp_path, "panels.dsnv")
+    saved = _save_session(page, tmp_path, "panels.dvb")
     _load_bundle_file(page, saved)
 
     assert page.eval_on_selector("#metadata-panel-add", "e => e.getAttribute('aria-expanded')") == "false"
@@ -1979,7 +1988,7 @@ def test_edits_and_added_columns_survive_a_session_round_trip(meta_page, tmp_pat
     _edit_cell(page, 0, "annotation", "kept")
     _edit_cell(page, 1, "family", "edited")
 
-    saved = _save_session(page, tmp_path, "edits.dsnv")
+    saved = _save_session(page, tmp_path, "edits.dvb")
     bundle = _read_session_bundle(saved)
     # The saved file is an ordinary bundle: the edits live in `metadata`, so
     # Python readers see them without knowing anything about app_state.
@@ -2011,7 +2020,7 @@ def test_edited_bundle_is_readable_by_the_python_reader(meta_page, tmp_path):
     page.fill("#metadata-fill-value", "group_one")
     page.click("#metadata-fill-apply")
 
-    bundle = load_bundle(_save_session(page, tmp_path, "annotated.dsnv"))
+    bundle = load_bundle(_save_session(page, tmp_path, "annotated.dvb"))
     summaries = summarize_cluster_metadata([0, 1, 2], bundle["metadata"])
     label_summary = next(s for s in summaries if s["name"] == "cluster_label")
     assert label_summary["count"] == 3
@@ -2065,7 +2074,7 @@ def test_session_round_trips_custom_colors(meta_page, tmp_path):
     page.evaluate("() => setColumnCategorical('score', true)")
     assert page.evaluate("() => state.nodeColorCache[0]") == "#112233"
 
-    saved = _save_session(page, tmp_path, "colors.dsnv")
+    saved = _save_session(page, tmp_path, "colors.dvb")
     colors = _read_session_bundle(saved)["app_state"]["colors"]
     assert colors["custom_palettes"]["family"] == {"colors": {"alpha": "#112233"}}
     assert colors["categorical_columns"] == ["score"]
@@ -2167,7 +2176,7 @@ def test_modified_click_on_an_empty_slot_leaves_the_selection_alone(page):
 def test_heading_names_the_loaded_network(meta_page):
     page = meta_page
     assert page.eval_on_selector("#viewer-title", "e => e.textContent") == (
-        "Domainator Similarity Network Viewer: Color Test Viewer"
+        "Domainator Viewer: Color Test Viewer"
     )
     # The didactic blurb that used to sit under the heading is gone.
     assert page.query_selector(".hero p") is None
@@ -2181,16 +2190,16 @@ def test_heading_follows_a_newly_loaded_bundle(meta_page, tmp_path):
     import json
 
     page = meta_page
-    saved = _save_session(page, tmp_path, "renamed.dsnv")
+    saved = _save_session(page, tmp_path, "renamed.dvb")
     bundle = _read_session_bundle(saved)
     bundle["name"] = "Some Other Network"
-    renamed = tmp_path / "renamed_bundle.dsnv"
+    renamed = tmp_path / "renamed_bundle.dvb"
     renamed.write_bytes(gzip.compress(json.dumps(bundle).encode("utf-8")))
 
     _load_bundle_file(page, renamed)
 
     assert page.eval_on_selector("#viewer-title", "e => e.textContent") == (
-        "Domainator Similarity Network Viewer: Some Other Network"
+        "Domainator Viewer: Some Other Network"
     )
     assert page.title() == "Some Other Network"
     assert page.pageerrors == []
@@ -2287,7 +2296,7 @@ def test_renamed_columns_survive_a_session_round_trip(meta_page, tmp_path):
     page = meta_page
     _rename_column(page, "family", "clan")
 
-    saved = _save_session(page, tmp_path, "renamed_col.dsnv")
+    saved = _save_session(page, tmp_path, "renamed_col.dvb")
     bundle = _read_session_bundle(saved)
     assert [c["name"] for c in bundle["metadata"]["columns"]] == ["clan", "score"]
     assert bundle["metadata"]["rows"][0] == ["alpha", 1]
@@ -2475,7 +2484,7 @@ def test_cluster_column_agrees_with_the_tsv_export(meta_page, tmp_path):
     exported = {row[0]: row[header.index("SSN_cluster")] for row in body}
 
     in_column = page.evaluate(
-        "() => Object.fromEntries(state.bundle.graph.nodes.map("
+        "() => Object.fromEntries(state.bundle.nodes.map("
         "(id, i) => [id, String(metadataValue(i, 'SSN_cluster'))]))"
     )
     assert exported == in_column
@@ -2487,7 +2496,7 @@ def test_cluster_column_agrees_with_the_tsv_export(meta_page, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _save_extraction(page, out_dir, filename="extraction.dsnv", name=None):
+def _save_extraction(page, out_dir, filename="extraction.dvb", name=None):
     """Click "Save extraction…", name it in the dialog, and save the download."""
     page.click("#save-extraction")
     page.wait_for_selector("#name-overlay:not([hidden])")
@@ -2512,7 +2521,7 @@ def _assert_js_series_matches_python(page, graph):
     from domainator import ssn_bundle
     from domainator.ssn_hierarchy import filter_merge_event_rows, threshold_slider_stops
 
-    bundle = {"graph": graph}
+    bundle = _network_bundle(graph)
     max_merge_events = page.evaluate("() => state.maxMergeEvents")
     window = page.evaluate("() => currentSplitWindow()")
     window = None if window is None else (window["min"], window["max"])
@@ -2563,22 +2572,22 @@ def test_extraction_of_everything_reproduces_the_python_bundle(meta_page, tmp_pa
     """The JS hierarchy/merge-series port must agree with ssn_hierarchy.py.
 
     Selecting every node makes the extraction a rebuild of the whole network, so its
-    structure can be compared field-for-field against what build_ssn_viewer.py wrote.
-    The derived series is checked against Python separately, since from v6 neither the
-    original nor the extraction stores one.
+    structure can be compared field-for-field against what build_ssn wrote. The derived
+    series is checked against Python separately, since neither the original nor the
+    extraction stores one.
     """
     page = meta_page
-    original = page.evaluate("() => state.bundle.graph")
+    original = page.evaluate(NETWORK_JS)
     _assert_js_series_matches_python(page, original)
     _select_nodes(page, list(range(6)))
 
-    extracted = _read_session_bundle(_save_extraction(page, tmp_path))["graph"]
+    extracted = _network(_read_session_bundle(_save_extraction(page, tmp_path)))
 
     assert extracted["nodes"] == original["nodes"]
     assert extracted["mst_edges"] == original["mst_edges"]
     assert extracted["hierarchy"] == original["hierarchy"]
     assert extracted["merge_impact_metric"] == original["merge_impact_metric"]
-    # A v6 graph carries nothing derived, so an extraction writes nothing derived.
+    # The view carries nothing derived, so an extraction writes nothing derived.
     assert set(extracted) == {"nodes", "mst_edges", "hierarchy", "merge_impact_metric"}
     assert page.pageerrors == []
 
@@ -2609,20 +2618,20 @@ def test_extraction_writes_a_loadable_subset(meta_page, tmp_path):
 
     page = meta_page
     _select_nodes(page, [0, 1, 2])          # A-B-C, connected in the MST
-    saved = _save_extraction(page, tmp_path, "abc.dsnv")
+    saved = _save_extraction(page, tmp_path, "abc.dvb")
 
     bundle = load_bundle(saved)             # valid for the Python readers too
-    assert bundle["graph"]["nodes"] == ["A", "B", "C"]
+    assert bundle["nodes"] == ["A", "B", "C"]
     assert bundle["metadata"]["rows"] == [["alpha", 1], ["alpha", 2], ["beta", 5]]
     assert bundle["name"] == "Color Test Viewer_extraction"
     # Connected, so the hierarchy has a single root spanning all three nodes.
-    assert len(bundle["graph"]["hierarchy"]["roots"]) == 1
-    assert sorted(bundle["graph"]["hierarchy"]["leaf_order"]) == [0, 1, 2]
-    hierarchy = bundle["graph"]["hierarchy"]
+    assert len(bundle["views"]["ssn"]["hierarchy"]["roots"]) == 1
+    assert sorted(bundle["views"]["ssn"]["hierarchy"]["leaf_order"]) == [0, 1, 2]
+    hierarchy = bundle["views"]["ssn"]["hierarchy"]
     assert clusters_at_threshold(hierarchy, coarsest_threshold(hierarchy)) == hierarchy["roots"]
 
     _load_bundle_file(page, saved)
-    assert page.evaluate("() => state.bundle.graph.nodes") == ["A", "B", "C"]
+    assert page.evaluate("() => state.bundle.nodes") == ["A", "B", "C"]
     assert page.eval_on_selector("#viewer-title", "e => e.textContent").endswith("_extraction")
     assert page.pageerrors == []
 
@@ -2631,10 +2640,10 @@ def test_extraction_reindexes_mst_edges(meta_page, tmp_path):
     """Edge endpoints are renumbered into the extraction's own node list."""
     page = meta_page
     _select_nodes(page, [3, 4, 5])          # D-E-F
-    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "def.dsnv"))
+    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "def.dvb"))
 
-    assert bundle["graph"]["nodes"] == ["D", "E", "F"]
-    for source, target, score in bundle["graph"]["mst_edges"]:
+    assert bundle["nodes"] == ["D", "E", "F"]
+    for source, target, score in bundle["views"]["ssn"]["mst_edges"]:
         assert 0 <= source < 3 and 0 <= target < 3
         assert score > 0
     assert page.pageerrors == []
@@ -2650,7 +2659,7 @@ def test_extraction_carries_session_state_for_surviving_nodes_only(meta_page, tm
     page.select_option("#color-by", "score")
 
     _select_nodes(page, [3, 4, 5])
-    app_state = _read_session_bundle(_save_extraction(page, tmp_path, "state.dsnv"))["app_state"]
+    app_state = _read_session_bundle(_save_extraction(page, tmp_path, "state.dvb"))["app_state"]
 
     assert app_state["view"]["color_by"] == "score"
     assert app_state["selection"]["node_ids"] == ["D", "E", "F"]
@@ -2673,11 +2682,11 @@ def test_extraction_loads_over_its_source_under_the_force_layout(meta_page, tmp_
     # The whole network is one cluster here, hierarchy node 10; A-B-C has five.
     assert page.evaluate("() => state.visibleLayout.map(item => item.componentId)") == [10]
     _select_nodes(page, [0, 1, 2])
-    saved = _save_extraction(page, tmp_path, "force.dsnv")
+    saved = _save_extraction(page, tmp_path, "force.dvb")
 
     _load_bundle_file(page, saved)
     page.wait_for_function("() => !state.layoutComputing")
-    assert page.evaluate("() => state.bundle.graph.nodes") == ["A", "B", "C"]
+    assert page.evaluate("() => state.bundle.nodes") == ["A", "B", "C"]
     assert page.pageerrors == []
 
 
@@ -2686,7 +2695,7 @@ def test_extraction_loads_without_reporting_missing_node_ids(meta_page, tmp_path
     page = meta_page
     _select_nodes(page, [0, 1, 2])
     page.keyboard.press("Shift+Digit4")
-    saved = _save_extraction(page, tmp_path, "clean.dsnv")
+    saved = _save_extraction(page, tmp_path, "clean.dvb")
 
     _load_bundle_file(page, saved)
     status = page.eval_on_selector("#bundle-status", "e => e.textContent")
@@ -2711,10 +2720,10 @@ def test_extraction_of_everything_matches_python_on_a_tied_network(many_cat_page
     """The 120-node fixture is a path of equal-weight edges, so every MST edge
     lands in one tie group -- the case the per-threshold grouping exists for."""
     page = many_cat_page
-    original = page.evaluate("() => state.bundle.graph")
+    original = page.evaluate(NETWORK_JS)
     _select_nodes(page, list(range(120)))
 
-    extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all120.dsnv"))["graph"]
+    extracted = _network(_read_session_bundle(_save_extraction(page, tmp_path, "all120.dvb")))
 
     assert extracted["hierarchy"] == original["hierarchy"]
     assert extracted["mst_edges"] == original["mst_edges"]
@@ -2730,10 +2739,10 @@ def test_extraction_of_a_contiguous_run_is_connected(many_cat_page, tmp_path):
     """A contiguous stretch of the path is MST-connected; a gapped one is not."""
     page = many_cat_page
     _select_nodes(page, list(range(10, 30)))
-    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "run.dsnv"))
-    assert len(bundle["graph"]["nodes"]) == 20
-    assert len(bundle["graph"]["mst_edges"]) == 19
-    assert len(bundle["graph"]["hierarchy"]["roots"]) == 1
+    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "run.dvb"))
+    assert len(bundle["nodes"]) == 20
+    assert len(bundle["views"]["ssn"]["mst_edges"]) == 19
+    assert len(bundle["views"]["ssn"]["hierarchy"]["roots"]) == 1
 
     _select_nodes(page, list(range(10, 20)) + list(range(40, 50)))
     messages = []
@@ -2750,18 +2759,18 @@ def test_extraction_of_everything_matches_python_on_distinct_weights(dense_page,
     """Same equivalence check where nearly every MST edge has its own weight, so
     the merge series has many rows and the moving sum window actually slides."""
     page = dense_page
-    original = page.evaluate("() => state.bundle.graph")
+    original = page.evaluate(NETWORK_JS)
     # Many distinct thresholds, so the moving-sum window actually slides.
     assert page.evaluate("() => state.series.eventRows.length") > 40
     _assert_js_series_matches_python(page, original)
     _select_nodes(page, list(range(60)))
 
-    extracted = _read_session_bundle(_save_extraction(page, tmp_path, "all60.dsnv"))["graph"]
+    extracted = _network(_read_session_bundle(_save_extraction(page, tmp_path, "all60.dvb")))
 
     assert extracted["hierarchy"] == original["hierarchy"]
     assert extracted["mst_edges"] == original["mst_edges"]
     # Reloading the extraction must derive the very same series the original did.
-    _load_bundle_file(page, tmp_path / "all60.dsnv")
+    _load_bundle_file(page, tmp_path / "all60.dvb")
     _assert_js_series_matches_python(page, extracted)
     assert page.pageerrors == []
 
@@ -2773,13 +2782,13 @@ def test_extraction_allows_separate_network_components(dense_page, tmp_path):
     apart invents nothing, so a whole multi-component network extracts cleanly.
     """
     page = dense_page
-    roots = page.evaluate("() => state.bundle.graph.hierarchy.roots.length")
+    roots = page.evaluate("() => state.bundle.views.ssn.hierarchy.roots.length")
     assert roots == 3          # the fixture is three unconnected blocks
 
     _select_nodes(page, list(range(60)))
-    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "multi.dsnv"))
-    assert len(bundle["graph"]["hierarchy"]["roots"]) == 3
-    assert len(bundle["graph"]["nodes"]) == 60
+    bundle = _read_session_bundle(_save_extraction(page, tmp_path, "multi.dvb"))
+    assert len(bundle["views"]["ssn"]["hierarchy"]["roots"]) == 3
+    assert len(bundle["nodes"]) == 60
     assert page.pageerrors == []
 
 
@@ -2807,7 +2816,7 @@ def test_leftmost_slider_stop_shows_the_true_components(dense_page):
     showed one cluster too many and could never reach the real components.
     """
     page = dense_page
-    roots = page.evaluate("() => state.bundle.graph.hierarchy.roots.length")
+    roots = page.evaluate("() => state.bundle.views.ssn.hierarchy.roots.length")
     assert roots == 3
 
     page.evaluate(
@@ -2819,7 +2828,7 @@ def test_leftmost_slider_stop_shows_the_true_components(dense_page):
     )
 
     stop = page.evaluate("() => currentSliderStop()")
-    weights = page.evaluate("() => state.bundle.graph.mst_edges.map(e => e[2])")
+    weights = page.evaluate("() => state.bundle.views.ssn.mst_edges.map(e => e[2])")
     weakest, span = min(weights), max(weights) - min(weights)
     # Strictly below the weakest merge, but only by 1% of the weight range: a floor
     # at 0 would leave most of the slider track empty on a network scoring 350-650.
@@ -2834,11 +2843,11 @@ def test_extraction_slider_keeps_the_floor_stop(meta_page, tmp_path):
     at their own fully merged view too."""
     page = meta_page
     _select_nodes(page, [0, 1, 2])
-    saved = _save_extraction(page, tmp_path, "floor.dsnv")
+    saved = _save_extraction(page, tmp_path, "floor.dvb")
 
-    graph = _read_session_bundle(saved)["graph"]
+    graph = _network(_read_session_bundle(saved))
     from domainator import ssn_bundle
-    stops = ssn_bundle.slider_stops({"graph": graph})
+    stops = ssn_bundle.slider_stops(_network_bundle(graph))
     weights = [edge[2] for edge in graph["mst_edges"]]
     weakest, span = min(weights), max(weights) - min(weights)
     # The JS port applies the same 1%-of-range offset as ssn_hierarchy does.
@@ -2873,7 +2882,7 @@ def test_session_restores_categorical_colouring_of_a_numeric_column(meta_page, t
     assert page.evaluate("() => colorInfo('score').type") == "categorical"
     categorical_colors = page.evaluate("() => state.nodeColorCache.slice()")
 
-    saved = _save_session(page, tmp_path, "categorical.dsnv")
+    saved = _save_session(page, tmp_path, "categorical.dvb")
     _load_bundle_file(page, saved)
 
     assert page.evaluate("() => state.categoricalColumns.has('score')") is True
@@ -2901,7 +2910,7 @@ def test_session_restores_gradient_colouring_when_the_flag_was_cleared(numeric_c
     )
     gradient_colors = page.evaluate("() => state.nodeColorCache.slice()")
 
-    saved = _save_session(page, tmp_path, "gradient.dsnv")
+    saved = _save_session(page, tmp_path, "gradient.dvb")
     _load_bundle_file(page, saved)
 
     assert page.evaluate("() => state.categoricalColumns.has('score')") is False
@@ -2931,7 +2940,7 @@ def test_rename_network_updates_heading_tab_and_bundle(meta_page):
     assert page.eval_on_selector("#name-overlay", "e => e.hidden") is True
     assert page.evaluate("() => state.bundle.name") == "GH17 family"
     assert page.eval_on_selector("#viewer-title", "e => e.textContent") == (
-        "Domainator Similarity Network Viewer: GH17 family"
+        "Domainator Viewer: GH17 family"
     )
     assert page.title() == "GH17 family"
     assert page.pageerrors == []
@@ -2956,8 +2965,8 @@ def test_rename_is_carried_into_saved_files(meta_page, tmp_path):
     with page.expect_download() as download_info:
         page.click("#save-session")
     download = download_info.value
-    assert download.suggested_filename == "renamed_net_session.dsnv"
-    saved = tmp_path / "renamed.dsnv"
+    assert download.suggested_filename == "renamed_net_session.dvb"
+    saved = tmp_path / "renamed.dvb"
     download.save_as(str(saved))
     assert _read_session_bundle(saved)["name"] == "renamed net"
 
@@ -2995,13 +3004,13 @@ def test_extraction_is_named_through_the_dialog(meta_page, tmp_path):
     with page.expect_download() as download_info:
         page.click("#name-apply")
     download = download_info.value
-    assert download.suggested_filename == "clade_A.dsnv"
-    saved = tmp_path / "cladeA.dsnv"
+    assert download.suggested_filename == "clade_A.dvb"
+    saved = tmp_path / "cladeA.dvb"
     download.save_as(str(saved))
 
     bundle = _read_session_bundle(saved)
     assert bundle["name"] == "clade A"
-    assert bundle["graph"]["nodes"] == ["A", "B", "C"]
+    assert bundle["nodes"] == ["A", "B", "C"]
     # The source network keeps its own name.
     assert page.evaluate("() => state.bundle.name") == "Color Test Viewer"
 
@@ -3162,7 +3171,7 @@ def test_focus_selection_accounts_for_node_radius(meta_page):
             const bounds = selectedNodeBounds();
             const item = state.visibleLayout.find(
                 entry => componentMembers(entry.componentId).includes(0));
-            const component = state.bundle.graph.hierarchy.nodes[item.componentId];
+            const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
             const dot = componentMemberLayout(component, item)
                 .find(entry => entry.memberIndex === 0);
             return {span: bounds.maxX - bounds.minX, radius: dot.radius};
@@ -4926,9 +4935,9 @@ def test_capped_series_still_reaches_the_bottom_of_the_axis(capped_page):
     """What the back-fill is for: ranking by impact alone strands the left end."""
     page = capped_page
     weakest_edge = page.evaluate(
-        "() => Math.min(...state.bundle.graph.mst_edges.map(e => e[2]))")
+        "() => Math.min(...state.bundle.views.ssn.mst_edges.map(e => e[2]))")
     strongest_edge = page.evaluate(
-        "() => Math.max(...state.bundle.graph.mst_edges.map(e => e[2]))")
+        "() => Math.max(...state.bundle.views.ssn.mst_edges.map(e => e[2]))")
     weakest_plotted = page.evaluate(
         "() => Math.min(...state.series.selectedRows.map(e => e.threshold_value))")
     span = strongest_edge - weakest_edge
@@ -4941,20 +4950,44 @@ def test_capped_series_still_reaches_the_bottom_of_the_axis(capped_page):
     assert page.pageerrors == []
 
 
-def test_split_event_caption_ignores_a_stale_stored_series(page):
-    """A pre-v6 bundle carries its own capped copy of the series. The viewer derives
-    its own, so a stale stored one can neither shrink the chart nor skew the caption."""
-    page.evaluate("""() => {
-        state.bundle.graph.merge_event_series = [];
-        state.bundle.graph.merge_event_total = 999999;
-        state.bundle.graph.max_merge_events = 1;
-        state.bundle.graph.merge_moving_sum = {window: 0, x: [], y: []};
-        state.bundle.graph.slider_stops = [];
-        updateSplitEventCount();
-    }""")
+def test_an_older_network_bundle_opens_and_saves_as_dvb(page, tmp_path):
+    """A .dsnv file from an earlier version opens as the .dvb bundle it corresponds to,
+    session and all. A pre-v6 one carries its own capped copy of the series; the viewer
+    derives its own, so a stale stored one can neither shrink the chart nor skew the
+    caption, and it is not saved again."""
+    import gzip
+    import json
+
+    from domainator.ssn_bundle import SSN_VIEWER_BUNDLE_FORMAT
+    from domainator.viewer_bundle import VIEWER_BUNDLE_FORMAT
+
     total = page.evaluate("() => state.series.total")
-    assert total > 0
+    _select_nodes(page, [0, 2])
+    session = _read_session_bundle(_save_session(page, tmp_path))
+    network = _network(session)
+    legacy = {
+        "format": SSN_VIEWER_BUNDLE_FORMAT, "version": 5, "name": session["name"],
+        "domainator_version": session["domainator_version"],
+        "graph": dict(network, merge_event_series=[], merge_event_total=999999, max_merge_events=1,
+                      merge_moving_sum={"window": 0, "x": [], "y": []}, slider_stops=[]),
+        "metadata": session["metadata"], "defaults": session["defaults"], "app_state": session["app_state"],
+    }
+    legacy_file = tmp_path / "old.dsnv"
+    legacy_file.write_bytes(gzip.compress(json.dumps(legacy).encode("utf-8")))
+    _select_nodes(page, [])
+
+    _load_bundle_file(page, legacy_file)
+    assert "not one this viewer knows about" not in page.text_content("#bundle-status")
+    assert page.evaluate("() => state.bundle.format") == VIEWER_BUNDLE_FORMAT
+    assert page.evaluate("() => Array.from(state.selectedNodeIndices).sort()") == [0, 2]
+    assert page.evaluate("() => state.series.total") == total
     assert _split_event_caption(page) == f"All {total:,} merge events plotted."
+    with page.expect_download() as download_info:
+        page.click("#save-session")
+    assert download_info.value.suggested_filename.endswith(".dvb")
+    resaved = _read_session_bundle(download_info.value.path())
+    assert resaved["format"] == VIEWER_BUNDLE_FORMAT and "graph" not in resaved
+    assert _network(resaved) == network
     assert page.pageerrors == []
 
 
@@ -5122,20 +5155,21 @@ def test_split_event_cap_keeps_the_threshold_you_are_looking_at(dense_page):
 
 def test_split_event_cap_is_saved_with_a_session(dense_page, tmp_path):
     """A session records the cap, so reopening it shows the chart that was saved."""
-    from domainator.ssn_bundle import SSN_VIEWER_BUNDLE_VERSION, load_bundle
+    from domainator.ssn_bundle import load_bundle
+    from domainator.viewer_bundle import VIEWER_BUNDLE_VERSION
 
     page = dense_page
     _set_split_event_cap(page, 7)
-    saved = _save_session(page, tmp_path, "capped_session.dsnv")
+    saved = _save_session(page, tmp_path, "capped_session.dvb")
     bundle = load_bundle(saved)
 
-    assert bundle["version"] == SSN_VIEWER_BUNDLE_VERSION == 6
+    assert bundle["version"] == VIEWER_BUNDLE_VERSION == 1
     assert bundle["app_state"]["view"]["max_merge_events"] == 7
     # Saving re-serializes the loaded graph, which carries nothing derived.
     for derived_key in ("merge_event_series", "merge_event_total", "max_merge_events",
                         "merge_moving_sum", "slider_stops",
                         "cluster_count_by_threshold", "edges_by_threshold"):
-        assert derived_key not in bundle["graph"]
+        assert derived_key not in bundle["views"]["ssn"]
 
     _load_bundle_file(page, saved)
     assert page.evaluate("() => state.maxMergeEvents") == 7
@@ -5375,7 +5409,7 @@ def test_clicking_the_split_chart_keeps_the_pan_and_zoom(page):
 def test_hover_readout_does_not_call_a_product_impact_a_node_count(product_metric_page):
     """min_child impacts are nodes; product impacts are not, and must not say so."""
     page = product_metric_page
-    assert page.evaluate("() => state.bundle.graph.merge_impact_metric") == "product"
+    assert page.evaluate("() => state.bundle.views.ssn.merge_impact_metric") == "product"
     entry = max(_split_hit_events(page), key=lambda e: e["event"]["largest_merge"])
     _hover_split_chart(page, entry["x"], entry["beads"][0]["y"])
     page.wait_for_selector("#split-chart-tip:not([hidden])")
@@ -5839,10 +5873,9 @@ def _build_embedded_viewer_spindles(out_dir):
     input_file = out_dir / "spindles.hdf5"
     html_file = out_dir / "viewer_spindles.html"
     DataMatrix(data, names, names).write(str(input_file), output_type="hdf")
-    build_ssn_viewer.main([
+    build_ssn.main([
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Spindle Test Viewer",
     ])
     return html_file
@@ -5896,7 +5929,7 @@ def _spindle_state(page, layout="tree", min_cluster_size=2, expected_visible=9):
 def _visible_sizes(page):
     return page.evaluate(
         """() => state.visibleClusters
-            .map(id => state.bundle.graph.hierarchy.nodes[id].size)
+            .map(id => state.bundle.views.ssn.hierarchy.nodes[id].size)
             .sort((left, right) => left - right)"""
     )
 
@@ -5982,7 +6015,7 @@ def test_collapse_long_paths_does_nothing_while_leaf_pruning_is_off(spindle_page
     # in force no cluster below it is left standing, which is the state to compare.
     page.wait_for_function(
         "() => !state.layoutComputing && state.visibleClusters.every("
-        "  id => state.bundle.graph.hierarchy.nodes[id].size >= 2)"
+        "  id => state.bundle.views.ssn.hierarchy.nodes[id].size >= 2)"
     )
     before = {"sizes": _visible_sizes(page), "links": _link_summary(page)}
 
@@ -6010,7 +6043,7 @@ def test_collapsed_edge_weight_is_the_path_minimum(spindle_page):
 
     problems = page.evaluate(
         """() => {
-            const nodes = state.bundle.graph.hierarchy.nodes;
+            const nodes = state.bundle.views.ssn.hierarchy.nodes;
             const active = activeClustersAtThreshold(selectedThresholdValue());
             const minSize = Number(document.getElementById('min-cluster-size').value);
             const pruned = mstLinksForActiveClusters(active, minSize, true, false);
@@ -6232,10 +6265,9 @@ def _build_embedded_viewer_crowded(out_dir, blob_count=10, blob_size=20):
     input_file = out_dir / "crowded.hdf5"
     html_file = out_dir / "viewer_crowded.html"
     DataMatrix(data, names, names).write(str(input_file), output_type="hdf")
-    build_ssn_viewer.main([
+    build_ssn.main([
         "-i", str(input_file),
         "--html_out", str(html_file),
-        "--embed_data",
         "--name", "Crowded Test Viewer",
     ])
     return html_file
@@ -6975,7 +7007,7 @@ def test_worker_and_main_thread_force_layouts_agree(crowded_page):
     summed, and neither this fixture nor the spindle one is large enough for that to
     amplify past 1e-6 -- both paths agreed here even while the sources differed. The
     guard for "there is only one copy" is structural and lives in
-    test_build_ssn_viewer.py::test_layout_core_is_shared_by_the_worker_and_the_page.
+    test_viewer.py::test_layout_core_is_shared_by_the_worker_and_the_page.
     """
     page = crowded_page
     page.select_option("#layout-algorithm", "force")

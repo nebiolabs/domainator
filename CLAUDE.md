@@ -14,7 +14,7 @@ conda activate domainator
 - Run one test file: `pytest test/test_domainate.py`
 - Run by name pattern: `pytest -k <pattern>`
 - Coverage: `coverage run -m pytest test && coverage report -m && coverage html` (open `htmlcov/index.html`)
-- Browser/SSN-viewer tests (optional, separate extra): `pip install -e ".[test,browser]" && playwright install chromium` — these skip automatically when `playwright` is not importable.
+- Browser/viewer tests (optional, separate extra): `pip install -e ".[test,browser]" && playwright install chromium` — these skip automatically when `playwright` is not importable.
 - Describe every command as JSON (the tool manifest): `domainator describe --indent 1`
 
 Tests use `pytest-datadir`: fixtures live in `test/data/` and are staged via the `shared_datadir` fixture. Do not mutate fixture files; write outputs to `tempfile.TemporaryDirectory()`. Most tests call a tool's `main([...args])` directly rather than spawning subprocesses, and compare outputs with `helpers.compare_seqfiles` / `compare_seqrecords`.
@@ -54,7 +54,7 @@ Use **American English spelling** everywhere: code identifiers, string literals,
 
 ## Versioning
 
-The version string lives only in `src/domainator/__init__.py` (`__version__`); packaging reads it from there and `domainator --version` prints it. Record each release in `CHANGELOG.md`. Breaking changes to the matrix file format require bumping `_MATRIX_FILE_VERSION` in `data_matrix.py`. Changes to the `.dsnv` Domainator Similarity Network Viewer bundle schema require bumping `SSN_VIEWER_BUNDLE_VERSION` in `ssn_bundle.py`; if the change is additive, add the previous version to `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` so existing bundles keep loading (see the `.dsnv` section of `docs/file_formats.md`). Don't bump versions of anything without first confirming with the user.
+The version string lives only in `src/domainator/__init__.py` (`__version__`); packaging reads it from there and `domainator --version` prints it. Record each release in `CHANGELOG.md`. Breaking changes to the matrix file format require bumping `_MATRIX_FILE_VERSION` in `data_matrix.py`. Changes to the `.dvb` Domainator Viewer bundle schema (network, tree and projection views) require bumping `VIEWER_BUNDLE_VERSION` in `viewer_bundle.py`; if the change is additive, keep the previous version in `SUPPORTED_VIEWER_BUNDLE_VERSIONS` so existing bundles keep loading (see the `.dvb` section of `docs/file_formats.md`). The older `.dsnv` network bundles are read (`ssn_bundle.load_bundle` and the viewer upgrade them to `.dvb`) but never written. Don't bump versions of anything without first confirming with the user.
 
 ## Docs map
 

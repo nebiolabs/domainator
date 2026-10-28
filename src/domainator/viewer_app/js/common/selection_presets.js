@@ -56,7 +56,7 @@
                 ' nodes in preset ' + slot + '.');
         }
         renderPresetSlots();
-        scheduleClusterRender();
+        scheduleRepaint();
     }
 
     // mode: 'replace' (the default), 'add' to union the preset into the current
@@ -90,7 +90,7 @@
         } else {
             setStatus('Recalled preset ' + slot + ' (' + after.toLocaleString() + ' nodes).');
         }
-        renderClusterView();
+        repaintNow();
         updateMetadataTable();
     }
 
@@ -102,7 +102,7 @@
     function setPresetPreviewSlot(slot) {
         if (state.presetPreviewSlot === slot) { return; }
         state.presetPreviewSlot = slot;
-        scheduleClusterRender();
+        scheduleRepaint();
     }
 
     // True when a keystroke belongs to a control the user is typing into, in

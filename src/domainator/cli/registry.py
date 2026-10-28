@@ -66,12 +66,12 @@ TOOLS: Dict[str, Tool] = {
     "compare_contigs": Tool("compare_contigs", "compare", "Compute similarities between gene neighborhoods from their domain content and order."),
     "transform_matrix": Tool("transform_matrix", "compare", "Convert score matrices into normalized scores or distances."),
     # network
-    "build_ssn": Tool("build_ssn", "network", "Build a sequence similarity network as a Cytoscape file."),
-    "build_ssn_viewer": Tool("build_ssn_viewer", "network", "Build a Domainator Similarity Network Viewer bundle and HTML page."),
+    "build_ssn": Tool("build_ssn", "network", "Build a sequence similarity network for Cytoscape or the Domainator Viewer."),
     "ssn_navigator": Tool("ssn_navigator", "network", "Query a similarity network bundle: clusters, members, and metadata."),
     "split_by_cluster": Tool("split_by_cluster", "network", "Split a sequence or profile file into one file per cluster of a similarity matrix."),
     "build_tree": Tool("build_tree", "network", "Build a UPGMA tree from a distance or similarity matrix."),
     "build_projection": Tool("build_projection", "network", "Project a matrix into 2D or 3D with UMAP, t-SNE, or PCA."),
+    "viewer": Tool("viewer", "network", "Write the Domainator Viewer, empty or opening a network, tree, or projection bundle."),
     # report
     "enum_report": Tool("enum_report", "report", "Tabulate properties of each contig, CDS, or domain."),
     "hmmer_report": Tool("hmmer_report", "report", "Tabulate properties of each HMM profile."),

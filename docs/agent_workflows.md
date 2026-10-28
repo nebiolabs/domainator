@@ -6,7 +6,7 @@ Copy-paste recipes for AI agents (or scripted pipelines) that need
 CLI conventions, read [AGENTS.md](https://github.com/nebiolabs/domainator/blob/main/AGENTS.md) first.
 
 The guiding idea: Domainator's HTML reports and binary artifacts (HDF5
-matrices, XGMML, the `.dsnv` SSN bundle) are meant for humans and browsers.
+matrices, XGMML, the `.dvb` viewer bundle) are meant for humans and browsers.
 For an agent, reach for the `--json_out` output modes and `domainator ssn_navigator`, which
 return compact, structured slices instead of whole-artifact dumps.
 
@@ -152,13 +152,13 @@ domainator seq_dist -i proteins.gb -r proteins.gb --hdf_out dist.hdf5
 domainator enum_report -i proteins.gb --by contig --columns architecture taxname:superkingdom -o meta.tsv
 
 # 3. compact SSN bundle
-domainator build_ssn_viewer -i dist.hdf5 -o net.dsnv --metadata meta.tsv
+domainator build_ssn -i dist.hdf5 --dvb_out net.dvb --metadata meta.tsv
 
 # 4. navigate without rendering
-domainator ssn_navigator -i net.dsnv -o - --query overview
-domainator ssn_navigator -i net.dsnv -o - --query thresholds                 # pick a cut-point
-domainator ssn_navigator -i net.dsnv -o - --query clusters --threshold 150   # clusters + sizes
-domainator ssn_navigator -i net.dsnv -o - --query cluster --threshold 150 --cluster 5   # members + metadata distribution
+domainator ssn_navigator -i net.dvb -o - --query overview
+domainator ssn_navigator -i net.dvb -o - --query thresholds                 # pick a cut-point
+domainator ssn_navigator -i net.dvb -o - --query clusters --threshold 150   # clusters + sizes
+domainator ssn_navigator -i net.dvb -o - --query cluster --threshold 150 --cluster 5   # members + metadata distribution
 ```
 
 The `metadata.tsv` columns (from `enum_report`) become the per-cluster
@@ -179,15 +179,15 @@ slider's ∞ end, where every node is its own cluster (reported as `"threshold":
 the same spelling the bundle uses); omitting `--threshold` is the other end, one cluster
 per connected component.
 
-Add `--html_out net.html --embed_data` in step 3 for a self-contained browser viewer
+Add `--html_out net.html` in step 3 for a self-contained browser viewer
 of the same network. Annotations made there (edited cells, new columns) are saved
-back into an ordinary `.dsnv` by its "Save session…" button, so a session file
+back into an ordinary `.dvb` by its "Save session…" button, so a session file
 feeds straight back into step 4 and the new columns show up in the per-cluster
 distributions. The chart glyph in each metadata column header is the interactive
 counterpart of those distributions -- a frequency table, bar or pie chart,
 histogram, box plot, cumulative distribution or summary statistics over the rows
 the table is currently showing, exportable as SVG, PNG or TSV.
-[ssn_viewer.md](ssn_viewer.md) is the guide to the viewer; the `.dsnv` section of
+[ssn_viewer.md](ssn_viewer.md) is the guide to the viewer; the `.dvb` section of
 [file_formats.md](file_formats.md) has the schema.
 
 ## Recipe 3 — inspect a matrix's cluster structure

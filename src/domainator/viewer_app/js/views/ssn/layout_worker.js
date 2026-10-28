@@ -1,6 +1,6 @@
 /*
  * The layout Web Worker's entry point. The worker's source is layout_core.js
- * followed by this file (see ssn_viewer_html._layout_worker_js).
+ * followed by this file (see viewer_html._layout_worker_js).
  */
 
 self.onmessage = function(event) {

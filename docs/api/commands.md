@@ -77,8 +77,6 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 
 ::: domainator.build_ssn.build_ssn
 
-::: domainator.build_ssn_viewer.build_ssn_viewer
-
 ::: domainator.ssn_navigator.ssn_navigator
 
 ::: domainator.split_by_cluster.split_by_cluster
@@ -86,6 +84,8 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 ::: domainator.build_tree.build_tree
 
 ::: domainator.build_projection.build_projection
+
+::: domainator.viewer.viewer
 
 ## Tables and summaries
 

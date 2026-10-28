@@ -28,7 +28,8 @@ The formats in [file_formats.md](file_formats.md):
 - **GenBank**: the `Domainator` and `Domain_Search` feature types and the qualifiers in its
   qualifier reference, including how locations and coordinates are written. These change only
   by addition, so a reader must ignore qualifiers it doesn't know.
-- **Versioned files**: matrix hdf5 files (`MATRIX_FILE_VERSION`), `.dsnv` bundles and `.didx`
+- **Versioned files**: matrix hdf5 files (`MATRIX_FILE_VERSION`), `.dvb` viewer bundles (and
+  the `.dsnv` network bundles of earlier versions, which are still read) and `.didx`
   indexes. Each is read for its current and previous major versions, and a file from a newer
   major version is refused with a `FormatVersionError`.
 - **Report JSON** (`--json_out` of `summary_report`, `matrix_report` and `ssn_navigator`): the

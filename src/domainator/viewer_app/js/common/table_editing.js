@@ -89,7 +89,7 @@
         }
         rebuildNodeColorCache();
         updateMetadataTable();
-        renderClusterView();
+        repaintNow();
         if (colorPickerIsOpen()) {
             openColorPicker();
         }
@@ -202,7 +202,7 @@
         }
         const columnName = validated.name;
         // `origin` marks columns created here so they can be deleted again. It is
-        // additive: build_ssn_viewer writes only {name, type} and no reader
+        // additive: the build tools write only {name, type} and no reader
         // inspects extra keys, so a bundle carrying it stays valid.
         state.metadataColumns.push({
             name: columnName,
@@ -241,13 +241,13 @@
         });
     }
 
-    // The viewer's counterpart to `domainator build_ssn --threshold <threshold> --cluster`: writes
-    // the connected-component number at the current threshold into a column. The
-    // default name matches that tool's CLUSTER_COLUMN so the two are interchangeable
-    // downstream, and an existing column of the same name is overwritten, as there.
+    // Writes the view's cluster numbers (see viewClusterAssignments) into a column. An
+    // existing column of the same name is overwritten.
     function addClusterColumn(name) {
         if (!state.bundle) { return false; }
-        const columnName = String(name || '').trim() || 'SSN_cluster';
+        const clusters = viewClusterAssignments();
+        if (!clusters) { return false; }
+        const columnName = String(name || '').trim() || clusters.defaultName;
         if (columnName === 'node_id') {
             setStatus('"node_id" is reserved; choose another column name.');
             return false;
@@ -259,7 +259,6 @@
             return false;
         }
 
-        const clusterNumbers = clusterNumbersAtCurrentThreshold();
         if (!existing) {
             state.metadataColumns.push({name: columnName, type: 'int', origin: 'viewer'});
             state.metadataByNodeIndex.forEach(row => { row.push(null); });
@@ -268,16 +267,15 @@
         }
         rebuildMetadataCaches();  // so writeMetadataValue can find the new column index
         state.allNodeIndices.forEach(nodeIndex => {
-            writeMetadataValue(nodeIndex, columnName, clusterNumbers.numberFor(nodeIndex));
+            writeMetadataValue(nodeIndex, columnName, clusters.numberFor(nodeIndex));
         });
         // Cluster ids are labels, not magnitudes, so color them as discrete
-        // categories -- the same thing domainator build_ssn_viewer's --categorical asks for.
+        // categories -- the same thing the --categorical option of build_ssn, build_tree and build_projection asks for.
         state.categoricalColumns.add(columnName);
 
         refreshAfterMetadataEdit({columnsChanged: !existing});
-        const stop = currentSliderStop();
-        setStatus('Wrote ' + clusterNumbers.clusterCount.toLocaleString() + ' cluster numbers into "' +
-            columnName + '" at threshold ' + (stop ? stop.threshold_label : '∞') + '.');
+        setStatus('Wrote ' + clusters.clusterCount.toLocaleString() + ' cluster numbers into "' +
+            columnName + '" ' + clusters.description() + '.');
         return true;
     }
 
@@ -712,7 +710,7 @@
             state.selectedNodeIndices.size.toLocaleString() + ' now selected (was ' +
             before.toLocaleString() + ').');
         resetMetadataPage();
-        renderClusterView();
+        repaintNow();
         updateMetadataTable();
         return true;
     }

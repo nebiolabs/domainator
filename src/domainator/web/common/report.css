@@ -183,7 +183,7 @@ body.resizing-column { cursor: col-resize; user-select: none; }
 /* charts.js and the summary page */
 .chart { overflow-x: auto; }
 /* Dragging zooms or pans a chart; it must not select the text in and around it. */
-.chart, svg.contig-plot, .projection-plot { user-select: none; -webkit-user-select: none; }
+.chart, svg.contig-plot { user-select: none; -webkit-user-select: none; }
 .toolbar input.bin-width { width: 5.5em; font: inherit; font-size: 0.9rem; }
 .chart rect[data-tip]:not([fill-opacity="0"]):hover { fill-opacity: 1; }
 .chart-tooltip {
@@ -296,12 +296,3 @@ svg.contig-plot { border: 1px solid var(--line); border-radius: 8px; cursor: gra
 svg.contig-plot.panning { cursor: grabbing; }
 svg.contig-plot [data-contig] > line, svg.contig-plot [data-contig] text, svg.contig-plot [data-feature] { cursor: pointer; }
 
-/* The projection plot */
-.projection-plot { position: relative; }
-.projection-plot svg { display: block; width: 100%; height: auto; }
-.projection-plot canvas { position: absolute; cursor: grab; touch-action: none; }
-.projection-plot canvas.panning { cursor: grabbing; }
-.projection-plot [data-group] { cursor: pointer; }
-.toolbar input.point-size { width: 4.5em; font: inherit; font-size: 0.9rem; }
-.toolbar input.point-search { width: 16em; }
-.toolbar button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }

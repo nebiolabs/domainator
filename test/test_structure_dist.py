@@ -181,7 +181,7 @@ def test_self_comparison_matrix(inputs, tmp_path):
 
     assert sorted(matrix.rows) == ALL_NAMES
     assert matrix.rows == matrix.columns
-    # build_ssn and build_ssn_viewer both require this
+    # build_ssn requires this
     assert matrix.symmetric_labels is True
     assert matrix.data_type == "score"
     assert matrix.shape == (9, 9)

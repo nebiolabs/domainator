@@ -18,7 +18,7 @@ MANIFEST_VERSION = 1
 # Options that hold a path, by name. Command options are named for what they hold, so the
 # name decides: see docs/tool_manifest.md for the rules. test_manifest.py checks that every
 # string option of every command is classified here or listed in TEXT_OPTIONS.
-INPUT_PATHS = {"input", "reference", "metadata", "color_table", "coords", "foldseek",
+INPUT_PATHS = {"input", "reference", "metadata", "color_table", "coords", "foldseek", "newick", "msa",
                "esm2_3di_weights", "matrix", "ncbi_summary"}
 DIRECTORIES = {"output_dir", "tmp_dir", "model_dir", "tmbed_model_dir", "datasets_workdir", "ncbi_taxonomy_path"}
 

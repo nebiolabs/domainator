@@ -10,7 +10,7 @@ it.
 
 This is an internals document, aimed at people changing the code. For what these
 features *do*, see the [Similarity Network Viewer guide](ssn_viewer.md), the
-[agent workflow guide](agent_workflows.md), and the `.dsnv` section of
+[agent workflow guide](agent_workflows.md), and the `.dvb` section of
 [File Formats](file_formats.md).
 
 - [Why a maximum spanning tree](#why-a-maximum-spanning-tree)
@@ -40,7 +40,7 @@ that scales with the node count instead of the edge count.
 Domainator computes that forest once, in `MaxTree`
 ([ssn_edges.py](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_edges.py), re-exported from
 `data_matrix`), and everything downstream — `domainator build_ssn --mst`, the `domainator matrix_report`
-plots, the `.dsnv` bundle written by `domainator build_ssn_viewer`, `domainator ssn_navigator` — reads
+plots, the `.dvb` bundle written by `domainator build_ssn --dvb_out`, `domainator ssn_navigator` — reads
 that one structure.
 
 Scores are similarities, so the interesting tree is the *maximum* spanning tree, not the
@@ -274,7 +274,7 @@ caps the series at `max_merge_events` (default 500) ranked by impact.
 
 The cap is applied **where the series is displayed**, never where a file is written: the
 viewer's "Split events" box, `domainator ssn_navigator --max_merge_events`, `domainator matrix_report
---max_merge_events`. A `.dsnv` bundle stores no series at all (see
+--max_merge_events`. A viewer bundle stores no series at all (see
 [File Formats](file_formats.md#what-is-derived-not-stored)), so raising the cap re-runs
 the selection rather than requiring a rebuild from the source matrix.
 
@@ -358,7 +358,7 @@ Stops optionally carry a `threshold_index` into the threshold tables, via the
 `threshold_index_lookup` argument. Only `matrix_report` passes it, because only that
 report carries those tables — the floor stop then reads the `threshold = 0` row, which is
 the complete-graph cut it stands for and is exact whenever no graph edge scores at or
-below the floor. A `.dsnv` bundle has no threshold tables, so its stops omit the field
+below the floor. A viewer bundle has no threshold tables, so its stops omit the field
 rather than index something that is not there.
 
 ## Replaying the merge order in the browser
@@ -382,10 +382,10 @@ its members. Children are ordered by minimum leaf index so the layout is determi
 
 Cutting is then a descent from the roots: recurse into a cluster whose `threshold ≤ cut`,
 otherwise keep it whole (`activeClustersAtThreshold`,
-[ssn_viewer/js/viewer.js](https://github.com/nebiolabs/domainator/blob/main/src/domainator/ssn_viewer/js/viewer.js)). The `≤` is the
+[viewer_app/js/views/ssn/slider.js](https://github.com/nebiolabs/domainator/blob/main/src/domainator/viewer_app/js/views/ssn/slider.js)). The `≤` is the
 strictly-above `--threshold` convention again — a component that merged exactly *at* the
 threshold is split back apart. Membership needs no traversal at all, just the
-`leaf_order` slice. This is what lets the `.dsnv` bundle scale with the node count rather
+`leaf_order` slice. This is what lets the viewer bundle scale with the node count rather
 than with O(n²) edges. [A worked example on a small
 forest](file_formats.md#hierarchy) walks all of that through three cuts.
 
@@ -407,8 +407,8 @@ partitioning: on that network the per-cut-point work is 0.6 ms instead of 296 ms
 ## Ports that must stay in step
 
 Most of this section's algorithms exist twice: once in Python, once in the viewer's
-JavaScript (`src/domainator/ssn_viewer/js/`). The JS side began as an extraction-only port and is now the
-viewer's primary path — since the `.dsnv` bundle stores nothing derived, the JS *is* what
+JavaScript (`src/domainator/viewer_app/js/views/ssn/`). The JS side began as an extraction-only port and is now the
+viewer's primary path — since the viewer bundle stores nothing derived, the JS *is* what
 produces the split chart and the slider every time a bundle is opened. The Python side
 serves `matrix_report`, `ssn_navigator` and `ssn_bundle`. The pairs are:
 

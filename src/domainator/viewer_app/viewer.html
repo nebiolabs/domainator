@@ -8,21 +8,21 @@
 {{css}}
 </style>
 </head>
-<body>
+<body data-active-view="ssn">
 <div class="shell">
     <section class="hero">
         <div class="hero-title">
-            <h1 id="viewer-title" title="Double-click to rename this network">{{heading}}</h1>
-            <button id="rename-network" type="button" class="title-edit" disabled aria-label="Rename this network" title="Rename this network. The name appears in the heading and the browser tab, is stored in the bundle, and names every file saved from here. You can also double-click the heading.">&#9998;</button>
+            <h1 id="viewer-title" title="Double-click to rename">{{heading}}</h1>
+            <button id="rename-network" type="button" class="title-edit" disabled aria-label="Rename" title="Rename. The name appears in the heading and the browser tab, is stored in the bundle, and names every file saved from here. You can also double-click the heading.">&#9998;</button>
         </div>
         <div class="loader">
-            <input id="bundle-file" type="file" accept=".dsnv,.ssnv,.gz,.json,.ssnview" />
+            <input id="bundle-file" type="file" accept=".dvb,.dsnv,.ssnv,.gz,.json,.ssnview" />
             <div id="bundle-status" class="status">No bundle loaded.</div>
             <div id="browser-warning" class="status"></div>
         </div>
     </section>
     <div class="grid">
-        <section class="panel wide">
+        <section class="panel wide" data-view="ssn">
             <h2>Cluster Splits vs Threshold</h2>
             <div class="panel-body">
                 <div class="split-topline">
@@ -58,10 +58,9 @@
                     <div class="note" id="split-event-count"></div>
                     <div class="split-event-cap">
                         <label for="split-event-cap">Split events</label>
-                        <!-- The cap used to be domainator build_ssn_viewer --max_merge_events,
-                             baked into the bundle. The series is derived on load now, so
-                             it is a control here instead: raising it costs one replay of
-                             the merge order, not a rebuild of the file. -->
+                        <!-- The series is derived on load, not stored in the bundle, so the
+                             cap is a control here: raising it costs one replay of the merge
+                             order, not a rebuild of the file. -->
                         <input id="split-event-cap" type="number" min="0" step="50"
                                title="How many split events the chart plots and the slider offers stops for: the strongest this many by impact, plus a few so no 5% band of the axis with an event to show is left empty. 0 plots every event."
                                disabled />
@@ -105,18 +104,26 @@
                         <button type="button" class="preset-slot" data-preset-slot="8" disabled>8</button>
                         <button type="button" class="preset-slot" data-preset-slot="9" disabled>9</button>
                     </div>
-                    <div id="hidden-summary" class="pill">0 nodes hidden</div>
+                    <div id="hidden-summary" class="pill" data-view="ssn">0 nodes hidden</div>
                     <div id="selection-summary" class="pill">0 nodes selected</div>
                 </div>
-                <div class="canvas-wrap"><canvas id="cluster-view" width="1100" height="700"></canvas></div>
-                <div class="note">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Hold Ctrl while Shift-dragging a box to select individual nodes within it. Hold Alt while Shift-dragging to deselect instead (combine with Ctrl to deselect individual nodes). Click a cluster bubble to toggle every node inside it. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its nodes in gray. Shift-click a preset button to add it to the current selection, or Alt+Shift-click to subtract it.</div>
+                <div class="canvas-wrap" data-view="ssn"><canvas id="cluster-view" width="1100" height="700"></canvas></div>
+                <div class="note" data-view="ssn">Wheel to zoom, drag the background to pan, Shift-drag a box to select clusters, and Ctrl-click a node to toggle it individually. Hold Ctrl while Shift-dragging a box to select individual nodes within it. Hold Alt while Shift-dragging to deselect instead (combine with Ctrl to deselect individual nodes). Click a cluster bubble to toggle every node inside it. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its nodes in gray. Shift-click a preset button to add it to the current selection, or Alt+Shift-click to subtract it.</div>
+                <div class="tree-stage" data-view="tree">
+                    <div class="tree-pane"><canvas id="tree-canvas" width="700" height="640"></canvas></div>
+                    <div class="msa-pane" id="msa-pane" hidden><canvas id="msa-canvas" width="400" height="640"></canvas></div>
+                </div>
+                <div class="projection-stage" data-view="projection"><canvas id="projection-canvas" width="900" height="700"></canvas></div>
+                <div class="note" data-view="projection">Wheel or double-click to zoom (Shift-double-click zooms out), and drag to pan. Click a point to toggle it. Shift-drag a box to select points, holding Alt to deselect instead. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its points in gray.</div>
+                <div id="view-tip" class="view-tip" aria-hidden="true" hidden></div>
+                <div class="note" data-view="tree">Wheel to scroll, Ctrl-wheel to zoom, and drag to pan. Click a leaf to toggle it, click a branch or an internal node to toggle its whole clade, and double-click an internal node to collapse or expand it. Shift-drag a box to select leaves, holding Alt to deselect instead. Over the alignment, Shift-wheel scrolls along it and Ctrl-wheel widens or narrows its columns. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its leaves in gray.</div>
             </div>
         </section>
         <section class="panel sidebar">
             <h2>View Settings</h2>
             <div class="panel-body tight">
                 <div class="controls">
-                    <div class="control">
+                    <div class="control" data-view="ssn">
                         <label for="layout-algorithm">Layout algorithm</label>
                         <select id="layout-algorithm">
                             <option value="tree">Tree</option>
@@ -126,11 +133,11 @@
                             <option value="treemap">Treemap (no edges)</option>
                         </select>
                     </div>
-                    <div class="control">
+                    <div class="control" data-view="ssn">
                         <label for="min-cluster-size">Minimum cluster size</label>
                         <input id="min-cluster-size" type="number" min="1" value="1" step="1" />
                     </div>
-                    <div class="control" title="Canvas pixels per layout unit. Copy this number into another viewer to show its network at the same zoom.">
+                    <div class="control" data-view="ssn" title="Canvas pixels per layout unit. Copy this number into another viewer to show its network at the same zoom.">
                         <label for="zoom-level">Zoom</label>
                         <input id="zoom-level" type="text" inputmode="decimal" value="1" disabled />
                     </div>
@@ -142,38 +149,91 @@
                         <label for="label-by">Label by</label>
                         <select id="label-by"></select>
                     </div>
-                    <div class="control checkbox">
+                    <div class="control checkbox" data-view="ssn">
                         <input id="show-node-counts" type="checkbox" checked />
                         <label for="show-node-counts">Show node count labels</label>
                     </div>
-                    <div class="control checkbox">
+                    <div class="control checkbox" data-view="ssn">
                         <input id="show-edge-scores" type="checkbox" />
                         <label for="show-edge-scores">Show edge score labels</label>
                     </div>
-                    <div class="control checkbox">
+                    <div class="control checkbox" data-view="ssn">
                         <input id="render-cluster-bounds" type="checkbox" checked />
                         <label for="render-cluster-bounds">Render cluster bounds</label>
                     </div>
-                    <div class="control checkbox">
+                    <div class="control checkbox" data-view="ssn">
                         <input id="render-nodes" type="checkbox" checked />
                         <label for="render-nodes">Render nodes</label>
                     </div>
-                    <div class="control checkbox">
+                    <div class="control checkbox" data-view="ssn">
                         <input id="reduce-elongation" type="checkbox" />
                         <label for="reduce-elongation">Reduce subcluster elongation</label>
                     </div>
-                    <div class="control checkbox">
+                    <div class="control checkbox" data-view="ssn">
                         <input id="leaf-pruning-only" type="checkbox" />
                         <label for="leaf-pruning-only">Minimum cluster size trims leaf clusters only</label>
                     </div>
-                    <div class="control checkbox sub-option" title="Contract a chain of small clusters that only passes through into a single dashed edge carrying the chain's weakest link">
+                    <div class="control checkbox sub-option" data-view="ssn" title="Contract a chain of small clusters that only passes through into a single dashed edge carrying the chain's weakest link">
                         <input id="collapse-long-paths" type="checkbox" disabled />
                         <label for="collapse-long-paths">Collapse long paths</label>
                     </div>
+                    <div class="control" data-view="tree">
+                        <label for="tree-layout">Branch lengths</label>
+                        <select id="tree-layout">
+                            <option value="phylogram" selected>As given (phylogram)</option>
+                            <option value="cladogram">Equal (cladogram)</option>
+                        </select>
+                    </div>
+                    <div class="control" data-view="tree" title="Pixels per leaf. Ctrl-wheel over the tree changes it too.">
+                        <label for="tree-row-height">Row height</label>
+                        <input id="tree-row-height" type="number" min="0.01" max="40" step="any" disabled />
+                    </div>
+                    <div class="control checkbox" data-view="tree">
+                        <input id="tree-ladderize" type="checkbox" />
+                        <label for="tree-ladderize">Ladderize (smaller clades first)</label>
+                    </div>
+                    <div class="control checkbox" data-view="tree">
+                        <input id="tree-show-labels" type="checkbox" checked />
+                        <label for="tree-show-labels">Show leaf labels</label>
+                    </div>
+                    <div class="control checkbox" data-view="tree">
+                        <input id="tree-show-support" type="checkbox" checked />
+                        <label for="tree-show-support">Show support values</label>
+                    </div>
+                    <div class="control" data-view="tree" title="Cut every branch that crosses this distance from the root: the clades below the cut are the clusters &quot;Fill with cluster numbers&quot; numbers and the table export's tree_cluster column holds.">
+                        <label for="tree-cut">Cut tree at <span id="tree-cut-label">(no cut)</span></label>
+                        <input id="tree-cut" type="range" min="0" max="1000" step="1" value="1000" disabled />
+                    </div>
+                    <div class="control" data-view="projection">
+                        <label for="projection-point-size">Point size</label>
+                        <input id="projection-point-size" type="number" min="0.5" max="20" step="0.5" value="4" />
+                    </div>
+                    <div class="control projection-3d-control" data-view="projection" hidden>
+                        <label for="projection-axes">Axes</label>
+                        <select id="projection-axes">
+                            <option value="0,1" selected>X / Y</option>
+                            <option value="0,2">X / Z</option>
+                            <option value="1,2">Y / Z</option>
+                        </select>
+                    </div>
+                    <div class="control tree-msa-control" data-view="tree" hidden>
+                        <label for="msa-scheme">Alignment colors</label>
+                        <select id="msa-scheme">
+                            <option value="auto" selected>By alphabet</option>
+                            <option value="protein">Amino acid classes</option>
+                            <option value="nucleotide">Nucleotides</option>
+                            <option value="identity">Identity to consensus</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div class="control tree-msa-control" data-view="tree" hidden title="Pixels per alignment column. Ctrl-wheel over the alignment changes it too.">
+                        <label for="msa-column-width">Column width</label>
+                        <input id="msa-column-width" type="number" min="1" max="40" step="any" value="10" />
+                    </div>
                 </div>
                 <div class="toolbar">
-                    <button id="sort-components-by-size" type="button" aria-pressed="true" disabled>Sort clusters by size: On</button>
-                    <button id="focus-largest-cluster" type="button" disabled>Focus largest cluster</button>
+                    <button id="sort-components-by-size" type="button" data-view="ssn" aria-pressed="true" disabled>Sort clusters by size: On</button>
+                    <button id="focus-largest-cluster" type="button" data-view="ssn" disabled>Focus largest cluster</button>
                     <button id="focus-selection" type="button" disabled title="Center the view on the selected nodes, zooming out only if they do not already fit">Focus selection</button>
                     <button id="reset-view" disabled>Reset view</button>
                     <button id="clear-selection" disabled>Clear selection</button>
@@ -185,9 +245,16 @@
                         <option value="8">8×</option>
                     </select>
                     <button id="export-svg" type="button" disabled>Export view SVG</button>
+                    <button id="tree-expand-all" type="button" data-view="tree" disabled title="Expand every collapsed clade">Expand all clades</button>
+                    <button id="export-newick" type="button" data-view="tree" disabled title="Download the tree as Newick, pruned to the selected leaves when there are any">Export Newick</button>
+                    <button id="export-fasta" type="button" class="tree-msa-control" data-view="tree" hidden disabled title="Download the selected leaves' sequences (all of them when nothing is selected) as FASTA">Export FASTA</button>
+                    <select id="export-fasta-gaps" class="tree-msa-control" data-view="tree" hidden title="Whether the FASTA keeps the alignment's gaps">
+                        <option value="aligned" selected>aligned</option>
+                        <option value="ungapped">gaps removed</option>
+                    </select>
                     <button id="customize-colors" type="button" disabled>Customize colors…</button>
-                    <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .dsnv session file">Save session…</button>
-                    <button id="save-extraction" type="button" disabled title="Download a new .dsnv bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
+                    <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .dvb session file">Save session…</button>
+                    <button id="save-extraction" type="button" data-view="ssn" disabled title="Download a new .dvb bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
                 </div>
                 <div class="note" id="selection-note">Load a bundle to begin exploring metadata.</div>
             </div>
@@ -415,7 +482,7 @@
         </div>
     </div>
 </div>
-<script type="application/json" id="dsnv-config">{{config}}</script>
+<script type="application/json" id="viewer-config">{{config}}</script>
 <script>
 {{script}}
 </script>

@@ -36,18 +36,18 @@ Prefer these over the HTML reports, which are large and meant for humans:
 
 ## Navigating a sequence-similarity network without rendering it
 
-`domainator build_ssn_viewer` produces a compact `.dsnv` bundle (gzip JSON) that the
-Domainator Similarity Network Viewer renders for humans. `domainator ssn_navigator` reads
+`domainator build_ssn --dvb_out` produces a compact `.dvb` bundle (gzip JSON) that the
+Domainator Viewer renders for humans. `domainator ssn_navigator` reads
 the same bundle and answers targeted questions as compact JSON — no rendering, no
 whole-network dump:
 
 ```bash
-domainator ssn_navigator -i net.dsnv -o - --query overview                       # size + metadata columns
-domainator ssn_navigator -i net.dsnv -o - --query thresholds                     # suggested similarity cut-points
-domainator ssn_navigator -i net.dsnv -o - --query clusters --threshold 50        # clusters (+sizes) at a threshold
-domainator ssn_navigator -i net.dsnv -o - --query cluster --threshold 50 --cluster 5  # one cluster: members + metadata distributions
-domainator ssn_navigator -i net.dsnv -o - --query cluster --threshold 50 --node ABC123   # the cluster a node falls in
-domainator ssn_navigator -i net.dsnv -o - --query node --node ABC123             # a node's metadata + membership across thresholds
+domainator ssn_navigator -i net.dvb -o - --query overview                       # size + metadata columns
+domainator ssn_navigator -i net.dvb -o - --query thresholds                     # suggested similarity cut-points
+domainator ssn_navigator -i net.dvb -o - --query clusters --threshold 50        # clusters (+sizes) at a threshold
+domainator ssn_navigator -i net.dvb -o - --query cluster --threshold 50 --cluster 5  # one cluster: members + metadata distributions
+domainator ssn_navigator -i net.dvb -o - --query cluster --threshold 50 --node ABC123   # the cluster a node falls in
+domainator ssn_navigator -i net.dvb -o - --query node --node ABC123             # a node's metadata + membership across thresholds
 ```
 
 Higher `--threshold` = finer clusters (more splitting). Omit `--threshold` (or
@@ -63,7 +63,7 @@ pass `inf`) for one cluster per connected component. `--top_n` bounds list sizes
   `hmmer_report`, `matrix_report`, `ssn_navigator`.
 - **comparison** — score/distance matrices: `seq_dist`, `kmer_dist`, `structure_dist`,
   `compare_contigs`, `hmmer_compare`, `transform_matrix`.
-- **plotting** — XGMML/SVG/HTML/trees: `build_ssn`, `build_ssn_viewer`,
+- **plotting** — XGMML/SVG/HTML/trees: `build_ssn`, `viewer`,
   `build_projection`, `build_tree`, `plot_contigs`, `color_table_to_legend`.
 
 ## Streaming and piping

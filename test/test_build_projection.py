@@ -1,17 +1,13 @@
 from domainator import build_projection
-from domainator.colors import DISTINCT_COLORS, OTHER_COLOR
+from domainator.colors import DISTINCT_COLORS, get_palette
+import gzip
 import io
+import json
 import tempfile
 import pandas as pd
 from pathlib import Path
 import pytest
-from helpers import report_data
-
-
-def _page_data(html):
-    envelope = report_data(html)
-    assert envelope["report"] == "build_projection"
-    return envelope["data"]
+from helpers import viewer_bundle
 
 
 @pytest.mark.parametrize("input_file",
@@ -33,20 +29,20 @@ def test_build_projection_1(input_file, shared_datadir):
         assert Path(out_cytoscape).is_file()
         #assert (out_mat.diagonal() == [410., 429., 405., 425., 411., 410., 400., 434., 426., 414., 398., 424., 430., 413., 402., 417., 451., 419., 429., 422.]).all()
 
-        # The page has the same points, coordinates and colors as the other outputs.
-        data = _page_data(Path(out_html).read_text())
-        assert data["algorithm"] == "pca"
-        assert data["axes"] == ["projection_X", "projection_Y"]
-        assert data["ids"] == list(out_table.index)
-        assert data["coords"] == [out_table["projection_X"].tolist(), out_table["projection_Y"].tolist()]
-        assert data["color_by"] == "group"
-        color_table = dict(line.split("\t") for line in Path(out_color_table).read_text().splitlines())
-        assert [group["value"] for group in data["groups"]] == ["g1", "g2", "g3"]
-        assert {group["value"]: group["color"] for group in data["groups"]} == color_table
+        # The page's bundle has the same points and coordinates as the other outputs.
+        bundle = viewer_bundle(Path(out_html).read_text())
+        assert bundle["format"] == "domainator_viewer_bundle" and bundle["name"] == "out"
+        view = bundle["views"]["projection"]
+        assert view["algorithm"] == "pca"
+        assert view["axes"] == ["projection_X", "projection_Y"]
+        assert bundle["nodes"] == list(out_table.index)
+        assert view["coords"] == [out_table["projection_X"].tolist(), out_table["projection_Y"].tolist()]
+        # The viewer colors the groups as get_palette does, so the bundle needs no color table.
+        assert bundle["defaults"] == {"color_by": "group", "label_by": None, "categorical_columns": []}
         metadata = pd.read_csv(shared_datadir / "metadata_FeSOD_20.tsv", sep="\t", index_col=0)["group"]
-        assert [data["groups"][g]["value"] for g in data["group"]] == [metadata[name] for name in data["ids"]]
-        assert [group["count"] for group in data["groups"]] == [data["group"].count(g) for g in range(3)]
-        assert data["metadata"] == {"columns": ["group"], "values": [[metadata[name] for name in data["ids"]]]}
+        assert bundle["metadata"] == {"columns": [{"name": "group", "type": "str"}], "rows": [[metadata[name]] for name in bundle["nodes"]]}
+        color_table = dict(line.split("\t") for line in Path(out_color_table).read_text().splitlines())
+        assert color_table == get_palette(metadata.unique())
 
 
 def test_png_out_is_gone(shared_datadir, tmp_path):
@@ -59,16 +55,18 @@ def test_build_projection_html_3d(shared_datadir):
     page = io.StringIO()
     build_projection.build_projection(build_projection.DataMatrix.from_file(shared_datadir / "scorefull.tsv"),
                                       three_d=True, html_out=page)
-    data = _page_data(page.getvalue())
-    assert data["axes"] == ["projection_X", "projection_Y", "projection_Z"]
-    assert len(data["coords"]) == 3 and all(len(axis) == 20 for axis in data["coords"])
-    assert data["color_by"] is None and data["groups"] is None and data["group"] is None
-    assert data["metadata"] == {"columns": [], "values": []}
+    bundle = viewer_bundle(page.getvalue())
+    assert bundle["name"] == "projection"
+    view = bundle["views"]["projection"]
+    assert view["axes"] == ["projection_X", "projection_Y", "projection_Z"]
+    assert len(view["coords"]) == 3 and all(len(axis) == 20 for axis in view["coords"])
+    assert bundle["defaults"]["color_by"] is None and "color_table" not in bundle["defaults"]
+    assert bundle["metadata"] == {"columns": [], "rows": [[] for _ in range(20)]}
 
 
 def test_build_projection_html_colors(shared_datadir, tmp_path):
-    """Values a --color_table does not list, and points with no value, are gray; table order
-    comes first and the points with no value last."""
+    """A --color_table is the viewer's starting palette; --label_by and --categorical set the
+    viewer's defaults, and the bundle can be written on its own."""
     names = pd.read_csv(shared_datadir / "metadata_FeSOD_20.tsv", sep="\t", index_col=0).index
     metadata = tmp_path / "metadata.tsv"
     # Every fifth point has no value; the others are a, b or c.
@@ -77,16 +75,26 @@ def test_build_projection_html_colors(shared_datadir, tmp_path):
     color_table = tmp_path / "colors.tsv"
     color_table.write_text("c\t#123456\na\t#ABCDEF\n")
     out_html = tmp_path / "out.html"
+    out_dvb = tmp_path / "out.dvb"
+    build_projection.main(["-i", str(shared_datadir / "scorefull.tsv"), "--html_out", str(out_html), "--dvb_out", str(out_dvb),
+                           "--metadata", str(metadata), "--color_by", "kind", "--color_table", str(color_table),
+                           "--label_by", "kind", "--categorical", "size", "--name", "FeSOD projection"])
+    bundle = viewer_bundle(out_html.read_text())
+    assert bundle == json.loads(gzip.open(out_dvb).read())
+    assert bundle["name"] == "FeSOD projection"
+    assert bundle["defaults"] == {"color_by": "kind", "label_by": "kind", "categorical_columns": ["size"],
+                                  "color_table": {"c": "#123456", "a": "#ABCDEF"}}
+    assert bundle["metadata"]["columns"] == [{"name": "kind", "type": "str"}, {"name": "size", "type": "int"}]
+    kinds = [row[0] for row in bundle["metadata"]["rows"]]
+    assert kinds.count(None) == 4
+
+
+def test_build_projection_palette_offset_reaches_the_viewer(shared_datadir, tmp_path):
+    out_html = tmp_path / "out.html"
     build_projection.main(["-i", str(shared_datadir / "scorefull.tsv"), "--html_out", str(out_html),
-                           "--metadata", str(metadata), "--color_by", "kind", "--color_table", str(color_table)])
-    data = _page_data(out_html.read_text())
-    assert [(group["value"], group["color"]) for group in data["groups"]] == [
-        ("c", "#123456"), ("a", "#ABCDEF"), ("b", OTHER_COLOR), (None, OTHER_COLOR)]
-    assert data["groups"][-1]["count"] == 4
-    kinds = dict(zip(data["ids"], data["metadata"]["values"][0]))
-    assert [data["groups"][g]["value"] for g in data["group"]] == [kinds[name] for name in data["ids"]]
-    assert data["metadata"]["columns"] == ["kind", "size"]
-    assert all(isinstance(value, int) for value in data["metadata"]["values"][1])
+                           "--metadata", str(shared_datadir / "metadata_FeSOD_20.tsv"), "--color_by", "group", "--palette_offset", "3"])
+    defaults = viewer_bundle(out_html.read_text())["defaults"]
+    assert defaults["color_table"] == get_palette(["g1", "g2", "g3"], offset=3)
 
 
 @pytest.mark.parametrize("input_file",

@@ -173,7 +173,7 @@
         updateGradientPreview();
         drawColorHistogram(columnName);
         rebuildNodeColorCache();
-        scheduleClusterRender();
+        scheduleRepaint();
     }
 
     function gradientStopRole(index, total) {

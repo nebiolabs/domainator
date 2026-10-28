@@ -1087,3 +1087,89 @@
         .wide, .sidebar, .full-width { grid-column: auto; }
         .split-topline { grid-template-columns: minmax(0, 1fr); }
     }
+
+/* Each view's own controls carry data-view="<view>"; only the open view's are shown. */
+body:not([data-active-view="ssn"]) [data-view="ssn"],
+body:not([data-active-view="tree"]) [data-view="tree"],
+body:not([data-active-view="projection"]) [data-view="projection"] {
+    display: none !important;
+}
+
+/* ---- Tree view ---- */
+.tree-stage {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    height: min(78vh, 900px);
+    min-height: 320px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+}
+.tree-pane {
+    flex: 3 1 0;
+    min-width: 0;
+    position: relative;
+}
+.msa-pane {
+    flex: 2 1 0;
+    min-width: 0;
+    position: relative;
+    border-left: 1px solid var(--line);
+}
+.tree-stage canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+.tree-stage canvas.panning {
+    cursor: grabbing;
+}
+.tree-msa-control[hidden],
+.msa-pane[hidden] {
+    display: none !important;
+}
+.view-tip {
+    position: fixed;
+    z-index: 30;
+    max-width: 420px;
+    padding: 6px 9px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    color: var(--ink);
+    font-size: 12px;
+    white-space: pre-line;
+    pointer-events: none;
+}
+.view-tip[hidden] {
+    display: none;
+}
+
+/* ---- Projection view ---- */
+.projection-stage {
+    position: relative;
+    height: min(78vh, 820px);
+    min-height: 320px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+}
+.projection-stage canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+.projection-stage canvas.panning {
+    cursor: grabbing;
+}
+.projection-3d-control[hidden] {
+    display: none !important;
+}

@@ -34,7 +34,7 @@ NOT_OPTIONS = {
     "compare_contigs": {"metrics"},
     "transform_matrix": {"row_lengths", "col_lengths"},
     "build_ssn": {"subset_labels", "max_output_bytes"},
-    "build_ssn_viewer": {"subset_labels"},
+    "build_tree": {"subset_labels"},
     "build_projection": {"algorithm_parameters"},
     "enum_report": {"analyses", "ncbi_taxonomy"},
     "hmmer_report": {"analyses"},

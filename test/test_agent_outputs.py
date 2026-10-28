@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from domainator import enum_report, hmmer_report, summary_report, matrix_report
-from domainator import build_ssn_viewer, ssn_navigator
+from domainator import build_ssn, ssn_navigator
 from domainator.data_matrix import DataMatrix
 from domainator import ssn_bundle
 from domainator.ssn_bundle import (
@@ -110,15 +110,15 @@ def _build_bundle(output_dir):
         {"category": ["alpha", "alpha", "beta", "gamma"], "count": [1, 2, 3, 4]},
         index=names,
     ).to_csv(meta, sep="\t")
-    bundle_path = os.path.join(output_dir, "net.dsnv")
-    build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path, "--metadata", meta])
+    bundle_path = os.path.join(output_dir, "net.dvb")
+    build_ssn.main(["-i", matrix_file, "--dvb_out", bundle_path, "--metadata", meta])
     return bundle_path
 
 
 def test_ssn_bundle_clusters_and_metadata(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         bundle = load_bundle(_build_bundle(output_dir))
-        hierarchy = bundle["graph"]["hierarchy"]
+        hierarchy = bundle["views"]["ssn"]["hierarchy"]
 
         # threshold None is the bundle's "∞" stop, the *finest* cut: like the
         # viewer's slider at its ∞ end, every merge is cut and every node stands
@@ -219,12 +219,12 @@ def test_node_membership_matches_the_full_partition_at_every_cut():
 
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
-        bundle_path = os.path.join(output_dir, "net.dsnv")
+        bundle_path = os.path.join(output_dir, "net.dvb")
         DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
-        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        build_ssn.main(["-i", matrix_file, "--dvb_out", bundle_path])
         bundle = load_bundle(bundle_path)
 
-    hierarchy = bundle["graph"]["hierarchy"]
+    hierarchy = bundle["views"]["ssn"]["hierarchy"]
     assert len(hierarchy["roots"]) > 1, "fixture should be a forest"
     position_by_node = {ni: pos for pos, ni in enumerate(hierarchy["leaf_order"])}
     merge_thresholds = sorted({node["threshold"] for node in hierarchy["nodes"]
@@ -254,7 +254,7 @@ def test_node_membership_matches_the_full_partition_at_every_cut():
 
 def test_ssn_navigator_rejects_bad_bundle(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
-        bad = os.path.join(output_dir, "bad.dsnv")
+        bad = os.path.join(output_dir, "bad.dvb")
         with open(bad, "w") as handle:
             json.dump({"format": "not_a_bundle"}, handle)
         with pytest.raises(ValueError):
@@ -286,12 +286,12 @@ def test_clusters_at_threshold_matches_build_ssn_clustering():
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
-        bundle_path = os.path.join(output_dir, "net.dsnv")
-        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        bundle_path = os.path.join(output_dir, "net.dvb")
+        build_ssn.main(["-i", matrix_file, "--dvb_out", bundle_path])
         bundle = load_bundle(bundle_path)
         tree = MaxTree(DataMatrix.from_file(matrix_file))
 
-    hierarchy = bundle["graph"]["hierarchy"]
+    hierarchy = bundle["views"]["ssn"]["hierarchy"]
     finite_stops = [
         stop["threshold_value"]
         for stop in ssn_bundle.slider_stops(bundle)
@@ -337,8 +337,8 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
-        bundle_path = os.path.join(output_dir, "net.dsnv")
-        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        bundle_path = os.path.join(output_dir, "net.dvb")
+        build_ssn.main(["-i", matrix_file, "--dvb_out", bundle_path])
         bundle = load_bundle(bundle_path)
 
     finest = ssn_navigator.ssn_navigator(bundle, query="clusters", threshold="inf")
@@ -353,7 +353,7 @@ def test_navigator_threshold_ends_match_the_viewer_slider():
 
     coarsest = ssn_navigator.ssn_navigator(bundle, query="clusters")
     assert coarsest["clusters"] == 2                # the two components
-    weakest = min(edge[2] for edge in bundle["graph"]["mst_edges"])
+    weakest = min(edge[2] for edge in bundle["views"]["ssn"]["mst_edges"])
     assert coarsest["threshold"] < weakest
 
     # The threshold table runs monotonically from the ∞ stop down to the floor.
@@ -379,8 +379,8 @@ def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
     with tempfile.TemporaryDirectory() as output_dir:
         matrix_file = os.path.join(output_dir, "matrix.hdf5")
         DataMatrix(data, names, names).write(matrix_file, output_type="hdf")
-        bundle_path = os.path.join(output_dir, "net.dsnv")
-        build_ssn_viewer.main(["-i", matrix_file, "-o", bundle_path])
+        bundle_path = os.path.join(output_dir, "net.dvb")
+        build_ssn.main(["-i", matrix_file, "--dvb_out", bundle_path])
         bundle = load_bundle(bundle_path)
 
     # The cap is the caller's, not the file's: the same bundle answers for any of them.
@@ -401,8 +401,8 @@ def test_ssn_navigator_reports_how_many_split_events_the_bundle_carries():
 
     # A pre-v6 bundle stored its own capped series. It is ignored, not read back, so a
     # stale copy cannot make the navigator under-report what the network really has.
-    stale = dict(bundle, graph=dict(bundle["graph"], merge_event_series=[],
-                                    merge_event_total=0, max_merge_events=1,
-                                    slider_stops=[]))
+    stale = dict(bundle, views={"ssn": dict(bundle["views"]["ssn"], merge_event_series=[],
+                                            merge_event_total=0, max_merge_events=1,
+                                            slider_stops=[])})
     result = ssn_navigator.ssn_navigator(stale, query="overview", max_merge_events=0)
     assert result["merge_event_total"] == uncapped["merge_event_total"]

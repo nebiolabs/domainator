@@ -37,7 +37,7 @@ nav:
   - File formats: file_formats.md
   - What 1.x keeps stable: stability.md
   - Examples: examples.md
-  - Similarity Network Viewer: ssn_viewer.md
+  - Networks in the Domainator Viewer: ssn_viewer.md
   - Tool manifest: tool_manifest.md
   - Structure search: structure_search.md
   - ESM-2 3Di and foldseek: esm_3b_foldseek.md

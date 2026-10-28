@@ -1,4 +1,4 @@
-"""Navigate a build_ssn_viewer ``.dsnv`` bundle and emit compact JSON summaries.
+"""Navigate the network in a Domainator Viewer bundle (build_ssn --dvb_out) and emit compact JSON summaries.
 
 This is a read-only, agent-friendly companion to the interactive HTML SSN
 viewer. Instead of rendering the whole network, it answers targeted questions
@@ -87,7 +87,7 @@ def _merge_event_coverage(event_rows, selected_rows, max_merge_events):
 
 
 def _threshold_summary(bundle, stops):
-    hierarchy = bundle["graph"]["hierarchy"]
+    hierarchy = bundle["views"]["ssn"]["hierarchy"]
     summary = []
     for stop in stops:
         threshold_value = stop["threshold_value"]
@@ -162,13 +162,14 @@ def ssn_navigator(bundle: Dict[str, Any], *, query: str = "overview", threshold:
                   cluster: Optional[int] = None, node: Optional[str] = None,
                   min_size: int = 1, top_n: int = 50, members: bool = False,
                   max_merge_events: int = DEFAULT_MAX_MERGE_EVENTS) -> Dict[str, Any]:
-    """Answer a single navigation query against a loaded ``.dsnv`` bundle dict.
+    """Answer a single navigation query against a bundle with a network view, as
+    ssn_bundle.load_bundle returns it.
 
     Returns a JSON-serializable dict. See the module docstring for modes.
     """
-    graph = bundle["graph"]
+    graph = bundle["views"]["ssn"]
     hierarchy = graph["hierarchy"]
-    node_names = graph["nodes"]
+    node_names = bundle["nodes"]
     threshold = _resolve_threshold(threshold, hierarchy)
 
     # Replaying the merge order costs a pass over the MST edges, so only the modes that
@@ -295,7 +296,7 @@ def ssn_navigator(bundle: Dict[str, Any], *, query: str = "overview", threshold:
 
 def build_parser():
     parser = tool_parser(__doc__)
-    add_input(parser, "A Domainator Similarity Network Viewer bundle (.dsnv) produced by build_ssn_viewer.", multiple=False, stdin=False)
+    add_input(parser, "A Domainator Viewer bundle (.dvb) with a network, from build_ssn --dvb_out or the viewer's Save session. Older network bundles (.dsnv) work too.", multiple=False, stdin=False)
     add_output(parser, "json", "Write the JSON answer to this file.", primary=True)
     parser.add_argument("--query", type=str, default="overview", choices=MODES,
                         help="Which navigation query to run.")

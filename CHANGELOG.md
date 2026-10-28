@@ -20,6 +20,20 @@ lists every change from 0.x.
   `docs/file_formats.md`.
 - A `schema_version` key in the `--json_out` of summary_report, matrix_report and ssn_navigator.
 - hmmer_compare `--alignments_out`.
+- The Domainator Viewer: build_ssn, build_tree and build_projection now write one HTML page
+  (`--html_out`) and one bundle format (`--dvb_out`, `.dvb`, docs/file_formats.md) for networks,
+  trees and projections alike, with the same selection-driven metadata table, editing, colors,
+  presets, column charts and saved sessions for all three. `domainator viewer` writes the page
+  empty, or opening a bundle (`-i`).
+- build_ssn `--html_out`, `--dvb_out`, `--merge_impact_metric`, `--label_by`, `--categorical` and
+  `--name`, replacing build_ssn_viewer; `--xgmml_out` is no longer required.
+- build_tree `--html_out` and `--dvb_out`: the tree in the Domainator Viewer, with a multiple
+  sequence alignment beside it (`--msa`, aligned FASTA); clade selection, collapsing,
+  ladderizing, a cut slider that numbers the clades below it, and Newick and FASTA exports of
+  the selection. `--newick` reads a tree built elsewhere instead of a matrix. Also
+  `--color_by`, `--color_table`, `--color_table_out`, `--palette_offset`, `--max_color_groups`,
+  `--label_by`, `--categorical`, `--name`, `--subset`, `--subset_file` and `--max_output_gb`.
+- build_projection `--dvb_out`, `--label_by`, `--categorical` and `--name`.
 - `--palette_offset` on build_ssn, build_projection and plot_contigs, and a matching start
   offset in the SSN viewer's color picker,
   for coloring a second column without reusing the palette colors a first one used.
@@ -38,6 +52,14 @@ lists every change from 0.x.
 
 ### Changed
 - Commands run as `domainator <command>`; the `<command>.py` scripts are gone.
+- build_projection `--html_out` writes the Domainator Viewer, which selects points into a metadata
+  table; its on-screen legend is now the viewer's legend export.
+- build_tree's xgmml output is laid out as a rectangular tree, colored with `--color_by`; its
+  internal nodes are named by their place in the tree in preorder.
+- The SSN viewer is now the Domainator Viewer, and its sources moved from `ssn_viewer/` to
+  `viewer_app/` (`ssn_viewer_html.py` is now `viewer_html.py`).
+- Networks for the viewer are `.dvb` bundles, and the viewer saves sessions and extractions as
+  `.dvb`. The viewer, `domainator viewer -i` and ssn_navigator still read `.dsnv` bundles.
 - Every output is an explicit `--<content>_out` option, and nothing reads standard input or
   writes standard output unless given `-`.
 - Options with the same meaning have the same name everywhere (see MIGRATION.md).
@@ -99,6 +121,8 @@ lists every change from 0.x.
   --png_out` is gone; its `--html_out` page downloads the plot as PNG or SVG.
 - The bundled web GUI (`domainator_server`) and its Flask dependency; a separate GUI project is
   being built on `domainator describe`.
+- build_ssn_viewer: build_ssn `--html_out` and `--dvb_out` write the viewer and its bundle, and
+  `domainator viewer` writes the page on its own (see MIGRATION.md).
 
 ### Fixed
 - A taxid missing from the NCBI taxonomy database (one newer than the database) crashed

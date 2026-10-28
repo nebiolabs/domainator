@@ -303,9 +303,9 @@ Matrices are stored as canonical CSR arrays: explicit zero values are removed an
 - `SPARSE_CSR_UPPER_TRIANGLE` (version 2.0): written when the row and column labels (and lengths) are the same and every value equals its transpose exactly. Only the upper triangle, including the diagonal, is stored; readers rebuild the lower triangle by mirroring it. This roughly halves the file. Matrices that are only approximately symmetric (e.g. raw DIAMOND bit scores) are stored in full; use `--symmetrize` on `domainator seq_dist`, `domainator structure_dist` or `domainator transform_matrix` to make them exactly symmetric. Older Domainator versions cannot read this type and fail with an error rather than misreading the file.
 - `DENSE` (version 1.0 only): every cell in `DENSE_DATA`. Still readable; the matrix is converted to CSR on load.
 
-What a missing (zero) cell means depends on `DATA_TYPE`. For similarity scores (`score`, `efi_score`, `bool`, ...) it means "no hit", and the SSN tools treat it as "no edge". For distances (any `DATA_TYPE` ending in `_dist`) it means distance 0, i.e. identical; every other cell is stored, so a distance matrix takes about 1.5 times the space of a dense array, or about 0.75 times when it is symmetric and stored as a triangle. The SSN tools (`domainator build_ssn`, `domainator build_ssn_viewer`, `domainator matrix_report`, `domainator split_by_cluster`) refuse distance matrices, and `domainator build_tree` uses `DATA_TYPE` to decide whether to convert scores into distances.
+What a missing (zero) cell means depends on `DATA_TYPE`. For similarity scores (`score`, `efi_score`, `bool`, ...) it means "no hit", and the SSN tools treat it as "no edge". For distances (any `DATA_TYPE` ending in `_dist`) it means distance 0, i.e. identical; every other cell is stored, so a distance matrix takes about 1.5 times the space of a dense array, or about 0.75 times when it is symmetric and stored as a triangle. The SSN tools (`domainator build_ssn`, `domainator matrix_report`, `domainator split_by_cluster`) refuse distance matrices, and `domainator build_tree` uses `DATA_TYPE` to decide whether to convert scores into distances.
 
-Threshold tables derived from a matrix (`domainator matrix_report`, `domainator build_ssn_viewer`) use
+Threshold tables derived from a matrix (`domainator matrix_report`) use
 one row per distinct maximum-spanning-tree edge weight, and every row describes the graph
 that `build_ssn --threshold <threshold>` keeps: edges scoring **strictly above** the threshold.
 An extra `threshold = 0` row (the `--threshold 0` default) closes the table out with the complete
@@ -326,47 +326,90 @@ Current readers accept major versions 1 and 2 and reject any other major version
 
 In the future, we may add a `DESCRIPTION` field to distinguish different kinds of data, like raw scores, normalized scores, etc. But so far it is up to the user to remember what the data represents. We may also add `ROW_SEQ_LENGTHS` and `COL_SEQ_LENGTHS` variables to allow for calculation of scores using the EFI score formula, which normalizes on length.
 
-## Domainator Similarity Network Viewer bundles (`.dsnv`)
+## Domainator Viewer bundles (`.dvb`)
 
-`domainator build_ssn_viewer` turns a symmetric similarity matrix into a `.dsnv` bundle: a
-**gzip-compressed JSON document** read by the standalone HTML viewer page
-(`--html_out`/`--embed_data`) and by `domainator ssn_navigator`. Readers accept plain (uncompressed)
-JSON as well, detected by the gzip magic number. The bundle stores an MST-derived merge
-hierarchy rather than the matrix itself, so its size scales with the node count, not with
-O(n²) edges. For how to *use* the viewer, see [ssn_viewer.md](ssn_viewer.md); this section
-is the on-disk contract.
+`domainator build_ssn`, `domainator build_tree` and `domainator build_projection` write, with
+`--dvb_out`, a **gzip-compressed JSON document** that the Domainator Viewer opens. Their
+`--html_out` page embeds the same bytes, `domainator viewer -i` writes a page that opens any
+bundle, the viewer's "Save session" writes the same format, and `domainator ssn_navigator`
+reads the network in one. Readers accept plain (uncompressed) JSON as well, detected by the
+gzip magic number. For how to *use* the viewer, see [ssn_viewer.md](ssn_viewer.md); this
+section is the on-disk contract.
 
-Top-level keys:
+A bundle describes a set of nodes once, and one or more views of them:
 
 ```python
-format: "domainator_ssn_viewer_bundle"  # a mismatch here is fatal for every reader
-version: int                            # see the compatibility rules below
-name: str                               # display name
-domainator_version: str                 # the build that wrote the file
-graph: dict                             # nodes, mst_edges, hierarchy, merge_impact_metric
-metadata: dict                          # positional node metadata table (see below)
-defaults: dict                          # color_by, label_by, categorical_columns, optional color_table
-(v4, optional) app_state: dict          # viewer UI state -- see below
+format: "domainator_viewer_bundle"  # a mismatch here is fatal for every reader
+version: int                        # see the compatibility rules below
+name: str                           # display name
+domainator_version: str             # the build that wrote the file
+nodes: [str, ...]                   # node ids; position i is node index i
+metadata: dict                      # positional node metadata table (see below)
+defaults: dict                      # color_by, label_by, categorical_columns, optional color_table
+views: dict                         # a view name and that view's data about nodes (see below)
+(optional) app_state: dict          # viewer UI state, written by "Save session" -- see below
 ```
 
-### The `graph` section
+`nodes` are the network's nodes, a tree's leaves, or a projection's points, in the order of
+the source matrix's rows (after `--subset`) or the tree's leaves. Their **position is the
+node index** used throughout the bundle: `metadata.rows[i]` describes `nodes[i]`, and every
+node reference inside a view is one of these positions. Ids are the only stable handle on a
+node — a position means something different in a rebuilt or subsetted bundle — so anything
+written back into a file (notably `app_state` selections) stores ids.
 
-The merge order, and nothing derived from it. Every node reference inside it is an
-**index into `graph.nodes`**, never a node id.
+`defaults` holds the viewer's starting `color_by` and `label_by` (metadata column names, or
+`null`), `categorical_columns` (numeric columns to color as categories rather than a
+gradient) and, optionally, `color_table` (`color_by` value to `"#RRGGBB"`, the column's
+starting palette; values it leaves out are gray).
+
+`views` maps a view name to that view's data. Each tool writes one view, and the viewer
+opens the first:
+
+- `ssn`: a similarity network, from `build_ssn` (below).
+- `tree`: `parent`, `length`, `label` and `support`, one entry per tree node in preorder
+  (so the root is node 0 and every node follows its parent): the parent's index (`-1` for the
+  root), the branch length to the parent, an internal node's label, and its support value
+  (or `null`). `leaf_nodes[i]` is the tree node of `nodes[i]`. `msa` is `null`, or
+  `{"alphabet": "protein" | "nucleotide", "length": ..., "sequences": [...]}`, the aligned
+  sequence of each of `nodes` (`null` for one the alignment lacks).
+- `projection`: `algorithm`, `axes` (two or three column names) and `coords`, where
+  `coords[a][i]` is `nodes[i]`'s coordinate on `axes[a]`.
+
+### The `metadata` table
+
+`metadata` is a positional table rather than a per-node mapping — `metadata.rows[i]`
+describes `nodes[i]`:
 
 ```python
-graph: {
-  "nodes":       [str, ...],                  # node ids; position i is node index i
+metadata: {
+  "columns": [{"name": str, "type": "str" | "int" | "float", (optional) "origin": str}, ...],
+  "rows":    [[value, value, ...], ...]   # one row per node, in nodes order
+}
+```
+
+`origin: "viewer"` marks a column created in the viewer rather than merged from a
+`--metadata` TSV; it is what lets the viewer offer to delete the column again. Readers
+that do not know the key can ignore it.
+
+### The `ssn` view
+
+`build_ssn` stores the network as an MST-derived merge hierarchy rather than the matrix
+itself, so the bundle's size scales with the node count, not with O(n²) edges. The view is
+the merge order, and nothing derived from it:
+
+```python
+views["ssn"]: {
   "mst_edges":   [[int, int, float], ...],    # [node_i, node_j, weight], weight-descending
   "hierarchy":   {...},                       # the merge dendrogram (below)
   "merge_impact_metric": "min_child" | "product",
 }
 ```
 
-That is the whole section. The split-event series, its moving sum and the threshold
-slider's stops are a pure function of these four keys, so **readers derive them rather
-than read them** — `ssn_bundle.merge_event_rows` / `merge_event_series` / `moving_sum` /
-`slider_stops` in Python, and the ports in the viewer's JavaScript (`src/domainator/ssn_viewer/js/`) in the browser. See
+That is the whole view. The split-event series, its moving sum and the threshold slider's
+stops are a pure function of these keys and `nodes`, so **readers derive them rather than
+read them** — `ssn_bundle.merge_event_rows` / `merge_event_series` / `moving_sum` /
+`slider_stops` in Python, and the ports in the viewer's JavaScript
+(`src/domainator/viewer_app/js/views/ssn/`) in the browser. See
 [Key algorithms](algorithms.md#split-event-scanning) for what that derivation does.
 
 Deriving costs one pass over `mst_edges` and scales with the node count, so the file
@@ -376,34 +419,24 @@ plot is chosen where they are displayed: the viewer's "Split events" box,
 `domainator ssn_navigator --max_merge_events`, or the `max_merge_events` argument to those
 `ssn_bundle` functions. The viewer goes further and spends its cap on the part of the axis
 currently on screen, so the same file yields more detail as you zoom — see
-[Key algorithms](algorithms.md#spending-the-cap-on-a-window). A **pre-v6 bundle still carries a stored copy** of all of it,
-already capped by whoever built it; readers in this build ignore those keys, so an old
-file is not stuck with the cap it was written with.
+[Key algorithms](algorithms.md#spending-the-cap-on-a-window).
 
 JSON has no infinity. Where a derived value is infinite — the `∞` slider stop's
 `threshold_value`, the first event row's `threshold_from_value` — a reader that writes
-it back out should spell it `null`, which is what pre-v6 writers did and what the
+it back out should spell it `null`, which is what older writers did and what the
 viewer's ports still produce.
 
 
-#### `nodes`
-
-The node ids, in the order of the source matrix's rows (after `--subset`). Its
-**position is the node index** used throughout the bundle: `metadata.rows[i]` describes
-`graph.nodes[i]`, `graph.mst_edges` endpoints are these positions, and
-`graph.hierarchy.leaf_order` holds these same indices. Ids are the only stable handle on
-a node — a position means something different in a rebuilt or subsetted bundle — so
-anything written back into a file (notably `app_state` selections) stores ids.
-
 #### `mst_edges`
 
-The maximum spanning forest of the input matrix, sorted by **descending weight**; every
-consumer of this array relies on that order. Each entry is `[node_i, node_j, weight]`,
+The maximum spanning forest of the input matrix's edges scoring above
+`build_ssn --threshold`, sorted by **descending weight**; every consumer of this array
+relies on that order. Each entry is `[node_i, node_j, weight]`,
 where `weight` is `max(M[i, j], M[j, i])` — the matrix may be slightly asymmetric (DIAMOND
 bit scores, for instance) and the larger of the two directions is what the tree was built
 on. The pair is unordered: it comes from the matrix's lower triangle, so there is no
 min-first convention to rely on. The array holds
-`len(graph.nodes) - <number of connected components>` entries, so a fully connected
+`len(nodes) - <number of connected components>` entries, so a fully connected
 network has `n - 1` and a network of isolated nodes has none.
 
 Replaying the first `m` of these through a union-find reproduces the connected components
@@ -421,7 +454,7 @@ hierarchy: {
     # one leaf per node, at index == node index
     {"id": int, "kind": "leaf", "node_index": int, "size": 1,
      "parent": int | None, "leaf_start": int, "leaf_count": 1},
-    # then one cluster per merge, in merge order, ids continuing from len(graph.nodes)
+    # then one cluster per merge, in merge order, ids continuing from len(nodes)
     {"id": int, "kind": "cluster", "left": int, "right": int, "threshold": float,
      "size": int, "parent": int | None, "leaf_start": int, "leaf_count": int},
     ...
@@ -432,7 +465,7 @@ hierarchy: {
 ```
 
 `nodes[i]["id"] == i`, so ids index the array directly. The array holds
-`len(graph.nodes) + len(graph.mst_edges)` entries: the leaves, then one cluster per merge
+`len(nodes) + len(mst_edges)` entries: the leaves, then one cluster per merge
 in the order the merges happened, so a cluster's `threshold` is non-increasing down the
 array. `parent` is `null` on the roots. `left`/`right` are ordered by their subtrees'
 minimum leaf index, which is what makes the layout deterministic.
@@ -460,49 +493,11 @@ number in the figure is the actual output of `build_mst_component_hierarchy` and
 
 `cluster_count_by_threshold`, `edges_by_threshold`, `merge_event_series`,
 `merge_event_total`, `max_merge_events`, `merge_moving_sum` and `slider_stops` were all
-keys of `graph` before v6. The first two described the **full input graph**, which a
-bundle never carried and no viewer ever read; the rest are derived from the merge order
-above. All seven are gone from a v6 file — see the version table below, and
-`ssn_bundle.py` for the functions that produce them now.
-
-A stop from `slider_stops` no longer carries `threshold_index` either: it indexed the
-two threshold tables, which no longer exist here. `domainator matrix_report` keeps both the
-tables and the index, because that report does carry full-graph edge counts.
-
-
-### The `metadata` table
-
-`metadata` is a positional table rather than a per-node mapping — `metadata.rows[i]`
-describes `graph.nodes[i]`:
-
-```python
-metadata: {
-  "columns": [{"name": str, "type": "str" | "int" | "float", (optional) "origin": str}, ...],
-  "rows":    [[value, value, ...], ...]   # one row per node, in graph.nodes order
-}
-```
-
-`origin: "viewer"` marks a column created in the HTML viewer rather than merged from a
-`--metadata` TSV; it is what lets the viewer offer to delete the column again. Readers
-that do not know the key can ignore it.
-
-### Versions and compatibility
-
-The version constants live in `ssn_bundle.py`
-(`SSN_VIEWER_BUNDLE_VERSION`, `SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS`).
-
-| Version | Change |
-| --- | --- |
-| 3 | Per-event `merge_size_counts`/`largest_merge`/`merge_count` and `graph.merge_moving_sum`. |
-| 4 | Optional top-level `app_state`. Purely additive: `domainator build_ssn_viewer` never writes it, and a reader that ignores the section can treat a v4 file exactly like a v3 file. |
-| 5 | `graph.merge_event_total` and `graph.max_merge_events`. Purely additive, and **both keys are optional** — a reader that ignores them treats a v5 file exactly like a v4 file, and a writer that does not know them may omit them. (The viewer's "Save session" re-stamps the current version onto whatever bundle was loaded, so a session saved from a v3/v4 file is a v5 file without them.) |
-| 6 | **A removal.** `graph.cluster_count_by_threshold`, `graph.edges_by_threshold`, `graph.merge_event_series`, `graph.merge_event_total`, `graph.max_merge_events`, `graph.merge_moving_sum` and `graph.slider_stops` (and its `threshold_index`) are all gone: the first two described a graph the bundle never carried, and the rest are derived from `graph.mst_edges`. This build reads v3–v6, because everything it needs has been present since v3, and it ignores the stored copies in an older file rather than inheriting the cap they were written with. A v3/v4/v5 *reader* handed a v6 file would find those keys missing. The `--max_merge_events` option of `domainator build_ssn_viewer` went with them; the cap is set where the series is displayed. |
-
-Bump `SSN_VIEWER_BUNDLE_VERSION` for any change to the schema, and add the old version to
-`SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written
-bundles keep loading. `ssn_bundle.load_bundle` refuses a version outside that tuple; the
-HTML viewer is deliberately more permissive and loads an unknown version with a warning,
-because refusing a file it can very likely still render is the worse failure.
+stored in older network bundles (see [below](#older-network-bundles-dsnv)). The first two
+described the **full input graph**, which a bundle never carried and no viewer ever read;
+the rest are derived from the merge order above. A stop from `slider_stops` carries no
+`threshold_index` either: it indexed the two threshold tables. `domainator matrix_report`
+keeps both the tables and the index, because that report does carry full-graph edge counts.
 
 ### `app_state` (saved sessions)
 
@@ -522,12 +517,15 @@ app_state: {
 }
 ```
 
-The viewer can also write an **extraction**: a bundle over a chosen subset of nodes,
-rebuilt from the induced MST edges rather than re-derived from the source matrix.
-The viewer's `js/extraction.js` ports `ssn_hierarchy.py`'s hierarchy and merge-series maths into
-JavaScript to do this, so the two must be changed together; the browser tests assert the
-port reproduces `domainator build_ssn_viewer`'s output field-for-field when the whole network is
-selected.
+The view fields are the open view's own: the threshold and split-event cap of a network,
+the cut height and collapsed clades of a tree, the axes of a projection.
+
+In the network view, the viewer can also write an **extraction**: a bundle over a chosen
+subset of nodes, rebuilt from the induced MST edges rather than re-derived from the source
+matrix. The viewer's `js/views/ssn/extraction.js` ports `ssn_hierarchy.py`'s hierarchy and
+merge-series maths into JavaScript to do this, so the two must be changed together; the
+browser tests assert the port reproduces `domainator build_ssn`'s output field-for-field
+when the whole network is selected.
 
 An extraction is only written when every original network component contributes a single
 MST-connected piece to the selection. The MST kept one path between any two nodes and
@@ -536,22 +534,20 @@ with no evidence of how the surviving pieces relate — writing them out as sepa
 components would assert an absence of similarity the file cannot support. Nodes in
 different components of the original network are exempt, since they were already
 unrelated. To extract an arbitrary subset, subset the source matrix instead
-(`domainator build_ssn_viewer --subset`), which measures those relationships rather than
-inferring them. Nothing has to be left empty any more: a v6 graph holds only the four
-keys an induced sub-MST can rebuild exactly. (`graph.edges_by_threshold` used to be the
-exception — it counted edges of the *full* graph, which a bundle never carried — and it
-is one of the keys v6 dropped.)
+(`domainator build_ssn --subset`), which measures those relationships rather than
+inferring them.
 
 Two rules make this section survive UI churn, and changes to it should preserve both:
 
 - **Every field is optional and independently skippable.** The viewer defines one registry
-  entry (`VIEW_STATE_FIELDS` in the viewer's `js/session_state.js`) per persisted control and looks each
-  saved key up in it. A key the current build does not recognize, or one whose value it
+  entry per persisted control (`sharedSessionFields()` in the viewer's
+  `js/common/session_state.js`, plus the open view's `sessionFields`) and looks each saved
+  key up in it. A key the current build does not recognize, or one whose value it
   cannot apply, is skipped and reported in the load status rather than aborting the load; a
   key the file omits keeps its default. So a session written by a different version of the
   viewer still opens.
 - **Selections are stored as node ids, never indices.** An index is a position in
-  `graph.nodes` and would silently mean a different sequence if the bundle were rebuilt or
+  `nodes` and would silently mean a different sequence if the bundle were rebuilt or
   subsetted. Ids that are not in the bundle are counted and reported on load. For the same
   reason the threshold is stored as `threshold_value`, not as a slider position, which is
   derived from the current stop list and shifts whenever the split-event cap changes. The
@@ -559,6 +555,46 @@ Two rules make this section survive UI churn, and changes to it should preserve 
   before it — the window is what the cap is spent on — with the threshold applied last, so
   that the stop it names exists to snap to by then.
 
+
+### Versions and compatibility
+
+The version is `VIEWER_BUNDLE_VERSION` in `viewer_bundle.py`, and the versions this build
+reads are `SUPPORTED_VIEWER_BUNDLE_VERSIONS`.
+
+| Version | Change |
+| --- | --- |
+| 1 | The first version. |
+
+Bump `VIEWER_BUNDLE_VERSION` for any change to the schema, and keep the old version in
+`SUPPORTED_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written
+bundles keep loading. `ssn_bundle.load_bundle` and `domainator viewer` refuse a version
+outside that tuple; the viewer page is deliberately more permissive and loads an unknown
+version with a warning, because refusing a file it can very likely still render is the
+worse failure.
+
+### Older network bundles (`.dsnv`)
+
+Before networks moved into `.dvb` bundles, `domainator build_ssn_viewer` wrote them to a
+format of their own, `"format": "domainator_ssn_viewer_bundle"`. Nothing writes it any more;
+the viewer, `domainator viewer -i` and `domainator ssn_navigator` (through
+`ssn_bundle.load_bundle`) still read versions 3 to 6, as the `.dvb` bundle they correspond
+to. It has the same `name`, `domainator_version`, `metadata`, `defaults` and optional
+`app_state`, and a `graph` holding `nodes` and the `ssn` view's keys:
+
+```python
+graph: {"nodes": [...], "mst_edges": [...], "hierarchy": {...}, "merge_impact_metric": ...}
+```
+
+| Version | Change |
+| --- | --- |
+| 3 | Per-event `merge_size_counts`/`largest_merge`/`merge_count` and `graph.merge_moving_sum`. |
+| 4 | Optional top-level `app_state`. |
+| 5 | `graph.merge_event_total` and `graph.max_merge_events`, both optional. |
+| 6 | **A removal.** `graph.cluster_count_by_threshold`, `graph.edges_by_threshold`, `graph.merge_event_series`, `graph.merge_event_total`, `graph.max_merge_events`, `graph.merge_moving_sum` and `graph.slider_stops` are gone: the first two described a graph the bundle never carried, and the rest are derived from `graph.mst_edges`. |
+
+Everything a reader needs has been there since version 3. Readers ignore the stored copies
+of derived data in a pre-v6 file, so an old file is not stuck with the split-event cap it
+was written with, and they drop them when the file is saved again as a `.dvb` session.
 
 ## Tabular data matrix
 
@@ -620,19 +656,26 @@ element's `label` is the output file name without its extension.
   typed `integer`, `real`, `boolean` or `string` from the column's values; a missing value is
   written as `0`, `0.0`, `false` or the empty string.
 - Each node has a `graphics` element. `build_projection` sets its `x` and `y` (`y` negated,
-  because Cytoscape's y axis points down), and `--color_by` sets its `fill`.
+  because Cytoscape's y axis points down); `build_tree` sets them to a rectangular layout of the
+  tree (`x` from 0 at the root to 1000 at the farthest leaf, leaves 30 apart down the page).
+  `--color_by` sets `fill`.
 - Each edge has the id and label `e<i>`, `source` and `target` node ids, and attributes for its
   values: `build_ssn` writes `SSN_SCORE` (the matrix value) and, when marking spanning-tree
   edges, the boolean `MST`; `build_tree` writes `TREE_DIST`, the branch length.
 - `build_ssn --cluster` adds the node attribute `SSN_cluster`, the node's cluster number.
-- `build_tree` also writes the tree's internal nodes, with the `Description`
-  `__INTERNAL_NODE_<k>__`.
+- `build_tree` writes the leaves, then the tree's internal nodes, with the `Description`
+  `__INTERNAL_NODE_<k>__`, `k` being the node's place in the tree in preorder (the root is 0).
 
 ## Newick trees
 
 `domainator build_tree --newick_out` writes one rooted tree, with branch lengths to six
-significant digits. Leaves are named for the matrix rows, with each space, `;`, `:`, `,`,
-`(`, `)` and `'` replaced by `_` (with a warning, unless `--quiet`). Internal nodes are unnamed.
+significant digits. Leaves are named for the matrix rows (or the `--newick` input's leaves),
+with each space, `;`, `:`, `,`, `(`, `)` and `'` replaced by `_` (with a warning, unless
+`--quiet`). Internal nodes are written with the `--newick` input's labels, or failing that its
+support values; a tree built from a matrix has neither.
+
+`build_tree --newick` reads the first tree of a Newick file. Numeric internal labels are
+support values; a tree with no branch lengths at all is read with every length 1.
 
 ## `hmmer_compare` scores and alignments
 

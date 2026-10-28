@@ -9,14 +9,14 @@ from jsonargparse import ActionConfigFile
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from domainator import report_html
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, parse_keyword_args, tool_parser
 from domainator.data_matrix import DataMatrix
 from domainator.external import import_optional
 from domainator.cytoscape import write_cytoscape_xgmml
-from domainator.seqio import open_if_is_name
 import scipy as sp
-from domainator.colors import OTHER_COLOR, get_palette, read_color_table, sort_palette_values
+from domainator.colors import get_palette, read_color_table
+from domainator.viewer_bundle import read_node_metadata, viewer_bundle, viewer_defaults
+from domainator.viewer_html import write_viewer_outputs
 
 
 XCOLNAME="projection_X"
@@ -61,78 +61,14 @@ def check_coords(n_components, data_matrix: DataMatrix):
     return data_matrix.toarray()
 
 
-def _json_value(value):
-    """A metadata cell as a JSON value: None when missing, numpy scalars as Python ones."""
-    if pd.isna(value):
-        return None
-    return value.item() if isinstance(value, np.generic) else value
-
-
-def _lookup_color(color_table, value):
-    """The color of ``value``, looked up as the xgmml writer does: the value, then its text."""
-    if value in color_table:
-        return color_table[value]
-    if str(value) in color_table:
-        return color_table[str(value)]
-    return color_table.get(None, OTHER_COLOR)
-
-
-def _color_groups(values, color_table):
-    """The legend groups of ``values`` and each point's group index.
-
-    Groups are in color table order, then values the table does not list (in palette order),
-    then missing values last.
-    """
-    table_order = {key: index for index, key in enumerate(color_table)}
-
-    def rank(value):
-        for key in (value, str(value)):
-            if key in table_order:
-                return table_order[key]
-        return len(table_order)
-
-    present = sort_palette_values([value for value in values.unique() if not pd.isna(value)])
-    present.sort(key=rank)  # stable, so unlisted values keep palette order
-    index = {value: i for i, value in enumerate(present)}
-    counts = values.value_counts()
-    groups = [{"value": _json_value(value), "color": _lookup_color(color_table, value), "count": int(counts[value])}
-              for value in present]
-    missing = int(values.isna().sum())
-    if missing:
-        groups.append({"value": None, "color": _lookup_color(color_table, None), "count": missing})
-    group = [len(present) if pd.isna(value) else index[value] for value in values]
-    return groups, group
-
-
-def _page_data(projection, axes, algorithm, color_by, color_table):
-    """The data of build_projection's HTML page (see web/reports/build_projection.js)."""
-    columns = [column for column in projection.columns if column not in axes]
-    groups, group = (None, None)
-    if color_by is not None:
-        groups, group = _color_groups(projection[color_by], color_table)
-    return {
-        "algorithm": algorithm,
-        "axes": list(axes),
-        "ids": [str(name) for name in projection.index],
-        "coords": [projection[axis].tolist() for axis in axes],
-        "color_by": color_by,
-        "groups": groups,
-        "group": group,
-        "metadata": {
-            "columns": [str(column) for column in columns],
-            "values": [[_json_value(value) for value in projection[column]] for column in columns],
-        },
-    }
-
-
-
-
 def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadata: Optional[List[str]] = None,
-                     color_by: Optional[str] = None, html_out: Optional[str] = None, coords_out: Optional[str] = None,
+                     color_by: Optional[str] = None, html_out: Optional[str] = None, dvb_out: Optional[str] = None,
+                     coords_out: Optional[str] = None,
                      xgmml_out: Optional[str] = None, scale: Optional[float] = 1000,
                      three_d: bool = False, algorithm_parameters: Optional[Dict[str, Any]] = None,
                      color_table: Optional[Dict[str, str]] = None, color_table_out: Optional[str] = None,
-                     palette_offset: int = 0) -> None:
+                     palette_offset: int = 0, label_by: Optional[str] = None, categorical: Optional[List[str]] = None,
+                     name: Optional[str] = None) -> None:
     """Project the rows of ``data_matrix`` into 2D or 3D and write the projection.
 
     Args:
@@ -142,8 +78,8 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
             coordinates).
         metadata: tab-separated metadata files, joined to the points by their first column.
         color_by: color the points by this metadata column.
-        html_out: write an interactive plot of the projection to this HTML page (a path or a
-            text handle). The page saves the plot as SVG or PNG.
+        html_out: write the Domainator Viewer, showing the projection, to this HTML file.
+        dvb_out: write the viewer bundle (gzip-compressed JSON, .dvb) to this file.
         coords_out: write the coordinates to this tab-separated file.
         xgmml_out: write the projection to this Cytoscape XGMML file.
         scale: scale the coordinates so that the widest axis spans this much.
@@ -156,6 +92,9 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
             tab-separated columns (annotation, hex color) and no header.
         palette_offset: skip this many colors at the start of the palette when assigning
             colors to color_by values. Ignored when color_table is given.
+        label_by: the metadata column the viewer labels points by at first.
+        categorical: numeric metadata columns the viewer colors as categories, not a gradient.
+        name: the projection's name, shown in the viewer. Defaults to the html or dvb output's stem.
     """
     if color_table_out is not None and color_by is None and color_table is None:
         raise ValueError("--color_table_out requires either --color_by or --color_table, otherwise there are no colors to write.")
@@ -217,22 +156,24 @@ def build_projection(data_matrix: DataMatrix, *, algorithm: str = "pca", metadat
     if coords_out is not None:
         projection.to_csv(coords_out,sep="\t")
 
-    if metadata is not None:
-        for file in metadata:
-            metadata_table = pd.read_csv(file, sep="\t", index_col=0)
-            projection = projection.merge(metadata_table,how="left", left_index=True, right_index=True)
+    node_data = read_node_metadata(metadata, data_matrix.rows)
+    projection = projection.merge(node_data, how="left", left_index=True, right_index=True)
 
+    given_color_table = color_table
     if color_by is not None:
         if color_table is None:
             color_table = get_palette(projection[color_by].unique(), offset=palette_offset)
 
-    if html_out is not None:
-        data = _page_data(projection, columns, algorithm, color_by, color_table)
-        page = report_html.render_report("build_projection", "Projection", "build_projection", data, encoding="gzip+base64")
-        outfile_handle, file_type = open_if_is_name(html_out, "w")
-        outfile_handle.write(page)
-        if file_type == "name":
-            outfile_handle.close()
+    if html_out is not None or dvb_out is not None:
+        if name is None:
+            output = html_out if html_out is not None else dvb_out
+            name = "projection" if hasattr(output, "write") else Path(output).stem
+        # The viewer assigns default colors as get_palette does; an offset palette goes in as a table.
+        viewer_colors = given_color_table if given_color_table is not None or palette_offset == 0 else color_table
+        defaults = viewer_defaults(node_data, color_by=color_by, color_table=viewer_colors, label_by=label_by, categorical=categorical)
+        view = {"algorithm": algorithm, "axes": columns, "coords": [projection[axis].tolist() for axis in columns]}
+        write_viewer_outputs(viewer_bundle(name, data_matrix.rows, node_data, defaults, {"projection": view}),
+                             html_out=html_out, dvb_out=dvb_out)
 
     if xgmml_out is not None:
         write_cytoscape_xgmml(xgmml_out, projection, name=Path(xgmml_out).stem, x_col=XCOLNAME, y_col=YCOLNAME, z_col=ZCOLNAME, color_by=color_by, color_table=color_table)
@@ -265,9 +206,16 @@ def build_parser():
     parser.add_argument("--color_table", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000")
     parser.add_argument("--color_table_out", required=False, default=None, type=str, help="tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table.")
     parser.add_argument("--palette_offset", required=False, default=0, type=int, help="Skip this many colors at the start of the palette before assigning colors to --color_by values. For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table.")
+    parser.add_argument("--label_by", type=str, default=None,
+                        help="Label the points in the html viewer by this metadata column at first.")
+    parser.add_argument("--categorical", type=str, nargs="+", required=False, default=None,
+                        help="Numeric metadata columns (for example integer cluster numbers) that the html viewer should color as discrete categories instead of a gradient.")
+    parser.add_argument("--name", type=str, default=None,
+                        help="The projection's name, shown in the html viewer. Defaults to the html (or dvb) output's file name.")
     
     add_output(parser, "xgmml", "Write the projection to this Cytoscape xgmml file.", primary=True, stdout=False)
-    add_output(parser, "html", "Write an interactive plot of the projection to this HTML page, which can save it as SVG or PNG.", stdout=False)
+    add_output(parser, "html", "Write the Domainator Viewer, showing the projection, to this HTML file. It selects points into a metadata table and saves pictures as SVG or PNG.", stdout=False)
+    add_output(parser, "dvb", "Write the gzip-compressed JSON Domainator Viewer bundle (.dvb) to this file. The viewer opens it, and saves sessions in the same format.", stdout=False)
     add_output(parser, "coords", "Write the projected coordinates to this tab-separated file.", stdout=False)
 
     for algorithm in ("pca", "tsne", "umap"):
@@ -283,7 +231,7 @@ def build_parser():
     
     parser.add_argument('--config', action=ActionConfigFile)
 
-    declare_outputs(parser, ["xgmml_out", "html_out", "coords_out"])
+    declare_outputs(parser, ["xgmml_out", "html_out", "dvb_out", "coords_out"])
     return parser
 
 
@@ -306,7 +254,8 @@ def main(argv):
 
     # Run
     build_projection(data_matrix=DataMatrix.from_file(input_file), algorithm=params.algorithm, metadata=params.metadata, color_by=params.color_by, 
-                     html_out=params.html_out, coords_out=params.coords_out, xgmml_out=params.xgmml_out, scale=params.scale, three_d=params.three_d, 
+                     html_out=params.html_out, dvb_out=params.dvb_out, coords_out=params.coords_out, xgmml_out=params.xgmml_out, scale=params.scale, three_d=params.three_d, 
                      algorithm_parameters=algorithm_parameters,
                      color_table=color_table, color_table_out=params.color_table_out,
-                     palette_offset=params.palette_offset)
+                     palette_offset=params.palette_offset, label_by=params.label_by, categorical=params.categorical,
+                     name=params.name)

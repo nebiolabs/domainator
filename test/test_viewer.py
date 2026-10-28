@@ -9,16 +9,25 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from domainator import build_ssn_viewer
+from domainator import build_ssn, viewer
 from domainator.data_matrix import DataMatrix
 from domainator.ssn_edges import MaxTree
 from domainator import ssn_bundle
-from domainator import ssn_viewer_html as ssn_viewer_html_module
+from domainator import viewer_html as viewer_html_module
+from domainator.errors import FormatVersionError, InputError
+from domainator.viewer_bundle import VIEWER_BUNDLE_FORMAT, VIEWER_BUNDLE_VERSION
 
 
 def _read_bundle(path):
     with open(path, "rb") as handle:
         return json.loads(gzip.decompress(handle.read()).decode("utf-8"))
+
+
+def _network_bundle(matrix, output_dir, **kwargs):
+    """The .dvb bundle build_ssn writes for ``matrix``."""
+    path = os.path.join(output_dir, "network.dvb")
+    build_ssn.build_ssn(matrix, dvb_out=path, **kwargs)
+    return _read_bundle(path)
 
 
 def _write_metadata(path, row_names):
@@ -33,7 +42,7 @@ def _write_metadata(path, row_names):
     metadata.to_csv(path, sep="\t")
 
 
-def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
+def test_build_ssn_dvb_writes_bundle_with_metadata_defaults():
     data = np.array([
         [0, 10, 6, 0],
         [10, 0, 7, 0],
@@ -46,14 +55,14 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
 
         matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
             "--metadata", metadata_file,
             "--color_by", "category",
             "--label_by", "category",
@@ -61,19 +70,21 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
 
         bundle = _read_bundle(bundle_file)
 
-        assert bundle["format"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_FORMAT
-        assert bundle["version"] == build_ssn_viewer.SSN_VIEWER_BUNDLE_VERSION == 6
+        assert bundle["format"] == VIEWER_BUNDLE_FORMAT
+        assert bundle["version"] == VIEWER_BUNDLE_VERSION == 1
+        assert list(bundle["views"]) == ["ssn"]
         # app_state is written only by the HTML viewer's "Save session" button.
         assert "app_state" not in bundle
-        assert bundle["graph"]["nodes"] == row_names
-        assert len(bundle["graph"]["mst_edges"]) == 3
+        assert bundle["nodes"] == row_names
+        assert len(bundle["views"]["ssn"]["mst_edges"]) == 3
+        assert bundle["views"]["ssn"]["merge_impact_metric"] == "min_child"
 
         # The split-event series, its moving sum and the slider's stops are derived from
         # the merge order rather than stored, so the bundle carries none of them.
         for derived_key in ("merge_event_series", "merge_event_total", "max_merge_events",
                             "merge_moving_sum", "slider_stops",
                             "cluster_count_by_threshold", "edges_by_threshold"):
-            assert derived_key not in bundle["graph"]
+            assert derived_key not in bundle["views"]["ssn"]
 
         events = ssn_bundle.merge_event_rows(bundle)
         assert len(events) == 3
@@ -98,9 +109,9 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         # threshold_index indexed threshold tables describing the full input graph.
         # The bundle never carried those, so the stops no longer pretend to point at them.
         assert all("threshold_index" not in stop for stop in stops)
-        assert bundle["graph"]["hierarchy"]["roots"] == [6]
-        assert bundle["graph"]["hierarchy"]["leaf_order"] == [0, 1, 2, 3]
-        assert bundle["graph"]["hierarchy"]["nodes"][6]["leaf_count"] == 4
+        assert bundle["views"]["ssn"]["hierarchy"]["roots"] == [6]
+        assert bundle["views"]["ssn"]["hierarchy"]["leaf_order"] == [0, 1, 2, 3]
+        assert bundle["views"]["ssn"]["hierarchy"]["nodes"][6]["leaf_count"] == 4
         assert bundle["defaults"] == {
             "color_by": "category",
             "label_by": "category",
@@ -114,7 +125,7 @@ def test_build_ssn_viewer_writes_bundle_with_metadata_defaults():
         assert bundle["metadata"]["rows"][0] == ["alpha", 1, 1.5]
 
 
-def test_build_ssn_viewer_records_categorical_columns():
+def test_build_ssn_dvb_records_categorical_columns():
     """--categorical marks numeric columns for discrete coloring in the viewer."""
     data = np.array([
         [0, 10, 6, 0],
@@ -128,14 +139,14 @@ def test_build_ssn_viewer_records_categorical_columns():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
 
         matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
             "--metadata", metadata_file,
             "--color_by", "count",
             "--categorical", "count",
@@ -147,7 +158,7 @@ def test_build_ssn_viewer_records_categorical_columns():
         assert {"name": "count", "type": "int"} in bundle["metadata"]["columns"]
 
 
-def test_build_ssn_viewer_records_color_table():
+def test_build_ssn_dvb_records_color_table():
     """--color_table is stored, normalized, as the color_by column's starting palette."""
     data = np.array([
         [0, 10, 6, 0],
@@ -162,16 +173,16 @@ def test_build_ssn_viewer_records_color_table():
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
         color_table_file = os.path.join(output_dir, "colors.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
 
         matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
         with open(color_table_file, "w") as handle:
             handle.write("alpha\tcc0000\nbeta\t#00Cc00\n")
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
             "--metadata", metadata_file,
             "--color_by", "category",
             "--color_table", color_table_file,
@@ -183,9 +194,9 @@ def test_build_ssn_viewer_records_color_table():
         # A table is a discrete mapping, so a numeric column it colors becomes categorical.
         with open(color_table_file, "w") as handle:
             handle.write("1\tcc0000\n2\t00cc00\n")
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
             "--metadata", metadata_file,
             "--color_by", "count",
             "--color_table", color_table_file,
@@ -195,17 +206,17 @@ def test_build_ssn_viewer_records_color_table():
         assert bundle["defaults"]["categorical_columns"] == ["count"]
 
         with pytest.raises(SystemExit):
-            build_ssn_viewer.main([
+            build_ssn.main([
                 "-i", input_file,
-                "-o", bundle_file,
+                "--dvb_out", bundle_file,
                 "--metadata", metadata_file,
                 "--color_table", color_table_file,
             ])
         with pytest.raises(ValueError, match="color_table requires color_by"):
-            build_ssn_viewer.build_ssn_viewer(matrix, color_table={"alpha": "#CC0000"})
+            build_ssn.build_ssn(matrix, color_table={"alpha": "#CC0000"}, dvb_out=bundle_file)
 
 
-def test_build_ssn_viewer_rejects_unknown_categorical_column():
+def test_build_ssn_dvb_rejects_unknown_categorical_column():
     data = np.array([
         [0, 10],
         [10, 0],
@@ -215,18 +226,18 @@ def test_build_ssn_viewer_rejects_unknown_categorical_column():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
         matrix.write(input_file, output_type="hdf")
 
         with pytest.raises(ValueError, match="categorical column 'missing'"):
-            build_ssn_viewer.main([
+            build_ssn.main([
                 "-i", input_file,
-                "-o", bundle_file,
+                "--dvb_out", bundle_file,
                 "--categorical", "missing",
             ])
 
 
-def test_build_ssn_viewer_omits_threshold_tables_but_still_cuts_like_maxtree():
+def test_build_ssn_dvb_omits_threshold_tables_but_still_cuts_like_maxtree():
     data = np.array([
         [0, 10, 0, 0, 0],
         [10, 0, 5, 0, 0],
@@ -240,31 +251,31 @@ def test_build_ssn_viewer_omits_threshold_tables_but_still_cuts_like_maxtree():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
         matrix.write(input_file, output_type="hdf")
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
         ])
 
         bundle = _read_bundle(bundle_file)
 
         # The bundle no longer carries the threshold tables: they described the *full*
         # input graph, which a bundle never holds, and nothing in the viewer read them.
-        assert "cluster_count_by_threshold" not in bundle["graph"]
-        assert "edges_by_threshold" not in bundle["graph"]
+        assert "cluster_count_by_threshold" not in bundle["views"]["ssn"]
+        assert "edges_by_threshold" not in bundle["views"]["ssn"]
 
         # What matters is that cutting the bundle still agrees with the matrix it came
         # from. MaxTree's table has one row per distinct MST weight, and cutting the
         # bundle's hierarchy at that weight must give the same component count.
-        hierarchy = bundle["graph"]["hierarchy"]
+        hierarchy = bundle["views"]["ssn"]["hierarchy"]
         for threshold, expected_clusters in tree.cluster_count_by_threshold:
             active = ssn_bundle.clusters_at_threshold(hierarchy, float(threshold))
             assert len(active) == int(expected_clusters), f"clusters at lb={threshold}"
 
-        assert bundle["graph"]["hierarchy"]["nodes"][8]["size"] == 5
-        assert bundle["graph"]["hierarchy"]["nodes"][8]["leaf_count"] == 5
+        assert bundle["views"]["ssn"]["hierarchy"]["nodes"][8]["size"] == 5
+        assert bundle["views"]["ssn"]["hierarchy"]["nodes"][8]["leaf_count"] == 5
 
 
 def test_bundle_merge_events_and_slider_stops_honour_a_caller_supplied_cap():
@@ -280,10 +291,10 @@ def test_bundle_merge_events_and_slider_stops_honour_a_caller_supplied_cap():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
         matrix.write(input_file, output_type="hdf")
 
-        build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
+        build_ssn.main(["-i", input_file, "--dvb_out", bundle_file])
 
         bundle = _read_bundle(bundle_file)
 
@@ -302,7 +313,7 @@ def test_bundle_merge_events_and_slider_stops_honour_a_caller_supplied_cap():
         stops = ssn_bundle.slider_stops(bundle, max_merge_events=2, event_rows=events)
         # 4 merge events + the ∞ stop + the floor stop.
         assert len(stops) == 6
-        assert stops[-1]["threshold_value"] < min(edge[2] for edge in bundle["graph"]["mst_edges"])
+        assert stops[-1]["threshold_value"] < min(edge[2] for edge in bundle["views"]["ssn"]["mst_edges"])
         assert stops[0]["threshold_value"] is None
 
         # The moving sum must come from the UNFILTERED rows, whatever the cap kept.
@@ -336,11 +347,11 @@ def test_bundle_cap_bites_on_a_network_large_enough_to_show_it():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "bundle.dvb")
         matrix.write(input_file, output_type="hdf")
-        build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
+        build_ssn.main(["-i", input_file, "--dvb_out", bundle_file])
         bundle = _read_bundle(bundle_file)
-        graph = bundle["graph"]
+        graph = bundle["views"]["ssn"]
 
         events = ssn_bundle.merge_event_rows(bundle)
         selected = ssn_bundle.merge_event_series(bundle, max_merge_events=5, event_rows=events)
@@ -380,9 +391,9 @@ def test_uncapped_series_keeps_every_event():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "bundle.dvb")
         matrix.write(input_file, output_type="hdf")
-        build_ssn_viewer.main(["-i", input_file, "-o", bundle_file])
+        build_ssn.main(["-i", input_file, "--dvb_out", bundle_file])
         bundle = _read_bundle(bundle_file)
 
         events = ssn_bundle.merge_event_rows(bundle)
@@ -390,7 +401,7 @@ def test_uncapped_series_keeps_every_event():
         assert len(events) == len(selected) == 4
 
 
-def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
+def test_build_ssn_dvb_subset_filters_nodes_and_metadata():
     data = np.array([
         [0, 10, 6, 1],
         [10, 0, 7, 1],
@@ -403,28 +414,28 @@ def test_build_ssn_viewer_subset_filters_nodes_and_metadata():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         metadata_file = os.path.join(output_dir, "metadata.tsv")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
 
         matrix.write(input_file, output_type="hdf")
         _write_metadata(metadata_file, row_names)
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
             "--metadata", metadata_file,
             "--subset", "A", "C", "D",
         ])
 
         bundle = _read_bundle(bundle_file)
 
-        assert bundle["graph"]["nodes"] == ["A", "C", "D"]
+        assert bundle["nodes"] == ["A", "C", "D"]
         assert len(bundle["metadata"]["rows"]) == 3
         assert bundle["metadata"]["rows"][0][0] == "alpha"
         assert bundle["metadata"]["rows"][1][0] == "beta"
         assert bundle["metadata"]["rows"][2][0] == "gamma"
 
 
-def test_build_ssn_viewer_writes_static_html_shell():
+def test_build_ssn_dvb_writes_static_html_shell():
     data = np.array([
         [0, 10, 6, 0],
         [10, 0, 7, 0],
@@ -436,13 +447,13 @@ def test_build_ssn_viewer_writes_static_html_shell():
 
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
+        bundle_file = os.path.join(output_dir, "test_bundle.dvb")
         html_file = os.path.join(output_dir, "viewer.html")
         matrix.write(input_file, output_type="hdf")
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
-            "-o", bundle_file,
+            "--dvb_out", bundle_file,
             "--html_out", html_file,
             "--name", "Viewer Test",
         ])
@@ -546,7 +557,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'const LINK_DASH_ON = 6;' in html_content
         assert "clusterContext.setLineDash(link.collapsed" in html_content
         assert '''stroke-dasharray="' + LINK_DASH_ON''' in html_content
-        assert '<button id="sort-components-by-size" type="button" aria-pressed="true" disabled>' in html_content
+        assert '<button id="sort-components-by-size" type="button" data-view="ssn" aria-pressed="true" disabled>' in html_content
         assert 'initialPosition: 0' in html_content
         assert 'reset-view' in html_content
         # The node-arrangement dropdown and exact-node-rendering toggle were removed:
@@ -566,7 +577,7 @@ def test_build_ssn_viewer_writes_static_html_shell():
 
         # Session save/load (bundle v4 app_state).
         assert '<button id="save-session" type="button" disabled' in html_content
-        assert 'const VIEW_STATE_FIELDS = [' in html_content
+        assert 'function sharedSessionFields()' in html_content
         assert 'function collectSessionState()' in html_content
         assert 'function applySessionState(appState)' in html_content
         assert 'function saveSessionFile()' in html_content
@@ -607,7 +618,8 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert 'function currentSplitWindow()' in html_content
         assert 'const DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50;' in html_content
         assert 'function originalComponentByNode()' in html_content
-        assert _viewer_config(html_content)['supportedBundleVersions'] == [3, 4, 5, 6]
+        assert _viewer_config(html_content)['supportedSsnBundleVersions'] == [3, 4, 5, 6]
+        assert _viewer_config(html_content)['supportedViewerBundleVersions'] == [1]
 
         # The split chart draws a capped selection of the split events, so it has to
         # say how much of the series that is.
@@ -667,7 +679,8 @@ def test_build_ssn_viewer_writes_static_html_shell():
         # A product merge impact is not a node count, in either chart's wording.
         assert 'Nodes displaced within' in html_content
         assert 'Split impact within' in html_content
-        assert 'SUPPORTED_BUNDLE_VERSIONS.includes(bundle.version)' in html_content
+        assert 'supportedVersions.includes(bundle.version)' in html_content
+        assert 'function upgradeSsnBundle(bundle)' in html_content
 
         # Selection presets: ten slots, keyboard-addressable, hover preview.
         assert '<div id="preset-slots"' in html_content
@@ -810,11 +823,11 @@ def test_build_ssn_viewer_writes_static_html_shell():
         assert '{{' not in html_content
 
 
-def test_build_ssn_viewer_writes_static_html_without_input():
+def test_viewer_writes_an_empty_page():
     with tempfile.TemporaryDirectory() as output_dir:
         html_file = os.path.join(output_dir, "viewer.html")
 
-        build_ssn_viewer.main([
+        viewer.main([
             "--html_out", html_file,
             "--name", "Viewer Only",
         ])
@@ -823,20 +836,29 @@ def test_build_ssn_viewer_writes_static_html_without_input():
 
         assert '<title>Viewer Only</title>' in html_content
         # The tab keeps the bare name; the heading spells out the app.
-        assert ('>Domainator Similarity Network Viewer: Viewer Only</h1>'
+        assert ('>Domainator Viewer: Viewer Only</h1>'
                 in html_content)
         assert _viewer_config(html_content)["embeddedBundleBase64"] is None
         assert 'No bundle loaded.' in html_content
 
+        viewer.main(["-o", html_file])
+        html_content = open(html_file, "r", encoding="utf-8").read()
+        assert '<title>Domainator Viewer</title>' in html_content
+
 
 def _viewer_config(html_content):
-    """The values the viewer page was built with (its dsnv-config block)."""
-    match = re.search(r'<script type="application/json" id="dsnv-config">(.*?)</script>', html_content, re.S)
+    """The values the viewer page was built with (its viewer-config block)."""
+    match = re.search(r'<script type="application/json" id="viewer-config">(.*?)</script>', html_content, re.S)
     assert match is not None
     return json.loads(match.group(1))
 
 
-def test_build_ssn_viewer_embeds_data_in_viewer_html():
+def _embedded_bundle(html_file):
+    embedded = _viewer_config(open(html_file, "r", encoding="utf-8").read())["embeddedBundleBase64"]
+    return gzip.decompress(base64.b64decode(embedded))
+
+
+def test_build_ssn_embeds_data_in_viewer_html():
     data = np.array([
         [0, 10, 6, 0],
         [10, 0, 7, 0],
@@ -849,27 +871,94 @@ def test_build_ssn_viewer_embeds_data_in_viewer_html():
     with tempfile.TemporaryDirectory() as output_dir:
         input_file = os.path.join(output_dir, "test_matrix.hdf5")
         html_file = os.path.join(output_dir, "viewer.html")
+        bundle_file = os.path.join(output_dir, "network.dvb")
         matrix.write(input_file, output_type="hdf")
 
-        build_ssn_viewer.main([
+        build_ssn.main([
             "-i", input_file,
             "--html_out", html_file,
-            "--embed_data",
+            "--dvb_out", bundle_file,
             "--name", "Embedded Viewer",
         ])
 
         html_content = open(html_file, "r", encoding="utf-8").read()
 
+        assert '<title>Embedded Viewer</title>' in html_content
         assert 'Loading bundled data...' in html_content
         assert 'autoloadEmbeddedBundle()' in html_content
 
-        embedded = _viewer_config(html_content)["embeddedBundleBase64"]
-        embedded_bundle = json.loads(gzip.decompress(base64.b64decode(embedded)).decode("utf-8"))
+        # The page carries the bundle file's bytes.
+        assert _embedded_bundle(html_file) == gzip.decompress(open(bundle_file, "rb").read())
+        embedded_bundle = json.loads(_embedded_bundle(html_file))
         assert embedded_bundle["name"] == "Embedded Viewer"
-        assert embedded_bundle["graph"]["nodes"] == row_names
+        assert embedded_bundle["nodes"] == row_names
+
+        # Without --name, the network is named after the output.
+        build_ssn.main(["-i", input_file, "--html_out", html_file])
+        assert json.loads(_embedded_bundle(html_file))["name"] == "viewer"
 
 
-def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied(capsys):
+def test_build_ssn_network_for_the_viewer_is_the_spanning_tree_above_the_threshold():
+    """The viewer shows the maximum spanning tree of the edges above --threshold, whatever
+    --mst and --knn make of the xgmml's edges, and loading the matrix with a lower bound
+    (as build_ssn does without --mst) gives the same network."""
+    data = np.array([
+        [0, 10, 6, 0, 0],
+        [10, 0, 7, 0, 0],
+        [6, 7, 0, 4, 0],
+        [0, 0, 4, 0, 2],
+        [0, 0, 0, 2, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D", "E"]
+    matrix = DataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_file = os.path.join(output_dir, "matrix.hdf5")
+        matrix.write(input_file, output_type="hdf")
+        bundles = []
+        for extra in ([], ["--mst"], ["--knn", "1"]):
+            bundle_file = os.path.join(output_dir, "network.dvb")
+            build_ssn.main(["-i", input_file, "--dvb_out", bundle_file, "--threshold", "3", *extra])
+            bundles.append(_read_bundle(bundle_file))
+        assert bundles[0]["views"] == bundles[1]["views"] == bundles[2]["views"]
+        assert [edge[2] for edge in bundles[0]["views"]["ssn"]["mst_edges"]] == [10, 7, 4]
+        # E is left on its own.
+        assert len(bundles[0]["views"]["ssn"]["hierarchy"]["roots"]) == 2
+
+        unthresholded = _network_bundle(matrix, output_dir, merge_impact_metric="product")
+        assert [edge[2] for edge in unthresholded["views"]["ssn"]["mst_edges"]] == [10, 7, 4, 2]
+        assert unthresholded["views"]["ssn"]["merge_impact_metric"] == "product"
+        with pytest.raises(ValueError, match="merge_impact_metric"):
+            _network_bundle(matrix, output_dir, merge_impact_metric="largest")
+
+
+def test_build_ssn_writes_xgmml_and_viewer_outputs_together(shared_datadir):
+    """The viewer outputs leave the xgmml as it was, and --cluster and the color options
+    reach the viewer's bundle too."""
+    with tempfile.TemporaryDirectory() as output_dir:
+        xgmml_file = os.path.join(output_dir, "network.xgmml")
+        alone_file = os.path.join(output_dir, "alone.xgmml")
+        bundle_file = os.path.join(output_dir, "network.dvb")
+        html_file = os.path.join(output_dir, "network.html")
+        args = ["-i", str(shared_datadir / "FeSOD_dist.tsv"), "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"),
+                "--threshold", "175", "--cluster", "--color_by", "SSN_cluster", "--palette_offset", "2"]
+        build_ssn.main([*args, "--xgmml_out", alone_file])
+        build_ssn.main([*args, "--xgmml_out", xgmml_file, "--dvb_out", bundle_file, "--html_out", html_file,
+                        "--label_by", "SSN_cluster", "--categorical", "SSN_cluster"])
+        assert open(xgmml_file).read() == open(alone_file).read().replace('label="alone"', 'label="network"')
+        bundle = _read_bundle(bundle_file)
+        assert bundle["name"] == "network"
+        assert {"name": "SSN_cluster", "type": "int"} in bundle["metadata"]["columns"]
+        defaults = bundle["defaults"]
+        assert defaults["color_by"] == defaults["label_by"] == "SSN_cluster"
+        assert defaults["categorical_columns"] == ["SSN_cluster"]
+        # An offset palette goes into the bundle as a color table, since the viewer's own
+        # default palette starts at the first color.
+        from domainator.colors import DISTINCT_COLORS
+        assert defaults["color_table"]["1"] == DISTINCT_COLORS[2].upper()
+
+
+def test_build_ssn_requires_an_output(capsys):
     data = np.array([
         [0, 10],
         [10, 0],
@@ -882,57 +971,13 @@ def test_build_ssn_viewer_requires_output_or_embed_when_input_supplied(capsys):
         matrix.write(input_file, output_type="hdf")
 
         with pytest.raises(SystemExit):
-            build_ssn_viewer.main([
+            build_ssn.main([
                 "-i", input_file,
             ])
-        assert "provide -o/--dsnv_out or --embed_data" in capsys.readouterr().err
+        assert "No output specified" in capsys.readouterr().err
 
 
-def test_build_ssn_viewer_rejects_output_without_input(capsys):
-    with tempfile.TemporaryDirectory() as output_dir:
-        bundle_file = os.path.join(output_dir, "test_bundle.dsnv")
-
-        with pytest.raises(SystemExit):
-            build_ssn_viewer.main([
-                "-o", bundle_file,
-            ])
-        assert "-o/--dsnv_out requires -i/--input" in capsys.readouterr().err
-
-
-def test_build_ssn_viewer_rejects_embed_without_viewer_html(capsys):
-    data = np.array([
-        [0, 10],
-        [10, 0],
-    ], dtype=float)
-    row_names = ["A", "B"]
-    matrix = DataMatrix(data, row_names, row_names)
-
-    with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "test_matrix.hdf5")
-        matrix.write(input_file, output_type="hdf")
-
-        with pytest.raises(SystemExit):
-            build_ssn_viewer.main([
-                "-i", input_file,
-                "--embed_data",
-            ])
-        assert "--embed_data requires --html_out" in capsys.readouterr().err
-
-
-def test_build_ssn_viewer_requires_viewer_html_without_input(capsys):
-    with pytest.raises(SystemExit):
-        build_ssn_viewer.main([])
-    assert "No output specified" in capsys.readouterr().err
-
-def test_load_bundle_accepts_every_supported_version():
-    """Older bundles still load: everything this build reads has been there since v3.
-
-    v4 added the ignorable app_state section and v5 two event-count keys, both
-    additive. v6 *removed* the derived threshold data, so a v3/v4/v5 file carries keys
-    a v6 reader simply ignores -- it derives those values from the merge order instead.
-    """
-    from domainator import ssn_bundle
-
+def test_viewer_opens_a_bundle():
     data = np.array([
         [0, 10, 6, 0],
         [10, 0, 7, 0],
@@ -943,11 +988,68 @@ def test_load_bundle_accepts_every_supported_version():
     matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "matrix.hdf5")
+        input_file = os.path.join(output_dir, "test_matrix.hdf5")
+        bundle_file = os.path.join(output_dir, "network.dvb")
+        html_file = os.path.join(output_dir, "viewer.html")
         matrix.write(input_file, output_type="hdf")
-        bundle = build_ssn_viewer.build_ssn_viewer(
-            DataMatrix.from_file(input_file), name="versions"
-        )
+        build_ssn.main(["-i", input_file, "--dvb_out", bundle_file, "--name", "from build_ssn"])
+
+        viewer.main(["-i", bundle_file, "--html_out", html_file])
+        assert '<title>from build_ssn</title>' in open(html_file, encoding="utf-8").read()
+        assert _embedded_bundle(html_file) == gzip.decompress(open(bundle_file, "rb").read())
+        viewer.main(["-i", bundle_file, "--html_out", html_file, "--name", "renamed"])
+        assert '<title>renamed</title>' in open(html_file, encoding="utf-8").read()
+
+        # A plain-JSON bundle is compressed for the page, and an older network bundle
+        # (.dsnv) opens as it is.
+        bundle = _read_bundle(bundle_file)
+        plain_file = os.path.join(output_dir, "plain.json")
+        legacy = _legacy_bundle(bundle, version=6)
+        with open(plain_file, "w") as handle:
+            json.dump(legacy, handle)
+        viewer.main(["-i", plain_file, "--html_out", html_file])
+        assert json.loads(_embedded_bundle(html_file)) == legacy
+
+        for content, error in ((b"not a bundle", InputError), (json.dumps({"format": "other"}).encode(), InputError),
+                               (json.dumps(dict(bundle, version=99)).encode(), FormatVersionError)):
+            with open(plain_file, "wb") as handle:
+                handle.write(content)
+            with pytest.raises(error):
+                viewer.main(["-i", plain_file, "--html_out", html_file])
+
+
+def _legacy_bundle(bundle, version):
+    """The .dsnv bundle that earlier versions wrote for the network in ``bundle``."""
+    return {
+        "format": ssn_bundle.SSN_VIEWER_BUNDLE_FORMAT,
+        "version": version,
+        "name": bundle["name"],
+        "domainator_version": bundle["domainator_version"],
+        "graph": {"nodes": bundle["nodes"], **bundle["views"]["ssn"]},
+        "metadata": bundle["metadata"],
+        "defaults": bundle["defaults"],
+    }
+
+
+def test_load_bundle_accepts_every_supported_version():
+    """Network bundles of earlier versions (.dsnv) still load, as the .dvb bundle they
+    correspond to: everything this build reads has been in them since v3.
+
+    v4 added the ignorable app_state section and v5 two event-count keys, both
+    additive. v6 *removed* the derived threshold data, so a v3/v4/v5 file carries keys
+    this reader simply drops -- it derives those values from the merge order instead.
+    """
+    data = np.array([
+        [0, 10, 6, 0],
+        [10, 0, 7, 0],
+        [6, 7, 0, 4],
+        [0, 0, 4, 0],
+    ], dtype=float)
+    row_names = ["A", "B", "C", "D"]
+    matrix = DataMatrix(data, row_names, row_names)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        bundle = _network_bundle(matrix, output_dir, name="versions")
 
         assert ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS == (3, 4, 5, 6)
 
@@ -961,39 +1063,49 @@ def test_load_bundle_accepts_every_supported_version():
             "slider_stops": [],
         }
 
+        def write(path, payload):
+            with open(path, "wb") as handle:
+                handle.write(gzip.compress(json.dumps(payload).encode()))
+
         for version in ssn_bundle.SUPPORTED_SSN_VIEWER_BUNDLE_VERSIONS:
             path = os.path.join(output_dir, f"v{version}.dsnv")
-            payload = dict(bundle, version=version)
+            payload = _legacy_bundle(bundle, version)
             if version < 6:
                 # A pre-v6 writer stored the derived data in the file. Loading must not
                 # depend on it -- and, crucially, must not *use* it either: the stored
                 # series here is empty and the real one has three events.
-                payload["graph"] = dict(bundle["graph"], **stale_derived_keys)
+                payload["graph"] = dict(payload["graph"], **stale_derived_keys)
             if version >= 4:
-                # A saved session; the reader must ignore the extra section.
+                # A saved session; it is kept, for the viewer.
                 payload["app_state"] = {"state_version": 1, "view": {"color_by": None}}
-            build_ssn_viewer.write_ssn_viewer_bundle(path, payload)
+            write(path, payload)
             loaded = ssn_bundle.load_bundle(path)
-            assert loaded["version"] == version
+            assert loaded == dict(bundle, **({"app_state": payload["app_state"]} if version >= 4 else {}))
             # Derived from the merge order, so an old file's stale copy is ignored.
             assert len(ssn_bundle.merge_event_rows(loaded)) == 3
             assert len(ssn_bundle.slider_stops(loaded)) == 5
 
         unsupported = os.path.join(output_dir, "v99.dsnv")
-        build_ssn_viewer.write_ssn_viewer_bundle(unsupported, dict(bundle, version=99))
-        with pytest.raises(ValueError, match="Unsupported Domainator Similarity Network Viewer bundle version 99"):
+        write(unsupported, _legacy_bundle(bundle, 99))
+        with pytest.raises(FormatVersionError, match="Unsupported domainator_ssn_viewer_bundle version 99"):
+            ssn_bundle.load_bundle(unsupported)
+        write(unsupported, dict(bundle, version=99))
+        with pytest.raises(FormatVersionError, match="Unsupported domainator_viewer_bundle version 99"):
+            ssn_bundle.load_bundle(unsupported)
+        write(unsupported, dict(bundle, views={"tree": {}}))
+        with pytest.raises(InputError, match="has no network view"):
             ssn_bundle.load_bundle(unsupported)
 
 
 def test_viewer_heading_names_the_network():
     """The <h1> is "<app name>: <network name>", with no name for a bare shell."""
-    from domainator.ssn_viewer_html import VIEWER_APP_NAME, viewer_heading
+    from domainator.viewer_html import VIEWER_APP_NAME, viewer_heading
 
     assert viewer_heading("GH17") == f"{VIEWER_APP_NAME}: GH17"
     assert viewer_heading("  GH17  ") == f"{VIEWER_APP_NAME}: GH17"
     # Titles that name no particular network collapse to the app name alone,
     # rather than "<app name>: <app name>", including the pre-rename app name.
-    for generic in (None, "", "   ", "Domainator SSN Viewer", VIEWER_APP_NAME):
+    for generic in (None, "", "   ", "Domainator SSN Viewer", "Domainator Similarity Network Viewer", VIEWER_APP_NAME):
         assert viewer_heading(generic) == VIEWER_APP_NAME
 
 
@@ -1018,20 +1130,16 @@ def test_lowest_slider_stop_reaches_the_fully_merged_network():
     matrix = DataMatrix(data, row_names, row_names)
 
     with tempfile.TemporaryDirectory() as output_dir:
-        input_file = os.path.join(output_dir, "matrix.hdf5")
-        matrix.write(input_file, output_type="hdf")
-        bundle = build_ssn_viewer.build_ssn_viewer(
-            DataMatrix.from_file(input_file), name="floor"
-        )
+        bundle = _network_bundle(matrix, output_dir, name="floor")
 
-    hierarchy = bundle["graph"]["hierarchy"]
+    hierarchy = bundle["views"]["ssn"]["hierarchy"]
     stops = ssn_bundle.slider_stops(bundle)
     lowest = min(stop["threshold_value"] for stop in stops if stop["threshold_value"] is not None)
-    weakest_mst_edge = min(edge[2] for edge in bundle["graph"]["mst_edges"])
+    weakest_mst_edge = min(edge[2] for edge in bundle["views"]["ssn"]["mst_edges"])
 
     # Strictly below the weakest edge, so no merge is excluded at this cut, and
     # only 1% of the weight range below it so the slider track is not mostly empty.
-    mst_weights = [edge[2] for edge in bundle["graph"]["mst_edges"]]
+    mst_weights = [edge[2] for edge in bundle["views"]["ssn"]["mst_edges"]]
     span = max(mst_weights) - min(mst_weights)
     assert lowest < weakest_mst_edge
     assert lowest == pytest.approx(weakest_mst_edge - 0.01 * span)
@@ -1053,15 +1161,15 @@ def test_layout_core_is_shared_by_the_worker_and_the_page():
     because each copy worked. Assert the identical text reaches both, so a future
     edit cannot quietly restore the split.
     """
-    core = ssn_viewer_html_module._layout_core_js()
+    core = viewer_html_module._layout_core_js()
     assert "function simulateComponentLayout" in core
     assert "function tidyComponentLayout" in core
     assert "function forestForceOptions" in core
 
-    worker = ssn_viewer_html_module._layout_worker_js()
+    worker = viewer_html_module._layout_worker_js()
     assert core in worker, "the Worker must be built from the shared core"
 
-    html = ssn_viewer_html_module.ssn_viewer_html()
+    html = viewer_html_module.viewer_html()
     assert core in html, "the page must embed the same core text, not its own copy"
 
     # Each shared function is defined exactly twice in the page: once inline in the

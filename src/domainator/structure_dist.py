@@ -6,7 +6,7 @@ input structures against reference structures.
 
 Every chain of every input is a row, whether or not it had a hit, so the row and column
 labels are exactly the record ids that domainator structure_to_genbank writes for the same
-structures, and the matrix feeds domainator build_ssn, domainator build_tree or domainator build_ssn_viewer
+structures, and the matrix feeds domainator build_ssn, domainator build_tree or domainator build_projection
 directly. That does mean the input database is read end to end, unlike domainator structure_search.
 
 Alignment direction is the opposite of domainator structure_search and domainator structure_domainate: the

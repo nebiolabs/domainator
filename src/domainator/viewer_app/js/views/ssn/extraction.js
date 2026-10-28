@@ -20,7 +20,7 @@
     // remaining pieces relate, and writing them out as separate components
     // would assert an absence of similarity that only the original all-vs-all
     // matrix could establish. Subset that matrix with
-    // domainator build_ssn_viewer --subset instead, which measures the relationship
+    // domainator build_ssn --subset instead, which measures the relationship
     // rather than guessing at it.
     //
     // Nodes in *different* components of the original network are exempt: they
@@ -66,7 +66,7 @@
         const newIndexByOld = new Map(nodeIndices.map((oldIndex, newIndex) => [oldIndex, newIndex]));
         const edges = [];
         // Original order is weight-descending, which every consumer below relies on.
-        state.bundle.graph.mst_edges.forEach(edge => {
+        state.bundle.views.ssn.mst_edges.forEach(edge => {
             const left = newIndexByOld.get(edge[0]);
             const right = newIndexByOld.get(edge[1]);
             if (left !== undefined && right !== undefined) {
@@ -100,8 +100,8 @@
 
     // Which top-level component of the full MST forest each node belongs to.
     function originalComponentByNode() {
-        const hierarchy = state.bundle.graph.hierarchy;
-        const componentOf = new Int32Array(state.bundle.graph.nodes.length).fill(-1);
+        const hierarchy = state.bundle.views.ssn.hierarchy;
+        const componentOf = new Int32Array(state.bundle.nodes.length).fill(-1);
         hierarchy.roots.forEach(rootId => {
             const root = hierarchy.nodes[rootId];
             for (let i = root.leaf_start; i < root.leaf_start + root.leaf_count; i++) {
@@ -514,30 +514,29 @@
                 'join them in the MST. The bundle records no similarity between those pieces, so ' +
                 'extracting them would assert they are unrelated. Select the nodes that link them ' +
                 '(raising the threshold shows where the links are), or subset the original matrix ' +
-                'with domainator build_ssn_viewer --subset.'};
+                'with domainator build_ssn --subset.'};
         }
 
         const nodeCount = induced.nodeIndices.length;
-        const metric = state.bundle.graph.merge_impact_metric;
+        const metric = state.bundle.views.ssn.merge_impact_metric;
         const keptIds = new Set(induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)));
 
         return {
             bundle: {
-                format: BUNDLE_FORMAT,
-                version: BUNDLE_VERSION,
+                format: VIEWER_BUNDLE_FORMAT,
+                version: VIEWER_BUNDLE_VERSION,
                 name: ((state.bundle.name || 'network') + '_extraction'),
                 domainator_version: DOMAINATOR_VERSION,
-                // A v6 graph: only what cannot be derived from the merge order. The
-                // split-event series, its moving sum and the slider's stops are all a
-                // function of these four keys, so an extraction no longer computes a
-                // frozen copy of them -- whoever opens it derives them, at whatever cap
-                // they are looking at it with.
-                graph: {
-                    nodes: induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)),
+                nodes: induced.nodeIndices.map(nodeIndex => nodeId(nodeIndex)),
+                // Only what cannot be derived from the merge order. The split-event series,
+                // its moving sum and the slider's stops are all a function of these and the
+                // nodes, so an extraction computes no frozen copy of them -- whoever opens it
+                // derives them, at whatever cap they are looking at it with.
+                views: {ssn: {
                     mst_edges: induced.edges,
                     merge_impact_metric: metric,
                     hierarchy: buildExtractionHierarchy(nodeCount, induced.edges),
-                },
+                }},
                 metadata: {
                     columns: state.metadataColumns.map(column => ({...column})),
                     rows: induced.nodeIndices.map(nodeIndex => state.metadataByNodeIndex[nodeIndex].slice()),
@@ -568,7 +567,7 @@
             label: 'Name for the extracted network',
             note: 'Names the new bundle and the file it is saved to. The extraction contains '
                 + built.nodeCount.toLocaleString() + ' of '
-                + state.bundle.graph.nodes.length.toLocaleString() + ' nodes.',
+                + state.bundle.nodes.length.toLocaleString() + ' nodes.',
             value: built.bundle.name,
             confirmLabel: 'Save',
             onConfirm: name => {

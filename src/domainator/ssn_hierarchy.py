@@ -293,7 +293,7 @@ def summarize_merge_events(component_summary, max_items=5):
 def merge_event_rank_key(row):
     """Strongest first. Shared by the cap and the density back-fill so both agree.
 
-    Ported to JavaScript in `ssn_viewer/js/extraction.js` (`compareMergeEventRank`)
+    Ported to JavaScript in `viewer_app/js/views/ssn/extraction.js` (`compareMergeEventRank`)
     for viewer-built extractions; the two must stay in step or an extraction's plot
     will not match the plot it was extracted from.
     """
@@ -448,7 +448,7 @@ def floor_threshold_value(lowest_merge_threshold: float, highest_merge_threshold
 def threshold_slider_stops(merge_event_rows, tree=None, threshold_index_lookup=None):
     """Slider stops for a merge-event series: ∞, one per event, then a floor.
 
-    Shared by ``matrix_report``, the ``.dsnv`` viewer (via its JavaScript port) and
+    Shared by ``matrix_report``, the Domainator Viewer (via its JavaScript port) and
     ``ssn_bundle`` so their sliders offer the same cuts. The trailing floor stop is
     what makes the fully merged network reachable at all: every other stop excludes
     its own tie group under the strictly-above ``--threshold`` convention, so the lowest
@@ -458,7 +458,7 @@ def threshold_slider_stops(merge_event_rows, tree=None, threshold_index_lookup=N
     ``threshold_index_lookup`` is an optional ``threshold -> row index`` callable
     (in practice :meth:`MaxTree.threshold_row_index`). When given, every stop also
     carries a ``threshold_index`` pointing into the tree's threshold tables, which is
-    how ``matrix_report`` reports each cut's edge count. A ``.dsnv`` bundle carries no
+    how ``matrix_report`` reports each cut's edge count. A viewer bundle carries no
     threshold tables, so the viewer's stops omit the field entirely rather than
     carrying an index into something that is not there.
     """

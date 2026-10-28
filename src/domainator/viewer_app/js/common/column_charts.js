@@ -20,7 +20,7 @@
     //    the PNG export. A canvas preview would need a second renderer for the
     //    SVG export, which is exactly the drift buildClusterViewSVG warns
     //    about. Charts are tens to hundreds of marks, so SVG DOM cost is
-    //    irrelevant here (unlike renderClusterView's thousands of nodes) and
+    //    irrelevant here (unlike the view's thousands of nodes) and
     //    axis labels come out as real selectable text.
     //
     // Colors are inherited from the column's own palette via customPalette(),
@@ -80,7 +80,7 @@
     // Baked into every chart's subtitle so an exported SVG/PNG says what it
     // counted, not just how many.
     function columnChartScopeLabel(rowCount) {
-        const total = state.bundle ? state.bundle.graph.nodes.length : 0;
+        const total = state.bundle ? viewerNodeCount() : 0;
         const parts = [rowCount.toLocaleString() + ' of ' + total.toLocaleString() + ' nodes'];
         parts.push(state.selectedNodeIndices.size > 0 ? 'selection' : 'all nodes');
         const filterText = metadataFilterText();
@@ -106,7 +106,7 @@
         if (columnIndex === undefined || !state.bundle) {
             return counts;
         }
-        counts.total = state.bundle.graph.nodes.length;
+        counts.total = viewerNodeCount();
         for (let nodeIndex = 0; nodeIndex < counts.total; nodeIndex++) {
             const raw = state.metadataByNodeIndex[nodeIndex]?.[columnIndex] ?? null;
             if (isMissingMetadataValue(raw)) {

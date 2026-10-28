@@ -5844,7 +5844,68 @@
    "kind": "path",
    "type": "string",
    "role": "output",
-   "required": true
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dvb_out",
+   "flags": [
+    "--dvb_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "merge_impact_metric",
+   "flags": [
+    "--merge_impact_metric"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "product",
+    "min_child"
+   ]
+  },
+  {
+   "name": "label_by",
+   "flags": [
+    "--label_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "categorical",
+   "flags": [
+    "--categorical"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
   },
   {
    "name": "cluster",
@@ -5896,166 +5957,6 @@
    ],
    "kind": "value",
    "type": "integer",
-   "required": false
-  }
- ],
- "build_ssn_viewer": [
-  {
-   "name": "verbose",
-   "flags": [
-    "-v",
-    "--verbose"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "quiet",
-   "flags": [
-    "-q",
-    "--quiet"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "input",
-   "flags": [
-    "-i",
-    "--input"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "input",
-   "required": false
-  },
-  {
-   "name": "dsnv_out",
-   "flags": [
-    "-o",
-    "--dsnv_out"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "output",
-   "required": false
-  },
-  {
-   "name": "html_out",
-   "flags": [
-    "--html_out"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "output",
-   "required": false
-  },
-  {
-   "name": "embed_data",
-   "flags": [
-    "--embed_data"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "name",
-   "flags": [
-    "--name"
-   ],
-   "kind": "value",
-   "type": "string",
-   "required": false
-  },
-  {
-   "name": "metadata",
-   "flags": [
-    "--metadata"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "input",
-   "multiple": true,
-   "required": false
-  },
-  {
-   "name": "subset",
-   "flags": [
-    "--subset"
-   ],
-   "kind": "value",
-   "type": "string",
-   "multiple": true,
-   "required": false
-  },
-  {
-   "name": "subset_file",
-   "flags": [
-    "--subset_file"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "input",
-   "required": false
-  },
-  {
-   "name": "color_by",
-   "flags": [
-    "--color_by"
-   ],
-   "kind": "value",
-   "type": "string",
-   "required": false
-  },
-  {
-   "name": "color_table",
-   "flags": [
-    "--color_table"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "input",
-   "required": false
-  },
-  {
-   "name": "label_by",
-   "flags": [
-    "--label_by"
-   ],
-   "kind": "value",
-   "type": "string",
-   "required": false
-  },
-  {
-   "name": "categorical",
-   "flags": [
-    "--categorical"
-   ],
-   "kind": "value",
-   "type": "string",
-   "multiple": true,
-   "required": false
-  },
-  {
-   "name": "merge_impact_metric",
-   "flags": [
-    "--merge_impact_metric"
-   ],
-   "kind": "value",
-   "type": "string",
-   "required": false,
-   "choices": [
-    "product",
-    "min_child"
-   ]
-  },
-  {
-   "name": "max_output_gb",
-   "flags": [
-    "--max_output_gb"
-   ],
-   "kind": "value",
-   "type": "number",
    "required": false
   }
  ],
@@ -6292,7 +6193,17 @@
    "kind": "path",
    "type": "string",
    "role": "input",
-   "required": true
+   "required": false
+  },
+  {
+   "name": "newick",
+   "flags": [
+    "--newick"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
   },
   {
    "name": "distance",
@@ -6332,6 +6243,111 @@
    "required": false
   },
   {
+   "name": "subset",
+   "flags": [
+    "--subset"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "subset_file",
+   "flags": [
+    "--subset_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "msa",
+   "flags": [
+    "--msa"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_by",
+   "flags": [
+    "--color_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "color_table",
+   "flags": [
+    "--color_table"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "color_table_out",
+   "flags": [
+    "--color_table_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "palette_offset",
+   "flags": [
+    "--palette_offset"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "max_color_groups",
+   "flags": [
+    "--max_color_groups"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "label_by",
+   "flags": [
+    "--label_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "categorical",
+   "flags": [
+    "--categorical"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
    "name": "newick_out",
    "flags": [
     "-o",
@@ -6350,6 +6366,35 @@
    "kind": "path",
    "type": "string",
    "role": "output",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dvb_out",
+   "flags": [
+    "--dvb_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "max_output_gb",
+   "flags": [
+    "--max_output_gb"
+   ],
+   "kind": "value",
+   "type": "number",
    "required": false
   }
  ],
@@ -6448,6 +6493,34 @@
    "required": false
   },
   {
+   "name": "label_by",
+   "flags": [
+    "--label_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "categorical",
+   "flags": [
+    "--categorical"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
    "name": "xgmml_out",
    "flags": [
     "-o",
@@ -6462,6 +6535,16 @@
    "name": "html_out",
    "flags": [
     "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "dvb_out",
+   "flags": [
+    "--dvb_out"
    ],
    "kind": "path",
    "type": "string",
@@ -6521,6 +6604,57 @@
    ],
    "kind": "flag",
    "type": "boolean"
+  }
+ ],
+ "viewer": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "html_out",
+   "flags": [
+    "-o",
+    "--html_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "name",
+   "flags": [
+    "--name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
   }
  ],
  "enum_report": [

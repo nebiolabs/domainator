@@ -9,7 +9,7 @@ Generates 2d or 3d umap, tsne, or pca projections from matrices
 output can be an interactive HTML plot, coordinates, or Cytoscape xgmml files.
 ```
 
-Give at least one of these outputs: `--xgmml_out`, `--html_out`, `--coords_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
+Give at least one of these outputs: `--xgmml_out`, `--html_out`, `--dvb_out`, `--coords_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
 
 | Option | Value | Default | Description |
 |---|---|---|---|
@@ -22,8 +22,12 @@ Give at least one of these outputs: `--xgmml_out`, `--html_out`, `--coords_out`.
 | `--color_table` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000 |
 | `--color_table_out` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table. |
 | `--palette_offset` | INTEGER | 0 | Skip this many colors at the start of the palette before assigning colors to --color_by values. For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table. |
+| `--label_by` | STRING |  | Label the points in the html viewer by this metadata column at first. |
+| `--categorical` | STRING ... |  | Numeric metadata columns (for example integer cluster numbers) that the html viewer should color as discrete categories instead of a gradient. |
+| `--name` | STRING |  | The projection's name, shown in the html viewer. Defaults to the html (or dvb) output's file name. |
 | `-o`, `--xgmml_out` | FILE |  | Write the projection to this Cytoscape xgmml file. |
-| `--html_out` | FILE |  | Write an interactive plot of the projection to this HTML page, which can save it as SVG or PNG. |
+| `--html_out` | FILE |  | Write the Domainator Viewer, showing the projection, to this HTML file. It selects points into a metadata table and saves pictures as SVG or PNG. |
+| `--dvb_out` | FILE |  | Write the gzip-compressed JSON Domainator Viewer bundle (.dvb) to this file. The viewer opens it, and saves sessions in the same format. |
 | `--coords_out` | FILE |  | Write the projected coordinates to this tab-separated file. |
 | `--pca_args` | STRING |  | keyword arguments for the pca implementation, as key=value pairs in one quoted string, for example --pca_args="n_components=2". Values are read as Python literals where possible. |
 | `--tsne_args` | STRING |  | keyword arguments for the tsne implementation, as key=value pairs in one quoted string, for example --tsne_args="n_components=2". Values are read as Python literals where possible. |

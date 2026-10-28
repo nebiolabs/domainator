@@ -2,7 +2,7 @@
  * Session save/load: the `app_state` section of a v4 bundle.
  *
  * Included (`// @include`) into viewer.js, the viewer's one `<script>` scope, so
- * it can call `state`, `renderClusterView()` and friends directly, and its
+ * it can call `state`, `repaintNow()` and friends directly, and its
  * function declarations hoist above the listener wiring.
  */
 
@@ -12,7 +12,7 @@
     // A saved session is an ordinary bundle whose `metadata` carries whatever
     // the user edited plus one extra top-level section, `app_state`. Because
     // the viewer's UI is expected to churn, state is *not* dumped ad hoc:
-    // every persisted control is one entry in VIEW_STATE_FIELDS below.
+    // every persisted control is one entry in a view's sessionFields.
     // Serializing walks the registry; applying looks each saved key up in it.
     // That makes both directions tolerant -- a key this build dropped is
     // skipped and reported, and a key the file omits keeps its default -- so
@@ -53,13 +53,13 @@
 
     function nodeIndexByIdMap() {
         if (!state.nodeIndexById) {
-            state.nodeIndexById = new Map(state.bundle.graph.nodes.map((id, index) => [id, index]));
+            state.nodeIndexById = new Map(viewerNodeIds().map((id, index) => [id, index]));
         }
         return state.nodeIndexById;
     }
 
     // Selections persist as node ids, never indices: an index is a position in
-    // graph.nodes and silently means a different sequence if the bundle is
+    // the bundle's nodes and silently means a different sequence if the bundle is
     // rebuilt or subsetted. Unmatched ids are counted so the load can say so.
     function nodeIndicesFromIds(ids) {
         const map = nodeIndexByIdMap();
@@ -105,191 +105,125 @@
         });
     }
 
-    const VIEW_STATE_FIELDS = [
-        domValueField('view', 'layout_algorithm', 'layout-algorithm'),
-        domValueField('view', 'min_cluster_size', 'min-cluster-size'),
-        domValueField('view', 'color_by', 'color-by'),
-        domValueField('view', 'label_by', 'label-by'),
-        domValueField('view', 'export_png_scale', 'export-png-scale'),
-        domCheckboxField('view', 'show_node_counts', 'show-node-counts'),
-        domCheckboxField('view', 'show_edge_scores', 'show-edge-scores'),
-        domCheckboxField('view', 'render_cluster_bounds', 'render-cluster-bounds'),
-        domCheckboxField('view', 'render_nodes', 'render-nodes'),
-        domCheckboxField('view', 'reduce_elongation', 'reduce-elongation'),
-        domCheckboxField('view', 'leaf_pruning_only', 'leaf-pruning-only'),
-        domCheckboxField('view', 'collapse_long_paths', 'collapse-long-paths'),
-        {
-            section: 'view',
-            key: 'sort_components_by_size',
-            get: () => sortComponentsBySizeEnabled(),
-            set: value => {
-                document.getElementById('sort-components-by-size')
-                    .setAttribute('aria-pressed', value ? 'true' : 'false');
-            },
-        },
-        {
-            // The split chart's x window, saved for the same reason the canvas
-            // transform below is: reopening a session onto the whole axis would throw
-            // away the part of it the session was about. Stored in threshold units, so
-            // it survives any change of cap; splitChartLayout clamps it into whatever
-            // range the bundle actually has.
-            //
-            // Restored before max_merge_events, because the window is what that cap is
-            // spent on: selecting first and setting the window afterwards would leave a
-            // zoomed session showing the unzoomed selection.
-            section: 'view',
-            key: 'split_chart_zoom',
-            get: () => state.splitChartZoom
-                ? {min: state.splitChartZoom.min, max: state.splitChartZoom.max}
-                : null,
-            set: value => {
-                if (value === null || value === undefined) {
-                    state.splitChartZoom = null;
-                    return;
-                }
-                if (!Number.isFinite(value.min) || !Number.isFinite(value.max) || !(value.max > value.min)) {
-                    throw new Error('malformed split chart zoom');
-                }
-                state.splitChartZoom = {min: Number(value.min), max: Number(value.max)};
-            },
-        },
-        {
-            // Restored after split_chart_zoom (the window it is spent on) and before
-            // threshold_value, because it decides which stops exist for that field to
-            // snap to. Uses rebuildMergeSeries rather than applyMaxMergeEvents for the
-            // same reason: snapping here would be undone.
-            section: 'view',
-            key: 'max_merge_events',
-            get: () => state.maxMergeEvents,
-            set: value => {
-                const cap = Number(value);
-                if (!Number.isFinite(cap) || cap < 0) { throw new Error('not a count: ' + value); }
-                rebuildMergeSeries(cap);
-            },
-        },
-        {
-            // The threshold is stored as its value, not as the slider position:
-            // positions are derived from the slider's stops and shift whenever the
-            // split-event cap changes.
-            section: 'view',
-            key: 'threshold_value',
-            get: () => {
-                const value = selectedThresholdValue();
-                return Number.isFinite(value) ? value : null;
-            },
-            set: value => {
-                if (value === null || value === undefined) {
-                    const infinityStop = state.sliderModel.stops.find(stop => stop.threshold_value === null);
-                    snapSliderToStop(infinityStop);
-                    return;
-                }
-                const target = Number(value);
-                if (!Number.isFinite(target)) { throw new Error('not a number: ' + value); }
-                snapSliderToStop(nearestStopForThreshold(target));
-            },
-        },
-        {
-            section: 'view',
-            key: 'view_transform',
-            get: () => ({
-                scale: state.viewTransform.scale,
-                offsetX: state.viewTransform.offsetX,
-                offsetY: state.viewTransform.offsetY,
-            }),
-            set: value => {
-                if (!value || !Number.isFinite(value.scale) || value.scale <= 0 ||
-                        !Number.isFinite(value.offsetX) || !Number.isFinite(value.offsetY)) {
-                    throw new Error('malformed view transform');
-                }
-                // Consumed by applyComputedLayout once a layout exists, which is
-                // also what would otherwise auto-fit the view and discard this.
-                state.pendingRestoreViewTransform = {
-                    scale: value.scale, offsetX: value.offsetX, offsetY: value.offsetY,
-                };
-            },
-        },
-        domValueField('table', 'filter', 'metadata-filter'),
-        domValueField('table', 'null_order', 'metadata-null-order'),
-        domValueField('table', 'rows_per_page', 'metadata-rows-per-page'),
-        {
-            section: 'table',
-            key: 'sort',
-            get: () => ({
-                column_key: state.metadataSort.columnKey,
-                direction: state.metadataSort.direction,
-            }),
-            set: value => {
-                const columnKey = value && value.column_key;
-                if (columnKey && !metadataColumnKeys().includes(columnKey)) {
-                    throw new Error('no column "' + columnKey + '"');
-                }
-                state.metadataSort = {
-                    columnKey: columnKey || null,
-                    direction: (value && value.direction === 'desc') ? 'desc' : 'asc',
-                };
-            },
-        },
-        {
-            section: 'table',
-            key: 'column_widths',
-            get: () => Object.fromEntries(state.metadataColumnWidths),
-            set: value => {
-                const widths = new Map();
-                Object.keys(value || {}).forEach(columnKey => {
-                    const width = Number(value[columnKey]);
-                    if (!Number.isFinite(width)) { return; }
-                    widths.set(columnKey, Math.max(96, Math.min(640, Math.round(width))));
-                });
-                state.metadataColumnWidths = widths;
-            },
-        },
-        {
-            section: 'colors',
-            key: 'custom_palettes',
-            get: () => state.customPalettes,
-            set: value => {
-                if (value === null || typeof value !== 'object') { throw new Error('not an object'); }
-                // Sessions written before gradients became stop lists carry
-                // {low, mid, high}; rewrite them so nothing downstream has to
-                // know about that shape.
-                state.customPalettes = normalizeCustomPalettes(value);
-            },
-        },
-        {
-            section: 'colors',
-            key: 'categorical_columns',
-            get: () => Array.from(state.categoricalColumns),
-            set: value => {
-                state.categoricalColumns = new Set(value || []);
-                // Whether a numeric column colors as categories is *derived* from this
-                // set, and rebuildMetadataCaches -- which derives it -- has already run
-                // by the time a session is applied. Without recomputing it here the
-                // checkbox would read categorical while the colors and the picker
-                // stayed in gradient mode until the box was toggled by hand.
-                state.metadataColorInfoByName.forEach((info, columnName) => {
-                    if (info.baseType === 'numeric') {
-                        info.type = state.categoricalColumns.has(columnName) ? 'categorical' : 'numeric';
+    // The fields every view saves, by key. A view's sessionFields lists them, in its own order,
+    // among the fields only it has; the order is the order a session is applied in.
+    function sharedSessionFields() {
+        return {
+            colorBy: domValueField('view', 'color_by', 'color-by'),
+            labelBy: domValueField('view', 'label_by', 'label-by'),
+            exportPngScale: domValueField('view', 'export_png_scale', 'export-png-scale'),
+            viewTransform: {
+                section: 'view',
+                key: 'view_transform',
+                get: () => ({
+                    scale: state.viewTransform.scale,
+                    offsetX: state.viewTransform.offsetX,
+                    offsetY: state.viewTransform.offsetY,
+                }),
+                set: value => {
+                    if (!value || !Number.isFinite(value.scale) || value.scale <= 0 ||
+                            !Number.isFinite(value.offsetX) || !Number.isFinite(value.offsetY)) {
+                        throw new Error('malformed view transform');
                     }
-                });
+                    // Consumed by applyComputedLayout once a layout exists, which is
+                    // also what would otherwise auto-fit the view and discard this.
+                    state.pendingRestoreViewTransform = {
+                        scale: value.scale, offsetX: value.offsetX, offsetY: value.offsetY,
+                    };
+                },
             },
-        },
-        {
-            section: 'selection',
-            key: 'node_ids',
-            get: () => nodeIdsFromIndices(state.selectedNodeIndices),
-            set: value => { state.selectedNodeIndices = new Set(nodeIndicesFromIds(value)); },
-        },
-        {
-            section: 'selection',
-            key: 'presets',
-            get: () => serializeSelectionPresets(),
-            set: value => { deserializeSelectionPresets(value); },
-        },
-    ];
+            filter: domValueField('table', 'filter', 'metadata-filter'),
+            nullOrder: domValueField('table', 'null_order', 'metadata-null-order'),
+            rowsPerPage: domValueField('table', 'rows_per_page', 'metadata-rows-per-page'),
+            sort: {
+                section: 'table',
+                key: 'sort',
+                get: () => ({
+                    column_key: state.metadataSort.columnKey,
+                    direction: state.metadataSort.direction,
+                }),
+                set: value => {
+                    const columnKey = value && value.column_key;
+                    if (columnKey && !metadataColumnKeys().includes(columnKey)) {
+                        throw new Error('no column "' + columnKey + '"');
+                    }
+                    state.metadataSort = {
+                        columnKey: columnKey || null,
+                        direction: (value && value.direction === 'desc') ? 'desc' : 'asc',
+                    };
+                },
+            },
+            columnWidths: {
+                section: 'table',
+                key: 'column_widths',
+                get: () => Object.fromEntries(state.metadataColumnWidths),
+                set: value => {
+                    const widths = new Map();
+                    Object.keys(value || {}).forEach(columnKey => {
+                        const width = Number(value[columnKey]);
+                        if (!Number.isFinite(width)) { return; }
+                        widths.set(columnKey, Math.max(96, Math.min(640, Math.round(width))));
+                    });
+                    state.metadataColumnWidths = widths;
+                },
+            },
+            customPalettes: {
+                section: 'colors',
+                key: 'custom_palettes',
+                get: () => state.customPalettes,
+                set: value => {
+                    if (value === null || typeof value !== 'object') { throw new Error('not an object'); }
+                    // Sessions written before gradients became stop lists carry
+                    // {low, mid, high}; rewrite them so nothing downstream has to
+                    // know about that shape.
+                    state.customPalettes = normalizeCustomPalettes(value);
+                },
+            },
+            categoricalColumns: {
+                section: 'colors',
+                key: 'categorical_columns',
+                get: () => Array.from(state.categoricalColumns),
+                set: value => {
+                    state.categoricalColumns = new Set(value || []);
+                    // Whether a numeric column colors as categories is *derived* from this
+                    // set, and rebuildMetadataCaches -- which derives it -- has already run
+                    // by the time a session is applied. Without recomputing it here the
+                    // checkbox would read categorical while the colors and the picker
+                    // stayed in gradient mode until the box was toggled by hand.
+                    state.metadataColorInfoByName.forEach((info, columnName) => {
+                        if (info.baseType === 'numeric') {
+                            info.type = state.categoricalColumns.has(columnName) ? 'categorical' : 'numeric';
+                        }
+                    });
+                },
+            },
+            nodeIds: {
+                section: 'selection',
+                key: 'node_ids',
+                get: () => nodeIdsFromIndices(state.selectedNodeIndices),
+                set: value => { state.selectedNodeIndices = new Set(nodeIndicesFromIds(value)); },
+            },
+            presets: {
+                section: 'selection',
+                key: 'presets',
+                get: () => serializeSelectionPresets(),
+                set: value => { deserializeSelectionPresets(value); },
+            },
+        };
+    }
+
+    // The open view's session fields, built once per view.
+    function viewStateFields() {
+        const view = activeView();
+        if (!view.stateFields) {
+            view.stateFields = view.sessionFields(sharedSessionFields());
+        }
+        return view.stateFields;
+    }
 
     function collectSessionState() {
         const sections = {};
-        VIEW_STATE_FIELDS.forEach(field => {
+        viewStateFields().forEach(field => {
             if (!sections[field.section]) { sections[field.section] = {}; }
             sections[field.section][field.key] = field.get();
         });
@@ -305,7 +239,7 @@
         if (!appState || typeof appState !== 'object') { return ''; }
         state.sessionMissingNodeIds = 0;
         const fieldsByPath = new Map(
-            VIEW_STATE_FIELDS.map(field => [field.section + '.' + field.key, field])
+            viewStateFields().map(field => [field.section + '.' + field.key, field])
         );
         const skipped = [];
         Object.keys(appState).forEach(sectionName => {
@@ -327,14 +261,7 @@
             });
         });
 
-        // Controls whose appearance is derived from the values just restored.
-        updateComponentSortButton();
-        updateCollapseLongPathsControl();
-        // Re-select and re-place under the window that was just restored. The registry
-        // order already does this for a session carrying view.max_merge_events, so this
-        // is idempotent there; it is load-bearing for an older session that carries a
-        // window but no cap, whose selection was otherwise made before the window was.
-        repositionSliderStops();
+        activeView().afterSessionApplied();
 
         const notes = [];
         if (skipped.length > 0) {
@@ -397,8 +324,8 @@
     function openRenameNetworkDialog() {
         if (!state.bundle) { return; }
         openNameDialog({
-            title: 'Rename network',
-            label: 'Network name',
+            title: 'Rename ' + activeView().bundleNoun,
+            label: activeView().bundleNoun.charAt(0).toUpperCase() + activeView().bundleNoun.slice(1) + ' name',
             note: 'Shown in the heading and the browser tab, stored in the bundle, and used to name saved files.',
             value: state.bundle.name || '',
             confirmLabel: 'Rename',
@@ -440,7 +367,7 @@
             if (browserSupportsBundleSaving()) {
                 const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
                 blob = await new Response(stream).blob();
-                extension = '.dsnv';
+                extension = '.dvb';
             } else {
                 // decodeBundleFile falls back to plain JSON, so this still round-trips.
                 blob = new Blob([bytes], {type: 'application/json'});
@@ -462,7 +389,7 @@
         // already in here; the file stays a valid bundle that Python readers
         // and this viewer can both open.
         await downloadBundleFile(
-            Object.assign({}, state.bundle, {version: BUNDLE_VERSION, app_state: collectSessionState()}),
+            Object.assign({}, state.bundle, {version: VIEWER_BUNDLE_VERSION, app_state: collectSessionState()}),
             exportBaseName() + '_session',
             'Saved session'
         );

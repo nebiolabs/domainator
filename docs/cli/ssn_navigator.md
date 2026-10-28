@@ -4,7 +4,7 @@
 Query a similarity network bundle: clusters, members, and metadata.
 
 ```
-Navigate a build_ssn_viewer ``.dsnv`` bundle and emit compact JSON summaries.
+Navigate the network in a Domainator Viewer bundle (build_ssn --dvb_out) and emit compact JSON summaries.
 
 This is a read-only, agent-friendly companion to the interactive HTML SSN
 viewer. Instead of rendering the whole network, it answers targeted questions
@@ -33,7 +33,7 @@ Give at least one of these outputs: `--json_out`. `-` as an input or output mean
 |---|---|---|---|
 | `-v`, `--verbose` |  |  | show debug output, and a traceback for errors. |
 | `-q`, `--quiet` |  |  | show errors only: no progress messages or warnings. |
-| `-i`, `--input` | FILE | required | A Domainator Similarity Network Viewer bundle (.dsnv) produced by build_ssn_viewer. |
+| `-i`, `--input` | FILE | required | A Domainator Viewer bundle (.dvb) with a network, from build_ssn --dvb_out or the viewer's Save session. Older network bundles (.dsnv) work too. |
 | `-o`, `--json_out` | FILE |  | Write the JSON answer to this file. Use - for standard output. |
 | `--query` | {overview,thresholds,clusters,cluster,node} | overview | Which navigation query to run. |
 | `--threshold` | STRING |  | Similarity threshold to cut the network at (higher = finer clusters), matching the viewer's slider. Pass 'inf' for the slider's fine end, where every node is its own cluster. Omit it for the coarse end: one cluster per connected component. |
