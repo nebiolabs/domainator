@@ -261,7 +261,8 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
         html_out_handle: an open text handle for the HTML report.
         json_out_handle: an open text handle for the JSON report.
         domains: focus domains: the report gives how often each other domain occurs with them,
-            and how far apart they are.
+            and how far apart they are. Co-occurrence rows are ordered alphabetically by
+            focus domain.
         co_occurrence_fraction_out: a path for the domain-by-domain co-occurrence matrix, as
             fractions of contigs.
         co_occurrence_count_out: a path for the co-occurrence matrix as counts of contigs.
@@ -361,7 +362,7 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
         domain_stats[domain]['description'] = '; '.join(domain_stats[domain]['description'])
     # Only calculate correlations for focus domains
     correlations_dict = {}
-    for domain1 in domains:
+    for domain1 in sorted(domains):
         if domain1 in domain_stats:
             # A new dict: the raw counts are still needed for the co-occurrence matrix outputs.
             original_count = domain_stats[domain1]['correlations'][domain1]

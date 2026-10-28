@@ -236,6 +236,29 @@ def test_co_occurence_count_is_unaffected_by_focus_domains(shared_datadir, tmp_p
     np.testing.assert_array_equal(DataMatrix.from_file(focused_fraction).toarray(), DataMatrix.from_file(plain_fraction).toarray())
 
 
+def test_cooccurrence_rows_are_alphabetical(shared_datadir, tmp_path):
+    import json
+
+    text_out = tmp_path / "summary.txt"
+    html_out = tmp_path / "summary.html"
+    json_out = tmp_path / "summary.json"
+    summary_report.main([
+        "-i", str(shared_datadir / "FeSOD_20_pfam.gb"),
+        "-o", str(text_out), "--html_out", str(html_out), "--json_out", str(json_out),
+        "--domains", "Sod_Fe_N", "Sod_Fe_C",
+    ])
+
+    expected = ["Sod_Fe_C", "Sod_Fe_N"]
+    cooccurrence = json.loads(json_out.read_text())["domain_cooccurrence"]
+    assert list(cooccurrence) == expected
+    assert list(report_data(html_out.read_text())["data"]["summary"]["domain_cooccurrence"]) == expected
+    lines = text_out.read_text().splitlines()
+    table = next(i for i, line in enumerate(lines) if line.startswith("Domain Co-occurrence"))
+    assert [line.split()[0] for line in lines[table + 2:table + 4]] == expected
+    assert cooccurrence["Sod_Fe_C"]["Sod_Fe_N"] == 100.0
+    assert cooccurrence["Sod_Fe_N"]["Sod_Fe_C"] == 100.0
+
+
 def test_summary_report_output_dash_writes_stdout(shared_datadir, tmp_path, capsys, monkeypatch):
     monkeypatch.chdir(tmp_path)
     summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "-o", "-"])
