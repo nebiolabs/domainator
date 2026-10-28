@@ -356,6 +356,30 @@ def test_domainator_infernal_cm_query(shared_datadir):
         assert domainator_features[0].qualifiers["program"] == ["infernal"]
 
 
+def test_domainator_infernal_skips_duplicate_hits(shared_datadir):
+    # A fragment that cuts the CopA hit near one end: the truncated-hit pass finds the
+    # same locus twice, and Infernal marks the weaker copy as a duplicate.
+    record = next(SeqIO.parse(shared_datadir / "pANT_R100.fa", "fasta"))
+    fragment = SeqRecord(record.seq[48590:48730], id="fragment", description="")
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        fasta = output_dir + "/fragment.fa"
+        SeqIO.write([fragment], fasta, "fasta")
+        out = output_dir + "/out.gb"
+        main([
+            "--input", fasta,
+            "--alphabet", "nucleotide",
+            "-r", str(shared_datadir / "RF00042.cm"),
+            "--genbank_out", out,
+            "--evalue", "10",
+        ])
+
+        domainator_features = [x for x in next(SeqIO.parse(out, "genbank")).features if x.type == DOMAIN_FEATURE_NAME]
+        locations = [str(x.location) for x in domainator_features]
+        assert len(locations) > 0
+        assert len(locations) == len(set(locations))
+
+
 def _assert_mixed_contig_and_cds_hits_are_both_annotated(shared_datadir, monkeypatch, cds_hit_name, cds_hit_desc, cds_hit_database, cds_hit_program):
     contig = next(SeqIO.parse(shared_datadir / "pDONR201.gb", "genbank"))
     domainate_module.clean_rec(contig)

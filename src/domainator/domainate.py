@@ -368,6 +368,10 @@ def infernal_hits_to_search_results(hits, references, evalue, db_name, min_evalu
         query_accession = top_hits.query.accession if top_hits.query.accession is not None else ""
         reference = references[query_name]
         for hit in top_hits:
+            # TopHits keeps the hits Infernal marked as overlapping duplicates of a better
+            # hit (cmsearch never reports them); skip them, or a locus is annotated twice.
+            if hit.duplicate:
+                continue
             if hit.evalue <= evalue and hit.evalue >= min_evalue:
                 hit_name = hit.name.split(",")
                 contig_index = int(hit_name[0])
