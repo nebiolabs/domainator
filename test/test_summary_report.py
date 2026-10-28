@@ -12,7 +12,7 @@ def test_contig_stats_1(shared_datadir):
         out_txt = output_dir + "/contig_stats_test.txt"
         summary_report.main(["-i", str(shared_datadir / "FeSOD_20_pfam.gb"), "-o", out_txt, "--html_out", out_html, "--domains", "Sod_Fe_C", "Sod_Fe_N" ])
         f_txt = open(out_txt).read()
-        assert "Domain Stats" in f_txt
+        assert "Domain Frequency" in f_txt
         assert "Sod_Fe_C" in f_txt
         assert "avg score" in f_txt
         assert "100.0" in f_txt
@@ -24,9 +24,9 @@ def test_contig_stats_1(shared_datadir):
         assert data["summary"]["contig_stats"]["contigs"] == 20
         assert "Sod_Fe_C" in {row["domain"] for row in data["summary"]["domain_frequency"]}
         assert data["summary"]["domain_cooccurrence"]["Sod_Fe_C"]["Sod_Fe_C"] == 100.0
-        histogram = data["length_histogram"]
-        assert sum(histogram["counts"]) == 20
-        assert len(histogram["bin_edges"]) == len(histogram["counts"]) + 1
+        lengths = data["length_counts"]
+        assert sum(lengths["counts"]) == 20
+        assert lengths["lengths"] == sorted(set(lengths["lengths"]))
         assert data["taxonomy_tree"] is None
 
 
@@ -41,11 +41,11 @@ def test_contig_stats_empty_input(shared_datadir):
         f_txt = open(out_txt).read()
         assert "LOCUS" not in f_txt
         assert "avg score" in f_txt
-        assert "Domain Stats" in f_txt
+        assert "Domain Frequency" in f_txt
         data = report_data(open(out_html).read())["data"]
         assert data["summary"]["contig_stats"]["contigs"] == 0
         assert data["summary"]["domain_frequency"] == []
-        assert data["length_histogram"] is None
+        assert data["length_counts"] is None
         # assert 0
         # compare_seqfiles(out, shared_datadir / "extract_peptides_test_1_out.gb")
         # assert compare_files(out, shared_datadir / "extract_peptides_test_1_out.gb")
@@ -119,7 +119,7 @@ def test_summary_report_nucleotide_annotations(shared_datadir):
         ])
 
         text = open(out_txt).read()
-        assert "Domain Stats" in text
+        assert "Domain Frequency" in text
         assert "dna_query_1" in text
         frequency = report_data(open(out_html).read())["data"]["summary"]["domain_frequency"]
         assert "dna_query_1" in {row["domain"] for row in frequency}
@@ -128,22 +128,31 @@ def test_summary_report_nucleotide_annotations(shared_datadir):
 
 # --- the HTML page's data ---
 
-def test_length_histogram_bins():
-    assert summary_report.length_histogram([]) is None
-    assert summary_report.length_histogram([7]) == {"bin_edges": [7, 8], "counts": [1]}
-    # 20 lengths aim for max(6, 4) = 6 bins: ceil(1000 / 6) = 167, rounded up to 200.
-    lengths = [1000 + 50 * i for i in range(20)]
-    histogram = summary_report.length_histogram(lengths)
-    assert histogram["bin_edges"] == [1000, 1200, 1400, 1600, 1800, 2000]
-    assert histogram["counts"] == [4, 4, 4, 4, 4]
-    # The first edge is the minimum rounded down to a multiple of the width.
-    histogram = summary_report.length_histogram([95, 96, 113, 140])
-    # 4 lengths aim for max(3, 2) = 3 bins: ceil(46 / 3) = 16, rounded up to 20.
-    assert histogram == {"bin_edges": [80, 100, 120, 140, 160], "counts": [2, 1, 0, 1]}
-    # Many lengths: at most 50 bins.
-    histogram = summary_report.length_histogram(list(range(100000)))
-    assert len(histogram["counts"]) <= summary_report.MAX_HISTOGRAM_BINS
-    assert sum(histogram["counts"]) == 100000
+def test_text_table_aligns_columns():
+    from domainator.text_plot import text_table
+    table = text_table(["name", "count", "note"], [["a", "8", "x"], ["longer", "12", ""]], [False, True, False])
+    assert table == "name    count  note\na           8  x\nlonger     12\n"
+    assert text_table(["name", "n"], [], [False, True]) == "name  n\n"
+
+
+def test_text_report_layout(shared_datadir, tmp_path):
+    out = tmp_path / "summary.txt"
+    summary_report.main(["-i", str(shared_datadir / "MT_nbs.gb"), "-o", str(out), "--domains", "N6_N4_Mtase"])
+    lines = out.read_text().splitlines()
+    assert lines[:7] == ["Contig Stats", "", "contigs: 20", "CDSs: 180", "partial CDSs: 0", "protein fragments: 0",
+                         "CDSs per 10 kb: 10.61"]
+    table = lines.index("Domain Frequency") + 1
+    assert lines[table].split() == ["domain", "database", "count", "description", "avg", "score"]
+    # Text columns are left-aligned, numbers right-aligned under their headers.
+    assert lines[table + 1].startswith("N6_N4_Mtase  ")
+    assert len(lines[table + 1]) == len(lines[table])
+    assert all(line == line.rstrip() for line in lines if not line.startswith(" "))
+
+
+def test_length_counts():
+    assert summary_report.length_counts([]) is None
+    assert summary_report.length_counts([7]) == {"lengths": [7], "counts": [1]}
+    assert summary_report.length_counts([140, 95, 113, 95]) == {"lengths": [95, 113, 140], "counts": [2, 1, 1]}
 
 
 def _taxon(lineage, names, ranks, count):

@@ -16,6 +16,7 @@
 //   the edges build_ssn --threshold <threshold_table.threshold[i]> --mst --knn k keeps.
 
 // @include common/payload.js
+// @include common/panels.js
 // @include common/download.js
 // @include common/table.js
 // @include common/charts.js
@@ -54,70 +55,23 @@ const MOVING_SUM_COLOR = "#e45756";
 // A cluster-size union-find snapshot is kept every this many slider stops.
 const CHECKPOINT_STRIDE = 50;
 
-function reportPanel(root, title, note = null) {
-    const section = document.createElement("section");
-    section.className = "panel";
-    const heading = document.createElement("h2");
-    heading.textContent = title;
-    section.appendChild(heading);
-    if (note) {
-        const text = document.createElement("p");
-        text.className = "note";
-        text.textContent = note;
-        section.appendChild(text);
-    }
-    root.appendChild(section);
-    return section;
-}
-
-function panelPart(parent, id, className = null) {
-    const part = document.createElement("div");
-    if (id) {
-        part.id = id;
-    }
-    if (className) {
-        part.className = className;
-    }
-    parent.appendChild(part);
-    return part;
-}
-
-// [label, value, id] triples as a grid of figures; id names the figure, for updating it.
-function statGrid(entries) {
-    const grid = document.createElement("dl");
-    grid.className = "stat-grid";
-    for (const [label, value, id] of entries) {
-        const item = document.createElement("div");
-        const term = document.createElement("dt");
-        term.textContent = label;
-        const figure = document.createElement("dd");
-        figure.textContent = value;
-        if (id) {
-            figure.id = id;
-        }
-        item.append(term, figure);
-        grid.appendChild(item);
-    }
-    return grid;
-}
-
 function summaryPanel(root, summary) {
     const section = reportPanel(root, "Summary");
     const scores = summary.edge_scores;
-    const entries = [
+    const columns = [[
         ["nodes", formatChartNumber(summary.nodes)],
         ["non-zero edges", formatChartNumber(summary.non_zero_edges)],
         ["connected components", formatChartNumber(summary.connected_components)],
-    ];
+    ]];
     if (scores) {
-        entries.push(
+        columns.push([
             ["mean score", formatFixed1(scores.mean)],
             ["median score", formatFixed1(scores.median)],
             ["lowest score", formatFixed1(scores.min)],
             ["highest score", formatFixed1(scores.max)],
-        );
+        ]);
     }
-    section.appendChild(statGrid(entries));
+    section.appendChild(statGrid(columns));
 }
 
 // Clusters, and the edges kept, by threshold; and clusters by edges kept.
@@ -463,7 +417,7 @@ function thresholdPanel(root, data, charts) {
     if (knn) {
         const kLabel = document.createElement("label");
         kLabel.htmlFor = "mst-knn-k-slider";
-        kLabel.append("MST + kNN k (build_ssn --mst --knn): ");
+        kLabel.append("MST + Knn k (build_ssn --mst --knn): ");
         const kNumber = document.createElement("strong");
         kNumber.id = "mst-knn-k-number";
         kLabel.appendChild(kNumber);
@@ -478,17 +432,21 @@ function thresholdPanel(root, data, charts) {
         controls.lastChild.appendChild(kSlider);
     }
 
-    const stats = [
-        ["clusters", formatChartNumber(summary.nodes), "num-clusters"],
-        ["singletons", formatChartNumber(summary.nodes), "num-singletons"],
-        ["largest cluster", "1", "largest-cluster"],
-        ["edges kept", "0", "num-edges"],
-        ["mean cluster size", "1.0", "avg-cluster-size"],
+    const columns = [
+        [
+            ["clusters", formatChartNumber(summary.nodes), "num-clusters"],
+            ["largest cluster", "1", "largest-cluster"],
+            ["mean cluster size", "1.0", "avg-cluster-size"],
+        ],
+        [
+            ["singletons", formatChartNumber(summary.nodes), "num-singletons"],
+            ["edges kept", "0", "num-edges"],
+        ],
     ];
     if (knn) {
-        stats.push(["projected MST + kNN edges", "0", "mst-knn-edges"]);
+        columns[1].push(["projected MST + Knn edges", "0", "mst-knn-edges"]);
     }
-    section.appendChild(statGrid(stats));
+    section.appendChild(statGrid(columns));
 
     const heading = document.createElement("h2");
     heading.textContent = "100 Largest Clusters";

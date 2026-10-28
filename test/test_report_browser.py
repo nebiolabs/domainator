@@ -264,10 +264,10 @@ def test_summary_page_draws_every_section(open_page, tmp_path, shared_datadir):
     assert page.pageerrors == [] and page.requests == []
     stats = page.eval_on_selector_all(".stat-grid div", "items => items.map(i => [i.querySelector('dt').textContent, i.querySelector('dd').textContent])")
     assert ["contigs", "20"] in stats
-    # One bar per bin, and the bars hold every contig.
-    data = page.evaluate("JSON.parse(document.getElementById('report-data').textContent).data")
+    # One bar per bin, and the bins hold every contig.
+    bins = page.evaluate("window.lengthHistogram.bins()")
     bars = page.eval_on_selector_all("#length-histogram svg rect[data-tip]", "bars => bars.map(b => b.dataset.tip)")
-    assert len(bars) == len(data["length_histogram"]["counts"])
+    assert len(bars) == len(bins["counts"]) and sum(bins["counts"]) == 20
     page.hover("#length-histogram svg rect[data-tip]:not([fill-opacity='0'])")
     assert "contigs" in page.text_content(".chart-tooltip")
     # The two tables keep their controls apart.
@@ -280,6 +280,74 @@ def test_summary_page_draws_every_section(open_page, tmp_path, shared_datadir):
     assert download.value.suggested_filename == "summary_report_lengths.svg"
     assert open(download.value.path()).read().count("<rect") == len(bars)
     assert page.query_selector("#taxonomy-chart") is None
+
+
+def _selected_text(page):
+    return page.evaluate("window.getSelection().toString()")
+
+
+def test_summary_page_histogram_bins_by_the_integer_rule(open_page, tmp_path, shared_datadir):
+    page = open_page(_summary_page(tmp_path / "summary.html", str(shared_datadir / "FeSOD_20_pfam.gb")))
+    page.wait_for_selector("#length-histogram svg rect")
+
+    def bins(values, counts=None):
+        counts = counts or [1] * len(values)
+        return page.evaluate("""([values, counts]) => {
+            const n = counts.reduce((a, b) => a + b, 0);
+            const lo = values[0], hi = values[values.length - 1];
+            return binValues(values, counts, lo, hi + 1, autoBinWidth(lo, hi, n));
+        }""", [values, counts])
+
+    assert bins([7]) == {"edges": [7, 8], "counts": [1]}
+    # 20 lengths aim for max(6, 4) = 6 bins: ceil(1000 / 6) = 167, rounded up to 200.
+    assert bins([1000 + 50 * i for i in range(20)]) == {"edges": [1000, 1200, 1400, 1600, 1800, 2000], "counts": [4, 4, 4, 4, 4]}
+    # The first edge is the minimum rounded down to a multiple of the width. 4 lengths aim for
+    # max(3, 2) = 3 bins: ceil(46 / 3) = 16, rounded up to 20.
+    assert bins([95, 113, 140], [2, 1, 1]) == {"edges": [80, 100, 120, 140, 160], "counts": [2, 1, 0, 1]}
+    # Many lengths: at most 50 bins.
+    many = bins(list(range(100000)))
+    assert len(many["counts"]) <= 50 and sum(many["counts"]) == 100000
+    assert page.pageerrors == []
+
+
+def test_summary_page_histogram_zooms_pans_and_rebins(open_page, tmp_path, shared_datadir):
+    page = open_page(_summary_page(tmp_path / "summary.html", str(shared_datadir / "FeSOD_20_pfam.gb")))
+    page.wait_for_selector("#length-histogram svg rect")
+    full = page.evaluate("window.lengthHistogram.bins()")
+    assert page.evaluate("window.lengthHistogram.view()") is None
+    assert page.is_disabled("#lengths-reset-zoom")
+    svg = page.locator("#length-histogram svg")
+    svg.scroll_into_view_if_needed()
+    box = svg.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.wheel(0, -300)
+    view = page.evaluate("window.lengthHistogram.view()")
+    assert view is not None and view[1] - view[0] < full["edges"][-1] - full["edges"][0]
+    assert page.is_enabled("#lengths-reset-zoom")
+
+    # A drag pans, and selects no text on the way.
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x - 150, y + 60, steps=5)
+    page.mouse.move(x - 150, box["y"] + box["height"] + 80, steps=5)
+    page.mouse.up()
+    panned = page.evaluate("window.lengthHistogram.view()")
+    assert panned[0] > view[0] and panned[1] - panned[0] == pytest.approx(view[1] - view[0])
+    assert _selected_text(page) == ""
+
+    # A typed bin width holds until it is cleared.
+    page.click("#lengths-reset-zoom")
+    page.fill("#lengths-bin-width", "500")
+    page.press("#lengths-bin-width", "Enter")
+    edges = page.evaluate("window.lengthHistogram.bins().edges")
+    assert {b - a for a, b in zip(edges, edges[1:])} == {500}
+    assert page.text_content("#lengths-bin-status").endswith(", 500 wide")
+    assert sum(page.evaluate("window.lengthHistogram.bins().counts")) == 20
+    page.fill("#lengths-bin-width", "")
+    page.press("#lengths-bin-width", "Enter")
+    assert page.evaluate("window.lengthHistogram.bins()") == full
+    assert page.pageerrors == []
 
 
 def test_summary_page_taxonomy_zooms(open_page, tmp_path, shared_datadir):
@@ -348,7 +416,7 @@ def test_matrix_page_walks_the_slider_through_every_stop(open_page, tmp_path, sh
         assert page.text_content("#threshold-number") == stop["threshold_label"]
         assert figures["clusters"] == str(table["clusters"][row] if row >= 0 else 20)
         assert figures["edges kept"] == f'{table["edges"][row] if row >= 0 else 0:,}'
-        assert figures["projected MST + kNN edges"] == f'{knn["counts"][row][knn["default_k"] - 1] if row >= 0 else 0:,}'
+        assert figures["projected MST + Knn edges"] == f'{knn["counts"][row][knn["default_k"] - 1] if row >= 0 else 0:,}'
         assert len(page.query_selector_all("#cluster-bubbles svg circle")) == min(100, int(figures["clusters"]))
     assert page.text_content("#threshold-number") == data["slider_stops"][-1]["threshold_label"]
     assert _figures(page)["clusters"] == "1"
@@ -359,7 +427,7 @@ def test_matrix_page_walks_the_slider_through_every_stop(open_page, tmp_path, sh
     page.keyboard.press("End")
     page.eval_on_selector("#mst-knn-k-slider", "s => { s.value = '2'; s.dispatchEvent(new Event('input')); }")
     floor_row = data["slider_stops"][-1]["threshold_index"]
-    assert _figures(page)["projected MST + kNN edges"] == f'{knn["counts"][floor_row][1]:,}'
+    assert _figures(page)["projected MST + Knn edges"] == f'{knn["counts"][floor_row][1]:,}'
     assert page.text_content("#mst-knn-k-number") == "2"
     assert page.pageerrors == []
 
@@ -426,12 +494,17 @@ def test_matrix_page_threshold_chart_zooms(open_page, tmp_path, shared_datadir):
     page.mouse.move(box["x"] + box["width"] * 0.5, y)
     page.mouse.down()
     page.mouse.move(box["x"] + box["width"] * 0.7, y, steps=5)
+    # Wandering off the chart while dragging, as a hand does.
+    page.mouse.move(box["x"] + box["width"] * 0.7, box["y"] + box["height"] + 120, steps=5)
     page.mouse.up()
     assert page.is_enabled("#threshold-chart-reset-zoom")
     assert ticks() != before
+    # Neither the drag nor the double-click selects the text in and around the chart.
+    assert _selected_text(page) == ""
     page.dblclick("#clusters-by-threshold svg rect[data-overlay]")
     assert page.is_disabled("#threshold-chart-reset-zoom")
     assert ticks() == before
+    assert _selected_text(page) == ""
     assert page.pageerrors == []
 
 
@@ -536,6 +609,18 @@ def test_contig_plot_hover_click_zoom_pan_and_download(open_page, tmp_path, shar
     view = _view(page)
     assert view["x"] > 0 and view["y"] > 0
     assert page.text_content("#details .details-heading") == "Contig"
+    # Nor does a drag that starts on a feature's label select the labels it crosses.
+    label = page.locator("svg.contig-plot [data-contig='0'] [data-feature] text").first.bounding_box()
+    page.mouse.move(label["x"] + 2, label["y"] + label["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(label["x"] + 200, label["y"] + 120, steps=8)
+    page.mouse.up()
+    assert _selected_text(page) == ""
+    # Double-clicking a label zooms in without selecting its word.
+    label = page.locator("svg.contig-plot [data-contig='0'] [data-feature] text").first.bounding_box()
+    page.mouse.dblclick(label["x"] + 4, label["y"] + label["height"] / 2)
+    assert _selected_text(page) == ""
+    page.click("#reset-view")
 
     with page.expect_download() as download:
         page.click("#download-svg")

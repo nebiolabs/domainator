@@ -20,7 +20,7 @@ from jsonargparse import ActionConfigFile
 import contextlib
 from pathlib import Path
 import pandas as pd
-import math
+from collections import Counter
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import output_file
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
@@ -32,7 +32,7 @@ from domainator.data_matrix import DataMatrix
 from domainator import DOMAIN_FEATURE_NAME
 import numpy as np
 from typing import Dict, Iterable, Optional, Set, TextIO, Tuple
-from domainator.text_plot import text_histogram
+from domainator.text_plot import text_histogram, text_table
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 import json
 from domainator.filter_domains import filter_domains
@@ -46,52 +46,44 @@ def _name_and_rank(data: TaxonomyData) -> Tuple[str, str]:
 
 
 class SummaryTextWriter():
+    """The text report. Its tables are text_plot.text_table, so that other implementations can
+    write the same text."""
     def __init__(self, out_handle):
-        # self.columns = columns
-        # self.column_types = column_types
         self.out_handle = out_handle
-    
+
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
-        if len(lengths) != 0:
-            hist_str = text_histogram(lengths, title="Contig Lengths")
-        else:
-            hist_str = ""
         print(f"""Contig Stats
 
 contigs: {num_contigs}
 CDSs: {num_cdss}
 partial CDSs: {num_partial_cdss}
 protein fragments: {num_fragment_proteins}
-CDSs per 10 kb: {num_cdss / ((sum(lengths)+0.01)/10000) : .2f}
-
-{hist_str}""", file=self.out_handle)
+CDSs per 10 kb: {num_cdss / ((sum(lengths) + 0.01) / 10000):.2f}
+""", file=self.out_handle)
+        if len(lengths) != 0:
+            print(text_histogram(lengths, title="Contig Lengths"), file=self.out_handle)
 
     def write_domain_table(self, domain_table_df, domain_cooccurence_df):
-        print(f"""Domain Stats
-        
-        Domain Frequency
-
-{domain_table_df.to_string(justify="left", float_format='{:.0f}'.format, index=False)}
-""", file=self.out_handle)
+        rows = [[row.domain, row.database, str(row.count), row.description, f"{row.avg_score:.1f}"]
+                for row in domain_table_df.rename(columns={"avg score": "avg_score"}).itertuples(index=False)]
+        print("Domain Frequency", file=self.out_handle)
+        print(text_table(["domain", "database", "count", "description", "avg score"], rows,
+                         [False, False, True, False, True]), file=self.out_handle)
         if domain_cooccurence_df is not None and len(domain_cooccurence_df) > 0:
-            print(f"""Domain Co-occurence (what percent of the time when the row-domain occurs does the column domain occur on the same contig)
-{domain_cooccurence_df.to_string(justify="left", float_format='{:.1f}'.format)}
-""", file=self.out_handle)
+            columns = list(domain_cooccurence_df.columns)
+            rows = [[focus] + [value if value == "" else f"{value:.1f}" for value in values]
+                    for focus, values in zip(domain_cooccurence_df.index, domain_cooccurence_df.itertuples(index=False))]
+            print("Domain Co-occurrence (the percent of the contigs with the row's domain that also have "
+                  "the column's domain)", file=self.out_handle)
+            print(text_table(["domain", *columns], rows, [False] + [True] * len(columns)), file=self.out_handle)
 
     def write_taxonomy(self, taxa_data):
-        #taxa_data = dict() # dict of dicts, taxid: {count: int, data: TaxonomyData}
-        table_data = {"taxid":[], "name":[], "rank":[], "count":[]}
-        for taxid in taxa_data:
-            table_data["taxid"].append(taxid)
-            name, rank = _name_and_rank(taxa_data[taxid]["data"])
-            table_data["name"].append(name)
-            table_data["rank"].append(rank)
-            table_data["count"].append(taxa_data[taxid]["count"])
-            
-        taxa_df = pd.DataFrame(table_data)
-
+        rows = []
+        for taxid, entry in taxa_data.items():
+            name, rank = _name_and_rank(entry["data"])
+            rows.append([str(taxid), name, rank, str(entry["count"])])
         print("Taxonomy", file=self.out_handle)
-        print(taxa_df.to_string(justify="left", float_format='{:.0f}'.format), file=self.out_handle)
+        print(text_table(["taxid", "name", "rank", "count"], rows, [True, False, False, True]), file=self.out_handle)
 
     def write_footer(self):
         pass
@@ -152,16 +144,16 @@ class SummaryJSONWriter():
 
 class SummaryHTMLWriter(SummaryJSONWriter):
     """The interactive page (web/reports/summary_report.*): the --json_out document, and the
-    contig length histogram and taxonomy tree the page draws."""
+    contig lengths and taxonomy tree the page draws."""
     def __init__(self, out_handle):
         super().__init__(out_handle)
-        self.length_histogram = None
+        self.length_counts = None
         self.taxonomy_tree = None
 
     def write_header(self, num_contigs, num_cdss, lengths, num_partial_cdss=0, num_fragment_proteins=0):
         super().write_header(num_contigs, num_cdss, lengths, num_partial_cdss=num_partial_cdss,
                              num_fragment_proteins=num_fragment_proteins)
-        self.length_histogram = length_histogram(lengths)
+        self.length_counts = length_counts(lengths)
 
     def write_taxonomy(self, taxa_data):
         super().write_taxonomy(taxa_data)
@@ -170,44 +162,19 @@ class SummaryHTMLWriter(SummaryJSONWriter):
     def write_footer(self):
         # Read back, so the page holds exactly what --json_out writes.
         summary = json.loads(json.dumps(self.payload, default=str))
-        data = {"summary": summary, "length_histogram": self.length_histogram, "taxonomy_tree": self.taxonomy_tree}
+        data = {"summary": summary, "length_counts": self.length_counts, "taxonomy_tree": self.taxonomy_tree}
         self.out_handle.write(report_html.render_report("summary_report", "Summary Report", "summary_report", data))
 
 
-# A histogram aims for about sqrt(n) bins, at least Sturges' ceil(log2(n)) + 1 and at most this.
-MAX_HISTOGRAM_BINS = 50
-
-
-def _nice_bin_width(raw: int) -> int:
-    """The smallest 1, 2 or 5 times a power of ten that is at least ``raw`` (>= 1)."""
-    power = 1
-    while True:
-        for factor in (1, 2, 5):
-            if factor * power >= raw:
-                return factor * power
-        power *= 10
-
-
-def length_histogram(lengths) -> Optional[Dict]:
-    """Integer lengths binned for the page: ``{"bin_edges": [...], "counts": [...]}``, bin i
-    counting the lengths in [bin_edges[i], bin_edges[i + 1]), or None for no lengths.
-
-    Integer arithmetic only, so other implementations can give the same bins: n lengths from lo
-    to hi aim for ``target = min(50, max((n - 1).bit_length() + 1, isqrt(n)))`` bins; the bin
-    width is the smallest 1, 2 or 5 times a power of ten that is at least
-    ``ceil((hi - lo + 1) / target)``, and the first edge is lo rounded down to a multiple of it.
-    """
+def length_counts(lengths) -> Optional[Dict]:
+    """The contig lengths for the page's histogram, which bins them itself as it zooms:
+    ``{"lengths": [...], "counts": [...]}``, the distinct lengths in ascending order and how many
+    contigs have each, or None for no lengths."""
     if len(lengths) == 0:
         return None
-    lo, hi, n = min(lengths), max(lengths), len(lengths)
-    target = min(MAX_HISTOGRAM_BINS, max((n - 1).bit_length() + 1, math.isqrt(n)))
-    width = _nice_bin_width(-(-(hi - lo + 1) // target))
-    start = lo // width * width
-    bins = (hi - start) // width + 1
-    counts = [0] * bins
-    for length in lengths:
-        counts[(length - start) // width] += 1
-    return {"bin_edges": [start + i * width for i in range(bins + 1)], "counts": counts}
+    tally = Counter(lengths)
+    distinct = sorted(tally)
+    return {"lengths": distinct, "counts": [tally[length] for length in distinct]}
 
 
 # Ranks kept in the taxonomy tree even when they add nothing (one child, no contigs of their own).
@@ -402,7 +369,7 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
                                           for domain2, count in domain_stats[domain1]['correlations'].items()}
 
     domain_table_df = pd.DataFrame.from_dict(domain_stats, orient='index', columns=['database', 'count', "description", 'avg score']).sort_values("count", ascending=False, kind="stable")
-    domain_table_df.reset_index(inplace=True, names='domain')
+    domain_table_df = domain_table_df.reset_index(names='domain')
     domain_cooccurence_df = None
     if len(correlations_dict) > 0:
         domain_cooccurence_df = pd.DataFrame.from_dict(correlations_dict, orient='index').fillna("")

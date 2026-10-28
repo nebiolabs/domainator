@@ -61,17 +61,23 @@ lists every change from 0.x.
   instead of Tabulator from a CDN. The page carries the same rows as `--json_out`, so the
   downloads keep full precision; the table still shows floats to one decimal place.
 - summary_report's `--html_out` page works offline and no longer needs matplotlib or seaborn:
-  the contig length histogram (with hover counts and SVG/PNG downloads) and the zoomable
+  the contig length histogram (with hover counts, wheel zoom and drag to pan, a bin width box,
+  and SVG/PNG downloads) and the zoomable
   taxonomy icicle are drawn by Domainator's own JavaScript instead of a seaborn PNG and d3
   from a CDN, and the domain frequency and co-occurrence tables are sortable, filterable
   tables like enum_report's. The page carries the `--json_out` document, so it shows the
   same numbers. The taxonomy tree's children are now in a fixed order (most contigs first).
+- summary_report's text report (`-o`) lays out its tables as plain aligned columns instead of
+  pandas' `to_string`, so the layout no longer changes with the pandas version: numbers are
+  right-aligned, `avg score` has one decimal place, and the co-occurrence and taxonomy tables
+  lose pandas' row numbers.
 - matrix_report's `--html_out` page works offline: its charts are Domainator's own JavaScript
   instead of Plotly and d3 from a CDN. The clusters-by-threshold and clusters-by-edges charts
   zoom by dragging across them; the split chart lines up with the threshold slider under it,
   and clicking it moves the threshold there; the arrow keys step the slider from stop to stop;
   and each chart, the 100-largest-clusters bubble chart included, downloads as SVG or PNG. The
-  page carries the `--json_out` document, so its summary shows the same numbers.
+  page carries the `--json_out` document, so its summary shows the same numbers, in a compact
+  block of figures beside each other. Dragging across a chart never selects the page's text.
 - plot_contigs works offline: the plot is Domainator's own JavaScript instead of d3 from a CDN,
   with zoom buttons, SVG/PNG downloads and a details box that lists every value in full. Each
   part of a multi-part feature is now drawn where it is, not all at the feature's start. A

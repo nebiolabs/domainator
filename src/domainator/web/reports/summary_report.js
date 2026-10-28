@@ -1,85 +1,51 @@
 // The summary report (summary_report): contig counts and lengths, the domains found, how often
 // other domains occur with the focus domains, and the taxonomy.
 //
-// report-data's data is {summary, length_histogram, taxonomy_tree}. summary is the document
-// --json_out writes. length_histogram is null (no contigs) or {bin_edges, counts}, bin i
-// counting the contig lengths in [bin_edges[i], bin_edges[i + 1]). taxonomy_tree is null
+// report-data's data is {summary, length_counts, taxonomy_tree}. summary is the document
+// --json_out writes. length_counts is null (no contigs) or {lengths, counts}, the distinct
+// contig lengths in ascending order and how many contigs have each. taxonomy_tree is null
 // (no --taxonomy) or a node {taxid, name, rank, count, children}, count being the contigs
 // assigned to that taxon itself.
 
 // @include common/payload.js
+// @include common/panels.js
 // @include common/download.js
 // @include common/table.js
 // @include common/charts.js
 // @include common/hierarchy.js
 
-function reportPanel(root, title, note = null) {
-    const section = document.createElement("section");
-    section.className = "panel";
-    const heading = document.createElement("h2");
-    heading.textContent = title;
-    section.appendChild(heading);
-    if (note) {
-        const text = document.createElement("p");
-        text.className = "note";
-        text.textContent = note;
-        section.appendChild(text);
-    }
-    root.appendChild(section);
-    return section;
-}
-
-function panelPart(section, id) {
-    const part = document.createElement("div");
-    part.id = id;
-    section.appendChild(part);
-    return part;
-}
-
-// [label, value] pairs as a grid of figures.
-function statGrid(entries) {
-    const grid = document.createElement("dl");
-    grid.className = "stat-grid";
-    for (const [label, value] of entries) {
-        const item = document.createElement("div");
-        const term = document.createElement("dt");
-        term.textContent = label;
-        const figure = document.createElement("dd");
-        figure.textContent = value;
-        item.append(term, figure);
-        grid.appendChild(item);
-    }
-    return grid;
-}
-
-function contigPanel(root, stats, histogram) {
+function contigPanel(root, stats, lengths) {
     const section = reportPanel(root, "Contig Stats");
-    const entries = [
+    const counts = [
         ["contigs", formatChartNumber(stats.contigs)],
         ["CDSs", formatChartNumber(stats.cdss)],
         ["partial CDSs", formatChartNumber(stats.partial_cdss)],
         ["protein fragments", formatChartNumber(stats.fragment_proteins)],
         ["CDSs per 10 kb", stats.cds_per_10kb.toFixed(2)],
     ];
+    const columns = [counts];
     if (stats.length) {
-        entries.push(
+        columns.push([
             ["shortest", formatChartNumber(stats.length.min)],
             ["median length", formatChartNumber(stats.length.median)],
             ["mean length", formatFixed1(stats.length.mean)],
             ["longest", formatChartNumber(stats.length.max)],
             ["total length", formatChartNumber(stats.length.total)],
-        );
+        ]);
     }
-    section.appendChild(statGrid(entries));
+    section.appendChild(statGrid(columns));
     const heading = document.createElement("h2");
     heading.textContent = "Contig Lengths";
     section.appendChild(heading);
     const chart = panelPart(section, "length-histogram");
-    if (histogram) {
-        drawHistogram(chart, {
-            binEdges: histogram.bin_edges, counts: histogram.counts, xLabel: "contig length",
-            yLabel: "contigs", itemLabel: "contigs", integerBins: true,
-            fileStem: "summary_report_lengths", idPrefix: "lengths-",
+    if (lengths) {
+        const note = document.createElement("p");
+        note.className = "note";
+        note.textContent = "Zoom with the mouse wheel or double-click (shift to zoom out), and drag to pan.";
+        section.insertBefore(note, chart);
+        window.lengthHistogram = drawHistogram(chart, {
+            values: lengths.lengths, counts: lengths.counts, xLabel: "contig length", yLabel: "contigs",
+            itemLabel: "contigs", fileStem: "summary_report_lengths", idPrefix: "lengths-",
         });
     } else {
         chart.innerHTML = '<div class="status">No contigs.</div>';
@@ -152,7 +118,7 @@ function taxonomyPanel(root, tree, taxa) {
         const {data} = await readReportData();
         const summary = data.summary;
         root.replaceChildren();
-        contigPanel(root, summary.contig_stats, data.length_histogram);
+        contigPanel(root, summary.contig_stats, data.length_counts);
         domainPanel(root, summary.domain_frequency);
         if (summary.domain_cooccurrence) {
             cooccurrencePanel(root, summary.domain_cooccurrence);

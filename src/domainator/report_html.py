@@ -22,7 +22,7 @@ import json
 import re
 from importlib.resources import files
 
-PAYLOAD_VERSION = 1
+PAYLOAD_VERSION = 2
 
 # The tokens report_shell() leaves in a page, for programs that fill pages without this module.
 TITLE_TOKEN = "@@REPORT_TITLE@@"

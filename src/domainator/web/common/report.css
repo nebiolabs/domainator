@@ -182,6 +182,9 @@ body.resizing-column { cursor: col-resize; user-select: none; }
 
 /* charts.js and the summary page */
 .chart { overflow-x: auto; }
+/* Dragging zooms or pans a chart; it must not select the text in and around it. */
+.chart, svg.contig-plot, .projection-plot { user-select: none; -webkit-user-select: none; }
+.toolbar input.bin-width { width: 5.5em; font: inherit; font-size: 0.9rem; }
 .chart rect[data-tip]:not([fill-opacity="0"]):hover { fill-opacity: 1; }
 .chart-tooltip {
     position: fixed;
@@ -196,15 +199,25 @@ body.resizing-column { cursor: col-resize; user-select: none; }
     white-space: pre-line;
     pointer-events: none;
 }
+/* Figures in a compact block of bordered cells, columns laid out by statGrid. */
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 10px 18px;
+    gap: 8px;
     margin: 0 0 16px;
 }
-.stat-grid div { display: flex; flex-direction: column-reverse; gap: 2px; }
-.stat-grid dt { color: var(--muted); font-size: 0.85rem; }
-.stat-grid dd { margin: 0; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.stat-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    background: var(--panel);
+}
+.stat-grid dt { color: var(--muted); font-size: 0.95rem; font-weight: 600; }
+.stat-grid dd { margin: 0; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
 .panel p.note { color: var(--muted); font-size: 0.9rem; margin: 0 0 12px; }
 
 /* The matrix report */
@@ -214,10 +227,47 @@ body.resizing-column { cursor: col-resize; user-select: none; }
     gap: 18px;
 }
 .chart-grid > div { min-width: 0; }
-.slider-controls { margin: 4px 0 16px; }
-.slider-controls label { display: block; margin: 10px 0 6px; font-size: 0.95rem; }
-.slider-track input[type="range"] { width: 100%; margin: 0; accent-color: #d62728; }
-#threshold-slider { direction: rtl; }
+.slider-controls {
+    margin: 4px 0 16px;
+    padding: 2px 0 12px;
+    background: var(--row-alt);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+.slider-controls label { display: block; margin: 10px 12px 6px; font-size: 0.95rem; }
+.slider-track input[type="range"] { margin: 0; cursor: pointer; }
+/* The threshold slider is a red knob on a plain track, its track running exactly under the
+   split chart's plot (the input reaches half a knob past it on each side). */
+#threshold-slider {
+    width: 100%;
+    height: 18px;
+    direction: rtl;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(#c3c8cf, #c3c8cf) center / calc(100% - 18px) 4px no-repeat;
+}
+#threshold-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: #d62728;
+}
+#threshold-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: #d62728;
+}
+#threshold-slider::-moz-range-progress { background: transparent; }
+#threshold-slider:disabled { cursor: default; }
+#threshold-slider:disabled::-webkit-slider-thumb { background: var(--muted); }
+#threshold-slider:disabled::-moz-range-thumb { background: var(--muted); }
+#threshold-slider:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+#mst-knn-k-slider { width: 240px; max-width: calc(100% - 24px); margin-left: 12px; accent-color: #1f77b4; }
 
 /* The contig plot */
 .contig-details {

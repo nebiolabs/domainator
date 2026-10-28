@@ -1,5 +1,5 @@
 // SVG charts drawn without a charting library: axes with round-number ticks, a hover tooltip,
-// a histogram of precomputed bins, and buttons that save a chart as SVG or PNG.
+// a histogram of integer values that zooms and pans, and buttons that save a chart as SVG or PNG.
 //
 // Colors and fonts are set as attributes, not by the page's stylesheet, so a saved SVG looks
 // the same outside the page.
@@ -47,6 +47,14 @@ function niceTicks(lo, hi, count) {
         ticks.push(Number((i * step).toPrecision(12)));
     }
     return ticks;
+}
+
+// The axis from 0 up to the first multiple of niceStep(0, top, count) at or above top, and its
+// ticks: [axisTop, ticks]. integer: true keeps whole-number ticks only.
+function zeroBasedAxis(top, count = 5, integer = false) {
+    const step = integer ? Math.max(1, niceStep(0, top, count)) : niceStep(0, top, count);
+    const axisTop = Math.max(step, Math.ceil(top / step - 1e-9) * step);
+    return [axisTop, niceTicks(0, axisTop, Math.round(axisTop / step))];
 }
 
 function formatChartNumber(value) {
@@ -177,54 +185,242 @@ function drawAxes(svg, {x, y, xTicks, yTicks, left, right, top, bottom, xLabel, 
     yTitle.textContent = yLabel;
 }
 
-// binEdges: n + 1 numbers, bin i holding the values in [binEdges[i], binEdges[i + 1]);
-// counts: n counts. With integerBins, a bin is labeled by the integers it holds.
-function drawHistogram(container, {binEdges, counts, xLabel, yLabel, itemLabel = "items",
-    integerBins = false, fileStem = "histogram", idPrefix = ""}) {
+// Histograms of integer values aim for about sqrt(n) bins, at least Sturges' ceil(log2(n)) + 1
+// and at most this.
+const MAX_HISTOGRAM_BINS = 50;
+// A histogram never zooms in to fewer values than this across.
+const MIN_HISTOGRAM_SPAN = 10;
+// How far the pointer moves before a press is a drag rather than a click.
+const CHART_DRAG_SLOP = 3;
+
+// The smallest 1, 2 or 5 times a power of ten that is at least raw (>= 1).
+function niceBinWidth(raw) {
+    for (let power = 1; ; power *= 10) {
+        for (const factor of [1, 2, 5]) {
+            if (factor * power >= raw) {
+                return factor * power;
+            }
+        }
+    }
+}
+
+// The bin width for n integer values from lo to hi: niceBinWidth(ceil((hi - lo + 1) / target)),
+// target = min(MAX_HISTOGRAM_BINS, max(bit length of (n - 1) + 1, floor(sqrt(n)))).
+function autoBinWidth(lo, hi, n) {
+    const bitLength = n > 1 ? (n - 1).toString(2).length : 0;
+    const target = Math.min(MAX_HISTOGRAM_BINS, Math.max(bitLength + 1, Math.floor(Math.sqrt(n))));
+    return niceBinWidth(Math.ceil((hi - lo + 1) / target));
+}
+
+// The first index in sorted values at or above value.
+function lowerBound(values, value) {
+    let lo = 0;
+    let hi = values.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (values[mid] < value) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+// Bins of the given width over [lo, hi): {edges, counts}, the first edge lo rounded down to a
+// multiple of width, bin i counting the values in [edges[i], edges[i + 1]). values are sorted
+// distinct integers, each occurring counts[i] times.
+function binValues(values, counts, lo, hi, width) {
+    const start = Math.floor(lo / width) * width;
+    const bins = Math.max(1, Math.ceil((hi - start) / width));
+    const binCounts = new Array(bins).fill(0);
+    for (let i = lowerBound(values, start); i < values.length && values[i] < start + bins * width; i += 1) {
+        binCounts[Math.floor((values[i] - start) / width)] += counts[i];
+    }
+    return {edges: Array.from({length: bins + 1}, (_, i) => start + i * width), counts: binCounts};
+}
+
+// A histogram of integer values: values are sorted and distinct, each occurring counts[i]
+// times. The wheel zooms the x axis around the pointer, dragging pans it, and double-click
+// zooms in (shift to zoom out). The bin width is chosen for the values in view (autoBinWidth)
+// unless one is typed into the toolbar. Returns {svg, view(), bins(), setView(range),
+// setBinWidth(width)}, width null for the automatic one.
+function drawHistogram(container, {values, counts, xLabel, yLabel, itemLabel = "items",
+    fileStem = "histogram", idPrefix = ""}) {
     const width = 760;
     const height = 300;
     const margin = {top: 12, right: 20, bottom: 48, left: 64};
+    const plot = {left: margin.left, right: width - margin.right, top: margin.top, bottom: height - margin.bottom};
     const svg = svgElement("svg", {
         viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `Histogram of ${xLabel}`,
         style: `width: 100%; max-width: ${width}px; height: auto;`,
     });
-    const lo = binEdges[0];
-    const hi = binEdges[binEdges.length - 1];
-    const maxCount = Math.max(1, ...counts);
-    // Counts get whole-number ticks.
-    const yTicks = niceTicks(0, maxCount, 5).filter(Number.isInteger);
-    const yTop = Math.max(maxCount, yTicks[yTicks.length - 1]);
-    const x = linearScale(lo, hi, margin.left, width - margin.right);
-    const y = linearScale(0, yTop, height - margin.bottom, margin.top);
-    // Integer bins get integer ticks.
-    const xTicks = niceTicks(lo, hi, 8).filter(tick => !integerBins || Number.isInteger(tick));
-    drawAxes(svg, {
-        x, y, xTicks, yTicks, xLabel, yLabel,
-        left: margin.left, right: width - margin.right, top: margin.top, bottom: height - margin.bottom,
-    });
+    chartFigure(container, svg, fileStem, idPrefix);
+    svg.style.cursor = "grab";
+    svg.style.touchAction = "none";
 
-    const bars = svgElement("g", {fill: CHART_ACCENT}, svg);
-    counts.forEach((count, i) => {
-        const x0 = x(binEdges[i]);
-        const x1 = x(binEdges[i + 1]);
-        const bar = svgElement("rect", {
-            x: x0 + 0.5, y: y(count), width: Math.max(1, x1 - x0 - 1), height: y(0) - y(count),
-            "fill-opacity": 0.85,
-        }, bars);
-        const start = binEdges[i];
-        const end = binEdges[i + 1];
-        const range = integerBins
-            ? (end - start === 1 ? formatChartNumber(start) : `${formatChartNumber(start)}–${formatChartNumber(end - 1)}`)
-            : `${formatChartNumber(start)}–${formatChartNumber(end)}`;
-        bar.dataset.tip = `${range}: ${formatChartNumber(count)} ${itemLabel}`;
-        // Empty bins can still be pointed at: a transparent strip the height of the plot.
-        if (count === 0) {
-            bar.setAttribute("y", margin.top);
-            bar.setAttribute("height", y(0) - margin.top);
-            bar.setAttribute("fill-opacity", 0);
+    const lo = values[0];
+    const hi = values[values.length - 1];
+    const total = counts.reduce((a, b) => a + b, 0);
+    const fullWidth = autoBinWidth(lo, hi, total);
+    const fullStart = Math.floor(lo / fullWidth) * fullWidth;
+    // The whole histogram: the automatic bins over every value.
+    const domain = [fullStart, fullStart + (Math.floor((hi - fullStart) / fullWidth) + 1) * fullWidth];
+    let view = null;
+    let chosenWidth = null;
+    let shown = null;
+
+    const toolbar = container.querySelector(".toolbar");
+    const resetButton = document.createElement("button");
+    resetButton.type = "button";
+    resetButton.id = `${idPrefix}reset-zoom`;
+    resetButton.textContent = "Reset zoom";
+    resetButton.addEventListener("click", () => setView(null));
+    const widthLabel = document.createElement("label");
+    widthLabel.textContent = "Bin width ";
+    const widthInput = document.createElement("input");
+    widthInput.type = "number";
+    widthInput.id = `${idPrefix}bin-width`;
+    widthInput.className = "bin-width";
+    widthInput.min = "1";
+    widthInput.step = "1";
+    widthInput.placeholder = "auto";
+    widthInput.title = "Leave empty to fit the bins to the values in view.";
+    widthInput.addEventListener("change", () => {
+        const typed = Math.round(Number(widthInput.value));
+        chosenWidth = widthInput.value !== "" && typed >= 1 ? typed : null;
+        widthInput.value = chosenWidth === null ? "" : String(chosenWidth);
+        render();
+    });
+    widthLabel.appendChild(widthInput);
+    const status = document.createElement("span");
+    status.className = "status";
+    status.id = `${idPrefix}bin-status`;
+    toolbar.append(resetButton, widthLabel, status);
+
+    function render() {
+        const [viewLo, viewHi] = view || domain;
+        let binWidth = chosenWidth;
+        if (binWidth === null) {
+            // Fit to the values in view; the whole histogram keeps the bins it opened with.
+            const first = Math.ceil(viewLo);
+            const last = Math.ceil(viewHi) - 1;
+            const a = lowerBound(values, first);
+            const b = lowerBound(values, last + 1);
+            let n = 0;
+            for (let i = a; i < b; i += 1) {
+                n += counts[i];
+            }
+            binWidth = view ? autoBinWidth(first, Math.max(first, last), Math.max(1, n)) : fullWidth;
+        }
+        shown = binValues(values, counts, viewLo, viewHi, binWidth);
+        svg.replaceChildren();
+        const x = linearScale(viewLo, viewHi, plot.left, plot.right);
+        const maxCount = Math.max(1, ...shown.counts);
+        // Counts get whole-number ticks.
+        const [yTop, yTicks] = zeroBasedAxis(maxCount, 5, true);
+        const y = linearScale(0, yTop, plot.bottom, plot.top);
+        const xTicks = niceTicks(viewLo, viewHi, 8).filter(Number.isInteger);
+        drawAxes(svg, {x, y, xTicks, yTicks, xLabel, yLabel, ...plot});
+        const bars = svgElement("g", {fill: CHART_ACCENT}, svg);
+        shown.counts.forEach((count, i) => {
+            const start = shown.edges[i];
+            const end = shown.edges[i + 1];
+            // Bins cut by the edge of the view are drawn up to it.
+            const x0 = Math.max(plot.left, x(start));
+            const x1 = Math.min(plot.right, x(end));
+            if (x1 - x0 < 0.5) {
+                return;
+            }
+            const bar = svgElement("rect", {
+                x: x0 + 0.5, y: y(count), width: Math.max(1, x1 - x0 - 1), height: y(0) - y(count),
+                "fill-opacity": 0.85,
+            }, bars);
+            const range = end - start === 1 ? formatChartNumber(start) : `${formatChartNumber(start)}–${formatChartNumber(end - 1)}`;
+            bar.dataset.tip = `${range}: ${formatChartNumber(count)} ${itemLabel}`;
+            // Empty bins can still be pointed at: a transparent strip the height of the plot.
+            if (count === 0) {
+                bar.setAttribute("y", plot.top);
+                bar.setAttribute("height", y(0) - plot.top);
+                bar.setAttribute("fill-opacity", 0);
+            }
+        });
+        attachTooltip(bars, bar => bar.dataset.tip);
+        resetButton.disabled = view === null;
+        status.textContent = `${formatChartNumber(shown.counts.length)} bin${shown.counts.length === 1 ? "" : "s"}, ${formatChartNumber(binWidth)} wide`;
+    }
+
+    // Keeps a view inside the whole histogram and at least MIN_HISTOGRAM_SPAN across; null is
+    // the whole histogram.
+    function setView(range) {
+        if (range !== null) {
+            const full = domain[1] - domain[0];
+            const span = Math.min(full, Math.max(MIN_HISTOGRAM_SPAN, range[1] - range[0]));
+            let start = Math.min(domain[1] - span, Math.max(domain[0], range[0]));
+            if (span >= full) {
+                start = domain[0];
+            }
+            range = span >= full ? null : [start, start + span];
+        }
+        view = range;
+        chartTooltip().hide();
+        render();
+    }
+
+    const toChart = event => new DOMPoint(event.clientX, event.clientY).matrixTransform(svg.getScreenCTM().inverse()).x;
+    const valueAt = px => {
+        const [viewLo, viewHi] = view || domain;
+        return viewLo + (px - plot.left) / (plot.right - plot.left) * (viewHi - viewLo);
+    };
+    const zoomAt = (factor, px) => {
+        const [viewLo, viewHi] = view || domain;
+        const at = valueAt(Math.max(plot.left, Math.min(plot.right, px)));
+        setView([at - (at - viewLo) / factor, at + (viewHi - at) / factor]);
+    };
+    svg.addEventListener("wheel", event => {
+        event.preventDefault();
+        const delta = -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002);
+        zoomAt(2 ** delta, toChart(event));
+    }, {passive: false});
+    svg.addEventListener("dblclick", event => zoomAt(event.shiftKey ? 0.5 : 2, toChart(event)));
+    let press = null;
+    svg.addEventListener("pointerdown", event => {
+        if (event.button === 0) {
+            press = {id: event.pointerId, clientX: event.clientX, from: toChart(event), view: view || domain, dragged: false};
         }
     });
-    attachTooltip(bars, bar => bar.dataset.tip);
-    chartFigure(container, svg, fileStem, idPrefix);
-    return svg;
+    svg.addEventListener("pointermove", event => {
+        if (!press || event.pointerId !== press.id) {
+            return;
+        }
+        if (!press.dragged) {
+            if (Math.abs(event.clientX - press.clientX) < CHART_DRAG_SLOP) {
+                return;
+            }
+            press.dragged = true;
+            svg.setPointerCapture(event.pointerId);
+            svg.style.cursor = "grabbing";
+        }
+        const [viewLo, viewHi] = press.view;
+        const shift = (toChart(event) - press.from) / (plot.right - plot.left) * (viewHi - viewLo);
+        setView([viewLo - shift, viewHi - shift]);
+    });
+    const release = () => {
+        press = null;
+        svg.style.cursor = "grab";
+    };
+    svg.addEventListener("pointerup", release);
+    svg.addEventListener("pointercancel", release);
+
+    render();
+    return {
+        svg,
+        view: () => (view ? view.slice() : null),
+        bins: () => ({edges: shown.edges.slice(), counts: shown.counts.slice()}),
+        setView,
+        setBinWidth(binWidth) {
+            widthInput.value = binWidth === null ? "" : String(binWidth);
+            widthInput.dispatchEvent(new Event("change"));
+        },
+    };
 }

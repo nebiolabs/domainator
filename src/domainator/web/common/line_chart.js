@@ -2,14 +2,6 @@
 // (zoom by dragging across it), log or linear x axes, a second y axis on the right, and a
 // tooltip with each series' value under the pointer.
 
-// The axis from 0 up to the first multiple of niceStep(0, top, count) at or above top, and its
-// ticks: [axisTop, ticks]. integer: true keeps whole-number ticks only.
-function zeroBasedAxis(top, count = 5, integer = false) {
-    const step = integer ? Math.max(1, niceStep(0, top, count)) : niceStep(0, top, count);
-    const axisTop = Math.max(step, Math.ceil(top / step - 1e-9) * step);
-    return [axisTop, niceTicks(0, axisTop, Math.round(axisTop / step))];
-}
-
 // Ticks for a log axis over [lo, hi] (lo > 0): the powers of ten, with 2 and 5 times them when
 // the range spans few decades, and round linear ticks when it spans less than one.
 function logTicks(lo, hi) {
