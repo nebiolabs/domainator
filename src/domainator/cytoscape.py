@@ -91,7 +91,6 @@ def format_att_value(value, xgmml_type):
         
 
 
-#TODO: option to add edges for non-zero mutual-blast (or some threshold)
 def _serialize_xgmml_element(element, tail):
     indent(element, level=1)
     element.tail = tail

@@ -26,11 +26,6 @@ ZCOLNAME="projection_Z"
 DENSE_PROJECTION_MIN_FILL = 0.5
 """Matrices with at least this fraction of non-zero cells are projected as dense arrays."""
 
-#TODO: for projections that are less overweighted toward dense regions of sequence space, learn a PCA on the reduced sequence set then apply it to the expanded sequence set.
-
-
-
-
 def center_and_scale(matrix, max_value):
     """
         matrix should be dimensions, pts, projection_dimension

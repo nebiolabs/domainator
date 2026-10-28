@@ -58,9 +58,6 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# TODO: write tests for genbank downloads.
-# TODO: NCBI TSA, mgnify, other databases, maybe with automatic taxonomy assignment if not annotated, that would be cool!
-
 ##### NCBI #####
 
 def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict[str, str]]:

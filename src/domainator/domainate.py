@@ -47,9 +47,6 @@ from domainator.location_ops import overlay
 #TODO: also look at: https://github.com/Larofeticus/hpc_hmmsearch, https://www.higithub.com/apcamargo/repo/hpc_pfam_search, https://docs.nersc.gov/performance/case-studies/hmmer3/
 #TODO: add progress bar
 #TODO: For phmmer hits, show the alignment as part of the annotation
-#TODO: add database name as DEFINITION or ACCESSION
-#TODO: I think there may be some issue in pyhmmer where it makes a pool of all available cores, and then just uses one of them.
-
 
 
 MAX_PROTEIN_SIZE = 100_000
@@ -826,7 +823,6 @@ def filter_by_overlap(hits, allowed_percent_overlap, presorted=False, by_db=Fals
         a list of tuples of the hits of a coding sequence with the non-overlapping domains 
         with the highest bitscores
     """
-    #TODO: filter different dbs independently.
     no_overlap_hits = []
     if not presorted:
         hits.sort(key=lambda x: x.score, reverse=True)  # sort by bitscore
@@ -1334,7 +1330,6 @@ def build_parser():
     add_input(parser, "the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which.", stdin=False)
     add_alphabet(parser)
     
-    # TODO: might be better to allow user to have different command line arguments for different kinds of databases? Particularly for precompiled databases like hhsuite and foldseek.
     parser.add_argument('-r', '--reference', required=False, type=str,
                         default=None, nargs='+',
                         help="reference files to search against the input. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.")

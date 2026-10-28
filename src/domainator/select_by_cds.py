@@ -27,7 +27,6 @@ from domainator.partial import fragment_status_allowed, cds_fragment_status, PAR
 from domainator.location_ops import circular_envelope, copy_location, overlap_size, stranded_end, stranded_start
 from typing import Tuple, Optional, Set, Iterable, Iterator
 from Bio.SeqRecord import SeqRecord
-#TODO: account for different domain databases
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
 #       https://www.ebi.ac.uk/interpro/search/ida/
 #TODO: add evalue or bitscore threshold for domains?

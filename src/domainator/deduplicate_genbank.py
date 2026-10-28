@@ -190,9 +190,7 @@ class Diamond(ClusterProgram):
     def get_reduced_names(self):
         return set(self.get_cluster_members().keys())
    
-# class HashDedup(ClusterProgram):
-#     pass
-# TODO
+
 
 def run_clustering(algorithm, input_fasta_path, id, extra_args, bin_path=None, add_count=None, cpus=1, log_handle=sys.stderr):
     """
@@ -259,7 +257,7 @@ def deduplicate_genbank(inputs: List[str], *, identity: float, algorithm: str = 
         raise ValueError("--both_strands is only supported for nucleotide input.")
     cpu = resolve_cpu(cpu)
 
-    if algorithm == "hash": #TODO: multiprocessing
+    if algorithm == "hash":
         if identity != 1:
             raise ValueError(f"hash algorithm only valid for identity = 1, not {identity}.")
         seen = dict()

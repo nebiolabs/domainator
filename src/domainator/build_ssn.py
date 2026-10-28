@@ -429,10 +429,7 @@ def build_parser():
     parser.add_argument('--config', action=ActionConfigFile)
 
 
-    # TODO: color by connected component (use a single color for all singletons)
-    # TODO: generate MSAs for connected clusters (write to files and make a cytoscape column with the alinged sequences)
-    # TODO: generate hmms for connected clusters (write to files)
-    # TODO: 
+    # TODO: color by connected component (use a single color for small clusters, either by topk clusters or a cluster size cutoff)
     declare_outputs(parser, ["xgmml_out", "html_out", "dvb_out"])
     return parser
 

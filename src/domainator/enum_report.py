@@ -102,7 +102,7 @@ def get_domain_architecture(rec:SeqRecord, sep:str="; ") -> str:
     domainator_features.sort(key=lambda x:x.location.start)
     return sep.join([feature.qualifiers["name"][0] for feature in domainator_features])
 
-def get_domain_architecture_detailed(rec:SeqRecord, domain_sep:str="/", CDS_sep:str="; ", no_domains_tag="no_domains") -> str: #TODO: add test for this.
+def get_domain_architecture_detailed(rec:SeqRecord, domain_sep:str="/", CDS_sep:str="; ", no_domains_tag="no_domains") -> str:
     CDS_features = list()
     
     if rec.annotations["molecule_type"] == "protein":
@@ -280,7 +280,7 @@ def qualifier_factory(spec, sep="; "):
         "function": qualifier,
     }
 
-def feature_count_factory(spec): #TODO: deduplicate with count_feature
+def feature_count_factory(spec):
     
     if len(spec) != 1:
         raise ValueError("feature_count spec must be length 1")

@@ -51,13 +51,6 @@ _NUCLEOTIDE_MIN_FRACTION = 0.9
 _GAP_CHARACTERS = set("-.")
 
 
-# TODO: instructions for how to get cytoscape formatted files to look nice (y-files tree layout and some others?).
-#see: https://stackoverflow.com/questions/28222179/save-dendrogram-to-newick-format
-#see also: https://github.com/biopython/biopython/blob/master/Bio/Phylo/TreeConstruction.py
-#see also: https://dendropy.org/library/phylogeneticdistance.html?highlight=upgma#dendropy.calculate.phylogeneticdistance.PhylogeneticDistanceMatrix.upgma_tree
-# https://docs.scipy.org/doc/scipy/reference/cluster.hierarchy.html
-
-
 @dataclass
 class Tree:
     """A rooted tree as arrays over its nodes in preorder, so node 0 is the root and every
