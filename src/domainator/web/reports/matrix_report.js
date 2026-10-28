@@ -515,7 +515,8 @@ function thresholdPanel(root, data, charts) {
     if (kSlider) {
         kSlider.addEventListener("input", show);
     }
-    selectStop(0);
+    // Start at the lowest threshold, the whole network, at the slider's left end.
+    selectStop(stops.length - 1);
     return {select: selectStop, positions};
 }
 

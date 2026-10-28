@@ -407,7 +407,11 @@ def test_matrix_page_walks_the_slider_through_every_stop(open_page, tmp_path, sh
     # MST agrees with Python's cluster counts.
     table = data["threshold_table"]
     knn = data["knn_projection"]
+    # The slider starts at the lowest threshold, at its left end.
+    assert page.text_content("#threshold-number") == data["slider_stops"][-1]["threshold_label"]
+    assert _figures(page)["clusters"] == "1"
     page.focus("#threshold-slider")
+    page.keyboard.press("Home")
     for i, stop in enumerate(data["slider_stops"]):
         if i > 0:
             page.keyboard.press("ArrowLeft")
@@ -517,8 +521,10 @@ def test_matrix_page_with_too_few_edges(open_page, tmp_path, values):
     page = open_page(_matrix_page(tmp_path / "matrix.html", tmp_path / "m.hdf5", "--knn_projection"))
     page.wait_for_selector("#cluster-bubbles svg circle")
     assert page.pageerrors == [] and page.requests == []
-    assert _figures(page)["clusters"] == str(len(values))
-    assert page.is_disabled("#threshold-slider") == (len(values) < 2 or values[0][1] == 0)
+    no_edges = len(values) < 2 or values[0][1] == 0
+    # The slider starts at the lowest threshold, where the one edge, if any, is kept.
+    assert _figures(page)["clusters"] == str(len(values) if no_edges else 1)
+    assert page.is_disabled("#threshold-slider") == no_edges
 
 
 def _contig_page(path, *extra):
