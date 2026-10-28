@@ -245,3 +245,13 @@ body.resizing-column { cursor: col-resize; user-select: none; }
 svg.contig-plot { border: 1px solid var(--line); border-radius: 8px; cursor: grab; touch-action: none; }
 svg.contig-plot.panning { cursor: grabbing; }
 svg.contig-plot [data-contig] > line, svg.contig-plot [data-contig] text, svg.contig-plot [data-feature] { cursor: pointer; }
+
+/* The projection plot */
+.projection-plot { position: relative; }
+.projection-plot svg { display: block; width: 100%; height: auto; }
+.projection-plot canvas { position: absolute; cursor: grab; touch-action: none; }
+.projection-plot canvas.panning { cursor: grabbing; }
+.projection-plot [data-group] { cursor: pointer; }
+.toolbar input.point-size { width: 4.5em; font: inherit; font-size: 0.9rem; }
+.toolbar input.point-search { width: 16em; }
+.toolbar button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }

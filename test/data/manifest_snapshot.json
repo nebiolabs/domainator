@@ -6459,9 +6459,9 @@
    "required": false
   },
   {
-   "name": "png_out",
+   "name": "html_out",
    "flags": [
-    "--png_out"
+    "--html_out"
    ],
    "kind": "path",
    "type": "string",

@@ -74,7 +74,7 @@ Each program's main output also has the short option `-o`:
 | TSV table | `--tsv_out` |
 | HTML / JSON / text report | `--html_out` / `--json_out` / `--text_out` |
 | HMM / CM profiles | `-o/--hmm_out` / `-o/--cm_out` |
-| Cytoscape XGMML / Newick tree / SVG / PNG | `--xgmml_out` / `--newick_out` / `--svg_out` / `--png_out` |
+| Cytoscape XGMML / Newick tree / SVG | `--xgmml_out` / `--newick_out` / `--svg_out` |
 | log file | `--log_out` |
 
 `--fasta_out` used to be a switch that made `-o` write FASTA instead of GenBank. It is now a
@@ -115,7 +115,7 @@ Options not listed are unchanged.
 
 | Program | 0.x | 1.0 |
 |---|---|---|
-| build_projection | `--png_out`, `--xgmml`, `--coords_out` | `--png_out`, `-o/--xgmml_out`, `--coords_out` |
+| build_projection | `--png_out`, `--xgmml`, `--coords_out` | `--html_out` (an interactive plot that saves itself as PNG or SVG; replaces `--png_out`), `-o/--xgmml_out`, `--coords_out` |
 | | `--3d` | `--three_d` |
 | | `--params` | `--umap_args`, `--tsne_args`, `--pca_args`: `key=value` pairs, e.g. `--umap_args="n_neighbors=30 min_dist=0.1"` |
 | build_ssn | `--xgmml`, `--cluster_tsv` | `-o/--xgmml_out`, `--cluster_tsv_out` |

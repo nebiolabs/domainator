@@ -263,8 +263,8 @@ domainator kmer_dist -i proteins.fasta -r proteins.fasta -o kmer_scores.hdf5
 # Similarity of contigs by their domain content, and the contigs sorted by it
 domainator compare_contigs -i annotated.gb --ji 0.5 --ai 0.5 -o contig_scores.hdf5 --genbank_out sorted_contigs.gb
 
-# A 2D projection of a similarity matrix, as a Cytoscape network and a picture (--png_out needs the projection extra)
-domainator build_projection -i scores.hdf5 --algorithm pca -o projection.xgmml --png_out projection.png
+# A 2D projection of a similarity matrix, as a Cytoscape network and an interactive plot (which saves PNG and SVG pictures)
+domainator build_projection -i scores.hdf5 --algorithm pca -o projection.xgmml --html_out projection.html
 ```
 
 Build a covariance model:

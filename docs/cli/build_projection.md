@@ -6,10 +6,10 @@ Project a matrix into 2D or 3D with UMAP, t-SNE, or PCA.
 ```
 Generates 2d or 3d umap, tsne, or pca projections from matrices
 
-output can be images, coordinates, or Cytoscape xgmml files.
+output can be an interactive HTML plot, coordinates, or Cytoscape xgmml files.
 ```
 
-Give at least one of these outputs: `--xgmml_out`, `--png_out`, `--coords_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
+Give at least one of these outputs: `--xgmml_out`, `--html_out`, `--coords_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
 
 | Option | Value | Default | Description |
 |---|---|---|---|
@@ -18,12 +18,12 @@ Give at least one of these outputs: `--xgmml_out`, `--png_out`, `--coords_out`. 
 | `-i`, `--input` | FILE | required | The matrix that you want to project into 2D or 3D space, rows are observations (typically gene names), columns are features (typically similarity to other genes, or hmm profile scores). Format can be tab-separated text or Domainator hdf5. |
 | `--algorithm` | {pca,tsne,umap,coords} | pca | Which projection algorithm to use. |
 | `--metadata` | FILE ... |  | tab separated files of sequence metadata. |
-| `--color_by` | STRING |  | Color the points in the output image based on this column of the metadata table. |
+| `--color_by` | STRING |  | Color the points in the HTML plot and the xgmml by this column of the metadata table. |
 | `--color_table` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. For example: CCDB   cc0000 |
 | `--color_table_out` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table. |
 | `--palette_offset` | INTEGER | 0 | Skip this many colors at the start of the palette before assigning colors to --color_by values. For example, if a plot colored by one column used the first 5 colors, --palette_offset 5 colors another column without reusing them. Ignored with --color_table. |
 | `-o`, `--xgmml_out` | FILE |  | Write the projection to this Cytoscape xgmml file. |
-| `--png_out` | FILE |  | Write a picture of the projection to this png file. |
+| `--html_out` | FILE |  | Write an interactive plot of the projection to this HTML page, which can save it as SVG or PNG. |
 | `--coords_out` | FILE |  | Write the projected coordinates to this tab-separated file. |
 | `--pca_args` | STRING |  | keyword arguments for the pca implementation, as key=value pairs in one quoted string, for example --pca_args="n_components=2". Values are read as Python literals where possible. |
 | `--tsne_args` | STRING |  | keyword arguments for the tsne implementation, as key=value pairs in one quoted string, for example --tsne_args="n_components=2". Values are read as Python literals where possible. |

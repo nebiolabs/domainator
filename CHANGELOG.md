@@ -78,6 +78,11 @@ lists every change from 0.x.
   contig's details list a fixed set of record annotations (references and structured comments
   are left out), and its metadata as the text in the file. `--color_by` needs `--metadata`
   and must name one of its columns; a contig with no value is drawn gray instead of failing.
+- build_projection `--html_out` replaces `--png_out`: an offline, interactive plot of the
+  projection, colored as the xgmml is, with each point's metadata on hover, legend entries that
+  hide and show their group, zoom and pan, a search by name, X/Y, X/Z and Y/Z views of a 3D
+  projection, and SVG/PNG downloads of the current view. A value missing from `--color_table`
+  is gray instead of failing.
 
 ### Removed
 - `partition_seqfile` and `partition_seqids` (domainate and domain_search partition their

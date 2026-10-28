@@ -100,7 +100,7 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 
 | Program | Description | input |  output  | streaming input  |  streaming output  |  notes  |
 | ---- | ----- | ---- |---| -- | -- | ------------- |
-|  domainator build_projection | generates 2d or 3d umap, tsne, or pca projections | a data matrix (hdf5 or tab-separated text), could be a sequence similarity matrix, or any other kind of data matrix. optionally, a table of node metadata. |  typically a Cyoscape xgmml file or a png image file. Other outputs are possible.  |  no  |  no  | |
+|  domainator build_projection | generates 2d or 3d umap, tsne, or pca projections | a data matrix (hdf5 or tab-separated text), could be a sequence similarity matrix, or any other kind of data matrix. optionally, a table of node metadata. |  typically a Cytoscape xgmml file or an interactive HTML plot, which can save PNG and SVG pictures. Other outputs are possible.  |  no  |  no  | |
 |  domainator build_ssn |  generates a Cytoscape file with a sequence similarity network (SSN)  |  a sparse matrix of network edges. optionally, a table of node metadata  |  typically a Cyoscape xgmml file, other SSN related files are possible | no  | no  | |
 |  domainator build_tree | Converts a distance matrix into a UPGMA tree |  a distance matrix, or a similarity matrix to convert into distances  | Newick or Cytoscape file  | no  | yes | Can attach annotations to cytoscape files, based on supplied metadata. |
 |  domainator clean_sequences | cleans sequence names and residues, and drops sequences with non-canonical residues | genbank or fasta files | a genbank or fasta file, and optionally a log of the changes | yes | yes | |
