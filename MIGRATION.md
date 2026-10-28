@@ -11,10 +11,9 @@ that names it, so nothing changes silently. This guide lists every change.
   TMbed (for `find_features --tmbed`) is installed separately; see "Optional: TMbed" in the
   README.
 - UMAP is an optional extra: `pip install "domainator[projection]"` for
-  `build_projection --algorithm umap`. The same extra brings matplotlib and seaborn, which
-  only `build_projection --png_out` uses. `torch` (for the ESM-2 and TMbed features) is the
-  `structure` extra. The `core` extra is gone (its packages are ordinary dependencies), and so is
-  the `bashplotlib` dependency.
+  `build_projection --algorithm umap`. matplotlib and seaborn are no longer needed. `torch`
+  (for the ESM-2 and TMbed features) is the `structure` extra. The `core` extra is gone (its
+  packages are ordinary dependencies), and so is the `bashplotlib` dependency.
 - `domainator doctor` lists the optional programs and packages and which of them are installed.
 
 ## Running programs

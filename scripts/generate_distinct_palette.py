@@ -1,8 +1,8 @@
-"""Regenerate the DISTINCT_COLORS palette used by domainator.utils.get_palette.
+"""Regenerate the DISTINCT_COLORS palette used by domainator.colors.get_palette.
 
 Greedy maximin ("glasbey") selection in CIELAB: repeatedly pick the candidate color
 whose nearest already-chosen color is as far away as possible. Seeded with
-matplotlib's tab10 so the first ten entries stay familiar, and with white/black so
+matplotlib's tab10 (the first ten DISTINCT_COLORS) so they stay familiar, and with white/black so
 nothing lands too close to a plot background.
 
 Candidates are restricted to 25 < L* < 85: darker colors are hard to tell apart and
@@ -11,7 +11,7 @@ lighter ones wash out on a white background.
 Usage:
     python scripts/generate_distinct_palette.py [N]
 
-Prints the hex list ready to paste into src/domainator/utils.py, plus the minimum
+Prints the hex list ready to paste into src/domainator/colors.py, plus the minimum
 pairwise deltaE, which is the number that matters: as long as it stays comfortably
 above ~20, every pair of colors in the palette is distinguishable, so consecutively
 numbered groups are guaranteed to look different.
@@ -20,8 +20,9 @@ numbered groups are guaranteed to look different.
 import itertools
 import sys
 
-import matplotlib
 import numpy as np
+
+from domainator.colors import DISTINCT_COLORS
 
 # Candidate grid resolution per channel, and the L* window colors must fall in.
 GRID_STEPS = 21
@@ -57,7 +58,7 @@ def generate(n_colors):
     in_range = (candidate_lab[..., 0] > MIN_LIGHTNESS) & (candidate_lab[..., 0] < MAX_LIGHTNESS)
     candidates, candidate_lab = candidates[in_range], candidate_lab[in_range]
 
-    anchors = [matplotlib.colors.to_rgb(c) for c in matplotlib.colormaps["tab10"].colors]
+    anchors = [tuple(int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)) for color in DISTINCT_COLORS[:10]]
     palette = list(anchors)
     palette_lab = list(srgb_to_lab(np.array(anchors)))
 

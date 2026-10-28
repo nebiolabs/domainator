@@ -87,8 +87,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# build_projection --algorithm umap, and its --png_out picture
-projection = ["umap-learn >=0.5.4", "matplotlib >=3.8", "seaborn >=0.13"]
+# build_projection --algorithm umap
+projection = ["umap-learn >=0.5.4"]
 # domainate --foldseek and find_features --tmbed. They also need packages that are not on PyPI:
 # esmologs (see docs/esm_3b_foldseek.md) and TMbed (see "Optional: TMbed" in README.md).
 structure = ["torch >=2.0"]

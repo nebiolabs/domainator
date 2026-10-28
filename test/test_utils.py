@@ -1,6 +1,6 @@
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import list_and_file_to_dict_keys
-from domainator.colors import AUTO_COLORS, DISTINCT_COLORS, OTHER_COLOR, get_palette, sort_palette_values
+from domainator.colors import DISTINCT_COLORS, OTHER_COLOR, get_palette, sort_palette_values
 from domainator.errors import InputError
 from domainator.expr import BooleanEvaluator
 from domainator.hmmio import alphabet_name, alphabet_score_scale, common_hmm_alphabet, get_alphabet, is_nucleic_acid_alphabet, iter_hmm_names, iter_hmms, iter_hmms_with_alphabet, open_hmm_file, open_writable_hmm_file, peek_hmm_alphabet, read_hmms
@@ -18,7 +18,6 @@ import pytest
 from array import array
 import re
 import math
-import random
 import pandas as pd
 import helpers
 from pyhmmer import easel
@@ -249,14 +248,6 @@ def test_get_palette_offset():
         "a": DISTINCT_COLORS[1], "b": DISTINCT_COLORS[2], "c": OTHER_COLOR, None: OTHER_COLOR}
     with pytest.raises(InputError):
         get_palette(["A"], offset=-1)
-
-
-def test_auto_colors_are_the_shuffled_husl_palette():
-    """AUTO_COLORS is the literal copy of what AutoColormap used to compute with seaborn."""
-    sns = pytest.importorskip("seaborn")
-    husl = [x.upper() for x in sns.color_palette("husl", n_colors=30).as_hex()]
-    random.Random(12).shuffle(husl)
-    assert list(AUTO_COLORS) == husl
 
 
 def test_get_palette_missing_values():

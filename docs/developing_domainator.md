@@ -58,7 +58,6 @@ Each step reports its fastest of `--repeat` runs; `--only domainate` runs a subs
   - pytest
   - pytest-datadir
   - pandas
-  - matplotlib and seaborn (optional, for build_projection --png_out)
   - cd-hit
   - scipy
   - pyhmmer
