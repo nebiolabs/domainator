@@ -81,13 +81,13 @@ def test_extract_domains_combine_1(shared_datadir, capsys):
         for rec in out_recs:
             assert str(rec.seq) == "AAGCACAACCATGCAGAATGAAGCCCGTCGTCTGCGTGCCGAACGCTGGAAAGCGGAAAATCAGGAAGGGATGGCTGAGGTCGCCCGGTTTATTGAAATGAACGGCTCTTTTGCTGACGAGAACAGGGACTGGTGAAATGCAGTTTAAGGTTTACACCTATAAAAGAGAGAGCCGTTATCGTCTGTTTGTGGATGTACAGAGTGATATTATTGACACGCCCGGGCGACGGATGGTGATCCCCCTGGCCAGTGCACGTCTGCTGTCAGATAAAGTCTCCCGTGAACTTTACCCGGTGGTGCATATCGGGGATGAAAGCTGGCGCATGATGACCACCGATATGGCCAGTGTGCCGGTCTCCGTTATCGGGGAAGAAGTGGCTGATCTCAGCCACCGCGAAAATGACATCAAAAACGCCATTAACCTGATGTTCTGGGGAATATAAATGT"
 
-def test_extract_domains_keep_names_1(shared_datadir, capsys):
+def test_extract_domains_keep_parent_id_1(shared_datadir, capsys):
     """
         Test read and write genbank files.
     """
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/domains.gb"
-        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "CcdA", "--extend_up", "10", "--extend_down", "10", "--combine", "--keep_name", "-o", out])
+        extract_domains.main(['-i', str(shared_datadir) + "/" + "pDONR201_multi_genemark_domainator.gb", "--domains", "CcdB", "CcdA", "--extend_up", "10", "--extend_down", "10", "--combine", "--keep_parent_id", "-o", out])
         out_recs = list(parse_seqfiles([out]))
         old_recs = list(parse_seqfiles([shared_datadir / "pDONR201_multi_genemark_domainator.gb"]))
         old_names = {rec.name for rec in old_recs}
@@ -271,14 +271,14 @@ def test_extract_domains_splice_concatenates_without_duplication():
     assert stitched.id == "test_rec_3:16"
 
 
-def test_extract_domains_splice_keep_name():
+def test_extract_domains_splice_keep_parent_id():
     record = _build_test_record("ACGT" * 10, [(2, 6), (12, 16)])
     results = list(
         extract_domains.extract_domains(
             [record],
             domains={"foo"},
             splice=True,
-            keep_name=True,
+            keep_parent_id=True,
         )
     )
     assert len(results) == 1

@@ -8,7 +8,7 @@ Extract unannotated regions
 
 Takes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts regions not containing them.
 
-This tool is currently only supports protein sequences, support for nucleic acids may be added someday.
+This tool supports only protein sequences.
 
 can write a fasta or a genbank file
 ```
@@ -30,13 +30,13 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
 | `--contigs` | STRING ... |  | only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs. |
 | `--contigs_file` | FILE |  | only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
-| `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be considered. default: no cutoff. |
-| `--min_score` | NUMBER |  | the score cutoff (min) for domain annotations to be considered. default: no cutoff. |
+| `-e`, `--evalue` | NUMBER |  | Count only domain/search-hit annotations with e-value <= this when finding unannotated gaps. Default: no cutoff. |
+| `--min_annotation_score` | NUMBER |  | Count only domain/search-hit annotations with score >= this when finding unannotated gaps. Raising this can enlarge the gaps. Default: no cutoff. |
 | `--databases` | STRING ... |  | Only consider domains from these databases. default: all databases. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations count as annotated. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
-| `--keep_direction` |  |  | by default extracted regions will be flipped so that the source CDS will be on the forward strand. Set this option to not reverse complement anything. In the rare case of a split CDS with parts on different strands, the strand of the first part will be considered. |
-| `--keep_name` |  |  | by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names. |
-| `--largest` |  |  | Extract only the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_length |
-| `--min_length` | INTEGER |  | Extract unannotated regions of at least this length from each protein. default: no cutoff. |
+| `--keep_direction` |  |  | Has no effect: this tool supports only protein sequences and never reverse-complements them. Retained for compatibility with extract_domains. |
+| `--keep_parent_id` |  |  | Use the parent protein ID instead of a coordinate-based region ID. This can produce duplicate IDs for different extracted sequences. |
+| `--largest` |  |  | Extract only the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_region_length |
+| `--min_region_length` | INTEGER |  | Extract only unannotated gaps of at least this many amino acids, before choosing --largest. Not a cutoff on the input protein length. Default: no cutoff. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

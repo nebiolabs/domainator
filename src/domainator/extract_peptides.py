@@ -71,7 +71,7 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                      keep_cds_feature: bool = True, cds_id_type: str = "name", annotation_type: str = "domainator",
                      strand: Optional[str] = None, unannotated: bool = False, _from_domain_search: bool = False,
                      extract_all: bool = False, invert: bool = False, _domain_search_negatives: Optional[Set[str]] = None,
-                     databases: Optional[Set[str]] = None, keep_name: bool = False, name_field: Optional[str] = None,
+                     databases: Optional[Set[str]] = None, keep_parent_id: bool = False, name_field: Optional[str] = None,
                      partial: str = "include", has_search_hit: bool = False,
                      ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                      include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
@@ -81,7 +81,8 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
         Yields the extracted peptides as SeqRecord objects.
         Args:
             records: an iterable of SeqRecords
-            evalue: the evalue cutoff for domain annotations to be put onto the new genbank file (None: no cutoff)
+            evalue: maximum e-value of domain/search-hit annotations used for CDS selection
+                and carried onto the peptide record (None: no cutoff).
             domains: only extract peptides containing these domains
             domain_expr: also select CDSs satisfying this Boolean domain expression.
             cds_ids: only consider peptides from cdss with these names
@@ -99,7 +100,8 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                 With no selectors, warn and ignore inversion.
             _domain_search_negatives: if not None, then this is a set of domain names that are considered negative hits. If a CDS has the best search hit as a negative, then it will be skipped.
             databases: if not None, then only consider domains from these databases when filtering by domain. default: all databases.
-            keep_name: if True, then keep the original name of the contig. If False, then the name will be the name of the CDS.
+            keep_parent_id: use the parent contig ID instead of the resolved CDS name for peptide
+                IDs. This can produce duplicate IDs for different peptide sequences.
             name_field: prefer this CDS qualifier for name matching and peptide IDs,
                 falling back to protein_id, gene_id, locus_tag, then gene.
             partial: select CDSs by fragment status: "include" (default, all), "exclude" (skip fragments), or "only" (only fragments).
@@ -192,7 +194,7 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                     peptide = Seq(cds.feature.qualifiers["translation"][0])
 
                 new_name = cds.name
-                if keep_name:
+                if keep_parent_id:
                     new_name = contig.id
                 rec = SeqRecord(seq=peptide, id=new_name, name=new_name)
 
@@ -256,7 +258,7 @@ def build_parser():
     parser.add_argument('--cds_file', type=str, default=None,
                         help="only look for peptides on cdss with names listed in this text file.")
 
-    parser.add_argument('--keep_name', action='store_true', default=False,
+    parser.add_argument('--keep_parent_id', action='store_true', default=False,
                        help="Use the original contig ID instead of the resolved CDS name for peptide IDs. "
                        "This can produce duplicate IDs.")
 
@@ -265,7 +267,7 @@ def build_parser():
                         ' If not supplied, then qualifiers will be checked in order of: ["protein_id", "gene_id", "locus_tag", "gene"]')
 
     parser.add_argument('-e', '--evalue', type=PositiveFloat, default=None,
-                        help="the evalue cutoff (max) for domain annotations to be put onto the new genbank file. Default: no cutoff.")
+                        help="Maximum e-value of domain/search-hit annotations used for CDS selection and carried onto peptide records. Default: no cutoff.")
     
 
     parser.add_argument('--config', action=ActionConfigFile)
@@ -302,7 +304,7 @@ def main(argv):
                     unannotated = params.unannotated,
                     invert=params.invert,
                     databases=params.databases,
-                    keep_name = params.keep_name,
+                    keep_parent_id = params.keep_parent_id,
                     name_field = params.name_field,
                     partial = params.partial,
                     ncbi_taxonomy=taxonomy_from_args(params),

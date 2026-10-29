@@ -163,11 +163,64 @@ fallback order:
 | `select_by_cds` | `gene_id`, `locus_tag`, `gene`, `protein_id` |
 
 If none is present, the shared resolver uses the CDS's unique ID. Peptide IDs use
-the resolved CDS name unless `--keep_name` requests the input contig ID.
+the resolved CDS name unless `--keep_parent_id` requests the input contig ID.
 `select_by_cds --name_field` affects matching, not its coordinate-based output IDs.
 Existing default precedence is preserved; use the same explicit field in both tools
 when the input has multiple identifiers. Peptide extraction still skips pseudogenes;
 selector parity does not remove tool-specific eligibility rules.
+
+### Score and length cutoffs
+
+Cutoffs apply to different objects; a score is not a property of an extracted
+sequence, and a region length is not necessarily the input record length.
+Score lower bounds and length lower/upper bounds are inclusive. E-value cutoffs
+are inclusive upper bounds.
+
+| Tool / option | Object and timing |
+|---|---|
+| `extract_domains --min_score` / `--evalue` | Individual domain/search-hit annotations, before extension, combination, or splicing. |
+| `extract_unannotated --min_annotation_score` / `--evalue` | Annotations that mask sequence when finding unannotated gaps. An annotation failing a cutoff does not mask sequence; raising the minimum score can enlarge the gaps. |
+| `extract_peptides --evalue` | Domain/search-hit annotations used for CDS selection and carried onto the peptide output. Not a score or length cutoff on the peptide. |
+| `select_by_contig --min_search_score` / `--max_search_score` | Existing `Domain_Search` annotation scores, not arbitrary domain scores. The inclusive range is an OR selector, not an independent record restriction. |
+| `select_by_contig --min_length` / `--max_length` | Whole input-record length, in bp for nucleotide input or amino acids for protein input. Independent restrictions, outside inversion. |
+| `extract_unannotated --min_region_length` | Each extracted gap's length in amino acids, before choosing `--largest`. Not the input protein length. |
+
+The contig search-score selector considers search annotations passing the e-value
+and database filters. The score range also limits `--has_search_hit`, but that
+selector ignores databases. A record outside the score range can still match
+another OR selector, such as a record ID or domain name; `--invert` negates the
+combined selectors.
+
+### Extracted IDs, provenance, and deduplication
+
+Peptide IDs use resolved CDS names, not coordinate-based region names.
+`extract_peptides --keep_parent_id` instead uses the parent contig ID.
+`extract_domains` and `extract_unannotated` normally use `model.region_id`:
+the parent ID plus 1-based inclusive endpoint coordinates, with `rc` for a
+reverse-complemented nucleotide region. Coordinates are omitted for a whole
+record extracted from its original origin. Protein regions are never
+reverse-complemented. `--keep_parent_id` on these two tools uses the parent record ID
+instead. `select_by_cds` uses coordinate-based region IDs; its `--name_field`
+changes CDS matching, not output IDs.
+
+Preserving a parent ID can give different extracted sequences the same ID.
+This is a naming collision, not evidence that the sequences are duplicates,
+and conflicts with the ID-to-sequence assumption described above. These extract
+tools do not automatically deduplicate or make colliding IDs unique.
+
+Peptide extraction's retained CDS feature carries `source_contig`, the parent
+contig ID. Feature locations on the output are mapped to peptide coordinates;
+`source_contig` alone does not preserve the original nucleotide coordinates.
+Region IDs record endpoints, not a complete provenance map for compound or
+spliced locations. FASTA output does not retain GenBank feature qualifiers.
+There is no uniform extraction-provenance schema across these tools.
+
+The shared exact-output `--dedup` policy is currently exposed by `select_by_cds`
+and `domain_search`, not by the three extract tools. Its choices are `none`,
+`id`, `sequence`, and nucleotide-only `sequence_rc`. Streaming deduplication
+keeps the first representative; ranked, capped search uses the best-scoring
+representative, breaking ties by arrival order. Deduplication precedes padding
+and is distinct from similarity clustering with `deduplicate_genbank`.
 
 ### Qualifier reference
 
@@ -283,7 +336,8 @@ Tools that extract part of a contig (`domainator select_by_cds`, `domainator dom
 - So `first > last` means either that the region is reverse complemented or that it wraps around the origin of a circular contig.
 - When the region is the whole contig and starts at the original origin, the coordinates are left out: forward is `<contig id>`, reverse is `<contig id>_rc`.
 - The record's GenBank ACCESSION keeps the original contig name, so you can still tell where the region came from.
-- Tools with `--keep_name` skip the renaming.
+- `extract_domains` and `extract_unannotated` skip renaming with `--keep_parent_id`;
+  `rotate_contigs` uses `--keep_name`.
 
 | Region of a 100 bp contig `c` | Name |
 |---|---|

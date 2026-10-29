@@ -2,7 +2,7 @@
 
 Takes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts regions not containing them.
 
-This tool is currently only supports protein sequences, support for nucleic acids may be added someday.
+This tool supports only protein sequences.
 
 can write a fasta or a genbank file
 """
@@ -25,9 +25,9 @@ from domainator.taxonomy.records import compile_taxonomy_filter
 
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
-def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
-                        keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
-                        databases: Optional[Set[str]] = None, largest: bool = False, min_length: Optional[int] = None,
+def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_annotation_score: Optional[float] = None,
+                        keep_direction: bool = False, keep_parent_id: bool = False, annotation_type: str = "domainator",
+                        databases: Optional[Set[str]] = None, largest: bool = False, min_region_length: Optional[int] = None,
                         ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                         include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
                         taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
@@ -35,18 +35,22 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
 
     Args:
         records: protein SeqRecords (only proteins are supported).
-        evalue: count only domains with an e-value at most this as annotations. None: all.
-        min_score: count only domains with a score at least this as annotations. None: all.
+        evalue: count only domain/search-hit annotations with an e-value at most this
+            when finding unannotated gaps. None: no cutoff.
+        min_annotation_score: count only domain/search-hit annotations with a score at least this
+            when finding unannotated gaps. Raising this can enlarge the gaps.
+            None: no cutoff.
         keep_direction: has no effect, since only proteins are supported; kept for
             compatibility with extract_domains.
-        keep_name: keep the proteins' names. By default, regions are renamed for their original
-            coordinates (see model.region_id). Careful: this can easily give duplicate names.
+        keep_parent_id: use the parent protein ID instead of a coordinate-based region ID.
+            This can produce duplicate IDs for different extracted sequences.
         annotation_type: which annotations count as annotated: "domainator", "domain_search",
             or "all".
         databases: count only domains from these databases as annotations. None: all.
         largest: yield only the largest unannotated region of each protein that is at least
-            ``min_length`` long.
-        min_length: yield only regions at least this long.
+            ``min_region_length`` long.
+        min_region_length: yield only unannotated gaps at least this many amino acids long,
+            before choosing the largest gap. Not a cutoff on the input protein length.
         ncbi_taxonomy: database required when taxonomy criteria are supplied.
         include_taxids: include these taxids and descendants (OR).
         exclude_taxids: exclude these taxids and descendants, overriding inclusion.
@@ -76,7 +80,7 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
                 keep = True
                 if not evalue_passes(feature, evalue):
                     keep = False
-                elif min_score is not None and feature_score(feature) < min_score:
+                elif min_annotation_score is not None and feature_score(feature) < min_annotation_score:
                     keep = False
                 if keep:
                     hit_domains.append(feature)
@@ -99,8 +103,8 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
         
         unannotated_regions = unannotated_regions.parts
         # filter by size
-        if min_length is not None:
-            unannotated_regions = [region for region in unannotated_regions if len(region) >= min_length]
+        if min_region_length is not None:
+            unannotated_regions = [region for region in unannotated_regions if len(region) >= min_region_length]
 
         if len(unannotated_regions) > 0:
             if largest:
@@ -110,7 +114,7 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
             contig_sections = list()
             for location in unannotated_regions:
                 contig_sections.append(slice_record_from_location(rec, location)) # slice_record_from_location handles maintaining source and taxonomy annotations.
-                if not keep_name:
+                if not keep_parent_id:
                     contig_sections[-1].id = region_id(rec, location)
 
             for out_rec in contig_sections:
@@ -131,10 +135,10 @@ def build_parser():
                         help="only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
     parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
-                        help="the evalue cutoff (max) for domain annotations to be considered. default: no cutoff.")
+                        help="Count only domain/search-hit annotations with e-value <= this when finding unannotated gaps. Default: no cutoff.")
     
-    parser.add_argument("--min_score", type=float, default=None, required=False, 
-                        help="the score cutoff (min) for domain annotations to be considered. default: no cutoff.")
+    parser.add_argument("--min_annotation_score", type=float, default=None, required=False,
+                        help="Count only domain/search-hit annotations with score >= this when finding unannotated gaps. Raising this can enlarge the gaps. Default: no cutoff.")
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Only consider domains from these databases. default: all databases.")
@@ -142,16 +146,16 @@ def build_parser():
     add_annotation_type(parser, help="Which annotations count as annotated.")
 
     parser.add_argument('--keep_direction', action='store_true', default=False,
-                       help="by default extracted regions will be flipped so that the source CDS will be on the forward strand. Set this option to not reverse complement anything. In the rare case of a split CDS with parts on different strands, the strand of the first part will be considered.")
+                       help="Has no effect: this tool supports only protein sequences and never reverse-complements them. Retained for compatibility with extract_domains.")
 
-    parser.add_argument('--keep_name', action='store_true', default=False,
-                       help="by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.")
+    parser.add_argument('--keep_parent_id', action='store_true', default=False,
+                       help="Use the parent protein ID instead of a coordinate-based region ID. This can produce duplicate IDs for different extracted sequences.")
     
     parser.add_argument('--largest', action='store_true', default=False,
-                        help="Extract only the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_length")
+                        help="Extract only the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_region_length")
     
-    parser.add_argument('--min_length', type=int, default=None,
-                        help=f"Extract unannotated regions of at least this length from each protein. default: no cutoff. ")
+    parser.add_argument('--min_region_length', type=int, default=None,
+                        help="Extract only unannotated gaps of at least this many amino acids, before choosing --largest. Not a cutoff on the input protein length. Default: no cutoff.")
 
     parser.add_argument('--config', action=ActionConfigFile)
     declare_outputs(parser, ["genbank_out", "fasta_out"])
@@ -176,9 +180,9 @@ def main(argv):
     extracted_domains_iterator = extract_unannotated(
         parse_seqfiles(genbanks, target_contigs), 
         evalue = params.evalue,
-        min_score = params.min_score,
+        min_annotation_score = params.min_annotation_score,
         keep_direction = params.keep_direction, 
-        keep_name = params.keep_name,
+        keep_parent_id = params.keep_parent_id,
         annotation_type=params.annotation_type,
         databases=params.databases,
         ncbi_taxonomy=taxonomy_from_args(params),
@@ -187,7 +191,7 @@ def main(argv):
         taxonomy_expr=params.taxonomy_expr,
         taxonomy_unknown=params.taxonomy_unknown,
         largest=params.largest,
-        min_length=params.min_length,
+        min_region_length=params.min_region_length,
         )
 
     write_seq_outputs(extracted_domains_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

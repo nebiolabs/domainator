@@ -23,15 +23,16 @@ AND # INVERT applies to this list of criteria
 OR (contig name matches specified regex [contigs_regex])
 OR (contig definition matches specified regex [definition_regex]) 
 OR (contig sequence matches specified regex [sequence_regex])
-OR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) 
+OR (contig contains at least one domain with name in specified list [domains, domains_file])
 OR (contig contains a combination of domains that match the specified boolean expression [domain_expr])
 OR (contig contains no domains [unannotated])
 OR (contig contains a qualifying search hit [has_search_hit])
+OR (contig has a search-hit score within specified bounds [min_search_score, max_search_score])
 )
 AND
-(total number of selected contigs is less than or equal to specified maximum [first])
+(total number of selected contigs is less than or equal to specified maximum [max_records])
 
-If --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. That is, length and first are still applied, 
+If --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. Length, CDS count, taxonomy, fragment status, and max_records still apply,
 but the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.
 ```
 
@@ -65,12 +66,12 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | NCBI taxonomy database directory; downloaded if missing and filtering is active. |
 | `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
 | `--max_records` | INTEGER |  | If set then stop after returning this many contigs. |
-| `--min_length` | INTEGER |  | skip contigs smaller than this. In units of bp (aa for protein input). |
-| `--max_length` | INTEGER |  | skip contigs larger than this. In units of bp (aa for protein input). |
+| `--min_length` | INTEGER |  | Keep only input records with length >= this, in bp for nucleotide input or amino acids for protein input. Not affected by --invert. |
+| `--max_length` | INTEGER |  | Keep only input records with length <= this, in bp for nucleotide input or amino acids for protein input. Not affected by --invert. |
 | `--min_cds` | INTEGER |  | skip contigs with fewer CDSs than this. Pseudogenes are not counted. |
 | `--max_cds` | INTEGER |  | skip contigs with more CDSs than this. Pseudogenes are not counted. |
-| `--min_search_score` | NUMBER |  | Skip contigs with a domain_search annotation score smaller than this. |
-| `--max_search_score` | NUMBER |  | Skip contigs with a domain_search annotation score larger than this. |
+| `--min_search_score` | NUMBER |  | Also select records with an existing Domain_Search annotation scoring >= this and passing e-value/database filters. Paired with --max_search_score as an inclusive range; OR with other selectors and affected by --invert. Also restricts --has_search_hit scoring, which ignores databases. |
+| `--max_search_score` | NUMBER |  | Upper bound (inclusive) of the search-score selector range. OR with other selectors, not a restriction on records selected by other criteria. Also restricts --has_search_hit scoring, which ignores databases. |
 | `--invert` |  |  | Invert the selection criteria. i.e. return contigs that do not match the selection criteria. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

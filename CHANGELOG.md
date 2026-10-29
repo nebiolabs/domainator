@@ -10,6 +10,11 @@ The 1.0 release: one `domainator` command, consistent options, a documented Pyth
 documented, versioned file formats. Many options were renamed; [MIGRATION.md](MIGRATION.md)
 lists every change from 0.x.
 
+Extraction options and matching Python keywords now use `keep_parent_id` instead
+of `keep_name` on all three extract tools. `extract_unannotated` also renames
+`min_length` to `min_region_length` and `min_score` to `min_annotation_score`.
+Defaults and extraction behavior are unchanged; old names are not aliases.
+
 ### Added
 - `extract_peptides --domain_expr` for Boolean domain selection and
   `select_by_cds --name_field` for explicit CDS name resolution, with matching

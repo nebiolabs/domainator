@@ -17,15 +17,16 @@ AND # INVERT applies to this list of criteria
 OR (contig name matches specified regex [contigs_regex])
 OR (contig definition matches specified regex [definition_regex]) 
 OR (contig sequence matches specified regex [sequence_regex])
-OR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) 
+OR (contig contains at least one domain with name in specified list [domains, domains_file])
 OR (contig contains a combination of domains that match the specified boolean expression [domain_expr])
 OR (contig contains no domains [unannotated])
 OR (contig contains a qualifying search hit [has_search_hit])
+OR (contig has a search-hit score within specified bounds [min_search_score, max_search_score])
 )
 AND
-(total number of selected contigs is less than or equal to specified maximum [first])
+(total number of selected contigs is less than or equal to specified maximum [max_records])
 
-If --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. That is, length and first are still applied, 
+If --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. Length, CDS count, taxonomy, fragment status, and max_records still apply,
 but the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.
 
 """
@@ -120,8 +121,10 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
         domain_expr: select records whose domain names satisfy this boolean expression.
         evalue: consider only domains with an e-value at most this (None: no cutoff).
         max_records: yield at most this many records.
-        min_length: keep only records at least this long.
-        max_length: keep only records at most this long.
+        min_length: keep only input records at least this long, in bp for nucleotide input
+            or amino acids for protein input. Not affected by invert.
+        max_length: keep only input records at most this long, in bp for nucleotide input
+            or amino acids for protein input. Not affected by invert.
         min_cds: keep only records with at least this many CDSs.
         max_cds: keep only records with at most this many CDSs.
         definition_regex: select records whose definition matches this regular expression.
@@ -138,8 +141,12 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
             evaluate against an empty lineage, or error. Not affected by invert.
         databases: consider only domains from these databases. None: all.
         unannotated: select records with no domain annotations.
-        min_search_score: select records whose domain_search best hit scores at least this.
-        max_search_score: select records whose domain_search best hit scores at most this.
+        min_search_score: also select records whose existing Domain_Search annotation
+            passes evalue and databases and scores at least this. Combined with
+            max_search_score as an inclusive range, OR with other selectors, and inverted
+            by invert. Also restricts has_search_hit scoring, which ignores databases.
+        max_search_score: upper bound of the inclusive search-score selector range.
+            Not an independent restriction on records selected by other criteria.
         annotation_type: which annotations count as domains: "domainator", "domain_search", or
             "all".
         has_search_hit: also select records with search hits passing evalue and search-score
@@ -309,10 +316,10 @@ def build_parser():
                         help="If set then stop after returning this many contigs.")
 
     parser.add_argument('--min_length', default=None, type=int,
-                        help="skip contigs smaller than this. In units of bp (aa for protein input).")
+                        help="Keep only input records with length >= this, in bp for nucleotide input or amino acids for protein input. Not affected by --invert.")
 
     parser.add_argument('--max_length', default=None, type=int,
-                        help="skip contigs larger than this. In units of bp (aa for protein input).")
+                        help="Keep only input records with length <= this, in bp for nucleotide input or amino acids for protein input. Not affected by --invert.")
 
     parser.add_argument('--min_cds', default=None, type=int,
                         help="skip contigs with fewer CDSs than this. Pseudogenes are not counted.")
@@ -321,9 +328,9 @@ def build_parser():
                         help="skip contigs with more CDSs than this. Pseudogenes are not counted.")
     
     parser.add_argument('--min_search_score', default=None, type=float,
-                            help="Skip contigs with a domain_search annotation score smaller than this.")
+                            help="Also select records with an existing Domain_Search annotation scoring >= this and passing e-value/database filters. Paired with --max_search_score as an inclusive range; OR with other selectors and affected by --invert. Also restricts --has_search_hit scoring, which ignores databases.")
     parser.add_argument('--max_search_score', default=None, type=float,
-                            help="Skip contigs with a domain_search annotation score larger than this.")
+                            help="Upper bound (inclusive) of the search-score selector range. OR with other selectors, not a restriction on records selected by other criteria. Also restricts --has_search_hit scoring, which ignores databases.")
     
     parser.add_argument('--invert', action='store_true',
                         help="Invert the selection criteria. i.e. return contigs that do not match the selection criteria.")

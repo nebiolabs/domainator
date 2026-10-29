@@ -31,7 +31,7 @@ from domainator.taxonomy.records import compile_taxonomy_filter
 def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
                     domains: Optional[Set[str]] = None, extend_range: Optional[int] = None,
                     extend_up: Optional[int] = None, extend_down: Optional[int] = None, combine: bool = False,
-                    keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
+                    keep_direction: bool = False, keep_parent_id: bool = False, annotation_type: str = "domainator",
                     databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include",
                     has_search_hit: bool = False, ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                     include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
@@ -40,8 +40,10 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
 
     Args:
         records: the contigs or proteins (SeqRecords).
-        evalue: select only domains with an e-value at most this. None: no cutoff.
-        min_score: select only domains with a score at least this. None: no cutoff.
+        evalue: extract only domain/search-hit annotations with an e-value at most this,
+            before extension, combination, or splicing. None: no cutoff.
+        min_score: extract only domain/search-hit annotations with a score at least this,
+            before extension, combination, or splicing. None: no cutoff.
         domains: select only domains with these names. None: all.
         extend_range: the default of extend_up and extend_down (None: 0).
         extend_up: also extract this many residues (or bases) upstream of each domain. None:
@@ -53,9 +55,9 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         keep_direction: don't reverse-complement regions. By default, regions are flipped so
             that the domain (with ``combine`` or ``splice``, the one with the lowest start) is on
             the forward strand.
-        keep_name: keep the contigs' names. By default, regions are renamed for their original
-            coordinates and whether they were reverse-complemented. Careful: this can easily
-            give duplicate names.
+        keep_parent_id: use the parent record ID instead of a coordinate-based region ID.
+            Applies to nucleotide and protein inputs and can produce duplicate IDs for
+            different extracted sequences.
         annotation_type: which annotations to extract: "domainator", "domain_search", or "all".
         has_search_hit: also extract search hits, ignoring domain names and databases but
             honoring evalue, min_score, and partial. Alone, extracts only search hits.
@@ -150,7 +152,7 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                 
                 location = FeatureLocation(start, end, new_strand)
                 contig_sections.append(slice_record_from_location(rec, location, feature_index.near(location))) # slice_record_from_location handles maintaining source and taxonomy annotations.
-                if not keep_name:
+                if not keep_parent_id:
                     contig_sections[-1].id = region_id(rec, location)
 
             elif splice:
@@ -188,7 +190,7 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                 if rec.annotations.get("topology", None) == "circular":
                     new_rec.annotations["topology"] = "circular"
 
-                if not keep_name:
+                if not keep_parent_id:
                     new_rec.id = region_id(rec, splice_location)
 
                 contig_sections.append(new_rec)
@@ -206,7 +208,7 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                     if flip:
                         contig_sections[-1] = contig_sections[-1].reverse_complement(id=rec.id, name=True, description=True, annotations=True) 
 
-                    if not keep_name:
+                    if not keep_parent_id:
                         contig_sections[-1].id = region_id(rec, location, flip=flip)
 
             for out_rec in contig_sections:
@@ -227,9 +229,9 @@ def build_parser():
                         help="only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
     parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
-                        help="the evalue cutoff (max) for domain annotations to be extracted")
+                        help="Extract only domain/search-hit annotations with e-value <= this, before extension, combination, or splicing. Default: no cutoff.")
     parser.add_argument("--min_score", type=float, default=None, required=False, 
-                        help="the score cutoff (min) for domain annotations to be extracted")
+                        help="Extract only domain/search-hit annotations with score >= this, before extension, combination, or splicing. Default: no cutoff.")
 
     parser.add_argument('--domains', type=str, default=None, nargs='+',
                         help="Include domains with these names")  # TODO: add some way to specify the database of a domain
@@ -256,8 +258,8 @@ def build_parser():
     parser.add_argument('--keep_direction', action='store_true', default=False,
                        help="by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything. In the rare case of a split domain with parts on different strands, the strand of the first part will be considered.")
 
-    parser.add_argument('--keep_name', action='store_true', default=False,
-                       help="by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names.")
+    parser.add_argument('--keep_parent_id', action='store_true', default=False,
+                       help="Use the parent nucleotide or protein record ID instead of a coordinate-based region ID. This can produce duplicate IDs for different extracted sequences.")
 
     parser.add_argument('--config', action=ActionConfigFile)
     declare_outputs(parser, ["genbank_out", "fasta_out"])
@@ -289,7 +291,7 @@ def main(argv):
         extend_down=params.extend_down,
         combine=params.combine, 
         keep_direction=params.keep_direction, 
-        keep_name=params.keep_name,
+        keep_parent_id=params.keep_parent_id,
         annotation_type=params.annotation_type,
         has_search_hit=params.has_search_hit,
         databases=params.databases,

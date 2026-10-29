@@ -135,7 +135,7 @@ def test_name_field_matching_fallback_and_defaults(record, tool):
     if tool == "extract_peptides":
         assert [rec.id for rec in selected] == ["CUSTOM", "f_B"]
         assert [rec.id for rec in function([record], cds_ids={"CUSTOM"},
-                                           name_field="custom", keep_name=True)] == ["contig"]
+                                           name_field="custom", keep_parent_id=True)] == ["contig"]
     else:
         original = list(function([record], cds_ids={default_name}))
         assert selected[0].id == original[0].id

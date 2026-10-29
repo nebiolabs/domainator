@@ -31,8 +31,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
 | `--contigs` | STRING ... |  | only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs. |
 | `--contigs_file` | FILE |  | only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
-| `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be extracted |
-| `--min_score` | NUMBER |  | the score cutoff (min) for domain annotations to be extracted |
+| `-e`, `--evalue` | NUMBER |  | Extract only domain/search-hit annotations with e-value <= this, before extension, combination, or splicing. Default: no cutoff. |
+| `--min_score` | NUMBER |  | Extract only domain/search-hit annotations with score >= this, before extension, combination, or splicing. Default: no cutoff. |
 | `--domains` | STRING ... |  | Include domains with these names |
 | `--domains_file` | FILE |  | text file containing names of domains to include. |
 | `--databases` | STRING ... |  | Domain databases to use for domain extraction. default: all databases. |
@@ -45,6 +45,6 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--combine` |  |  | if set, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous. Cannot be used with --splice. |
 | `--splice` |  |  | if set, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together, in the order they are read on the strand of the domain with the lowest start coordinate. By default, each hit domain will be extracted separately. Cannot be used with --combine. |
 | `--keep_direction` |  |  | by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything. In the rare case of a split domain with parts on different strands, the strand of the first part will be considered. |
-| `--keep_name` |  |  | by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names. |
+| `--keep_parent_id` |  |  | Use the parent nucleotide or protein record ID instead of a coordinate-based region ID. This can produce duplicate IDs for different extracted sequences. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

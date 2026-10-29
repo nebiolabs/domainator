@@ -2157,9 +2157,9 @@
    "type": "boolean"
   },
   {
-   "name": "keep_name",
+   "name": "keep_parent_id",
    "flags": [
-    "--keep_name"
+    "--keep_parent_id"
    ],
    "kind": "flag",
    "type": "boolean"
@@ -2424,9 +2424,9 @@
    "required": false
   },
   {
-   "name": "keep_name",
+   "name": "keep_parent_id",
    "flags": [
-    "--keep_name"
+    "--keep_parent_id"
    ],
    "kind": "flag",
    "type": "boolean"
@@ -2596,9 +2596,9 @@
    "required": false
   },
   {
-   "name": "min_score",
+   "name": "min_annotation_score",
    "flags": [
-    "--min_score"
+    "--min_annotation_score"
    ],
    "kind": "value",
    "type": "number",
@@ -2637,9 +2637,9 @@
    "type": "boolean"
   },
   {
-   "name": "keep_name",
+   "name": "keep_parent_id",
    "flags": [
-    "--keep_name"
+    "--keep_parent_id"
    ],
    "kind": "flag",
    "type": "boolean"
@@ -2653,9 +2653,9 @@
    "type": "boolean"
   },
   {
-   "name": "min_length",
+   "name": "min_region_length",
    "flags": [
-    "--min_length"
+    "--min_region_length"
    ],
    "kind": "value",
    "type": "integer",

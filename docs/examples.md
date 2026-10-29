@@ -242,7 +242,7 @@ Extract sequences:
 domainator extract_peptides -i annotated.gb --domains CcdB -o ccdb_proteins.gb --fasta_out ccdb_proteins.fasta
 
 # The parts of each protein at least 50 residues long that no domain covers (linkers, unknown domains)
-domainator extract_unannotated -i annotated_proteins.gb --min_length 50 -o unannotated.gb
+domainator extract_unannotated -i annotated_proteins.gb --min_region_length 50 -o unannotated.gb
 
 # Every record as FASTA
 domainator genbank_to_fasta -i annotated.gb --fasta_out annotated.fasta

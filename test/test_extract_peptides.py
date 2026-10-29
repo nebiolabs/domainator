@@ -158,14 +158,14 @@ def test_extract_peptides_domains_filter_1(shared_datadir):
         assert new_file[2].id == "pDONR201_5"
         assert new_file[3].id == "pDONR201_5"
 
-def test_extract_peptides_keep_name_1(shared_datadir):
+def test_extract_peptides_keep_parent_id_1(shared_datadir):
     """
         Test read and write genbank files.
     """
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/peptides.gb"
-        extract_peptides.main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-o", out, "--keep_name"])
+        extract_peptides.main(["-i", str(shared_datadir / "JABFVH010000506_extraction.gb"), "-o", out, "--keep_parent_id"])
         recs = list(parse_seqfiles([out]))
         assert len(recs) == 2
         rec_ids = [rec.id for rec in recs]

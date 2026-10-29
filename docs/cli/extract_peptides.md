@@ -50,8 +50,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--invert` |  |  | Invert the combined CDS selectors, not contigs, strand, partial, or taxonomy. With no selectors, warn and ignore. |
 | `--cds` | STRING ... |  | only look for peptides on cdss with these names |
 | `--cds_file` | FILE |  | only look for peptides on cdss with names listed in this text file. |
-| `--keep_name` |  |  | Use the original contig ID instead of the resolved CDS name for peptide IDs. This can produce duplicate IDs. |
+| `--keep_parent_id` |  |  | Use the original contig ID instead of the resolved CDS name for peptide IDs. This can produce duplicate IDs. |
 | `--name_field` | STRING |  | The CDS qualifier to prefer for CDS name matching and peptide IDs. If not supplied, then qualifiers will be checked in order of: \["protein_id", "gene_id", "locus_tag", "gene"\] |
-| `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be put onto the new genbank file. Default: no cutoff. |
+| `-e`, `--evalue` | NUMBER |  | Maximum e-value of domain/search-hit annotations used for CDS selection and carried onto peptide records. Default: no cutoff. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

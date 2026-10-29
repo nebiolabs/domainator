@@ -45,6 +45,21 @@ used to `exit(1)` from library code (seq_dist's diamond errors) or raise `System
 
 ## Inputs and outputs
 
+### Extraction parameter names
+
+The CLI, configuration keys, and Python keyword arguments use the following
+replacements, without aliases. Defaults and extraction behavior are unchanged.
+
+| Tools | Old CLI option / Python keyword | Replacement |
+|---|---|---|
+| `extract_domains`, `extract_peptides`, `extract_unannotated` | `--keep_name` / `keep_name` | `--keep_parent_id` / `keep_parent_id` |
+| `extract_unannotated` | `--min_length` / `min_length` | `--min_region_length` / `min_region_length` |
+| `extract_unannotated` | `--min_score` / `min_score` | `--min_annotation_score` / `min_annotation_score` |
+
+`keep_parent_id` preserves the parent record ID, not a CDS name. The unannotated
+extractor's length cutoff measures output gaps in amino acids; its score cutoff
+determines which annotations mask sequence when finding gaps.
+
 ### Annotation versus selection/search
 
 `domainate` and `structure_domainate` always annotate and retain every input record,
@@ -264,15 +279,18 @@ Options not listed are unchanged.
 | enum_report | `-o/--output`, `--html`, `--json` | `-o/--tsv_out`, `--html_out`, `--json_out` |
 | | one flag per column: `--domains --length --taxname genus species --qualifier CDS product` | `--columns domains length taxname:genus:species qualifier:CDS:product` (arguments follow the column name after `:`; `domainator enum_report --help` lists the columns) |
 | extract_domains | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
+| | `--keep_name` | `--keep_parent_id` |
 | | `--score` | `--min_score` |
 | | `--search_hits` | `--has_search_hit` |
 | | `--pad_up`, `--pad_down` | `--extend_up`, `--extend_down`, and new `--extend_range` |
 | extract_peptides | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
+| | `--keep_name` | `--keep_parent_id` |
 | | `--cdss`, `--cdss_file` | `--cds`, `--cds_file` |
 | | `--search_hits` | `--has_search_hit` |
 | extract_unannotated | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
-| | `--score` | `--min_score` |
-| | `--lb` | `--min_length` |
+| | `--keep_name` | `--keep_parent_id` |
+| | `--score` | `--min_annotation_score` |
+| | `--lb` | `--min_region_length` |
 | | `--search_hits` | `--annotation_type all` |
 | filter_domains | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `-m/--max_overlap` | `--max_overlap` |
@@ -488,8 +506,9 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | select_by_contig | `target_domains`, `target_contigs`, `domain_evalue`, `first`, `length_lb/ub`, `cds_count_lb/ub`, `search_score_lb/ub` | `domains`, `contigs`, `evalue`, `max_records`, `min_length`/`max_length`, `min_cds`/`max_cds`, `min_search_score`/`max_search_score` |
 | select_by_cds, extract_peptides | `target_cdss`, `target_domains` | `cds_ids`, `domains` |
 | filter_domains | `databases_keep`, `databases_filter`, `selected_domains` | `keep_databases`, `databases`, `domains` |
-| extract_domains | `score`, `pad_up`, `pad_down` | `min_score`, `extend_up`, `extend_down` |
-| extract_unannotated | `score`, `lb` | `min_score`, `min_length` |
+| extract_domains | `score`, `pad_up`, `pad_down`, `keep_name` | `min_score`, `extend_up`, `extend_down`, `keep_parent_id` |
+| extract_peptides | `keep_name` | `keep_parent_id` |
+| extract_unannotated | `score`, `lb`, `keep_name` | `min_annotation_score`, `min_region_length`, `keep_parent_id` |
 | trim_contigs | `strip_domains`, `no_domain`, `kb_truncation`, `cds_truncation` | `domains`, `unannotated`, `kb_range`, `cds_range` |
 | db_download | `output_file_path`, `num_recs`, `success_rec_log` | `output`, `max_records`, `success_log_out` |
 | split_by_cluster | `matrix_path` | `matrix` |
