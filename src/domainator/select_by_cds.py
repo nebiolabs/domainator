@@ -18,7 +18,7 @@ from domainator.cli.common import add_annotation_type, add_dedup, add_has_search
 from domainator.dedup import RecordDeduplicator
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
-from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator.cli.common import add_list_and_file, list_and_file_to_dict_keys, partial_help
 from domainator.expr import BooleanEvaluator
 from domainator.model import DomainatorCDS, cds_name_precedence, get_non_domainator_features, region_id, check_annotation_type, get_dist_to_end, get_hit_best_score, get_dist_to_start, get_focus_strand, get_hit_names, get_hit_scores, set_dist_to_end, set_dist_to_start, set_focus_strand, set_hit_best_score
 from domainator import DOMAIN_SEARCH_BEST_HIT_NAME
@@ -595,20 +595,16 @@ def build_parser():
                         help="If set, then return the entire matching contigs.")
 
            
-    parser.add_argument('--contigs', type=str, default=None, nargs='+',
-                        help="Only extract regions from contigs with these names.")
-    parser.add_argument('--contigs_file', type=str, default=None,
-                        help="text file containing names of contigs to extract from.")
+    add_list_and_file(parser, "contigs",
+                      help="Only read input records with these IDs; not inverted by --invert.")
     parser.add_argument('--cds', type=str, default=None, nargs='+',
                         help="Include CDSs with these names (additive with --domains)")
     parser.add_argument('--cds_file', type=str, default=None,
                         help="text file containing names of CDSs to include.")
     parser.add_argument('--name_field', type=str, default=None,
                         help="CDS qualifier to prefer for name matching, falling back to gene_id, locus_tag, gene, then protein_id. Does not change coordinate-based region IDs.")
-    parser.add_argument('--domains', type=str, default=None, nargs='+',
-                        help="Include domains with these names") #TODO: add some way to specify the database of a domain
-    parser.add_argument('--domains_file', type=str, default=None,
-                        help="text file containing names of domains to include.")
+    add_list_and_file(parser, "domains",
+                      help="Select CDSs containing these domain names, OR with other CDS selectors.")
     parser.add_argument('--domain_expr', type=str, default=None,
                         help="a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains")
     

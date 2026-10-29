@@ -124,6 +124,36 @@ To restrict search hits by database or name instead, use `--annotation_type doma
 as annotated when calculating the uncovered regions. `filter_domains` applies its filters
 to the chosen types and leaves other feature types unchanged.
 
+### Additive name lists and files
+
+The extract tools, `select_by_cds`, and `select_by_contig` merge `--contigs` with
+`--contigs_file`; tools with domain-name selection also merge `--domains` with
+`--domains_file`. Each pair forms a union, with duplicates ignored, not an
+intersection or an override. The file may contain one name per plain-text line,
+FASTA/GenBank records (record IDs are used), or HMM profiles (profile names are
+used). Plain-text lines have surrounding whitespace stripped and blank lines
+ignored. Direct list values are used unchanged; matching remains case-sensitive.
+
+Omitting both sources leaves the criterion inactive. An empty direct list alone
+also leaves it inactive, but supplying an empty file creates an explicitly empty
+name set. That empty set matches nothing, can participate in inversion where the
+names are selectors, and does not trigger a no-selector default. An empty input
+restriction admits no records. Direct names supplied alongside an empty file
+remain active.
+
+Shared argument handling does not make the options' roles identical:
+
+- In `select_by_contig`, contig IDs and domain names are record-level OR
+  selectors. A domain match can select a record not listed in `--contigs`.
+  `--invert` negates the combined selectors.
+- In the extract tools and `select_by_cds`, contig IDs restrict the input records
+  before extraction/feature selection. Other selectors cannot admit an unlisted
+  record, and inversion cannot undo this restriction.
+- In peptide extraction and CDS-neighborhood selection, domain names are OR
+  selectors alongside the other CDS selectors. Domain extraction instead uses
+  the names to select annotations, with search hits optionally added by
+  `--has_search_hit`.
+
 ### CDS selection algebra and names
 
 `extract_peptides` and `select_by_cds` use the same CDS selection algebra in the CLI

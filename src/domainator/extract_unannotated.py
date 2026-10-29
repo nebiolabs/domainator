@@ -13,7 +13,7 @@ from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
-from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.cli.common import add_list_and_file, list_and_file_to_dict_keys
 from domainator.locations import slice_record_from_location
 from domainator.model import region_id, annotation_feature_types, feature_score, evalue_passes
 from Bio.SeqFeature import FeatureLocation
@@ -128,11 +128,8 @@ def build_parser():
     add_seq_outputs(parser)
     add_taxonomy_filters(parser)
 
-    parser.add_argument('--contigs', default=[], nargs='+',
-                        help="only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
-
-    parser.add_argument('--contigs_file', default=None, 
-                        help="only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
+    add_list_and_file(parser, "contigs", default=[],
+                      help="Only read input protein records with these IDs; restricts where extraction occurs.")
 
     parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="Count only domain/search-hit annotations with e-value <= this when finding unannotated gaps. Default: no cutoff.")

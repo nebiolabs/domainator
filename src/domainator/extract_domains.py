@@ -16,7 +16,7 @@ from jsonargparse.typing import PositiveFloat
 from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
-from domainator.cli.common import list_and_file_to_dict_keys, partial_help
+from domainator.cli.common import add_list_and_file, list_and_file_to_dict_keys, partial_help
 from domainator.locations import FeatureIndex, slice_record_from_location, pad_location
 from domainator.model import region_id, get_cds_unique_name, annotation_feature_types, feature_score, evalue_passes
 from domainator.partial import cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
@@ -222,21 +222,16 @@ def build_parser():
     add_seq_outputs(parser)
     add_taxonomy_filters(parser)
 
-    parser.add_argument('--contigs', default=[], nargs='+',
-                        help="only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
-
-    parser.add_argument('--contigs_file', default=None, 
-                        help="only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
+    add_list_and_file(parser, "contigs", default=[],
+                      help="Only read input records with these IDs; restricts where extraction occurs.")
 
     parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="Extract only domain/search-hit annotations with e-value <= this, before extension, combination, or splicing. Default: no cutoff.")
     parser.add_argument("--min_score", type=float, default=None, required=False, 
                         help="Extract only domain/search-hit annotations with score >= this, before extension, combination, or splicing. Default: no cutoff.")
 
-    parser.add_argument('--domains', type=str, default=None, nargs='+',
-                        help="Include domains with these names")  # TODO: add some way to specify the database of a domain
-    parser.add_argument('--domains_file', type=str, default=None,
-                        help="text file containing names of domains to include.")
+    add_list_and_file(parser, "domains",
+                      help="Extract annotations with these domain names; search hits can also be selected by --has_search_hit.")
         
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Domain databases to use for domain extraction. default: all databases.")

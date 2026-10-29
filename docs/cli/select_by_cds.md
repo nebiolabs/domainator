@@ -40,13 +40,13 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--cds_up` | INTEGER |  | How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS. |
 | `--cds_down` | INTEGER |  | How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS. |
 | `--whole_contig` |  |  | If set, then return the entire matching contigs. |
-| `--contigs` | STRING ... |  | Only extract regions from contigs with these names. |
-| `--contigs_file` | FILE |  | text file containing names of contigs to extract from. |
+| `--contigs` | STRING ... |  | Only read input records with these IDs; not inverted by --invert. Additive with --contigs_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--contigs_file` | FILE |  | Only read input records with these IDs; not inverted by --invert. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --contigs; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--cds` | STRING ... |  | Include CDSs with these names (additive with --domains) |
 | `--cds_file` | FILE |  | text file containing names of CDSs to include. |
 | `--name_field` | STRING |  | CDS qualifier to prefer for name matching, falling back to gene_id, locus_tag, gene, then protein_id. Does not change coordinate-based region IDs. |
-| `--domains` | STRING ... |  | Include domains with these names |
-| `--domains_file` | FILE |  | text file containing names of domains to include. |
+| `--domains` | STRING ... |  | Select CDSs containing these domain names, OR with other CDS selectors. Additive with --domains_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--domains_file` | FILE |  | Select CDSs containing these domain names, OR with other CDS selectors. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --domains; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--domain_expr` | STRING |  | a boolean expression using operators & (AND), \| (OR), and ~(NOT), to specify a desired combination of domains |
 | `--databases` | STRING ... |  | Consider only domains from these databases when filtering by domain. default: all databases. |
 | `--strand` | {f,r} |  | Only extract regions around CDSs on the specified strand. |

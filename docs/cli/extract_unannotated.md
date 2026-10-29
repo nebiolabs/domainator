@@ -28,8 +28,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--taxonomy_unknown` | {exclude,include,evaluate,error} | exclude | Unresolved taxonomy: exclude (default), include, evaluate against an empty lineage, or error. With ~2, exclude rejects unlabeled candidates; evaluate and include allow them. Only active with taxonomy criteria. Not inverted. |
 | `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | NCBI taxonomy database directory; downloaded if missing and filtering is active. |
 | `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
-| `--contigs` | STRING ... |  | only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs. |
-| `--contigs_file` | FILE |  | only extract regions from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
+| `--contigs` | STRING ... |  | Only read input protein records with these IDs; restricts where extraction occurs. Additive with --contigs_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--contigs_file` | FILE |  | Only read input protein records with these IDs; restricts where extraction occurs. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --contigs; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `-e`, `--evalue` | NUMBER |  | Count only domain/search-hit annotations with e-value <= this when finding unannotated gaps. Default: no cutoff. |
 | `--min_annotation_score` | NUMBER |  | Count only domain/search-hit annotations with score >= this when finding unannotated gaps. Raising this can enlarge the gaps. Default: no cutoff. |
 | `--databases` | STRING ... |  | Only consider domains from these databases. default: all databases. |

@@ -36,10 +36,10 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--taxonomy_unknown` | {exclude,include,evaluate,error} | exclude | Unresolved taxonomy: exclude (default), include, evaluate against an empty lineage, or error. With ~2, exclude rejects unlabeled candidates; evaluate and include allow them. Only active with taxonomy criteria. Not inverted. |
 | `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | NCBI taxonomy database directory; downloaded if missing and filtering is active. |
 | `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
-| `--contigs` | STRING ... |  | only look for peptides on contigs with ids in this list. Additive with --contigs_file. default: all contigs. |
-| `--contigs_file` | FILE |  | only look for peptides on contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
-| `--domains` | STRING ... |  | Only extract peptides containing these domains |
-| `--domains_file` | FILE |  | text file containing names of domains, where peptides containing these domains will be extracted. |
+| `--contigs` | STRING ... |  | Only read input records with these IDs; not inverted by --invert. Additive with --contigs_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--contigs_file` | FILE |  | Only read input records with these IDs; not inverted by --invert. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --contigs; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--domains` | STRING ... |  | Select CDSs containing these domain names, OR with other CDS selectors. Additive with --domains_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--domains_file` | FILE |  | Select CDSs containing these domain names, OR with other CDS selectors. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --domains; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--domain_expr` | STRING |  | Boolean domain expression using &, \|, ~, and parentheses. Additive with other CDS selectors. |
 | `--databases` | STRING ... |  | Consider only domains from these databases when filtering by domain. default: all databases. |
 | `--unannotated` |  |  | extract peptides from CDSs with no domain annotations. |

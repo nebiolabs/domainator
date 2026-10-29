@@ -159,6 +159,24 @@ def add_seq_outputs(parser, *, genbank_help: str = "Write the records to this Ge
     add_output(parser, "fasta", fasta_help)
 
 
+def add_list_and_file(parser, name: str, *, help: str,
+                      default: Optional[Sequence[str]] = None):
+    """Add an additive name list/file pair without assigning selection semantics."""
+    parser.add_argument(
+        f"--{name}", type=str, default=default, nargs="+",
+        help=f"{help} Additive with --{name}_file; duplicate names are ignored. "
+             "If neither source is supplied, no name criterion is applied.",
+    )
+    parser.add_argument(
+        f"--{name}_file", type=str, default=None,
+        help=f"{help} Read names from a plain-text file (one per line), FASTA/GenBank "
+             f"record IDs, or HMM profile names. Additive with --{name}; duplicate names "
+             "are ignored. Plain-text lines are stripped and blank lines ignored. "
+             "An empty file adds no names; if no names are supplied directly either, "
+             "the resulting list is explicitly empty, not an omitted criterion.",
+    )
+
+
 def add_taxonomy_filters(parser):
     """Add the shared taxonomy selection contract."""
     from domainator.taxonomy import default_ncbi_taxonomy_path
@@ -312,8 +330,12 @@ def list_and_file_to_dict_keys(input_list=None, input_file=None, as_set=False):
                         If any other kind of file is passed, then just read the lines and pass the lines individually
 
         output:
-            None if input_list and input_file are both None.
-            else, a dict where keys are values read from input_list and input_file, and values are None.
+            None if input_list is absent/empty and input_file is None.
+            Otherwise, the union of both sources, with duplicates removed, as a dict
+            with None values (in insertion order), or a set when as_set is True.
+            A supplied empty file produces an empty collection, not None.
+            Plain-text file lines are stripped and blank lines ignored; direct
+            list values are used unchanged.
     """
 
     out = None  # dict() we're treating this as an ordered set where values = None

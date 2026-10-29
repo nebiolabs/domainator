@@ -37,7 +37,7 @@ import sys
 from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
-from domainator.cli.common import list_and_file_to_dict_keys
+from domainator.cli.common import add_list_and_file, list_and_file_to_dict_keys
 from domainator.expr import BooleanEvaluator
 from domainator.taxonomy.records import compile_taxonomy_filter
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
@@ -273,10 +273,8 @@ def build_parser():
 
     add_seq_outputs(parser)
 
-    parser.add_argument('--contigs', type=str, default=None, nargs='+',
-                        help="Only consider contigs with these names.")
-    parser.add_argument('--contigs_file', type=str, default=None,
-                        help="text file containing names of contigs to select.")
+    add_list_and_file(parser, "contigs",
+                      help="Select records with these IDs, OR with other record selectors; affected by --invert.")
     parser.add_argument('--contigs_regex', type=str, default=None,
                         help="Only consider contigs with names matching this regex.")
     
@@ -286,10 +284,8 @@ def build_parser():
     parser.add_argument("--sequence_regex", default=None, required=False, type=str, #TODO: add a test for this.
                         help="only keep contigs with a sequence that matches this regex.")
 
-    parser.add_argument('--domains', type=str, default=None, nargs='+',
-                        help="Include domains with these names")  # TODO: add some way to specify the database of a domain
-    parser.add_argument('--domains_file', type=str, default=None,
-                        help="text file containing names of domains to include.")
+    add_list_and_file(parser, "domains",
+                      help="Select records containing these domain names, OR with other record selectors.")
     parser.add_argument('--domain_expr', type=str, default=None,
                         help="a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains")
 

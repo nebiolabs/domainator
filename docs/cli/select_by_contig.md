@@ -45,13 +45,13 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-i`, `--input` | FILE ... | required | Names of input genbank files. Use - to read standard input. |
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
-| `--contigs` | STRING ... |  | Only consider contigs with these names. |
-| `--contigs_file` | FILE |  | text file containing names of contigs to select. |
+| `--contigs` | STRING ... |  | Select records with these IDs, OR with other record selectors; affected by --invert. Additive with --contigs_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--contigs_file` | FILE |  | Select records with these IDs, OR with other record selectors; affected by --invert. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --contigs; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--contigs_regex` | STRING |  | Only consider contigs with names matching this regex. |
 | `--definition_regex` | STRING |  | only keep contigs with a definition that matches this regex. |
 | `--sequence_regex` | STRING |  | only keep contigs with a sequence that matches this regex. |
-| `--domains` | STRING ... |  | Include domains with these names |
-| `--domains_file` | FILE |  | text file containing names of domains to include. |
+| `--domains` | STRING ... |  | Select records containing these domain names, OR with other record selectors. Additive with --domains_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--domains_file` | FILE |  | Select records containing these domain names, OR with other record selectors. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --domains; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--domain_expr` | STRING |  | a boolean expression using operators & (AND), \| (OR), and ~(NOT), to specify a desired combination of domains |
 | `--partial` | {include,exclude,only} | include | Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition, NON_TER features, or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location, or a /partial qualifier. Not affected by --invert. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select contigs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |

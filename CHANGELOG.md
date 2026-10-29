@@ -16,6 +16,10 @@ of `keep_name` on all three extract tools. `extract_unannotated` also renames
 Defaults and extraction behavior are unchanged; old names are not aliases.
 
 ### Added
+- Shared additive contig/domain list and file argument setup for extract tools,
+  `select_by_cds`, and `select_by_contig`. Help now documents supported file formats,
+  normalization, empty-file behavior, and record selectors versus input restrictions;
+  existing defaults and selection behavior are unchanged.
 - `extract_peptides --domain_expr` for Boolean domain selection and
   `select_by_cds --name_field` for explicit CDS name resolution, with matching
   keyword-only library parameters. Existing default name precedence is preserved.
