@@ -55,6 +55,39 @@ Note that for structure-derived records, all coordinates are indices into the *o
 
 `Domain_Search` features are added by `domainator domain_search` and `domainator structure_search`. `Domain_Search` annotations are related to `Domainator` annotations in that they have exactly the same qualifiers. What makes them distinct is that they are cleared from sequences used as input to `domainator domain_search`, and there are exactly one per contig on sequences returned by `domainator domain_search`. Other programs, such as `domainator extract_domains`, `domainator select_by_cds`, and others also handle `Domain_Search` annotations distinctly from `Domainator` annotations, selected with `--annotation_type domain_search`.
 
+#### Selecting annotation sources and search hits
+
+Every tool with `--annotation_type` accepts `domainator` (`Domainator` features),
+`domain_search` (`Domain_Search` features), and `all` (both). Domain-name matching,
+Boolean domain expressions, database restrictions, and unannotated tests use the chosen
+sources. With `all`, names from both sources are combined before evaluating expressions,
+within the CDS or record being selected. The option chooses sources, not an additional
+selection criterion. Without selection criteria, CDS/contig selection and peptide extraction
+still return all otherwise eligible CDSs/records.
+
+`select_by_cds`, `select_by_contig`, `extract_peptides`, `extract_domains`, and
+`rotate_contigs` also accept `--has_search_hit`. This is an independent OR criterion:
+select existing search hits regardless of `--annotation_type`, domain names, expressions,
+and `--databases`. Search hits must still pass the e-value and applicable score cutoffs.
+The combined selection participates in `--invert` where available; other tool-specific
+eligibility and output constraints still apply. Alone, `--has_search_hit` selects only
+search hits (or their containing CDSs/records). Rotation adds them as anchor candidates;
+the highest-ranked candidate wins. For `select_by_cds`, the flag also enables contig-level
+nucleotide search hits without `--include_nucleic_acids`.
+
+For example, select CDSs with regular domain A or B, plus any qualifying search-hit CDS:
+
+```bash
+domainator select_by_cds -i annotated.gb -o selected.gb \
+  --annotation_type domainator --domains A B --has_search_hit
+```
+
+To restrict search hits by database or name instead, use `--annotation_type domain_search`
+(or `all`) with the normal criteria and omit `--has_search_hit`.
+`extract_unannotated` has no additive selector: `--annotation_type all` counts both types
+as annotated when calculating the uncovered regions. `filter_domains` applies its filters
+to the chosen types and leaves other feature types unchanged.
+
 ### Qualifier reference
 
 Every qualifier holds one value. `.` means "not applicable" or "not known".

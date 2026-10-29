@@ -4,9 +4,10 @@ Takes a domain-annotated genbank file and extracts regions of contigs based on c
 
 Specify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.
 
-if target_cdss, target_domains or domain_expr is specified then selection logic is:
+If CDS names, domain names, a domain expression, unannotated, or has_search_hit is specified,
+selection logic is:
 
-    contigs & (target_cdss or target_domains or domain_expr or unannotated) & strand & partial
+    contigs & (cds_ids or domains or domain_expr or unannotated or has_search_hit) & strand & partial
 
 otherwise:
     return every cds in contigs
@@ -14,7 +15,7 @@ otherwise:
 """
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
@@ -345,11 +346,12 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                   max_region_overlap: float = 1.0, strand: Optional[str] = None, _from_domain_search: bool = False,
                   _domain_search_negatives: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
                   unannotated: bool = False, include_nucleic_acids: bool = False, partial: str = "include",
+                  has_search_hit: bool = False,
                   ) -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` around the CDSs (or proteins) that are selected.
 
-    A CDS is selected if it matches any of ``cds_ids``, ``domains``, ``domain_expr`` and
-    ``unannotated`` (or with none of them, every CDS), and then the ``strand`` and ``partial``
+    A CDS is selected if it matches any of ``cds_ids``, ``domains``, ``domain_expr``,
+    ``unannotated`` and ``has_search_hit`` (or with none of them, every CDS), and then the ``strand`` and ``partial``
     filters.
 
     Args:
@@ -365,10 +367,14 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
         normalize_direction: reverse-complement regions whose selected CDS is on the reverse
             strand.
         evalue: ignore domains with an e-value above this (None: no cutoff).
-        invert: invert the ``cds_ids``, ``domains``, ``domain_expr`` and ``unannotated``
+        invert: invert the combined ``cds_ids``, ``domains``, ``domain_expr``, ``unannotated``
+            and ``has_search_hit``
             selection (the ranges are still applied as usual).
-        annotation_type: "domainator", or "domain_search" to also select the CDSs marked as
-            domain_search hits ("domain_search" turns on include_nucleic_acids).
+        annotation_type: which annotations supply domain names: "domainator", "domain_search",
+            or "all". Does not itself select CDSs.
+        has_search_hit: also select CDSs marked as domain_search hits passing evalue, ignoring
+            domain names, expressions, and databases. Participates in invert and enables
+            contig-level nucleotide search hits.
         max_region_overlap: the largest fraction of overlap allowed between two output regions
             (1 or more: no filter).
         strand: "f" or "r" to select only CDSs on that strand. None: both.
@@ -387,7 +393,7 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
     Yields:
         SeqRecords of the selected regions.
     """ 
-    search_hits = check_annotation_type(annotation_type) == "domain_search"
+    check_annotation_type(annotation_type)
     databases = set(databases) if databases is not None else None
 
     if cds_ids is not None:
@@ -414,10 +420,11 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
         for focus_index, cds in enumerate(cdss):
             keep = False
             
-            if cds.is_nucleic_acid and not search_hits and not _from_domain_search and not include_nucleic_acids: # ignore 
-                continue
+            if cds.is_nucleic_acid and not _from_domain_search and not include_nucleic_acids:
+                if not has_search_hit or cds.domain_search_feature is None:
+                    continue
             #If no selectors then keep every cds
-            if cds_ids is None and domains is None and domain_expr is None and not search_hits and (not _from_domain_search) and (not unannotated):
+            if cds_ids is None and domains is None and domain_expr is None and not has_search_hit and (not _from_domain_search) and (not unannotated):
                 keep = True
             elif _from_domain_search:
                 if cds.index in hit_scores:
@@ -426,19 +433,20 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                         keep = True
                         best_score = hit_scores[cds.index]
             else:
+                domain_names = cds.get_domain_names(databases, annotation_type=annotation_type)
                 if cds_ids is not None: # if cds_ids then update based on cds name
                     if cds.name in cds_ids:
                         keep = True
                 if domains is not None: # if target_domains, then update based on domain names
-                    if len(cds.get_domain_names(databases).intersection(domains)):
+                    if len(domain_names.intersection(domains)):
                         keep = True
                 if domain_expr is not None: # if target_domains, then update based on domain names
-                    if expression_evaluator.check_expression(cds.get_domain_names(databases)):
+                    if expression_evaluator.check_expression(domain_names):
                         keep = True
                 if unannotated:
-                    if len(cds.get_domain_names(databases)) == 0:
+                    if len(domain_names) == 0:
                         keep = True
-                if search_hits and cds.domain_search_feature is not None:
+                if has_search_hit and cds.domain_search_feature is not None:
                     keep = True
             
             if strand is not None:
@@ -585,6 +593,7 @@ def build_parser():
     parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
 
     add_annotation_type(parser, help="Which annotations to select CDSs by.")
+    add_has_search_hit(parser)
 
     parser.add_argument('--pad', action='store_true', default=False,
                         help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor.")
@@ -652,6 +661,7 @@ def main(argv):
         normalize_direction=normalize_direction,
         evalue=params.evalue,
         annotation_type = params.annotation_type,
+        has_search_hit=params.has_search_hit,
         invert = params.invert,
         max_region_overlap = params.max_region_overlap,
         strand = params.strand,

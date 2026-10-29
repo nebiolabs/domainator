@@ -106,11 +106,21 @@ domainate (``Domainator`` features), ``domain_search`` the best hits written by 
 (``Domain_Search`` features), and ``all`` both."""
 
 
-def check_annotation_type(annotation_type: str, allowed=ANNOTATION_TYPES[:2]) -> str:
+def check_annotation_type(annotation_type: str, allowed=ANNOTATION_TYPES) -> str:
     """Return ``annotation_type``, or raise ValueError if it isn't one of ``allowed``."""
     if annotation_type not in allowed:
         raise ValueError(f"annotation_type must be one of {', '.join(allowed)}, not {annotation_type!r}.")
     return annotation_type
+
+
+def annotation_feature_types(annotation_type: str) -> Set[str]:
+    """The GenBank feature types selected by ``annotation_type``."""
+    check_annotation_type(annotation_type)
+    if annotation_type == "domainator":
+        return {DOMAIN_FEATURE_NAME}
+    if annotation_type == "domain_search":
+        return {DOMAIN_SEARCH_BEST_HIT_NAME}
+    return {DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME}
 
 
 def get_cds_unique_name(feature):
@@ -195,10 +205,15 @@ class DomainatorCDS():
                         cdss[name_to_idx[cds_num]].domain_search_feature = feature
         return cdss
     
-    def get_domain_names(self, databases:Optional[Set[str]]=None, evalue:Optional[float]=None):
+    def get_domain_names(self, databases:Optional[Set[str]]=None, evalue:Optional[float]=None, *,
+                         annotation_type: str = "domainator"):
 
         out = set()
-        for f in self.domain_features:
+        feature_types = annotation_feature_types(annotation_type)
+        features = self.domain_features if DOMAIN_FEATURE_NAME in feature_types else []
+        if DOMAIN_SEARCH_BEST_HIT_NAME in feature_types and self.domain_search_feature is not None:
+            features = [*features, self.domain_search_feature]
+        for f in features:
             keep = True
             if databases is not None and f.qualifiers["database"][0] not in databases:
                 keep = False

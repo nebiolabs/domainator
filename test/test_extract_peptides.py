@@ -78,7 +78,7 @@ def test_domain_search_hit_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        extract_peptides.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--annotation_type", "domain_search"])
+        extract_peptides.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--has_search_hit"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         new_file[0].name = "pDONR201_1"

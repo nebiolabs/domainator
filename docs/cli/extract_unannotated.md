@@ -27,7 +27,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be considered. default: no cutoff. |
 | `--min_score` | NUMBER |  | the score cutoff (min) for domain annotations to be considered. default: no cutoff. |
 | `--databases` | STRING ... |  | Only consider domains from these databases. default: all databases. |
-| `--annotation_type` | {domainator,domain_search} | domainator | Which annotations count as annotated. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). |
+| `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations count as annotated. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
 | `--keep_direction` |  |  | by default extracted regions will be flipped so that the source CDS will be on the forward strand. Set this option to not reverse complement anything. In the rare case of a split CDS with parts on different strands, the strand of the first part will be considered. |
 | `--keep_name` |  |  | by default, extracted regions will be renamed to note their original coordinates and whether they were reverse complemented. Set this option to keep contigs with their original names. WARNING: if you aren't careful, this can easily result in duplicate names. |
 | `--largest` |  |  | Extract only the largest unannotated region from each protein, providing it passes the length cutoff specified by --min_length |

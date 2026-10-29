@@ -2092,8 +2092,17 @@
    "required": false,
    "choices": [
     "domainator",
-    "domain_search"
+    "domain_search",
+    "all"
    ]
+  },
+  {
+   "name": "has_search_hit",
+   "flags": [
+    "--has_search_hit"
+   ],
+   "kind": "flag",
+   "type": "boolean"
   },
   {
    "name": "partial",
@@ -2289,8 +2298,17 @@
    "required": false,
    "choices": [
     "domainator",
-    "domain_search"
+    "domain_search",
+    "all"
    ]
+  },
+  {
+   "name": "has_search_hit",
+   "flags": [
+    "--has_search_hit"
+   ],
+   "kind": "flag",
+   "type": "boolean"
   },
   {
    "name": "strand",
@@ -2486,7 +2504,8 @@
    "required": false,
    "choices": [
     "domainator",
-    "domain_search"
+    "domain_search",
+    "all"
    ]
   },
   {
@@ -2792,8 +2811,17 @@
    "required": false,
    "choices": [
     "domainator",
-    "domain_search"
+    "domain_search",
+    "all"
    ]
+  },
+  {
+   "name": "has_search_hit",
+   "flags": [
+    "--has_search_hit"
+   ],
+   "kind": "flag",
+   "type": "boolean"
   },
   {
    "name": "anchor",
@@ -3119,8 +3147,17 @@
    "required": false,
    "choices": [
     "domainator",
-    "domain_search"
+    "domain_search",
+    "all"
    ]
+  },
+  {
+   "name": "has_search_hit",
+   "flags": [
+    "--has_search_hit"
+   ],
+   "kind": "flag",
+   "type": "boolean"
   },
   {
    "name": "pad",
@@ -3354,6 +3391,14 @@
     "domain_search",
     "all"
    ]
+  },
+  {
+   "name": "has_search_hit",
+   "flags": [
+    "--has_search_hit"
+   ],
+   "kind": "flag",
+   "type": "boolean"
   },
   {
    "name": "databases",

@@ -33,7 +33,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--domains_file` | FILE |  | text file containing names of domains, where peptides containing these domains will be extracted. |
 | `--databases` | STRING ... |  | Consider only domains from these databases when filtering by domain. default: all databases. |
 | `--unannotated` |  |  | extract peptides from CDSs with no domain annotations. |
-| `--annotation_type` | {domainator,domain_search} | domainator | Which annotations to select peptides by. With domain_search, the search hits are extracted. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). |
+| `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select peptides by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
+| `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
 | `--strand` | {f,r} |  | Only extract peptides from CDSs on the specified strand. |
 | `--partial` | {include,exclude,only} | include | Which CDSs to extract peptides from, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Not affected by --invert. |
 | `--invert` |  |  | Invert the CDS selection criteria. i.e. return peptides from CDSs that don't match the CDS selection criteria. (Only applies to CDS selection, not contig selection) |

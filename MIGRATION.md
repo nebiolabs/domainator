@@ -96,7 +96,7 @@ Output ending in `.gz` is compressed for every GenBank, FASTA, and TSV output.
 | `-r/--references` | `-r/--reference` | |
 | `--lb` (matrix and network programs) | `--threshold` | keep values strictly above this |
 | `--score_cutoff`, `--score` | `--min_score` | |
-| `--search_hits` | `--annotation_type domain_search` | `--annotation_type {domainator,domain_search}` |
+| `--search_hits` | `--has_search_hit` | additive search-hit selection; extract_unannotated uses `--annotation_type all` instead |
 | `--keep_db` | `--db_out` | |
 | `--hits_tsv` | `--hits_tsv_out` | |
 | `--input_type` / `--reference_type` (seq_dist, kmer_dist) | `--input_format` / `--reference_format` | |
@@ -108,6 +108,28 @@ Output ending in `.gz` is compressed for every GenBank, FASTA, and TSV output.
 | `-e/--evalue` in filtering programs | unchanged, but the default is now "no cutoff" | was 1e8 in some programs and none in others |
 | `-e/--evalue`, `--min_evalue` | unchanged | must be greater than 0 (`--min_evalue`: at least 0); checked when the command line is parsed |
 | `--cpu` | unchanged | `0` (the default) now means one thread per physical core everywhere |
+
+### Annotation sources versus search-hit selection
+
+`--annotation_type {domainator,domain_search,all}` consistently chooses the annotation
+sources used by normal domain criteria. Names from both sources are combined for `all`.
+It does not independently select search-hit CDSs or records. Use `--has_search_hit` for
+the additive behavior of the old `--search_hits`: normal selection OR search-hit presence.
+The combined selection is inverted by `--invert` where available. Search hits must pass
+quality cutoffs, but this independent branch ignores domain names, expressions, and
+database restrictions. To filter search hits by database, use `--annotation_type
+domain_search` or `all` with normal criteria, without `--has_search_hit`.
+
+This also replaces the additive use of `--annotation_type domain_search` in earlier
+1.0 development versions. With no other selectors, `--has_search_hit` selects only search
+hits; the source option alone does not restrict CDS/contig selection or peptide extraction.
+For contig-level nucleotide hits in `select_by_cds`, `--has_search_hit` enables them
+automatically; ordinary source-based selection uses `--include_nucleic_acids`.
+
+`extract_unannotated` instead uses `--annotation_type all` to count both annotation types
+as covered regions; it has no `--has_search_hit`. `filter_domains` also has no independent
+search-hit selector: it filters the selected annotation types and preserves the others.
+See [annotation selection](docs/file_formats.md#selecting-annotation-sources-and-search-hits).
 
 ## Program-specific changes
 
@@ -153,15 +175,15 @@ Options not listed are unchanged.
 | | one flag per column: `--domains --length --taxname genus species --qualifier CDS product` | `--columns domains length taxname:genus:species qualifier:CDS:product` (arguments follow the column name after `:`; `domainator enum_report --help` lists the columns) |
 | extract_domains | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--score` | `--min_score` |
-| | `--search_hits` | `--annotation_type domain_search` |
+| | `--search_hits` | `--has_search_hit` |
 | | `--pad_up`, `--pad_down` | `--extend_up`, `--extend_down`, and new `--extend_range` |
 | extract_peptides | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--cdss`, `--cdss_file` | `--cds`, `--cds_file` |
-| | `--search_hits` | `--annotation_type domain_search` |
+| | `--search_hits` | `--has_search_hit` |
 | extract_unannotated | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--score` | `--min_score` |
 | | `--lb` | `--min_length` |
-| | `--search_hits` | `--annotation_type domain_search` |
+| | `--search_hits` | `--annotation_type all` |
 | filter_domains | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `-m/--max_overlap` | `--max_overlap` |
 | | `--databases_filter` | `--databases` |
@@ -186,11 +208,11 @@ Options not listed are unchanged.
 | rotate_contigs | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `-r/--references` | `-r/--reference` |
 | | `--where` | `--anchor` |
-| | `--search_hits` | `--annotation_type domain_search` |
+| | `--search_hits` | `--has_search_hit` |
 | select_by_cds | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `--pad_where` | `--anchor` |
 | | `--skip_deduplicate` | `--no_deduplicate` |
-| | `--search_hits` | `--annotation_type domain_search` |
+| | `--search_hits` | `--has_search_hit` |
 | select_by_contig | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--domain_type {domain,search,both}` | `--annotation_type {domainator,domain_search,all}` |
 | | `--first` | `--max_records` |
@@ -326,7 +348,8 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | all | `fasta_type` | `alphabet` |
 | all | `threads`, `cpus` | `cpu` |
 | all matrix tools | `lb` | `threshold` |
-| extract_domains, extract_peptides, extract_unannotated, rotate_contigs, select_by_cds | `search_hits=True` | `annotation_type="domain_search"` |
+| extract_domains, extract_peptides, rotate_contigs, select_by_cds | `search_hits=True` | `has_search_hit=True` |
+| extract_unannotated | `search_hits=True` | `annotation_type="all"` |
 | select_by_contig | `domain_type="domain"/"search"/"both"` | `annotation_type="domainator"/"domain_search"/"all"` |
 | select_by_contig | `target_domains`, `target_contigs`, `domain_evalue`, `first`, `length_lb/ub`, `cds_count_lb/ub`, `search_score_lb/ub` | `domains`, `contigs`, `evalue`, `max_records`, `min_length`/`max_length`, `min_cds`/`max_cds`, `min_search_score`/`max_search_score` |
 | select_by_cds, extract_peptides | `target_cdss`, `target_domains` | `cds_ids`, `domains` |
@@ -376,4 +399,3 @@ What the copy added is now in functions:
 | `record.set_hit_best_score(x)`, `record.get_hit_scores()`, `record.set_dist_to_start(x)`, ... | `set_hit_best_score(record, x)`, `get_hit_scores(record)`, ... in `domainator.model` |
 | comparing records with `<` (by best hit score) | `sorted(records, key=get_hit_best_score)` |
 | `feature.strand` | `feature.location.strand` |
-

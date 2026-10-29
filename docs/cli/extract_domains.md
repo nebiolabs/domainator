@@ -30,7 +30,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--domains` | STRING ... |  | Include domains with these names |
 | `--domains_file` | FILE |  | text file containing names of domains to include. |
 | `--databases` | STRING ... |  | Domain databases to use for domain extraction. default: all databases. |
-| `--annotation_type` | {domainator,domain_search} | domainator | Which annotations to extract. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). |
+| `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to extract. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
+| `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
 | `--partial` | {include,exclude,only} | include | Which domains to extract, by the CDS or protein they are on, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Contig-level nucleotide hits are never on fragments. |
 | `--extend_range` | INTEGER |  | extract this many additional residues (or bases) on each side of the hit region. Sets the default of --extend_up and --extend_down. |
 | `--extend_up` | INTEGER |  | extract this many additional residues (or bases) upstream of the hit region. Default: --extend_range, or 0. |

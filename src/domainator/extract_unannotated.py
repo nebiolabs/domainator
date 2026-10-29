@@ -15,8 +15,7 @@ from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.locations import slice_record_from_location
-from domainator.model import region_id, check_annotation_type, feature_score, evalue_passes
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator.model import region_id, annotation_feature_types, feature_score, evalue_passes
 from Bio.SeqFeature import FeatureLocation
 from domainator.location_ops import inverted
 from Bio.SeqRecord import SeqRecord
@@ -36,8 +35,8 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
             compatibility with extract_domains.
         keep_name: keep the proteins' names. By default, regions are renamed for their original
             coordinates (see model.region_id). Careful: this can easily give duplicate names.
-        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best
-            hits written by domain_search).
+        annotation_type: which annotations count as annotated: "domainator", "domain_search",
+            or "all".
         databases: count only domains from these databases as annotations. None: all.
         largest: yield only the largest unannotated region of each protein that is at least
             ``min_length`` long.
@@ -46,7 +45,7 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
     Yields:
         The unannotated regions.
     """
-    search_hits = check_annotation_type(annotation_type) == "domain_search"
+    feature_types = annotation_feature_types(annotation_type)
     databases = set(databases) if databases is not None else None
     for rec in records:
         hit_domains = list() #list of SeqFeatures
@@ -54,7 +53,7 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
             raise ValueError("extract_unannotated currently only supports protein sequences.")
         
         for feature in rec.features:
-            if (search_hits and feature.type == DOMAIN_SEARCH_BEST_HIT_NAME) or (feature.type == DOMAIN_FEATURE_NAME):
+            if feature.type in feature_types:
                 if databases is not None and feature.qualifiers["database"][0] not in databases:
                     continue
                 keep = True

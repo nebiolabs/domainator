@@ -374,7 +374,7 @@ def test_domain_search_hit_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/extraction.gb"
-        select_by_cds.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--annotation_type", "domain_search"])
+        select_by_cds.main(["-i", str(shared_datadir / "pDONR_201_domain_search.gb"), "-o", out, "--has_search_hit"])
         new_file = list(SeqIO.parse(out, "genbank"))
         assert len(new_file) == 1
         cdss = DomainatorCDS.list_from_contig(new_file[0])
@@ -423,7 +423,7 @@ def test_select_by_cds_search_hits_selects_nucleic_acid_annotations(shared_datad
             "--evalue", "0.1",
         ])
 
-        select_by_cds.main(["-i", annotated, "-o", out, "--annotation_type", "domain_search"])
+        select_by_cds.main(["-i", annotated, "-o", out, "--has_search_hit"])
         records = list(SeqIO.parse(out, "genbank"))
 
         assert len(records) == 1

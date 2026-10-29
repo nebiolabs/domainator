@@ -20,6 +20,7 @@ OR (contig sequence matches specified regex [sequence_regex])
 OR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) 
 OR (contig contains a combination of domains that match the specified boolean expression [domain_expr])
 OR (contig contains no domains [unannotated])
+OR (contig contains a qualifying search hit [has_search_hit])
 )
 AND
 (total number of selected contigs is less than or equal to specified maximum [first])
@@ -32,7 +33,7 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 import sys
 
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys
@@ -44,7 +45,7 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
-from domainator.model import evalue_passes, feature_score
+from domainator.model import annotation_feature_types, evalue_passes, feature_score
 from Bio.SeqRecord import SeqRecord
 
 # TODO: account for different domain databases
@@ -104,11 +105,12 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
                      exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
                      databases: Optional[Set[str]] = None, unannotated: bool = False,
                      min_search_score: Optional[float] = None, max_search_score: Optional[float] = None,
-                     annotation_type: str = "domainator", partial: str = "include") -> Iterator[SeqRecord]:
+                     annotation_type: str = "domainator", partial: str = "include",
+                     has_search_hit: bool = False) -> Iterator[SeqRecord]:
     """Yield the records of ``records`` that are selected.
 
     A record is selected if it matches any of the name, definition, sequence, domain and
-    search-score criteria (or with none of them, every record), and it must also pass the
+    search-hit or search-score criteria (or with none of them, every record), and it must also pass the
     length, CDS-count, taxonomy and ``partial`` filters.
 
     Args:
@@ -137,6 +139,8 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
         max_search_score: select records whose domain_search best hit scores at most this.
         annotation_type: which annotations count as domains: "domainator", "domain_search", or
             "all".
+        has_search_hit: also select records with search hits passing evalue and search-score
+            cutoffs, ignoring domain names, expressions, and databases. Participates in invert.
         partial: "include" (the default) keeps all records, "exclude" drops fragments, "only"
             keeps only fragments. A protein record is a fragment if
             partial.get_fragment_status says so (e.g. a UniProt " (Fragment)" header); a
@@ -146,6 +150,7 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
         The selected records.
     """
 
+    feature_types = annotation_feature_types(annotation_type)
     databases = set(databases) if databases is not None else None
     returned = 0
 
@@ -210,17 +215,20 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
             if sequence_regex.search(str(contig.seq)): # select the contig if the sequence matches the regex
                 selected = True
                 
-        if domains is not None or domain_expr is not None or unannotated or min_search_score is not None or max_search_score is not None:
+        if domains is not None or domain_expr is not None or unannotated or has_search_hit or min_search_score is not None or max_search_score is not None:
             contig_domains = set()
             domain_search_feature = None
             at_least_one_test = True
             for feature in contig.features:
+                if has_search_hit and feature.type == DOMAIN_SEARCH_BEST_HIT_NAME and evalue_passes(feature, evalue):
+                    if min_search_score is None or min_search_score <= feature_score(feature) <= max_search_score:
+                        selected = True
                 if feature.type == DOMAIN_FEATURE_NAME and evalue_passes(feature, evalue) and (databases is None or feature.qualifiers["database"][0] in databases):
-                    if annotation_type in ("domainator", "all"):
+                    if feature.type in feature_types:
                         contig_domains.add(feature.qualifiers["name"][0])
                 if feature.type == DOMAIN_SEARCH_BEST_HIT_NAME and evalue_passes(feature, evalue) and (databases is None or feature.qualifiers["database"][0] in databases):
                     domain_search_feature = feature
-                    if annotation_type in ("domain_search", "all"):
+                    if feature.type in feature_types:
                         contig_domains.add(feature.qualifiers["name"][0])
 
             if min_search_score is not None and domain_search_feature is not None:
@@ -282,7 +290,8 @@ def build_parser():
                         help="Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. "
                         "A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition, NON_TER features, "
                         "or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location, or a /partial qualifier. Not affected by --invert.")
-    add_annotation_type(parser, choices=("domainator", "domain_search", "all"), help="Which annotations to select contigs by.")    
+    add_annotation_type(parser, help="Which annotations to select contigs by.")
+    add_has_search_hit(parser)
 
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
                         help="Consider only domains from these databases when filtering by domain. default: all databases.")
@@ -384,6 +393,7 @@ def main(argv):
                     min_search_score=params.min_search_score,
                     max_search_score=params.max_search_score,
                     annotation_type=params.annotation_type,
+                    has_search_hit=params.has_search_hit,
                     partial=params.partial
     )
 

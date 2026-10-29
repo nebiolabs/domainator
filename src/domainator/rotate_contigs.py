@@ -1,7 +1,7 @@
 """Rotate circular contigs so that their origin is set relative to a domain annotation.
 
 For each contig, one domain is chosen from new annotations found by searching the references (-r) against the contig,
-and/or from pre-existing Domainator (--domains) or domain_search (--annotation_type domain_search) annotations.
+and/or from pre-existing annotations (--domains, --annotation_type, --has_search_hit).
 If there are several candidates, the one with the highest score is chosen (ties broken by lowest E-value, then by position).
 The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--anchor),
 and reverse complemented if necessary to put the chosen domain on the forward strand (unless --keep_direction).
@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Un
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.offsets import count_peptides
@@ -39,7 +39,7 @@ from domainator.lean_record import LeanContig, lean_to_seqrecord, LEAN_SEARCH_TY
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.locations import slice_record_from_location, WHERE_CHOICES
-from domainator.model import region_id, check_annotation_type
+from domainator.model import region_id, annotation_feature_types
 from domainator.location_ops import circular_envelope
 
 _NUCLEOTIDE_LETTERS = set("ACGTURYSWKMBDHVN-.")
@@ -193,21 +193,21 @@ def _qualifier_float(feature:SeqFeature, name:str, default:float) -> float:
         return default
 
 
-def _candidate_features(rec:SeqRecord, new_hit_ids:Set[int], evalue:float, domains:Optional[Set[str]], databases:Optional[Set[str]], search_hits:bool) -> List[SeqFeature]:
+def _candidate_features(rec:SeqRecord, new_hit_ids:Set[int], evalue:float, domains:Optional[Set[str]], databases:Optional[Set[str]],
+                        feature_types:Set[str], has_search_hit:bool, use_existing:bool) -> List[SeqFeature]:
     """The features of rec that the contig can be rotated on."""
     candidates = list()
     for f in rec.features:
         if id(f) in new_hit_ids:
             selected = True
         else: # pre-existing annotation
-            if f.type == DOMAIN_FEATURE_NAME:
-                selected = domains is not None and f.qualifiers.get("name", [None])[0] in domains
-            elif f.type == DOMAIN_SEARCH_BEST_HIT_NAME:
-                selected = search_hits
-            else:
-                selected = False
-            if databases is not None and f.qualifiers.get("database", [None])[0] not in databases:
-                selected = False
+            selected = (
+                use_existing and f.type in feature_types
+                and (domains is None or f.qualifiers.get("name", [None])[0] in domains)
+                and (databases is None or f.qualifiers.get("database", [None])[0] in databases)
+            )
+            if has_search_hit and f.type == DOMAIN_SEARCH_BEST_HIT_NAME:
+                selected = True
         if selected and _qualifier_float(f, "evalue", float("inf")) <= evalue:
             candidates.append(f)
     return candidates
@@ -221,7 +221,8 @@ def _pick_anchor(candidates:List[SeqFeature]) -> SeqFeature:
 def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre_parsed_references:Optional[Dict[str, Dict[str, Any]]]=None, z:int=1000, evalue:float=0.001,
                    domains:Optional[Iterable[str]]=None, databases:Optional[Iterable[str]]=None, annotation_type:str="domainator", anchor:str="start",
                    keep_direction:bool=False, circularize:bool=False, keep_name:bool=False, keep_annotation:bool=False,
-                   gene_call:Optional[str]=None, cpu:int=0, max_mode:bool=False, batch_size:int=1000) -> Iterator[SeqRecord]:
+                   gene_call:Optional[str]=None, cpu:int=0, max_mode:bool=False, batch_size:int=1000,
+                   has_search_hit:bool=False) -> Iterator[SeqRecord]:
     """
         Rotate circular contigs so that their origin is set relative to a domain annotation.
 
@@ -234,9 +235,12 @@ def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre
             pre_parsed_references: the output of domainate.read_references, used instead of references.
             z: passed as the -Z parameter to hmmsearch.
             evalue: the maximum evalue of new and pre-existing domains to rotate on.
-            domains: names of pre-existing Domainator annotations to rotate on.
+            domains: names of pre-existing annotations to rotate on, from annotation_type.
             databases: only consider pre-existing annotations from these databases. If None, consider all databases.
-            annotation_type: "domainator", or "domain_search" to rotate on pre-existing domain_search annotations.
+            annotation_type: which pre-existing annotations to use: "domainator", "domain_search",
+                or "all". With "domainator", specify domains to use pre-existing annotations.
+            has_search_hit: also consider search hits passing evalue, ignoring domain names and
+                databases. The highest-ranked candidate still determines the anchor.
             anchor: "start", "end", or "center". Where to put the origin, relative to the domain in its own orientation.
             keep_direction: if True, don't reverse complement contigs with the domain on the reverse strand.
             circularize: if True, rotate linear contigs and fasta records as though they were circular. If False, skip them.
@@ -248,7 +252,7 @@ def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre
             max_mode: run the search in maximum sensitivity mode.
             batch_size: number of contigs to search at a time.
     """
-    search_hits = check_annotation_type(annotation_type) == "domain_search"
+    feature_types = annotation_feature_types(annotation_type)
     if anchor not in WHERE_CHOICES:
         raise ValueError(f"where must be one of {', '.join(WHERE_CHOICES)}, not {anchor}")
     if gene_call not in (None, "all", "unannotated"):
@@ -257,24 +261,25 @@ def rotate_contigs(records:Iterable, *, references:Optional[List[str]]=None, pre
         raise ValueError("batch_size must be at least 1.")
     domains = set(domains) if domains else None
     databases = set(databases) if databases is not None else None
+    use_existing = domains is not None or (annotation_type != "domainator" and not has_search_hit)
 
     reference_groups = pre_parsed_references
     if references is not None:
         reference_groups = read_references(references, None)
-    if reference_groups is None and domains is None and not search_hits:
-        raise ValueError("Specify references, domains, or annotation_type=\"domain_search\" to choose domains to rotate on.")
+    if reference_groups is None and not use_existing and not has_search_hit:
+        raise ValueError("Specify references, domains, or annotation_type=\"domain_search\"/\"all\", or has_search_hit to choose domains to rotate on.")
     if reference_groups is None and gene_call is not None:
         raise ValueError("gene_call only applies when searching references.")
-    if gene_call == "all" and (domains is not None or search_hits):
-        raise ValueError("gene_call 'all' deletes pre-existing annotations, so it can't be combined with domains or annotation_type=\"domain_search\".")
+    if gene_call == "all" and (use_existing or has_search_hit):
+        raise ValueError("gene_call 'all' deletes pre-existing annotations, so it can't be combined with domains, annotation_type=\"domain_search\"/\"all\", or has_search_hit.")
 
-    return _rotate_contigs(records, reference_groups, z, evalue, domains, databases, search_hits, anchor, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size)
+    return _rotate_contigs(records, reference_groups, z, evalue, domains, databases, feature_types, has_search_hit, use_existing, anchor, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size)
 
 
-def _rotate_contigs(records, reference_groups, z, evalue, domains, databases, search_hits, where, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size):
+def _rotate_contigs(records, reference_groups, z, evalue, domains, databases, feature_types, has_search_hit, use_existing, where, keep_direction, circularize, keep_name, keep_annotation, gene_call, cpu, max_mode, batch_size):
     """The generator behind rotate_contigs. It is separate so that rotate_contigs can validate its arguments before any records are read."""
     for rec, new_hit_ids in _search(_prepare_records(records, circularize), reference_groups, z, evalue, cpu, gene_call, max_mode, batch_size):
-        candidates = _candidate_features(rec, new_hit_ids, evalue, domains, databases, search_hits)
+        candidates = _candidate_features(rec, new_hit_ids, evalue, domains, databases, feature_types, has_search_hit, use_existing)
         if len(candidates) == 0:
             warnings.warn(f"No qualifying domain found on contig {rec.id}. Skipping contig.")
             continue
@@ -300,12 +305,13 @@ def build_parser():
                         help="threshold E value for domains to rotate on. Both new and pre-existing annotations must pass this threshold. Must be <=10.")
 
     parser.add_argument("--domains", type=str, default=None, nargs="+",
-                        help="Rotate on pre-existing domainator annotations with these names.")
+                        help="Rotate on pre-existing annotations with these names, from --annotation_type.")
     parser.add_argument("--domains_file", type=str, default=None,
-                        help="text file containing names of pre-existing domainator annotations to rotate on.")
+                        help="text file containing names of pre-existing annotations to rotate on, from --annotation_type.")
     parser.add_argument("--databases", type=str, default=None, nargs="+",
                         help="Consider only pre-existing annotations from these databases. default: all databases.")
     add_annotation_type(parser, help="Which pre-existing annotations to rotate on.")
+    add_has_search_hit(parser)
 
     parser.add_argument("--anchor", type=str, default="start", choices=WHERE_CHOICES,
                         help="where to put the origin, relative to the chosen domain in its own orientation (not relative to the original orientation of the contig). "
@@ -359,6 +365,7 @@ def main(argv):
         domains=domains,
         databases=params.databases,
         annotation_type=params.annotation_type,
+        has_search_hit=params.has_search_hit,
         anchor=params.anchor,
         keep_direction=params.keep_direction,
         circularize=params.circularize,

@@ -7,7 +7,7 @@ Set the origin of circular contigs relative to a domain.
 Rotate circular contigs so that their origin is set relative to a domain annotation.
 
 For each contig, one domain is chosen from new annotations found by searching the references (-r) against the contig,
-and/or from pre-existing Domainator (--domains) or domain_search (--annotation_type domain_search) annotations.
+and/or from pre-existing annotations (--domains, --annotation_type, --has_search_hit).
 If there are several candidates, the one with the highest score is chosen (ties broken by lowest E-value, then by position).
 The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--anchor),
 and reverse complemented if necessary to put the chosen domain on the forward strand (unless --keep_direction).
@@ -38,10 +38,11 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-r`, `--reference` | FILE ... |  | reference files to search against the input, to find new domains to rotate on. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. |
 | `-Z` | INTEGER | 1000 | Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. Set to 0 to use the number of actual target sequences in the input files (not available when reading from stdin). |
 | `-e`, `--evalue` | NUMBER | 0.001 | threshold E value for domains to rotate on. Both new and pre-existing annotations must pass this threshold. Must be <=10. |
-| `--domains` | STRING ... |  | Rotate on pre-existing domainator annotations with these names. |
-| `--domains_file` | FILE |  | text file containing names of pre-existing domainator annotations to rotate on. |
+| `--domains` | STRING ... |  | Rotate on pre-existing annotations with these names, from --annotation_type. |
+| `--domains_file` | FILE |  | text file containing names of pre-existing annotations to rotate on, from --annotation_type. |
 | `--databases` | STRING ... |  | Consider only pre-existing annotations from these databases. default: all databases. |
-| `--annotation_type` | {domainator,domain_search} | domainator | Which pre-existing annotations to rotate on. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). |
+| `--annotation_type` | {domainator,domain_search,all} | domainator | Which pre-existing annotations to rotate on. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
+| `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
 | `--anchor` | {start,end,center} | start | where to put the origin, relative to the chosen domain in its own orientation (not relative to the original orientation of the contig). start: the first base of the domain becomes the first base of the contig. end: the last base of the domain becomes the last base of the contig. center: the origin is placed in the middle of the domain. |
 | `--keep_direction` |  |  | by default, contigs are reverse complemented if necessary to put the chosen domain on the forward strand. Setting this option will keep the original orientation of the contig. |
 | `--circularize` |  |  | treat fasta records and linear genbank records as circular, before searching and rotating. By default, they are skipped. |

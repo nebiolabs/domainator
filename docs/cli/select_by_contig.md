@@ -26,6 +26,7 @@ OR (contig sequence matches specified regex [sequence_regex])
 OR (contig contains at least one domain with name in specified list [target_domains, target_domains_file]) 
 OR (contig contains a combination of domains that match the specified boolean expression [domain_expr])
 OR (contig contains no domains [unannotated])
+OR (contig contains a qualifying search hit [has_search_hit])
 )
 AND
 (total number of selected contigs is less than or equal to specified maximum [first])
@@ -53,6 +54,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--domain_expr` | STRING |  | a boolean expression using operators & (AND), \| (OR), and ~(NOT), to specify a desired combination of domains |
 | `--partial` | {include,exclude,only} | include | Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition, NON_TER features, or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location, or a /partial qualifier. Not affected by --invert. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select contigs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
+| `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
 | `--databases` | STRING ... |  | Consider only domains from these databases when filtering by domain. default: all databases. |
 | `--unannotated` |  |  | Select contigs with no domain annotations. |
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be considered when selecting by domain. Default: no cutoff. |

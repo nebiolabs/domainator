@@ -10,9 +10,10 @@ Takes a domain-annotated genbank file and extracts regions of contigs based on c
 
 Specify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.
 
-if target_cdss, target_domains or domain_expr is specified then selection logic is:
+If CDS names, domain names, a domain expression, unannotated, or has_search_hit is specified,
+selection logic is:
 
-    contigs & (target_cdss or target_domains or domain_expr or unannotated) & strand & partial
+    contigs & (cds_ids or domains or domain_expr or unannotated or has_search_hit) & strand & partial
 
 otherwise:
     return every cds in contigs
@@ -45,7 +46,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--strand` | {f,r} |  | Only extract regions around CDSs on the specified strand. |
 | `--partial` | {include,exclude,only} | include | Which CDSs to extract regions around, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Not affected by --invert. |
 | `--unannotated` |  |  | Select contigs with no domain annotations. |
-| `--annotation_type` | {domainator,domain_search} | domainator | Which annotations to select CDSs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). |
+| `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select CDSs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
+| `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
 | `--pad` |  |  | If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor. |
 | `--anchor` | {start,end,center} | start | Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints. |
 | `--keep_direction` |  |  | by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on. |

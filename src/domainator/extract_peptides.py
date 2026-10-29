@@ -16,7 +16,7 @@ Criteria are combined with the following logic:
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from typing import Optional, Set, Iterable, Iterator
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
@@ -65,7 +65,7 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                      strand: Optional[str] = None, unannotated: bool = False, _from_domain_search: bool = False,
                      extract_all: bool = False, invert: bool = False, _domain_search_negatives: Optional[Set[str]] = None,
                      databases: Optional[Set[str]] = None, keep_name: bool = False, name_field: Optional[str] = None,
-                     partial: str = "include") -> Iterator[SeqRecord]:
+                     partial: str = "include", has_search_hit: bool = False) -> Iterator[SeqRecord]:
     """
         Extracts all peptide sequences from each SeqRecord in records.
         Yields the extracted peptides as SeqRecord objects.
@@ -76,7 +76,9 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
             cds_ids: only consider peptides from cdss with these names
             keep_cds_feature: if True, keep the CDS feature on the peptide record. If False, remove it.
             cds_id_type: if "name", then cds_ids is a list of CDS names. If "num", then cds_ids is a list of CDS numbers.
-            annotation_type: "domainator", or "domain_search" to also extract the peptides of the best hits written by domain_search.
+            annotation_type: which annotations supply domain names: "domainator", "domain_search", or "all".
+            has_search_hit: also select CDSs with search hits passing evalue, ignoring domain
+                names and databases. Participates in invert.
             strand: only extract peptides of CDSs on the specified strand. If None, then extract peptides from CDSs on both strands. forward strand is "f", reverse strand is "r".
             unannotated: if True, extract peptides from CDSs with no domain annotations.
             _from_domain_search: if True, then the input records are from a domain search, and we can skip all the annotation propagation.
@@ -88,7 +90,7 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
             partial: select CDSs by fragment status: "include" (default, all), "exclude" (skip fragments), or "only" (only fragments).
                 A CDS is a fragment if its location has '<' or '>' (see utils.get_fragment_status). Not affected by invert.
     """
-    search_hits = check_annotation_type(annotation_type) == "domain_search"
+    check_annotation_type(annotation_type)
     
     # TODO: if fasta_out is set, we can skip all the annotation propagation, because it won't be used. This should speed things up for that case.
     
@@ -117,11 +119,12 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                     keep = True
                 if (cds_ids is not None and target_cds_id in cds_ids):
                     keep = True
-                if domains is not None and len(domains.intersection(cds.get_domain_names(databases))) > 0:
+                domain_names = cds.get_domain_names(databases, annotation_type=annotation_type)
+                if domains is not None and len(domains.intersection(domain_names)) > 0:
                     keep = True
-                if search_hits and cds.domain_search_feature is not None:
+                if has_search_hit and cds.domain_search_feature is not None:
                     keep = True
-                if unannotated and len(cds.get_domain_names(databases)) == 0:
+                if unannotated and len(domain_names) == 0:
                     keep = True
             
             if strand is not None:
@@ -203,7 +206,8 @@ def build_parser():
     
     parser.add_argument('--unannotated', action='store_true', default=False, help="extract peptides from CDSs with no domain annotations.")
 
-    add_annotation_type(parser, help="Which annotations to select peptides by. With domain_search, the search hits are extracted.")
+    add_annotation_type(parser, help="Which annotations to select peptides by.")
+    add_has_search_hit(parser)
 
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract peptides from CDSs on the specified strand.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which CDSs to extract peptides from") + " Not affected by --invert.")
@@ -250,7 +254,7 @@ def main(argv):
     target_cdss = list_and_file_to_dict_keys(params.cds, params.cds_file, as_set=True)
 
     extract_all = False
-    if target_domains is None and target_cdss is None and not params.unannotated and params.annotation_type != "domain_search":
+    if target_domains is None and target_cdss is None and not params.unannotated and not params.has_search_hit:
         extract_all = True
         if params.invert:
             warnings.warn("Invert supplied with no selection criteria. Invert will be ignored.")
@@ -264,6 +268,7 @@ def main(argv):
                     cds_ids=target_cdss,
                     keep_cds_feature=True,
                     annotation_type = params.annotation_type,
+                    has_search_hit=params.has_search_hit,
                     strand = params.strand,
                     unannotated = params.unannotated,
                     extract_all=extract_all,

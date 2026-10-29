@@ -13,14 +13,14 @@ can write a fasta or a genbank file
 from typing import Iterable, Iterator, Optional, Set
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.locations import FeatureIndex, slice_record_from_location, pad_location
-from domainator.model import region_id, get_cds_unique_name, check_annotation_type, feature_score, evalue_passes
+from domainator.model import region_id, get_cds_unique_name, annotation_feature_types, feature_score, evalue_passes
 from domainator.partial import cds_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_SEARCH_BEST_HIT_NAME
 from Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.location_ops import merge_parts
 from Bio.SeqRecord import SeqRecord
@@ -29,7 +29,8 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                     domains: Optional[Set[str]] = None, extend_range: Optional[int] = None,
                     extend_up: Optional[int] = None, extend_down: Optional[int] = None, combine: bool = False,
                     keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
-                    databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include") -> Iterator[SeqRecord]:
+                    databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include",
+                    has_search_hit: bool = False) -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` covered by their domain annotations.
 
     Args:
@@ -50,8 +51,9 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         keep_name: keep the contigs' names. By default, regions are renamed for their original
             coordinates and whether they were reverse-complemented. Careful: this can easily
             give duplicate names.
-        annotation_type: "domainator" (domain annotations) or "domain_search" (also the best
-            hits written by domain_search).
+        annotation_type: which annotations to extract: "domainator", "domain_search", or "all".
+        has_search_hit: also extract search hits, ignoring domain names and databases but
+            honoring evalue, min_score, and partial. Alone, extracts only search hits.
         databases: select only domains from these databases. None: all.
         splice: when a contig has several selected domains, delete the sequence between them and
             join the domains, in the order they are read on the strand of the domain with the
@@ -64,7 +66,7 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
     Yields:
         The extracted regions.
     """
-    search_hits = check_annotation_type(annotation_type) == "domain_search"
+    feature_types = annotation_feature_types(annotation_type)
 
     if splice and combine:
         raise ValueError("Cannot use --splice and --combine at the same time.")
@@ -80,15 +82,16 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         if partial != "include":
             cds_by_id = {get_cds_unique_name(f): f for f in rec.features if f.type == "CDS"}
         for feature in rec.features:
-            if (search_hits and feature.type == DOMAIN_SEARCH_BEST_HIT_NAME) or (feature.type == DOMAIN_FEATURE_NAME):
-                if databases is not None and feature.qualifiers["database"][0] not in databases:
-                    continue
+            search_hit = has_search_hit and feature.type == DOMAIN_SEARCH_BEST_HIT_NAME
+            selected = (
+                feature.type in feature_types
+                and (domains is not None or not has_search_hit)
+                and (domains is None or feature.qualifiers["name"][0] in domains)
+                and (databases is None or feature.qualifiers["database"][0] in databases)
+            )
+            if selected or search_hit:
                 keep = True
-                if feature.type == DOMAIN_FEATURE_NAME and domains is not None and feature.qualifiers["name"][0] not in domains:
-                    keep = False
-                elif (search_hits and feature.type == DOMAIN_FEATURE_NAME) and domains is None:
-                    keep = False
-                elif not evalue_passes(feature, evalue):
+                if not evalue_passes(feature, evalue):
                     keep = False
                 elif min_score is not None and feature_score(feature) < min_score:
                     keep = False
@@ -220,6 +223,7 @@ def build_parser():
                         help="Domain databases to use for domain extraction. default: all databases.")
 
     add_annotation_type(parser, help="Which annotations to extract.")
+    add_has_search_hit(parser)
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which domains to extract, by the CDS or protein they are on") + " Contig-level nucleotide hits are never on fragments.")
 
     parser.add_argument("--extend_range", type=int, default=None, help="extract this many additional residues (or bases) on each side of the hit region. Sets the default of --extend_up and --extend_down.")
@@ -270,6 +274,7 @@ def main(argv):
         keep_direction=params.keep_direction, 
         keep_name=params.keep_name,
         annotation_type=params.annotation_type,
+        has_search_hit=params.has_search_hit,
         databases=params.databases,
         splice=params.splice,
         partial=params.partial,

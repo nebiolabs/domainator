@@ -154,7 +154,7 @@ def add_switch(parser, name: str, help: str, *, default: bool, negative_help: st
 
 
 
-def add_annotation_type(parser, *, choices: Sequence[str] = ANNOTATION_TYPES[:2], default: str = "domainator", help: str = ""):
+def add_annotation_type(parser, *, choices: Sequence[str] = ANNOTATION_TYPES, default: str = "domainator", help: str = ""):
     """Add ``--annotation_type``: which annotations a command reads.
 
     ``domainator`` is the domain annotations written by domainate (``Domainator`` features),
@@ -164,6 +164,14 @@ def add_annotation_type(parser, *, choices: Sequence[str] = ANNOTATION_TYPES[:2]
                                help=(help or "Which annotations to use.") + " domainator: domain annotations (from domainate). "
                                     "domain_search: best-hit annotations (from domain_search)."
                                     + (" all: both." if "all" in choices else ""))
+
+
+def add_has_search_hit(parser):
+    """Add the independent, additive search-hit selection criterion."""
+    return parser.add_argument("--has_search_hit", action="store_true", default=False,
+                               help="Also select existing domain_search hits, regardless of annotation_type, "
+                                    "domain names, domain expressions, or databases. Hits must pass the e-value "
+                                    "and score cutoffs where applicable. Participates in --invert where available.")
 
 
 def add_alphabet(parser):

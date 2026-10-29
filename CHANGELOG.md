@@ -11,6 +11,11 @@ documented, versioned file formats. Many options were renamed; [MIGRATION.md](MI
 lists every change from 0.x.
 
 ### Added
+- `--has_search_hit` on select_by_cds, select_by_contig, extract_peptides, extract_domains,
+  and rotate_contigs: an independent search-hit selection criterion that bypasses domain
+  names, expressions, and database restrictions, honors quality cutoffs, and participates
+  in `--invert` where available. `--annotation_type {domainator,domain_search,all}` now
+  consistently selects annotation sources rather than implicitly adding search hits.
 - The `domainator <command>` dispatcher, with `domainator --help`, `domainator completion
   {bash,zsh,tcsh}` (shell tab completion) and `domainator doctor` (which optional programs
   and packages are installed).
