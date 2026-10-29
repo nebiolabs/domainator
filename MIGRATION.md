@@ -163,8 +163,9 @@ Options not listed are unchanged.
 | domain_search | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `-r/--references` | `-r/--reference` |
 | | `--pad_where` | `--anchor` |
-| | `--deduplicate` | `--deduplicate` / `--no_deduplicate` (still off by default) |
-| | `--dedup_both_strands` | `--both_strands` |
+| | `--deduplicate`, `--no_deduplicate` | `--dedup id`, `--dedup none` (still off by default) |
+| | `--deduplicate_by_sequence` | `--dedup sequence` |
+| | `--dedup_both_strands`, `--both_strands` (with sequence deduplication) | `--dedup sequence_rc` |
 | domainate | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `-r/--references` | `-r/--reference` |
 | | `--max_domains` | `--max_hits_per_cds` |
@@ -211,7 +212,7 @@ Options not listed are unchanged.
 | | `--search_hits` | `--has_search_hit` |
 | select_by_cds | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `--pad_where` | `--anchor` |
-| | `--skip_deduplicate` | `--no_deduplicate` |
+| | `--deduplicate`, `--skip_deduplicate`, `--no_deduplicate` | `--dedup id`, `--dedup none`, `--dedup none` (ID deduplication remains the default) |
 | | `--search_hits` | `--has_search_hit` |
 | select_by_contig | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
 | | `--domain_type {domain,search,both}` | `--annotation_type {domainator,domain_search,all}` |
@@ -254,6 +255,50 @@ Options not listed are unchanged.
 | | `--compress` / `--bgzf` | `--compress` |
 | | `--cpu` (default 1) | `--cpu` (default 0: all physical cores) |
 
+### Output deduplication policies
+
+domain_search and select_by_cds use one single-choice option,
+`--dedup {none,id,sequence,sequence_rc}`, with these policies:
+
+| Policy | Meaning |
+|---|---|
+| `none` | Keep all output records. |
+| `id` | Keep one representative per output record ID. |
+| `sequence` | Keep unique output sequences, ignoring case and terminal `*` characters. |
+| `sequence_rc` | Like `sequence`, also collapsing nucleotide reverse complements. Not valid for protein output. |
+
+Choose exactly one policy. The old switches and the pre-release multi-value
+`--dedup` syntax are removed, without aliases.
+
+Domainator assumes that **the same record ID identifies the same sequence**.
+Different IDs can identify identical sequences; annotations and focus-hit scores
+can differ between copies of the same sequence. Consequently, sequence uniqueness
+also enforces ID uniqueness, so composable selectors are unnecessary.
+Reusing an ID for different
+sequences is unsupported; give those records distinct IDs before using them
+together. Deduplication relies on this invariant rather than globally validating it.
+
+Omitting the option preserves each command's default: no deduplication for
+domain_search, and ID deduplication for select_by_cds. JSON/YAML configurations use
+a string, for example `"dedup": "sequence_rc"`, not an array.
+`--dedup none` overrides deduplication from a configuration file.
+
+Deduplication compares extracted/translated records before padding. Without
+`--max_hits`, the first arriving representative is kept; parallel search arrival
+order is arbitrary. With `domain_search --max_hits N`, each worker and the global
+merge retain at most N winning records, replacing a representative when a
+better-scoring copy arrives. Only the final winners are sorted, so duplicates do
+not consume result slots and no all-hit buffer is needed. Each policy's
+retained records and heap metadata are O(N), in
+addition to the normal bounded task/result queues, input batches, and search state.
+Equal scores favor earlier arrivals; representatives can depend on parallel
+batch completion order.
+
+`deduplicate_genbank --both_strands` is unchanged as an option: it belongs to the
+separate clustering interface. Exact hash deduplication now correctly equates only
+a nucleotide sequence and its reverse complement, not its plain complement or
+plain reversal.
+
 ## Behavior changes
 
 - `-e/--evalue` keeps annotations with an e-value *at or below* the cutoff in every program.
@@ -272,8 +317,8 @@ Options not listed are unchanged.
   Expressions like `A~B` or `A(B`, which used to be split into the wrong names, are errors.
 - The `DOMAINATOR_GB_PARSER` environment variable no longer exists.
 - Tabs inside FASTA sequence lines are dropped, like spaces (Biopython's FASTA reader does this).
-- domain_search `--max_hits` and sort_contigs order records with equal scores by their input
-  order (it was arbitrary).
+- domain_search `--max_hits` breaks equal-score ties by result arrival order (which
+  depends on parallel batch completion); sort_contigs uses input order.
 - Missing external programs (foldseek, cmbuild, cd-hit, usearch, diamond, datasets) give one
   error message that names the `--<program>_path` option.
 
@@ -362,7 +407,9 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | infernal_build | `informat` | `input_format` |
 | rotate_contigs | `where` | `anchor` |
 | domainate | `max_hits`, `esm2_3Di_weights`, `esm2_3Di_device` | `max_hits_per_cds`, `esm2_3di_weights`, `esm2_3di_device` |
-| domain_search | `partitions` (the input), `decoy_names`, `dedup_both_strands` | `targets` (SeqRecords, or the same partitions), `decoys`, `both_strands` |
+| domain_search | `partitions` (the input), `decoy_names` | `targets` (SeqRecords, or the same partitions), `decoys` |
+| domain_search | `deduplicate_by_sequence`, `both_strands` / `dedup_both_strands` | `dedup="sequence"`, `dedup="sequence_rc"` |
+| select_by_cds.deduplicate_and_pad | `deduplicate=True` / `False` | `dedup="id"` / `"none"` |
 | find_features | `gpu_device` | `device` |
 | hmmer_search, hmmer_compare | `reference_files`, `score_cutoff` | `references`, `min_score` |
 | hmmer_compare | `out_handle`, `alignments` | `tsv_out_handle`, `alignments_out_handle` (either can be None) |
@@ -375,6 +422,10 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | split_by_cluster | `outdir` | `output_dir` |
 | color_genbank | `color_targets` | `targets` |
 | color_table_to_legend | `svg` | `svg_out` |
+
+The pre-release `dedup` collection parameter is now one string in Python as well
+as in configuration files. For example, use `dedup="sequence_rc"` instead of
+`dedup=["id", "sequence_rc"]`. `domain_search` defaults to `dedup="none"`.
 
 **Matrices.** `seq_dist`, `kmer_dist`, `structure_dist` and `compare_contigs` return a
 `DataMatrix` instead of writing files, so they no longer take `hdf`, `dense_text` or

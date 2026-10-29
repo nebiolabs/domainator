@@ -544,31 +544,19 @@
    "type": "boolean"
   },
   {
-   "name": "deduplicate",
+   "name": "dedup",
    "flags": [
-    "--deduplicate"
+    "--dedup"
    ],
-   "negative_flags": [
-    "--no_deduplicate"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "deduplicate_by_sequence",
-   "flags": [
-    "--deduplicate_by_sequence"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "both_strands",
-   "flags": [
-    "--both_strands"
-   ],
-   "kind": "flag",
-   "type": "boolean"
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "id",
+    "sequence",
+    "sequence_rc"
+   ]
   },
   {
    "name": "max_region_overlap",
@@ -3191,15 +3179,19 @@
    "type": "boolean"
   },
   {
-   "name": "deduplicate",
+   "name": "dedup",
    "flags": [
-    "--deduplicate"
+    "--dedup"
    ],
-   "negative_flags": [
-    "--no_deduplicate"
-   ],
-   "kind": "flag",
-   "type": "boolean"
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "id",
+    "sequence",
+    "sequence_rc"
+   ]
   },
   {
    "name": "max_region_overlap",

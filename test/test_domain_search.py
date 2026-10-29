@@ -3,6 +3,7 @@ import os
 from domainator.domain_search import main
 import domainator.domain_search as domain_search_module
 import tempfile
+from contextlib import nullcontext
 from glob import glob
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -13,6 +14,8 @@ from domainator.offsets import count_peptides_in_record
 from domainator.partial import get_fragment_status
 from domainator.seqio import parse_seqfiles, write_genbank
 from domainator._mp import Shared
+from domainator.dedup import RecordDeduplicator
+from domainator.errors import InputError
 import pytest
 from helpers import compare_seqfiles, compare_seqrecords
 
@@ -455,7 +458,7 @@ def test_deduplicate(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir="test_out"
         out = output_dir + f"/out.gb"
-        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--whole_contig", "--cpu", "1", "--deduplicate", "--keep_direction"]
+        args = ['--input', str(gb) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "-Z", "1000", "--whole_contig", "--cpu", "1", "--dedup", "id", "--keep_direction"]
         main(args)
         assert os.path.isfile(out)
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -470,21 +473,37 @@ def test_deduplicate_by_sequence_nucleotide(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.gb"
         base_args = ['--input', str(gb), "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--whole_contig", "--cpu", "1", "--keep_direction"]
-        main(base_args + ["--deduplicate"])
+        main(base_args + ["--dedup", "id"])
         assert len(list(SeqIO.parse(out, "genbank"))) == 4
 
-        main(base_args + ["--deduplicate_by_sequence"])
+        main(base_args + ["--dedup", "sequence"])
         assert len(list(SeqIO.parse(out, "genbank"))) == 1
 
         # neighborhoods: one copy of each distinct region
         region_args = ['--input', str(gb), "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--cds_range", "1", "--cpu", "1"]
         main(region_args)
         all_seqs = [str(rec.seq) for rec in SeqIO.parse(out, "genbank")]
-        main(region_args + ["--deduplicate_by_sequence"])
+        main(region_args + ["--dedup", "sequence"])
         dedup_seqs = [str(rec.seq) for rec in SeqIO.parse(out, "genbank")]
         assert len(dedup_seqs) < len(all_seqs)
         assert len(dedup_seqs) == len(set(dedup_seqs))
         assert set(dedup_seqs) == set(all_seqs)
+
+@pytest.mark.parametrize("both_strands", [False, True])
+@pytest.mark.parametrize("sequence,is_reverse_complement", [
+    ("AACG", False),
+    ("CGTT", True),
+    ("TTGC", False),
+    ("GCAA", False),
+])
+def test_sequence_dedup_strand_equivalence(sequence, is_reverse_complement, both_strands):
+    deduplicator = RecordDeduplicator("sequence_rc" if both_strands else "sequence")
+    original = SeqRecord(Seq("AACG"), id="original")
+    candidate = SeqRecord(Seq(sequence), id="candidate")
+    assert deduplicator.keep(original)
+    duplicate = sequence == "AACG" or (both_strands and is_reverse_complement)
+    assert deduplicator.keep(candidate) == (not duplicate)
+
 
 def test_deduplicate_by_sequence_both_strands(shared_datadir):
     gb = shared_datadir / "pDONR201_multi_genemark_domainator.gb"
@@ -495,11 +514,11 @@ def test_deduplicate_by_sequence_both_strands(shared_datadir):
         in_gb = output_dir + "/in.gb"
         write_genbank([fwd, rev], in_gb)
         out = output_dir + "/out.gb"
-        base_args = ['--input', in_gb, "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--whole_contig", "--cpu", "1", "--keep_direction", "--deduplicate_by_sequence"]
-        main(base_args)
+        base_args = ['--input', in_gb, "-r", str(hmms), "--evalue", str(0.1), "-o", out, "-Z", "1000", "--whole_contig", "--cpu", "1", "--keep_direction"]
+        main(base_args + ["--dedup", "sequence"])
         assert len(list(SeqIO.parse(out, "genbank"))) == 2
 
-        main(base_args + ["--both_strands"])
+        main(base_args + ["--dedup", "sequence_rc"])
         assert len(list(SeqIO.parse(out, "genbank"))) == 1
 
 @pytest.mark.parametrize("extra_args", [
@@ -527,21 +546,66 @@ def test_deduplicate_by_sequence_protein(shared_datadir, extra_args):
         dup_seqs = [str(rec.seq).upper().strip("*") for rec in SeqIO.parse(out, "genbank")]
         assert len(set(dup_seqs)) < len(dup_seqs)
 
-        main(['--input', dup_fasta] + base_args + ["--deduplicate_by_sequence"])
+        main(['--input', dup_fasta] + base_args + ["--dedup", "sequence"])
         dedup_seqs = [str(rec.seq).upper().strip("*") for rec in SeqIO.parse(out, "genbank")]
         assert len(dedup_seqs) == len(expected)
         assert set(dedup_seqs) == expected
 
-def test_deduplicate_by_sequence_validation(shared_datadir, capsys):
+@pytest.mark.parametrize("dedup,message", [
+    ("unknown", "invalid choice"),
+    ("sequence_rc", "only supported for nucleotide output"),
+])
+def test_dedup_validation(shared_datadir, capsys, dedup, message):
     hmms = shared_datadir / "pdonr_hmms.hmm"
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + "/out.gb"
         with pytest.raises(SystemExit):
-            main(['--input', str(shared_datadir / "pDONR201.gb"), "-r", str(hmms), "-o", out, "--cpu", "1", "--both_strands"])
-        assert "requires --deduplicate_by_sequence" in capsys.readouterr().err
-        with pytest.raises(SystemExit):
-            main(['--input', str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(hmms), "-o", out, "--cpu", "1", "--deduplicate_by_sequence", "--both_strands"])
-        assert "only supported for nucleotide output" in capsys.readouterr().err
+            main(['--input', str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(hmms), "-o", out, "--cpu", "1", "--dedup", dedup])
+        assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("dedup,expected", [
+    ("none", [("a", 100), ("a", 90)]),
+    ("id", [("a", 100), ("b", 80)]),
+    ("sequence", [("a", 100), ("c", 70)]),
+])
+def test_ranked_dedup_before_limit(monkeypatch, dedup, expected):
+    records = []
+    for name, sequence, score in [("a", "MA", 90), ("b", "MA", 80),
+                                  ("c", "MC", 70), ("a", "MA", 100)]:
+        rec = SeqRecord(Seq(sequence), id=name, annotations={"molecule_type": "protein"})
+        set_hit_best_score(rec, score)
+        records.append(rec)
+
+    monkeypatch.setattr(domain_search_module, "make_pool", lambda **kwargs: nullcontext())
+    monkeypatch.setattr(domain_search_module.domainate, "read_references", lambda *args, **kwargs: {})
+    monkeypatch.setattr(domain_search_module.domainate, "domainate", lambda records, **kwargs: records)
+
+    def run_tasks(pool, worker, tasks, **kwargs):
+        assert worker.max_hits == 2
+        for task in tasks:
+            hits = worker(task)
+            assert len(hits) <= 2
+            yield hits
+
+    monkeypatch.setattr(domain_search_module, "imap_unordered_bounded", run_tasks)
+    hits = list(domain_search_module.domain_search(
+        records, references=[], z=1000, cpu=2, batch_size=3, max_hits=2, dedup=dedup,
+    ))
+    assert [(rec.id, get_hit_best_score(rec)) for rec in hits] == expected
+
+
+@pytest.mark.parametrize("dedup", ["unknown", None, [], ["sequence"]])
+def test_library_rejects_invalid_dedup(dedup):
+    with pytest.raises(InputError):
+        list(domain_search_module.domain_search([], references=[], z=1000, dedup=dedup))
+
+
+def test_library_rejects_translated_sequence_rc():
+    with pytest.raises(InputError, match="only supported for nucleotide output"):
+        list(domain_search_module.domain_search(
+            [], references=[], z=1000, dedup="sequence_rc", translate=True,
+        ))
 
 def test_domain_search_peptides(shared_datadir):
     input_files = [str(shared_datadir / "simple_genpept.gb"),  str(shared_datadir / "pdonr_peptides.fasta")]

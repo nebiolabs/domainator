@@ -324,15 +324,14 @@ def sequence_hashes(seq, both_strands: bool = False) -> List[bytes]:
         The sequence is uppercased and terminal '*' stripped before hashing, so case and stop codons don't distinguish sequences.
 
         seq: a Seq or str.
-        both_strands: if True, also return the digests of the complement and reverse complement (for nucleotide sequences),
+        both_strands: if True, also return the digest of the reverse complement (for nucleotide sequences),
             so a sequence matches its other-strand copies.
 
-        returns: a list of digests (1, or 3 if both_strands). Two sequences are duplicates if their lists share any digest.
+        returns: a list of digests (1, or 2 if both_strands). Two sequences are duplicates if their lists share any digest.
     """
     seq_str = str(seq).upper().strip("*")
     out = [hashlib.sha256(seq_str.encode("utf-8")).digest()]
     if both_strands:
         seq_obj = Seq(seq_str)
-        out.append(hashlib.sha256(str(seq_obj.complement()).encode("utf-8")).digest())
         out.append(hashlib.sha256(str(seq_obj.reverse_complement()).encode("utf-8")).digest())
     return out

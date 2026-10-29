@@ -27,6 +27,21 @@ then open htmlcov/index.html in a browser to see coverage
 
 ## parallel workers
 
+Sequence records follow the [ID-to-sequence invariant](file_formats.md#sequence-identity):
+the same ID identifies the same sequence, though annotations and hit scores may
+differ. The single-choice `--dedup` policy has one key:
+the ID, the normalized sequence hash, or a canonical sequence/reverse-complement
+hash. Sequence uniqueness also guarantees ID uniqueness, so policies do not need
+to be composable.
+
+For `domain_search --max_hits N`, `dedup.TopHits` keeps at most N winning records
+in each task and in the parent. Better copies replace their representatives;
+equal scores favor earlier arrivals. A heap stores only ranking metadata and
+keys, and stale entries are periodically compacted to keep that metadata O(N)
+as well. Discarding a task's lower-ranked keys is lossless: that task already has
+N better distinct keys, which remain distinct after the global merge. Only final
+winners are sorted; inputs and search batches retain their usual bounded pipeline.
+
 Every pool of workers comes from `domainator._mp.make_pool`. On free-threaded Python with the GIL off, its workers are threads, which share memory; otherwise they are processes started with spawn. A task gets large read-only data (parsed references, matrices) through `_mp.Shared`, never through module globals or attributes of the task's function: a process pool sends the function and its arguments with every task, but a `Shared` reaches each worker once, and threads read the parent's copy. A task must not change anything it shares with other tasks.
 
 `DOMAINATOR_MP_START_METHOD` overrides the choice: `threads`, or a multiprocessing start method (`spawn`, `forkserver`, `fork`). Running the tests with `DOMAINATOR_MP_START_METHOD=threads` checks the thread path on an ordinary Python. On free-threaded Python, pyhmmer, pyinfernal and pyrodigal still turn the GIL back on when imported (they haven't declared that they can run without it), so pools are processes there too unless you start Python with `PYTHON_GIL=0`.

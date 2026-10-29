@@ -56,6 +56,14 @@ lists every change from 0.x.
   (`DOMAINATOR_MP_START_METHOD` overrides this). Domainator builds on free-threaded Python.
 
 ### Changed
+- domain_search and select_by_cds replace deduplication switches with the single-choice
+  `--dedup {none,id,sequence,sequence_rc}` policy. Their defaults remain
+  none and id, respectively. Ranked searches retain the top `--max_hits` winners
+  incrementally in each worker and the global merge, replacing weaker copies
+  without buffering all candidates. Deduplication relies on Domainator's
+  invariant that the same record ID identifies the same sequence.
+  The pre-release multi-value syntax is removed; configuration and library APIs
+  also use one policy string.
 - Commands run as `domainator <command>`; the `<command>.py` scripts are gone.
 - build_projection `--html_out` writes the Domainator Viewer, which selects points into a metadata
   table; its on-screen legend is now the viewer's legend export.
@@ -130,6 +138,8 @@ lists every change from 0.x.
   `domainator viewer` writes the page on its own (see MIGRATION.md).
 
 ### Fixed
+- Strand-independent exact deduplication no longer collapses complement-only or
+  reverse-only nucleotide sequences; only reverse-complement copies are equivalent.
 - A taxid missing from the NCBI taxonomy database (one newer than the database) crashed
   summary_report and enum_report's taxonomy columns. It is now treated as unknown, with
   blank names and ranks and one warning per taxid suggesting `--taxonomy_update`.

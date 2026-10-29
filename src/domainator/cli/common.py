@@ -22,6 +22,7 @@ from typing import Iterable, Optional, Sequence
 from jsonargparse import ArgumentParser
 
 from domainator import __version__
+from domainator.dedup import DEDUP_CHOICES
 from domainator.hmmio import iter_hmm_names, read_hmms
 from domainator.model import ANNOTATION_TYPES
 from domainator.seqio import STDIN_PATHS, STDOUT_PATHS, get_file_type, parse_seqfiles
@@ -138,6 +139,17 @@ def add_output(parser, content: str, help: str, *, primary: bool = False, requir
                                  help=help + (" Use - for standard output." if stdout else ""), **kwargs)
     action.stdout = stdout
     return action
+
+
+def add_dedup(parser, *, default: str = "none"):
+    parser.add_argument(
+        "--dedup", type=str, choices=DEDUP_CHOICES, default=default,
+        help="Output uniqueness policy: "
+             "none keeps all records; id drops repeated output IDs; sequence drops identical output sequences "
+             "(ignoring case and terminal '*'); sequence_rc also collapses nucleotide reverse complements. "
+             "The same ID must identify the same sequence, so sequence uniqueness also ensures unique IDs. "
+             "Deduplication happens before padding.",
+    )
 
 
 def add_seq_outputs(parser, *, genbank_help: str = "Write the records to this GenBank file.",

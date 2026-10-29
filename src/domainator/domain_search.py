@@ -13,11 +13,22 @@ at most 100 hits will be returned (not 500).
 
 When max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.
 If neither is set, then hits will be written on the fly and not sorted.
+
+--dedup selects one output uniqueness policy: none (the default), id,
+sequence, or sequence_rc. With --max_hits, deduplication keeps the best-scoring
+representatives before applying the limit, retaining at most --max_hits winners
+per worker and in the global merge. Domainator assumes that the same record ID
+always identifies the same sequence, so sequence uniqueness also ensures unique
+IDs. Hit scores and annotations can still differ between copies.
+Without --max_hits, the first arriving representative is kept; parallel arrival
+order is arbitrary.
 """
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import NonNegativeFloat, PositiveFloat
-from domainator.cli.common import add_alphabet, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, reject_stdin, tool_parser
+from domainator.cli.common import add_alphabet, add_dedup, add_input, add_seq_outputs, check_outputs, declare_outputs, reject_stdin, tool_parser
+from domainator.dedup import RecordDeduplicator, TopHits
+from domainator.errors import InputError
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles, native_parser_available
 from domainator.offsets import count_peptides_in_record, partition_seqfile, i_partition_seqfiles, index_total_cds
@@ -26,27 +37,17 @@ from domainator._mp import Shared, imap_unordered_bounded, make_pool, resolve_cp
 from domainator.taxonomy.records import compile_taxonomy_allowed
 from domainator.partial import PARTIAL_CHOICES
 from domainator.locations import WHERE_CHOICES
-from domainator.model import sequence_hashes, get_hit_best_score, get_hit_names, set_dist_to_start
+from domainator.model import get_hit_names, set_dist_to_start
 from domainator import select_by_cds
 from domainator import db_index
 from domainator import domainate
 import functools
-import heapq
 from typing import List, Tuple, Set, Optional, Iterable, Iterator, Union
 from domainator import extract_peptides
 from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from Bio.SeqRecord import SeqRecord
-
-
-def _is_new_sequence(record, seen: Set[bytes], both_strands: bool) -> bool:
-    """Exact-sequence dedup check: True (and record its hashes in seen) if record's sequence hasn't been seen yet."""
-    hashes = sequence_hashes(record.seq, both_strands)
-    if any(h in seen for h in hashes):
-        return False
-    seen.update(hashes)
-    return True
 
 
 class _domain_search_worker():
@@ -56,7 +57,7 @@ class _domain_search_worker():
     once: the parsed references, and the compiled taxonomy filter (None: no filter).
     """
 
-    def __init__(self, *, references: Shared, allowed_taxids: Shared, z: int, evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include", deduplicate_by_sequence: bool = False, dedup_both_strands: bool = False):
+    def __init__(self, *, references: Shared, allowed_taxids: Shared, z: int, evalue: float, max_overlap: float, add_annotations: bool, cds_range: Tuple, kb_range: Tuple, whole_contig: bool, normalize_direction: bool, translate: bool, gene_call:str = None, min_evalue:float = 0.0, batch_size: int = 10000, fasta_type: str = "protein", max_mode: bool = False, max_region_overlap=1.0, strand: Optional[str] = None, decoy_names: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None, max_hits: Optional[int] = None, partial: str = "include", dedup: str = "none"):
 
         self.references = references
         self.allowed_taxids = allowed_taxids
@@ -79,17 +80,11 @@ class _domain_search_worker():
         self.decoy_names = decoy_names
         self.max_hits_per_contig = max_hits_per_contig
         self.partial = partial
-        # When max_hits is set, each task keeps only its own top-max_hits records
-        # (by best domain score) before returning, so the parent receives at most
-        # O(tasks * max_hits) records to merge instead of every hit. The global
-        # top-max_hits is unchanged: a single task can contribute at most max_hits
-        # records to a global top-max_hits, so trimming per task is lossless.
+        # A task's top-N unique keys suffice for the global top-N: a discarded
+        # key already has N better keys in that task, and merging cannot remove
+        # those distinct keys under the ID-to-sequence invariant.
         self.max_hits = max_hits
-        # Sequence dedup is also done per task so that, with max_hits set, the
-        # per-task top-max_hits isn't crowded out by copies of one sequence (which
-        # would make the per-task trim lossy). domain_search dedups again globally.
-        self.deduplicate_by_sequence = deduplicate_by_sequence
-        self.dedup_both_strands = dedup_both_strands
+        self.dedup = dedup
 
     def __call__(self, task):
         """Search one task: a (sequence file path, file offset, number of records) partition, or a
@@ -105,26 +100,13 @@ class _domain_search_worker():
             path, offset, count = task
             records = parse_seqfiles((path,), None, filetype_override=None, seek_to=offset, max_recs=count, default_molecule_type=self.fasta_type, genbank_parser="lean")
         out = list()
-        max_hits = self.max_hits
-        seen = set() if self.deduplicate_by_sequence else None
-        arrivals = []
+        top_hits = TopHits(self.max_hits, self.dedup) if self.max_hits is not None else None
 
         def _emit(record):
-            if seen is not None and not _is_new_sequence(record, seen, self.dedup_both_strands):
-                return
-            # Bounded min-heap over this worker's own hits: with max_hits set the
-            # worker never holds (or returns) more than max_hits records. Entries are
-            # (best score, -arrival, record), so the heap root is always this partition's
-            # weakest kept hit, and of equal scores the earlier hit ranks higher.
-            if max_hits is None:
+            if top_hits is None:
                 out.append(record)
-                return
-            entry = (get_hit_best_score(record), -len(arrivals), record)
-            arrivals.append(None)
-            if len(out) < max_hits:
-                heapq.heappush(out, entry)
             else:
-                heapq.heappushpop(out, entry)
+                top_hits.add(record)
 
         for rec in domainate.domainate(
                 records, #TODO: clear best_domain_hit ?
@@ -184,9 +166,9 @@ class _domain_search_worker():
             except Exception as e:
                 e.add_note(f"while processing {rec.id}")
                 raise
-        if max_hits is None:
+        if top_hits is None:
             return out
-        return [record for _, _, record in sorted(out, reverse=True)]  # best first, then in input order
+        return top_hits.records()
  
 class _partition_seqfile_worker():
     def __init__(self, cdss_per_partition):
@@ -229,7 +211,7 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
                   exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
                   alphabet: str = "protein", max_mode: bool = False, max_region_overlap: float = 1.0,
                   strand: Optional[str] = None, decoys: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None,
-                  partial: str = "include", deduplicate_by_sequence: bool = False, both_strands: bool = False) -> Iterator[SeqRecord]:
+                  partial: str = "include", dedup: str = "none") -> Iterator[SeqRecord]:
     """Search ``references`` against ``targets`` in parallel and yield the hit regions.
 
     The targets are searched in batches, each annotated as by domainate, and the region around
@@ -276,16 +258,25 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         partial: which proteins/CDSs to search, by fragment status: "include" (all, the
             default), "exclude" (skip fragments), or "only" (only fragments). See
             domainate.domainate.
-        deduplicate_by_sequence: drop hits whose output sequence is identical (ignoring case and
-            a terminal '*') to an earlier hit. Partitions finish in any order, so which of
-            several identical copies is kept is arbitrary. Only 32-byte hashes are held.
-        both_strands: with deduplicate_by_sequence, also treat complement and
-            reverse-complement nucleotide sequences as duplicates.
+        dedup: output uniqueness policy: "none" (the default), "id", "sequence",
+            or "sequence_rc". Records with the same ID must have the same sequence,
+            so either sequence policy also ensures unique IDs.
+            Sequence comparisons ignore case and terminal '*'; sequence_rc also matches
+            nucleotide reverse complements. With max_hits, each worker and the parent
+            retain at most max_hits winners, replacing copies with better-scoring hits,
+            and sorting only the final winners. Equal scores favor earlier arrivals.
+            Without max_hits, the first arriving representative is kept; parallel
+            arrival order is arbitrary.
 
     Yields:
         SeqRecords of the hit regions.
     """
 
+    deduplicator = RecordDeduplicator(dedup)
+    if dedup == "sequence_rc" and translate:
+        raise InputError("--dedup sequence_rc is only supported for nucleotide output.")
+    if max_hits is not None and max_hits < 1:
+        raise InputError("max_hits must be at least 1.")
     cpu = max(2, resolve_cpu(cpu))
 
     if include_taxids is not None:
@@ -311,10 +302,8 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
     shared_references = Shared(build=functools.partial(domainate.read_references, references, foldseek=None))
     shared_taxids = Shared(allowed_taxids)
 
-    out_heap = []
-    arrivals = 0
-    worker = _domain_search_worker(references=shared_references, allowed_taxids=shared_taxids, z=z, evalue=evalue, max_overlap=max_overlap, add_annotations=add_annotations, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, translate=translate, gene_call=gene_call, min_evalue=min_evalue, batch_size=batch_size, fasta_type=alphabet, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoys, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, deduplicate_by_sequence=deduplicate_by_sequence, dedup_both_strands=both_strands)
-    seen = set() if deduplicate_by_sequence else None
+    top_hits = TopHits(max_hits, dedup) if max_hits is not None else None
+    worker = _domain_search_worker(references=shared_references, allowed_taxids=shared_taxids, z=z, evalue=evalue, max_overlap=max_overlap, add_annotations=add_annotations, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction, translate=translate, gene_call=gene_call, min_evalue=min_evalue, batch_size=batch_size, fasta_type=alphabet, max_mode=max_mode, max_region_overlap=max_region_overlap, strand=strand, decoy_names=decoys, max_hits_per_contig=max_hits_per_contig, max_hits=max_hits, partial=partial, dedup=dedup)
 
     # Pool tuning notes:
     #   - Workers persist for the whole search, so the references parsed once per
@@ -326,29 +315,21 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
     #     is reserved one core rather than oversubscribing.
     workers = cpu - 1
     with make_pool(processes=workers, shared=[shared_references, shared_taxids]) as pool:
-        # hits are lists of SeqRecords. When max_hits is set, each list is already
+        # When max_hits is set, each list is already deduplicated and
         # trimmed to that task's own top-max_hits (see _domain_search_worker), so
         # the parent merges O(tasks * max_hits) records rather than every hit; the
         # central heap below still selects the global top-max_hits.
         for hits in imap_unordered_bounded(pool, worker, _search_tasks(targets, batch_size, alphabet), max_pending=2 * workers):
 
             for rec in hits:
-                if seen is not None and not _is_new_sequence(rec, seen, both_strands):
-                    continue
-                if max_hits is None:
-                    yield rec
+                if top_hits is None:
+                    if deduplicator.keep(rec):
+                        yield rec
                 else:
-                    # (best score, -arrival, record): the root is the weakest kept hit
-                    entry = (get_hit_best_score(rec), -arrivals, rec)
-                    arrivals += 1
-                    if len(out_heap) < max_hits:
-                        heapq.heappush(out_heap, entry)
-                    else:
-                        heapq.heappushpop(out_heap, entry)
+                    top_hits.add(rec)
 
-    out_heap.sort(reverse=True)
-    for _, _, rec in out_heap:
-        yield rec
+    if top_hits is not None:
+        yield from top_hits.records()
 
 def get_input_molecule_types(input_files: List[str], default_molecule_type="protein") -> Set[str]:
     """reads the first record from each input file and gets the 'molecule_type' annotation
@@ -434,14 +415,7 @@ def build_parser():
                         help="the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.")
     parser.add_argument('--add_annotations', action='store_true', default=False,
                         help="When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.")
-    add_switch(parser, "deduplicate", default=False,
-               help="if the same region is extracted for multiple hits, then keep only one copy of it (compared by record ID).",
-               negative_help="keep every copy of a region extracted for multiple hits. This can result in duplicated contig names.")
-    parser.add_argument('--deduplicate_by_sequence', action='store_true', default=False,
-                        help="Drop hits whose output sequence is identical to an earlier hit (SHA-256 hash, as in domainator deduplicate_genbank --algorithm hash). "
-                        "Useful for highly redundant databases. Independent of --deduplicate, which only drops repeated record IDs.")
-    parser.add_argument('--both_strands', action='store_true', default=False,
-                        help="With --deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates.")
+    add_dedup(parser)
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")
 
@@ -530,7 +504,6 @@ def main(argv):
         
     whole_contig = params.whole_contig
     normalize_direction = not params.keep_direction
-    deduplicate = params.deduplicate
     pad = params.pad
     translate = params.translate
 
@@ -548,11 +521,9 @@ def main(argv):
         raise ValueError("Inputs are a combination of DNA and protein sequences, but --translate is not set. This would lead to an output genbank file with mixed protein and DNA sequences.")
     if ("protein" in molecule_types or translate) and (kb_range is not None or cds_range is not None or whole_contig or pad):
         raise ValueError("Protein sequence output is not compatible with neighborhood extraction or padding.")
-    if params.both_strands:
-        if not params.deduplicate_by_sequence:
-            parser.error("--both_strands requires --deduplicate_by_sequence.")
+    if params.dedup == "sequence_rc":
         if "protein" in molecule_types or translate:
-            parser.error("--both_strands is only supported for nucleotide output.")
+            parser.error("--dedup sequence_rc is only supported for nucleotide output.")
     
 
 
@@ -622,7 +593,6 @@ def main(argv):
         decoys=decoy_names,
         max_hits_per_contig=params.max_hits_per_contig,
         partial=params.partial,
-        deduplicate_by_sequence=params.deduplicate_by_sequence,
-        both_strands=params.both_strands,
+        dedup=params.dedup,
         )
-        outputs.write_all(select_by_cds.deduplicate_and_pad(hits, deduplicate=deduplicate, pad=pad, anchor=params.anchor, best_first=True))
+        outputs.write_all(select_by_cds.deduplicate_and_pad(hits, pad=pad, anchor=params.anchor, best_first=True))

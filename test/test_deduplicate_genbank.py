@@ -155,13 +155,17 @@ def test_deduplicate_genbank_hash_both_strands(shared_datadir):
         input_fasta = output_dir + "/input.fasta"
         out = output_dir + "/deduplicate_out.fasta"
         log = output_dir + "/deduplicate_out.log"
+        cluster_table = output_dir + "/clusters.tsv"
 
         seq = "ACGTAAGT"
         rev_comp = str(Seq.Seq(seq).reverse_complement())
+        complement = str(Seq.Seq(seq).complement())
 
         with open(input_fasta, "w") as handle:
             handle.write(f">seq1\n{seq}\n")
             handle.write(f">seq2\n{rev_comp}\n")
+            handle.write(f">complement_only\n{complement}\n")
+            handle.write(f">reverse_only\n{seq[::-1]}\n")
 
         deduplicate_genbank.main([
             "-i", input_fasta,
@@ -172,12 +176,20 @@ def test_deduplicate_genbank_hash_both_strands(shared_datadir):
             "--prefix_count",
             "--fasta_out", out,
             "--log_out", log,
+            "--cluster_tsv_out", cluster_table,
         ])
 
         assert Path(out).is_file()
         recs = list(parse_seqfiles([out]))
-        assert len(recs) == 1
-        assert recs[0].id[:2] == "2-"
+        assert [(rec.id, str(rec.seq)) for rec in recs] == [
+            ("2-seq1", seq),
+            ("2-complement_only", complement),
+        ]
+        assert Path(cluster_table).read_text().splitlines() == [
+            "representative\tcontigs",
+            "2-seq1\tseq1 ; seq2",
+            "2-complement_only\tcomplement_only ; reverse_only",
+        ]
 
 
 def test_deduplicate_genbank_usearch_both_strands_sets_flag():

@@ -1,6 +1,20 @@
 [index](README.md)
 # Domainator file formats
 
+## Sequence identity
+
+Within datasets used together, Domainator assumes that **records with the same ID
+have the same sequence**. Different IDs may refer to identical sequences, and
+annotations and focus-hit scores may differ even when the ID and sequence agree.
+If records reuse an ID for different sequences, rename them before combining or
+searching them. Tools that deliberately preserve names while changing sequences
+leave that responsibility to the caller.
+
+Deduplication compares output records before padding and relies on this invariant;
+it does not maintain a global ID-to-sequence validation table. Thus
+`--dedup sequence` and `--dedup sequence_rc` also guarantee unique IDs.
+Deduplication therefore needs only one policy, not a combination of selectors.
+
 ## Genbank
 
 Genbank files are the sequence format most used by Domainator. Genbank files are convenient because they can store information on both sequence and sequence positional annotations.

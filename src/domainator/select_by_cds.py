@@ -15,7 +15,8 @@ otherwise:
 """
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, add_switch, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_dedup, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.dedup import RecordDeduplicator
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
@@ -92,19 +93,17 @@ def pad_records(records, pad_char="N", where:str="start"):
         if records[i].annotations.get("topology") == "circular":
             records[i].annotations["topology"] = "linear"
 
-def deduplicate_and_pad(regions, *, deduplicate=False, pad=False, anchor="start", best_first=False):
-    """Yield ``regions``, dropping any whose id was already seen (with ``deduplicate``), and padded
+def deduplicate_and_pad(regions, *, dedup: str = "none", pad=False, anchor="start", best_first=False):
+    """Yield ``regions``, filtered by the ``dedup`` policy, and padded
     with N so that their focus CDSs line up (with ``pad``, which reads every region first).
 
     ``best_first`` sorts padded domain_search hits best first, as their unpadded order would be.
     """
-    seen = set()
+    deduplicator = RecordDeduplicator(dedup)
     kept = list()
     for region in regions:
-        if deduplicate:
-            if region.id in seen:
-                continue
-            seen.add(region.id)
+        if not deduplicator.keep(region):
+            continue
         if pad:
             kept.append(region)
         else:
@@ -603,10 +602,7 @@ def build_parser():
 
     parser.add_argument('--keep_direction', action='store_true', default=False,
                         help="by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on.")
-    add_switch(parser, "deduplicate", default=True,
-               help="if the same region is extracted for multiple hits, then keep only one copy of it.",
-               negative_help="keep every copy of a region extracted for multiple hits (which might be useful if you are counting hits). "
-                             "This results in duplicated contig names, which could be a problem for downstream domainator applications.")
+    add_dedup(parser, default="id")
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")
 
@@ -671,4 +667,4 @@ def main(argv):
         partial = params.partial,
         )
     with SeqOutputs(params.genbank_out, params.fasta_out) as outputs:
-        outputs.write_all(deduplicate_and_pad(selected, deduplicate=params.deduplicate, pad=params.pad, anchor=params.anchor))
+        outputs.write_all(deduplicate_and_pad(selected, dedup=params.dedup, pad=params.pad, anchor=params.anchor))

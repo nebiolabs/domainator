@@ -19,6 +19,15 @@ at most 100 hits will be returned (not 500).
 
 When max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.
 If neither is set, then hits will be written on the fly and not sorted.
+
+--dedup selects one output uniqueness policy: none (the default), id,
+sequence, or sequence_rc. With --max_hits, deduplication keeps the best-scoring
+representatives before applying the limit, retaining at most --max_hits winners
+per worker and in the global merge. Domainator assumes that the same record ID
+always identifies the same sequence, so sequence uniqueness also ensures unique
+IDs. Hit scores and annotations can still differ between copies.
+Without --max_hits, the first arriving representative is kept; parallel arrival
+order is arbitrary.
 ```
 
 Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
@@ -49,9 +58,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--cpu` | INTEGER | 0 | the number of cores of the cpu which are used at a time to run the search (0: one thread per physical core) |
 | `--max_overlap` | NUMBER | 1 | the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. |
 | `--add_annotations` |  |  | When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score. |
-| `--deduplicate`, `--no_deduplicate` |  |  | if the same region is extracted for multiple hits, then keep only one copy of it (compared by record ID). |
-| `--deduplicate_by_sequence` |  |  | Drop hits whose output sequence is identical to an earlier hit (SHA-256 hash, as in domainator deduplicate_genbank --algorithm hash). Useful for highly redundant databases. Independent of --deduplicate, which only drops repeated record IDs. |
-| `--both_strands` |  |  | With --deduplicate_by_sequence, also treat complement and reverse-complement nucleotide sequences as duplicates. |
+| `--dedup` | {none,id,sequence,sequence_rc} | none | Output uniqueness policy: none keeps all records; id drops repeated output IDs; sequence drops identical output sequences (ignoring case and terminal '*'); sequence_rc also collapses nucleotide reverse complements. The same ID must identify the same sequence, so sequence uniqueness also ensures unique IDs. Deduplication happens before padding. |
 | `--max_region_overlap` | NUMBER | 1.0 | the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. |
 | `--translate` |  |  | by default, nucleotide inputs return nucleotide regions. When --translate is set, CDS hits are translated before writing. Whole-contig nucleic-acid hits are not translated. Note that --translate is incompatble with neighborhood extraction. |
 | `--kb_range` | NUMBER |  | How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS. |
