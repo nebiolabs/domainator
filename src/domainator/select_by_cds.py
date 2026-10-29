@@ -585,7 +585,6 @@ def build_parser():
     parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
 
     add_annotation_type(parser, help="Which annotations to select CDSs by.")
-    #TODO: 
 
     parser.add_argument('--pad', action='store_true', default=False,
                         help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor.")
