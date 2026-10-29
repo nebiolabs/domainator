@@ -1,14 +1,25 @@
-"""Search for matches to protein or nucleic-acid references.
+"""Select sequence records or hit neighborhoods matching protein or nucleic-acid references.
 
-For searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries.
+Only matching records or regions are returned. Use domainate to annotate and retain
+all input records, including those without qualifying hits.
+This tool is optimized for large sequence databases with relatively few references.
+The -i/--input files are the database being searched; -r/--reference supplies the
+references to search for.
 Protein references are searched against CDSs or protein records.
 Nucleic-acid references are searched against whole nucleotide contigs.
 Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
 Protein inputs cannot be searched with nucleotide references.
 
-Returns the contigs with hits, possibly truncated to the neighborhood around the hits.
+Protein input yields matching protein records. Nucleotide input yields hit-centered
+regions or, with --whole_contig, whole contigs. For protein-reference searches of
+CDSs, --translate yields peptides from matching CDSs. The output sequence need not
+be the same length as the aligned region.
 
-When --max_hits is specified, it applies to the entire search, not individual queries. Thus if you supply 5 query profiles and --max_hits 100, 
+Search best-hit annotations (Domain_Search features) mark the selected hits.
+--add_annotations also adds domain annotations (Domainator features) for retained
+hits; it does not enable the best-hit annotations, which are already present.
+
+When --max_hits is specified, it applies to the entire search, not individual references. Thus if you supply 5 reference profiles and --max_hits 100,
 at most 100 hits will be returned (not 500). 
 
 When max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.
@@ -226,7 +237,8 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
             batches of about ``batch_size`` CDSs, and read only a few batches ahead of the
             search, so they can be a stream; a partition is one batch, read by the worker that
             searches it.
-        references: HMM or protein FASTA files to search with (hmmsearch or phmmer).
+        references: references to search for: protein HMMs/FASTA, nucleotide HMMs/FASTA,
+            or Infernal covariance models.
         z: the database size for e-values (hmmsearch's Z), as ``-Z``.
         evalue: keep hits with an e-value at most this.
         max_hits: keep only this many hits, the best-scoring. None: all.
@@ -234,13 +246,14 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         cpu: number of workers (0: one per physical core); values below 2 are raised to 2 (one
             merges the results, the others search).
         batch_size: about how many CDSs (or proteins) a worker searches at once.
-        add_annotations: also add Domainator features for the hits.
+        add_annotations: also add domain annotations (Domainator features) for retained
+            hits, in addition to the search best-hit annotations (Domain_Search features).
         cds_range: (upstream, downstream) numbers of CDSs to extract around each hit CDS.
         kb_range: (upstream, downstream) kb to extract around each hit CDS. Partially enclosed
             features are truncated, with '<' or '>' marking the cut ends.
         whole_contig: extract the whole contig of each hit (once, if it has several hits).
         normalize_direction: reverse-complement regions whose hit CDS is on the reverse strand.
-        translate: translate nucleotide hits into proteins.
+        translate: emit peptides from matching CDSs in protein-reference searches.
         gene_call: as for domainate.
         min_evalue: as for domainate.
         max_mode: as for domainate.
@@ -274,7 +287,9 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
             arrival order is arbitrary.
 
     Yields:
-        SeqRecords of the hit regions.
+        Matching protein records, nucleotide hit regions/whole contigs, or translated
+        CDSs, according to the input and output options. Search best-hit feature
+        locations mark alignments, not necessarily the extent of the output sequence.
     """
 
     deduplicator = RecordDeduplicator(dedup)
@@ -353,7 +368,7 @@ def build_parser():
     add_alphabet(parser)
     parser.add_argument('-r', '--reference', required=True, type=str,
                         default=None, nargs='+',
-                        help="reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.") 
+                        help="References to search for in the --input records. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.")
 
     add_seq_outputs(parser, genbank_help="Write the hits to this GenBank file. "
                     "If the filename ends in .gz/.bgz, the output is written as BGZF (block-gzip): "
@@ -401,7 +416,7 @@ def build_parser():
     parser.add_argument('--max_overlap', type=float, default=1,
                         help="the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.")
     parser.add_argument('--add_annotations', action='store_true', default=False,
-                        help="When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score.")
+                        help="Add domain annotations (Domainator features) for retained hits, in addition to the search best-hit annotations (Domain_Search features) already present.")
     add_dedup(parser)
     parser.add_argument('--max_region_overlap', type=float, default=1.0,
                        help="the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region.")

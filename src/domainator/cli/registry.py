@@ -31,11 +31,11 @@ CATEGORIES: Tuple[Tuple[str, str], ...] = (
 
 TOOLS: Dict[str, Tool] = {
     # annotate
-    "domainate": Tool("domainate", "annotate", "Annotate contigs or proteins with hits to HMM, sequence, or CM references."),
-    "domain_search": Tool("domain_search", "annotate", "Search a large database with a few references and extract the hits."),
+    "domainate": Tool("domainate", "annotate", "Annotate contigs or proteins with reference hits, retaining records without hits."),
+    "domain_search": Tool("domain_search", "annotate", "Select matching sequence records or hit neighborhoods; optionally translate CDS hits."),
     "find_features": Tool("find_features", "annotate", "Annotate transmembrane regions, signal peptides, and other sequence features."),
-    "structure_domainate": Tool("structure_domainate", "annotate", "Annotate protein structures with hits to reference structures."),
-    "structure_search": Tool("structure_search", "annotate", "Search a structure database with a few reference structures."),
+    "structure_domainate": Tool("structure_domainate", "annotate", "Annotate structure-derived protein records, retaining records without hits."),
+    "structure_search": Tool("structure_search", "annotate", "Select matching structure-derived protein records and mark their best-hit regions."),
     # edit
     "clean_sequences": Tool("clean_sequences", "edit", "Clean sequence names and residues, and filter out sequences with non-canonical residues."),
     "color_genbank": Tool("color_genbank", "edit", "Add color qualifiers to CDS and domain features."),

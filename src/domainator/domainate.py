@@ -4,6 +4,14 @@ Protein references are searched against CDSs or protein records with hmmsearch o
 Nucleic-acid references are searched against whole nucleotide contigs with nhmmer or infernal cmsearch.
 Hits passing the threshold are added to the output GenBank file as new Domainator features.
 
+Every input record is retained, including records without qualifying hits. Use
+domain_search to select matching records or hit neighborhoods instead.
+Both tools perform similarity searches; annotation versus search describes their
+output contract, not whether an alignment is performed.
+
+The -i/--input files contain the records being annotated; -r/--reference supplies
+the references to search for.
+
 Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
 Protein inputs cannot be searched with nucleotide references.
 
@@ -1354,7 +1362,7 @@ def build_parser():
     
     parser.add_argument('-r', '--reference', required=False, type=str,
                         default=None, nargs='+',
-                        help="reference files to search against the input. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.")
+                        help="References to search for in the --input records. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.")
     
     parser.add_argument("--foldseek", nargs="+", default=None, type=str, required=False,
                         help="Foldseek database files.")

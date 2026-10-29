@@ -1,7 +1,7 @@
 [CLI reference](README.md)
 # domainator structure_domainate
 
-Annotate protein structures with hits to reference structures.
+Annotate structure-derived protein records, retaining records without hits.
 
 ```
 Annotate protein structures with hits to reference structures.
@@ -12,9 +12,12 @@ prebuilt foldseek database, aligns reference structures against them, and writes
 genbank file where every input chain is one record carrying Domainator features for the
 references that hit it.
 
-Every input record is annotated and written, whether or not it had hits.
-Use structure_search to select only matching records.
-Use domainator structure_search instead when searching a large database with a few references.
+Every input record is retained, including records without qualifying hits.
+Domain annotations (Domainator features) describe retained reference hits.
+Use domainator structure_search to select only matching records; it is optimized
+for searching large databases with relatively few references.
+The -i/--input values identify structures to annotate; -r/--reference supplies the
+reference structures to search for.
 
 References are aligned as the query and the input database as the target, so --evalue is
 always computed against the database being annotated, exactly as it is for the rest of
@@ -35,7 +38,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-v`, `--verbose` |  |  | show debug output, and a traceback for errors. |
 | `-q`, `--quiet` |  |  | show errors only: no progress messages or warnings. |
 | `-i`, `--input` | FILE ... | required | structures to annotate: pdb/cif files (optionally gzipped), a directory to search recursively, a glob, or the prefix of a prebuilt foldseek database. |
-| `-r`, `--reference` | FILE ... | required | reference structures to annotate the input with. Same accepted forms as --input. |
+| `-r`, `--reference` | FILE ... | required | Reference structures to search for in the --input records being annotated. Same accepted forms as --input. |
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
 | `-e`, `--evalue` | NUMBER | 0.001 | threshold E value for a hit. E values are computed against the input database. |

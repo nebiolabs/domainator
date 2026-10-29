@@ -1,18 +1,21 @@
 [CLI reference](README.md)
 # domainator structure_search
 
-Search a structure database with a few reference structures.
+Select matching structure-derived protein records and mark their best-hit regions.
 
 ```
-Search a structure database with a small number of reference structures.
+Select matching structure-derived protein records and mark their best-hit regions.
 
-The structure-input counterpart of domainator domain_search. For searching large structure
-databases (for example a foldseek database built from AlphaFold DB) with a handful of
-reference structures.
+The structure-input counterpart of domainator domain_search, optimized for large
+structure databases (for example a foldseek database built from AlphaFold DB) with
+relatively few references. The -i/--input values identify the database being searched;
+-r/--reference supplies the reference structures to search for.
 
-Only records that had a hit are written. Each one carries a Domain_Search feature marking
-the region homologous to the best-matching reference; pass --add_annotations to also write
-a Domainator feature for every hit.
+Only matching records are written, using each target's full observed amino-acid
+sequence, not a crop to the alignment. Search best-hit annotations (Domain_Search
+features) mark the regions homologous to the best-matching references.
+--add_annotations also writes domain annotations (Domainator features) for retained
+hits; the best-hit annotations are already present without this option.
 
 References are aligned as the query and the searched database as the target, which is both
 what foldseek is optimized for and what makes --evalue mean the same thing it means
@@ -36,7 +39,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-v`, `--verbose` |  |  | show debug output, and a traceback for errors. |
 | `-q`, `--quiet` |  |  | show errors only: no progress messages or warnings. |
 | `-i`, `--input` | FILE ... | required | the structure database to search: the prefix of a prebuilt foldseek database, or pdb/cif files (optionally gzipped), a directory to search recursively, or a glob. |
-| `-r`, `--reference` | FILE ... | required | reference structures to search with. Same accepted forms as --input. |
+| `-r`, `--reference` | FILE ... | required | Reference structures to search for in the --input database. Same accepted forms as --input. |
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
 | `-e`, `--evalue` | NUMBER | 0.001 | threshold E value for a hit. E values are computed against the searched database. |
@@ -44,7 +47,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--max_hits` | INTEGER |  | return at most this many records, the best-scoring ones. Applies to the whole search, not per reference. When set, output is sorted best-first and written after the search completes. |
 | `--max_overlap` | NUMBER | 1 | maximum fraction of overlap allowed between annotations on one record. 1 disables overlap filtering. |
 | `--overlap_by_db` |  |  | filter overlapping annotations within each database independently, instead of across all databases. |
-| `--add_annotations` |  |  | also write a Domainator feature for every hit, in addition to the Domain_Search feature for the best hit. |
+| `--add_annotations` |  |  | Add domain annotations (Domainator features) for retained hits, in addition to the search best-hit annotations (Domain_Search features) already present. |
 | `--database_name` | STRING |  | value for the /database qualifier on the annotations. Defaults to the reference database or directory name. |
 | `--db_out` | FILE |  | when the input is structure files rather than a prebuilt database, also write the database built from them, using this path as its prefix. |
 | `--hits_tsv_out` | FILE |  | write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output. |

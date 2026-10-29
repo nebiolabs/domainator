@@ -2,14 +2,14 @@
 # Structure search and annotation
 
 Domainator can use protein structures as input, either annotating them with reference
-structures or searching a large structure database with a few reference structures. Both
+structures or selecting matching records from a structure database. Both
 produce ordinary Domainator genbank files, so the rest of the suite — `domainator extract_domains`,
 `domainator plot_contigs`, `domainator enum_report`, `domainator summary_report`, `domainator color_genbank`,
 `domainator build_ssn`, `domainator seq_dist`, `domainator select_by_contig` — works on the results unchanged.
 `domainator structure_dist` is the exception: it writes a data matrix rather than genbank, feeding
 `domainator build_ssn`, `domainator build_tree` and `domainator build_projection` the way `domainator seq_dist` does.
 
-There are four tools, mirroring the sequence-based ones:
+There are four roles, mirroring the sequence-based tools:
 
 |  | sequence input | structure input |
 | ---- | ---- | ---- |
@@ -17,6 +17,33 @@ There are four tools, mirroring the sequence-based ones:
 | **search** (hit records, `Domain_Search` features) | `domainator domain_search` | `domainator structure_search` |
 | **compare** (pairwise score/distance matrix) | `domainator seq_dist` | `domainator structure_dist` |
 | **convert** | — | `domainator structure_to_genbank` |
+
+## Command roles and output shapes
+
+Annotation and search both perform similarity searches against references. Choose
+between them by the required output, not merely the input size or reference count:
+
+| Command | Records retained and output shape | Annotation features |
+|---|---|---|
+| `domainate` | All input sequence records, including those without qualifying hits; no hit-centered extraction. | Domain annotations (`Domainator`) for retained hits. |
+| `structure_domainate` | All input structure-derived protein records, including chains without qualifying hits; full observed sequences. | Domain annotations (`Domainator`) for retained hits. |
+| `domain_search` | Matching protein records, nucleotide hit regions/neighborhoods, or whole contigs; protein-reference CDS hits can be translated with `--translate`. | Search best-hit annotations (`Domain_Search`); `--add_annotations` also adds domain annotations (`Domainator`). |
+| `structure_search` | Matching structure-derived protein records, with full observed target sequences rather than alignment crops. | Search best-hit annotations (`Domain_Search`); `--add_annotations` also adds domain annotations (`Domainator`). |
+
+A best-hit feature marks an aligned region; its location is not necessarily the
+extent of the emitted sequence. Structure coordinates refer to observed residues,
+not original PDB residue numbering or residues absent from the structure.
+Additional domain annotations are subject to the tool's annotation filters and
+limits; `--add_annotations` does not mean that every raw backend hit is written.
+
+In all four commands, `-i` identifies the records/database being annotated or
+searched, and `-r` supplies references being searched for. For the structural
+aligners, those references are backend **queries** and the input database contains
+backend **targets**; these alignment terms do not change the CLI convention.
+Search tools are optimized for large databases with relatively few references,
+but that performance guidance is not the definition of the annotation/search roles.
+Other commands use their own output contracts: `hmmer_search`, for example,
+selects HMM profiles rather than sequence neighborhoods.
 
 ## Requirements
 
@@ -93,7 +120,8 @@ domainator plot_contigs -i annotated.gb --html_out annotated.html
 
 Every input chain is annotated and written, whether or not it had a hit.
 Use `structure_search` to keep only matching chains; add `--add_annotations` to
-include Domainator features as well as the Domain_Search best-hit feature.
+add domain annotations (`Domainator` features) alongside the search best-hit
+annotation (`Domain_Search` feature) already present.
 `structure_domainate` no longer accepts `--hits_only` or `--no_annotations`,
 in either its CLI or its public Python API.
 
@@ -119,9 +147,11 @@ domainator structure_search -i /path/to/afdb_foldseek_db -r query.pdb \
 domainator enum_report -i hits.gb --columns domains -o hits.tsv
 ```
 
-Only records that matched are written, each carrying a `Domain_Search` feature marking the
-region homologous to its best-matching reference. `--add_annotations` also writes a
-`Domainator` feature per hit.
+Only records that matched are written, each containing the full observed target
+sequence, not a crop to its alignment. A search best-hit annotation (`Domain_Search`
+feature) marks the region homologous to its best-matching reference.
+`--add_annotations` also writes domain annotations (`Domainator` features) for
+retained hits.
 
 Hit records are built from the sequences foldseek reports for each hit, so the searched
 database is never read end to end and its size does not bound memory usage. Hits are grouped

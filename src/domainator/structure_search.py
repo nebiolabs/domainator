@@ -1,12 +1,15 @@
-"""Search a structure database with a small number of reference structures.
+"""Select matching structure-derived protein records and mark their best-hit regions.
 
-The structure-input counterpart of domainator domain_search. For searching large structure
-databases (for example a foldseek database built from AlphaFold DB) with a handful of
-reference structures.
+The structure-input counterpart of domainator domain_search, optimized for large
+structure databases (for example a foldseek database built from AlphaFold DB) with
+relatively few references. The -i/--input values identify the database being searched;
+-r/--reference supplies the reference structures to search for.
 
-Only records that had a hit are written. Each one carries a Domain_Search feature marking
-the region homologous to the best-matching reference; pass --add_annotations to also write
-a Domainator feature for every hit.
+Only matching records are written, using each target's full observed amino-acid
+sequence, not a crop to the alignment. Search best-hit annotations (Domain_Search
+features) mark the regions homologous to the best-matching references.
+--add_annotations also writes domain annotations (Domainator features) for retained
+hits; the best-hit annotations are already present without this option.
 
 References are aligned as the query and the searched database as the target, which is both
 what foldseek is optimized for and what makes --evalue mean the same thing it means
@@ -59,8 +62,8 @@ def structure_search(input_values: List[str], *, references: List[str], aligner:
         max_hits: return at most this many records, the best-scoring ones. None means all.
         max_overlap: maximum fractional overlap between annotations on one record.
         overlap_by_db: filter overlaps within each database rather than across all.
-        add_annotations: also write a Domainator feature per hit, not just the
-            Domain_Search best-hit feature.
+        add_annotations: also write domain annotations (Domainator features) for
+            retained hits, in addition to search best-hit annotations (Domain_Search features).
         alignment_type: the foldseek alignment type (None: the backend's default).
         metrics: extra structural metrics to compute and store as qualifiers.
         max_seqs: maximum hits the backend keeps per reference.
@@ -70,8 +73,10 @@ def structure_search(input_values: List[str], *, references: List[str], aligner:
         hits_tsv_out: copy the backend's raw hit table here, for cross-checking.
 
     Yields:
-        SeqRecord objects with molecule_type "protein". Sorted best-first when max_hits is
-        set, otherwise streamed in whatever order the backend grouped them.
+        Protein SeqRecords containing matching targets' full observed sequences, not
+        alignment crops. Search best-hit features mark the aligned regions.
+        Sorted best-first when max_hits is set, otherwise streamed in whatever order
+        the backend grouped them.
     """
     metrics = list(metrics or [])
 
@@ -225,7 +230,7 @@ def build_parser():
 
     add_input(parser, "the structure database to search: the prefix of a prebuilt foldseek database, or pdb/cif files (optionally gzipped), a directory to search recursively, or a glob.", stdin=False)
     parser.add_argument('-r', '--reference', default=None, required=True, nargs='+', type=str,
-                        help="reference structures to search with. Same accepted forms as --input.")
+                        help="Reference structures to search for in the --input database. Same accepted forms as --input.")
     add_seq_outputs(parser)
     parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001,
                         help="threshold E value for a hit. E values are computed against the searched database.")
@@ -238,7 +243,7 @@ def build_parser():
     parser.add_argument('--overlap_by_db', action='store_true', default=False,
                         help="filter overlapping annotations within each database independently, instead of across all databases.")
     parser.add_argument('--add_annotations', action='store_true', default=False,
-                        help="also write a Domainator feature for every hit, in addition to the Domain_Search feature for the best hit.")
+                        help="Add domain annotations (Domainator features) for retained hits, in addition to the search best-hit annotations (Domain_Search features) already present.")
     parser.add_argument('--database_name', default=None, type=str,
                         help="value for the /database qualifier on the annotations. Defaults to the reference database or directory name.")
     parser.add_argument('--db_out', default=None, type=str,

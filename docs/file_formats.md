@@ -124,6 +124,53 @@ To restrict search hits by database or name instead, use `--annotation_type doma
 as annotated when calculating the uncovered regions. `filter_domains` applies its filters
 to the chosen types and leaves other feature types unchanged.
 
+### Extraction sequence types and nucleotide limits
+
+`extract_domains` retains the input sequence type: protein input produces protein
+regions and nucleotide input produces nucleotide regions. It extracts annotation
+locations, including compound locations, not automatically whole CDSs, and does
+not translate nucleotide output.
+
+Extension amounts are amino acids on protein input and bases on nucleotide input.
+Nucleotide extension is not rounded to codon boundaries and can cross CDS
+boundaries or include noncoding sequence. Individual and spliced extraction uses
+the location-padding rules: extension is limited by linear record ends and can
+wrap around circular records.
+
+`--combine` and `--splice` operate across the selected annotations in each input
+record, not separately within each CDS:
+
+- `--combine` extracts their enclosing span, including intervening sequence,
+  extended at the span's ends and clipped to the linear record. It rejects
+  circular records because the enclosing direction is ambiguous.
+- `--splice` extends individual annotations and joins selected regions using
+  annotation locations and the ordering determined by the lowest-start
+  annotation. This is not a request to reconstruct a gene's biological exons.
+- Selected annotations can belong to different genes or strands. Neither
+  operation guarantees a valid coding sequence.
+
+For protein-domain output from nucleotide input, translate CDSs first so domain
+extraction operates on protein coordinates and each protein is a separate record:
+
+```bash
+domainator extract_peptides -i annotated_genomes.gb -o peptides.gb
+domainator extract_domains -i peptides.gb --domains PF00001 -o protein_domains.gb
+```
+
+For whole CDSs or nucleotide neighborhoods, use `select_by_cds` instead.
+
+`extract_unannotated` supports only protein records and rejects nucleotide input.
+It extracts gaps not covered by the annotation types and databases passing the
+specified cutoffs; this is not evidence that the gaps have no biological function.
+Its `--keep_direction` option has no effect and is retained for compatibility.
+For unannotated portions of translated proteins, run `extract_peptides` first,
+then `extract_unannotated`.
+
+There is no nucleotide mode of `extract_unannotated`. Whole-contig unannotated
+bases, domain-free portions within CDSs, and whole CDSs lacking domains are
+different operations, especially with overlapping genes and opposite strands.
+They must not be inferred from this tool's protein-gap behavior.
+
 ### Additive name lists and files
 
 The extract tools, `select_by_cds`, and `select_by_contig` merge `--contigs` with

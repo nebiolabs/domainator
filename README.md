@@ -48,8 +48,20 @@ Please use our [discussions page](https://github.com/nebiolabs/domainator/discus
 # Overview and key concepts
 
 Annotation tools (`domainate`, `structure_domainate`) annotate and retain every input
-record. Search tools (`domain_search`, `structure_search`) select hits. The three
-`extract_*` tools, `select_by_cds`, `select_by_contig`, and `domain_search` share
+record, including records without hits. Search tools (`domain_search`,
+`structure_search`) select matching records or regions. Both roles perform similarity
+searches; the distinction is what they emit, not whether an alignment is performed.
+Sequence search can return neighborhoods or translated CDSs; structure search returns
+matching targets' full observed protein sequences and marks their best-hit regions.
+Search best-hit annotations (`Domain_Search` features) are present by default;
+`--add_annotations` also adds domain annotations (`Domainator` features).
+See the [command roles and output shapes](docs/structure_search.md#command-roles-and-output-shapes).
+
+For these four tools, `-i` identifies the records/database being annotated or searched,
+and `-r` supplies the references being searched for. Backend-specific "query" and
+"target" terminology does not reverse this CLI convention.
+
+The three `extract_*` tools, `select_by_cds`, `select_by_contig`, and `domain_search` share
 taxonomy criteria; unresolved taxonomy is excluded by default, including with negated
 expressions. See [taxonomy migration and examples](MIGRATION.md#taxonomy-filtering-and-unresolved-labels)
 and [agent workflows](docs/agent_workflows.md#taxonomy-restricted-extraction).
@@ -119,9 +131,9 @@ Many commands that can generate large outputs also support `--max_output_gb` to 
 |  domainator domainate  | annotates contig or protein sequences with protein or nucleic-acid hits | genbank (protein genbank, or nucleotide genbank with CDS annotations) or protein/nucleotide fasta files to annotate. Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CMs. | a genbank file with new annotations | no | yes | Nucleotide references search whole contigs rather than individual CDSs. Consider `domainator domain_search` if searching for small numbers of references against large databases. `--partial exclude` skips fragments, see [partial features](docs/file_formats.md#partial-features-and-fragments). |
 |  domainator db_download | Download databases from the internet in formats appropriate for domainator  |  None | genbank or fasta  | N/A  | yes | For NCBI genome databases, the default `--download_backend datasets` uses the NCBI Datasets CLI (`ncbi-datasets-cli`, installed with the conda env) for NCBI-friendly bulk downloads. Use `--download_backend direct` for HTTPS downloads without that dependency; keep `--download_workers` low (~3) to avoid NCBI rate-limiting. |
 |  domainator enum_report | from a genbank file generates a tab separated file of properties and metadata related to the input, for example the domain content of each contig or cds. | genbank files | a tab separated, html, or JSON (`--json_out`, streaming NDJSON) metadata table  | yes | yes |  |
-|  domainator extract_domains | Takes a domainator-genbank file, looks for the specified domains, and extracts them from the contigs.  |  a (nucleotide or peptide) genbank file.  |  a genbank or fasta file of the same sequence-type (nucleotide or peptide) as the input  | yes  |  yes  | If you want to extract peptide domains from a nucleotide genbank, pass the output of this program into extract_peptides (or vice-versa) |
+|  domainator extract_domains | Takes a domainator-genbank file, looks for the specified domains, and extracts their annotated regions. | a nucleotide or protein genbank file | a genbank or fasta file of the same sequence type as the input | yes | yes | For protein-domain output from nucleotide input, run extract_peptides first, then extract_domains. Nucleotide regions are not automatically whole CDSs or codon-aligned after extension; combine/splice operates per input record, not per CDS. See [extraction limits](docs/file_formats.md#extraction-sequence-types-and-nucleotide-limits). |
 |  domainator extract_peptides | extracts translated peptide sequences from nucleotide genbank sequences, preserves the domainator annotations (other annotations are lost) |  nucleotide genbank file  |  peptide genbank file  | yes  | yes | |
-|  domainator extract_unannotated | Takes a domainator-genbank file, extracts regions not covered by any domain annotations  |  a peptide genbank file.  |  a peptide genbank or fasta file  | yes  |  yes  |   |
+|  domainator extract_unannotated | Extracts protein gaps not covered by qualifying annotations | a protein genbank file | a protein genbank or fasta file | yes | yes | Protein-only; nucleotide input is rejected. For gaps in translated proteins, run extract_peptides first. `--keep_direction` has no effect. See [extraction limits](docs/file_formats.md#extraction-sequence-types-and-nucleotide-limits). |
 |  domainator filter_domains  |  applies more stringent filtering to domainator-annotated genbank files.  |  domainator-annotated genbank files  |  a genbank file  |  yes  | yes  | If you want to annotate the same genbank file with multiple evalue or max_overlap cutoffs, it is often faster to run domainator.py first with loose cutoffs, then run domainator filter_domains with more stringent cutoffs. To clear all annotations, just run `domainator filter_domains` with an evalue of `-1`|
 |  domainator find_features | annotates transmembrane regions and signal peptides (TMbed) and PROSITE motifs as Domainator features | protein or nucleotide genbank or fasta files | a genbank file | yes | yes | `--tmbed` needs the `structure` extra and TMbed (see [Requirements](#requirements)). |
 |  domainator genbank_to_fasta | converts genbank files to fasta files  | one or more genbank files  | a fasta file | yes  | yes  |  |

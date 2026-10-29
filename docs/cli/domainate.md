@@ -1,7 +1,7 @@
 [CLI reference](README.md)
 # domainator domainate
 
-Annotate contigs or proteins with hits to HMM, sequence, or CM references.
+Annotate contigs or proteins with reference hits, retaining records without hits.
 
 ```
 Annotate sequence files with protein or nucleic-acid references.
@@ -9,6 +9,14 @@ Annotate sequence files with protein or nucleic-acid references.
 Protein references are searched against CDSs or protein records with hmmsearch or phmmer.
 Nucleic-acid references are searched against whole nucleotide contigs with nhmmer or infernal cmsearch.
 Hits passing the threshold are added to the output GenBank file as new Domainator features.
+
+Every input record is retained, including records without qualifying hits. Use
+domain_search to select matching records or hit neighborhoods instead.
+Both tools perform similarity searches; annotation versus search describes their
+output contract, not whether an alignment is performed.
+
+The -i/--input files contain the records being annotated; -r/--reference supplies
+the references to search for.
 
 Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
 Protein inputs cannot be searched with nucleotide references.
@@ -26,7 +34,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-q`, `--quiet` |  |  | show errors only: no progress messages or warnings. |
 | `-i`, `--input` | FILE ... | required | the genbank or fasta files to annotate. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which. |
 | `--alphabet` | {nucleotide,protein} | protein | Whether the sequences in FASTA inputs are protein or nucleotide. GenBank records declare their own molecule type. |
-| `-r`, `--reference` | FILE ... |  | reference files to search against the input. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. |
+| `-r`, `--reference` | FILE ... |  | References to search for in the --input records. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. |
 | `--foldseek` | FILE ... |  | Foldseek database files. |
 | `--esm2_3di_weights` | FILE |  | checkpoint file for esm2_3Di model. |
 | `--esm2_3di_device` | STRING | cuda:0 | device to use for esm2_3Di model. |

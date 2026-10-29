@@ -1,11 +1,20 @@
-"""Extract domain-annotated regions
+"""Extract domain-annotated regions from protein or nucleotide records.
 
-Takes a genbank file which has been annotated using the domainator program, looks for the specified domains, and extracts them from the contigs.
+Reads annotated GenBank records and writes the selected regions as GenBank or FASTA.
+Output retains the input sequence type: nucleotide input produces nucleotide regions,
+not translated peptides or automatically complete CDSs.
 
-This tool is typically used with protein sequences, but can also be used with nucleic acid sequences.
-Handling of nucleic acids is less stable and will may change in future updates, so use with caution.
+Extension is measured in amino acids for protein input and bases for nucleotide input.
+Nucleotide extension is not rounded to codons or confined to the source CDS.
+Individual extractions follow annotation locations, including compound locations.
 
-can write a fasta or a genbank file
+--combine and --splice operate across selected annotations in each input record, not
+separately per CDS. They can span different genes or strands and do not guarantee a
+valid coding sequence. --combine includes intervening sequence and rejects circular
+records; --splice joins selected regions rather than reconstructing a gene.
+
+For protein-domain output from nucleotide records, use extract_peptides first, then
+extract_domains. For whole CDSs or nucleotide neighborhoods, use select_by_cds.
 """
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
@@ -38,6 +47,10 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                     taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` covered by their domain annotations.
 
+    Output retains the input sequence type. Nucleotide regions are not translated,
+    rounded to codons, or automatically expanded to whole CDSs. Combining/splicing
+    operates per input record, not per CDS, and does not guarantee a coding sequence.
+
     Args:
         records: the contigs or proteins (SeqRecords).
         evalue: extract only domain/search-hit annotations with an e-value at most this,
@@ -46,12 +59,14 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
             before extension, combination, or splicing. None: no cutoff.
         domains: select only domains with these names. None: all.
         extend_range: the default of extend_up and extend_down (None: 0).
-        extend_up: also extract this many residues (or bases) upstream of each domain. None:
-            extend_range.
-        extend_down: also extract this many residues (or bases) downstream of each domain. None:
-            extend_range.
-        combine: when a contig has several selected domains, extract one region enclosing them
-            all. Raises an error for a circular contig, whose enclosing region is ambiguous.
+        extend_up: extend upstream by this many amino acids for protein input or bases
+            for nucleotide input. Not rounded to codons or restricted to CDS boundaries.
+            None: extend_range.
+        extend_down: extend downstream in the same units as extend_up. None: extend_range.
+        combine: extract one enclosing span of all selected annotations in each input
+            record, including intervening sequence, extended at the span's ends.
+            Not grouped by CDS; may span different genes or strands. Raises an error
+            for a circular record, whose enclosing region is ambiguous.
         keep_direction: don't reverse-complement regions. By default, regions are flipped so
             that the domain (with ``combine`` or ``splice``, the one with the lowest start) is on
             the forward strand.
@@ -71,7 +86,8 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
             before extension/combine/splice; protein inputs use record taxonomy.
         splice: when a contig has several selected domains, delete the sequence between them and
             join the domains, in the order they are read on the strand of the domain with the
-            lowest start.
+            lowest start. Each annotation is extended before joining. Not grouped by CDS
+            and not a guarantee of biological exon splicing or a valid coding sequence.
         partial: select domains by the fragment status of their CDS (or protein record):
             "include" (all, the default), "exclude" (skip domains on fragments), or "only" (only
             domains on fragments). Contig-level nucleotide hits are never on fragments.
@@ -240,15 +256,15 @@ def build_parser():
     add_has_search_hit(parser)
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which domains to extract, by the CDS or protein they are on") + " Contig-level nucleotide hits are never on fragments.")
 
-    parser.add_argument("--extend_range", type=int, default=None, help="extract this many additional residues (or bases) on each side of the hit region. Sets the default of --extend_up and --extend_down.")
-    parser.add_argument("--extend_up", type=int, default=None, help="extract this many additional residues (or bases) upstream of the hit region. Default: --extend_range, or 0.")
-    parser.add_argument("--extend_down", type=int, default=None, help="extract this many additional residues (or bases) downstream of the hit region. Default: --extend_range, or 0.")
+    parser.add_argument("--extend_range", type=int, default=None, help="Extend each side by this many amino acids for protein input or bases for nucleotide input. Not rounded to codons or restricted to CDS boundaries. Sets the default of --extend_up and --extend_down.")
+    parser.add_argument("--extend_up", type=int, default=None, help="Extend upstream by this many amino acids for protein input or bases for nucleotide input. With --combine, extends the enclosing span. Default: --extend_range, or 0.")
+    parser.add_argument("--extend_down", type=int, default=None, help="Extend downstream by this many amino acids for protein input or bases for nucleotide input. With --combine, extends the enclosing span. Default: --extend_range, or 0.")
 
-    parser.add_argument("--combine", action="store_true", default=False, help="if set, then when multiple target domains occur in the same contig, an envelope containing all of the hit domains will be extracted. "
-                        "By default, each hit domain will be extracted separately. This option will raise an exception on circular contigs, because it would be ambiguous. Cannot be used with --splice.")
+    parser.add_argument("--combine", action="store_true", default=False, help="Extract one enclosing span of all selected annotations per input record, including intervening sequence. "
+                        "Not grouped by CDS; may span different genes or strands. Does not guarantee a coding sequence. Rejects circular records. By default, extracts each annotation separately. Cannot be used with --splice.")
     
     parser.add_argument("--splice", action="store_true", default=False, help="if set, then when multiple target domains occur in the same contig, the intermediate sequence will be deleted and the extracted domains from the contig glued together, in the order they are read on the strand of the domain with the lowest start coordinate. "
-                        "By default, each hit domain will be extracted separately. Cannot be used with --combine.")
+                        "Applies across selected annotations per input record, not per CDS; does not guarantee biological exon splicing or a coding sequence. By default, each hit domain will be extracted separately. Cannot be used with --combine.")
     
     parser.add_argument('--keep_direction', action='store_true', default=False,
                        help="by default extracted regions will be flipped so that the domain (or the domain with the lowest start coordinate when --combine or --splice is active) is on the forward strand. Set this option to not reverse complement anything. In the rare case of a split domain with parts on different strands, the strand of the first part will be considered.")

@@ -1,20 +1,31 @@
 [CLI reference](README.md)
 # domainator domain_search
 
-Search a large database with a few references and extract the hits.
+Select matching sequence records or hit neighborhoods; optionally translate CDS hits.
 
 ```
-Search for matches to protein or nucleic-acid references.
+Select sequence records or hit neighborhoods matching protein or nucleic-acid references.
 
-For searching large databases of sequences (genbank files or fasta files) with small numbers (< ~100) of queries.
+Only matching records or regions are returned. Use domainate to annotate and retain
+all input records, including those without qualifying hits.
+This tool is optimized for large sequence databases with relatively few references.
+The -i/--input files are the database being searched; -r/--reference supplies the
+references to search for.
 Protein references are searched against CDSs or protein records.
 Nucleic-acid references are searched against whole nucleotide contigs.
 Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
 Protein inputs cannot be searched with nucleotide references.
 
-Returns the contigs with hits, possibly truncated to the neighborhood around the hits.
+Protein input yields matching protein records. Nucleotide input yields hit-centered
+regions or, with --whole_contig, whole contigs. For protein-reference searches of
+CDSs, --translate yields peptides from matching CDSs. The output sequence need not
+be the same length as the aligned region.
 
-When --max_hits is specified, it applies to the entire search, not individual queries. Thus if you supply 5 query profiles and --max_hits 100, 
+Search best-hit annotations (Domain_Search features) mark the selected hits.
+--add_annotations also adds domain annotations (Domainator features) for retained
+hits; it does not enable the best-hit annotations, which are already present.
+
+When --max_hits is specified, it applies to the entire search, not individual references. Thus if you supply 5 reference profiles and --max_hits 100,
 at most 100 hits will be returned (not 500). 
 
 When max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.
@@ -38,7 +49,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-q`, `--quiet` |  |  | show errors only: no progress messages or warnings. |
 | `-i`, `--input` | FILE ... | required | the genbank or fasta files to search. Genbank files can be nucleotide (with CDS annotations) or peptide. Fasta files can be protein or nucleotide; use --alphabet to specify which. |
 | `--alphabet` | {nucleotide,protein} | protein | Whether the sequences in FASTA inputs are protein or nucleotide. GenBank records declare their own molecule type. |
-| `-r`, `--reference` | FILE ... | required | reference files to search with. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. |
+| `-r`, `--reference` | FILE ... | required | References to search for in the --input records. Supported types are protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files. |
 | `-o`, `--genbank_out` | FILE |  | Write the hits to this GenBank file. If the filename ends in .gz/.bgz, the output is written as BGZF (block-gzip): it is gunzip-readable and ~3-4x smaller, and can be used directly as a random-access, partitionable compressed input to a later domainator step. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the hits to this FASTA file. Use - for standard output. |
 | `-Z` | INTEGER | 1000 | Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen.  Set to 0 to use the number of target sequences in the input, counted before any taxonomy filter, so filtering does not change E-values. Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful. |
@@ -58,7 +69,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--decoys_file` | FILE |  | text file containing names of decoy domains. |
 | `--cpu` | INTEGER | 0 | the number of cores of the cpu which are used at a time to run the search (0: one thread per physical core) |
 | `--max_overlap` | NUMBER | 1 | the maximum fractional overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done. |
-| `--add_annotations` |  |  | When activated, new domainator annotations will be added to the file, not just the domain_search annotations. Useful if you want to see what the non-best hits score. |
+| `--add_annotations` |  |  | Add domain annotations (Domainator features) for retained hits, in addition to the search best-hit annotations (Domain_Search features) already present. |
 | `--dedup` | {none,id,sequence,sequence_rc} | none | Output uniqueness policy: none keeps all records; id drops repeated output IDs; sequence drops identical output sequences (ignoring case and terminal '*'); sequence_rc also collapses nucleotide reverse complements. The same ID must identify the same sequence, so sequence uniqueness also ensures unique IDs. Deduplication happens before padding. |
 | `--max_region_overlap` | NUMBER | 1.0 | the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. |
 | `--translate` |  |  | by default, nucleotide inputs return nucleotide regions. When --translate is set, CDS hits are translated before writing. Whole-contig nucleic-acid hits are not translated. Note that --translate is incompatble with neighborhood extraction. |

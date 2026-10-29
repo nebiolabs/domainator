@@ -132,10 +132,17 @@ merge listed at threshold `T` becomes visible at the next lower threshold.
 
 ## Recipe 1 — annotate, then get a structured summary
 
-Annotation tools (`domainate`, `structure_domainate`) retain every input record and
-annotate hits. Use `domain_search` / `structure_search` to select hits instead;
-`--add_annotations` includes Domainator annotations alongside search best-hit features.
+Annotation tools (`domainate`, `structure_domainate`) retain every input record,
+including records without hits, and add domain annotations for retained hits.
+Use `domain_search` /
+`structure_search` to select matching records or regions instead. Sequence search
+can emit neighborhoods or translated CDSs; structure search emits matching targets'
+full observed protein sequences and marks their best-hit regions.
+`--add_annotations` adds domain annotations (`Domainator` features) alongside the
+search best-hit annotations (`Domain_Search` features) already present.
 The annotation tools do not accept `--hits_only` or `--no_annotations`.
+The input being annotated/searched is `-i`; references being searched for are `-r`.
+See [command roles and output shapes](structure_search.md#command-roles-and-output-shapes).
 
 ```bash
 domainator domainate -i genomes.gb -r pfam.hmm -o annotated.gb --max_overlap 0.6
