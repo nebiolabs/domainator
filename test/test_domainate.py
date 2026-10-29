@@ -76,12 +76,13 @@ def test_domainator_pseudo(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         #output_dir = "test_out"
         out = output_dir + "/out1.gb"
-        args = ['--input', str(gb),  "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--hits_only", "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
+        args = ['--input', str(gb),  "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_hits_per_cds", str(1), "--max_overlap", str(1)]
 
         main(args)
         assert len(glob(output_dir+"/*.gb")) == 1
         new_file = list(SeqIO.parse(out, "genbank"))
-        assert len(new_file) == 0
+        assert new_file
+        assert not any(f.type == DOMAIN_FEATURE_NAME for rec in new_file for f in rec.features)
 
 
 def test_domainator_multi_hmm(shared_datadir):
@@ -345,7 +346,6 @@ def test_domainator_infernal_cm_query(shared_datadir):
             "--alphabet", "nucleotide",
             "-r", str(cm_reference),
             "--genbank_out", str(out),
-            "--hits_only",
             "--evalue", "0.1",
         ])
 
@@ -529,7 +529,6 @@ def test_domainator_nucleotide_query_spanning_circular_origin(shared_datadir):
             "--input", gb_path,
             "-r", query_path,
             "--genbank_out", out,
-            "--hits_only",
             "--evalue", "0.1",
         ])
 
@@ -663,13 +662,14 @@ def test_domainator_gene_annotate_fasta_1(shared_datadir):
         assert "/gene_id=\"pDONR201_3\"" in f_txt
         assert "/score=\"90.2\"" in f_txt
 
-def test_domainate_taxonomy_1(shared_datadir):
+def test_domainate_taxonomy_migration_to_search(shared_datadir):
     input = shared_datadir / "swissprot_CuSOD_subset.fasta"
     hmms = shared_datadir / "swissprot_CuSOD_subset.fasta"
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + f"/out.gb"
         args = ['--input', str(input) , "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--include_taxids", "2", "--exclude_taxids", "1224"]
-        main(args)
+        from domainator.domain_search import main as search_main
+        search_main(args)
         assert os.path.isfile(out)
         
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -677,14 +677,15 @@ def test_domainate_taxonomy_1(shared_datadir):
         assert count_peptides_in_record(new_file[0]) == 1
         assert new_file[0].id == "sp|O31851|YOJM_BACSU"
 
-def test_domainate_taxonomy_expr(shared_datadir):
+def test_domainate_taxonomy_expr_migration_to_search(shared_datadir):
     # "2 & ~1224" is equivalent to --include_taxids 2 --exclude_taxids 1224.
     input = shared_datadir / "swissprot_CuSOD_subset.fasta"
     hmms = shared_datadir / "swissprot_CuSOD_subset.fasta"
     with tempfile.TemporaryDirectory() as output_dir:
         out = output_dir + f"/out.gb"
         args = ['--input', str(input), "-r", str(hmms), "--evalue", str(0.1), "-o", str(out), "--max_overlap", str(1), "-Z", "1000", "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--taxonomy_expr", "2 & ~1224"]
-        main(args)
+        from domainator.domain_search import main as search_main
+        search_main(args)
         assert os.path.isfile(out)
 
         new_file = list(SeqIO.parse(out, "genbank"))
@@ -889,8 +890,9 @@ def test_domainate_uniprot_fragment_filter(shared_datadir):
         hit_ids = dict()
         for partial in ("include", "exclude", "only"):
             out = output_dir + f"/out_{partial}.gb"
-            main(["-i", fasta, "-r", hmm_path, "-o", out, "--partial", partial, "--hits_only"])
-            hit_ids[partial] = {r.id for r in parse_seqfiles([out])}
+            main(["-i", fasta, "-r", hmm_path, "-o", out, "--partial", partial])
+            hit_ids[partial] = {r.id for r in parse_seqfiles([out])
+                                if any(f.type == DOMAIN_FEATURE_NAME for f in r.features)}
         assert fragment_id in hit_ids["include"]
         assert fragment_id not in hit_ids["exclude"]
         assert hit_ids["only"] == {fragment_id}
@@ -899,7 +901,7 @@ def test_domainate_uniprot_fragment_filter(shared_datadir):
 
 @pytest.mark.parametrize("input_file", ["pDONR201_multi_genemark.gb", "FeSOD_20.gb", "FeSOD_20.fasta", "pDONR201_multi_genemark_domainator.gb"])
 def test_domainate_lean_parser_writes_contigs_without_hits(shared_datadir, monkeypatch, input_file):
-    """Without --hits_only, contigs without hits are written too, and the lean parser gives the same output as Biopython."""
+    """Contigs without hits are written too, and lean output matches Biopython."""
     with tempfile.TemporaryDirectory() as output_dir:
         outputs = dict()
         for parser in ("biopython", "lean"):
@@ -973,11 +975,11 @@ def test_prodigal_circular_origin_genes(shared_datadir):
 
 
 @pytest.mark.parametrize("batch_size", [7, 100])
-def test_domainate_hits_only_keeps_input_order(shared_datadir, tmp_path, batch_size):
+def test_domainate_keeps_input_order(shared_datadir, tmp_path, batch_size):
     fasta = str(shared_datadir / "FeSOD_20.fasta")
     out = str(tmp_path / "out.gb")
-    main(["-i", fasta, "-r", str(shared_datadir / "FeSOD_pfam.hmm"), "-o", out, "--hits_only", "-Z", "20", "--batch_size", str(batch_size)])
+    main(["-i", fasta, "-r", str(shared_datadir / "FeSOD_pfam.hmm"), "-o", out, "-Z", "20", "--batch_size", str(batch_size)])
     input_ids = [rec.id for rec in SeqIO.parse(fasta, "fasta")]
     output_ids = [rec.id for rec in SeqIO.parse(out, "genbank")]
     assert output_ids
-    assert output_ids == [i for i in input_ids if i in set(output_ids)]
+    assert output_ids == input_ids

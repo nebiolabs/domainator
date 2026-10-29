@@ -28,6 +28,12 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-i`, `--input` | FILE ... | required | GenBank files. Use - to read standard input. |
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
+| `--include_taxids` | INTEGER ... |  | Include these NCBI taxids and their descendants (OR). |
+| `--exclude_taxids` | INTEGER ... |  | Exclude these NCBI taxids and their descendants; exclusions take precedence. |
+| `--taxonomy_expr` | STRING |  | Boolean expression over taxid lineages using &, \|, ~, and parentheses, e.g. "2 & ~1224". Mutually exclusive with include/exclude_taxids. |
+| `--taxonomy_unknown` | {exclude,include,evaluate,error} | exclude | Unresolved taxonomy: exclude (default), include, evaluate against an empty lineage, or error. With ~2, exclude rejects unlabeled candidates; evaluate and include allow them. Only active with taxonomy criteria. Not inverted. |
+| `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | NCBI taxonomy database directory; downloaded if missing and filtering is active. |
+| `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
 | `--kb_range` | NUMBER |  | How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS. |
 | `--kb_up` | NUMBER |  | How many kb upstream of the selected CDS to extract. Starting from the end of the CDS. |
 | `--kb_down` | NUMBER |  | How many kb downstream of the selected CDS to extract. Starting from the end of the CDS. |

@@ -58,11 +58,12 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--databases` | STRING ... |  | Consider only domains from these databases when filtering by domain. default: all databases. |
 | `--unannotated` |  |  | Select contigs with no domain annotations. |
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be considered when selecting by domain. Default: no cutoff. |
-| `--include_taxids` | INTEGER ... |  | Space separated list of taxids to include |
-| `--exclude_taxids` | INTEGER ... |  | Space separated list of taxids to exclude |
-| `--taxonomy_expr` | STRING |  | A boolean expression over taxids using operators & (AND), \| (OR), ~ (NOT), and parentheses, e.g. "2 & ~1224" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids. |
-| `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist. |
-| `--taxonomy_update` |  |  | If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version. |
+| `--include_taxids` | INTEGER ... |  | Include these NCBI taxids and their descendants (OR). |
+| `--exclude_taxids` | INTEGER ... |  | Exclude these NCBI taxids and their descendants; exclusions take precedence. |
+| `--taxonomy_expr` | STRING |  | Boolean expression over taxid lineages using &, \|, ~, and parentheses, e.g. "2 & ~1224". Mutually exclusive with include/exclude_taxids. |
+| `--taxonomy_unknown` | {exclude,include,evaluate,error} | exclude | Unresolved taxonomy: exclude (default), include, evaluate against an empty lineage, or error. With ~2, exclude rejects unlabeled candidates; evaluate and include allow them. Only active with taxonomy criteria. Not inverted. |
+| `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | NCBI taxonomy database directory; downloaded if missing and filtering is active. |
+| `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
 | `--max_records` | INTEGER |  | If set then stop after returning this many contigs. |
 | `--min_length` | INTEGER |  | skip contigs smaller than this. In units of bp (aa for protein input). |
 | `--max_length` | INTEGER |  | skip contigs larger than this. In units of bp (aa for protein input). |

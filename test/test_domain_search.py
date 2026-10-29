@@ -579,7 +579,7 @@ def test_ranked_dedup_before_limit(monkeypatch, dedup, expected):
 
     monkeypatch.setattr(domain_search_module, "make_pool", lambda **kwargs: nullcontext())
     monkeypatch.setattr(domain_search_module.domainate, "read_references", lambda *args, **kwargs: {})
-    monkeypatch.setattr(domain_search_module.domainate, "domainate", lambda records, **kwargs: records)
+    monkeypatch.setattr(domain_search_module.domainate, "_domainate", lambda records, **kwargs: records)
 
     def run_tasks(pool, worker, tasks, **kwargs):
         assert worker.max_hits == 2
@@ -783,7 +783,7 @@ def test_domain_search_passes_allowed_taxids_to_domainate(shared_datadir, monkey
         captured.update(kwargs)
         return iter(matched_records)
 
-    monkeypatch.setattr(domain_search_module.domainate, "domainate", fake_domainate)
+    monkeypatch.setattr(domain_search_module.domainate, "_domainate", fake_domainate)
 
     worker = domain_search_module._domain_search_worker(
         references=Shared({}), allowed_taxids=Shared(frozenset({2, 198538})), z=1000, evalue=0.1,

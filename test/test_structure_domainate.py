@@ -96,11 +96,13 @@ def test_annotation_qualifiers(annotated):
         assert metric not in feature.qualifiers
 
 
-def test_hits_only(inputs, references, tmp_path):
+def test_retains_records_without_hits(inputs, references, tmp_path):
     out = tmp_path / "hits.gb"
     structure_domainate.main(["-i", inputs, "-r", references, "-o", str(out),
-                              "--hits_only", "--cpu", "2"])
-    assert {record.id for record in _read(out)} == EXPECTED_HITS
+                              "--cpu", "2"])
+    records = _read(out)
+    assert {record.id for record in records if _domains(record)} == EXPECTED_HITS
+    assert any(not _domains(record) for record in records)
 
 
 def test_database_prefix_input_matches_structure_file_input(inputs, references, tmp_path):
@@ -146,18 +148,18 @@ def test_evalue_threshold_changes_hit_count(inputs, references, tmp_path):
     strict = tmp_path / "strict.gb"
     loose = tmp_path / "loose.gb"
     structure_domainate.main(["-i", inputs, "-r", references, "-o", str(strict),
-                              "-e", "1e-15", "--hits_only", "--cpu", "2"])
+                              "-e", "1e-15", "--cpu", "2"])
     structure_domainate.main(["-i", inputs, "-r", references, "-o", str(loose),
-                              "-e", "10", "--hits_only", "--cpu", "2"])
-    assert len(_read(strict)) < len(_read(loose))
+                              "-e", "10", "--cpu", "2"])
+    assert sum(bool(_domains(r)) for r in _read(strict)) < sum(bool(_domains(r)) for r in _read(loose))
 
 
 def test_min_evalue_excludes_the_identical_match(inputs, references, tmp_path):
     """--min_evalue has no foldseek equivalent, so it is enforced by domainator itself."""
     out = tmp_path / "no_self.gb"
     structure_domainate.main(["-i", inputs, "-r", references, "-o", str(out),
-                              "--min_evalue", "1e-15", "--hits_only", "--cpu", "2"])
-    assert {record.id for record in _read(out)} == {"1NDD_A"}
+                              "--min_evalue", "1e-15", "--cpu", "2"])
+    assert {record.id for record in _read(out) if _domains(record)} == {"1NDD_A"}
 
 
 def test_database_name_override(inputs, references, tmp_path):
@@ -168,10 +170,11 @@ def test_database_name_override(inputs, references, tmp_path):
     assert databases == {"mystructures"}
 
 
-def test_no_annotations_requires_hits_only(inputs, references, tmp_path):
-    with pytest.raises(RuntimeError, match="only makes sense together with --hits_only"):
+@pytest.mark.parametrize("flag", ["--hits_only", "--no_annotations"])
+def test_removed_annotation_flags(inputs, references, tmp_path, flag):
+    with pytest.raises(SystemExit):
         structure_domainate.main(["-i", inputs, "-r", references,
-                                  "-o", str(tmp_path / "x.gb"), "--no_annotations"])
+                                  "-o", str(tmp_path / "x.gb"), flag])
 
 
 def test_max_output_gb(inputs, references, tmp_path):

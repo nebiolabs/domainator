@@ -29,16 +29,14 @@ from domainator.locations import feature_intervals, overlap_fraction
 from domainator.model import get_sources, set_hit_best_score, set_hit_names, set_hit_scores
 from domainator.offsets import count_peptides
 from domainator.partial import PARTIAL_CHOICES, codon_offset, fragment_status_allowed, get_fragment_status, normalize_cds_translation, on_contig_translation
-from domainator.taxonomy.records import get_taxid, location_taxid, source_taxids, taxid_allowed
+from domainator.taxonomy.records import get_taxid, location_taxid, source_taxids, taxid_allowed, TaxonomyFilter
 from domainator.model import get_cds_unique_name
 from domainator.seqio import parse_seqfiles, get_file_type
 from domainator.hmmio import read_hmms, read_infernal_cms, read_pyhmmer_fastas, read_pyhmmer_peptide_fastas, is_nucleic_acid_alphabet, peek_hmm_alphabet
-from domainator.taxonomy.records import filter_by_taxonomy
 import pyhmmer
 import pyinfernal
 import pyrodigal
 from pathlib import Path
-from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
 from domainator import foldseek as foldseek_lib
 from domainator.lean_record import LeanContig, lean_to_seqrecord, lean_translate, LEAN_SEARCH_TYPES, materialize_lean_search, LeanSearchContig, LeanFastaContig
 from domainator.location_ops import overlay
@@ -675,7 +673,7 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None, pa
     # FASTA nucleotide records cds_peptides() is empty (searched whole by nhmmer).
     if LEAN_SEARCH_TYPES and isinstance(contig, LEAN_SEARCH_TYPES):
         if contig.molecule_type == "protein":
-            if allowed_taxids is not None and not taxid_allowed(contig.taxid(), allowed_taxids):
+            if allowed_taxids is not None and not taxid_allowed(contig.taxid(), allowed_taxids, f"record {contig.id!r}"):
                 return
             if not fragment_status_allowed(contig.fragment(), partial):
                 return
@@ -689,7 +687,7 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None, pa
             if allowed_taxids is not None:
                 # Per-CDS taxid (longest covering source) computed in Rust; skip excluded CDSs.
                 for feature_index, prot, taxid in contig.cds_peptides_with_taxid(dropped, partial):
-                    if not taxid_allowed(taxid, allowed_taxids):
+                    if not taxid_allowed(taxid, allowed_taxids, f"record {contig.id!r}, CDS index {feature_index}"):
                         continue
                     if len(prot) > MAX_PROTEIN_SIZE:
                         warnings.warn(f"Skipping protein longer than {MAX_PROTEIN_SIZE} aa: {contig.id}")
@@ -705,7 +703,7 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None, pa
 
     #prot_list = list()
     if contig.annotations['molecule_type'] == "protein":
-        if allowed_taxids is not None and not taxid_allowed(get_taxid(contig), allowed_taxids):
+        if allowed_taxids is not None and not taxid_allowed(get_taxid(contig), allowed_taxids, f"record {contig.id!r}"):
             return
         if not fragment_status_allowed(get_fragment_status(contig), partial):
             return
@@ -722,7 +720,7 @@ def get_prot_list(contig, unique_id, dropped_types=None, allowed_taxids=None, pa
             if feature.type == 'CDS' and "pseudo" not in feature.qualifiers and "pseudogene" not in feature.qualifiers:
                 if allowed_taxids is not None:
                     taxid = location_taxid(feature_intervals(feature), sources)
-                    if not taxid_allowed(taxid, allowed_taxids):
+                    if not taxid_allowed(taxid, allowed_taxids, f"record {contig.id!r}, CDS {feature.location}"):
                         continue
                 if partial != "include" and not fragment_status_allowed(get_fragment_status(feature), partial):
                     continue
@@ -746,18 +744,20 @@ def _nucleotide_contig_searchable(rec, allowed_taxids) -> bool:
     skipped pre-search only when none of those is allowed. Surviving gappy contigs are searched
     and filtered per hit region in domainator_inner."""
     if LeanFastaContig is not None and isinstance(rec, LeanFastaContig):
-        return taxid_allowed(rec.taxid(), allowed_taxids)
+        return taxid_allowed(rec.taxid(), allowed_taxids, f"record {rec.id!r}")
     if LeanSearchContig is not None and isinstance(rec, LeanSearchContig):
         whole = rec.whole_contig_taxid()
         gappy_source_taxids = rec.source_taxids
     else:
         sources = get_sources(rec)
         if not sources:  # FASTA-style materialized record: per-record taxid from description
-            return taxid_allowed(get_taxid(rec), allowed_taxids)
+            return taxid_allowed(get_taxid(rec), allowed_taxids, f"record {rec.id!r}")
         whole = location_taxid([(0, len(rec.seq))], sources)
         gappy_source_taxids = lambda: source_taxids(rec)
     if whole is not None:
-        return taxid_allowed(whole, allowed_taxids)
+        return taxid_allowed(whole, allowed_taxids, f"record {rec.id!r}")
+    if isinstance(allowed_taxids, TaxonomyFilter) and allowed_taxids.unknown == "error":
+        return True
     # Gappy: skip only if neither an uncovered/no-taxon region (32644) nor any source is allowed.
     if taxid_allowed(None, allowed_taxids):
         return True
@@ -1035,7 +1035,8 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
                     def _hit_allowed(h):
                         loc = build_contig_hit_location(contig, h)
                         region = [(int(p.start), int(p.end)) for p in loc.parts]
-                        return taxid_allowed(location_taxid(region, sources), allowed_taxids)
+                        return taxid_allowed(location_taxid(region, sources), allowed_taxids,
+                                             f"record {contig.id!r}, nucleotide hit {loc}")
                     contig_hits = [h for h in contig_hits if _hit_allowed(h)]
             if contig_hits:
                 add_contig_nucleic_acid_annotations(contig, contig_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
@@ -1160,11 +1161,39 @@ def prodigal_CDS_annotate(rec:SeqRecord):
 
 def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str]], z: int, evalue: float = 0.001,
               max_hits_per_cds: Optional[int] = None, max_overlap: float = 1, cpu: int = 0, batch_size: int = 10000,
+              pre_parsed_references: Optional[Dict[str, Dict[str, Any]]] = None,
+              best_annotation: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
+              max_mode: bool = False, foldseek: Optional[List[str]] = None,
+              esm2_3di_weights: Optional[str] = None, esm2_3di_device: str = "cuda:0", overlap_by_db: bool = False,
+              max_hits_per_contig: Optional[int] = None, foldseek_device: str = "cpu", partial: str = "include",
+              foldseek_path: Optional[str] = None) -> Iterator[SeqRecord]:
+    """Annotate every input record with domain hits, retaining records without hits.
+
+    Search references against proteins/CDSs or nucleotide contigs, adding Domainator
+    features passing evalue, min_evalue, overlap, and hit-count thresholds. references=None
+    uses pre_parsed_references. z is HMMER's database size, cpu=0 uses all cores, and
+    batch_size bounds the protein search batches. gene_call and partial control CDSs
+    searched; max_mode disables heuristic filters. Foldseek options configure optional
+    structural searches. best_annotation also adds Domain_Search best-hit features.
+    Use domain_search for taxonomy filtering, hit-only output, or optional annotations.
+    """
+    yield from _domainate(
+        records, references=references, z=z, evalue=evalue, max_hits_per_cds=max_hits_per_cds,
+        max_overlap=max_overlap, cpu=cpu, batch_size=batch_size,
+        pre_parsed_references=pre_parsed_references, best_annotation=best_annotation,
+        gene_call=gene_call, min_evalue=min_evalue, max_mode=max_mode, foldseek=foldseek,
+        esm2_3di_weights=esm2_3di_weights, esm2_3di_device=esm2_3di_device,
+        overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig,
+        foldseek_device=foldseek_device, partial=partial, foldseek_path=foldseek_path,
+    )
+
+
+def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str]], z: int, evalue: float = 0.001,
+              max_hits_per_cds: Optional[int] = None, max_overlap: float = 1, cpu: int = 0, batch_size: int = 10000,
               hits_only: bool = False, no_annotations: bool = False, pre_parsed_references: Optional[Dict[str, Dict[str, Any]]] = None,
               best_annotation: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
-              ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
-              exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
-              allowed_taxids: Optional[AbstractSet[int]] = None, max_mode: bool = False, foldseek: Optional[List[str]] = None,
+              allowed_taxids: Optional[Union[AbstractSet[int], TaxonomyFilter]] = None,
+              max_mode: bool = False, foldseek: Optional[List[str]] = None,
               esm2_3di_weights: Optional[str] = None, esm2_3di_device: str = "cuda:0", overlap_by_db: bool = False,
               max_hits_per_contig: Optional[int] = None, foldseek_device: str = "cpu", partial: str = "include",
               foldseek_path: Optional[str] = None) -> Iterator[SeqRecord]:
@@ -1196,11 +1225,6 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
             every contig; "unannotated" calls genes only on contigs without CDSs; None keeps the
             existing CDSs.
         min_evalue: keep hits with an e-value at least this.
-        ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy filters.
-        include_taxids: keep only records with a taxid in this list (or below it).
-        exclude_taxids: drop records with a taxid in this list (or below it).
-        taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g.
-            "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
         allowed_taxids: search only the CDSs whose taxid is in this set (the per-CDS filter
             domain_search uses; see ``get_prot_list``).
         max_mode: turn off HMMER's heuristic filters: much slower, but more sensitive.
@@ -1254,10 +1278,6 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
     if clear_CDS_annotations:
         dropped_types.add("CDS")
 
-    if include_taxids is not None:
-        include_taxids = set(include_taxids)
-    if exclude_taxids is not None:
-        exclude_taxids = set(exclude_taxids)
     if partial not in PARTIAL_CHOICES:
         raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
     
@@ -1267,8 +1287,6 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
     infernal_nucleic_acid_list = list()
     foldseek_list = list()
     contig_index = 0
-    if include_taxids or exclude_taxids or taxonomy_expr:
-        records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
 
     nhmmer_extension = get_max_reference_length(reference_groups, "nhmmer")
     infernal_extension = get_max_reference_length(reference_groups, "infernal")
@@ -1358,7 +1376,7 @@ def build_parser():
     parser.add_argument('-Z', default=1000, type=int, 
                         help="Passed as the -Z parameter to hmmsearch: Assert that the total number of targets in your searches is <x>, for the purposes of per-sequence E-value calculations, rather than the actual number of targets seen. "
                         "\n"
-                        "Set to 0 to use the number of target sequences in the input, counted before any taxonomy filter, so filtering does not change E-values. "
+                        "Set to 0 to use the number of target sequences in the input. "
                         "Supplying -Z is recommended for most use cases of domainate, as it will speed up the search and make comparisons between searches more meaningful.")
 
     parser.add_argument('-e', '--evalue', type=PositiveFloat, default=0.001, 
@@ -1373,12 +1391,7 @@ def build_parser():
     parser.add_argument('--max_mode', action="store_true", default=False,
                         help="Run hmmsearch, phmmer, or nhmmer in maximum sensitivity mode, which is much slower, but more sensitive.")
 
-    parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include. Contigs with taxonomy not in this list will be skipped.")
-    parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude. Contigs with taxonomy in this list will be skipped.")
-    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
     parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES, help=PARTIAL_HELP)
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
-    parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
 
     parser.add_argument('--cpu', type=int, default=0,
                         help="the number of cores of the cpu which are used at a time to run the search (0: one thread per physical core)")
@@ -1386,10 +1399,6 @@ def build_parser():
                         help="the maximum fractional of overlap between domains to be included in the annotated genbank. If >= 1, then no overlap filtering will be done.")
     parser.add_argument("--overlap_by_db", action='store_true', default=False,
                         help="If activated, then overlap filtering will be done by database, rather than all together.")
-    parser.add_argument('--hits_only', action='store_true', default=False,
-                        help="when activated, the ouptut will only have contigs with at least one domain annotation. In many cases, domainator domain_search will be faster and more appropriate.")
-    parser.add_argument('--no_annotations', action='store_true', default=False,
-                        help="when activated, new annotations will not be added to the file. This is useful if you are just trying to extract a set of contigs for annotation in a later step.")
 
     parser.add_argument("--batch_size", type=int, default=10000, required=False,
                         help="How many target sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory.")
@@ -1436,18 +1445,6 @@ def main(argv):
         for file_path in params.input: 
             Z += count_peptides(file_path)
 
-    if params.no_annotations and not params.hits_only:
-        raise RuntimeError(f"You've specified no_annotations, without specifying hits_only. This seems like a useless thing to do. If you want to select a subset of contigs, please use domainator select_by_contig.")
-
-    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
-        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
-
-    ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr:
-        # create the path to the NCBI taxonomy database
-        Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
-        # load the NCBI taxonomy database
-        ncbi_taxonomy = NCBITaxonomy(params.ncbi_taxonomy_path, params.taxonomy_update)
 
     # Run
     annotated = domainate(
@@ -1460,14 +1457,8 @@ def main(argv):
             max_overlap=params.max_overlap,
             cpu=params.cpu,
             batch_size=params.batch_size,
-            hits_only=params.hits_only,
-            no_annotations=params.no_annotations,
             pre_parsed_references=reference_groups,
             gene_call=params.gene_call,
-            ncbi_taxonomy=ncbi_taxonomy,
-            include_taxids=params.include_taxids,
-            exclude_taxids=params.exclude_taxids,
-            taxonomy_expr=params.taxonomy_expr,
             max_mode=params.max_mode,
             foldseek=None,
             esm2_3di_weights=params.esm2_3di_weights,
@@ -1479,4 +1470,4 @@ def main(argv):
         )
     write_seq_outputs(annotated, genbank=params.genbank_out, fasta=params.fasta_out,
                       max_output_bytes=max_output_gb_to_bytes(params.max_output_gb),
-                      mitigation_options=["--hits_only", "--max_hits_per_cds", "--evalue"])
+                      mitigation_options=["--max_hits_per_cds", "--evalue"])

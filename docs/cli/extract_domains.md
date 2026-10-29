@@ -23,6 +23,12 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-i`, `--input` | FILE ... | required | Genbank filenames. Use - to read standard input. |
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
+| `--include_taxids` | INTEGER ... |  | Include these NCBI taxids and their descendants (OR). |
+| `--exclude_taxids` | INTEGER ... |  | Exclude these NCBI taxids and their descendants; exclusions take precedence. |
+| `--taxonomy_expr` | STRING |  | Boolean expression over taxid lineages using &, \|, ~, and parentheses, e.g. "2 & ~1224". Mutually exclusive with include/exclude_taxids. |
+| `--taxonomy_unknown` | {exclude,include,evaluate,error} | exclude | Unresolved taxonomy: exclude (default), include, evaluate against an empty lineage, or error. With ~2, exclude rejects unlabeled candidates; evaluate and include allow them. Only active with taxonomy criteria. Not inverted. |
+| `--ncbi_taxonomy_path` | DIR | /tmp/ncbi_taxonomy_sean | NCBI taxonomy database directory; downloaded if missing and filtering is active. |
+| `--taxonomy_update` |  |  | Check for an updated taxonomy database when filtering is active. |
 | `--contigs` | STRING ... |  | only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs. |
 | `--contigs_file` | FILE |  | only extract domains from contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be extracted |

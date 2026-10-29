@@ -24,13 +24,18 @@ from domainator import DOMAIN_SEARCH_BEST_HIT_NAME
 from Bio.SeqFeature import FeatureLocation, CompoundLocation
 from domainator.location_ops import merge_parts
 from Bio.SeqRecord import SeqRecord
+from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
+from domainator.taxonomy import NCBITaxonomy
+from domainator.taxonomy.records import compile_taxonomy_filter
 
 def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
                     domains: Optional[Set[str]] = None, extend_range: Optional[int] = None,
                     extend_up: Optional[int] = None, extend_down: Optional[int] = None, combine: bool = False,
                     keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
                     databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include",
-                    has_search_hit: bool = False) -> Iterator[SeqRecord]:
+                    has_search_hit: bool = False, ncbi_taxonomy: Optional[NCBITaxonomy] = None,
+                    include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
+                    taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` covered by their domain annotations.
 
     Args:
@@ -55,6 +60,13 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         has_search_hit: also extract search hits, ignoring domain names and databases but
             honoring evalue, min_score, and partial. Alone, extracts only search hits.
         databases: select only domains from these databases. None: all.
+        ncbi_taxonomy: database required when taxonomy criteria are supplied.
+        include_taxids: include these taxids and descendants (OR).
+        exclude_taxids: exclude these taxids and descendants, overriding inclusion.
+        taxonomy_expr: boolean lineage expression, exclusive with include/exclude_taxids.
+        taxonomy_unknown: unresolved taxonomy policy: exclude (default), include, evaluate
+            against an empty lineage, or error. Applied to the original domain location
+            before extension/combine/splice; protein inputs use record taxonomy.
         splice: when a contig has several selected domains, delete the sequence between them and
             join the domains, in the order they are read on the strand of the domain with the
             lowest start.
@@ -67,6 +79,8 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         The extracted regions.
     """
     feature_types = annotation_feature_types(annotation_type)
+    taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
+                                              taxonomy_expr, taxonomy_unknown)
 
     if splice and combine:
         raise ValueError("Cannot use --splice and --combine at the same time.")
@@ -104,6 +118,8 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                     else: # contig-level nucleotide hit
                         status = None
                     keep = fragment_status_allowed(status, partial)
+                if keep and taxonomy_filter is not None:
+                    keep = taxonomy_filter.matches(rec, feature)
                 if keep:
                     hit_domains.append(feature)
         
@@ -202,6 +218,7 @@ def build_parser():
     add_input(parser, 'Genbank filenames.')
 
     add_seq_outputs(parser)
+    add_taxonomy_filters(parser)
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only extract domains from contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -278,6 +295,11 @@ def main(argv):
         databases=params.databases,
         splice=params.splice,
         partial=params.partial,
+        ncbi_taxonomy=taxonomy_from_args(params),
+        include_taxids=params.include_taxids,
+        exclude_taxids=params.exclude_taxids,
+        taxonomy_expr=params.taxonomy_expr,
+        taxonomy_unknown=params.taxonomy_unknown,
         )
 
     write_seq_outputs(extracted_domains_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

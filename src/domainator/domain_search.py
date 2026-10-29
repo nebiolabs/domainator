@@ -34,7 +34,8 @@ from domainator.seqio import parse_seqfiles, native_parser_available
 from domainator.offsets import count_peptides_in_record, partition_seqfile, i_partition_seqfiles, index_total_cds
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator._mp import Shared, imap_unordered_bounded, make_pool, resolve_cpu
-from domainator.taxonomy.records import compile_taxonomy_allowed
+from domainator.taxonomy.records import compile_taxonomy_filter
+from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.partial import PARTIAL_CHOICES
 from domainator.locations import WHERE_CHOICES
 from domainator.model import get_hit_names, set_dist_to_start
@@ -45,7 +46,7 @@ import functools
 from typing import List, Tuple, Set, Optional, Iterable, Iterator, Union
 from domainator import extract_peptides
 from pathlib import Path
-from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from Bio.SeqRecord import SeqRecord
 
@@ -108,7 +109,7 @@ class _domain_search_worker():
             else:
                 top_hits.add(record)
 
-        for rec in domainate.domainate(
+        for rec in domainate._domainate(
                 records, #TODO: clear best_domain_hit ?
                 references=None,
                 pre_parsed_references=self.references.get(),
@@ -209,6 +210,7 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
                   whole_contig: bool = False, normalize_direction: bool = True, translate: bool = False, gene_call: Optional[str] = None, min_evalue: float = 0.0,
                   ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
                   exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
+                  taxonomy_unknown: str = "exclude",
                   alphabet: str = "protein", max_mode: bool = False, max_region_overlap: float = 1.0,
                   strand: Optional[str] = None, decoys: Optional[Set[str]] = None, max_hits_per_contig: Optional[int] = None,
                   partial: str = "include", dedup: str = "none") -> Iterator[SeqRecord]:
@@ -243,10 +245,13 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         min_evalue: as for domainate.
         max_mode: as for domainate.
         ncbi_taxonomy: an NCBITaxonomy, needed by the taxonomy filters.
-        include_taxids: keep only contigs with a taxid in this list (or below it).
-        exclude_taxids: drop contigs with a taxid in this list (or below it).
+        include_taxids: search proteins/CDSs or nucleotide hits in these taxids or descendants.
+        exclude_taxids: exclude these taxids or descendants, overriding inclusion.
         taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g.
             "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
+        taxonomy_unknown: unresolved taxonomy policy: exclude (default), include, evaluate
+            against an empty lineage, or error. Protein/CDS targets are filtered before
+            searching, nucleotide hits before ranking; expanded output is not re-filtered.
         alphabet: "protein" or "nucleotide", the molecule type of FASTA databases.
         max_region_overlap: the largest fraction of overlap allowed between two output regions
             (1 or more: no filter). Regions are kept greedily in order of CDS start, if less than
@@ -279,23 +284,9 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         raise InputError("max_hits must be at least 1.")
     cpu = max(2, resolve_cpu(cpu))
 
-    if include_taxids is not None:
-        include_taxids = set(include_taxids)
-    if exclude_taxids is not None:
-        exclude_taxids = set(exclude_taxids)
-
-    if taxonomy_expr and (include_taxids or exclude_taxids):
-        raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
-
-    # "Compile" the taxonomy filter once in the parent into a frozenset of allowed
-    # taxids (a single O(N) pass over the tree), then share it with the workers.
-    # Filtering in workers is then an O(1) membership test, and the set -- not the
-    # full NCBITaxonomy -- reaches each worker once. The full NCBITaxonomy is
-    # released afterward so the parent does not hold it.
-    allowed_taxids = None
-    if ncbi_taxonomy is not None:
-        allowed_taxids = compile_taxonomy_allowed(ncbi_taxonomy, include_taxids, exclude_taxids, taxonomy_expr)
-        ncbi_taxonomy = None
+    allowed_taxids = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
+                                            taxonomy_expr, taxonomy_unknown)
+    ncbi_taxonomy = None
 
     # Each worker process parses the references itself, which is cheaper than
     # pickling the parsed pyhmmer/pyinfernal objects; threads share one parsed copy.
@@ -393,11 +384,7 @@ def build_parser():
                         help="the maximum number of independent hits per contig. For nucleotide contig-level hits, each non-overlapping hit region is treated as an independent hit. [default: unlimited]")
 
 
-    parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
-    parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
-    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
-    parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
+    add_taxonomy_filters(parser)
 
 
     parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES, help=domainate.PARTIAL_HELP)
@@ -549,15 +536,7 @@ def main(argv):
         partitions = i_partition_seqfiles(input_files, params.batch_size)
         Z = params.Z
 
-    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
-        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
-
-    ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr:
-        # create the path to the NCBI taxonomy database
-        Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
-        # load the NCBI taxonomy database
-        ncbi_taxonomy = NCBITaxonomy(params.ncbi_taxonomy_path, params.taxonomy_update)
+    ncbi_taxonomy = taxonomy_from_args(params)
 
     decoy_names = list_and_file_to_dict_keys(params.decoys, params.decoys_file, as_set=True)
 
@@ -586,6 +565,7 @@ def main(argv):
         include_taxids=params.include_taxids,
         exclude_taxids=params.exclude_taxids,
         taxonomy_expr=params.taxonomy_expr,
+        taxonomy_unknown=params.taxonomy_unknown,
         alphabet=params.alphabet,
         max_mode=params.max_mode,
         max_region_overlap=params.max_region_overlap,

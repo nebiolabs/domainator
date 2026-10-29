@@ -71,6 +71,28 @@ Note that for structure-derived records, all coordinates are indices into the *o
 
 #### Selecting annotation sources and search hits
 
+Taxonomy filtering on `extract_domains`, `extract_peptides`, `extract_unannotated`,
+`select_by_cds`, `select_by_contig`, and `domain_search` uses common
+`--include_taxids`, `--exclude_taxids`, and `--taxonomy_expr` criteria. Taxids match
+their descendants; exclusions override inclusions. Expressions use `&`, `|`, `~`,
+and parentheses and cannot be combined with include/exclude lists.
+
+With active criteria, `--taxonomy_unknown exclude` (the default) drops missing,
+unidentified (32644), deleted, absent-from-database, and uncovered-region taxonomy.
+`include` admits unresolved candidates through the taxonomy gate; `evaluate` uses
+an empty lineage (so `~2` passes but `2` fails); `error` raises a contextual error.
+Merged taxids follow valid replacements. In particular, negated criteria do not
+admit unlabeled candidates unless explicitly requested. Incorrect labels can still
+produce incorrect biological assignments. Without criteria, no policy is applied.
+
+Protein inputs and whole-record selection use record taxonomy. Nucleotide CDS/domain
+anchors use the longest source covering every interval, including circular/compound
+parts; a full-contig source takes precedence over a nested source. Taxonomy is checked
+before translating or expanding anchors and before combining/splicing allowed domains.
+An emitted neighborhood may include other taxa; taxonomy is not rechecked on its
+expanded sequence. Taxonomy is an independent restriction, not inverted by `--invert`.
+These rules do not change the GenBank serialization format.
+
 Every tool with `--annotation_type` accepts `domainator` (`Domainator` features),
 `domain_search` (`Domain_Search` features), and `all` (both). Domain-name matching,
 Boolean domain expressions, database restrictions, and unannotated tests use the chosen

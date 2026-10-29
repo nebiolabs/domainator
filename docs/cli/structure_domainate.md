@@ -12,7 +12,8 @@ prebuilt foldseek database, aligns reference structures against them, and writes
 genbank file where every input chain is one record carrying Domainator features for the
 references that hit it.
 
-Every input record is written, whether or not it had hits, unless --hits_only is given.
+Every input record is annotated and written, whether or not it had hits.
+Use structure_search to select only matching records.
 Use domainator structure_search instead when searching a large database with a few references.
 
 References are aligned as the query and the input database as the target, so --evalue is
@@ -42,8 +43,6 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--max_hits_per_cds` | INTEGER |  | maximum number of annotations to add per record. If not supplied, there is no limit. |
 | `--max_overlap` | NUMBER | 1 | maximum fraction of overlap allowed between annotations on one record. 1 disables overlap filtering. |
 | `--overlap_by_db` |  |  | filter overlapping annotations within each database independently, instead of across all databases. |
-| `--hits_only` |  |  | write only records that had at least one hit. |
-| `--no_annotations` |  |  | do not write Domainator features. Only meaningful together with --hits_only, where it selects hit records without annotating them. |
 | `--database_name` | STRING |  | value for the /database qualifier on the annotations. Defaults to the reference database or directory name. |
 | `--db_out` | FILE |  | also write the aligner database built from the input structures, using this path as its prefix, so it can be reused as --input later. |
 | `--hits_tsv_out` | FILE |  | write the aligner's own hit table here, for debugging or for cross-checking against a hand-run search. With reseek this is the table before the per-reference --max_seqs cap is applied, so it may hold more rows than the output. |

@@ -38,13 +38,13 @@ from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.expr import BooleanEvaluator
-from domainator.taxonomy.records import filter_by_taxonomy
+from domainator.taxonomy.records import compile_taxonomy_filter
+from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.partial import filter_by_partial, PARTIAL_CHOICES
 from typing import Set, Optional, Iterable, Iterator
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
-from pathlib import Path
-from domainator.taxonomy import NCBITaxonomy, default_ncbi_taxonomy_path
+from domainator.taxonomy import NCBITaxonomy
 from domainator.model import annotation_feature_types, evalue_passes, feature_score
 from Bio.SeqRecord import SeqRecord
 
@@ -103,6 +103,7 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
                      contigs: Optional[Set[str]] = None, contigs_regex: Optional[str] = None, invert: bool = False,
                      ncbi_taxonomy: Optional[NCBITaxonomy] = None, include_taxids: Optional[Iterable[int]] = None,
                      exclude_taxids: Optional[Iterable[int]] = None, taxonomy_expr: Optional[str] = None,
+                     taxonomy_unknown: str = "exclude",
                      databases: Optional[Set[str]] = None, unannotated: bool = False,
                      min_search_score: Optional[float] = None, max_search_score: Optional[float] = None,
                      annotation_type: str = "domainator", partial: str = "include",
@@ -133,6 +134,8 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
         exclude_taxids: drop records with a taxid in this list (or below it).
         taxonomy_expr: a boolean expression over taxids (operators & | ~ and parentheses), e.g.
             "2 & ~1224". Mutually exclusive with include_taxids/exclude_taxids.
+        taxonomy_unknown: unresolved record taxonomy policy: exclude (default), include,
+            evaluate against an empty lineage, or error. Not affected by invert.
         databases: consider only domains from these databases. None: all.
         unannotated: select records with no domain annotations.
         min_search_score: select records whose domain_search best hit scores at least this.
@@ -169,13 +172,8 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
     if contigs_regex is not None:
         contigs_regex = re.compile(contigs_regex)
 
-    if include_taxids is not None:
-        include_taxids = set(include_taxids)
-    if exclude_taxids is not None:
-        exclude_taxids = set(exclude_taxids)
-
-    if include_taxids or exclude_taxids or taxonomy_expr:
-        records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
+    taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
+                                              taxonomy_expr, taxonomy_unknown)
     
     if partial != "include":
         records = filter_by_partial(records, partial)
@@ -251,6 +249,8 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
             selected = not selected
         
         if selected:
+            if taxonomy_filter is not None and not taxonomy_filter.matches(contig):
+                continue
             if max_records is None:
                 yield contig
             else:
@@ -301,11 +301,7 @@ def build_parser():
     parser.add_argument('-e', '--evalue', default=None, type=PositiveFloat,
                         help="the evalue cutoff (max) for domain annotations to be considered when selecting by domain. Default: no cutoff.")
 
-    parser.add_argument("--include_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to include")
-    parser.add_argument("--exclude_taxids", nargs='+', default=None, type=int, help="Space separated list of taxids to exclude")
-    parser.add_argument("--taxonomy_expr", type=str, default=None, help="A boolean expression over taxids using operators & (AND), | (OR), ~ (NOT), and parentheses, e.g. \"2 & ~1224\" (within Bacteria but not Proteobacteria). A taxid is true for a contig when it is in the contig's lineage. Mutually exclusive with --include_taxids/--exclude_taxids.")
-    parser.add_argument("--ncbi_taxonomy_path", type=str,  default=default_ncbi_taxonomy_path(), help="Path to NCBI taxonomy database directory. Will be created and downloaded if it does not exist.")
-    parser.add_argument("--taxonomy_update", action="store_true", help="If taxonomy database exists, check it against the version on the ncbi server and update if there is a newer version.")
+    add_taxonomy_filters(parser)
 
     #
 
@@ -357,15 +353,7 @@ def main(argv):
 
     check_outputs(parser, params)
 
-    if params.taxonomy_expr and (params.include_taxids or params.exclude_taxids):
-        raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
-
-    ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr:
-        # create the path to the NCBI taxonomy database
-        Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
-        # load the NCBI taxonomy database
-        ncbi_taxonomy = NCBITaxonomy(params.ncbi_taxonomy_path, params.taxonomy_update)
+    ncbi_taxonomy = taxonomy_from_args(params)
 
     # Run
    
@@ -388,6 +376,7 @@ def main(argv):
                     include_taxids=params.include_taxids,
                     exclude_taxids=params.exclude_taxids,
                     taxonomy_expr=params.taxonomy_expr,
+                    taxonomy_unknown=params.taxonomy_unknown,
                     databases=params.databases,
                     unannotated=params.unannotated,
                     min_search_score=params.min_search_score,

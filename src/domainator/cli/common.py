@@ -159,6 +159,42 @@ def add_seq_outputs(parser, *, genbank_help: str = "Write the records to this Ge
     add_output(parser, "fasta", fasta_help)
 
 
+def add_taxonomy_filters(parser):
+    """Add the shared taxonomy selection contract."""
+    from domainator.taxonomy import default_ncbi_taxonomy_path
+    from domainator.taxonomy.records import TAXONOMY_UNKNOWN_CHOICES
+
+    parser.add_argument("--include_taxids", nargs="+", default=None, type=int,
+                        help="Include these NCBI taxids and their descendants (OR).")
+    parser.add_argument("--exclude_taxids", nargs="+", default=None, type=int,
+                        help="Exclude these NCBI taxids and their descendants; exclusions take precedence.")
+    parser.add_argument("--taxonomy_expr", type=str, default=None,
+                        help="Boolean expression over taxid lineages using &, |, ~, and parentheses, "
+                             'e.g. "2 & ~1224". Mutually exclusive with include/exclude_taxids.')
+    parser.add_argument("--taxonomy_unknown", type=str, default="exclude", choices=TAXONOMY_UNKNOWN_CHOICES,
+                        help="Unresolved taxonomy: exclude (default), include, evaluate against an empty "
+                             "lineage, or error. With ~2, exclude rejects unlabeled candidates; evaluate "
+                             "and include allow them. Only active with taxonomy criteria. Not inverted.")
+    parser.add_argument("--ncbi_taxonomy_path", type=str, default=default_ncbi_taxonomy_path(),
+                        help="NCBI taxonomy database directory; downloaded if missing and filtering is active.")
+    parser.add_argument("--taxonomy_update", action="store_true",
+                        help="Check for an updated taxonomy database when filtering is active.")
+
+
+def taxonomy_from_args(params):
+    """Load taxonomy only when criteria activate filtering."""
+    from domainator.errors import InputError
+    from domainator.taxonomy import NCBITaxonomy
+    from domainator.taxonomy.records import taxonomy_active
+
+    expression = params.taxonomy_expr.strip() if params.taxonomy_expr else None
+    if expression and (params.include_taxids or params.exclude_taxids):
+        raise InputError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
+    if not taxonomy_active(params.include_taxids, params.exclude_taxids, expression):
+        return None
+    return NCBITaxonomy(params.ncbi_taxonomy_path, params.taxonomy_update)
+
+
 def add_switch(parser, name: str, help: str, *, default: bool, negative_help: str):
     """Add ``--<name>`` and ``--no_<name>``, which set the same boolean ``<name>``."""
     parser.add_argument(f"--{name}", dest=name, action="store_true", default=default, help=help)

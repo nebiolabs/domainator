@@ -28,6 +28,9 @@ from domainator.locations import slice_record_from_location
 from domainator.partial import codon_offset, fragment_status_allowed, get_fragment_status, PARTIAL_CHOICES
 import warnings
 from itertools import chain
+from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
+from domainator.taxonomy import NCBITaxonomy
+from domainator.taxonomy.records import compile_taxonomy_filter
 
 # TODO: account for different databases in domain selection
 # TODO: how to handle stop codons? Right now they are translated if they are covered by in the CDS annotation.
@@ -65,7 +68,10 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                      strand: Optional[str] = None, unannotated: bool = False, _from_domain_search: bool = False,
                      extract_all: bool = False, invert: bool = False, _domain_search_negatives: Optional[Set[str]] = None,
                      databases: Optional[Set[str]] = None, keep_name: bool = False, name_field: Optional[str] = None,
-                     partial: str = "include", has_search_hit: bool = False) -> Iterator[SeqRecord]:
+                     partial: str = "include", has_search_hit: bool = False,
+                     ncbi_taxonomy: Optional[NCBITaxonomy] = None,
+                     include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
+                     taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
     """
         Extracts all peptide sequences from each SeqRecord in records.
         Yields the extracted peptides as SeqRecord objects.
@@ -89,8 +95,17 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
             keep_name: if True, then keep the original name of the contig. If False, then the name will be the name of the CDS.
             partial: select CDSs by fragment status: "include" (default, all), "exclude" (skip fragments), or "only" (only fragments).
                 A CDS is a fragment if its location has '<' or '>' (see utils.get_fragment_status). Not affected by invert.
+            ncbi_taxonomy: database required when taxonomy criteria are supplied.
+            include_taxids: include these taxids and descendants (OR).
+            exclude_taxids: exclude these taxids and descendants, overriding inclusion.
+            taxonomy_expr: boolean lineage expression, exclusive with include/exclude_taxids.
+            taxonomy_unknown: unresolved taxonomy policy: exclude (default), include,
+                evaluate against an empty lineage, or error. Taxonomy is resolved on the
+                original CDS, before translation, and is not affected by invert.
     """
     check_annotation_type(annotation_type)
+    taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
+                                              taxonomy_expr, taxonomy_unknown)
     
     # TODO: if fasta_out is set, we can skip all the annotation propagation, because it won't be used. This should speed things up for that case.
     
@@ -138,6 +153,8 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
 
             if keep and partial != "include" and not fragment_status_allowed(get_fragment_status(cds.feature), partial):
                 keep = False
+            if keep and taxonomy_filter is not None:
+                keep = taxonomy_filter.matches(contig, cds.feature)
 
             if keep:
                 if keep_cds_feature:
@@ -189,6 +206,7 @@ def build_parser():
     add_input(parser, 'Genbank filenames.')
 
     add_seq_outputs(parser)
+    add_taxonomy_filters(parser)
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only look for peptides on contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -277,6 +295,11 @@ def main(argv):
                     keep_name = params.keep_name,
                     name_field = params.name_field,
                     partial = params.partial,
+                    ncbi_taxonomy=taxonomy_from_args(params),
+                    include_taxids=params.include_taxids,
+                    exclude_taxids=params.exclude_taxids,
+                    taxonomy_expr=params.taxonomy_expr,
+                    taxonomy_unknown=params.taxonomy_unknown,
                     )
 
     write_seq_outputs(extracted_peptides_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

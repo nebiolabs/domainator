@@ -132,6 +132,11 @@ merge listed at threshold `T` becomes visible at the next lower threshold.
 
 ## Recipe 1 — annotate, then get a structured summary
 
+Annotation tools (`domainate`, `structure_domainate`) retain every input record and
+annotate hits. Use `domain_search` / `structure_search` to select hits instead;
+`--add_annotations` includes Domainator annotations alongside search best-hit features.
+The annotation tools do not accept `--hits_only` or `--no_annotations`.
+
 ```bash
 domainator domainate -i genomes.gb -r pfam.hmm -o annotated.gb --max_overlap 0.6
 domainator summary_report -i annotated.gb --json_out summary.json
@@ -141,6 +146,33 @@ domainator enum_report -i annotated.gb --by contig --columns architecture length
 `summary.json` gives dataset-level domain frequencies and (with `--taxonomy`)
 taxonomic breakdown; `contigs.ndjson` gives one line per contig with its domain
 architecture — filter/aggregate it with any JSON tooling.
+
+### Taxonomy-restricted extraction
+
+All three `extract_*` tools, `select_by_cds`, `select_by_contig`, and `domain_search`
+accept the same taxonomy criteria. The input is still the file being edited:
+
+```bash
+# Extract peptides whose original CDS belongs to Bacteria but not clade 1224.
+domainator extract_peptides -i annotated.gb --taxonomy_expr "2 & ~1224" -o peptides.gb
+# Do not admit unlabeled proteins just because the expression is negated.
+domainator extract_domains -i annotated_proteins.gb --taxonomy_expr "~2" -o nonbacterial.gb
+# For annotation workflows, select whole records before domainate.
+domainator select_by_contig -i genomes.gb --include_taxids 2 -o bacteria.gb
+domainator domainate -i bacteria.gb -r pfam.hmm -o annotated_bacteria.gb
+```
+
+`--taxonomy_unknown exclude` is the default: missing, unidentified, deleted, unknown
+IDs, and uncovered regions are rejected with active criteria. `evaluate` explicitly
+uses an empty lineage (allowing unlabeled candidates for `~2`); `include` bypasses
+the taxonomy gate for unresolved candidates, and `error` stops on them. None proves
+that a missing label is biologically outside an excluded clade.
+
+Taxonomy is resolved on the original CDS/domain anchor before extension or translation.
+The longest source covering all anchor parts wins. Expanded neighborhoods can include
+other taxa. `--invert` does not invert taxonomy. Protein `extract_unannotated` and
+`select_by_contig` use whole-record taxonomy. No criteria means no taxonomy filtering
+or database loading; use `--ncbi_taxonomy_path` to select an existing offline database.
 
 ## Recipe 2 — build a similarity network and navigate it
 

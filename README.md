@@ -47,6 +47,13 @@ Please use our [discussions page](https://github.com/nebiolabs/domainator/discus
 
 # Overview and key concepts
 
+Annotation tools (`domainate`, `structure_domainate`) annotate and retain every input
+record. Search tools (`domain_search`, `structure_search`) select hits. The three
+`extract_*` tools, `select_by_cds`, `select_by_contig`, and `domain_search` share
+taxonomy criteria; unresolved taxonomy is excluded by default, including with negated
+expressions. See [taxonomy migration and examples](MIGRATION.md#taxonomy-filtering-and-unresolved-labels)
+and [agent workflows](docs/agent_workflows.md#taxonomy-restricted-extraction).
+
 Domainator provides several dozen discrete, flexible programs that can be composed into a broad range of workflows via command line or python scripting. Domainator also treats HMM-profiles as first-class citizens, supporting subsetting of .hmm files and comparison of HMM-profiles, including the construction of profile similarity networks and trees.
 
 Domainator uses the GenBank file format as a carrier of both sequence and annotation data. Independence from a fixed set of sequence sources and the co-location of sequences and all their annotation data in a single file increases data portability and decreases complexity for end-users. Domainator can add functional annotations to sequences by comparison to protein HMM-profiles, protein sequences, nucleotide sequences, nucleotide HMMs, or infernal covariance models. Protein references are searched against CDSs or protein records, while nucleic-acid references are searched against whole nucleotide contigs. For example, in a single call to domainate, a set of genome or metagenome contigs can be annotated with hits to Pfam HMM-profiles, RFAM profiles, and hits to REBASE Gold Standard protein sequences at the same time.
@@ -379,4 +386,3 @@ Johnson, Sean R., Peter Weigele, Alexey Fomenkov, Andrew Ge, Anna Vincze, James 
  - Zhiyi Sun 
  - Andrew Ge
  - Yu-Cheng Lin
-

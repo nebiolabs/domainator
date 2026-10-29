@@ -19,12 +19,18 @@ from domainator.model import region_id, annotation_feature_types, feature_score,
 from Bio.SeqFeature import FeatureLocation
 from domainator.location_ops import inverted
 from Bio.SeqRecord import SeqRecord
+from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
+from domainator.taxonomy import NCBITaxonomy
+from domainator.taxonomy.records import compile_taxonomy_filter
 
 
 #TODO: better filtering of output records when input is nucleic acids. Use functions from domainator select_by_cds to extract CDSs first, then extract the domains from the individual CDSs.
 def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
                         keep_direction: bool = False, keep_name: bool = False, annotation_type: str = "domainator",
-                        databases: Optional[Set[str]] = None, largest: bool = False, min_length: Optional[int] = None) -> Iterator[SeqRecord]:
+                        databases: Optional[Set[str]] = None, largest: bool = False, min_length: Optional[int] = None,
+                        ncbi_taxonomy: Optional[NCBITaxonomy] = None,
+                        include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
+                        taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
     """Yield the regions of the proteins in ``records`` that have no domain annotation.
 
     Args:
@@ -41,16 +47,27 @@ def extract_unannotated(records: Iterable[SeqRecord], *, evalue: Optional[float]
         largest: yield only the largest unannotated region of each protein that is at least
             ``min_length`` long.
         min_length: yield only regions at least this long.
+        ncbi_taxonomy: database required when taxonomy criteria are supplied.
+        include_taxids: include these taxids and descendants (OR).
+        exclude_taxids: exclude these taxids and descendants, overriding inclusion.
+        taxonomy_expr: boolean lineage expression, exclusive with include/exclude_taxids.
+        taxonomy_unknown: unresolved taxonomy policy: exclude (default), include,
+            evaluate against an empty lineage, or error. Filters original protein records
+            before extracting gaps.
 
     Yields:
         The unannotated regions.
     """
     feature_types = annotation_feature_types(annotation_type)
+    taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
+                                              taxonomy_expr, taxonomy_unknown)
     databases = set(databases) if databases is not None else None
     for rec in records:
         hit_domains = list() #list of SeqFeatures
         if rec.annotations['molecule_type'] != "protein":
             raise ValueError("extract_unannotated currently only supports protein sequences.")
+        if taxonomy_filter is not None and not taxonomy_filter.matches(rec):
+            continue
         
         for feature in rec.features:
             if feature.type in feature_types:
@@ -105,6 +122,7 @@ def build_parser():
     add_input(parser, 'Genbank filenames.')
 
     add_seq_outputs(parser)
+    add_taxonomy_filters(parser)
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only extract regions from contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -163,6 +181,11 @@ def main(argv):
         keep_name = params.keep_name,
         annotation_type=params.annotation_type,
         databases=params.databases,
+        ncbi_taxonomy=taxonomy_from_args(params),
+        include_taxids=params.include_taxids,
+        exclude_taxids=params.exclude_taxids,
+        taxonomy_expr=params.taxonomy_expr,
+        taxonomy_unknown=params.taxonomy_unknown,
         largest=params.largest,
         min_length=params.min_length,
         )

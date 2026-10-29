@@ -29,6 +29,9 @@ from domainator.partial import fragment_status_allowed, cds_fragment_status, PAR
 from domainator.location_ops import circular_envelope, copy_location, overlap_size, stranded_end, stranded_start
 from typing import Tuple, Optional, Set, Iterable, Iterator
 from Bio.SeqRecord import SeqRecord
+from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
+from domainator.taxonomy import NCBITaxonomy
+from domainator.taxonomy.records import compile_taxonomy_filter
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
 #       https://www.ebi.ac.uk/interpro/search/ida/
 #TODO: add evalue or bitscore threshold for domains?
@@ -346,6 +349,9 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                   _domain_search_negatives: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
                   unannotated: bool = False, include_nucleic_acids: bool = False, partial: str = "include",
                   has_search_hit: bool = False,
+                  ncbi_taxonomy: Optional[NCBITaxonomy] = None,
+                  include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
+                  taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude",
                   ) -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` around the CDSs (or proteins) that are selected.
 
@@ -388,11 +394,20 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
         partial: select CDSs by fragment status: "include" (all, the default), "exclude" (skip
             fragments), or "only" (only fragments). A CDS is a fragment if its location has '<'
             or '>' (see partial.get_fragment_status). Not affected by invert.
+        ncbi_taxonomy: database required when taxonomy criteria are supplied.
+        include_taxids: include these taxids and descendants (OR).
+        exclude_taxids: exclude these taxids and descendants, overriding inclusion.
+        taxonomy_expr: boolean lineage expression, exclusive with include/exclude_taxids.
+        taxonomy_unknown: unresolved taxonomy policy: exclude (default), include, evaluate
+            against an empty lineage, or error. Applies to the focus CDS/hit, not the
+            expanded neighborhood; not affected by invert.
 
     Yields:
         SeqRecords of the selected regions.
     """ 
     check_annotation_type(annotation_type)
+    taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
+                                              taxonomy_expr, taxonomy_unknown)
     databases = set(databases) if databases is not None else None
 
     if cds_ids is not None:
@@ -459,6 +474,8 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
 
             if keep and partial != "include" and not fragment_status_allowed(cds_fragment_status(rec, cds.feature), partial):
                 keep = False
+            if keep and taxonomy_filter is not None:
+                keep = taxonomy_filter.matches(rec, cds.feature)
 
             if keep:
                 if feature_index is None:
@@ -548,6 +565,7 @@ def build_parser():
     add_input(parser, "GenBank files.")
 
     add_seq_outputs(parser)
+    add_taxonomy_filters(parser)
 
 
     parser.add_argument('--kb_range', type=float, default=None,
@@ -665,6 +683,11 @@ def main(argv):
         unannotated = params.unannotated,
         include_nucleic_acids = params.include_nucleic_acids,
         partial = params.partial,
+        ncbi_taxonomy=taxonomy_from_args(params),
+        include_taxids=params.include_taxids,
+        exclude_taxids=params.exclude_taxids,
+        taxonomy_expr=params.taxonomy_expr,
+        taxonomy_unknown=params.taxonomy_unknown,
         )
     with SeqOutputs(params.genbank_out, params.fasta_out) as outputs:
         outputs.write_all(deduplicate_and_pad(selected, dedup=params.dedup, pad=params.pad, anchor=params.anchor))

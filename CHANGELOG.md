@@ -11,6 +11,12 @@ documented, versioned file formats. Many options were renamed; [MIGRATION.md](MI
 lists every change from 0.x.
 
 ### Added
+- Shared taxonomy filters on extract_domains, extract_peptides, extract_unannotated,
+  and select_by_cds, consistent with select_by_contig and domain_search. CDS/domain
+  extraction filters original anchors, not expanded neighborhoods.
+- `--taxonomy_unknown {exclude,include,evaluate,error}` on these selection, extraction,
+  and sequence-search tools. The default excludes unresolved taxonomy even for
+  negated criteria such as `~2`; empty-lineage evaluation is an explicit opt-in.
 - `--has_search_hit` on select_by_cds, select_by_contig, extract_peptides, extract_domains,
   and rotate_contigs: an independent search-hit selection criterion that bypasses domain
   names, expressions, and database restrictions, honors quality cutoffs, and participates
@@ -126,6 +132,10 @@ lists every change from 0.x.
   is gray instead of failing.
 
 ### Removed
+- Taxonomy filters, `--hits_only`, and `--no_annotations` from domainate;
+  structure_domainate also drops the latter two. Their public Python functions
+  drop the corresponding keywords. Annotation tools retain every input record
+  and annotate hits; use the search tools for hit selection.
 - `partition_seqfile` and `partition_seqids` (domainate and domain_search partition their
   input themselves), and `--offset`/`--recs_to_read` (index the database with
   `domainator format_db --index` instead).

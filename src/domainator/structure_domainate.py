@@ -6,7 +6,8 @@ prebuilt foldseek database, aligns reference structures against them, and writes
 genbank file where every input chain is one record carrying Domainator features for the
 references that hit it.
 
-Every input record is written, whether or not it had hits, unless --hits_only is given.
+Every input record is annotated and written, whether or not it had hits.
+Use structure_search to select only matching records.
 Use domainator structure_search instead when searching a large database with a few references.
 
 References are aligned as the query and the input database as the target, so --evalue is
@@ -34,13 +35,13 @@ from domainator.output_guardrails import add_max_output_gb_argument, max_output_
 from Bio.SeqRecord import SeqRecord
 
 
-MITIGATION_OPTIONS = ["--hits_only", "--max_hits_per_cds", "-e/--evalue", "--no_annotations"]
+MITIGATION_OPTIONS = ["--max_hits_per_cds", "-e/--evalue"]
 
 
 def structure_domainate(input_values: List[str], *, references: List[str], aligner: structure_lib.StructureAligner,
                         evalue: float = 0.001, min_evalue: float = 0.0,
                         max_hits_per_cds: Optional[int] = None, max_overlap: float = 1.0, overlap_by_db: bool = False,
-                        hits_only: bool = False, no_annotations: bool = False, alignment_type: Optional[int] = None,
+                        alignment_type: Optional[int] = None,
                         metrics: Optional[List[str]] = None, max_seqs: Optional[int] = None, tmp_dir: Optional[str] = None,
                         keep_db: Optional[str] = None, database_name: Optional[str] = None,
                         hits_tsv_out: Optional[str] = None) -> Iterator[SeqRecord]:
@@ -56,8 +57,6 @@ def structure_domainate(input_values: List[str], *, references: List[str], align
         max_overlap: maximum fractional overlap between kept annotations. >= 1 disables
             overlap filtering.
         overlap_by_db: filter overlaps within each database rather than across all.
-        hits_only: write only records that had at least one hit.
-        no_annotations: do not write Domainator features (only meaningful with hits_only).
         alignment_type: the foldseek alignment type (None: the backend's default).
         metrics: extra structural metrics to compute and store as qualifiers.
         max_seqs: maximum hits the backend keeps per reference.
@@ -99,13 +98,11 @@ def structure_domainate(input_values: List[str], *, references: List[str], align
 
         for name, sequence, source_path in aligner.iter_sequences(input_db):
             record_hits = by_target.get(name)
-            if record_hits is None and hits_only:
-                continue
             record = structure_lib.build_protein_record(name, sequence, source_path)
             if record_hits:
                 domainate.add_protein_annotations(
                     record, record_hits, sys.maxsize if max_hits_per_cds is None else max_hits_per_cds, max_overlap,
-                    no_annotations, False, overlap_by_db)
+                    False, False, overlap_by_db)
             yield record
 
 
@@ -126,10 +123,6 @@ def build_parser():
                         help="maximum fraction of overlap allowed between annotations on one record. 1 disables overlap filtering.")
     parser.add_argument('--overlap_by_db', action='store_true', default=False,
                         help="filter overlapping annotations within each database independently, instead of across all databases.")
-    parser.add_argument('--hits_only', action='store_true', default=False,
-                        help="write only records that had at least one hit.")
-    parser.add_argument('--no_annotations', action='store_true', default=False,
-                        help="do not write Domainator features. Only meaningful together with --hits_only, where it selects hit records without annotating them.")
     parser.add_argument('--database_name', default=None, type=str,
                         help="value for the /database qualifier on the annotations. Defaults to the reference database or directory name.")
     parser.add_argument('--db_out', default=None, type=str,
@@ -148,9 +141,6 @@ def main(argv):
     params = parser.parse_args(argv)
     check_outputs(parser, params)
 
-    if params.no_annotations and not params.hits_only:
-        raise RuntimeError("--no_annotations only makes sense together with --hits_only, "
-                           "otherwise the output would carry no information at all.")
     if params.max_hits_per_cds is not None and params.max_hits_per_cds < 1:
         parser.error("--max_hits_per_cds must be at least 1. Leave it out to add every annotation.")
 
@@ -166,7 +156,6 @@ def main(argv):
         params.input, references=params.reference, aligner=aligner,
         evalue=params.evalue, min_evalue=params.min_evalue, max_hits_per_cds=params.max_hits_per_cds,
         max_overlap=params.max_overlap, overlap_by_db=params.overlap_by_db,
-        hits_only=params.hits_only, no_annotations=params.no_annotations,
         alignment_type=params.alignment_type, metrics=params.metrics,
         max_seqs=params.max_seqs, tmp_dir=params.tmp_dir, keep_db=params.db_out,
         database_name=params.database_name, hits_tsv_out=params.hits_tsv_out,

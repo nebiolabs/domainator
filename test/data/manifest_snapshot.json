@@ -171,35 +171,6 @@
    "type": "boolean"
   },
   {
-   "name": "include_taxids",
-   "flags": [
-    "--include_taxids"
-   ],
-   "kind": "value",
-   "type": "integer",
-   "multiple": true,
-   "required": false
-  },
-  {
-   "name": "exclude_taxids",
-   "flags": [
-    "--exclude_taxids"
-   ],
-   "kind": "value",
-   "type": "integer",
-   "multiple": true,
-   "required": false
-  },
-  {
-   "name": "taxonomy_expr",
-   "flags": [
-    "--taxonomy_expr"
-   ],
-   "kind": "value",
-   "type": "string",
-   "required": false
-  },
-  {
    "name": "partial",
    "flags": [
     "--partial"
@@ -212,24 +183,6 @@
     "exclude",
     "only"
    ]
-  },
-  {
-   "name": "ncbi_taxonomy_path",
-   "flags": [
-    "--ncbi_taxonomy_path"
-   ],
-   "kind": "path",
-   "type": "string",
-   "role": "directory",
-   "required": false
-  },
-  {
-   "name": "taxonomy_update",
-   "flags": [
-    "--taxonomy_update"
-   ],
-   "kind": "flag",
-   "type": "boolean"
   },
   {
    "name": "cpu",
@@ -253,22 +206,6 @@
    "name": "overlap_by_db",
    "flags": [
     "--overlap_by_db"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "hits_only",
-   "flags": [
-    "--hits_only"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "no_annotations",
-   "flags": [
-    "--no_annotations"
    ],
    "kind": "flag",
    "type": "boolean"
@@ -464,6 +401,21 @@
    "kind": "value",
    "type": "string",
    "required": false
+  },
+  {
+   "name": "taxonomy_unknown",
+   "flags": [
+    "--taxonomy_unknown"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include",
+    "evaluate",
+    "error"
+   ]
   },
   {
    "name": "ncbi_taxonomy_path",
@@ -975,22 +927,6 @@
    "name": "overlap_by_db",
    "flags": [
     "--overlap_by_db"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "hits_only",
-   "flags": [
-    "--hits_only"
-   ],
-   "kind": "flag",
-   "type": "boolean"
-  },
-  {
-   "name": "no_annotations",
-   "flags": [
-    "--no_annotations"
    ],
    "kind": "flag",
    "type": "boolean"
@@ -2003,6 +1939,68 @@
    "required": false
   },
   {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "taxonomy_unknown",
+   "flags": [
+    "--taxonomy_unknown"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include",
+    "evaluate",
+    "error"
+   ]
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
    "name": "contigs",
    "flags": [
     "--contigs"
@@ -2220,6 +2218,68 @@
    "required": false
   },
   {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "taxonomy_unknown",
+   "flags": [
+    "--taxonomy_unknown"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include",
+    "evaluate",
+    "error"
+   ]
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
    "name": "contigs",
    "flags": [
     "--contigs"
@@ -2433,6 +2493,68 @@
    "type": "string",
    "role": "output",
    "required": false
+  },
+  {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "taxonomy_unknown",
+   "flags": [
+    "--taxonomy_unknown"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include",
+    "evaluate",
+    "error"
+   ]
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
   },
   {
    "name": "contigs",
@@ -2951,6 +3073,68 @@
    "required": false
   },
   {
+   "name": "include_taxids",
+   "flags": [
+    "--include_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "exclude_taxids",
+   "flags": [
+    "--exclude_taxids"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "taxonomy_expr",
+   "flags": [
+    "--taxonomy_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "taxonomy_unknown",
+   "flags": [
+    "--taxonomy_unknown"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include",
+    "evaluate",
+    "error"
+   ]
+  },
+  {
+   "name": "ncbi_taxonomy_path",
+   "flags": [
+    "--ncbi_taxonomy_path"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "taxonomy_update",
+   "flags": [
+    "--taxonomy_update"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
    "name": "kb_range",
    "flags": [
     "--kb_range"
@@ -3449,6 +3633,21 @@
    "kind": "value",
    "type": "string",
    "required": false
+  },
+  {
+   "name": "taxonomy_unknown",
+   "flags": [
+    "--taxonomy_unknown"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include",
+    "evaluate",
+    "error"
+   ]
   },
   {
    "name": "ncbi_taxonomy_path",

@@ -189,7 +189,7 @@ Work happens on the `version_one` branch.
 | `hmmer_compare --cpu 0` crashes on `Pool(0)`; the default of 8 is inconsistent with other tools | `hmmer_compare.py:83,120` |
 | `get_domain_names(evalue=)` drops hits *better* than the threshold | `utils.py:799` |
 | A `KeyError` path prints the record to **stdout**, corrupting piped GenBank | `utils.py:946` |
-| `domainate(hits_only)`: the last batch is yielded in hit order, not input order; the membership test is O(n·h) on a list | `domainate.py:1272,1282` |
+| Historical hit-only ordering bug: the last batch used hit order rather than input order. Public hit-only options are now removed from domainate/structure_domainate; the private sequence-search engine retains stable ordering. | `domainate.py` private search engine |
 | A bare `except:` around `overlay` silently skips annotations (and catches `KeyboardInterrupt`) | `domainate.py:876,890` |
 | `_merge_intervals` is defined twice; the second shadows the first | `utils.py:1827,2394` |
 | `summary_report -o -` creates a file named `-` | `summary_report.py:730` |

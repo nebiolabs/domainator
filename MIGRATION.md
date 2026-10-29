@@ -45,6 +45,65 @@ used to `exit(1)` from library code (seq_dist's diamond errors) or raise `System
 
 ## Inputs and outputs
 
+### Annotation versus selection/search
+
+`domainate` and `structure_domainate` always annotate and retain every input record,
+including records without hits. Both remove `--hits_only` and `--no_annotations`,
+and the corresponding public Python keywords. `domainate` also removes
+`--include_taxids`, `--exclude_taxids`, `--taxonomy_expr`, `--ncbi_taxonomy_path`,
+and `--taxonomy_update`, and its public taxonomy-related Python keywords.
+
+Use `domain_search` or `structure_search` for hit-only output. Search output includes
+`Domain_Search` best-hit features by default; `--add_annotations` also adds `Domainator`
+features. Search defaults therefore are not byte-for-byte replacements for old
+annotation-tool hit-only output. For whole-contig sequence hits, also consider
+`domain_search --whole_contig`.
+
+To annotate only records from a clade, filter first:
+
+```bash
+domainator select_by_contig -i genomes.gb --include_taxids 2 -o bacteria.gb
+domainator domainate -i bacteria.gb -r pfam.hmm -o annotated.gb
+```
+
+### Taxonomy filtering and unresolved labels
+
+`extract_domains`, `extract_peptides`, `extract_unannotated`, `select_by_cds`,
+`select_by_contig`, and `domain_search` share include/exclude taxids, Boolean
+`--taxonomy_expr`, database setup options, and
+`--taxonomy_unknown {exclude,include,evaluate,error}`.
+
+The default **exclude** drops unresolved taxonomy, even for exclusion-only filters
+and negation. Missing labels, uncovered regions, unidentified taxid 32644, deleted
+taxids, and IDs absent from the local database are unresolved. Merged IDs use their
+valid replacement's taxonomy. This intentionally changes older filtering that could
+retain unidentified/deleted taxa under negation.
+
+For `--taxonomy_expr "~2"` (not Bacteria):
+
+| Candidate | exclude (default) | evaluate | include | error |
+|---|---|---|---|---|
+| Known bacterial protein | drop | drop | drop | drop |
+| Known archaeal protein | keep | keep | keep | keep |
+| Unlabeled protein, possibly bacterial | drop | keep | keep | error |
+
+`evaluate` evaluates unresolved taxonomy against an empty lineage: positive inclusion
+fails, while exclusion-only criteria/negation can pass. `include` always passes the
+taxonomy gate for unresolved candidates, even with positive inclusion. Neither option
+proves those candidates lie outside an excluded clade. `error` reports the unresolved
+candidate. Other selection criteria still apply with every policy. With no taxonomy
+criteria, the policy is inactive and no database is loaded.
+
+CDS/domain extraction resolves taxonomy on the original anchor before translation,
+extension, combination, or splicing. The longest source fully covering the anchor
+wins, not the narrowest source; a gappy source must cover every anchor part.
+Neighborhoods and extended domains may contain sequence from other taxa.
+`select_by_contig` and protein-only `extract_unannotated` filter whole records.
+Taxonomy restrictions are independent of `--invert`.
+
+`db_download` retains its existing compiled-membership filtering behavior; this change
+does not add an unknown-taxonomy option to downloads.
+
 **Nothing reads stdin or writes stdout unless asked to.** Use `-` as the path:
 `-i -` reads stdin and `-o -` writes stdout. `/dev/stdin` and `/dev/stdout` work too. Only one
 output can go to stdout at a time. A program given no output at all is an error.

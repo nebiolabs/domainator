@@ -37,7 +37,7 @@ from domainator.output_guardrails import add_max_output_gb_argument, max_output_
 from Bio.SeqRecord import SeqRecord
 
 
-MITIGATION_OPTIONS = ["--max_hits", "-e/--evalue", "--no_annotations"]
+MITIGATION_OPTIONS = ["--max_hits", "-e/--evalue"]
 
 
 def structure_search(input_values: List[str], *, references: List[str], aligner: structure_lib.StructureAligner,

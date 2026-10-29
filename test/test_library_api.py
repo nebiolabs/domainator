@@ -14,16 +14,18 @@ from domainator.cli.registry import TOOLS
 # an option (its dest), the plural of a repeatable one (references for -r/--reference), or
 # <dest>_handle (an open handle for that output).
 NOT_OPTIONS = {
-    "domainate": {"z", "ncbi_taxonomy", "allowed_taxids", "pre_parsed_references", "best_annotation", "max_hits_per_contig"},
+    "domainate": {"z", "pre_parsed_references", "best_annotation", "max_hits_per_contig"},
     "domain_search": {"z", "ncbi_taxonomy", "normalize_direction"},
     "structure_domainate": {"aligner", "keep_db"},
     "structure_search": {"aligner", "keep_db"},
     "clean_sequences": {"stats"},
     "color_genbank": {"color_feature"},
     "deduplicate_genbank": {"extra_args", "bin_paths", "add_count", "clusters"},
-    "extract_peptides": {"cds_ids", "keep_cds_feature", "cds_id_type", "extract_all", "_from_domain_search", "_domain_search_negatives"},
+    "extract_peptides": {"cds_ids", "keep_cds_feature", "cds_id_type", "extract_all", "_from_domain_search", "_domain_search_negatives", "ncbi_taxonomy"},
+    "extract_domains": {"ncbi_taxonomy"},
+    "extract_unannotated": {"ncbi_taxonomy"},
     "rotate_contigs": {"z", "pre_parsed_references"},
-    "select_by_cds": {"cds_ids", "normalize_direction", "_from_domain_search", "_domain_search_negatives"},
+    "select_by_cds": {"cds_ids", "normalize_direction", "_from_domain_search", "_domain_search_negatives", "ncbi_taxonomy"},
     "select_by_contig": {"ncbi_taxonomy"},
     "select_by_coord": {"coordinate_selections"},
     "structure_to_genbank": {"aligner"},

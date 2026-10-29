@@ -91,8 +91,11 @@ domainator structure_domainate -i my_structures/ -r reference_structures/ -o ann
 domainator plot_contigs -i annotated.gb --html_out annotated.html
 ```
 
-Every input chain is written, whether or not it had a hit. Add `--hits_only` to keep just
-the chains that matched.
+Every input chain is annotated and written, whether or not it had a hit.
+Use `structure_search` to keep only matching chains; add `--add_annotations` to
+include Domainator features as well as the Domain_Search best-hit feature.
+`structure_domainate` no longer accepts `--hits_only` or `--no_annotations`,
+in either its CLI or its public Python API.
 
 Because both databases are built from real structures they carry C-alpha coordinates, so the
 full range of foldseek alignment modes is available:
