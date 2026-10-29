@@ -354,7 +354,7 @@ def build_parser():
         parser.add_argument(f"--{option}_path", type=str, default=None,
                             help=f"path to the {program} executable, if it is not on the PATH.")
 
-    parser.add_argument("--identity", type=float, required=True, default=None,
+    parser.add_argument("--identity", "--id", dest="identity", type=float, required=True, default=None,
                         help="Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent.")
 
     labels = parser.add_mutually_exclusive_group(required=False)

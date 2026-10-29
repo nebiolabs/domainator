@@ -103,7 +103,18 @@ def test_deduplicate_genbank_usearch(shared_datadir):
         assert "pDONR201_4_1-4\tpDONR201_4_1 ; pDONR201_4_2 ; pDONR201_4_3 ; pDONR201_4_4" in cluster_table
         assert len(cluster_table) == 8
 
-def test_deduplicate_genbank_hash(shared_datadir):
+def test_deduplicate_genbank_identity_alias():
+    parser = deduplicate_genbank.build_parser()
+    args = ["-i", "input.gb", "-o", "output.gb"]
+    canonical = parser.parse_args(args + ["--identity", "0.9"])
+    alias = parser.parse_args(args + ["--id", "0.9"])
+    assert alias.as_dict() == canonical.as_dict()
+    assert alias.identity == 0.9
+    assert "id" not in alias.as_dict()
+
+
+@pytest.mark.parametrize("identity_flag", ["--identity", "--id"])
+def test_deduplicate_genbank_hash(shared_datadir, identity_flag):
     
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
@@ -111,7 +122,7 @@ def test_deduplicate_genbank_hash(shared_datadir):
         log = output_dir + "/deduplicate_out.log"
         cluster_table_out = output_dir + "/cluster_table.tsv"
         
-        deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), "--identity", "1", "--algorithm", "hash", "-o", out, "--prefix_count", "--log_out", log, "--cluster_tsv_out", cluster_table_out])
+        deduplicate_genbank.main(["-i", str(shared_datadir / "extract_peptides_test_2.gb"), identity_flag, "1", "--algorithm", "hash", "-o", out, "--prefix_count", "--log_out", log, "--cluster_tsv_out", cluster_table_out])
         assert Path(out).is_file()
         recs  = list(parse_seqfiles([out]))
         for rec in recs:

@@ -26,7 +26,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--cdhit_est_path` | PROGRAM |  | path to the cd-hit-est executable, if it is not on the PATH. |
 | `--usearch_path` | PROGRAM |  | path to the usearch executable, if it is not on the PATH. |
 | `--diamond_path` | PROGRAM |  | path to the diamond executable, if it is not on the PATH. |
-| `--identity` | NUMBER | required | Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent. |
+| `--identity`, `--id` | NUMBER | required | Identity threshold (between 0 and 1), passed to cd-hit as the -c parameter, to usearch as the -id parameter, or to diamond as --approx-id after converting to percent. |
 | `--prefix_count` |  |  | In the output genbank file, will prepend X- to the names of contigs, where X is the number of contigs from the original file collapsed into this centroid. |
 | `--suffix_count` |  |  | In the output genbank file, will append -X to the names of contigs, where X is the number of contigs from the original file collapsed into this centroid. |
 | `--cpu` | INTEGER | 0 | The number of threads to use for deduplication. 0: one per physical core. |

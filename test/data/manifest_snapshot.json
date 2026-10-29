@@ -1875,7 +1875,8 @@
   {
    "name": "identity",
    "flags": [
-    "--identity"
+    "--identity",
+    "--id"
    ],
    "kind": "value",
    "type": "number",
