@@ -10,13 +10,12 @@ Takes a domain-annotated genbank file and extracts regions of contigs based on c
 
 Specify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.
 
-If CDS names, domain names, a domain expression, unannotated, or has_search_hit is specified,
-selection logic is:
-
-    contigs & (cds_ids or domains or domain_expr or unannotated or has_search_hit) & strand & partial
-
-otherwise:
-    return every cds in contigs
+CDS names, domain names, domain expressions, unannotated, and search-hit presence
+are OR selectors. With no selectors, all eligible CDSs are selected.
+Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions.
+Invert negates only the combined selectors, never these restrictions. With no
+selectors, invert warns and is ignored. Restrictions apply to the focus CDS,
+not every feature in an expanded neighborhood.
 ```
 
 Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
@@ -45,13 +44,14 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--contigs_file` | FILE |  | text file containing names of contigs to extract from. |
 | `--cds` | STRING ... |  | Include CDSs with these names (additive with --domains) |
 | `--cds_file` | FILE |  | text file containing names of CDSs to include. |
+| `--name_field` | STRING |  | CDS qualifier to prefer for name matching, falling back to gene_id, locus_tag, gene, then protein_id. Does not change coordinate-based region IDs. |
 | `--domains` | STRING ... |  | Include domains with these names |
 | `--domains_file` | FILE |  | text file containing names of domains to include. |
 | `--domain_expr` | STRING |  | a boolean expression using operators & (AND), \| (OR), and ~(NOT), to specify a desired combination of domains |
 | `--databases` | STRING ... |  | Consider only domains from these databases when filtering by domain. default: all databases. |
 | `--strand` | {f,r} |  | Only extract regions around CDSs on the specified strand. |
 | `--partial` | {include,exclude,only} | include | Which CDSs to extract regions around, by fragment status. include: all. exclude: skip fragments. only: only fragments. A CDS is a fragment if its location has '<' or '>', or it has a /partial qualifier. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition or NON_TER features (UniProt text entries), or a CDS/Protein feature with '<' or '>' spanning it. Not affected by --invert. |
-| `--unannotated` |  |  | Select contigs with no domain annotations. |
+| `--unannotated` |  |  | Select CDSs with no domain annotations. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select CDSs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
 | `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
 | `--pad` |  |  | If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor. |
@@ -60,7 +60,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--dedup` | {none,id,sequence,sequence_rc} | id | Output uniqueness policy: none keeps all records; id drops repeated output IDs; sequence drops identical output sequences (ignoring case and terminal '*'); sequence_rc also collapses nucleotide reverse complements. The same ID must identify the same sequence, so sequence uniqueness also ensures unique IDs. Deduplication happens before padding. |
 | `--max_region_overlap` | NUMBER | 1.0 | the maximum fractional of overlap between any two output regions. If >= 1, then no overlap filtering will be done. Regions are output in a greedy fashion based on CDS start site. New regions are output if less than this fraction of them overlaps with any previously output region. |
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be considered when selecting CDSs. Default: no cutoff. |
-| `--invert` |  |  | Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs). |
+| `--invert` |  |  | Invert the combined CDS selectors, not contigs, strand, partial, or taxonomy. With no selectors, warn and ignore. |
 | `--include_nucleic_acids` |  |  | Include nucleic-acid annotations with no associated CDS (those with cds_id='.') when applying CDS selection criteria. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

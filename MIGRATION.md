@@ -190,6 +190,36 @@ as covered regions; it has no `--has_search_hit`. `filter_domains` also has no i
 search-hit selector: it filters the selected annotation types and preserves the others.
 See [annotation selection](docs/file_formats.md#selecting-annotation-sources-and-search-hits).
 
+### CDS and peptide selection
+
+`extract_peptides` now accepts `--domain_expr`, additive with CDS names, domain
+names, unannotated, and search-hit presence, just like `select_by_cds`. For example:
+
+```bash
+domainator extract_peptides -i annotated.gb --domain_expr "A & B & ~C" \
+  --fasta_out proteins.faa
+```
+
+Both tools now apply `--invert` only to the combined OR selectors. Strand is an
+independent restriction, like contig IDs, fragment status, and taxonomy. Previously,
+`--domains A --strand f --invert` could reinclude reverse-strand CDSs; it now selects
+only forward-strand CDSs without A. This is an intentional pre-v1 behavior correction.
+
+With no positive selectors, both CLI and library functions select all otherwise
+eligible CDSs. Inversion without selectors warns once and is ignored; strand,
+fragment-status, and taxonomy restrictions still apply. In particular,
+`extract_peptides(records)` now extracts eligible peptides without requiring the
+library-only `extract_all=True`. `select_by_cds(records, invert=True)` no longer
+silently selects nothing. Explicit empty selector sets remain different from `None`:
+an empty set selects nothing, or all eligible CDSs when inverted.
+
+`select_by_cds` now accepts `--name_field`, like `extract_peptides`. This field affects
+CDS name matching; on peptide extraction it also determines peptide IDs. Default
+name precedence has not changed: peptides prefer `protein_id`, while neighborhood
+selection prefers `gene_id`, then `locus_tag`. Specify the same name field in both
+tools when necessary. Neighborhood output IDs remain coordinate-based.
+See [the full selection contract](docs/file_formats.md#cds-selection-algebra-and-names).
+
 ## Program-specific changes
 
 Options not listed are unchanged.

@@ -2320,6 +2320,15 @@
    "required": false
   },
   {
+   "name": "domain_expr",
+   "flags": [
+    "--domain_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
    "name": "databases",
    "flags": [
     "--databases"
@@ -3234,6 +3243,15 @@
    "kind": "path",
    "type": "string",
    "role": "input",
+   "required": false
+  },
+  {
+   "name": "name_field",
+   "flags": [
+    "--name_field"
+   ],
+   "kind": "value",
+   "type": "string",
    "required": false
   },
   {

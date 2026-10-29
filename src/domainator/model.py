@@ -134,10 +134,18 @@ def get_cds_unique_name(feature):
         name_parts = ["_".join( (str(stranded_start_human_readable(p)), str(p.strand), str(stranded_end_human_readable(p))) ) for p in feature.location.parts]
         return " ".join(name_parts) # space so it can be split into multiple lines when writing genbank files
 
+def cds_name_precedence(name_field: Optional[str] = None, *,
+                        default: Optional[List[str]] = None) -> List[str]:
+    """Prefer a requested qualifier, retaining the tool's normal fallback order."""
+    fields = default if default is not None else ["gene_id", "locus_tag", "gene", "protein_id"]
+    return ([name_field] if name_field is not None else []) + [
+        field for field in fields if field != name_field
+    ]
+
+
 def get_cds_name(feature, precedence=None): #(contig_id, feature):
     if precedence is None:
-        precedence = ["gene_id", "locus_tag", "gene", "protein_id"]
-
+        precedence = cds_name_precedence()
     for p in precedence:
         if p in feature.qualifiers:
             return feature.qualifiers[p][0]

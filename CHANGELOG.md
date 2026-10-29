@@ -11,6 +11,9 @@ documented, versioned file formats. Many options were renamed; [MIGRATION.md](MI
 lists every change from 0.x.
 
 ### Added
+- `extract_peptides --domain_expr` for Boolean domain selection and
+  `select_by_cds --name_field` for explicit CDS name resolution, with matching
+  keyword-only library parameters. Existing default name precedence is preserved.
 - Shared taxonomy filters on extract_domains, extract_peptides, extract_unannotated,
   and select_by_cds, consistent with select_by_contig and domain_search. CDS/domain
   extraction filters original anchors, not expanded neighborhoods.
@@ -62,6 +65,9 @@ lists every change from 0.x.
   (`DOMAINATOR_MP_START_METHOD` overrides this). Domainator builds on free-threaded Python.
 
 ### Changed
+- Peptide and CDS-neighborhood selection now invert only the combined OR selectors,
+  never strand or other independent restrictions. With no selectors, both library
+  and CLI calls select all eligible CDSs; inversion warns and is ignored.
 - domain_search and select_by_cds replace deduplication switches with the single-choice
   `--dedup {none,id,sequence,sequence_rc}` policy. Their defaults remain
   none and id, respectively. Ranked searches retain the top `--max_hits` winners

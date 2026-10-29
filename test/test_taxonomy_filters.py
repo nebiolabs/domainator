@@ -134,6 +134,22 @@ def test_feature_taxonomy_precedes_extraction(taxonomy, tool):
     assert records[0].annotations["molecule_type"] == ("protein" if tool == "extract_peptides" else "DNA")
 
 
+@pytest.mark.parametrize("tool", ["extract_peptides", "select_by_cds"])
+@pytest.mark.parametrize("invert", [False, True])
+def test_taxonomy_only_selection_uses_core_defaults(taxonomy, tool, invert):
+    function = getattr(importlib.import_module(f"domainator.{tool}"), tool)
+    kwargs = {"ncbi_taxonomy": taxonomy, "include_taxids": [1423], "invert": invert}
+    if invert:
+        with pytest.warns(UserWarning, match="Invert supplied with no selection criteria") as caught:
+            records = list(function([mixed()], **kwargs))
+        assert len(caught) == 1
+    else:
+        records = list(function([mixed()], **kwargs))
+    assert [(r.id, len(r)) for r in records] == [
+        ("cds1", 20) if tool == "extract_peptides" else ("mixed_91:150", 60)
+    ]
+
+
 @pytest.mark.parametrize("tool", FEATURE_TOOLS)
 def test_boundary_unknown_and_inversion(taxonomy, tool):
     function = getattr(importlib.import_module(f"domainator.{tool}"), tool)

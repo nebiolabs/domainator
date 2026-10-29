@@ -4,13 +4,12 @@ Takes a domain-annotated genbank file and extracts regions of contigs based on c
 
 Specify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.
 
-If CDS names, domain names, a domain expression, unannotated, or has_search_hit is specified,
-selection logic is:
-
-    contigs & (cds_ids or domains or domain_expr or unannotated or has_search_hit) & strand & partial
-
-otherwise:
-    return every cds in contigs
+CDS names, domain names, domain expressions, unannotated, and search-hit presence
+are OR selectors. With no selectors, all eligible CDSs are selected.
+Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions.
+Invert negates only the combined selectors, never these restrictions. With no
+selectors, invert warns and is ignored. Restrictions apply to the focus CDS,
+not every feature in an expanded neighborhood.
 
 """
 from jsonargparse import ActionConfigFile
@@ -21,7 +20,7 @@ from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.expr import BooleanEvaluator
-from domainator.model import DomainatorCDS, get_non_domainator_features, region_id, check_annotation_type, get_dist_to_end, get_hit_best_score, get_dist_to_start, get_focus_strand, get_hit_names, get_hit_scores, set_dist_to_end, set_dist_to_start, set_focus_strand, set_hit_best_score
+from domainator.model import DomainatorCDS, cds_name_precedence, get_non_domainator_features, region_id, check_annotation_type, get_dist_to_end, get_hit_best_score, get_dist_to_start, get_focus_strand, get_hit_names, get_hit_scores, set_dist_to_end, set_dist_to_start, set_focus_strand, set_hit_best_score
 from domainator import DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.locations import FeatureIndex, pad_location, slice_record_from_location, circular_dist, WHERE_CHOICES
 from Bio.SeqFeature import FeatureLocation
@@ -32,6 +31,7 @@ from Bio.SeqRecord import SeqRecord
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.taxonomy import NCBITaxonomy
 from domainator.taxonomy.records import compile_taxonomy_filter
+import warnings
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
 #       https://www.ebi.ac.uk/interpro/search/ida/
 #TODO: add evalue or bitscore threshold for domains?
@@ -348,7 +348,7 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                   max_region_overlap: float = 1.0, strand: Optional[str] = None, _from_domain_search: bool = False,
                   _domain_search_negatives: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
                   unannotated: bool = False, include_nucleic_acids: bool = False, partial: str = "include",
-                  has_search_hit: bool = False,
+                  has_search_hit: bool = False, name_field: Optional[str] = None,
                   ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                   include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
                   taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude",
@@ -373,8 +373,8 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
             strand.
         evalue: ignore domains with an e-value above this (None: no cutoff).
         invert: invert the combined ``cds_ids``, ``domains``, ``domain_expr``, ``unannotated``
-            and ``has_search_hit``
-            selection (the ranges are still applied as usual).
+            and ``has_search_hit`` selection, not strand, partial, or taxonomy.
+            With no selectors, warn and ignore inversion.
         annotation_type: which annotations supply domain names: "domainator", "domain_search",
             or "all". Does not itself select CDSs.
         has_search_hit: also select CDSs marked as domain_search hits passing evalue, ignoring
@@ -383,6 +383,8 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
         max_region_overlap: the largest fraction of overlap allowed between two output regions
             (1 or more: no filter).
         strand: "f" or "r" to select only CDSs on that strand. None: both.
+        name_field: prefer this CDS qualifier for name matching, falling back to
+            gene_id, locus_tag, gene, then protein_id. Region IDs remain coordinate-based.
         _from_domain_search: internal (domain_search): select the CDSs recorded as hits on the
             record.
         _domain_search_negatives: internal (domain_search): with _from_domain_search, domain
@@ -418,10 +420,17 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
 
     if domain_expr is not None:
         expression_evaluator = BooleanEvaluator(domain_expr)
+    name_precedence = cds_name_precedence(name_field)
+    no_selectors = (cds_ids is None and domains is None and domain_expr is None
+                    and not has_search_hit and not _from_domain_search and not unannotated)
+    if no_selectors and invert:
+        warnings.warn("Invert supplied with no selection criteria. Invert will be ignored.")
+        invert = False
 
     for rec in records:
         # First make a list of all the focus CDSs, by index
-        cdss = DomainatorCDS.list_from_contig(rec, evalue, include_nucleic_acid_annotations=True) # _from_domain_search
+        cdss = DomainatorCDS.list_from_contig(rec, evalue, name_precedence=name_precedence,
+                                            include_nucleic_acid_annotations=True) # _from_domain_search
         cdss.sort(key=lambda x: stranded_start(x.feature.location)) #TODO: why is this stranded_start, not start?
         if max_region_overlap < 1.0:
             selected_locations = list()
@@ -438,7 +447,7 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                 if not has_search_hit or cds.domain_search_feature is None:
                     continue
             #If no selectors then keep every cds
-            if cds_ids is None and domains is None and domain_expr is None and not has_search_hit and (not _from_domain_search) and (not unannotated):
+            if no_selectors:
                 keep = True
             elif _from_domain_search:
                 if cds.index in hit_scores:
@@ -463,14 +472,14 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                 if has_search_hit and cds.domain_search_feature is not None:
                     keep = True
             
+            if invert:
+                keep = not keep
+
             if strand is not None:
                 if strand == "f" and cds.feature.location.parts[0].strand == -1: # if strand is forward, but the cds is on the reverse strand, then don't keep it
                     keep = False
                 elif strand == "r" and cds.feature.location.parts[0].strand != -1:
                     keep = False
-
-            if invert:
-                keep = not keep
 
             if keep and partial != "include" and not fragment_status_allowed(cds_fragment_status(rec, cds.feature), partial):
                 keep = False
@@ -594,6 +603,8 @@ def build_parser():
                         help="Include CDSs with these names (additive with --domains)")
     parser.add_argument('--cds_file', type=str, default=None,
                         help="text file containing names of CDSs to include.")
+    parser.add_argument('--name_field', type=str, default=None,
+                        help="CDS qualifier to prefer for name matching, falling back to gene_id, locus_tag, gene, then protein_id. Does not change coordinate-based region IDs.")
     parser.add_argument('--domains', type=str, default=None, nargs='+',
                         help="Include domains with these names") #TODO: add some way to specify the database of a domain
     parser.add_argument('--domains_file', type=str, default=None,
@@ -607,7 +618,7 @@ def build_parser():
     parser.add_argument('--strand', type=str, default=None, choices=["f", "r"], help="Only extract regions around CDSs on the specified strand.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which CDSs to extract regions around") + " Not affected by --invert.")
 
-    parser.add_argument('--unannotated', action='store_true', default=False, help="Select contigs with no domain annotations.")
+    parser.add_argument('--unannotated', action='store_true', default=False, help="Select CDSs with no domain annotations.")
 
     add_annotation_type(parser, help="Which annotations to select CDSs by.")
     add_has_search_hit(parser)
@@ -629,7 +640,7 @@ def build_parser():
                         help="the evalue cutoff (max) for domain annotations to be considered when selecting CDSs. Default: no cutoff.")
 
     parser.add_argument('--invert', action='store_true',
-                        help="Invert the CDS selection criteria. i.e. return CDSs that don't match the CDS selection criteria. (only applies to CDS selection, not neighborhoods or contigs).")
+                        help="Invert the combined CDS selectors, not contigs, strand, partial, or taxonomy. With no selectors, warn and ignore.")
 
     parser.add_argument('--include_nucleic_acids', action='store_true',
                         help="Include nucleic-acid annotations with no associated CDS (those with cds_id='.') when applying CDS selection criteria.")
@@ -667,6 +678,7 @@ def main(argv):
     selected = select_by_cds(
         parse_seqfiles(params.input, target_contigs), 
         cds_ids=selected_cdss, 
+        name_field=params.name_field,
         domains=selected_domains, 
         domain_expr=domain_expr, 
         cds_range=cds_range, 

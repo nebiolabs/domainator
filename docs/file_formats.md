@@ -124,6 +124,51 @@ To restrict search hits by database or name instead, use `--annotation_type doma
 as annotated when calculating the uncovered regions. `filter_domains` applies its filters
 to the chosen types and leaves other feature types unchanged.
 
+### CDS selection algebra and names
+
+`extract_peptides` and `select_by_cds` use the same CDS selection algebra in the CLI
+and Python API. CDS names, domain names, `domain_expr`, `unannotated`, and
+`has_search_hit` are additive OR selectors. Domain expressions are evaluated within
+each CDS, after annotation-source, database, and e-value filtering. For example,
+`--cds exceptional_gene --domain_expr "A & B"` selects the named CDS OR any CDS
+containing both domains. It does not require the named CDS to contain them.
+
+Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions:
+
+```text
+allowed_contig AND allowed_strand AND allowed_partial AND allowed_taxonomy
+    AND (matches_any_selector if not invert else NOT matches_any_selector)
+```
+
+With no selectors, all otherwise eligible CDSs are selected. `--invert` with no
+selectors warns once per operation and is ignored, including when only restrictions
+are supplied. Python callers distinguish absent selectors (`None`) from an explicit
+empty set, which matches no CDSs. The peptide library's `extract_all=True` overrides
+positive selectors, but never the independent restrictions. CLI contig restrictions
+are applied while reading input; library callers can prefilter their record iterable.
+
+For example, `--domains A --strand f --invert` selects only forward-strand CDSs
+without A. Opposite-strand CDSs cannot be reintroduced by inversion. Restrictions
+apply to the original focus CDS, not its neighbors; a neighborhood may contain CDSs
+on the other strand or sequence assigned to another taxon. Output direction
+normalization and `--keep_direction` are separate from strand selection.
+
+Both tools accept `--name_field` (Python: `name_field`) to prefer a CDS qualifier
+for matching `--cds`. If that qualifier is absent, the tool retains its normal
+fallback order:
+
+| Tool | Default name precedence |
+|---|---|
+| `extract_peptides` | `protein_id`, `gene_id`, `locus_tag`, `gene` |
+| `select_by_cds` | `gene_id`, `locus_tag`, `gene`, `protein_id` |
+
+If none is present, the shared resolver uses the CDS's unique ID. Peptide IDs use
+the resolved CDS name unless `--keep_name` requests the input contig ID.
+`select_by_cds --name_field` affects matching, not its coordinate-based output IDs.
+Existing default precedence is preserved; use the same explicit field in both tools
+when the input has multiple identifiers. Peptide extraction still skips pseudogenes;
+selector parity does not remove tool-specific eligibility rules.
+
 ### Qualifier reference
 
 Every qualifier holds one value. `.` means "not applicable" or "not known".
