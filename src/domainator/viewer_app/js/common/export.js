@@ -1,3 +1,54 @@
+    function entireContentExport() {
+        return document.getElementById('export-extent').value === 'entire';
+    }
+
+    function imageExportSuffix(extension, scaled = false) {
+        const scale = selectedPngScale();
+        return (entireContentExport() ? '_entire' : '_view') +
+            (scaled && scale > 1 ? '@' + scale + 'x' : '') + '.' + extension;
+    }
+
+    function validateImageExportSize(width, height, raster = false) {
+        if (![width, height].every(value => Number.isSafeInteger(value) && value > 0)) {
+            throw new Error('Invalid image dimensions: ' + width + ' x ' + height + '.');
+        }
+        // Bound bitmap allocation before asking the browser for hundreds of MB.
+        // Browsers with smaller canvas limits may still refuse encoding below this.
+        if (raster && (width > 32767 || height > 32767 || width * height > 64000000)) {
+            throw new Error('PNG is too large (' + width + ' x ' + height +
+                ' px; maximum side 32767 px and area 64 million pixels). Use SVG or a lower PNG resolution.');
+        }
+    }
+
+    async function runImageExport(action) {
+        try {
+            await action();
+        } catch (error) {
+            console.error(error);
+            setStatus('Image export failed: ' + error.message);
+        }
+    }
+
+    async function exportCanvasPNG(size, draw, suffix = imageExportSuffix('png')) {
+        const scale = selectedPngScale();
+        const width = Math.round(size.width * scale);
+        const height = Math.round(size.height * scale);
+        validateImageExportSize(width, height, true);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { throw new Error('Could not allocate PNG canvas. Use SVG or a lower PNG resolution.'); }
+        ctx.scale(scale, scale);
+        draw(ctx);
+        const blob = await new Promise((resolve, reject) => {
+            canvas.toBlob(value => value ? resolve(value) :
+                reject(new Error('Could not encode PNG (' + width + ' x ' + height +
+                    ' px). Use SVG or a lower PNG resolution.')), 'image/png');
+        });
+        triggerDownload(URL.createObjectURL(blob), exportBaseName() + suffix, true);
+    }
+
     function exportSelection() {
         const selected = Array.from(state.selectedNodeIndices).sort((left, right) => left - right);
         if (!state.bundle) {
@@ -35,4 +86,3 @@
         link.click();
         URL.revokeObjectURL(link.href);
     }
-

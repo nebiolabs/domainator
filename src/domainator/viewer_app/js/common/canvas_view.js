@@ -1,7 +1,7 @@
-    function worldToScreenPoint(x, y) {
+    function worldToScreenPoint(x, y, transform = state.viewTransform) {
         return {
-            x: (x * state.viewTransform.scale) + state.viewTransform.offsetX,
-            y: (y * state.viewTransform.scale) + state.viewTransform.offsetY,
+            x: (x * transform.scale) + transform.offsetX,
+            y: (y * transform.scale) + transform.offsetY,
         };
     }
 

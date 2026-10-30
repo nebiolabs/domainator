@@ -252,8 +252,7 @@
     // On-screen extent of a layout item's footprint. Lattice and rect items are boxes,
     // so their own width is the room available -- `radius` is a half-diagonal there and
     // would overstate it for a tall, narrow cluster.
-    function itemScreenExtent(item) {
-        const scale = state.viewTransform.scale;
+    function itemScreenExtent(item, scale = state.viewTransform.scale) {
         if (item.shape === 'lattice' || item.shape === 'rect') {
             return {width: (item.x1 - item.x0) * scale, height: (item.y1 - item.y0) * scale};
         }
@@ -261,8 +260,8 @@
         return {width: diameter, height: diameter};
     }
 
-    function clusterCountLabelFits(text, item) {
-        const extent = itemScreenExtent(item);
+    function clusterCountLabelFits(text, item, scale = state.viewTransform.scale) {
+        const extent = itemScreenExtent(item, scale);
         if (extent.height < CLUSTER_COUNT_LABEL_FONT + 4) {
             return false;
         }
@@ -345,9 +344,11 @@
         // every draw call. Defaults render to the on-screen canvas.
         const clusterContext = ctx;
         const clusterCanvas = {width: viewWidth, height: viewHeight};
+        const transform = options.transform || state.viewTransform;
+        const toScreen = (x, y) => worldToScreenPoint(x, y, transform);
         // Every pan and zoom ends in a repaint. An export repaints the same transform,
         // so refreshing the box then too is harmless.
-        updateZoomLevelControl();
+        if (options.interactive !== false) { updateZoomLevelControl(); }
         clusterContext.clearRect(0, 0, clusterCanvas.width, clusterCanvas.height);
         clusterContext.fillStyle = '#ffffff';
         clusterContext.fillRect(0, 0, clusterCanvas.width, clusterCanvas.height);
@@ -366,16 +367,16 @@
         const previewNodeOutlines = [];
         const previewBoundsPaths = [];
         const TAU = Math.PI * 2;
-        const drawScale = Math.max(state.viewTransform.scale, 1e-9);
+        const drawScale = Math.max(transform.scale, 1e-9);
 
         // World-space viewport bounds for culling (#4)
-        const worldMinX = (0 - state.viewTransform.offsetX) / drawScale;
-        const worldMaxX = (clusterCanvas.width - state.viewTransform.offsetX) / drawScale;
-        const worldMinY = (0 - state.viewTransform.offsetY) / drawScale;
-        const worldMaxY = (clusterCanvas.height - state.viewTransform.offsetY) / drawScale;
+        const worldMinX = (0 - transform.offsetX) / drawScale;
+        const worldMaxX = (clusterCanvas.width - transform.offsetX) / drawScale;
+        const worldMinY = (0 - transform.offsetY) / drawScale;
+        const worldMaxY = (clusterCanvas.height - transform.offsetY) / drawScale;
 
         clusterContext.save();
-        clusterContext.translate(state.viewTransform.offsetX, state.viewTransform.offsetY);
+        clusterContext.translate(transform.offsetX, transform.offsetY);
         clusterContext.scale(drawScale, drawScale);
 
         state.splitLinks.forEach(link => {
@@ -523,7 +524,7 @@
                 }
                 if (collectDotLabels && !dotLabelsOverflow &&
                     dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {
-                    if (dot.radius * state.viewTransform.scale < MIN_LABELED_DOT_SCREEN_RADIUS) {
+                    if (dot.radius * drawScale < MIN_LABELED_DOT_SCREEN_RADIUS) {
                         // Sub-pixel dot: a label beside it would point at nothing visible.
                     } else if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {
                         dotLabelsOverflow = true;
@@ -567,18 +568,18 @@
             previewBoundsPaths.forEach(item => {
                 clusterContext.beginPath();
                 if (item.shape === 'rect') {
-                    const topLeft = worldToScreenPoint(item.x0, item.y0);
-                    const bottomRight = worldToScreenPoint(item.x1, item.y1);
+                    const topLeft = toScreen(item.x0, item.y0);
+                    const bottomRight = toScreen(item.x1, item.y1);
                     clusterContext.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
                 } else {
-                    const center = worldToScreenPoint(item.x, item.y);
-                    clusterContext.arc(center.x, center.y, (item.radius * state.viewTransform.scale) + 3, 0, TAU);
+                    const center = toScreen(item.x, item.y);
+                    clusterContext.arc(center.x, center.y, (item.radius * drawScale) + 3, 0, TAU);
                 }
                 clusterContext.stroke();
             });
             previewNodeOutlines.forEach(outline => {
-                const screenPoint = worldToScreenPoint(outline.x, outline.y);
-                const screenRadius = Math.max(4, (outline.radius * state.viewTransform.scale) + 3.4);
+                const screenPoint = toScreen(outline.x, outline.y);
+                const screenRadius = Math.max(4, (outline.radius * drawScale) + 3.4);
                 clusterContext.beginPath();
                 clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, TAU);
                 clusterContext.stroke();
@@ -589,8 +590,8 @@
         if (selectedNodeOutlines.length > 0) {
             clusterContext.save();
             selectedNodeOutlines.forEach(outline => {
-                const screenPoint = worldToScreenPoint(outline.x, outline.y);
-                const screenRadius = Math.max(3, (outline.radius * state.viewTransform.scale) + 1.6);
+                const screenPoint = toScreen(outline.x, outline.y);
+                const screenRadius = Math.max(3, (outline.radius * drawScale) + 1.6);
                 clusterContext.beginPath();
                 clusterContext.arc(screenPoint.x, screenPoint.y, screenRadius, 0, TAU);
                 if (outline.faint) {
@@ -614,10 +615,10 @@
                     return;
                 }
                 const text = formatValue(link.threshold);
-                if (!edgeScoreLabelFits(text, anchor.length * state.viewTransform.scale)) {
+                if (!edgeScoreLabelFits(text, anchor.length * drawScale)) {
                     return;
                 }
-                const point = worldToScreenPoint(anchor.x, anchor.y);
+                const point = toScreen(anchor.x, anchor.y);
                 drawBadge(clusterContext, text,
                     point.x + (anchor.normalX * EDGE_SCORE_LABEL_OFFSET),
                     point.y + (anchor.normalY * EDGE_SCORE_LABEL_OFFSET));
@@ -632,15 +633,15 @@
             clusterContext.textAlign = 'center';
             clusterContext.textBaseline = 'middle';
             state.visibleLayout.forEach(item => {
-                const screenPoint = worldToScreenPoint(item.x, item.y);
-                const screenRadius = item.radius * state.viewTransform.scale;
+                const screenPoint = toScreen(item.x, item.y);
+                const screenRadius = item.radius * drawScale;
                 if (screenPoint.x + screenRadius < 0 || screenPoint.x - screenRadius > clusterCanvas.width ||
                     screenPoint.y + screenRadius < 0 || screenPoint.y - screenRadius > clusterCanvas.height) {
                     return;
                 }
                 const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
                 const text = component.size.toLocaleString();
-                if (!clusterCountLabelFits(text, item)) {
+                if (!clusterCountLabelFits(text, item, drawScale)) {
                     return;
                 }
                 clusterContext.fillText(text, screenPoint.x, screenPoint.y + 4);
@@ -669,12 +670,12 @@
                 if (!text) {
                     return;
                 }
-                const screenPoint = worldToScreenPoint(candidate.x, candidate.y);
+                const screenPoint = toScreen(candidate.x, candidate.y);
                 clusterContext.fillText(String(text).slice(0, 24), screenPoint.x, screenPoint.y);
             });
         }
 
-        if (state.selectionBox) {
+        if (state.selectionBox && options.interactive !== false) {
             const box = state.selectionBox;
             clusterContext.save();
             clusterContext.fillStyle = 'rgba(200, 85, 61, 0.10)';
@@ -686,7 +687,7 @@
             clusterContext.restore();
         }
 
-        if (state.layoutComputing) {
+        if (state.layoutComputing && options.interactive !== false) {
             const cx = clusterCanvas.width / 2;
             const cy = clusterCanvas.height / 2;
             clusterContext.save();
@@ -858,48 +859,68 @@
         };
     }
 
-    function exportClusterPNG() {
-        if (!state.bundle) {
-            return;
-        }
-        const scaleFactor = selectedPngScale();
-        // Render into an offscreen canvas scaled by the chosen factor so the PNG
-        // is a true high-resolution re-rasterization (not an upscaled snapshot).
-        // The view transform and logical dimensions are unchanged, so the image
-        // shows exactly the current view at higher pixel density. Rendering
-        // offscreen also keeps any transient selection box out of the export.
-        const target = document.createElement('canvas');
-        target.width = Math.round(clusterCanvas.width * scaleFactor);
-        target.height = Math.round(clusterCanvas.height * scaleFactor);
-        const targetContext = target.getContext('2d');
-        if (!targetContext) {
-            window.alert('Could not export PNG at ' + scaleFactor + '×; try a lower resolution.');
-            return;
-        }
-        targetContext.scale(scaleFactor, scaleFactor);
-        renderClusterView(targetContext, clusterCanvas.width, clusterCanvas.height, {preview: false});
-        target.toBlob(blob => {
-            if (!blob) {
-                // Browsers (notably Safari, ~16.7M px) refuse to encode an
-                // oversized canvas and hand back null. Tell the user instead of
-                // failing silently.
-                window.alert('The view is too large to export as a ' + scaleFactor +
-                    '× PNG (' + target.width + '×' + target.height + ' px). Try a lower resolution or zoom in.');
-                return;
+    function clusterExportSize() {
+        const size = {width: clusterCanvas.width, height: clusterCanvas.height, transform: {...state.viewTransform}};
+        if (entireContentExport()) {
+            if (state.layoutComputing) { throw new Error('Wait for the network layout to finish before exporting entire content.'); }
+            const bounds = clusterLayoutBounds();
+            if (bounds) {
+                const scale = state.viewTransform.scale;
+                const measurer = document.createElement('canvas').getContext('2d');
+                if (!measurer) { throw new Error('Could not measure network labels.'); }
+                let padding = 12;
+                const field = currentLabelField();
+                measurer.font = '12px Georgia';
+                for (const item of state.visibleLayout) {
+                    const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
+                    for (const dot of componentMemberLayout(component, item)) {
+                        if (!renderNodesEnabled() && !state.selectedNodeIndices.has(dot.memberIndex)) { continue; }
+                        bounds.minX = Math.min(bounds.minX, dot.x - dot.radius);
+                        bounds.minY = Math.min(bounds.minY, dot.y - dot.radius);
+                        bounds.maxX = Math.max(bounds.maxX, dot.x + dot.radius);
+                        bounds.maxY = Math.max(bounds.maxY, dot.y + dot.radius);
+                        if (field && renderNodesEnabled()) {
+                            const value = field === '__node_id__' ? nodeId(dot.memberIndex) : metadataValue(dot.memberIndex, field);
+                            padding = Math.max(padding, measurer.measureText(String(value ?? '').slice(0, 24)).width / 2 + 4);
+                        }
+                    }
+                }
+                measurer.font = EDGE_SCORE_LABEL_FONT + 'px Georgia';
+                for (const link of state.splitLinks) {
+                    for (const segment of renderedLinkSegments(link)) {
+                        bounds.minX = Math.min(bounds.minX, segment.startX, segment.endX);
+                        bounds.maxX = Math.max(bounds.maxX, segment.startX, segment.endX);
+                        bounds.minY = Math.min(bounds.minY, segment.startY, segment.endY);
+                        bounds.maxY = Math.max(bounds.maxY, segment.startY, segment.endY);
+                    }
+                    if (showEdgeScoresEnabled()) {
+                        padding = Math.max(padding, measurer.measureText(formatValue(link.threshold)).width / 2 +
+                            EDGE_SCORE_BADGE_PADDING / 2 + EDGE_SCORE_LABEL_OFFSET + 2, 20);
+                    }
+                }
+                size.width = Math.ceil((bounds.maxX - bounds.minX) * scale + 2 * padding);
+                size.height = Math.ceil((bounds.maxY - bounds.minY) * scale + 2 * padding);
+                size.transform = {scale, offsetX: padding - bounds.minX * scale, offsetY: padding - bounds.minY * scale};
             }
-            const href = URL.createObjectURL(blob);
-            const suffix = scaleFactor > 1 ? '_view@' + scaleFactor + 'x.png' : '_view.png';
-            triggerDownload(href, exportBaseName() + suffix, true);
-        }, 'image/png');
+        }
+        validateImageExportSize(size.width, size.height);
+        return size;
+    }
+
+    function exportClusterPNG() {
+        if (!state.bundle) { return; }
+        const size = clusterExportSize();
+        return exportCanvasPNG(size, ctx => renderClusterView(ctx, size.width, size.height,
+            {transform: size.transform, preview: false, interactive: false}), imageExportSuffix('png', true));
     }
 
     // Render the current cluster view to a standalone SVG document. Geometry is
     // baked into screen space (every point passed through worldToScreenPoint)
     // so the markup needs no transforms and matches the canvas pixel-for-pixel.
     // This mirrors renderClusterView(); keep the two in sync.
-    function buildClusterViewSVG() {
-        const width = clusterCanvas.width;
-        const height = clusterCanvas.height;
+    function buildClusterViewSVG(size = clusterExportSize()) {
+        const {width, height, transform} = size;
+        const toScreen = (x, y) => worldToScreenPoint(x, y, transform);
         const fmt = value => Math.round(value * 100) / 100;
         const parts = [];
         parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
@@ -913,11 +934,11 @@
         }
 
         const TAU = Math.PI * 2;
-        const drawScale = Math.max(state.viewTransform.scale, 1e-9);
-        const worldMinX = (0 - state.viewTransform.offsetX) / drawScale;
-        const worldMaxX = (width - state.viewTransform.offsetX) / drawScale;
-        const worldMinY = (0 - state.viewTransform.offsetY) / drawScale;
-        const worldMaxY = (height - state.viewTransform.offsetY) / drawScale;
+        const drawScale = Math.max(transform.scale, 1e-9);
+        const worldMinX = (0 - transform.offsetX) / drawScale;
+        const worldMaxX = (width - transform.offsetX) / drawScale;
+        const worldMinY = (0 - transform.offsetY) / drawScale;
+        const worldMaxY = (height - transform.offsetY) / drawScale;
 
         // Split links (edges). Collapsed paths go in their own dashed group, matching
         // renderClusterView.
@@ -931,8 +952,8 @@
             }
             let d = '';
             segments.forEach((segment, index) => {
-                const start = worldToScreenPoint(segment.startX, segment.startY);
-                const end = worldToScreenPoint(segment.endX, segment.endY);
+                const start = toScreen(segment.startX, segment.startY);
+                const end = toScreen(segment.endX, segment.endY);
                 if (index === 0) {
                     d += 'M' + fmt(start.x) + ' ' + fmt(start.y);
                 } else {
@@ -982,11 +1003,11 @@
             const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
             const members = componentMembers(item.componentId);
             const selectionState = componentSelectionState(members);
-            const center = worldToScreenPoint(item.x, item.y);
+            const center = toScreen(item.x, item.y);
             const screenRadius = item.radius * drawScale;
             const isLattice = item.shape === 'lattice';
             const isRect = item.shape === 'rect';
-            const rectTopLeft = isRect ? worldToScreenPoint(item.x0, item.y0) : null;
+            const rectTopLeft = isRect ? toScreen(item.x0, item.y0) : null;
             const rectWidth = isRect ? (item.x1 - item.x0) * drawScale : 0;
             const rectHeight = isRect ? (item.y1 - item.y0) * drawScale : 0;
             const boundsShape = (fillAttrs, strokeAttrs) => (isRect
@@ -1006,8 +1027,8 @@
                     }
                     let d = '';
                     const edge = (wx0, wy0, wx1, wy1) => {
-                        const a = worldToScreenPoint(wx0, wy0);
-                        const b = worldToScreenPoint(wx1, wy1);
+                        const a = toScreen(wx0, wy0);
+                        const b = toScreen(wx1, wy1);
                         d += 'M' + fmt(a.x) + ' ' + fmt(a.y) + 'L' + fmt(b.x) + ' ' + fmt(b.y);
                     };
                     for (const nodeIndex of members) {
@@ -1056,7 +1077,7 @@
                         bucket = [];
                         buckets.set(color, bucket);
                     }
-                    const dotCenter = worldToScreenPoint(dot.x, dot.y);
+                    const dotCenter = toScreen(dot.x, dot.y);
                     bucket.push({x: dotCenter.x, y: dotCenter.y, r: dot.radius * drawScale});
                 }
                 if (!selectionState.allSelected && state.selectedNodeIndices.has(dot.memberIndex)) {
@@ -1064,7 +1085,7 @@
                 }
                 if (collectDotLabels && !dotLabelsOverflow &&
                     dot.x >= worldMinX && dot.x <= worldMaxX && dot.y >= worldMinY && dot.y <= worldMaxY) {
-                    if (dot.radius * state.viewTransform.scale < MIN_LABELED_DOT_SCREEN_RADIUS) {
+                    if (dot.radius * drawScale < MIN_LABELED_DOT_SCREEN_RADIUS) {
                         // Sub-pixel dot: a label beside it would point at nothing visible.
                     } else if (dotLabelCandidates.length >= MAX_LABELED_DOTS) {
                         dotLabelsOverflow = true;
@@ -1094,8 +1115,8 @@
 
         if (selectedNodeOutlines.length > 0) {
             const outlineParts = selectedNodeOutlines.map(outline => {
-                const screenPoint = worldToScreenPoint(outline.x, outline.y);
-                const screenRadius = Math.max(3, (outline.radius * state.viewTransform.scale) + 1.6);
+                const screenPoint = toScreen(outline.x, outline.y);
+                const screenRadius = Math.max(3, (outline.radius * drawScale) + 1.6);
                 if (outline.faint) {
                     const fill = svgColorParts('rgba(30, 42, 47, 0.30)');
                     return '<circle cx="' + fmt(screenPoint.x) + '" cy="' + fmt(screenPoint.y) + '" r="' + fmt(screenRadius) +
@@ -1118,10 +1139,10 @@
                     return;
                 }
                 const text = formatValue(link.threshold);
-                if (!edgeScoreLabelFits(text, anchor.length * state.viewTransform.scale)) {
+                if (!edgeScoreLabelFits(text, anchor.length * drawScale)) {
                     return;
                 }
-                const point = worldToScreenPoint(anchor.x, anchor.y);
+                const point = toScreen(anchor.x, anchor.y);
                 const x = point.x + (anchor.normalX * EDGE_SCORE_LABEL_OFFSET);
                 const y = point.y + (anchor.normalY * EDGE_SCORE_LABEL_OFFSET);
                 // Measured here rather than estimated: the badge is being drawn, and
@@ -1141,15 +1162,15 @@
         // Node-count labels (one per bubble), under the same fit test as the canvas.
         if (showNodeCountsEnabled()) {
             state.visibleLayout.forEach(item => {
-                const screenPoint = worldToScreenPoint(item.x, item.y);
-                const screenRadius = item.radius * state.viewTransform.scale;
+                const screenPoint = toScreen(item.x, item.y);
+                const screenRadius = item.radius * drawScale;
                 if (screenPoint.x + screenRadius < 0 || screenPoint.x - screenRadius > width ||
                     screenPoint.y + screenRadius < 0 || screenPoint.y - screenRadius > height) {
                     return;
                 }
                 const component = state.bundle.views.ssn.hierarchy.nodes[item.componentId];
                 const text = component.size.toLocaleString();
-                if (!clusterCountLabelFits(text, item)) {
+                if (!clusterCountLabelFits(text, item, drawScale)) {
                     return;
                 }
                 parts.push('<text x="' + fmt(screenPoint.x) + '" y="' + fmt(screenPoint.y + 4) + '" font-size="' +
@@ -1174,7 +1195,7 @@
                 if (!text) {
                     return;
                 }
-                const screenPoint = worldToScreenPoint(candidate.x, candidate.y);
+                const screenPoint = toScreen(candidate.x, candidate.y);
                 parts.push('<text x="' + fmt(screenPoint.x) + '" y="' + fmt(screenPoint.y) + '" font-size="12" fill="#1e2a2f"' +
                     ' text-anchor="middle" dominant-baseline="central">' + escapeXml(String(text).slice(0, 24)) + '</text>');
             });
@@ -1191,7 +1212,7 @@
         const svg = buildClusterViewSVG();
         const blob = new Blob([svg], {type: 'image/svg+xml'});
         const href = URL.createObjectURL(blob);
-        triggerDownload(href, exportBaseName() + '_view.svg', true);
+        triggerDownload(href, exportBaseName() + imageExportSuffix('svg'), true);
     }
 
     function toggleSelectionForComponent(componentId) {
@@ -1349,4 +1370,3 @@
             updateMetadataTable();
         }
     }
-

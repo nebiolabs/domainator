@@ -670,8 +670,8 @@ def test_build_ssn_dvb_writes_static_html_shell():
 
         # Label level-of-detail is gated on each mark's on-screen size, not on a
         # single zoom threshold, and the canvas and SVG renderers share the rules.
-        assert 'function itemScreenExtent(item)' in html_content
-        assert 'function clusterCountLabelFits(text, item)' in html_content
+        assert 'function itemScreenExtent(item, scale = state.viewTransform.scale)' in html_content
+        assert 'function clusterCountLabelFits(text, item, scale = state.viewTransform.scale)' in html_content
         assert 'function edgeScoreLabelFits(text, linkScreenLength)' in html_content
         assert 'const MIN_LABELED_DOT_SCREEN_RADIUS' in html_content
         assert 'state.viewTransform.scale >= 0.11' not in html_content

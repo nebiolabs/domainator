@@ -18,6 +18,7 @@ scriptable, read-only companion see `domainator ssn_navigator` in the
 - [Selecting nodes](#selecting-nodes)
 - [Selection presets](#selection-presets)
 - [View Settings](#view-settings)
+- [Rooting trees](#rooting-trees)
 - [Colors](#colors)
 - [The Node Metadata table](#the-node-metadata-table)
 - [Editing metadata](#editing-metadata)
@@ -509,12 +510,65 @@ menu), and **TSV** — the numbers behind the picture, including the frequency t
 colors, the histogram's bin edges, the box plot's five-number summary and the ECDF's
 points.
 
+## Rooting trees
+
+Tree mode has three rooting buttons below the tree:
+
+- **Root at midpoint** places the root halfway along the longest leaf-to-leaf
+  path, using the stored branch lengths even when the display is a cladogram.
+  It requires at least two leaves, finite nonnegative lengths, and a positive
+  diameter.
+- **Root on selection** uses the selected group as the **outgroup**, placing the
+  root halfway along its boundary branch. Select exactly one complete clade
+  under the current root, or one leaf. Empty selections, the whole tree, and
+  partial or nonmonophyletic groups cannot be used. Collapsing a clade does not
+  change which leaves it contains.
+- **Restore original root** restores the original topology, branch lengths,
+  internal labels, and child order. Unlike **Reset view**, it changes the root
+  rather than the zoom and scroll.
+
+Rerooting preserves leaf-to-leaf distances, leaf metadata, colors, selections,
+presets, and the alignment's sequence mapping. Branch support follows its
+original split; internal labels stay with their vertices. Collapsed groups remain
+collapsed if they are still the same clades, and otherwise expand. The status
+line reports those expansions. Unary root stems are omitted when rerooting so
+they cannot become extra leaves; root-only annotations remain recoverable in the
+original-root snapshot rather than being reassigned.
+
+The root-relative **Cut tree at** slider resets to its left endpoint (0, with the
+cut line hidden), and vertical scroll returns to the top. Row height, alignment column width, and other display settings
+are kept. Previously filled metadata columns are not rewritten; fill cluster
+numbers again if you want a column for a new cut.
+
+Newick export and **Save session…** use the current rooted tree. Sessions also
+retain the original root, so **Restore original root** still works after reopening.
+
+**Swap children** exchanges the top and bottom **child subtrees** of the selected
+internal clade, leaving any middle children and the order inside each subtree
+unchanged. Select exactly one complete internal clade; selecting the entire tree
+swaps its root's children. Empty, partial, nonmonophyletic, and single-leaf
+selections cannot be used. The same action again swaps the subtrees back.
+
+Manual child order overrides ladderization at that node only; **Ladderize** remains
+enabled and still applies inside its subtrees. The alignment rows move with their
+leaves. Swaps do not change branch lengths, annotations, cluster assignments, or
+the selection, and are included in Newick and image exports and saved sessions.
+Rerooting retains manual order where the same clade and child subtrees survive;
+orders that no longer apply are cleared and reported.
+
+The **Cut tree at** slider shows its dashed marker only at interior positions,
+both on screen and in PNG/SVG exports. Either endpoint hides the marker. The
+**left endpoint (0) is the default** and puts all leaves in one cluster; the
+right endpoint means **no cut**, with one cluster per leaf. Hiding the marker
+does not change these clustering rules. Sessions preserve the slider position;
+files without a saved position open at the left endpoint.
+
 ## Exports
 
 | Button | Writes |
 | --- | --- |
-| **Export view PNG** + scale | The cluster canvas as a raster image, at 1×–8× screen resolution |
-| **Export view SVG** | The cluster canvas as vector art, for a figure |
+| **Export view PNG** + scale | The active network, tree/alignment, or projection as a raster image, at 1×–8× resolution |
+| **Export view SVG** | The active view as vector art, for a figure |
 | **Export chart PNG / SVG** | The split-event chart itself, at its current zoom, under the split chart |
 | **Export table TSV** | The displayed rows, plus a cluster number per node at the current threshold |
 | A column header's **Copy** | One column's displayed values, to the clipboard |
@@ -526,6 +580,30 @@ points.
 
 Every one of these goes through the browser's ordinary download flow, into whatever
 download directory it is configured to use — a page has no other way to write a file.
+
+**Image extent** controls both view image exports:
+
+- **Current viewport** (the default) exports the portion currently visible.
+- **Entire content** exports the complete current scene, including off-screen
+  content, at the current zoom/detail level. The image grows instead of shrinking
+  the scene to fit the viewport. In tree mode this includes every displayed row
+  and every alignment column, even after scrolling horizontally or vertically.
+  In projection mode it uses the currently chosen axis pair.
+
+Entire-content export keeps collapsed clades collapsed and respects network
+thresholds, filters, and display toggles. Existing label-density rules still
+apply; it does not force every node to have a label. Selections are included,
+but transient hover previews and drag boxes are not. Exporting does not move,
+zoom, scroll, or resize the live view. Entire-content filenames end in
+`_entire.svg` or `_entire.png` (with the network PNG's resolution suffix when
+applicable); viewport filenames are unchanged. The extent choice is saved in
+sessions, independently of chart and legend exports.
+
+Large scenes can produce very large images. PNG export refuses dimensions over
+32,767 pixels on either side or an area over 64 million pixels before allocating
+the bitmap. Browsers with smaller limits can also refuse encoding; the status
+line explains the failure rather than cropping or silently reducing resolution.
+Choose a lower PNG resolution, zoom out, or use SVG, which has no bitmap limit.
 
 Both PNG buttons follow the one **PNG resolution** selector in View Settings, and both
 re-rasterize the chart at that density rather than upscaling a screenshot, so a 4× export

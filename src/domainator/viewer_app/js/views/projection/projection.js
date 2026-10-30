@@ -44,11 +44,11 @@
         return Number.isFinite(radius) && radius > 0 ? radius : 4;
     }
 
-    function projectionPlotArea(width, height) {
+    function projectionPlotArea(width, height, margin = PROJECTION_MARGIN) {
         return {
-            left: PROJECTION_MARGIN.left, top: PROJECTION_MARGIN.top,
-            width: Math.max(10, width - PROJECTION_MARGIN.left - PROJECTION_MARGIN.right),
-            height: Math.max(10, height - PROJECTION_MARGIN.top - PROJECTION_MARGIN.bottom),
+            left: margin.left, top: margin.top,
+            width: Math.max(10, width - margin.left - margin.right),
+            height: Math.max(10, height - margin.top - margin.bottom),
         };
     }
 
@@ -74,9 +74,8 @@
     }
 
     // Functions from data to canvas pixels and back, for the current view.
-    function projectionScales(width, height) {
-        const projection = state.projection;
-        const area = projectionPlotArea(width, height);
+    function projectionScales(width, height, projection = state.projection, margin = PROJECTION_MARGIN) {
+        const area = projectionPlotArea(width, height, margin);
         const u = projection.unitsPerPixel;
         const x0 = projection.center.x - u * area.width / 2;
         const y1 = projection.center.y + u * area.height / 2;
@@ -120,13 +119,13 @@
         return Number(value.toPrecision(6)).toString();
     }
 
-    function drawProjection(ctx, width, height) {
+    function drawProjection(ctx, width, height, options = {}) {
         const projection = state.projection;
-        const scales = projectionScales(width, height);
+        const scales = projectionScales(width, height, options.view, options.margin);
         const {area} = scales;
         const radius = projectionPointRadius();
         const coloring = Boolean(colorInfo(currentColorField()));
-        const preview = presetPreviewNodeSet();
+        const preview = options.preview === false ? null : presetPreviewNodeSet();
         ctx.save();
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, width, height);
@@ -370,29 +369,61 @@
         renderProjectionView();
     }
 
+    function projectionExportSize() {
+        const rect = document.getElementById('projection-canvas').getBoundingClientRect();
+        const size = {width: rect.width, height: rect.height, options: {}};
+        if (entireContentExport()) {
+            const projection = state.projection;
+            const [xs, ys] = projectionPair().map(axis => projection.view.coords[axis]);
+            let [x0, x1, y0, y1] = [Infinity, -Infinity, Infinity, -Infinity];
+            xs.forEach((x, i) => {
+                x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+                y0 = Math.min(y0, ys[i]); y1 = Math.max(y1, ys[i]);
+            });
+            if (!xs.length) { x0 = x1 = y0 = y1 = 0; }
+            const measurer = document.createElement('canvas').getContext('2d');
+            if (!measurer) { throw new Error('Could not measure projection labels.'); }
+            measurer.font = '11px ' + VIEW_FONT;
+            let padX = Math.max(16, projectionPointRadius() + 4);
+            const padY = Math.max(16, projectionPointRadius() + 4);
+            const field = currentLabelField();
+            if (field && xs.length <= PROJECTION_MAX_LABELS) {
+                for (let i = 0; i < xs.length; i++) {
+                    const value = field === '__node_id__' ? nodeId(i) : metadataValue(i, field);
+                    padX = Math.max(padX, measurer.measureText(String(value ?? '')).width + projectionPointRadius() + 4);
+                }
+            }
+            const u = projection.unitsPerPixel;
+            const margin = {...PROJECTION_MARGIN};
+            for (const tick of niceProjectionTicks(y0 - padY * u, y1 + padY * u, 8)) {
+                margin.left = Math.max(margin.left, Math.ceil(measurer.measureText(formatProjectionTick(tick)).width + 12));
+            }
+            const axisWidth = Math.max(...projectionPair().map(axis => measurer.measureText(projection.view.axes[axis]).width));
+            size.width = Math.ceil(Math.max((x1 - x0) / u + padX * 2 + margin.left + margin.right, axisWidth + 8));
+            size.height = Math.ceil((y1 - y0) / u + padY * 2 + margin.top + margin.bottom);
+            size.options = {view: {center: {x: x0 / 2 + x1 / 2, y: y0 / 2 + y1 / 2}, unitsPerPixel: u},
+                margin, preview: false};
+        }
+        validateImageExportSize(Math.round(size.width), Math.round(size.height));
+        return size;
+    }
+
     function exportProjectionPNG() {
         if (!state.projection) { return; }
-        const rect = document.getElementById('projection-canvas').getBoundingClientRect();
-        const scale = selectedPngScale();
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(rect.width * scale);
-        canvas.height = Math.round(rect.height * scale);
-        const ctx = canvas.getContext('2d');
-        ctx.scale(scale, scale);
-        drawProjection(ctx, rect.width, rect.height);
-        canvas.toBlob(blob => triggerDownload(URL.createObjectURL(blob), exportBaseName() + '_view.png', true), 'image/png');
+        const size = projectionExportSize();
+        return exportCanvasPNG(size, ctx => drawProjection(ctx, size.width, size.height, size.options));
     }
 
     function buildProjectionSVG() {
-        const rect = document.getElementById('projection-canvas').getBoundingClientRect();
-        const ctx = createSvgContext(Math.round(rect.width), Math.round(rect.height));
-        drawProjection(ctx, rect.width, rect.height);
+        const size = projectionExportSize();
+        const ctx = createSvgContext(Math.round(size.width), Math.round(size.height));
+        drawProjection(ctx, size.width, size.height, size.options);
         return ctx.toSVG();
     }
 
     function exportProjectionSVG() {
         if (!state.projection) { return; }
-        triggerDownload(URL.createObjectURL(new Blob([buildProjectionSVG()], {type: 'image/svg+xml'})), exportBaseName() + '_view.svg', true);
+        triggerDownload(URL.createObjectURL(new Blob([buildProjectionSVG()], {type: 'image/svg+xml'})), exportBaseName() + imageExportSuffix('svg'), true);
     }
 
     function setupProjectionViewControls() {

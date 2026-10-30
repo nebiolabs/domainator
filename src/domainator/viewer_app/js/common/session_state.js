@@ -112,6 +112,7 @@
             colorBy: domValueField('view', 'color_by', 'color-by'),
             labelBy: domValueField('view', 'label_by', 'label-by'),
             exportPngScale: domValueField('view', 'export_png_scale', 'export-png-scale'),
+            exportExtent: domValueField('view', 'export_extent', 'export-extent'),
             viewTransform: {
                 section: 'view',
                 key: 'view_transform',

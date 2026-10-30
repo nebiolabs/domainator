@@ -109,6 +109,7 @@
             shared.colorBy,
             shared.labelBy,
             shared.exportPngScale,
+            shared.exportExtent,
             domCheckboxField('view', 'show_node_counts', 'show-node-counts'),
             domCheckboxField('view', 'show_edge_scores', 'show-edge-scores'),
             domCheckboxField('view', 'render_cluster_bounds', 'render-cluster-bounds'),

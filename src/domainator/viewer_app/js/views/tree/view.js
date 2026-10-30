@@ -51,6 +51,7 @@
             document.querySelectorAll('.tree-msa-control').forEach(element => { element.hidden = !tree.msa; });
             document.getElementById('msa-pane').hidden = !tree.msa;
             document.getElementById('tree-show-support').disabled = !tree.hasSupport;
+            document.getElementById('tree-cut').value = String(TREE_CUT_DEFAULT);
             document.getElementById('metadata-add-cluster-column').title =
                 'Number every leaf by the clade it is in when the tree is cut at the "Cut tree at" slider, largest clade first. Defaults to the name tree_cluster.';
         },
@@ -75,6 +76,20 @@
             shared.colorBy,
             shared.labelBy,
             shared.exportPngScale,
+            shared.exportExtent,
+            {
+                section: 'view',
+                key: 'tree_rooting',
+                get: () => ({original: treeTopology(state.tree.rootOriginal), location: state.tree.rootLocation}),
+                set: restoreTreeRootingState,
+            },
+            {
+                section: 'view',
+                key: 'tree_child_order',
+                get: () => Array.from(state.tree.childOrder, ([node, children]) => ({node, children: children.slice()}))
+                    .sort((left, right) => left.node - right.node),
+                set: restoreTreeChildOrder,
+            },
             {
                 // Collapsed clades by their node's place in the tree's arrays, which a session
                 // file carries along with the clades.
@@ -122,5 +137,7 @@
         resetView: treeResetView,
         updateSelectionControls: selectedCount => {
             document.getElementById('focus-selection').disabled = selectedCount === 0;
+            updateTreeRootControls();
+            updateTreeSwapControl();
         },
     };

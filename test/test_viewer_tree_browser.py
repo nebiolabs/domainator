@@ -17,6 +17,7 @@ from domainator import build_ssn, build_tree
 from domainator.colors import get_palette
 from domainator.data_matrix import DataMatrix
 from domainator.seqio import parse_seqfiles
+from domainator.viewer import _read_bundle
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -79,6 +80,7 @@ def msa_page(msa_html):
 
 def _leaf_point(page, name):
     """Where leaf `name`'s tip is on the screen, in client coordinates."""
+    page.locator("#tree-canvas").scroll_into_view_if_needed()
     return page.evaluate("""name => {
         const rect = document.getElementById('tree-canvas').getBoundingClientRect();
         const g = treeGeometry(rect.width, rect.height);
@@ -88,6 +90,7 @@ def _leaf_point(page, name):
 
 
 def _node_point(page, node):
+    page.locator("#tree-canvas").scroll_into_view_if_needed()
     return page.evaluate("""node => {
         const rect = document.getElementById('tree-canvas').getBoundingClientRect();
         const g = treeGeometry(rect.width, rect.height);
@@ -97,6 +100,17 @@ def _node_point(page, node):
 
 def _selected(page):
     return sorted(page.evaluate("Array.from(state.selectedNodeIndices).map(i => state.bundle.nodes[i])"))
+
+
+def _select_names(page, names):
+    page.evaluate("""names => {
+        state.selectedNodeIndices = new Set(names.map(name => state.bundle.nodes.indexOf(name)));
+        updateMetadataTable();
+    }""", names)
+
+
+def _leaf_order(page):
+    return page.evaluate("state.tree.layout.rowNode.map(node => nodeId(state.tree.treeToBundle[node]))")
 
 
 def _pixel(page, canvas_id, x, y):
@@ -186,6 +200,9 @@ def test_ladderize_puts_smaller_clades_first(page):
 
 
 def test_cut_fills_cluster_numbers_and_exports_them(page):
+    assert page.input_value("#tree-cut") == "0"
+    assert page.locator("#tree-show-cut-line").count() == 0
+    assert page.evaluate("state.bundle.nodes.map((_, i) => treeClusterNumbers().numberFor(i))") == [1] * 7
     page.evaluate("document.getElementById('tree-cut').value = 250; document.getElementById('tree-cut').dispatchEvent(new Event('input'))")
     assert page.text_content("#tree-cut-label") == "0.25"
     page.click("#metadata-panel-add")
@@ -339,3 +356,239 @@ def test_one_page_opens_network_and_tree_bundles(tmp_path, shared_datadir_module
         assert page.is_visible("#cluster-view") and not page.is_visible("#tree-canvas")
         assert page.locator("#metadata-table tbody tr").count() == 3
         assert page.pageerrors == []
+
+
+def test_reroot_controls_monophyly_collapse_and_restore(page):
+    original = page.evaluate("treeTopology(state.tree.view)")
+    assert not page.is_disabled("#tree-root-midpoint")
+    assert page.is_disabled("#tree-root-selection") and page.is_disabled("#tree-root-original")
+    page.evaluate("""() => {
+        const tree = state.tree;
+        tree.collapsed.add(tree.view.label.indexOf('clade_x'));
+        const c = tree.view.leaf_nodes[state.bundle.nodes.indexOf('C')];
+        tree.collapsed.add(tree.view.parent[c]);
+        state.selectedNodeIndices = new Set(['C', 'D'].map(name => state.bundle.nodes.indexOf(name)));
+        treeComputeLayout(); renderTreeView(); updateMetadataTable();
+        document.getElementById('tree-cut').value = '500';
+    }""")
+    assert not page.is_disabled("#tree-root-selection")
+    page.click("#tree-root-selection")
+    assert _selected(page) == ["C", "D"]
+    assert page.input_value("#tree-cut") == "0"
+    collapsed = page.evaluate("Array.from(state.tree.collapsed, node => treeCladeLeaves(node).map(nodeId).sort())")
+    assert collapsed == [["C", "D"]]
+    assert "Expanded 1" in page.text_content("#bundle-status")
+    assert page.evaluate("state.tree.view === state.bundle.views.tree")
+    assert page.evaluate("Array.from(state.tree.rootDistance).every(Number.isFinite)")
+    assert not page.is_disabled("#tree-root-original")
+    page.evaluate("""() => {
+        state.selectedNodeIndices = new Set(['A', 'C'].map(name => state.bundle.nodes.indexOf(name)));
+        updateMetadataTable();
+    }""")
+    assert page.is_disabled("#tree-root-selection")
+    page.click("#tree-root-original")
+    assert page.evaluate("treeTopology(state.tree.view)") == original
+    assert _selected(page) == ["A", "C"]
+    assert page.is_disabled("#tree-root-original")
+    assert page.pageerrors == []
+
+
+def test_reroot_session_retains_current_and_original_topology(msa_page):
+    page = msa_page
+    original = page.evaluate("treeTopology(state.tree.view)")
+    sequences = page.evaluate("state.tree.msa.sequences")
+    page.click("#tree-root-midpoint")
+    page.evaluate("""() => {
+        state.selectedNodeIndices = new Set([0]); updateMetadataTable();
+    }""")
+    page.click("#tree-root-selection")
+    rooted = page.evaluate("treeTopology(state.tree.view)")
+    assert rooted != original
+    with page.expect_download() as downloaded:
+        page.click("#save-session")
+    bundle = json.loads(gzip.open(downloaded.value.path()).read())
+    assert _read_bundle(downloaded.value.path())[1]["views"]["tree"] == bundle["views"]["tree"]
+    assert bundle["views"]["tree"]["parent"] == rooted["parent"]
+    assert bundle["app_state"]["view"]["tree_rooting"]["original"] == original
+    page.evaluate("bundle => installBundle(bundle)", bundle)
+    assert page.evaluate("treeTopology(state.tree.view)") == rooted
+    assert page.evaluate("state.tree.msa.sequences") == sequences
+    assert page.evaluate("Array.from(state.selectedNodeIndices)") == [0]
+    assert "skipped" not in page.text_content("#bundle-status")
+    page.click("#tree-root-original")
+    assert page.evaluate("treeTopology(state.tree.view)") == original
+    assert page.evaluate("state.tree.msa.sequences") == sequences
+    assert page.pageerrors == []
+
+
+def test_invalid_rooting_session_is_skipped_not_partially_applied(page):
+    original = page.evaluate("treeTopology(state.tree.view)")
+    note = page.evaluate("""() => applySessionState({view: {tree_rooting: {
+        original: treeTopology(state.tree.view), location: {a: 0, b: 9999, offset: 1}
+    }}})""")
+    assert "skipped 1 saved setting" in note
+    assert page.evaluate("treeTopology(state.tree.view)") == original
+    assert page.evaluate("state.tree.rootLocation") is None
+    assert page.pageerrors == []
+
+
+def test_entire_tree_export_keeps_collapsed_clades(page):
+    page.evaluate("""() => {
+        state.tree.collapsed.add(state.tree.view.label.indexOf('clade_x'));
+        treeComputeLayout(); renderTreeView();
+    }""")
+    page.select_option("#export-extent", "entire")
+    with page.expect_download() as downloaded:
+        page.click("#export-svg")
+    svg = downloaded.value.path().read_text()
+    assert ">C</text>" not in svg and ">D</text>" not in svg
+    assert "clade_x (4 leaves)</text>" in svg
+    assert page.evaluate("state.tree.collapsed.size") == 1
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("selection,enabled", [
+    ([], False), (["C"], False), (["A", "C"], False), (["C", "E", "F"], False),
+    (["C", "D"], True), (["C", "D", "E", "F"], True), (list("ABCDEFG"), True),
+])
+def test_swap_children_requires_one_internal_clade(page, selection, enabled):
+    _select_names(page, selection)
+    assert page.is_enabled("#tree-swap-children") is enabled
+    assert page.pageerrors == []
+
+
+def test_swap_moves_whole_subtrees_without_reversing_their_descendants(page):
+    original = page.evaluate("treeTopology(state.tree.view)")
+    _select_names(page, list("ABCDEFG"))
+    page.click("#tree-swap-children")
+    assert _leaf_order(page) == ["G", "C", "D", "E", "F", "A", "B"]
+    assert page.evaluate("treeTopology(state.tree.view)") == original
+    assert _selected(page) == list("ABCDEFG")
+    page.click("#tree-swap-children")
+    assert _leaf_order(page) == list("ABCDEFG")
+    assert page.pageerrors == []
+
+
+def test_swap_preserves_ladderization_inside_subtrees_and_middle_children(page):
+    page.check("#tree-ladderize")
+    before = _leaf_order(page)
+    _select_names(page, ["C", "D", "E", "F"])
+    page.click("#tree-swap-children")
+    assert page.is_checked("#tree-ladderize")
+    assert _leaf_order(page) == ["G", "A", "B", "C", "D", "F", "E"]
+    # F is the middle child and the C/D subtree has not been reversed.
+    with page.expect_download() as downloaded:
+        page.click("#export-newick")
+    assert downloaded.value.path().read_text().strip() == "((C:0.1,D:0.15)75:0.05,F:0.2,E:0.4)clade_x;"
+    page.click("#tree-swap-children")
+    assert _leaf_order(page) == before
+    assert page.pageerrors == []
+
+
+def test_swap_is_visible_in_newick_and_image_exports(page):
+    c = _leaf_point(page, "C")
+    d = _leaf_point(page, "D")
+    page.mouse.click(c["x"] + 15, c["y"])
+    page.mouse.click(d["x"] + 15, d["y"])
+    assert page.is_enabled("#tree-swap-children")
+    page.click("#tree-swap-children")
+    assert _leaf_order(page) == ["A", "B", "D", "C", "E", "F", "G"]
+    with page.expect_download() as downloaded:
+        page.click("#export-newick")
+    assert downloaded.value.path().read_text().strip() == "(D:0.15,C:0.1)75;"
+    page.select_option("#export-extent", "entire")
+    with page.expect_download() as downloaded:
+        page.click("#export-svg")
+    svg = downloaded.value.path().read_text()
+    assert svg.index(">D</text>") < svg.index(">C</text>")
+    assert page.pageerrors == []
+
+
+def test_swapped_alignment_rows_keep_their_sequences_and_descendant_order(msa_page):
+    page = msa_page
+    page.check("#tree-ladderize")
+    expected = page.evaluate("""() => {
+        const tree = state.tree;
+        const groups = tree.layout.displayChildren[0].map(child => tree.layout.rowNode
+            .filter(node => node >= child && node < tree.subtreeEnd[child]).map(node => nodeId(tree.treeToBundle[node])));
+        [groups[0], groups[groups.length - 1]] = [groups[groups.length - 1], groups[0]];
+        return groups.flat();
+    }""")
+    original = page.evaluate("Object.fromEntries(state.bundle.nodes.map((name, i) => [name, state.tree.msa.sequences[i]]))")
+    _select_names(page, list(original))
+    page.click("#tree-swap-children")
+    assert _leaf_order(page) == expected
+    assert page.is_checked("#tree-ladderize")
+    rows = page.evaluate("state.tree.layout.rowNode.map(node => [nodeId(state.tree.treeToBundle[node]), msaRowSequence(node)])")
+    assert all(sequence == original[name] for name, sequence in rows)
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("cut", [0, 250, 1000])
+def test_child_order_and_cut_position_round_trip_and_missing_defaults_left(page, cut):
+    _select_names(page, ["C", "D"])
+    page.click("#tree-swap-children")
+    page.evaluate("cut => { document.getElementById('tree-cut').value = cut; }", cut)
+    with page.expect_download() as downloaded:
+        page.click("#save-session")
+    bundle = json.loads(gzip.open(downloaded.value.path()).read())
+    assert bundle["app_state"]["view"]["tree_child_order"]
+    assert bundle["app_state"]["view"]["tree_cut"] == str(cut)
+    assert "tree_show_cut_line" not in bundle["app_state"]["view"]
+    page.evaluate("bundle => installBundle(bundle)", bundle)
+    assert _leaf_order(page) == ["A", "B", "D", "C", "E", "F", "G"]
+    assert page.input_value("#tree-cut") == str(cut)
+    assert "skipped" not in page.text_content("#bundle-status")
+    del bundle["app_state"]["view"]["tree_child_order"]
+    del bundle["app_state"]["view"]["tree_cut"]
+    page.evaluate("bundle => installBundle(bundle)", bundle)
+    assert _leaf_order(page) == list("ABCDEFG")
+    assert page.input_value("#tree-cut") == "0"
+    assert page.locator("#tree-show-cut-line").count() == 0
+    assert page.evaluate("state.tree.childOrder.size") == 0
+    assert page.pageerrors == []
+
+
+def test_retired_cut_visibility_session_field_is_skipped_without_losing_cut_position(page):
+    page.evaluate("""() => {
+        const bundle = JSON.parse(JSON.stringify(state.bundle));
+        bundle.app_state = collectSessionState();
+        bundle.app_state.view.tree_cut = '250';
+        bundle.app_state.view.tree_show_cut_line = false;
+        installBundle(bundle);
+    }""")
+    assert page.input_value("#tree-cut") == "250"
+    assert "tree_show_cut_line (unknown)" in page.text_content("#bundle-status")
+    assert page.locator("#tree-show-cut-line").count() == 0
+    assert 'stroke-dasharray="5 4"' in page.evaluate("buildTreeViewSVG()")
+    assert page.pageerrors == []
+
+
+def test_invalid_saved_child_order_is_skipped_atomically(page):
+    _select_names(page, ["C", "D"])
+    page.click("#tree-swap-children")
+    before = page.evaluate("Array.from(state.tree.childOrder)")
+    note = page.evaluate("""() => {
+        const [node, children] = Array.from(state.tree.childOrder)[0];
+        return applySessionState({view: {tree_child_order: [
+            {node, children}, {node: 0, children: [9999, 9999, 9999]}
+        ]}});
+    }""")
+    assert "skipped 1 saved setting" in note
+    assert page.evaluate("Array.from(state.tree.childOrder)") == before
+    assert page.pageerrors == []
+
+
+def test_reroot_remaps_valid_child_orders_and_reports_orders_that_no_longer_apply(page):
+    _select_names(page, ["C", "D"])
+    page.click("#tree-swap-children")
+    _select_names(page, ["G"])
+    page.click("#tree-root-selection")
+    assert page.evaluate("state.tree.childOrder.size") == 1
+    order = _leaf_order(page)
+    assert order.index("D") + 1 == order.index("C")
+    _select_names(page, ["C"])
+    page.click("#tree-root-selection")
+    assert page.evaluate("state.tree.childOrder.size") == 0
+    assert "Cleared 1 manual child order" in page.text_content("#bundle-status")
+    assert page.pageerrors == []

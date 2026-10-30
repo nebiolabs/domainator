@@ -70,7 +70,7 @@
         tree.scrollY = Math.max(0, Math.min(maxScroll, tree.scrollY));
     }
 
-    function treeGeometry(width, height) {
+    function treeGeometry(width, height, options = {}) {
         const tree = state.tree;
         const layout = tree.layout;
         const top = treeHeaderHeight();
@@ -84,24 +84,28 @@
             layout.rowNode.forEach(node => { longest = Math.max(longest, treeRowLabel(node).length); });
             labelWidth = Math.min(width * 0.45, longest * fontSize * 0.6 + 16);
         }
-        const treeWidth = Math.max(40, width - TREE_PADDING_LEFT - TREE_PADDING_RIGHT - labelWidth);
+        const treeWidth = options.treeWidth ?? Math.max(40, width - TREE_PADDING_LEFT - TREE_PADDING_RIGHT - labelWidth);
+        const left = options.left ?? TREE_PADDING_LEFT;
+        const scrollY = options.scrollY ?? tree.scrollY;
         const rowCount = layout.rowNode.length;
         return {
             width, height, top, viewHeight, rowHeight, labels, fontSize, treeWidth,
-            xOf: value => TREE_PADDING_LEFT + value / layout.maxX * treeWidth,
-            xPx: node => TREE_PADDING_LEFT + layout.x[node] / layout.maxX * treeWidth,
-            yPx: row => top + (row + 0.5) * rowHeight - tree.scrollY,
-            rowStart: Math.max(0, Math.floor(tree.scrollY / rowHeight) - 1),
-            rowEnd: Math.min(rowCount - 1, Math.ceil((tree.scrollY + viewHeight) / rowHeight) + 1),
+            xOf: value => left + value / layout.maxX * treeWidth,
+            xPx: node => left + layout.x[node] / layout.maxX * treeWidth,
+            yPx: row => top + (row + 0.5) * rowHeight - scrollY,
+            rowStart: Math.max(0, Math.floor(scrollY / rowHeight) - 1),
+            rowEnd: Math.min(rowCount - 1, Math.ceil((scrollY + viewHeight) / rowHeight) + 1),
+            msaScrollX: options.msaScrollX ?? tree.msaScrollX,
+            preview: options.preview !== false,
         };
     }
 
     // Per node: the color every leaf below it shares (null when they differ or nothing is
     // colored), how many of its leaves are selected, and how many are in the previewed preset.
-    function treeCladeSummaries() {
+    function treeCladeSummaries(showPreview = true) {
         const tree = state.tree;
         const coloring = Boolean(colorInfo(currentColorField()));
-        const preview = presetPreviewNodeSet();
+        const preview = showPreview ? presetPreviewNodeSet() : null;
         const color = new Array(tree.count).fill(null);
         const selected = new Int32Array(tree.count);
         const previewed = new Int32Array(tree.count);
@@ -209,7 +213,7 @@
 
         // Rows: a collapsed clade's wedge, a leaf's dot, the colors and the labels.
         const radius = Math.min(4, Math.max(1.2, rowHeight * 0.3));
-        const stripX = TREE_PADDING_LEFT + geometry.treeWidth + 6;
+        const stripX = geometry.xOf(layout.maxX) + 6;
         ctx.font = geometry.fontSize + 'px ' + VIEW_FONT;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
@@ -280,7 +284,7 @@
             ctx.strokeStyle = VIEW_INK;
             ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.moveTo(TREE_PADDING_LEFT, barY);
+            ctx.moveTo(geometry.xOf(0), barY);
             ctx.lineTo(geometry.xOf(length), barY);
             ctx.stroke();
             ctx.font = '11px ' + VIEW_FONT;
@@ -291,7 +295,7 @@
         }
 
         const cutX = treeCutX();
-        if (Number.isFinite(cutX)) {
+        if (Number.isFinite(cutX) && cutX > 0) {
             const x = geometry.xOf(cutX);
             ctx.strokeStyle = VIEW_ACCENT;
             ctx.lineWidth = 1.5;
@@ -318,21 +322,21 @@
         tree.msaScrollX = Math.max(0, Math.min(maxScroll, tree.msaScrollX));
     }
 
-    function msaColumnRange(width) {
+    function msaColumnRange(width, scrollX = state.tree.msaScrollX) {
         const columnWidth = msaColumnWidth();
         const length = state.tree.msa.length;
         return {
             columnWidth,
-            start: Math.max(0, Math.floor(state.tree.msaScrollX / columnWidth)),
-            end: Math.min(length - 1, Math.ceil((state.tree.msaScrollX + width) / columnWidth)),
-            xOf: column => column * columnWidth - state.tree.msaScrollX,
+            start: Math.max(0, Math.floor(scrollX / columnWidth)),
+            end: Math.min(length - 1, Math.ceil((scrollX + width) / columnWidth)),
+            xOf: column => column * columnWidth - scrollX,
         };
     }
 
     function drawMsa(ctx, geometry, width, summary) {
         const tree = state.tree;
         const {rowHeight, rowStart, rowEnd, top, height} = geometry;
-        const columns = msaColumnRange(width);
+        const columns = msaColumnRange(width, geometry.msaScrollX);
         const {columnWidth, start, end, xOf} = columns;
         const scheme = msaScheme();
         ctx.save();
@@ -345,7 +349,7 @@
         for (let row = rowStart - (rowStart % stride); row <= rowEnd; row += stride) {
             const node = tree.layout.rowNode[row];
             const sequence = msaRowSequence(node);
-            const y = top + row * rowHeight - tree.scrollY;
+            const y = geometry.yPx(row) - rowHeight / 2;
             const rowSpan = rowHeight * stride;
             if (sequence === null) {
                 ctx.fillStyle = '#fafafa';
@@ -467,9 +471,9 @@
     // ---- Exports ----
 
     // Both panes as they are shown, drawn onto `ctx` side by side.
-    function drawTreeViewExport(ctx, treeWidth, msaWidth, height) {
-        const summary = treeCladeSummaries();
-        const geometry = treeGeometry(treeWidth, height);
+    function drawTreeViewExport(ctx, treeWidth, msaWidth, height, options = {}) {
+        const summary = treeCladeSummaries(options.preview !== false);
+        const geometry = treeGeometry(treeWidth, height, options);
         drawTree(ctx, geometry, summary);
         if (msaWidth > 0) {
             ctx.save();
@@ -482,31 +486,54 @@
     function treeExportSize() {
         const treeRect = document.getElementById('tree-canvas').getBoundingClientRect();
         const msaRect = state.tree.msa ? document.getElementById('msa-canvas').getBoundingClientRect() : {width: 0};
-        return {treeWidth: treeRect.width, msaWidth: msaRect.width, height: treeRect.height};
+        const size = {treeWidth: treeRect.width, msaWidth: msaRect.width, height: treeRect.height, options: {}};
+        if (entireContentExport()) {
+            const tree = state.tree;
+            const geometry = treeGeometry(treeRect.width, treeRect.height);
+            const measurer = document.createElement('canvas').getContext('2d');
+            if (!measurer) { throw new Error('Could not measure tree labels.'); }
+            let labelWidth = TREE_COLOR_STRIP + 10;
+            if (geometry.labels) {
+                measurer.font = geometry.fontSize + 'px ' + VIEW_FONT;
+                for (const node of tree.layout.rowNode) {
+                    labelWidth = Math.max(labelWidth, measurer.measureText(treeRowLabel(node)).width + 24);
+                }
+            }
+            let left = TREE_PADDING_LEFT;
+            if (treeShowSupport() && tree.rowHeight >= TREE_SUPPORT_MIN_ROW) {
+                measurer.font = '9px ' + VIEW_FONT;
+                for (const node of tree.layout.visibleOrder) {
+                    const text = tree.view.label[node] || (tree.view.support[node] === null ? '' : formatTreeLength(tree.view.support[node]));
+                    left = Math.max(left, measurer.measureText(text).width + 8);
+                }
+            }
+            size.treeWidth = Math.ceil(left + geometry.treeWidth + labelWidth + TREE_PADDING_RIGHT);
+            measurer.font = '10px ' + VIEW_FONT;
+            size.msaWidth = tree.msa ? Math.ceil(tree.msa.length * msaColumnWidth() +
+                measurer.measureText(String(tree.msa.length)).width / 2 + 4) : 0;
+            size.height = Math.ceil(treeHeaderHeight() + tree.layout.rowNode.length * tree.rowHeight + TREE_PADDING_BOTTOM);
+            size.options = {treeWidth: geometry.treeWidth, left, scrollY: 0, msaScrollX: 0, preview: false};
+        }
+        size.width = size.treeWidth + size.msaWidth;
+        validateImageExportSize(Math.round(size.width), Math.round(size.height));
+        return size;
     }
 
     function exportTreePNG() {
         if (!state.tree) { return; }
-        const {treeWidth, msaWidth, height} = treeExportSize();
-        const scale = selectedPngScale();
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round((treeWidth + msaWidth) * scale);
-        canvas.height = Math.round(height * scale);
-        const ctx = canvas.getContext('2d');
-        ctx.scale(scale, scale);
-        drawTreeViewExport(ctx, treeWidth, msaWidth, height);
-        canvas.toBlob(blob => triggerDownload(URL.createObjectURL(blob), exportBaseName() + '_view.png', true), 'image/png');
+        const size = treeExportSize();
+        return exportCanvasPNG(size, ctx => drawTreeViewExport(ctx, size.treeWidth, size.msaWidth, size.height, size.options));
     }
 
     function buildTreeViewSVG() {
-        const {treeWidth, msaWidth, height} = treeExportSize();
+        const {treeWidth, msaWidth, height, options} = treeExportSize();
         const ctx = createSvgContext(Math.round(treeWidth + msaWidth), Math.round(height));
-        drawTreeViewExport(ctx, treeWidth, msaWidth, height);
+        drawTreeViewExport(ctx, treeWidth, msaWidth, height, options);
         return ctx.toSVG();
     }
 
     function exportTreeSVG() {
         if (!state.tree) { return; }
         const blob = new Blob([buildTreeViewSVG()], {type: 'image/svg+xml'});
-        triggerDownload(URL.createObjectURL(blob), exportBaseName() + '_view.svg', true);
+        triggerDownload(URL.createObjectURL(blob), exportBaseName() + imageExportSuffix('svg'), true);
     }

@@ -42,6 +42,7 @@
             shared.colorBy,
             shared.labelBy,
             shared.exportPngScale,
+            shared.exportExtent,
             {
                 // The data at the plot's center and the data units per pixel.
                 section: 'view',

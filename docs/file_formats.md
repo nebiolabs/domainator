@@ -765,6 +765,46 @@ app_state: {
 The view fields are the open view's own: the threshold and split-event cap of a network,
 the cut height and collapsed clades of a tree, the axes of a projection.
 
+All views can persist `view.export_extent`, either `"viewport"` (the default when
+absent) or `"entire"`. It controls view PNG/SVG exports, not charts or legends.
+
+Tree sessions can also carry `view.tree_rooting`:
+
+```python
+{
+  "original": {"parent": [...], "length": [...], "label": [...],
+               "support": [...], "leaf_nodes": [...]},
+  "location": None | {"node": int} | {"a": int, "b": int, "offset": float}
+}
+```
+
+`original` is the original preorder topology, without a duplicate alignment.
+`location` is either the original root (`null` in JSON), a vertex of that
+topology, or a point `offset` branch-length units from original vertex `a` toward
+its adjacent vertex `b`. Synthetic roots are regenerated, not accumulated.
+The ordinary `views.tree` arrays always contain the **current rooted tree**, so
+readers do not need `app_state` to interpret it. `tree_collapsed` indices refer to
+that current topology. The viewer validates the original topology and checks
+that its saved root regenerates the current arrays before accepting this
+optional restoration state; malformed state is skipped and reported. Sessions
+without this field treat their stored tree as the original.
+
+Tree sessions persist the cut slider position as `view.tree_cut`, defaulting to
+`"0"` (the left endpoint) when absent. Both endpoints hide the marker; only
+interior positions draw it, including in image exports. The right endpoint
+(`"1000"`) still means no cut. Marker visibility has no separate setting; the
+retired `view.tree_show_cut_line` field is skipped and reported as unknown if
+present in an older session.
+
+Tree sessions can also persist `view.tree_child_order` (default `[]`), a list of
+`{"node": int, "children": [int, ...]}` entries over the **current tree's preorder
+indices**. Each entry is a complete permutation of one internal node's immediate
+children, with no duplicate nodes or child indices. This is a display-order
+override, applied after ladderization, and also used by Newick export; it does not
+change the topology arrays or branch lengths. Descendant orders remain independent.
+Malformed order state is skipped atomically and reported. Rerooting remaps valid
+overrides by original vertex/branch identity and clears ones that no longer match.
+
 In the network view, the viewer can also write an **extraction**: a bundle over a chosen
 subset of nodes, rebuilt from the induced MST edges rather than re-derived from the source
 matrix. The viewer's `js/views/ssn/extraction.js` ports `ssn_hierarchy.py`'s hierarchy and

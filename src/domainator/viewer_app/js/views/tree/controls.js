@@ -337,7 +337,46 @@
         triggerDownload(URL.createObjectURL(new Blob([text], {type})), exportBaseName() + suffix, true);
     }
 
+    function treeSwappableClade() {
+        const tree = state.tree;
+        if (!tree) { return null; }
+        const node = treeSelectedClade(tree, state.selectedNodeIndices, true);
+        return node !== null && tree.children[node].length >= 2 ? node : null;
+    }
+
+    function updateTreeSwapControl() {
+        const button = document.getElementById('tree-swap-children');
+        const node = treeSwappableClade();
+        button.disabled = node === null;
+        button.title = node === null
+            ? 'Select exactly one complete internal clade with at least two child subtrees (the whole tree is allowed)'
+            : 'Exchange the top and bottom child subtrees, preserving the order inside each subtree';
+    }
+
+    function treeSwapChildren() {
+        const node = treeSwappableClade();
+        if (node === null) {
+            const message = 'Select exactly one complete internal clade with at least two child subtrees.';
+            console.warn(message);
+            setStatus('Could not swap children: ' + message);
+            return;
+        }
+        const tree = state.tree;
+        const children = tree.layout.displayChildren[node].slice();
+        const last = children.length - 1;
+        [children[0], children[last]] = [children[last], children[0]];
+        tree.childOrder.set(node, children);
+        treeComputeLayout();
+        renderTreeView();
+        updateMetadataTable();
+        setStatus('Swapped top and bottom child subtrees; ordering inside each subtree is unchanged.');
+    }
+
     function setupTreeViewControls() {
+        document.getElementById('tree-swap-children').addEventListener('click', treeSwapChildren);
+        for (const mode of ['midpoint', 'selection', 'original']) {
+            document.getElementById('tree-root-' + mode).addEventListener('click', () => rerootTree(mode));
+        }
         attachTreePointer(document.getElementById('tree-canvas'), true);
         attachTreePointer(document.getElementById('msa-canvas'), false);
         const relayout = () => {

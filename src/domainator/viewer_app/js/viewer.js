@@ -217,6 +217,8 @@
         populateMetadataControls();
         rebuildNodeColorCache();
         view.enableControls();
+        document.getElementById('export-extent').disabled = false;
+        document.getElementById('export-extent').value = 'viewport';
         // "Fill with cluster numbers" is for views that have clusters.
         document.getElementById('metadata-add-cluster-column').style.display = view.hasClusters ? '' : 'none';
         document.getElementById('customize-colors').disabled = false;
@@ -287,6 +289,7 @@
 // @include views/ssn/split_chart_hover.js
 // @include common/svg_context.js
 // @include views/tree/tree.js
+// @include views/tree/rooting.js
 // @include views/tree/msa.js
 // @include views/tree/render.js
 // @include views/tree/controls.js

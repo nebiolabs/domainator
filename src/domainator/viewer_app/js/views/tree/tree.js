@@ -12,6 +12,7 @@
     const TREE_ROW_HEIGHT_MIN = 0.01;
     // The slider's positions; its last position means no cut.
     const TREE_CUT_STEPS = 1000;
+    const TREE_CUT_DEFAULT = 0;
 
     function createTreeState(bundle) {
         const view = bundle.views.tree;
@@ -44,10 +45,15 @@
         }
         return {
             view, count, children, treeToBundle, subtreeEnd, leafCount, rootDistance, height,
+            rootOriginal: treeTopology(view),
+            rootLocation: null,
+            rootOrigins: view.parent.map((_, node) => node),
+            rootMidpoint: null,
             hasSupport: view.support.some(value => value !== null && value !== undefined) ||
                 view.label.some(label => label !== null && label !== undefined && label !== ''),
             msa: view.msa || null,
             collapsed: new Set(),
+            childOrder: new Map(),
             // Pixels per row, and how far the rows are scrolled; null until the first paint fits
             // the tree to the canvas.
             rowHeight: null,
@@ -93,6 +99,7 @@
         if (treeLadderized()) {
             displayChildren.forEach(children => children.sort((left, right) => tree.leafCount[left] - tree.leafCount[right]));
         }
+        tree.childOrder.forEach((children, node) => { displayChildren[node] = children.slice(); });
         const x = new Float64Array(count);
         if (treeLayoutMode() === 'cladogram') {
             const top = tree.height[0];
@@ -138,6 +145,26 @@
         }
         tree.layout = {x, maxX: maxX || 1, cladeMaxX, rowNode, nodeRow, visibleOrder, displayChildren};
         tree.cladeConsensus = new Map();
+    }
+
+    function restoreTreeChildOrder(value) {
+        if (!Array.isArray(value)) { throw new Error('Malformed child order.'); }
+        const order = new Map();
+        for (const entry of value) {
+            const node = entry?.node;
+            const children = entry?.children;
+            if (!Number.isInteger(node) || node < 0 || node >= state.tree.count || order.has(node) ||
+                    !Array.isArray(children)) {
+                throw new Error('Malformed child order.');
+            }
+            const expected = new Set(state.tree.children[node]);
+            if (expected.size < 2 || children.length !== expected.size || new Set(children).size !== expected.size ||
+                    children.some(child => !expected.has(child))) {
+                throw new Error('Child order must be a permutation of this internal node\'s children.');
+            }
+            order.set(node, children.slice());
+        }
+        state.tree.childOrder = order;
     }
 
     // ---- Cutting the tree into clusters ----
@@ -206,7 +233,7 @@
     // The tree in Newick format, pruned to the bundle nodes in `keep` (all of them when null):
     // other leaves are removed, then internal nodes left with no leaves, and an internal node
     // left with one child is merged into it, adding their branch lengths, as build_tree --subset
-    // does.
+    // does. An unpruned export keeps annotated unary vertices introduced by rerooting.
     function treeNewick(keep) {
         const tree = state.tree;
         const view = tree.view;
@@ -242,8 +269,8 @@
             }
             const {node, root} = item;
             const length = item.carried + (node === 0 ? 0 : Number(view.length[node]) || 0);
-            const children = tree.children[node].filter(child => kept[child]);
-            if (children.length === 1) {
+            const children = (tree.childOrder.get(node) || tree.children[node]).filter(child => kept[child]);
+            if (children.length === 1 && (keep !== null || (!view.label[node] && view.support[node] === null))) {
                 stack.push({node: children[0], carried: length, root});
                 continue;
             }

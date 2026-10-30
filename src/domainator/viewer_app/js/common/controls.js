@@ -2,8 +2,8 @@
     // the color picker, the metadata table and the selection.
     function setupSharedViewerControls() {
         // The view toolbar's buttons act on whichever view is open.
-        document.getElementById('export-png').addEventListener('click', () => activeView().exportPng());
-        document.getElementById('export-svg').addEventListener('click', () => activeView().exportSvg());
+        document.getElementById('export-png').addEventListener('click', () => runImageExport(() => activeView().exportPng()));
+        document.getElementById('export-svg').addEventListener('click', () => runImageExport(() => activeView().exportSvg()));
         document.getElementById('focus-selection').addEventListener('click', () => activeView().focusSelection());
         document.getElementById('reset-view').addEventListener('click', () => activeView().resetView());
         document.getElementById('bundle-file').addEventListener('change', async event => {

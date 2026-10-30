@@ -113,6 +113,13 @@
                     <div class="tree-pane"><canvas id="tree-canvas" width="700" height="640"></canvas></div>
                     <div class="msa-pane" id="msa-pane" hidden><canvas id="msa-canvas" width="400" height="640"></canvas></div>
                 </div>
+                <div class="toolbar" data-view="tree" role="group" aria-label="Tree operations">
+                    <button id="tree-root-midpoint" type="button" disabled aria-describedby="tree-root-note">Root at midpoint</button>
+                    <button id="tree-root-selection" type="button" disabled aria-describedby="tree-root-note">Root on selection</button>
+                    <button id="tree-root-original" type="button" disabled title="Restore the original topology and child order without resetting other display settings">Restore original root</button>
+                    <button id="tree-swap-children" type="button" disabled>Swap children</button>
+                </div>
+                <div id="tree-root-note" class="note" data-view="tree"></div>
                 <div class="projection-stage" data-view="projection"><canvas id="projection-canvas" width="900" height="700"></canvas></div>
                 <div class="note" data-view="projection">Wheel or double-click to zoom (Shift-double-click zooms out), and drag to pan. Click a point to toggle it. Shift-drag a box to select points, holding Alt to deselect instead. Press 0-9 to recall a selection preset, Shift+0-9 to store the current selection into one, and hover a preset button to outline its points in gray.</div>
                 <div id="view-tip" class="view-tip" aria-hidden="true" hidden></div>
@@ -200,9 +207,9 @@
                         <input id="tree-show-support" type="checkbox" checked />
                         <label for="tree-show-support">Show support values</label>
                     </div>
-                    <div class="control" data-view="tree" title="Cut every branch that crosses this distance from the root: the clades below the cut are the clusters &quot;Fill with cluster numbers&quot; numbers and the table export's tree_cluster column holds.">
-                        <label for="tree-cut">Cut tree at <span id="tree-cut-label">(no cut)</span></label>
-                        <input id="tree-cut" type="range" min="0" max="1000" step="1" value="1000" disabled />
+                    <div class="control" data-view="tree" title="Cut every branch that crosses this distance from the root: the clades below the cut are the clusters &quot;Fill with cluster numbers&quot; numbers and the table export's tree_cluster column holds. Both endpoints hide the line: left (0, the default) puts all leaves in one cluster; right means no cut, one cluster per leaf.">
+                        <label for="tree-cut">Cut tree at <span id="tree-cut-label">0</span></label>
+                        <input id="tree-cut" type="range" min="0" max="1000" step="1" value="0" disabled />
                     </div>
                     <div class="control" data-view="projection">
                         <label for="projection-point-size">Point size</label>
@@ -237,6 +244,11 @@
                     <button id="focus-selection" type="button" disabled title="Center the view on the selected nodes, zooming out only if they do not already fit">Focus selection</button>
                     <button id="reset-view" disabled>Reset view</button>
                     <button id="clear-selection" disabled>Clear selection</button>
+                    <label for="export-extent">Image extent</label>
+                    <select id="export-extent" disabled title="Applies to view PNG and SVG exports, not charts or legends">
+                        <option value="viewport" selected>Current viewport</option>
+                        <option value="entire">Entire content</option>
+                    </select>
                     <button id="export-png" type="button" disabled>Export view PNG</button>
                     <select id="export-png-scale" title="PNG resolution" disabled>
                         <option value="1">1× (screen)</option>
