@@ -229,6 +229,11 @@ The sidebar holds everything that changes what is drawn rather than what is sele
 
 ### Nodes and Labels
 
+The **Nodes** and **Labels** sections expand or collapse when you click their
+headings (or focus a heading and press Enter or Space). Both start expanded.
+Collapsing settings does not hide their marks or text; saved sessions retain
+each section's expanded/collapsed state.
+
 **Nodes** configures the marks for individual sequences. **Color by** maps a metadata
 property to the existing categorical palette or numeric gradient; **Shape by** maps a
 property to categorical shapes. Shape values are always categories, even when numeric:
@@ -252,6 +257,11 @@ the actual branch tip, followed by its text labels. These are leaf annotations, 
 metadata on internal nodes. Either list may be empty: removing annotations does not
 remove branches, support values, or selection targets. **Show leaf labels** temporarily
 hides the text without deleting its configuration.
+
+To reorder tree nodes with the mouse, drag a node section's **Drag** handle above
+or below another node section. The insertion line shows where it will land.
+Mappings and visibility travel with the section; labels are not reordered.
+**Move up** and **Move down** remain available for keyboard users.
 
 Each tree node section also has **Show node**, which hides just that section's
 tip glyphs without removing its mapping. Hidden glyphs do not occupy marker slots.

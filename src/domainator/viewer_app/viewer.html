@@ -148,8 +148,8 @@
                         <label for="zoom-level">Zoom</label>
                         <input id="zoom-level" type="text" inputmode="decimal" value="1" disabled />
                     </div>
-                    <fieldset class="appearance-settings">
-                        <legend>Nodes</legend>
+                    <details id="node-settings" class="appearance-settings" open>
+                        <summary>Nodes</summary>
                         <div id="node-styles">
                             <select id="color-by" aria-label="Color by"></select>
                             <button id="customize-colors" type="button" disabled>Customize colors...</button>
@@ -167,16 +167,16 @@
                             <input id="render-nodes" type="checkbox" checked />
                             <label for="render-nodes">Render nodes</label>
                         </div>
-                    </fieldset>
-                    <fieldset class="appearance-settings">
-                        <legend>Labels</legend>
+                    </details>
+                    <details id="label-settings" class="appearance-settings" open>
+                        <summary>Labels</summary>
                         <div id="label-styles"><select id="label-by" aria-label="Text by"></select></div>
                         <button id="add-label-style" type="button" hidden>Add label</button>
                         <div class="control checkbox" data-view="tree">
                             <input id="tree-show-labels" type="checkbox" checked />
                             <label for="tree-show-labels">Show leaf labels</label>
                         </div>
-                    </fieldset>
+                    </details>
                     <div class="control checkbox" data-view="ssn">
                         <input id="show-node-counts" type="checkbox" checked />
                         <label for="show-node-counts">Show node count labels</label>

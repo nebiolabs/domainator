@@ -1,4 +1,7 @@
     function resetAppearance() {
+        clearAppearanceDrag();
+        document.getElementById('node-settings').open = true;
+        document.getElementById('label-settings').open = true;
         state.appearanceNextId = 2;
         state.nodeStyles = [{id: 'node-1', color_by: state.bundle.defaults.color_by || '', shape_by: '', show_node: true}];
         state.labelStyles = [{id: 'label-1', text_by: state.bundle.defaults.label_by ||
@@ -78,7 +81,22 @@
                 entry.dataset.styleKind = kind;
                 const heading = document.createElement('strong');
                 heading.textContent = (kind === 'node' ? 'Node ' : 'Label ') + (index + 1);
-                entry.append(heading);
+                const header = document.createElement('div');
+                header.className = 'appearance-entry-header';
+                header.append(heading);
+                if (kind === 'node' && state.activeViewName === 'tree') {
+                    const handle = document.createElement('button');
+                    handle.type = 'button';
+                    handle.id = style.id + '-drag';
+                    handle.className = 'appearance-drag-handle';
+                    handle.textContent = 'Drag';
+                    handle.setAttribute('aria-label', 'Drag to reorder node ' + (index + 1));
+                    handle.title = 'Drag to reorder, or use the Move up and Move down buttons.';
+                    handle.disabled = styles.length < 2;
+                    handle.draggable = !handle.disabled;
+                    header.append(handle);
+                }
+                entry.append(header);
                 if (kind === 'node') {
                     if (state.activeViewName === 'tree') {
                         const container = document.createElement('div');
@@ -112,13 +130,13 @@
                             button.setAttribute('aria-label', text + ' ' + kind + ' ' + (index + 1));
                             actions.append(button);
                         });
-                        if (focusedId) { document.getElementById(focusedId)?.focus({preventScroll: true}); }
                     entry.append(actions);
                 }
                 list.append(entry);
             });
             document.getElementById('add-' + kind + '-style').hidden = state.activeViewName !== 'tree';
         });
+        if (focusedId) { document.getElementById(focusedId)?.focus({preventScroll: true}); }
     }
 
     function appearanceChanged() {
@@ -129,6 +147,7 @@
     }
 
     function setupAppearanceControls() {
+        setupAppearanceDragging();
         ['node', 'label'].forEach(kind => {
             const list = document.getElementById(kind + '-styles');
             list.addEventListener('change', event => {
@@ -193,6 +212,66 @@
             repaintNow();
             renderShapePicker();
         });
+    }
+
+    function clearAppearanceDropIndicators() {
+        document.querySelectorAll('#node-styles .appearance-entry').forEach(entry => {
+            entry.classList.remove('appearance-drop-before', 'appearance-drop-after');
+        });
+    }
+
+    function clearAppearanceDrag() {
+        state.appearanceDrag = null;
+        clearAppearanceDropIndicators();
+        document.querySelectorAll('#node-styles .appearance-dragging').forEach(entry => {
+            entry.classList.remove('appearance-dragging');
+        });
+    }
+
+    function setupAppearanceDragging() {
+        const list = document.getElementById('node-styles');
+        list.addEventListener('dragstart', event => {
+            const handle = event.target.closest('.appearance-drag-handle');
+            if (!handle || handle.disabled || state.activeViewName !== 'tree') { return; }
+            const entry = handle.closest('[data-style-id]');
+            state.appearanceDrag = entry.dataset.styleId;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-domainator-node-style', state.appearanceDrag);
+            event.dataTransfer.setData('text/plain', state.appearanceDrag);
+            entry.classList.add('appearance-dragging');
+        });
+        list.addEventListener('dragover', event => {
+            if (!state.appearanceDrag) { return; }
+            const entry = event.target.closest('.appearance-entry');
+            clearAppearanceDropIndicators();
+            if (!entry || entry.dataset.styleId === state.appearanceDrag) { return; }
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            const bounds = entry.getBoundingClientRect();
+            entry.classList.add(event.clientY < bounds.top + bounds.height / 2
+                ? 'appearance-drop-before' : 'appearance-drop-after');
+        });
+        list.addEventListener('dragleave', event => {
+            if (!list.contains(event.relatedTarget)) { clearAppearanceDropIndicators(); }
+        });
+        list.addEventListener('drop', event => {
+            const id = state.appearanceDrag;
+            const entry = event.target.closest('.appearance-entry');
+            clearAppearanceDrag();
+            if (!id || !entry || event.dataTransfer.getData('application/x-domainator-node-style') !== id) { return; }
+            event.preventDefault();
+            const targetId = entry.dataset.styleId;
+            const sourceIndex = state.nodeStyles.findIndex(style => style.id === id);
+            if (sourceIndex < 0 || targetId === id) { return; }
+            const bounds = entry.getBoundingClientRect();
+            const after = event.clientY >= bounds.top + bounds.height / 2;
+            const [style] = state.nodeStyles.splice(sourceIndex, 1);
+            const targetIndex = state.nodeStyles.findIndex(item => item.id === targetId);
+            state.nodeStyles.splice(targetIndex + (after ? 1 : 0), 0, style);
+            appearanceChanged();
+            document.getElementById(id + '-drag').focus({preventScroll: true});
+        });
+        list.addEventListener('dragend', clearAppearanceDrag);
     }
 
     function validateAppearanceStyles(value, kind) {

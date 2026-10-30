@@ -801,6 +801,12 @@ Tree sessions also persist Boolean `view.tree_show_color_bars` and
 independent of label and glyph visibility; disabling branch coloring leaves glyph
 and bar colors unchanged. These controls do not change networks or projections.
 
+All views can persist Boolean `view.node_settings_open` and
+`view.label_settings_open` (default `true`). These collapse/expand the corresponding
+settings sections without changing rendered annotations. Dragging tree node
+sections updates `view.node_styles` array order while preserving style IDs,
+mappings, and visibility; it needs no additional persisted drag state.
+
 An empty mapping string means unmapped; `text_by` also accepts `__node_id__`. Other
 mapping strings name metadata columns. Shape values are categorical regardless of the
 metadata column's numeric color mode. Supported glyph names are `circle`, `square`,

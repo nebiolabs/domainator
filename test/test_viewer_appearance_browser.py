@@ -95,6 +95,21 @@ def _label(page, index):
     return page.locator("#label-styles .appearance-entry").nth(index)
 
 
+def _drag_node(page, style_id, target, *, after=False):
+    handle = page.locator(f"#{style_id}-drag")
+    handle.hover()
+    bounds = handle.bounding_box()
+    x, y = bounds["x"] + bounds["width"] / 2, bounds["y"] + bounds["height"] / 2
+    page.mouse.down()
+    page.mouse.move(x, y + 10, steps=5)
+    page.wait_for_function("(id) => state.appearanceDrag === id", arg=style_id)
+    bounds = target.bounding_box()
+    position = {"x": 20, "y": bounds["height"] - 2 if after else 2}
+    target.hover(position=position)
+    target.hover(position=position)
+    page.mouse.up()
+
+
 def _three_nodes_two_labels(page):
     page.select_option("#shape-by", "score")
     page.click("#add-node-style")
@@ -110,8 +125,8 @@ def _three_nodes_two_labels(page):
 @pytest.mark.parametrize("mode", ["tree", "projection", "ssn"])
 def test_shape_mapping_is_categorical_without_changing_gradient(open_appearance, mode):
     page = open_appearance(mode)
-    assert page.locator("legend", has_text="Nodes").count() == 1
-    assert page.locator("legend", has_text="Labels").count() == 1
+    assert page.locator("summary", has_text="Nodes").count() == 1
+    assert page.locator("summary", has_text="Labels").count() == 1
     assert page.is_visible("#add-node-style") is (mode == "tree")
     assert page.get_by_label("Show node", exact=True).count() == (1 if mode == "tree" else 0)
     page.select_option("#color-by", "score")
@@ -522,4 +537,109 @@ def test_tree_visibility_settings_round_trip_and_default_for_older_sessions(open
     page.wait_for_function("() => state.nodeStyles.every(style => style.show_node)")
     assert page.is_checked("#tree-show-color-bars") and page.is_checked("#tree-color-branches")
     assert "skipped" not in page.text_content("#bundle-status")
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("mode", ["tree", "projection", "ssn"])
+def test_appearance_sections_collapse_without_changing_the_view(open_appearance, mode):
+    page = open_appearance(mode)
+    if mode == "tree":
+        _three_nodes_two_labels(page)
+    before = page.evaluate("""() => ({
+        nodes: state.nodeStyles, labels: state.labelStyles,
+        image: viewerCanvas().toDataURL(), selection: Array.from(state.selectedNodeIndices)
+    })""")
+    page.locator("#node-settings > summary").click()
+    assert not page.is_visible("#color-by")
+    assert page.is_visible("#label-by")
+    page.locator("#label-settings > summary").focus()
+    page.keyboard.press("Enter")
+    assert not page.is_visible("#label-by")
+    page.evaluate("refreshAfterMetadataEdit()")
+    assert not page.evaluate("document.getElementById('node-settings').open")
+    assert not page.evaluate("document.getElementById('label-settings').open")
+    assert page.evaluate("""() => ({
+        nodes: state.nodeStyles, labels: state.labelStyles,
+        image: viewerCanvas().toDataURL(), selection: Array.from(state.selectedNodeIndices)
+    })""") == before
+    page.locator("#label-settings > summary").focus()
+    page.keyboard.press("Space")
+    assert page.is_visible("#label-by")
+    page.locator("#node-settings > summary").click()
+    assert page.is_visible("#color-by")
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("mode", ["tree", "projection", "ssn"])
+def test_collapsed_appearance_sections_round_trip_and_legacy_defaults(open_appearance, mode, tmp_path):
+    page = open_appearance(mode)
+    page.locator("#node-settings > summary").click()
+    page.locator("#label-settings > summary").click()
+    saved = _download(page, "#save-session")
+    _, payload = _read_bundle(saved)
+    view = payload["app_state"]["view"]
+    assert view["node_settings_open"] is False and view["label_settings_open"] is False
+    page.set_input_files("#bundle-file", saved)
+    page.wait_for_function("""() => !document.getElementById('node-settings').open &&
+        !document.getElementById('label-settings').open""")
+    assert not page.is_visible("#color-by") and not page.is_visible("#label-by")
+    assert "skipped" not in page.text_content("#bundle-status")
+    del view["node_settings_open"]
+    del view["label_settings_open"]
+    legacy = tmp_path / "expanded_legacy.dvb"
+    legacy.write_bytes(serialize_bundle(payload))
+    page.set_input_files("#bundle-file", legacy)
+    page.wait_for_function("""() => document.getElementById('node-settings').open &&
+        document.getElementById('label-settings').open""")
+    assert page.is_visible("#color-by") and page.is_visible("#label-by")
+    assert "skipped" not in page.text_content("#bundle-status")
+    assert page.pageerrors == []
+
+
+def test_dragging_tree_nodes_reorders_mappings_rendering_and_saved_state(open_appearance):
+    page = open_appearance("tree")
+    _three_nodes_two_labels(page)
+    _node(page, 1).get_by_label("Show node", exact=True).uncheck()
+    original = page.evaluate("state.nodeStyles")
+    first, second, third = [style["id"] for style in original]
+    labels = page.evaluate("state.labelStyles")
+    _drag_node(page, second, page.locator(f'#node-styles [data-style-id="{first}"]'))
+    assert page.evaluate("state.nodeStyles") == [original[1], original[0], original[2]]
+    assert page.input_value("#color-by") == "score"
+    assert page.evaluate("treeCladeSummaries().color[state.tree.view.leaf_nodes[0]]") == page.evaluate("nodeColor(0, 'score')")
+    assert page.locator("#node-styles .appearance-entry").evaluate_all(
+        "entries => entries.map(entry => entry.dataset.styleId)",
+    ) == [second, first, third]
+    assert page.evaluate("state.appearanceDrag") is None
+    assert page.locator(".appearance-dragging, .appearance-drop-before, .appearance-drop-after").count() == 0
+    target = page.locator(f'#node-styles [data-style-id="{third}"]')
+    _drag_node(page, second, target, after=True)
+    expected = [original[0], original[2], original[1]]
+    assert page.evaluate("state.nodeStyles") == expected
+    assert page.evaluate("state.labelStyles") == labels
+    assert page.input_value("#color-by") == "group"
+    saved = _download(page, "#save-session")
+    assert _read_bundle(saved)[1]["app_state"]["view"]["node_styles"] == expected
+    page.set_input_files("#bundle-file", saved)
+    page.wait_for_function("() => state.nodeStyles[1].id === " + json.dumps(third))
+    assert page.evaluate("state.nodeStyles") == expected
+    assert page.pageerrors == []
+
+
+def test_cancelled_and_external_drags_do_not_reorder_tree_nodes(open_appearance):
+    page = open_appearance("tree")
+    assert page.locator(".appearance-drag-handle").is_disabled()
+    _three_nodes_two_labels(page)
+    original = page.evaluate("state.nodeStyles")
+    _drag_node(page, original[0]["id"], page.locator("#label-settings > summary"))
+    assert page.evaluate("state.nodeStyles") == original
+    assert page.evaluate("state.appearanceDrag") is None
+    assert page.locator(".appearance-dragging, .appearance-drop-before, .appearance-drop-after").count() == 0
+    page.evaluate("""() => {
+        const data = new DataTransfer();
+        data.setData('application/x-domainator-node-style', state.nodeStyles[2].id);
+        document.querySelector('#node-styles .appearance-entry').dispatchEvent(
+            new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: data}));
+    }""")
+    assert page.evaluate("state.nodeStyles") == original
     assert page.pageerrors == []

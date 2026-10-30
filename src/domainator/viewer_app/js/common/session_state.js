@@ -240,6 +240,14 @@
                     set: value => restoreAppearanceStyles(value, 'label')},
                 {section: 'shapes', key: 'custom_mappings', get: () => state.customShapes,
                     set: value => { state.customShapes = validateShapeMappings(value); }},
+                ...['node', 'label'].map(kind => ({
+                    section: 'view', key: kind + '_settings_open',
+                    get: () => document.getElementById(kind + '-settings').open,
+                    set: value => {
+                        if (typeof value !== 'boolean') { throw new Error('invalid section expansion'); }
+                        document.getElementById(kind + '-settings').open = value;
+                    },
+                })),
             ]);
         }
         return view.stateFields;
