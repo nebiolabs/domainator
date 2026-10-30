@@ -113,6 +113,7 @@ def test_shape_mapping_is_categorical_without_changing_gradient(open_appearance,
     assert page.locator("legend", has_text="Nodes").count() == 1
     assert page.locator("legend", has_text="Labels").count() == 1
     assert page.is_visible("#add-node-style") is (mode == "tree")
+    assert page.get_by_label("Show node", exact=True).count() == (1 if mode == "tree" else 0)
     page.select_option("#color-by", "score")
     colors = page.evaluate("state.nodeColorCache.slice()")
     page.select_option("#shape-by", "score")
@@ -414,4 +415,111 @@ def test_loading_different_view_resets_annotation_and_editor_state(open_appearan
     assert page.evaluate("Object.keys(state.customShapes)") == []
     assert not page.is_visible("#shape-picker-overlay")
     assert not page.is_visible("#add-node-style")
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("visibility", [(True, False, False), (False, True, False), (False, False, False)])
+@pytest.mark.parametrize("show_bars", [True, False])
+@pytest.mark.parametrize("color_tree", [True, False])
+def test_tree_nodes_bars_and_coloring_are_independently_toggleable(open_appearance, visibility, show_bars, color_tree):
+    page = open_appearance("tree")
+    _three_nodes_two_labels(page)
+    for index, shown in enumerate(visibility):
+        _node(page, index).get_by_label("Show node", exact=True).set_checked(shown)
+    page.set_checked("#tree-show-color-bars", show_bars)
+    page.set_checked("#tree-color-branches", color_tree)
+    page.select_option("#export-extent", "entire")
+    svg = ET.fromstring(_download(page, "#export-svg").read_bytes())
+    filled = [element for element in svg.iter(SVG + "path") if element.get("fill") not in (None, "none")]
+    assert len(filled) == 8 * sum(visibility)
+    bars = [element for element in svg.iter(SVG + "rect") if element.get("width") == "8"]
+    assert len(bars) == (24 if show_bars else 0)
+    assert all(float(element.get("x")) + 8 <= float(svg.get("width")) for element in bars)
+    strokes = {element.get("stroke") for element in svg.iter(SVG + "path") if element.get("fill") == "none"}
+    ink = page.evaluate("svgColorParts(VIEW_INK).color")
+    if color_tree:
+        assert page.evaluate("svgColorParts(nodeColor(0, 'group')).color") in strokes
+    else:
+        assert strokes == {ink}
+    texts = [element.text for element in svg.iter(SVG + "text")]
+    for name in "ABCDEFGH":
+        assert name in texts and "description_" + name * 12 in texts
+    assert page.evaluate("state.nodeStyles.map(style => style.color_by)") == ["group", "score", "group"]
+    assert page.evaluate("state.nodeStyles.map(style => style.shape_by)") == ["score", "group", "score"]
+    assert page.evaluate("treeCladeSummaries().color[state.tree.view.leaf_nodes[0]]") == page.evaluate("nodeColor(0, 'group')")
+    assert page.pageerrors == []
+
+
+@pytest.mark.parametrize("extent", ["viewport", "entire"])
+def test_hidden_tree_nodes_keep_bars_and_coloring_in_canvas_png_and_svg(open_appearance, extent):
+    page = open_appearance("tree")
+    _three_nodes_two_labels(page)
+    for index in range(3):
+        _node(page, index).get_by_label("Show node", exact=True).uncheck()
+    page.select_option("#export-extent", extent)
+    page.select_option("#export-png-scale", "1")
+    samples = page.evaluate("""() => {
+        const canvas = viewerCanvas();
+        const rect = canvas.getBoundingClientRect();
+        const a = treeGeometry(rect.width, rect.height);
+        const size = treeExportSize();
+        const b = treeGeometry(size.treeWidth, size.height, size.options);
+        function points(g) {
+            const node = state.tree.view.leaf_nodes[0];
+            const row = state.tree.layout.nodeRow[node];
+            const parent = state.tree.view.parent[node];
+            return [[(g.xPx(node) + g.xPx(parent)) / 2, g.yPx(row)],
+                ...g.colorBars.map((style, index) => [g.stripX + index * 10 + 4, g.yPx(row)])];
+        }
+        return {screen: points(a), exported: points(b), image: canvas.toDataURL().split(',')[1]};
+    }""")
+    colors = _pixels(page, base64.b64decode(samples["image"]), "image/png", samples["screen"])
+    assert len(colors) == 4 and all(min(color) < 225 for color in colors)
+    for button, mime in (("#export-png", "image/png"), ("#export-svg", "image/svg+xml")):
+        data = _download(page, button).read_bytes()
+        observed = _pixels(page, data, mime, samples["exported"])
+        for actual, expected in zip(observed, colors):
+            assert actual == pytest.approx(expected, abs=30)
+    page.locator("#tree-canvas").scroll_into_view_if_needed()
+    point = page.evaluate("""() => {
+        const rect = viewerCanvas().getBoundingClientRect();
+        const g = treeGeometry(rect.width, rect.height);
+        const node = state.tree.view.leaf_nodes[0];
+        return {x: rect.x + g.stripX + 4, y: rect.y + g.yPx(state.tree.layout.nodeRow[node])};
+    }""")
+    page.mouse.click(**point)
+    assert page.evaluate("Array.from(state.selectedNodeIndices)") == [0]
+    assert page.pageerrors == []
+
+
+def test_tree_visibility_settings_round_trip_and_default_for_older_sessions(open_appearance, tmp_path):
+    page = open_appearance("tree")
+    _three_nodes_two_labels(page)
+    _node(page, 0).get_by_label("Show node", exact=True).uncheck()
+    _node(page, 2).get_by_label("Show node", exact=True).uncheck()
+    page.uncheck("#tree-show-color-bars")
+    page.uncheck("#tree-color-branches")
+    saved = _download(page, "#save-session")
+    _, payload = _read_bundle(saved)
+    view = payload["app_state"]["view"]
+    assert [style["show_node"] for style in view["node_styles"]] == [False, True, False]
+    assert view["tree_show_color_bars"] is False
+    assert view["tree_color_branches"] is False
+    page.set_input_files("#bundle-file", saved)
+    page.wait_for_function("() => state.nodeStyles.length === 3 && !state.nodeStyles[0].show_node")
+    assert not _node(page, 0).get_by_label("Show node", exact=True).is_checked()
+    assert _node(page, 1).get_by_label("Show node", exact=True).is_checked()
+    assert not page.is_checked("#tree-show-color-bars")
+    assert not page.is_checked("#tree-color-branches")
+    assert "skipped" not in page.text_content("#bundle-status")
+    for style in view["node_styles"]:
+        del style["show_node"]
+    del view["tree_show_color_bars"]
+    del view["tree_color_branches"]
+    legacy = tmp_path / "older_appearance.dvb"
+    legacy.write_bytes(serialize_bundle(payload))
+    page.set_input_files("#bundle-file", legacy)
+    page.wait_for_function("() => state.nodeStyles.every(style => style.show_node)")
+    assert page.is_checked("#tree-show-color-bars") and page.is_checked("#tree-color-branches")
+    assert "skipped" not in page.text_content("#bundle-status")
     assert page.pageerrors == []

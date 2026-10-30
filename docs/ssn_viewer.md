@@ -253,14 +253,23 @@ metadata on internal nodes. Either list may be empty: removing annotations does 
 remove branches, support values, or selection targets. **Show leaf labels** temporarily
 hides the text without deleting its configuration.
 
+Each tree node section also has **Show node**, which hides just that section's
+tip glyphs without removing its mapping. Hidden glyphs do not occupy marker slots.
+**Show color bars** independently controls the color strips at the right, one per
+node section with a color mapping, whether labels or glyphs are visible or not. **Color tree**
+independently enables mapped branch and collapsed-wedge colors. All three are on
+by default and are stored in saved sessions.
+
 The **first node configuration** supplies tree branch colors: a branch inherits a color
 only when all leaves below it share that color. Reordering the first configuration
-therefore changes branch colors. With no node configurations, branches are neutral.
+therefore changes branch colors. Hiding that configuration's glyph does not disable
+its branch colors or color bar. With **Color tree** off, or no node configurations,
+branches are neutral.
 Collapsed clades keep their structural wedge and, when text labels are enabled, their
 clade-name/leaf-count summary rather than invented per-leaf annotations.
 
-Dense trees show a compact strip for each mapped color when individual annotations are
-too small to read. Long text may be shortened in the viewport; **Entire content**
+Color strips remain readable in dense trees when individual annotations are too small
+to read, unless **Show color bars** is off. Long text may be shortened in the viewport; **Entire content**
 image exports include all annotation text. Colors and shape assignments are shared per
 property, so two node configurations using the same property use the same assignments.
 Metadata edits update all affected configurations; column renames retain mappings,

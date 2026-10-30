@@ -387,7 +387,7 @@
         };
         document.getElementById('tree-layout').addEventListener('change', relayout);
         document.getElementById('tree-ladderize').addEventListener('change', relayout);
-        ['tree-show-labels', 'tree-show-support', 'msa-scheme', 'msa-column-width'].forEach(id => {
+        ['tree-show-labels', 'tree-show-support', 'tree-show-color-bars', 'tree-color-branches', 'msa-scheme', 'msa-column-width'].forEach(id => {
             document.getElementById(id).addEventListener('change', () => renderTreeView());
         });
         document.getElementById('tree-row-height').addEventListener('change', event => {

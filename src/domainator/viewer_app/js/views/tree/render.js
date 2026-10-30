@@ -75,6 +75,9 @@
         const fontSize = Math.min(TREE_LABEL_FONT_MAX, rowHeight * 0.8);
         const radius = Math.min(4, Math.max(1.2, rowHeight * 0.3));
         const markerStep = radius * 2 + 3;
+        const nodeStyles = state.nodeStyles.filter(style => style.show_node !== false);
+        const colorBars = document.getElementById('tree-show-color-bars').checked
+            ? state.nodeStyles.filter(style => style.color_by) : [];
         const firstLabel = state.labelStyles.findIndex(style => style.text_by);
         let measure = tree.annotationMeasure;
         if (!measure || measure.layout !== layout || measure.fontSize !== fontSize) {
@@ -93,11 +96,11 @@
             measure = {layout, fontSize, labelWidths};
             tree.annotationMeasure = measure;
         }
-        const markerWidth = state.nodeStyles.length ? (state.nodeStyles.length - 1) * markerStep + radius + 4 : 4;
-        const stripWidth = state.nodeStyles.filter(style => style.color_by).length * (TREE_COLOR_STRIP + 2) + 10;
-        const annotationWidth = labels ? markerWidth + measure.labelWidths.reduce((sum, value) => sum + value, 0)
-            : Math.max(markerWidth, stripWidth);
-        const labelWidth = Math.min(width * 0.55, annotationWidth);
+        const markerWidth = nodeStyles.length ? (nodeStyles.length - 1) * markerStep + radius + 4 : 4;
+        const stripWidth = colorBars.length ? colorBars.length * (TREE_COLOR_STRIP + 2) + 4 : 0;
+        const textWidth = labels ? measure.labelWidths.reduce((sum, value) => sum + value, 0) : 0;
+        const annotationWidth = markerWidth + textWidth + stripWidth;
+        const labelWidth = Math.min(width * 0.55, markerWidth + textWidth) + stripWidth;
         const treeWidth = options.treeWidth ?? Math.max(40, width - TREE_PADDING_LEFT - TREE_PADDING_RIGHT - labelWidth);
         const left = options.left ?? TREE_PADDING_LEFT;
         const scrollY = options.scrollY ?? tree.scrollY;
@@ -105,6 +108,9 @@
         return {
             width, height, top, viewHeight, rowHeight, labels, fontSize, treeWidth,
             radius, markerStep, markerWidth, annotationWidth, labelWidths: measure.labelWidths,
+            nodeStyles, colorBars,
+            annotationRight: width - TREE_PADDING_RIGHT - stripWidth,
+            stripX: width - TREE_PADDING_RIGHT - stripWidth + 4,
             fullAnnotations: options.fullAnnotations === true,
             xOf: value => left + value / layout.maxX * treeWidth,
             xPx: node => left + layout.x[node] / layout.maxX * treeWidth,
@@ -192,6 +198,7 @@
         // Branches, batched by color: a clade's branches take the color all its leaves share.
         const segments = new Map();
         const selectedSegments = [];
+        const colorBranches = document.getElementById('tree-color-branches').checked;
         const addSegment = (color, x1, y1, x2, y2, selected) => {
             if (!segments.has(color)) {
                 segments.set(color, []);
@@ -203,7 +210,7 @@
         };
         layout.visibleOrder.forEach(node => {
             const row = layout.nodeRow[node];
-            const color = summary.color[node] || VIEW_INK;
+            const color = (colorBranches && summary.color[node]) || VIEW_INK;
             const selected = summary.selected[node] > 0 && summary.selected[node] === tree.leafCount[node];
             const parent = view.parent[node];
             if (parent >= 0 && row >= rowStart - 1 && row <= rowEnd + 1) {
@@ -242,7 +249,6 @@
 
         // Rows: a collapsed clade's wedge, a leaf's dot, the colors and the labels.
         const radius = geometry.radius;
-        const stripX = geometry.xOf(layout.maxX) + 6;
         ctx.font = geometry.fontSize + 'px ' + VIEW_FONT;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
@@ -256,7 +262,7 @@
             if (!leaf) {
                 const end = geometry.xOf(layout.cladeMaxX[node]);
                 const half = Math.max(0.5, rowHeight * 0.4);
-                ctx.fillStyle = color || '#9aa3a8';
+                ctx.fillStyle = (colorBranches && color) || '#9aa3a8';
                 ctx.globalAlpha = 0.7;
                 ctx.beginPath();
                 ctx.moveTo(x, y);
@@ -267,10 +273,10 @@
                 ctx.globalAlpha = 1;
                 labelX = Math.max(end, x + 8) + 4;
             } else if (rowHeight >= TREE_DOT_MIN_ROW) {
-                state.nodeStyles.forEach((style, index) => {
+                geometry.nodeStyles.forEach((style, index) => {
                     const markerX = x + index * geometry.markerStep;
-                    if (markerX + radius > width - TREE_PADDING_RIGHT) { return; }
-                    ctx.fillStyle = index === 0 ? (summary.coloring ? color : VIEW_MUTED)
+                    if (markerX + radius > geometry.annotationRight) { return; }
+                    ctx.fillStyle = style === state.nodeStyles[0] ? (summary.coloring ? color : VIEW_MUTED)
                         : appearanceColor(style, tree.treeToBundle[node], VIEW_MUTED);
                     ctx.beginPath();
                     appendNodeGlyph(ctx, shapeForNode(style, tree.treeToBundle[node]), markerX, y, radius);
@@ -282,24 +288,21 @@
                 state.labelStyles.forEach((style, index) => {
                     if (!style.text_by || (!leaf && index !== state.labelStyles.findIndex(item => item.text_by))) { return; }
                     const text = treeRowLabel(node, style);
-                    const available = Math.min(geometry.labelWidths[index] - 8, width - TREE_PADDING_RIGHT - labelX);
+                    const available = Math.min(geometry.labelWidths[index] - 8, geometry.annotationRight - labelX);
                     const shown = geometry.fullAnnotations ? text : treeFittingText(ctx, text, available);
                     if (shown) { ctx.fillText(shown, labelX, y); }
                     labelX += geometry.labelWidths[index];
                 });
-            } else {
-                let offset = 0;
-                state.nodeStyles.forEach((style, index) => {
-                    if (!style.color_by) { return; }
-                    const stripColor = index === 0 ? color
-                        : leaf ? appearanceColor(style, tree.treeToBundle[node], null) : null;
-                    if (stripX + offset + TREE_COLOR_STRIP <= width - TREE_PADDING_RIGHT) {
-                        ctx.fillStyle = stripColor || '#9aa3a8';
-                        ctx.fillRect(stripX + offset, y - rowHeight / 2, TREE_COLOR_STRIP, Math.max(rowHeight, 1));
-                    }
-                    offset += TREE_COLOR_STRIP + 2;
-                });
             }
+            geometry.colorBars.forEach((style, index) => {
+                const stripColor = style === state.nodeStyles[0] ? color
+                    : leaf ? appearanceColor(style, tree.treeToBundle[node], null) : null;
+                const stripX = geometry.stripX + index * (TREE_COLOR_STRIP + 2);
+                if (stripX >= 0 && stripX + TREE_COLOR_STRIP <= width - TREE_PADDING_RIGHT) {
+                    ctx.fillStyle = stripColor || '#9aa3a8';
+                    ctx.fillRect(stripX, y - rowHeight / 2, TREE_COLOR_STRIP, Math.max(rowHeight, 1));
+                }
+            });
         }
 
         // Support values and internal labels.

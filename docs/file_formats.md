@@ -772,7 +772,7 @@ Version 2 adds these optional shared appearance fields:
 {
   "view": {
     "node_styles": [
-      {"id": "node-1", "color_by": "family", "shape_by": "group"}
+      {"id": "node-1", "color_by": "family", "shape_by": "group", "show_node": true}
     ],
     "label_styles": [
       {"id": "label-1", "text_by": "__node_id__"}
@@ -792,6 +792,14 @@ Networks and projections require one entry in each array. Trees allow zero or mo
 an absent array restores legacy defaults, whereas `[]` deliberately removes all entries.
 Tree markers start at leaf tips, followed by label text. The first marker's color mapping
 also controls shared-descendant branch and collapsed-wedge colors.
+
+Node styles accept optional Boolean `show_node` (default `true`). In tree mode it
+controls only that style's tip glyphs, not its color mapping, branch coloring, or
+right-side color bar. Hidden glyphs do not reserve marker slots.
+Tree sessions also persist Boolean `view.tree_show_color_bars` and
+`view.tree_color_branches`, both defaulting to `true` when absent. Color bars are
+independent of label and glyph visibility; disabling branch coloring leaves glyph
+and bar colors unchanged. These controls do not change networks or projections.
 
 An empty mapping string means unmapped; `text_by` also accepts `__node_id__`. Other
 mapping strings name metadata columns. Shape values are categorical regardless of the

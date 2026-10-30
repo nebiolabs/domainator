@@ -1,6 +1,6 @@
     function resetAppearance() {
         state.appearanceNextId = 2;
-        state.nodeStyles = [{id: 'node-1', color_by: state.bundle.defaults.color_by || '', shape_by: ''}];
+        state.nodeStyles = [{id: 'node-1', color_by: state.bundle.defaults.color_by || '', shape_by: '', show_node: true}];
         state.labelStyles = [{id: 'label-1', text_by: state.bundle.defaults.label_by ||
             (state.activeViewName === 'tree' ? '__node_id__' : '')}];
         state.customShapes = {};
@@ -9,6 +9,8 @@
         state.colorPickerColumn = null;
         state.colorPickerStyleId = null;
         document.getElementById('tree-show-labels').checked = true;
+        document.getElementById('tree-show-color-bars').checked = true;
+        document.getElementById('tree-color-branches').checked = true;
         document.getElementById('render-nodes').checked = true;
         closeShapePicker();
     }
@@ -78,6 +80,20 @@
                 heading.textContent = (kind === 'node' ? 'Node ' : 'Label ') + (index + 1);
                 entry.append(heading);
                 if (kind === 'node') {
+                    if (state.activeViewName === 'tree') {
+                        const container = document.createElement('div');
+                        container.className = 'control checkbox';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = style.id + '-show-node';
+                        checkbox.dataset.appearanceKey = 'show_node';
+                        checkbox.checked = style.show_node !== false;
+                        const label = document.createElement('label');
+                        label.htmlFor = checkbox.id;
+                        label.textContent = 'Show node';
+                        container.append(checkbox, label);
+                        entry.append(container);
+                    }
                     entry.append(appearancePropertyMenu(style, 'color_by', 'Color by', index === 0 ? 'color-by' : style.id + '-color'));
                     const colors = appearanceButton('Customize colors...', 'colors', !style.color_by);
                     if (index === 0) { colors.id = 'customize-colors'; }
@@ -120,7 +136,7 @@
                 if (!key) { return; }
                 const styles = kind === 'node' ? state.nodeStyles : state.labelStyles;
                 const style = styles.find(item => item.id === event.target.closest('[data-style-id]').dataset.styleId);
-                style[key] = event.target.value;
+                style[key] = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
                 if (key === 'color_by' && state.colorPickerStyleId === style.id) {
                     state.colorPickerColumn = style.color_by;
                 }
@@ -153,7 +169,7 @@
             document.getElementById('add-' + kind + '-style').addEventListener('click', () => {
                 const styles = kind === 'node' ? state.nodeStyles : state.labelStyles;
                 const id = kind + '-' + state.appearanceNextId++;
-                styles.push(kind === 'node' ? {id, color_by: styles[0]?.color_by || '', shape_by: ''}
+                styles.push(kind === 'node' ? {id, color_by: styles[0]?.color_by || '', shape_by: '', show_node: true}
                     : {id, text_by: '__node_id__'});
                 appearanceChanged();
             });
@@ -200,6 +216,12 @@
                 }
                 style[key] = field;
             });
+            if (kind === 'node') {
+                if (entry.show_node !== undefined && typeof entry.show_node !== 'boolean') {
+                    throw new Error('invalid node visibility');
+                }
+                style.show_node = entry.show_node ?? true;
+            }
             return style;
         });
         return styles;

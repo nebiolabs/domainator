@@ -82,3 +82,17 @@ def test_style_validation_preserves_empty_tree_lists_and_rejects_bad_data(tmp_pa
     """)
     assert result[0] == []
     assert all(value != "accepted" for value in result[1:])
+
+
+def test_node_visibility_defaults_to_shown_and_requires_a_boolean(tmp_path):
+    result = _run(tmp_path, """
+        const state = {activeViewName: 'tree'};
+        const metadataColumn = name => name === 'group';
+        const style = {id: 'node-1', color_by: 'group', shape_by: ''};
+        const results = [validateAppearanceStyles([style], 'node')[0].show_node,
+            validateAppearanceStyles([{...style, show_node: false}], 'node')[0].show_node];
+        try { validateAppearanceStyles([{...style, show_node: 'false'}], 'node'); }
+        catch (error) { results.push(error.message); }
+        process.stdout.write(JSON.stringify(results));
+    """)
+    assert result == [True, False, "invalid node visibility"]

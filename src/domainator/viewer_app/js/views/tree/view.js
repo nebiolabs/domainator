@@ -69,6 +69,8 @@
             domValueField('view', 'tree_layout', 'tree-layout'),
             domCheckboxField('view', 'tree_ladderize', 'tree-ladderize'),
             domCheckboxField('view', 'tree_show_labels', 'tree-show-labels'),
+            domCheckboxField('view', 'tree_show_color_bars', 'tree-show-color-bars'),
+            domCheckboxField('view', 'tree_color_branches', 'tree-color-branches'),
             domCheckboxField('view', 'tree_show_support', 'tree-show-support'),
             domValueField('view', 'tree_cut', 'tree-cut'),
             domValueField('view', 'msa_scheme', 'msa-scheme'),
