@@ -195,7 +195,7 @@ def test_bundle_holds_the_tree_metadata_and_alignment(shared_datadir, tmp_path):
                      "--metadata", str(shared_datadir / "FeSOD_metadata.tsv"), "--msa", str(shared_datadir / "FeSOD_20.afa"),
                      "--color_by", "Status", "--label_by", "Accession", "--categorical", "active", "--name", "FeSOD"])
     bundle = _read_bundle(dvb)
-    assert bundle["format"] == "domainator_viewer_bundle" and bundle["version"] == 1
+    assert bundle["format"] == "domainator_viewer_bundle" and bundle["version"] == 2
     assert bundle["name"] == "FeSOD"
     assert bundle["defaults"] == {"color_by": "Status", "label_by": "Accession", "categorical_columns": ["active"]}
     view = bundle["views"]["tree"]

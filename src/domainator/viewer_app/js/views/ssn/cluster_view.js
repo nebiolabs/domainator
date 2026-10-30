@@ -508,11 +508,13 @@
                 if (showNodes) {
                     // Use pre-computed color cache (#2)
                     const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
-                    const buckets = dot.square ? squareColorBuckets : dotColorBuckets;
-                    let bucket = buckets.get(color);
+                    const shape = shapeForNode(state.nodeStyles[0], dot.memberIndex, dot.square ? 'cell' : 'circle');
+                    const buckets = shape === 'cell' ? squareColorBuckets : dotColorBuckets;
+                    const key = shape === 'cell' ? color : color + '|' + shape;
+                    let bucket = buckets.get(key);
                     if (bucket === undefined) {
                         bucket = [];
-                        buckets.set(color, bucket);
+                        buckets.set(key, bucket);
                     }
                     bucket.push(dot);
                 }
@@ -536,12 +538,12 @@
         });
 
         // Batch draw all dots grouped by color (#3)
-        dotColorBuckets.forEach((dots, color) => {
+        dotColorBuckets.forEach((dots, key) => {
+            const [color, shape] = key.split('|');
             clusterContext.fillStyle = color;
             clusterContext.beginPath();
             for (const dot of dots) {
-                clusterContext.moveTo(dot.x + dot.radius, dot.y);
-                clusterContext.arc(dot.x, dot.y, dot.radius, 0, TAU);
+                appendNodeGlyph(clusterContext, shape, dot.x, dot.y, dot.radius);
             }
             clusterContext.fill();
         });
@@ -1071,11 +1073,13 @@
             for (const dot of dotLayout) {
                 if (showNodes) {
                     const color = state.nodeColorCache[dot.memberIndex] ?? nodeColor(dot.memberIndex);
-                    const buckets = dot.square ? squareColorBuckets : dotColorBuckets;
-                    let bucket = buckets.get(color);
+                    const shape = shapeForNode(state.nodeStyles[0], dot.memberIndex, dot.square ? 'cell' : 'circle');
+                    const buckets = shape === 'cell' ? squareColorBuckets : dotColorBuckets;
+                    const key = shape === 'cell' ? color : color + '|' + shape;
+                    let bucket = buckets.get(key);
                     if (bucket === undefined) {
                         bucket = [];
-                        buckets.set(color, bucket);
+                        buckets.set(key, bucket);
                     }
                     const dotCenter = toScreen(dot.x, dot.y);
                     bucket.push({x: dotCenter.x, y: dotCenter.y, r: dot.radius * drawScale});
@@ -1100,9 +1104,10 @@
             parts.push(boundsParts.join(''));
         }
 
-        dotColorBuckets.forEach((dots, color) => {
+        dotColorBuckets.forEach((dots, key) => {
+            const [color, shape] = key.split('|');
             const fill = svgColorParts(color);
-            const circles = dots.map(dot => '<circle cx="' + fmt(dot.x) + '" cy="' + fmt(dot.y) + '" r="' + fmt(dot.r) + '"/>').join('');
+            const circles = dots.map(dot => nodeGlyphSVG(shape, dot.x, dot.y, dot.r, fmt)).join('');
             parts.push('<g fill="' + fill.color + '"' + (fill.opacity !== 1 ? ' fill-opacity="' + fill.opacity + '"' : '') + '>' + circles + '</g>');
         });
 

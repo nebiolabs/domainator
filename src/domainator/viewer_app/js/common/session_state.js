@@ -109,8 +109,22 @@
     // among the fields only it has; the order is the order a session is applied in.
     function sharedSessionFields() {
         return {
-            colorBy: domValueField('view', 'color_by', 'color-by'),
-            labelBy: domValueField('view', 'label_by', 'label-by'),
+            colorBy: {
+                section: 'view', key: 'color_by', get: currentColorField,
+                set: value => {
+                    if (value !== '' && !metadataColumn(value)) { throw new Error('no option "' + value + '"'); }
+                    state.nodeStyles[0].color_by = value;
+                    renderAppearanceControls();
+                },
+            },
+            labelBy: {
+                section: 'view', key: 'label_by', get: currentLabelField,
+                set: value => {
+                    if (value !== '' && value !== '__node_id__' && !metadataColumn(value)) { throw new Error('no option "' + value + '"'); }
+                    state.labelStyles[0].text_by = value || (state.activeViewName === 'tree' ? '__node_id__' : '');
+                    renderAppearanceControls();
+                },
+            },
             exportPngScale: domValueField('view', 'export_png_scale', 'export-png-scale'),
             exportExtent: domValueField('view', 'export_extent', 'export-extent'),
             viewTransform: {
@@ -217,7 +231,16 @@
     function viewStateFields() {
         const view = activeView();
         if (!view.stateFields) {
-            view.stateFields = view.sessionFields(sharedSessionFields());
+            view.stateFields = view.sessionFields(sharedSessionFields()).concat([
+                {section: 'view', key: 'node_styles',
+                    get: () => state.nodeStyles.map((style, index) => ({...style, color_by: index === 0 ? currentColorField() : style.color_by})),
+                    set: value => restoreAppearanceStyles(value, 'node')},
+                {section: 'view', key: 'label_styles',
+                    get: () => state.labelStyles.map((style, index) => ({...style, text_by: index === 0 ? currentLabelField() : style.text_by})),
+                    set: value => restoreAppearanceStyles(value, 'label')},
+                {section: 'shapes', key: 'custom_mappings', get: () => state.customShapes,
+                    set: value => { state.customShapes = validateShapeMappings(value); }},
+            ]);
         }
         return view.stateFields;
     }
@@ -248,7 +271,10 @@
             // Scalars at the top level are metadata about the save itself
             // (state_version, saved_by, saved_at), not restorable fields.
             if (!section || typeof section !== 'object' || Array.isArray(section)) { return; }
-            Object.keys(section).forEach(key => {
+            // Legacy aliases apply first, independent of the file's key order.
+            const keys = Object.keys(section).sort((a, b) =>
+                Number(['node_styles', 'label_styles'].includes(a)) - Number(['node_styles', 'label_styles'].includes(b)));
+            keys.forEach(key => {
                 const field = fieldsByPath.get(sectionName + '.' + key);
                 if (!field) {
                     skipped.push(sectionName + '.' + key + ' (unknown)');

@@ -210,6 +210,7 @@
         state.pendingRestoreViewTransform = null;
         view.reset(bundle);
         state.allNodeIndices = viewerNodeIds().map((_, i) => i);
+        resetAppearance();
         rebuildMetadataCaches();
 
         // Must precede rebuildNodeColorCache: the cache is keyed off the "Color by"
@@ -269,6 +270,8 @@
 // @include common/controls.js
 // @include common/metadata.js
 // @include common/colors.js
+// @include common/shapes.js
+// @include common/appearance.js
 // @include common/color_picker.js
 // @include common/metadata_table.js
 // @include common/export.js
@@ -298,6 +301,7 @@
 // @include views/projection/view.js
 
     setupSharedViewerControls();
+    setupAppearanceControls();
     setupSsnViewControls();
     setupTreeViewControls();
     setupProjectionViewControls();

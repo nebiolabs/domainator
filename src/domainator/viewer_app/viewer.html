@@ -148,14 +148,27 @@
                         <label for="zoom-level">Zoom</label>
                         <input id="zoom-level" type="text" inputmode="decimal" value="1" disabled />
                     </div>
-                    <div class="control">
-                        <label for="color-by">Color by</label>
-                        <select id="color-by"></select>
-                    </div>
-                    <div class="control">
-                        <label for="label-by">Label by</label>
-                        <select id="label-by"></select>
-                    </div>
+                    <fieldset class="appearance-settings">
+                        <legend>Nodes</legend>
+                        <div id="node-styles">
+                            <select id="color-by" aria-label="Color by"></select>
+                            <button id="customize-colors" type="button" disabled>Customize colors...</button>
+                        </div>
+                        <button id="add-node-style" type="button" hidden>Add node</button>
+                        <div class="control checkbox" data-view="ssn">
+                            <input id="render-nodes" type="checkbox" checked />
+                            <label for="render-nodes">Render nodes</label>
+                        </div>
+                    </fieldset>
+                    <fieldset class="appearance-settings">
+                        <legend>Labels</legend>
+                        <div id="label-styles"><select id="label-by" aria-label="Text by"></select></div>
+                        <button id="add-label-style" type="button" hidden>Add label</button>
+                        <div class="control checkbox" data-view="tree">
+                            <input id="tree-show-labels" type="checkbox" checked />
+                            <label for="tree-show-labels">Show leaf labels</label>
+                        </div>
+                    </fieldset>
                     <div class="control checkbox" data-view="ssn">
                         <input id="show-node-counts" type="checkbox" checked />
                         <label for="show-node-counts">Show node count labels</label>
@@ -167,10 +180,6 @@
                     <div class="control checkbox" data-view="ssn">
                         <input id="render-cluster-bounds" type="checkbox" checked />
                         <label for="render-cluster-bounds">Render cluster bounds</label>
-                    </div>
-                    <div class="control checkbox" data-view="ssn">
-                        <input id="render-nodes" type="checkbox" checked />
-                        <label for="render-nodes">Render nodes</label>
                     </div>
                     <div class="control checkbox" data-view="ssn">
                         <input id="reduce-elongation" type="checkbox" />
@@ -198,10 +207,6 @@
                     <div class="control checkbox" data-view="tree">
                         <input id="tree-ladderize" type="checkbox" />
                         <label for="tree-ladderize">Ladderize (smaller clades first)</label>
-                    </div>
-                    <div class="control checkbox" data-view="tree">
-                        <input id="tree-show-labels" type="checkbox" checked />
-                        <label for="tree-show-labels">Show leaf labels</label>
                     </div>
                     <div class="control checkbox" data-view="tree">
                         <input id="tree-show-support" type="checkbox" checked />
@@ -264,7 +269,6 @@
                         <option value="aligned" selected>aligned</option>
                         <option value="ungapped">gaps removed</option>
                     </select>
-                    <button id="customize-colors" type="button" disabled>Customize colors…</button>
                     <button id="save-session" type="button" disabled title="Download this bundle plus the current viewer state as a .dvb session file">Save session…</button>
                     <button id="save-extraction" type="button" data-view="ssn" disabled title="Download a new .dvb bundle containing only the selected nodes. The selection must be connected in the MST.">Save extraction…</button>
                 </div>
@@ -491,6 +495,23 @@
             <button id="column-chart-download-tsv" type="button">Download TSV</button>
             <button id="column-chart-export-svg" type="button">Export SVG</button>
             <button id="column-chart-export-png" type="button">Export PNG</button>
+        </div>
+    </div>
+</div>
+<div id="shape-picker-overlay" class="cp-overlay" hidden>
+    <div class="cp-dialog" role="dialog" aria-modal="true" aria-labelledby="shape-picker-title">
+        <div class="cp-head">
+            <h3 id="shape-picker-title">Shapes</h3>
+            <button id="shape-picker-close" type="button" class="cp-close" aria-label="Close shapes">Close</button>
+        </div>
+        <div class="cp-body">
+            <p id="shape-picker-note" class="note" role="status"></p>
+            <div id="shape-picker-list"></div>
+        </div>
+        <div class="toolbar cp-foot">
+            <button id="shape-picker-prev" type="button">Previous</button>
+            <button id="shape-picker-next" type="button">Next</button>
+            <button id="shape-picker-reset" type="button">Reset to automatic</button>
         </div>
     </div>
 </div>

@@ -28,8 +28,8 @@ from domainator.output_guardrails import enforce_output_limit, make_temporary_ou
 
 
 VIEWER_BUNDLE_FORMAT = "domainator_viewer_bundle"
-VIEWER_BUNDLE_VERSION = 1
-SUPPORTED_VIEWER_BUNDLE_VERSIONS = (1,)
+VIEWER_BUNDLE_VERSION = 2
+SUPPORTED_VIEWER_BUNDLE_VERSIONS = (1, 2)
 
 
 def read_node_metadata(paths: Optional[Iterable[Union[str, PathLike]]], index: Sequence[str]) -> pd.DataFrame:

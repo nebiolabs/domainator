@@ -71,7 +71,7 @@ def test_build_ssn_dvb_writes_bundle_with_metadata_defaults():
         bundle = _read_bundle(bundle_file)
 
         assert bundle["format"] == VIEWER_BUNDLE_FORMAT
-        assert bundle["version"] == VIEWER_BUNDLE_VERSION == 1
+        assert bundle["version"] == VIEWER_BUNDLE_VERSION == 2
         assert list(bundle["views"]) == ["ssn"]
         # app_state is written only by the HTML viewer's "Save session" button.
         assert "app_state" not in bundle
@@ -619,7 +619,7 @@ def test_build_ssn_dvb_writes_static_html_shell():
         assert 'const DEFAULT_WINDOWED_MAX_MERGE_EVENTS = 50;' in html_content
         assert 'function originalComponentByNode()' in html_content
         assert _viewer_config(html_content)['supportedSsnBundleVersions'] == [3, 4, 5, 6]
-        assert _viewer_config(html_content)['supportedViewerBundleVersions'] == [1]
+        assert _viewer_config(html_content)['supportedViewerBundleVersions'] == [1, 2]
 
         # The split chart draws a capped selection of the split events, so it has to
         # say how much of the series that is.

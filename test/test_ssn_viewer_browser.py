@@ -1251,7 +1251,7 @@ def test_saved_session_is_a_valid_current_bundle(meta_page, tmp_path):
 
     bundle = load_bundle(saved)  # would raise on a bad format/version
     assert bundle["format"] == VIEWER_BUNDLE_FORMAT
-    assert bundle["version"] == VIEWER_BUNDLE_VERSION == 1
+    assert bundle["version"] == VIEWER_BUNDLE_VERSION == 2
     assert bundle["nodes"] == ["A", "B", "C", "D", "E", "F"]
 
     app_state = bundle["app_state"]
@@ -5163,7 +5163,7 @@ def test_split_event_cap_is_saved_with_a_session(dense_page, tmp_path):
     saved = _save_session(page, tmp_path, "capped_session.dvb")
     bundle = load_bundle(saved)
 
-    assert bundle["version"] == VIEWER_BUNDLE_VERSION == 1
+    assert bundle["version"] == VIEWER_BUNDLE_VERSION == 2
     assert bundle["app_state"]["view"]["max_merge_events"] == 7
     # Saving re-serializes the loaded graph, which carries nothing derived.
     for derived_key in ("merge_event_series", "merge_event_total", "max_merge_events",

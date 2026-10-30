@@ -118,7 +118,7 @@
         if (event.ctrlKey || event.metaKey || event.altKey) { return; }
         if (keyboardTargetIsTextEntry(event.target)) { return; }
         if (colorPickerIsOpen() || metadataPasteDialogIsOpen() || nameDialogIsOpen()
-            || columnChartIsOpen()) { return; }
+            || columnChartIsOpen() || shapePickerIsOpen()) { return; }
         const match = /^Digit([0-9])$/.exec(event.code || '');
         if (!match) { return; }
         const slot = Number(match[1]);

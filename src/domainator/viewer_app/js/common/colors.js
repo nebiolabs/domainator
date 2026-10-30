@@ -1,4 +1,7 @@
     function rebuildNodeColorCache() {
+        state.shapeCaches = new Map();
+        state.styleColorCaches = new Map();
+        if (state.tree) { state.tree.annotationMeasure = null; }
         if (!state.bundle) {
             state.nodeColorCache = [];
             return;
@@ -308,8 +311,7 @@
         return info && info.type === 'categorical' ? defaultCategoricalPalette(columnName) : null;
     }
 
-    function nodeColor(nodeIndex) {
-        const columnName = currentColorField();
+    function nodeColor(nodeIndex, columnName = currentColorField()) {
         const info = colorInfo(columnName);
         const value = metadataValue(nodeIndex, columnName);
         if (!info) {
@@ -370,4 +372,3 @@
         const toHex = n => Math.round(Number(n)).toString(16).padStart(2, '0');
         return '#' + toHex(match[1]) + toHex(match[2]) + toHex(match[3]);
     }
-

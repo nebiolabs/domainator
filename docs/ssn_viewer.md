@@ -227,6 +227,45 @@ the edges are a solid mat and the cluster *shapes* carry all the information.
 
 The sidebar holds everything that changes what is drawn rather than what is selected.
 
+### Nodes and Labels
+
+**Nodes** configures the marks for individual sequences. **Color by** maps a metadata
+property to the existing categorical palette or numeric gradient; **Shape by** maps a
+property to categorical shapes. Shape values are always categories, even when numeric:
+mapping shape to a score does not change its color gradient.
+
+**Customize shapes...** shows each category's glyph and lets you change its assignment,
+including the **No value** shape. Automatic assignments use sorted category order and
+cycle through circle, square, diamond, triangle up, triangle down, and hexagon. The
+dialog reports when shapes repeat; they are not unique identifiers for large category
+sets. **Reset to automatic** removes overrides. With no shape mapping, dots stay circles
+and treemap cells stay squares; with a mapping, the glyph fits inside the existing cell.
+
+**Labels** chooses the **Text by** property: a metadata column, `node_id`, or None.
+Label color, font, and other styling are not configurable here. Networks and projections
+have one node configuration and one text-label configuration, retaining their existing
+density-based label limits.
+
+Trees additionally have **Add node**, **Add label**, **Remove**, **Move up**, and
+**Move down** controls. Each leaf gets its configured markers side by side starting at
+the actual branch tip, followed by its text labels. These are leaf annotations, not
+metadata on internal nodes. Either list may be empty: removing annotations does not
+remove branches, support values, or selection targets. **Show leaf labels** temporarily
+hides the text without deleting its configuration.
+
+The **first node configuration** supplies tree branch colors: a branch inherits a color
+only when all leaves below it share that color. Reordering the first configuration
+therefore changes branch colors. With no node configurations, branches are neutral.
+Collapsed clades keep their structural wedge and, when text labels are enabled, their
+clade-name/leaf-count summary rather than invented per-leaf annotations.
+
+Dense trees show a compact strip for each mapped color when individual annotations are
+too small to read. Long text may be shortened in the viewport; **Entire content**
+image exports include all annotation text. Colors and shape assignments are shared per
+property, so two node configurations using the same property use the same assignments.
+Metadata edits update all affected configurations; column renames retain mappings,
+and deletion clears the affected mappings with a status message.
+
 **Minimum cluster size** hides clusters smaller than N, which is how you get a
 thousand-singleton network to render usefully. **Minimum cluster size trims leaf clusters
 only** softens it: instead of dropping every small cluster, it repeatedly prunes small
@@ -319,9 +358,11 @@ open, so they never fire when you meant to type a number.
 
 ## Colors
 
-**Color by** picks the column that colors nodes; **Label by** picks the column drawn as
-node labels (or `node_id`). **Customize colors…** opens the picker for whichever column
-`Color by` names.
+**Color by**, under **Nodes**, picks the column that colors a node configuration.
+**Text by**, under **Labels**, picks its label text (or `node_id`).
+**Customize colors...** opens the picker for that node configuration's color property,
+including when it is a secondary tree marker. Palette edits, color-table import/export,
+and legend exports all use that property, not necessarily the first marker's property.
 
 ### Categorical columns
 

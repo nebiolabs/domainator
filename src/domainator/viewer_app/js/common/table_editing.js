@@ -93,22 +93,13 @@
         if (colorPickerIsOpen()) {
             openColorPicker();
         }
+        if (shapePickerIsOpen()) { renderShapePicker(); }
     }
 
     // populateMetadataControls resets color-by/label-by to the bundle defaults,
     // which would undo the user's choice every time a column is added.
     function populateMetadataControlsPreservingSelection() {
-        const colorBy = document.getElementById('color-by');
-        const labelBy = document.getElementById('label-by');
-        const previousColor = colorBy.value;
-        const previousLabel = labelBy.value;
         populateMetadataControls();
-        if (Array.from(colorBy.options).some(option => option.value === previousColor)) {
-            colorBy.value = previousColor;
-        }
-        if (Array.from(labelBy.options).some(option => option.value === previousLabel)) {
-            labelBy.value = previousLabel;
-        }
     }
 
     function setMetadataValue(nodeIndex, columnName, rawText) {
@@ -233,7 +224,7 @@
     // whatever each menu was showing -- carries the choice over on its own.
     function renameColumnInMenus(oldName, newName) {
         COLUMN_NAME_MENU_IDS.forEach(menuId => {
-            Array.from(document.getElementById(menuId).options).forEach(option => {
+            Array.from(document.getElementById(menuId)?.options || []).forEach(option => {
                 if (option.value === oldName) {
                     option.value = newName;
                 }
@@ -312,6 +303,7 @@
             state.metadataSort.columnKey = columnName;
         }
         renameColumnInMenus(oldName, columnName);
+        retargetAppearanceProperty(oldName, columnName);
         metadataColumn(oldName).name = columnName;
 
         refreshAfterMetadataEdit({columnsChanged: true});
@@ -343,8 +335,10 @@
         if (state.metadataSort.columnKey === columnName) {
             state.metadataSort = {columnKey: null, direction: 'asc'};
         }
+        const cleared = retargetAppearanceProperty(columnName, '');
         refreshAfterMetadataEdit({columnsChanged: true});
-        setStatus('Deleted column "' + columnName + '".');
+        setStatus('Deleted column "' + columnName + '".' +
+            (cleared ? ' Cleared ' + cleared + ' appearance mapping(s).' : ''));
         return true;
     }
 

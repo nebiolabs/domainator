@@ -138,10 +138,12 @@
         forEachProjectionPoint(scales, radius, (i, px, py) => {
             drawn.push([i, px, py]);
             const color = coloring ? state.nodeColorCache[i] : '#1f77b4';
-            if (!byColor.has(color)) {
-                byColor.set(color, []);
+            const shape = shapeForNode(state.nodeStyles[0], i);
+            const key = color + '|' + shape;
+            if (!byColor.has(key)) {
+                byColor.set(key, {color, shape, points: []});
             }
-            byColor.get(color).push(px, py);
+            byColor.get(key).points.push(px, py);
             if (state.selectedNodeIndices.has(i)) {
                 selected.push(px, py);
             }
@@ -150,12 +152,11 @@
             }
         });
         ctx.globalAlpha = PROJECTION_POINT_OPACITY;
-        byColor.forEach((points, color) => {
+        byColor.forEach(({points, color, shape}) => {
             ctx.fillStyle = color;
             ctx.beginPath();
             for (let k = 0; k < points.length; k += 2) {
-                ctx.moveTo(points[k] + radius, points[k + 1]);
-                ctx.arc(points[k], points[k + 1], radius, 0, 2 * Math.PI);
+                appendNodeGlyph(ctx, shape, points[k], points[k + 1], radius);
             }
             ctx.fill();
         });

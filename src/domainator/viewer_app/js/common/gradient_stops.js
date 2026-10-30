@@ -96,7 +96,7 @@
         if (histogram && histogram.highEdge > histogram.lowEdge) {
             return {low: histogram.lowEdge, high: histogram.highEdge};
         }
-        const info = colorInfo(currentColorField());
+        const info = colorInfo(colorPickerField());
         if (info && Number.isFinite(info.min) && Number.isFinite(info.max) && info.max > info.min) {
             return {low: info.min, high: info.max};
         }
@@ -161,7 +161,7 @@
     // Committing an edit
     // ---------------------------------------------------------------------
     function commitGradientStops() {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         if (!columnName) {
             return;
         }
@@ -268,7 +268,7 @@
     // "Reset values to data range": refit the ramp onto the data while keeping
     // the relative spacing of any stops the user has placed.
     function resetGradientStopValues() {
-        const info = colorInfo(currentColorField());
+        const info = colorInfo(colorPickerField());
         const stops = currentGradientStops();
         const domain = gradientRangeDomain();
         if (!info || stops.length < MIN_GRADIENT_STOPS) {

@@ -73,45 +73,15 @@
     }
 
     function populateMetadataControls() {
-        const colorBy = document.getElementById('color-by');
-        const labelBy = document.getElementById('label-by');
-        colorBy.innerHTML = '';
-        labelBy.innerHTML = '';
-
-        const emptyOption = document.createElement('option');
-        emptyOption.value = '';
-        emptyOption.textContent = 'None';
-        colorBy.appendChild(emptyOption.cloneNode(true));
-        labelBy.appendChild(emptyOption.cloneNode(true));
-
-        // "Label by" can also use the sequence's node_id (not a metadata column).
-        const nodeIdOption = document.createElement('option');
-        nodeIdOption.value = '__node_id__';
-        nodeIdOption.textContent = 'node_id';
-        labelBy.appendChild(nodeIdOption);
-
-        state.metadataColumns.forEach(column => {
-            const colorOption = document.createElement('option');
-            colorOption.value = column.name;
-            colorOption.textContent = column.name;
-            colorBy.appendChild(colorOption);
-
-            const labelOption = document.createElement('option');
-            labelOption.value = column.name;
-            labelOption.textContent = column.name;
-            labelBy.appendChild(labelOption);
-        });
-
-        colorBy.value = state.bundle.defaults.color_by || '';
-        labelBy.value = state.bundle.defaults.label_by || '';
+        renderAppearanceControls();
     }
 
     function currentColorField() {
-        return document.getElementById('color-by').value;
+        return document.getElementById('color-by')?.value || '';
     }
 
     function currentLabelField() {
-        return document.getElementById('label-by').value;
+        return document.getElementById('label-by')?.value || '';
     }
 
     function metadataColumn(name) {
@@ -171,4 +141,3 @@
         }
         return result;
     }
-

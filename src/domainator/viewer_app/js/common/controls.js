@@ -19,16 +19,7 @@
                 setStatus('Failed to load bundle: ' + error.message);
             }
         });
-        document.getElementById('color-by').addEventListener('change', () => {
-            rebuildNodeColorCache();
-            repaintNow();
-            if (colorPickerIsOpen()) {
-                openColorPicker();
-            }
-        });
-        document.getElementById('label-by').addEventListener('change', () => repaintNow());
         document.getElementById('export-selected').addEventListener('click', exportSelection);
-        document.getElementById('customize-colors').addEventListener('click', openColorPicker);
         document.getElementById('save-session').addEventListener('click', saveSessionFile);
         document.getElementById('rename-network').addEventListener('click', openRenameNetworkDialog);
         document.getElementById('color-picker-close').addEventListener('click', closeColorPicker);

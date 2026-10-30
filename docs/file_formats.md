@@ -758,12 +758,55 @@ app_state: {
   "view":      {...},   # layout, color_by/label_by, toggles, threshold_value, max_merge_events, view_transform
   "table":     {...},   # sort, filter, null_order, rows_per_page, column_widths
   "colors":    {...},   # custom_palettes, categorical_columns
+  "shapes":    {...},   # custom_mappings: per-property categorical glyph overrides
   "selection": {"node_ids": [...], "presets": {"<slot 0-9>": {"node_ids": [...], "saved_at": str}}}
 }
 ```
 
 The view fields are the open view's own: the threshold and split-event cap of a network,
 the cut height and collapsed clades of a tree, the axes of a projection.
+
+Version 2 adds these optional shared appearance fields:
+
+```json
+{
+  "view": {
+    "node_styles": [
+      {"id": "node-1", "color_by": "family", "shape_by": "group"}
+    ],
+    "label_styles": [
+      {"id": "label-1", "text_by": "__node_id__"}
+    ]
+  },
+  "shapes": {
+    "custom_mappings": {
+      "group": {"values": {"a": "diamond"}, "null_shape": "circle"}
+    }
+  }
+}
+```
+
+Style IDs are stable settings-entry identifiers, not sequence IDs; node entries use
+`node-<integer>` and label entries use `label-<integer>`. Array order is drawing order.
+Networks and projections require one entry in each array. Trees allow zero or more:
+an absent array restores legacy defaults, whereas `[]` deliberately removes all entries.
+Tree markers start at leaf tips, followed by label text. The first marker's color mapping
+also controls shared-descendant branch and collapsed-wedge colors.
+
+An empty mapping string means unmapped; `text_by` also accepts `__node_id__`. Other
+mapping strings name metadata columns. Shape values are categorical regardless of the
+metadata column's numeric color mode. Supported glyph names are `circle`, `square`,
+`diamond`, `triangle_up`, `triangle_down`, and `hexagon`. Unoverridden categories use
+sorted-category automatic assignments, cycling through these six glyphs; missing and
+empty values use `null_shape`. Overrides are shared per property.
+
+`view.color_by` and `view.label_by` remain primary-entry compatibility projections.
+When both legacy fields and new arrays occur, valid arrays take precedence regardless
+of JSON key order. Legacy tree sessions with empty `label_by` retain their node-ID
+fallback; a new explicit empty `text_by` produces no text. Existing visibility fields
+remain independent. Invalid appearance arrays or shape mappings are skipped atomically
+and reported without discarding other session fields. `state_version` remains 1: the
+optional-field registry contract is unchanged.
 
 All views can persist `view.export_extent`, either `"viewport"` (the default when
 absent) or `"entire"`. It controls view PNG/SVG exports, not charts or legends.
@@ -849,6 +892,7 @@ reads are `SUPPORTED_VIEWER_BUNDLE_VERSIONS`.
 | Version | Change |
 | --- | --- |
 | 1 | The first version. |
+| 2 | Optional ordered node/label styles and categorical shape assignments in saved sessions. Version 1 remains supported. |
 
 Bump `VIEWER_BUNDLE_VERSION` for any change to the schema, and keep the old version in
 `SUPPORTED_VIEWER_BUNDLE_VERSIONS` when the change is additive so previously written

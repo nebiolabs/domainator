@@ -24,27 +24,22 @@
         return state.tree.msa ? MSA_HEADER : TREE_HEADER_PLAIN;
     }
 
-    function treeLeafLabel(bundleIndex) {
-        const field = currentLabelField();
-        if (field && field !== '__node_id__') {
-            const value = metadataValue(bundleIndex, field);
-            return value === null || value === undefined ? '' : String(value);
-        }
-        return nodeId(bundleIndex);
+    function treeLeafLabel(bundleIndex, style = state.labelStyles[0]) {
+        return appearanceText(style, bundleIndex);
     }
 
     // What a row is called: a leaf's label, or a collapsed clade's label and size.
-    function treeRowLabel(node) {
+    function treeRowLabel(node, style = state.labelStyles[0]) {
         const tree = state.tree;
         if (tree.children[node].length === 0) {
-            return treeLeafLabel(tree.treeToBundle[node]);
+            return treeLeafLabel(tree.treeToBundle[node], style);
         }
         const label = tree.view.label[node];
         return (label ? label + ' ' : '') + '(' + tree.leafCount[node].toLocaleString() + ' leaves)';
     }
 
     function treeShowLabels() {
-        return document.getElementById('tree-show-labels').checked;
+        return document.getElementById('tree-show-labels').checked && state.labelStyles.some(style => style.text_by);
     }
 
     function treeShowSupport() {
@@ -78,18 +73,39 @@
         const rowHeight = tree.rowHeight;
         const labels = treeShowLabels() && rowHeight >= TREE_LABEL_MIN_ROW;
         const fontSize = Math.min(TREE_LABEL_FONT_MAX, rowHeight * 0.8);
-        let labelWidth = TREE_COLOR_STRIP + 10;
-        if (labels) {
-            let longest = 0;
-            layout.rowNode.forEach(node => { longest = Math.max(longest, treeRowLabel(node).length); });
-            labelWidth = Math.min(width * 0.45, longest * fontSize * 0.6 + 16);
+        const radius = Math.min(4, Math.max(1.2, rowHeight * 0.3));
+        const markerStep = radius * 2 + 3;
+        const firstLabel = state.labelStyles.findIndex(style => style.text_by);
+        let measure = tree.annotationMeasure;
+        if (!measure || measure.layout !== layout || measure.fontSize !== fontSize) {
+            const ctx = document.createElement('canvas').getContext('2d');
+            if (!ctx) { throw new Error('Could not measure tree annotations.'); }
+            ctx.font = fontSize + 'px ' + VIEW_FONT;
+            const labelWidths = state.labelStyles.map((style, index) => {
+                if (!style.text_by) { return 0; }
+                let longest = 0;
+                layout.rowNode.forEach(node => {
+                    if (index !== firstLabel && tree.children[node].length > 0) { return; }
+                    longest = Math.max(longest, ctx.measureText(treeRowLabel(node, style)).width);
+                });
+                return longest + 8;
+            });
+            measure = {layout, fontSize, labelWidths};
+            tree.annotationMeasure = measure;
         }
+        const markerWidth = state.nodeStyles.length ? (state.nodeStyles.length - 1) * markerStep + radius + 4 : 4;
+        const stripWidth = state.nodeStyles.filter(style => style.color_by).length * (TREE_COLOR_STRIP + 2) + 10;
+        const annotationWidth = labels ? markerWidth + measure.labelWidths.reduce((sum, value) => sum + value, 0)
+            : Math.max(markerWidth, stripWidth);
+        const labelWidth = Math.min(width * 0.55, annotationWidth);
         const treeWidth = options.treeWidth ?? Math.max(40, width - TREE_PADDING_LEFT - TREE_PADDING_RIGHT - labelWidth);
         const left = options.left ?? TREE_PADDING_LEFT;
         const scrollY = options.scrollY ?? tree.scrollY;
         const rowCount = layout.rowNode.length;
         return {
             width, height, top, viewHeight, rowHeight, labels, fontSize, treeWidth,
+            radius, markerStep, markerWidth, annotationWidth, labelWidths: measure.labelWidths,
+            fullAnnotations: options.fullAnnotations === true,
             xOf: value => left + value / layout.maxX * treeWidth,
             xPx: node => left + layout.x[node] / layout.maxX * treeWidth,
             yPx: row => top + (row + 0.5) * rowHeight - scrollY,
@@ -98,6 +114,19 @@
             msaScrollX: options.msaScrollX ?? tree.msaScrollX,
             preview: options.preview !== false,
         };
+    }
+
+    function treeFittingText(ctx, text, available) {
+        if (available <= 0) { return ''; }
+        if (ctx.measureText(text).width <= available) { return text; }
+        let low = 0;
+        let high = text.length;
+        while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (ctx.measureText(text.slice(0, mid) + '...').width <= available) { low = mid; }
+            else { high = mid - 1; }
+        }
+        return low ? text.slice(0, low) + '...' : '';
     }
 
     // Per node: the color every leaf below it shares (null when they differ or nothing is
@@ -212,7 +241,7 @@
         });
 
         // Rows: a collapsed clade's wedge, a leaf's dot, the colors and the labels.
-        const radius = Math.min(4, Math.max(1.2, rowHeight * 0.3));
+        const radius = geometry.radius;
         const stripX = geometry.xOf(layout.maxX) + 6;
         ctx.font = geometry.fontSize + 'px ' + VIEW_FONT;
         ctx.textBaseline = 'middle';
@@ -223,7 +252,7 @@
             const x = xPx(node);
             const leaf = tree.children[node].length === 0;
             const color = summary.color[node];
-            let labelX = x + radius + 4;
+            let labelX = x + geometry.markerWidth;
             if (!leaf) {
                 const end = geometry.xOf(layout.cladeMaxX[node]);
                 const half = Math.max(0.5, rowHeight * 0.4);
@@ -238,17 +267,38 @@
                 ctx.globalAlpha = 1;
                 labelX = Math.max(end, x + 8) + 4;
             } else if (rowHeight >= TREE_DOT_MIN_ROW) {
-                ctx.fillStyle = summary.coloring ? color : VIEW_MUTED;
-                ctx.beginPath();
-                ctx.arc(x, y, radius, 0, 2 * Math.PI);
-                ctx.fill();
+                state.nodeStyles.forEach((style, index) => {
+                    const markerX = x + index * geometry.markerStep;
+                    if (markerX + radius > width - TREE_PADDING_RIGHT) { return; }
+                    ctx.fillStyle = index === 0 ? (summary.coloring ? color : VIEW_MUTED)
+                        : appearanceColor(style, tree.treeToBundle[node], VIEW_MUTED);
+                    ctx.beginPath();
+                    appendNodeGlyph(ctx, shapeForNode(style, tree.treeToBundle[node]), markerX, y, radius);
+                    ctx.fill();
+                });
             }
             if (geometry.labels) {
                 ctx.fillStyle = VIEW_INK;
-                ctx.fillText(treeRowLabel(node), labelX, y);
-            } else if (summary.coloring) {
-                ctx.fillStyle = color || '#9aa3a8';
-                ctx.fillRect(stripX, y - rowHeight / 2, TREE_COLOR_STRIP, Math.max(rowHeight, 1));
+                state.labelStyles.forEach((style, index) => {
+                    if (!style.text_by || (!leaf && index !== state.labelStyles.findIndex(item => item.text_by))) { return; }
+                    const text = treeRowLabel(node, style);
+                    const available = Math.min(geometry.labelWidths[index] - 8, width - TREE_PADDING_RIGHT - labelX);
+                    const shown = geometry.fullAnnotations ? text : treeFittingText(ctx, text, available);
+                    if (shown) { ctx.fillText(shown, labelX, y); }
+                    labelX += geometry.labelWidths[index];
+                });
+            } else {
+                let offset = 0;
+                state.nodeStyles.forEach((style, index) => {
+                    if (!style.color_by) { return; }
+                    const stripColor = index === 0 ? color
+                        : leaf ? appearanceColor(style, tree.treeToBundle[node], null) : null;
+                    if (stripX + offset + TREE_COLOR_STRIP <= width - TREE_PADDING_RIGHT) {
+                        ctx.fillStyle = stripColor || '#9aa3a8';
+                        ctx.fillRect(stripX + offset, y - rowHeight / 2, TREE_COLOR_STRIP, Math.max(rowHeight, 1));
+                    }
+                    offset += TREE_COLOR_STRIP + 2;
+                });
             }
         }
 
@@ -492,13 +542,7 @@
             const geometry = treeGeometry(treeRect.width, treeRect.height);
             const measurer = document.createElement('canvas').getContext('2d');
             if (!measurer) { throw new Error('Could not measure tree labels.'); }
-            let labelWidth = TREE_COLOR_STRIP + 10;
-            if (geometry.labels) {
-                measurer.font = geometry.fontSize + 'px ' + VIEW_FONT;
-                for (const node of tree.layout.rowNode) {
-                    labelWidth = Math.max(labelWidth, measurer.measureText(treeRowLabel(node)).width + 24);
-                }
-            }
+            const labelWidth = geometry.annotationWidth + 8;
             let left = TREE_PADDING_LEFT;
             if (treeShowSupport() && tree.rowHeight >= TREE_SUPPORT_MIN_ROW) {
                 measurer.font = '9px ' + VIEW_FONT;
@@ -512,7 +556,7 @@
             size.msaWidth = tree.msa ? Math.ceil(tree.msa.length * msaColumnWidth() +
                 measurer.measureText(String(tree.msa.length)).width / 2 + 4) : 0;
             size.height = Math.ceil(treeHeaderHeight() + tree.layout.rowNode.length * tree.rowHeight + TREE_PADDING_BOTTOM);
-            size.options = {treeWidth: geometry.treeWidth, left, scrollY: 0, msaScrollX: 0, preview: false};
+            size.options = {treeWidth: geometry.treeWidth, left, scrollY: 0, msaScrollX: 0, preview: false, fullAnnotations: true};
         }
         size.width = size.treeWidth + size.msaWidth;
         validateImageExportSize(Math.round(size.width), Math.round(size.height));

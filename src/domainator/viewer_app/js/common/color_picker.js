@@ -4,7 +4,7 @@
     // describes discrete mappings, so it applies to categorical columns. Returns the
     // column name, or null after setting an explanatory status message.
     function categoricalColumnForColorTable(action) {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         const info = colorInfo(columnName);
         if (!columnName || !info) {
             setStatus(action + ' color table: choose a "Color by" column first.');
@@ -86,7 +86,7 @@
     // min/mid/max ticks. All fills pass through svgColorParts so default hsl() colors
     // become SVG-editor-safe rgb()+opacity. No external refs (keeps PNG untainted).
     function buildLegendSVG() {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         const info = colorInfo(columnName);
         const title = columnName || 'Legend';
         const titleFontSize = 24;
@@ -261,6 +261,8 @@
         if (overlay) {
             overlay.hidden = true;
         }
+        state.colorPickerColumn = null;
+        state.colorPickerStyleId = null;
     }
 
     function ensureCategoricalPalette(columnName) {
@@ -590,7 +592,7 @@
     // Serves both the palette menu and the start offset: either one re-applies the
     // menu's palette from the offset.
     function changeColorPalette() {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         if (!columnName) {
             return;
         }
@@ -607,7 +609,7 @@
 
     // Step the discrete swatch pager (no-op for numeric/empty columns).
     function changeColorPickerPage(delta) {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         const info = colorInfo(columnName);
         if (!columnName || !info || info.type === 'numeric') {
             return;
@@ -623,7 +625,7 @@
         // A fresh open (column switch, reset, TSV load) starts at the first page.
         state.colorPickerPage = 0;
         const overlay = document.getElementById('color-picker-overlay');
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         const info = colorInfo(columnName);
         const discretePanel = document.getElementById('color-picker-discrete');
         const continuousPanel = document.getElementById('color-picker-continuous');
@@ -678,7 +680,7 @@
     }
 
     function toggleColorCategorical() {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         if (!columnName || !columnIsNumericType(columnName)) {
             return;
         }
@@ -689,7 +691,7 @@
     }
 
     function resetColorPicker() {
-        const columnName = currentColorField();
+        const columnName = colorPickerField();
         if (columnName) {
             delete state.customPalettes[paletteKey(columnName)];
             rebuildNodeColorCache();
@@ -697,4 +699,3 @@
             openColorPicker();
         }
     }
-
