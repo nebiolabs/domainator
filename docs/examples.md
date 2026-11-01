@@ -58,7 +58,7 @@ You can also run domainate sequentially, meaning you can run an already annotate
 ## Visualizing output
 ```bash
 domainator summary_report -i annotated.gb --html_out domain_summary.html
-domainator enum_report -i annotated.gb --by contig --columns definition taxname:superkingdom:genus:species:self length domains --html_out enum_report.html -o enum_report.tsv
+domainator enum_report -i annotated.gb --by contig --columns definition taxname:domain:genus:species:self length domains --html_out enum_report.html -o enum_report.tsv
 domainator color_genbank -i annotated.gb -o annotated_colored.gb --target domains
 domainator plot_contigs -i annotated_colored.gb --html_out contigs_plot.html
 ```
@@ -77,7 +77,7 @@ domainator domainate -i neighborhoods.gb -o annotated_neighborhoods.gb -r exampl
 
 # generate various kinds of reports of the results
 domainator summary_report -i annotated_neighborhoods.gb -o /dev/stdout --html_out summary_report.html --taxonomy
-domainator enum_report -i annotated_neighborhoods.gb -o /dev/stdout --html_out enum_report.html --columns definition length taxname:superkingdom:genus:self domains domain_descriptions domain_search
+domainator enum_report -i annotated_neighborhoods.gb -o /dev/stdout --html_out enum_report.html --columns definition length taxname:domain:genus:self domains domain_descriptions domain_search
 domainator color_genbank -i annotated_neighborhoods.gb -o annotated_neighborhoods_colored.gb --target domains
 domainator plot_contigs -i annotated_neighborhoods_colored.gb --html_out neighborhoods_plot.html 
 ```
@@ -89,7 +89,7 @@ domainator domainate -i protein_hits.gb  -o annotated_proteins.gb -r example_fil
 
 # generate various kinds of reports
 domainator summary_report -i annotated_proteins.gb -o /dev/stdout --html_out summary_report.html --taxonomy
-domainator enum_report -i annotated_proteins.gb -o /dev/stdout --html_out enum_report.html --columns definition length taxname:superkingdom:genus:self domains domain_descriptions domain_search
+domainator enum_report -i annotated_proteins.gb -o /dev/stdout --html_out enum_report.html --columns definition length taxname:domain:genus:self domains domain_descriptions domain_search
 domainator color_genbank -i annotated_proteins.gb -o annotated_proteins_colored.gb --target domains
 domainator plot_contigs -i annotated_proteins_colored.gb --html_out proteins_plot.html 
 ```

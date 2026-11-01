@@ -465,7 +465,7 @@ def test_enum_report_html_quote_escape_1(shared_datadir):
 def test_enum_html_writer_missing_values_are_null():
     out = StringIO()
     writer = table_writers.HTMLTableWriter(
-        ["taxname_superkingdom", "taxid_superkingdom", "taxname_domain"],
+        ["taxname_realm", "taxid_domain", "taxname_domain"],
         ["str", "int", "str"],
         out,
         None,
@@ -475,7 +475,7 @@ def test_enum_html_writer_missing_values_are_null():
     writer.write_row([None, None, "Eukaryota"])
     writer.write_footer()
 
-    assert report_rows(out.getvalue()) == [{"taxname_superkingdom": None, "taxid_superkingdom": None, "taxname_domain": "Eukaryota"}]
+    assert report_rows(out.getvalue()) == [{"taxname_realm": None, "taxid_domain": None, "taxname_domain": "Eukaryota"}]
 
 
 def test_enum_report_taxonomy_1(shared_datadir):
@@ -483,7 +483,7 @@ def test_enum_report_taxonomy_1(shared_datadir):
     with tempfile.TemporaryDirectory() as output_dir:
         # output_dir = "test_out"
         out = output_dir + "/enum_report.tsv"
-        enum_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out, "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--columns", "taxid_lineage", "taxname_lineage", "taxid:self:superkingdom:genus", "taxname:self:superkingdom:genus", "domain_descriptions", "append:one:int:1", "append:two:float:2.0", "append:three:str:three"])
+        enum_report.main(["-i", str(shared_datadir / "swissprot_CuSOD_subset.fasta"), "-o", out, "--ncbi_taxonomy_path", str(shared_datadir / "taxdmp"), "--columns", "taxid_lineage", "taxname_lineage", "taxid:self:domain:genus", "taxname:self:domain:genus", "domain_descriptions", "append:one:int:1", "append:two:float:2.0", "append:three:str:three"])
         assert Path(out).is_file()
         
         with open(out) as f:
@@ -491,7 +491,7 @@ def test_enum_report_taxonomy_1(shared_datadir):
             assert len(lines) == 3
             for i, l in enumerate(lines):
                 lines[i] = lines[i].rstrip("\r\n").split("\t")
-            assert lines[0] == ["contig", "taxid_lineage", "taxname_lineage", "taxid_self", "taxid_superkingdom", "taxid_genus", "taxname_self", "taxname_superkingdom", "taxname_genus", "domain_descriptions", "one", "two", "three"]
+            assert lines[0] == ["contig", "taxid_lineage", "taxname_lineage", "taxid_self", "taxid_domain", "taxid_genus", "taxname_self", "taxname_domain", "taxname_genus", "domain_descriptions", "one", "two", "three"]
             assert len(lines[1]) == len(lines[0])
             assert len(lines[2]) == len(lines[0])
             assert lines[1] == ["sp|P0AGD1|SODC_ECOLI", "131567; 2; 1224; 1236; 91347; 543; 561; 562", "cellular organisms; Bacteria; Pseudomonadota; Gammaproteobacteria; Enterobacterales; Enterobacteriaceae; Escherichia; Escherichia coli", "562", "2", "561", "Escherichia coli", "Bacteria", "Escherichia", "", "1", "2.0", "three"] 

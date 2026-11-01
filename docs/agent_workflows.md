@@ -188,7 +188,7 @@ or database loading; use `--ncbi_taxonomy_path` to select an existing offline da
 domainator seq_dist -i proteins.gb -r proteins.gb --hdf_out dist.hdf5
 
 # 2. (optional) per-node metadata to attach, e.g. domain architecture + taxonomy
-domainator enum_report -i proteins.gb --by contig --columns architecture taxname:superkingdom -o meta.tsv
+domainator enum_report -i proteins.gb --by contig --columns architecture taxname:domain -o meta.tsv
 
 # 3. compact SSN bundle
 domainator build_ssn -i dist.hdf5 --dvb_out net.dvb --metadata meta.tsv

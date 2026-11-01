@@ -54,8 +54,8 @@ Give at least one of these outputs: `--tsv_out`, `--html_out`, `--json_out`. `-`
 | `taxid_lineage` | the taxids from the root to the record's taxid, separated by ';'. |
 | `taxname_lineage` | the taxon names from the root to the record's taxid, separated by ';'. |
 | `rank_lineage` | the ranks from the root to the record's taxid, separated by ';'. |
-| `taxid:rank[:...]` | the taxid at each given rank (e.g. superkingdom, genus, species; 'self' for the record's own taxid), in columns named taxid_\[rank\]. |
-| `taxname:rank[:...]` | the taxon name at each given rank (e.g. superkingdom, genus, species; 'self' for the record's own taxon), in columns named taxname_\[rank\]. |
+| `taxid:rank[:...]` | the taxid at each given rank (e.g. domain, genus, species; 'self' for the record's own taxid), in columns named taxid_\[rank\]. |
+| `taxname:rank[:...]` | the taxon name at each given rank (e.g. domain, genus, species; 'self' for the record's own taxon), in columns named taxname_\[rank\]. |
 | `qualifier:feature:qualifier` | the values of this qualifier on features of this type, separated by ';'. |
 | `feature_count:feature` | the number of features of this type. |
 | `motif_count:motif` | the number of matches of this PROSITE motif in the sequence (nucleotide motifs for nucleotide sequences, protein motifs for proteins; see https://emboss.sourceforge.net/apps/release/6.5/emboss/apps/fuzzpro.html). |

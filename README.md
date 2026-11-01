@@ -353,7 +353,7 @@ domainator domainate --cpu 4 --max_overlap 0.6 -i your_genbank.gb -r Pfam-A.hmm 
 ## Visualizing output
 ```bash
 domainator summary_report -i domainator_output.gb --html_out domain_summary.html
-domainator enum_report -i domainator_output.gb --by contig --columns taxname:superkingdom:genus:species:self length domains --html_out enum_report.html -o enum_report.tsv
+domainator enum_report -i domainator_output.gb --by contig --columns taxname:domain:genus:species:self length domains --html_out enum_report.html -o enum_report.tsv
 domainator plot_contigs -i domainator_output.gb --html_out contigs_plot.html
 ```
 

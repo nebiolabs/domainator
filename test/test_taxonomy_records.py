@@ -55,7 +55,7 @@ def test_taxonomy_data(ncbi_taxonomy):
     assert str(from_taxid) == str(from_record) == repr(from_record)
     assert from_taxid.lineage[0] == 1 and from_taxid.lineage[-1] == E_COLI
     assert from_taxid.rank_to_name["species"] == "Escherichia coli"
-    assert from_taxid.rank_to_taxid["superkingdom" if "superkingdom" in from_taxid.ranks else "domain"] == BACTERIA
+    assert from_taxid.rank_to_taxid["domain"] == BACTERIA
     with pytest.raises(RuntimeError, match="either a SeqRecord or a taxid"):
         TaxonomyData(ncbi_taxonomy)
     with pytest.raises(RuntimeError, match="not both"):

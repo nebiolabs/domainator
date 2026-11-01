@@ -161,20 +161,31 @@ def _taxon(lineage, names, ranks, count):
 
 def test_taxonomy_tree_skips_unranked_and_single_child_taxa():
     taxa = {
-        # root > cellular organisms (no rank) > Bacteria (domain) > Bacillota (phylum) > Bacilli (class) > Bacillus (genus)
+        # root > cellular organisms (cellular root) > Bacteria (domain) > Bacillota (phylum) > Bacilli (class) > Bacillus (genus)
         1386: _taxon([1, 131567, 2, 1239, 91061, 1386], ["root", "cellular organisms", "Bacteria", "Bacillota", "Bacilli", "Bacillus"],
-                     ["no rank", "no rank", "domain", "phylum", "class", "genus"], 3),
+                     ["no rank", "cellular root", "domain", "phylum", "class", "genus"], 3),
         561: _taxon([1, 131567, 2, 1224, 1236, 561], ["root", "cellular organisms", "Bacteria", "Pseudomonadota", "Gammaproteobacteria", "Escherichia"],
-                    ["no rank", "no rank", "domain", "phylum", "class", "genus"], 5),
+                    ["no rank", "cellular root", "domain", "phylum", "class", "genus"], 5),
+        # root > Viruses (acellular root) > Riboviria (realm) > Orthornavirae (kingdom) > Pisuviricota (phylum)
+        2732408: _taxon([1, 10239, 2559587, 2732396, 2732408], ["root", "Viruses", "Riboviria", "Orthornavirae", "Pisuviricota"],
+                        ["no rank", "acellular root", "realm", "kingdom", "phylum"], 2),
         # An unranked taxon of its own is kept.
         12908: _taxon([1, 12908], ["root", "unclassified sequences"], ["no rank", "no rank"], 1),
     }
     tree = summary_report.taxonomy_tree(taxa)
     assert (tree["taxid"], tree["name"], tree["count"]) == (1, "All", 0)
-    bacteria, unclassified = tree["children"]
-    # Bacteria (a domain) is kept; the single-child phyla and classes are not.
+    cellular, viruses, unclassified = tree["children"]
+    # The cellular root and Bacteria (a domain) are kept although each has one child; the single-child phyla and classes are not.
+    assert (cellular["name"], cellular["rank"], cellular["count"]) == ("cellular organisms", "cellular root", 0)
+    [bacteria] = cellular["children"]
     assert (bacteria["name"], bacteria["rank"], bacteria["count"]) == ("Bacteria", "domain", 0)
     assert [(c["name"], c["count"], c["children"]) for c in bacteria["children"]] == [("Escherichia", 5, []), ("Bacillus", 3, [])]
+    # Likewise the acellular root, its realm and kingdom.
+    assert (viruses["name"], viruses["rank"], viruses["count"]) == ("Viruses", "acellular root", 0)
+    [riboviria] = viruses["children"]
+    [orthornavirae] = riboviria["children"]
+    assert (riboviria["name"], orthornavirae["name"]) == ("Riboviria", "Orthornavirae")
+    assert [(c["name"], c["count"]) for c in orthornavirae["children"]] == [("Pisuviricota", 2)]
     assert (unclassified["taxid"], unclassified["rank"], unclassified["count"]) == (12908, "no rank", 1)
 
 

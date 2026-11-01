@@ -178,7 +178,7 @@ def length_counts(lengths) -> Optional[Dict]:
 
 
 # Ranks kept in the taxonomy tree even when they add nothing (one child, no contigs of their own).
-TREE_KEPT_RANKS = {"superkingdom", "domain", "realm", "kingdom"}
+TREE_KEPT_RANKS = {"cellular root", "acellular root", "domain", "realm", "kingdom"}
 
 
 def taxonomy_tree(taxa_data) -> Dict:

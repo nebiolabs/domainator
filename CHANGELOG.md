@@ -74,6 +74,11 @@ Defaults and extraction behavior are unchanged; old names are not aliases.
   (`DOMAINATOR_MP_START_METHOD` overrides this). Domainator builds on free-threaded Python.
 
 ### Changed
+- Taxonomy follows NCBI's rank changes: `superkingdom` is gone from current taxdumps, so
+  enum_report's `taxid:`/`taxname:` examples use `domain` (Bacteria, Archaea, Eukaryota;
+  use `realm` for viruses). summary_report's taxonomy tree keeps the new `cellular root`
+  ("cellular organisms") and `acellular root` ("Viruses") ranks as nodes, as it does
+  domains, realms and kingdoms.
 - Peptide and CDS-neighborhood selection now invert only the combined OR selectors,
   never strand or other independent restrictions. With no selectors, both library
   and CLI calls select all eligible CDSs; inversion warns and is ignored.
