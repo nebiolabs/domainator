@@ -29,7 +29,7 @@ When --max_hits is specified, it applies to the entire search, not individual re
 at most 100 hits will be returned (not 500). 
 
 When max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.
-If neither is set, then hits will be written on the fly and not sorted.
+If neither is set, then hits will be written on the fly, in input order.
 
 --dedup selects one output uniqueness policy: none (the default), id,
 sequence, or sequence_rc. With --max_hits, deduplication keeps the best-scoring
@@ -37,8 +37,8 @@ representatives before applying the limit, retaining at most --max_hits winners
 per worker and in the global merge. Domainator assumes that the same record ID
 always identifies the same sequence, so sequence uniqueness also ensures unique
 IDs. Hit scores and annotations can still differ between copies.
-Without --max_hits, the first arriving representative is kept; parallel arrival
-order is arbitrary.
+Without --max_hits, hits are written in input order, whatever --cpu is, and the first
+representative in input order is kept.
 ```
 
 Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
@@ -76,7 +76,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--kb_range` | NUMBER |  | How many kb upstream and downstream of the selected CDS to extract. Starting from the ends of the CDS. |
 | `--kb_up` | NUMBER |  | How many kb upstream of the selected CDS to extract. Starting from the end of the CDS. |
 | `--kb_down` | NUMBER |  | How many kb downstream of the selected CDS to extract. Starting from the end of the CDS. |
-| `--cds_range` | INTEGER |  | How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs. |
+| `--cds_range` | INTEGER |  | How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs. Only protein-coding CDSs are counted, never hits on a nucleotide reference. |
 | `--cds_up` | INTEGER |  | How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS. |
 | `--cds_down` | INTEGER |  | How many CDSs downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate downstream CDS. |
 | `--whole_contig` |  |  | If set, then return the entire matching contigs. Circular contigs stay circular, and are rotated so that the hit is in the center. |

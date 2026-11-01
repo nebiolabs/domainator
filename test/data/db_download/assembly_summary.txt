@@ -1,0 +1,13 @@
+#   See ftp://ftp.ncbi.nlm.nih.gov/genomes/README_assembly_summary.txt for a description of the columns in this file.
+#assembly_accession	bioproject	biosample	wgs_master	refseq_category	taxid	species_taxid	organism_name	infraspecific_name	isolate	version_status	assembly_level	release_type	genome_rep	seq_rel_date	asm_name	asm_submitter	gbrs_paired_asm	paired_asm_comp	ftp_path	excluded_from_refseq	relation_to_type_material
+GCA_000000011.1	PRJNA0	SAMN0		na	562	562	Escherichia coli			latest	Complete Genome	Major	Full	2020/01/15	Ecoli1	Test	na	na	genomes/GCA_000000011.1_Ecoli1		
+GCA_000000022.1	PRJNA1	SAMN1		reference genome	562	562	Escherichia coli			latest	Complete Genome	Major	Full	2021/06/01	Ecoli2	Test	na	na	genomes/GCA_000000022.1_Ecoli2		
+GCA_000000033.1	PRJNA2	SAMN2		representative genome	1423	1423	Bacillus subtilis			latest	Scaffold	Major	Full	2019/03/10	Bsub1	Test	na	na	genomes/GCA_000000033.1_Bsub1		
+GCA_000000044.1	PRJNA3	SAMN3		representative genome	4932	4932	Saccharomyces cerevisiae			latest	Chromosome	Major	Full	2022/02/02	Yeast1	Test	na	na	genomes/GCA_000000044.1_Yeast1		
+GCA_000000055.1	PRJNA4	SAMN4		na	256318	256318	metagenome			latest	Contig	Major	Full	2023/05/05	Meta1	Test	na	na	genomes/GCA_000000055.1_Meta1		
+GCA_000000066.1	PRJNA5	SAMN5		na	256318	256318	metagenome			latest	Contig	Major	Full	2023/05/06	Meta2	Test	na	na	genomes/GCA_000000066.1_Meta2		
+GCA_000000077.1	PRJNA6	SAMN6		na	77133	77133	uncultured bacterium			latest	Complete Genome	Major	Full	2018/01/01	Env1	Test	na	na	genomes/GCA_000000077.1_Env1		
+GCA_000000088.1	PRJNA7	SAMN7		na	77133	77133	uncultured bacterium			latest	Complete Genome	Major	Full	2018/01/02	Env2	Test	na	na	genomes/GCA_000000088.1_Env2		
+GCA_000000099.1	PRJNA8	SAMN8		na	83333	562	Escherichia coli K-12			latest	Complete Genome	Major	Full	2024/01/01	Missing1	Test	na	na	genomes/GCA_000000099.1_Missing1		
+GCA_000000101.1	PRJNA9	SAMN9		na	83333	562	Escherichia coli K-12			latest	Complete Genome	Major	Full	2024/02/01	NoFtp1	Test	na	na	na		
+GCA_000000112.1	PRJNA10	SAMN10		reference genome	83333	562	Escherichia coli K-12			latest	Complete Genome	Major	Full	2024/07/07	K12	Test	na	na	genomes/GCA_000000112.1_K12		

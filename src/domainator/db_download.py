@@ -30,6 +30,7 @@ from jsonargparse import ActionConfigFile
 import logging
 import gzip
 import os
+import shutil
 import subprocess
 import time
 import requests
@@ -41,18 +42,18 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature, UnknownPosition
 from domainator.seqio import write_genbank, parse_seqfiles
 from domainator.taxonomy.records import filter_by_taxonomy, compile_taxonomy_allowed
 from domainator.cli.common import list_and_file_to_dict_keys, partial_help
-from domainator._mp import make_pool, make_manager, resolve_cpu
+from domainator._mp import imap_bounded, make_pool, resolve_cpu
 from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator import __version__
 from typing import Dict, Set, Optional, Iterator, Iterable
 from domainator.domainate import clean_rec, prodigal_CDS_annotate
-from domainator.errors import ExternalToolError
+from domainator.errors import ExternalToolError, InputError
 from domainator.external import resolve_binary
 import tqdm
 import datetime
 import tempfile
 import functools
-from contextlib import nullcontext
+from contextlib import contextmanager
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -66,12 +67,14 @@ def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict
 
     Args:
         file_path (str, optional): Path to a local copy of a GenBank assembly summary file. If None, the file will be downloaded from the URL.
+            An ftp_path in a local file that is not a URL names a local directory laid out like the NCBI genomes
+            server (a mirror); a relative one is relative to the directory holding the summary file.
 
     Returns:
         Iterator[Dict[str, str]]: An iterator of dictionaries where keys are column labels and values are row entries.
     """
 
-    def parse_file(file):
+    def parse_file(file, base_dir=None):
         # Discard the first line (it's a comment)
         next(file)
 
@@ -86,13 +89,16 @@ def load_ncbi_assembly_summary(file_path: Optional[str] = None) -> Iterator[Dict
                 parts = line.split("\t")
                 out = dict(zip(header, parts))
                 out["versionless_accession"] = out["assembly_accession"].split(".")[0]
+                ftp_path = out.get("ftp_path", "").strip()
+                if base_dir is not None and ftp_path not in ("", "na") and not _is_url(ftp_path):
+                    out["ftp_path"] = os.path.join(base_dir, ftp_path)
                 yield out
 
     logger.info(f"Loading assembly_summary_genbank.txt")
     # Open the file and parse it
     if file_path is not None:
         with open(file_path) as f:
-            yield from parse_file(f)
+            yield from parse_file(f, os.path.dirname(os.path.abspath(file_path)))
     else:
         url = "https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt"
         with requests.get(url, stream=True) as response:
@@ -339,25 +345,23 @@ def gbff_is_valid(path):
     except (OSError, EOFError, UnicodeDecodeError):
         return False
 
-def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, records_written=None, num_recs=None):
+def process_local_gbff(gbff_path, output_file_path, gene_call):
     """
-    Process a single local .gbff(.gz) file and append its records to the combined output GenBank file.
+    Append the records of one local .gbff(.gz) file to a GenBank file.
 
-    This is the backend-agnostic per-genome processing step, shared by the direct-download
-    worker and the NCBI Datasets backend.
+    This is the backend-agnostic per-genome step, shared by the direct-download and NCBI
+    Datasets backends. Their workers each write a genome to a file of its own, which the parent
+    then appends to the database in the order of the assembly summary.
 
     Args:
         gbff_path (str): Path to a local .gbff or .gbff.gz file (gzip is decompressed transparently).
-        output_file_path (str): Path to the combined output GenBank file (records are appended).
+        output_file_path (str): Path of the GenBank file to append the records to.
         gene_call (str): One of None, 'all', or 'unannotated'. If None, records are appended as-is
             (fast path, no parsing). If 'all', existing CDS annotations are cleared and all contigs
             re-annotated with Prodigal. If 'unannotated', only contigs without CDS annotations are annotated.
-        lock: An optional lock to serialize writes to output_file_path. None for single-process use.
-        records_written: An optional shared counter (multiprocessing Value) used to enforce num_recs.
-        num_recs (int): An optional cap on the number of genomes to write.
 
     Returns:
-        bool: True if the genome was written, False on failure or if num_recs was already reached.
+        bool: True if the genome was written, False if it is not valid GenBank or could not be processed.
     """
     if gene_call not in (None, 'all', 'unannotated'):
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
@@ -379,19 +383,14 @@ def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, record
                 if CDS_count == 0:
                     prodigal_CDS_annotate(record)
 
-        with (lock if lock is not None else nullcontext()):
-            if num_recs is not None and records_written is not None and records_written.value >= num_recs:
-                return False
-            with open(output_file_path, "a") as output_handle:
-                if records is not None:
-                    for record in records:
-                        write_genbank((record,), output_handle)
-                else:
-                    with _open_maybe_gzip(gbff_path, "rt") as gbff_in:
-                        for line in gbff_in:
-                            output_handle.write(line)
-            if num_recs is not None and records_written is not None:
-                records_written.value += 1
+        with open(output_file_path, "a") as output_handle:
+            if records is not None:
+                for record in records:
+                    write_genbank((record,), output_handle)
+            else:
+                with _open_maybe_gzip(gbff_path, "rt") as gbff_in:
+                    for line in gbff_in:
+                        output_handle.write(line)
         return True
 
     except EOFError as e:
@@ -401,9 +400,36 @@ def process_local_gbff(gbff_path, output_file_path, gene_call, lock=None, record
         logger.warning(f"error processing {gbff_path}: {e}")
         return False
 
-def worker_process(r, output_file_path, gene_call, num_recs, records_written, lock, user_agent=None):
+def _append_genome(staged_path, output_file_path):
+    """Append a genome a worker wrote to staged_path to the database, then delete staged_path."""
+    with open(staged_path, "rb") as staged, open(output_file_path, "ab") as output_handle:
+        shutil.copyfileobj(staged, output_handle)
+    os.remove(staged_path)
 
+def _is_url(location):
+    return location.startswith(("http://", "https://", "ftp://"))
+
+def _versionless_accession(r):
+    return r.get("versionless_accession", r.get("assembly_accession", "").split(".")[0])
+
+def worker_process(task, staging_dir, gene_call, user_agent=None):
+    """Fetch one assembly's genomic.gbff.gz and write its records to a file in staging_dir.
+
+    task is (index, summary row). An ftp_path that is not a URL is a local directory laid out like
+    the NCBI genomes server (a mirror), which is read in place. Returns the path of the written
+    file, or None if the genome could not be fetched or is not valid GenBank.
+    """
+    index, r = task
     ftp_path = r['ftp_path'].rstrip("/")
+    staged = os.path.join(staging_dir, f"{index}.gb")
+
+    if not _is_url(ftp_path):
+        local_file = os.path.join(ftp_path, os.path.basename(ftp_path) + "_genomic.gbff.gz")
+        if not os.path.isfile(local_file):
+            logger.warning(f"{local_file} not found, skipping")
+            return None
+        return staged if process_local_gbff(local_file, staged, gene_call) else None
+
     assembly_long_name = ftp_path.split('/')[-1]
     remote_nucleotide_file = ftp_path + '/' + assembly_long_name + "_genomic.gbff.gz"
 
@@ -421,36 +447,38 @@ def worker_process(r, output_file_path, gene_call, num_recs, records_written, lo
     adapter = HTTPAdapter(max_retries=retries)
     session.mount('https://', adapter)
 
+    local_path = os.path.join(staging_dir, f"{index}.gbff.gz")
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            local_path = os.path.join(tmpdir, "genomic.gbff.gz")
-            with session.get(remote_nucleotide_file, stream=True) as response:
-                response.raise_for_status()
-                with open(local_path, "wb") as fh:
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        fh.write(chunk)
-            success = process_local_gbff(local_path, output_file_path, gene_call, lock=lock, records_written=records_written, num_recs=num_recs)
-        if success is False:
-            return False
-        return r["versionless_accession"]
+        with session.get(remote_nucleotide_file, stream=True) as response:
+            response.raise_for_status()
+            with open(local_path, "wb") as fh:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    fh.write(chunk)
+        return staged if process_local_gbff(local_path, staged, gene_call) else None
 
     except requests.RequestException as e:
         logger.warning(f"error downloading {remote_nucleotide_file}: {e}")
-        return False
+        return None
     except Exception as e:
         logger.warning(f"error processing {remote_nucleotide_file}: {e}")
-        return False
+        return None
+    finally:
+        if os.path.exists(local_path):
+            os.remove(local_path)
 
 def process_genbank_accessions(genbank_accessions, output_file_path, gene_call, num_recs, download_workers:int=1, success_rec_log=None, user_agent=None):
     """
     Processes a list of GenBank accessions, downloading the corresponding nucleotide data over HTTPS
     and writing it to the output file (the "direct" download backend).
 
+    Genomes are appended in the order of genbank_accessions, whatever order their downloads finish
+    in, so the output, and which genomes num_recs keeps, do not depend on timing.
+
     Args:
         genbank_accessions (list): A list of dictionaries containing GenBank accession information.
         output_file_path (str): The path of the combined output GenBank file (records are appended).
         gene_call (str): If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. If None, existing annotations will be kept.
-        num_recs (int): The maximum number of records to download. If None, all records will be downloaded.
+        num_recs (int): The maximum number of genomes to write. If None, all genomes will be written.
         download_workers (int, optional): The number of simultaneous download connections (pool size). Defaults to 1.
         success_rec_log (str, optional): Path to a log file for successfully written accessions. Defaults to None.
         user_agent (str, optional): User-Agent header sent with each request. Defaults to None.
@@ -466,45 +494,47 @@ def process_genbank_accessions(genbank_accessions, output_file_path, gene_call, 
     appended = 0
     failed = 0
 
-    with make_manager() as manager:
-        lock = manager.Lock()
-        records_written = manager.Value('i', 0)
-        with make_pool(processes=download_workers) as pool:
-            for success in tqdm.tqdm(pool.imap_unordered(functools.partial(worker_process, output_file_path=output_file_path, gene_call=gene_call, num_recs=num_recs, records_written=records_written, lock=lock, user_agent=user_agent), genbank_accessions), total=len(genbank_accessions), desc="GenBank genomes", leave=True, dynamic_ncols=True):
-                with lock:
-                    if success is not False:
-                        appended += 1
-                        if success_rec_log is not None:
-                            success_log_handle.write(success + "\n")
-                    else:
-                        failed += 1
-                    if num_recs is not None and records_written.value >= num_recs:
-                        break
-
-    if success_log_handle is not None:
-        success_log_handle.close()
+    try:
+        # The pool stops before the staging directory is removed (with-items exit in reverse).
+        with tempfile.TemporaryDirectory() as staging_dir, make_pool(processes=download_workers) as pool:
+            worker = functools.partial(worker_process, staging_dir=staging_dir, gene_call=gene_call, user_agent=user_agent)
+            staged_genomes = imap_bounded(pool, worker, enumerate(genbank_accessions), max_pending=2 * download_workers)
+            for r, staged in tqdm.tqdm(zip(genbank_accessions, staged_genomes), total=len(genbank_accessions), desc="GenBank genomes", leave=True, dynamic_ncols=True):
+                if staged is None:
+                    failed += 1
+                    continue
+                _append_genome(staged, output_file_path)
+                appended += 1
+                if success_log_handle is not None:
+                    success_log_handle.write(_versionless_accession(r) + "\n")
+                if num_recs is not None and appended >= num_recs:
+                    break
+    finally:
+        if success_log_handle is not None:
+            success_log_handle.close()
 
     return {"appended": appended, "failed": failed}
 
-def _datasets_local_worker(gbff_path, output_file_path, gene_call, lock, records_written, num_recs):
-    """Process one rehydrated .gbff.gz; returns (versionless_accession, success_bool)."""
-    accession = Path(gbff_path).parent.name.split(".")[0]
-    ok = process_local_gbff(str(gbff_path), output_file_path, gene_call, lock=lock, records_written=records_written, num_recs=num_recs)
-    return (accession, ok)
+def _datasets_local_worker(task, staging_dir, gene_call):
+    """Write one rehydrated .gbff(.gz) to a file in staging_dir; task is (index, gbff_path). Returns that file's path, or None."""
+    index, gbff_path = task
+    staged = os.path.join(staging_dir, f"{index}.gb")
+    return staged if process_local_gbff(str(gbff_path), staged, gene_call) else None
 
 def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_recs, cpus, success_rec_log, datasets_workdir, datasets_include="gbff", datasets_max_workers=1, api_key=None, datasets_path=None, datasets_gzip=False):
     """
     Download genomes using the NCBI Datasets CLI (dehydrate/rehydrate), then process them locally.
 
     The network-heavy phase is delegated to NCBI's own bulk-download tool (which handles throttling),
-    while the local parse / gene-call / append phase reuses process_local_gbff over a cpus-sized pool.
+    while the local parse / gene-call phase reuses process_local_gbff over a cpus-sized pool. Genomes
+    are appended in the order of their rehydrated files' paths.
 
     Args:
         genbank_accessions (list): Filtered accession dicts (from download_ncbi). Uses 'assembly_accession'.
         output_file_path (str): Combined output GenBank file (records are appended).
         gene_call (str): None, 'all', or 'unannotated' (see process_local_gbff).
         num_recs (int): Optional cap on the number of genomes to write.
-        cpus (int): Number of workers for the local parse/gene-call/append pass (network is done).
+        cpus (int): Number of workers for the local parse/gene-call pass (network is done).
         success_rec_log (str): Optional path to log successfully written versionless accessions.
         datasets_workdir (str): Working directory for the dehydrated package and rehydrated files.
         datasets_include (str): Value for `datasets ... --include` (default "gbff"; the genomic
@@ -615,26 +645,23 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     appended = 0
     failed = 0
 
-    with make_manager() as manager:
-        lock = manager.Lock()
-        records_written = manager.Value('i', 0)
+    try:
         # The download was already capped to num_recs (the accessions slice above), so every
-        # rehydrated genome should be both appended AND logged. No early break here: breaking
-        # on records_written races with concurrent appends and can leave a genome in the .gb
-        # that never made it into the success log, which would duplicate it on the next resume.
-        worker = functools.partial(_datasets_local_worker, output_file_path=output_file_path, gene_call=gene_call, lock=lock, records_written=records_written, num_recs=None)
-        with make_pool(processes=cpus) as pool:
-            for accession, ok in tqdm.tqdm(pool.imap_unordered(worker, gbff_files), total=len(gbff_files), desc="Datasets genomes", leave=True, dynamic_ncols=True):
-                with lock:
-                    if ok:
-                        appended += 1
-                        if success_rec_log is not None:
-                            success_log_handle.write(accession + "\n")
-                    else:
-                        failed += 1
-
-    if success_log_handle is not None:
-        success_log_handle.close()
+        # rehydrated genome is both appended and logged.
+        with tempfile.TemporaryDirectory(dir=workdir) as staging_dir, make_pool(processes=cpus) as pool:
+            worker = functools.partial(_datasets_local_worker, staging_dir=staging_dir, gene_call=gene_call)
+            staged_genomes = imap_bounded(pool, worker, enumerate(gbff_files), max_pending=2 * cpus)
+            for gbff_path, staged in tqdm.tqdm(zip(gbff_files, staged_genomes), total=len(gbff_files), desc="Datasets genomes", leave=True, dynamic_ncols=True):
+                if staged is None:
+                    failed += 1
+                    continue
+                _append_genome(staged, output_file_path)
+                appended += 1
+                if success_log_handle is not None:
+                    success_log_handle.write(gbff_path.parent.name.split(".")[0] + "\n")
+    finally:
+        if success_log_handle is not None:
+            success_log_handle.close()
 
     return {"appended": appended, "failed": failed, "missing": missing}
 
@@ -642,55 +669,65 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
 
 ##### Uniprot #####
 
-def download_and_convert_uniprot_dat(url, output_handle, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
-    """Append the records of a UniProt .dat.gz file to output_handle as GenBank. Returns the number of records written."""
-    recs_written = 0
-    with requests.get(url, stream=True) as response:
-        response.raise_for_status()
-        with gzip.open(response.raw, "rt") as gzipped_file:
-            records = tqdm.tqdm(SeqIO.parse(gzipped_file, "swiss"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
-            if include_taxids or exclude_taxids or taxonomy_expr:
-                records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
+@contextmanager
+def _open_gzipped_source(location):
+    """A text stream over the gzipped file at location, a URL or a local path."""
+    if _is_url(location):
+        with requests.get(location, stream=True) as response:
+            response.raise_for_status()
+            with gzip.open(response.raw, "rt") as handle:
+                yield handle
+    else:
+        with gzip.open(location, "rt") as handle:
+            yield handle
 
-            for record in records:
-                # fragment status from the "Flags: Fragment" description and NON_TER features
-                if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial):
-                    continue
-                features = [SeqFeature(FeatureLocation(0, len(record)), type="source", qualifiers={"db_xref": f"taxon:{record.annotations['ncbi_taxid'][0]}"})]
-                for feature in record.features:
-                    skip = False
-                    for part in feature.location.parts:
-                        if isinstance(part.start, UnknownPosition) or isinstance(part.end, UnknownPosition):
-                            skip = True
-                            break
-                    if not skip:
-                        features.append(feature)
-                record.features = features
-                write_genbank((record,), output_handle)
-                recs_written += 1
-                if num_recs is not None and recs_written >= num_recs:
-                    break
+def download_and_convert_uniprot_dat(url, output_handle, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
+    """Append the records of a UniProt .dat.gz file (a URL or a local path) to output_handle as GenBank. Returns the number of records written."""
+    recs_written = 0
+    with _open_gzipped_source(url) as gzipped_file:
+        records = tqdm.tqdm(SeqIO.parse(gzipped_file, "swiss"), desc=os.path.basename(url), leave=True, dynamic_ncols=True)
+        if include_taxids or exclude_taxids or taxonomy_expr:
+            records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
+
+        for record in records:
+            # fragment status from the "Flags: Fragment" description and NON_TER features
+            if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial):
+                continue
+            features = [SeqFeature(FeatureLocation(0, len(record)), type="source", qualifiers={"db_xref": f"taxon:{record.annotations['ncbi_taxid'][0]}"})]
+            for feature in record.features:
+                skip = False
+                for part in feature.location.parts:
+                    if isinstance(part.start, UnknownPosition) or isinstance(part.end, UnknownPosition):
+                        skip = True
+                        break
+                if not skip:
+                    features.append(feature)
+            record.features = features
+            write_genbank((record,), output_handle)
+            recs_written += 1
+            if num_recs is not None and recs_written >= num_recs:
+                break
     return recs_written
 
 def download_uniprot_fasta(url, output_handle, include_taxids, exclude_taxids, ncbi_taxonomy, num_recs=None, taxonomy_expr=None, partial="include"):
-    """Append the records of a UniProt .fasta.gz file to output_handle. Returns the number of records written."""
+    """Append the records of a UniProt .fasta.gz file (a URL or a local path) to output_handle. Returns the number of records written."""
     recs_written = 0
-    with requests.get(url, stream=True) as response:
-        response.raise_for_status()
-        with gzip.open(response.raw, "rt") as gzipped_file:
-            records = tqdm.tqdm(parse_seqfiles([gzipped_file], filetype_override="fasta"), desc=url.split("/")[-1], leave=True, dynamic_ncols=True)
-            if include_taxids or exclude_taxids or taxonomy_expr:
-                records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
-            for record in records:
-                if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial): # " (Fragment)" header
-                    continue
-                SeqIO.write(record, output_handle, "fasta")
-                recs_written += 1
-                if num_recs is not None and recs_written >= num_recs:
-                    break
+    with _open_gzipped_source(url) as gzipped_file:
+        records = tqdm.tqdm(parse_seqfiles([gzipped_file], filetype_override="fasta"), desc=os.path.basename(url), leave=True, dynamic_ncols=True)
+        if include_taxids or exclude_taxids or taxonomy_expr:
+            records = filter_by_taxonomy(records, include_taxids, exclude_taxids, ncbi_taxonomy, taxonomy_expr=taxonomy_expr)
+        for record in records:
+            if partial != "include" and not fragment_status_allowed(get_fragment_status(record), partial): # " (Fragment)" header
+                continue
+            SeqIO.write(record, output_handle, "fasta")
+            recs_written += 1
+            if num_recs is not None and recs_written >= num_recs:
+                break
     return recs_written
 
 
+UNIPROT_URL = "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
+"""UniProt's release directory, which holds the uniprot_<part>.<fasta|dat>.gz files."""
 UNIPROT_DBS = {"swissprot", "trembl", "uniprot", "swissprot_gb", "trembl_gb", "uniprot_gb"}
 FASTA_DBS = {"swissprot", "trembl", "uniprot"}
 UNIPROT_PARTS = {"swissprot": ["sprot"], "trembl": ["trembl"], "uniprot": ["sprot", "trembl"]}
@@ -707,21 +744,25 @@ def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_t
                 download_backend: str = "datasets", download_workers: int = 3, user_agent: Optional[str] = None,
                 datasets_workdir: Optional[str] = None, datasets_include: str = "gbff", datasets_max_workers: int = 10,
                 ncbi_api_key: Optional[str] = None, datasets_path: Optional[str] = None, datasets_gzip: bool = False,
-                taxonomy_expr: Optional[str] = None, partial: str = "include") -> None:
+                taxonomy_expr: Optional[str] = None, partial: str = "include", uniprot_dir: Optional[str] = None) -> None:
 
     """Download a database (``db``: a UniProt or NCBI genome database) and write it to ``output``.
 
     UniProt databases are written as FASTA, or GenBank for the _gb ones; NCBI genome databases as
     GenBank. include_taxids, exclude_taxids and taxonomy_expr filter by taxonomy (with
     ``ncbi_taxonomy``, an NCBITaxonomy); max_records stops after that many records; before and
-    after filter NCBI genomes by release date; success_log_out lists the accessions written. The
-    other options are those of ``domainator db_download``.
+    after filter NCBI genomes by release date; success_log_out lists the accessions written;
+    uniprot_dir reads the UniProt release files from a local directory instead of downloading
+    them. Records are appended to ``output``. The other options are those of
+    ``domainator db_download``.
     """
     cpu = resolve_cpu(cpu)
     if taxonomy_expr and (include_taxids or exclude_taxids):
         raise ValueError("taxonomy_expr is mutually exclusive with include_taxids/exclude_taxids.")
     if partial != "include" and db.lower() not in UNIPROT_DBS:
         raise ValueError(f"partial only applies to the UniProt databases ({', '.join(sorted(UNIPROT_DBS))}), not {db}.")
+    if uniprot_dir is not None and db.lower() not in UNIPROT_DBS:
+        raise ValueError(f"uniprot_dir only applies to the UniProt databases ({', '.join(sorted(UNIPROT_DBS))}), not {db}.")
 
     if include_taxids is not None:
         include_taxids = set(include_taxids)
@@ -761,13 +802,22 @@ def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_t
             download, extension = download_uniprot_fasta, "fasta"
         else:
             download, extension = download_and_convert_uniprot_dat, "dat"
+        sources = []
+        for part in parts:
+            file_name = f"uniprot_{part}.{extension}.gz"
+            if uniprot_dir is None:
+                sources.append(f"{UNIPROT_URL}/{file_name}")
+            elif os.path.isfile(os.path.join(uniprot_dir, file_name)):
+                sources.append(os.path.join(uniprot_dir, file_name))
+            else:
+                raise InputError(f"{os.path.join(uniprot_dir, file_name)} not found: --uniprot_dir must hold the UniProt release files for --db {db}.")
         remaining = max_records
-        with open(output, "w") as output_handle:
-            for part in parts:
+        with open(output, "a") as output_handle:
+            for source in sources:
                 if remaining is not None and remaining <= 0:
                     break
                 written = download(
-                    f"https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_{part}.{extension}.gz",
+                    source,
                     output_handle,
                     include_taxids,
                     exclude_taxids,
@@ -846,7 +896,7 @@ def db_download(ncbi_taxonomy: Optional[NCBITaxonomy], *, output: str, include_t
             exclude_taxids,
             ncbi_taxonomy,
             filter_by_uniqueness=False,
-            no_na=False,
+            no_na=True,
             gene_call=gene_call,
             num_recs=max_records,
             ncbi_summary=ncbi_summary,
@@ -940,7 +990,9 @@ def build_parser():
                         help="text file containing accessions genbank records to exclude. Should be versionless (i.e. without the '.' and number after the '.')")
 
 
-    parser.add_argument("--ncbi_summary", type=str, default=None, help="Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt.")
+    parser.add_argument("--uniprot_dir", type=str, default=None,
+                        help="For the UniProt databases: read the release files (uniprot_sprot.fasta.gz, uniprot_trembl.dat.gz, ...) from this directory, a local mirror of UniProt's knowledgebase/complete directory, instead of downloading them.")
+    parser.add_argument("--ncbi_summary", type=str, default=None, help="Path to NCBI summary file. Normally it will be downloaded from the Internet on every execution, but you may want to pre-download it, or make custom subsets, the url is: https://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt. In a local file, an ftp_path that is not a URL is read as a local directory laid out like the NCBI genomes server (relative to the summary file's directory), for a local mirror with --download_backend direct.")
     parser.add_argument('--gene_call', type=str, default=None, choices=["all", "unannotated"], required=False,
                         help="When activated, for nucleotide databases, such as Genbank, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated.")
     parser.add_argument("--max_records", type=int, default=None, help="Stop after downloading this many records. For UniProt, this is the number of proteins. For genbank, the number of genomes, including multi-contig genomes. This is mainly for testing.")
@@ -1010,7 +1062,10 @@ def main(argv):
         raise ValueError("--taxonomy_expr is mutually exclusive with --include_taxids/--exclude_taxids.")
 
     ncbi_taxonomy = None
-    if params.include_taxids or params.exclude_taxids or params.taxonomy_expr or params.db.lower().endswith("_proks"):
+    # The _proks databases always filter out Eukaryota, and the nonredundant ones keep one
+    # genome per taxid, which needs each genome's lineage.
+    if (params.include_taxids or params.exclude_taxids or params.taxonomy_expr
+            or params.db.lower().endswith("_proks") or "nonredundant" in params.db.lower()):
         # create the path to the NCBI taxonomy database
         Path(params.ncbi_taxonomy_path).mkdir(parents=True, exist_ok=True)
         # load the NCBI taxonomy database
@@ -1043,4 +1098,5 @@ def main(argv):
                            download_backend=params.download_backend, download_workers=download_workers, user_agent=user_agent,
                            datasets_workdir=params.datasets_workdir, datasets_include=params.datasets_include,
                            datasets_max_workers=params.datasets_max_workers, ncbi_api_key=api_key, datasets_path=params.datasets_path,
-                           datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr, partial=params.partial)
+                           datasets_gzip=params.datasets_gzip, taxonomy_expr=params.taxonomy_expr, partial=params.partial,
+                           uniprot_dir=params.uniprot_dir)

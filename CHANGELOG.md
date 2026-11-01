@@ -16,6 +16,10 @@ of `keep_name` on all three extract tools. `extract_unannotated` also renames
 Defaults and extraction behavior are unchanged; old names are not aliases.
 
 ### Added
+- db_download `--uniprot_dir` reads the UniProt release files from a local mirror instead of
+  downloading them, and an `--ncbi_summary` whose `ftp_path` is a local directory (relative to
+  the summary) is read from a local mirror of the NCBI genomes server. The tests now run
+  offline against small mirrors under `test/data/db_download/`.
 - Shared additive contig/domain list and file argument setup for extract tools,
   `select_by_cds`, and `select_by_contig`. Help now documents supported file formats,
   normalization, empty-file behavior, and record selectors versus input restrictions;
@@ -193,3 +197,13 @@ Defaults and extraction behavior are unchanged; old names are not aliases.
 - db_download `--db uniprot` and `--db uniprot_gb` wrote only TrEMBL: the TrEMBL download
   overwrote the SwissProt records already written. `--max_records` now caps the total across
   both rather than each.
+- db_download wrote NCBI genomes in the order their downloads finished, so the output, and
+  which genomes `--max_records` kept, depended on timing. Genomes are now appended in
+  assembly-summary order (rehydrated-file order for the datasets backend), by the parent
+  process, so a worker that fails partway never leaves part of a genome in the database.
+- db_download `--append` was ignored for the UniProt databases, which overwrote the file.
+- db_download `--db ncbi_nonredundant_all` failed unless a taxonomy filter was given, because
+  the taxonomy it needs to keep one genome per taxid was not loaded.
+- db_download `--db ncbi_representative_all` kept genomes whose `refseq_category` is `na`,
+  the same set as `ncbi_all`; like `ncbi_representative_proks`, it now keeps only
+  representative and reference genomes.

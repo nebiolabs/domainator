@@ -5,6 +5,7 @@ import shutil
 import pytest
 from domainator.partial import get_fragment_status
 from domainator.seqio import parse_seqfiles
+from domainator.errors import InputError
 from pathlib import Path
 
 
@@ -331,90 +332,169 @@ def test_process_via_datasets_gzip_flag(shared_datadir, monkeypatch):
     assert off and not any("--gzip" in c for c in off)
 
 
-# --- --partial (offline: requests.get is mocked) ---
+# --- offline downloads from local mirrors (test/data/db_download, see its README) ---
 
-import io
-
-
-_UNIPROT_DAT = """ID   A0A001_TEST             Unreviewed;        10 AA.
-AC   A0A001;
-DT   01-JAN-2020, integrated into UniProtKB/TrEMBL.
-DT   01-JAN-2020, sequence version 1.
-DT   01-JAN-2020, entry version 1.
-DE   SubName: Full=Complete protein;
-OS   Escherichia coli.
-OC   Bacteria; Pseudomonadota.
-OX   NCBI_TaxID=562;
-SQ   SEQUENCE   10 AA;  1000 MW;  0000000000000000 CRC64;
-     MKRFSLAILA
-//
-ID   A0A002_TEST             Unreviewed;        10 AA.
-AC   A0A002;
-DT   01-JAN-2020, integrated into UniProtKB/TrEMBL.
-DT   01-JAN-2020, sequence version 1.
-DT   01-JAN-2020, entry version 1.
-DE   SubName: Full=Fragment protein;
-DE   Flags: Fragment;
-OS   Escherichia coli.
-OC   Bacteria; Pseudomonadota.
-OX   NCBI_TaxID=562;
-FT   NON_TER         1
-SQ   SEQUENCE   10 AA;  1000 MW;  0000000000000000 CRC64;
-     MKRFSLAILA
-//
-"""
-
-_UNIPROT_FASTA = """>sp|A0A001|A_ECOLI Complete protein OS=Escherichia coli OX=562 PE=1 SV=1
-MKRFSLAILA
->tr|A0A002|B_ECOLI Fragment protein (Fragment) OS=Escherichia coli OX=562 PE=4 SV=1
-MKRFSLAILA
-"""
+SPROT = ["C0HLM9", "P0C6K8", "Q01457", "P80438", "P0A7Y4"]
+SPROT_FRAGMENTS = ["C0HLM9", "P80438"]
+TREMBL = ["A0A0U3GSY3", "Q50831", "A0A0K2RVI7"]
 
 
-class _FakeResponse:
-    def __init__(self, text):
-        self.raw = io.BytesIO(gzip.compress(text.encode()))
-    def raise_for_status(self):
-        pass
-    def __enter__(self):
-        return self
-    def __exit__(self, *args):
-        return False
+def _accessions(path):
+    """The UniProt accessions of the records in path, in file order (the id of a GenBank record,
+    the middle field of a UniProt FASTA header)."""
+    return [r.id.split("|")[1] if "|" in r.id else r.id for r in parse_seqfiles([str(path)])]
 
 
-@pytest.mark.parametrize("db,payload", [("swissprot", _UNIPROT_FASTA), ("swissprot_gb", _UNIPROT_DAT)])
-@pytest.mark.parametrize("partial,expected", [("include", {"A0A001", "A0A002"}), ("exclude", {"A0A001"}), ("only", {"A0A002"})])
-def test_uniprot_download_partial(monkeypatch, tmp_path, db, payload, partial, expected):
-    monkeypatch.setattr(db_download.requests, "get", lambda url, stream=True: _FakeResponse(payload))
-    outfile = tmp_path / ("out.gb" if db.endswith("_gb") else "out.fasta")
-    db_download.main(["--db", db, "--genbank_out" if db.endswith("_gb") else "--fasta_out", str(outfile), "--partial", partial, "--no_taxonomy_update"])
-    records = list(parse_seqfiles([str(outfile)]))
-    assert {accession for accession in ("A0A001", "A0A002") if any(accession in r.id + r.name for r in records)} == expected
+@pytest.mark.parametrize("db,out_flag,out_name", [("swissprot", "--fasta_out", "out.fasta"), ("swissprot_gb", "--genbank_out", "out.gb")])
+@pytest.mark.parametrize("partial", ["include", "exclude", "only"])
+def test_uniprot_download_partial(shared_datadir, tmp_path, db, out_flag, out_name, partial):
+    outfile = tmp_path / out_name
+    db_download.main(["--db", db, out_flag, str(outfile), "--partial", partial, "--uniprot_dir", str(shared_datadir / "db_download" / "uniprot")])
+    expected = {"include": SPROT,
+                "exclude": [a for a in SPROT if a not in SPROT_FRAGMENTS],
+                "only": SPROT_FRAGMENTS}[partial]
+    assert _accessions(outfile) == expected
     if db == "swissprot_gb" and partial == "only":
-        assert get_fragment_status(records[0]) == "N" # NON_TER on residue 1 survives the conversion to GenBank
+        assert get_fragment_status(next(iter(parse_seqfiles([str(outfile)])))) is not None
 
 
-def _split_uniprot_payload(payload):
-    """The first record of a mocked UniProt payload for SwissProt, the second for TrEMBL."""
-    if payload.startswith(">"):
-        sprot, trembl = payload.split("\n>")
-        return sprot + "\n", ">" + trembl
-    sprot, trembl, _ = payload.split("//\n")
-    return sprot + "//\n", trembl + "//\n"
+@pytest.mark.parametrize("db,out_flag,out_name", [("uniprot", "--fasta_out", "out.fasta"), ("uniprot_gb", "--genbank_out", "out.gb")])
+@pytest.mark.parametrize("max_records", ["1", "5", "6", "100"])
+def test_uniprot_download_includes_swissprot_and_trembl(shared_datadir, tmp_path, db, out_flag, out_name, max_records):
+    outfile = tmp_path / out_name
+    db_download.main(["--db", db, out_flag, str(outfile), "--max_records", max_records, "--uniprot_dir", str(shared_datadir / "db_download" / "uniprot")])
+    assert _accessions(outfile) == (SPROT + TREMBL)[:int(max_records)]
 
 
-@pytest.mark.parametrize("db,payload", [("uniprot", _UNIPROT_FASTA), ("uniprot_gb", _UNIPROT_DAT)])
-@pytest.mark.parametrize("max_records,expected", [(None, ["A0A001", "A0A002"]), (1, ["A0A001"]), (2, ["A0A001", "A0A002"])])
-def test_uniprot_download_includes_swissprot_and_trembl(monkeypatch, tmp_path, db, payload, max_records, expected):
-    sprot, trembl = _split_uniprot_payload(payload)
-    monkeypatch.setattr(db_download.requests, "get", lambda url, stream=True: _FakeResponse(sprot if "uniprot_sprot" in url else trembl))
-    outfile = tmp_path / ("out.gb" if db.endswith("_gb") else "out.fasta")
-    args = ["--db", db, "--genbank_out" if db.endswith("_gb") else "--fasta_out", str(outfile), "--no_taxonomy_update"]
-    if max_records is not None:
-        args += ["--max_records", str(max_records)]
-    db_download.main(args)
+@pytest.mark.parametrize("db,out_flag,out_name", [("trembl", "--fasta_out", "out.fasta"), ("trembl_gb", "--genbank_out", "out.gb")])
+def test_uniprot_download_trembl(shared_datadir, tmp_path, db, out_flag, out_name):
+    outfile = tmp_path / out_name
+    db_download.main(["--db", db, out_flag, str(outfile), "--uniprot_dir", str(shared_datadir / "db_download" / "uniprot")])
+    assert _accessions(outfile) == TREMBL
+
+
+@pytest.mark.parametrize("db,out_flag,out_name", [("uniprot", "--fasta_out", "out.fasta"), ("uniprot_gb", "--genbank_out", "out.gb")])
+@pytest.mark.parametrize("taxonomy_args,expected", [
+    (["--include_taxids", "2"], ["Q01457", "P80438", "P0A7Y4"]),
+    (["--exclude_taxids", "2", "10239"], ["C0HLM9", "A0A0U3GSY3", "Q50831"]),
+    (["--taxonomy_expr", "2157 | (10239 & ~136187)"], ["P0C6K8", "A0A0U3GSY3", "Q50831"]),
+])
+def test_uniprot_download_taxonomy(shared_datadir, tmp_path, db, out_flag, out_name, taxonomy_args, expected):
+    outfile = tmp_path / out_name
+    db_download.main(["--db", db, out_flag, str(outfile), "--uniprot_dir", str(shared_datadir / "db_download" / "uniprot"),
+                      "--ncbi_taxonomy_path", str(shared_datadir / "db_download" / "taxdmp"), "--no_taxonomy_update"] + taxonomy_args)
+    assert _accessions(outfile) == expected
+
+
+def test_uniprot_download_append(shared_datadir, tmp_path):
+    outfile = tmp_path / "out.fasta"
+    uniprot_dir = shared_datadir / "db_download" / "uniprot"
+    db_download.main(["--db", "trembl", "--fasta_out", str(outfile), "--uniprot_dir", str(uniprot_dir)])
+    db_download.main(["--db", "swissprot", "--fasta_out", str(outfile), "--uniprot_dir", str(uniprot_dir), "--append"])
+    assert _accessions(outfile) == TREMBL + SPROT
+
+
+def test_uniprot_dir_missing_release_file(shared_datadir, tmp_path):
+    with pytest.raises(InputError, match="uniprot_trembl.dat.gz"):
+        db_download.main(["--db", "trembl_gb", "--genbank_out", str(tmp_path / "out.gb"), "--uniprot_dir", str(tmp_path)])
+
+
+def test_uniprot_dir_rejects_ncbi(shared_datadir, tmp_path):
+    with pytest.raises(ValueError, match="UniProt"):
+        db_download.db_download(None, output=str(tmp_path / "out.gb"), db="ncbi_all", uniprot_dir=str(shared_datadir / "db_download" / "uniprot"))
+
+
+# The mirror's assemblies, in summary order: GCA_000000088 is a truncated download, GCA_000000099
+# has no genome file and GCA_000000101 has no ftp_path. GCA_000000055/66 are metagenomes and
+# GCA_000000077/88 environmental samples, which the nonredundant databases keep however many there are.
+@pytest.mark.parametrize("db,expected", [
+    ("ncbi_all", ["GCA_000000011", "GCA_000000022", "GCA_000000033", "GCA_000000044", "GCA_000000055", "GCA_000000066", "GCA_000000077", "GCA_000000112"]),
+    ("ncbi_representative_all", ["GCA_000000022", "GCA_000000033", "GCA_000000044", "GCA_000000112"]),
+    ("ncbi_representative_proks", ["GCA_000000022", "GCA_000000033", "GCA_000000112"]),
+    ("ncbi_nonredundant_all", ["GCA_000000033", "GCA_000000044", "GCA_000000022", "GCA_000000112", "GCA_000000055", "GCA_000000066", "GCA_000000077"]),
+    ("ncbi_nonredundant_proks", ["GCA_000000033", "GCA_000000022", "GCA_000000112", "GCA_000000055", "GCA_000000066", "GCA_000000077"]),
+    ("ncbi_complete_genome_proks", ["GCA_000000011", "GCA_000000022", "GCA_000000077", "GCA_000000112"]),
+    ("ncbi_complete_genome_nonredundant_proks", ["GCA_000000022", "GCA_000000112", "GCA_000000077"]),
+])
+def test_ncbi_download_from_mirror(shared_datadir, tmp_path, db, expected):
+    data = shared_datadir / "db_download"  # the NCBI mirror: its assembly summary names local genome directories
+    ncbi = ["--download_backend", "direct", "--ncbi_summary", str(data / "assembly_summary.txt"),
+            "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update"]
+    outfile = tmp_path / "out.gb"
+    success_log = tmp_path / "success_log.txt"
+    db_download.main(["--db", db, "-o", str(outfile), "--success_log_out", str(success_log)] + ncbi)
+    assert success_log.read_text().split() == expected
+    assert len(list(parse_seqfiles([str(outfile)]))) > 0
+
+
+@pytest.mark.parametrize("filter_args,expected", [
+    (["--include_taxids", "562"], ["GCA_000000011", "GCA_000000022", "GCA_000000112"]),
+    (["--exclude_taxids", "562", "2759"], ["GCA_000000033", "GCA_000000055", "GCA_000000066", "GCA_000000077"]),
+    (["--taxonomy_expr", "2 & ~81490"], ["GCA_000000011", "GCA_000000022", "GCA_000000033", "GCA_000000112"]),
+    (["--before", "2021-06-01"], ["GCA_000000011", "GCA_000000033", "GCA_000000077"]),
+    (["--after", "2021-06-01"], ["GCA_000000044", "GCA_000000055", "GCA_000000066", "GCA_000000112"]),
+    (["--exclude_accessions", "GCA_000000011", "GCA_000000044"], ["GCA_000000022", "GCA_000000033", "GCA_000000055", "GCA_000000066", "GCA_000000077", "GCA_000000112"]),
+    (["--max_records", "3"], ["GCA_000000011", "GCA_000000022", "GCA_000000033"]),
+])
+def test_ncbi_download_filters(shared_datadir, tmp_path, filter_args, expected):
+    data = shared_datadir / "db_download"  # the NCBI mirror: its assembly summary names local genome directories
+    ncbi = ["--download_backend", "direct", "--ncbi_summary", str(data / "assembly_summary.txt"),
+            "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update"]
+    outfile = tmp_path / "out.gb"
+    success_log = tmp_path / "success_log.txt"
+    db_download.main(["--db", "ncbi_all", "-o", str(outfile), "--success_log_out", str(success_log)] + ncbi + filter_args)
+    assert success_log.read_text().split() == expected
+
+
+def test_ncbi_download_exclude_accessions_file(shared_datadir, tmp_path):
+    data = shared_datadir / "db_download"  # the NCBI mirror: its assembly summary names local genome directories
+    ncbi = ["--download_backend", "direct", "--ncbi_summary", str(data / "assembly_summary.txt"),
+            "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update"]
+    outfile = tmp_path / "out.gb"
+    success_log = tmp_path / "success_log.txt"
+    exclude = shared_datadir / "db_download" / "exclude_accessions.txt"
+    db_download.main(["--db", "ncbi_complete_genome_proks", "-o", str(outfile), "--success_log_out", str(success_log),
+                      "--exclude_accessions_file", str(exclude)] + ncbi)
+    assert success_log.read_text().split() == ["GCA_000000022", "GCA_000000077"]
+
+
+@pytest.mark.parametrize("download_workers", ["1", "4"])
+def test_ncbi_download_keeps_summary_order(shared_datadir, tmp_path, download_workers):
+    """Genomes are appended in summary order whatever order the workers finish in, so the
+    output does not depend on timing."""
+    data = shared_datadir / "db_download"  # the NCBI mirror: its assembly summary names local genome directories
+    ncbi = ["--download_backend", "direct", "--ncbi_summary", str(data / "assembly_summary.txt"),
+            "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update"]
+    outfile = tmp_path / "out.gb"
+    db_download.main(["--db", "ncbi_all", "-o", str(outfile), "--download_workers", download_workers] + ncbi)
+    expected = []
+    for source in ["pDONR201.gb", "pDONR201_no_CDSs.gb", "pDONR201_partly_CDSs.gb", "saccharomyces_extraction.gb",
+                   "pDONR201_multi_genemark.gb", "bacillus_phage_SPR.gb", "ccdb.gb", "pDONR201_genemark.gb"]:
+        expected += [r.id for r in parse_seqfiles([str(shared_datadir / source)])]
+    assert [r.id for r in parse_seqfiles([str(outfile)])] == expected
+
+
+@pytest.mark.parametrize("gene_call", ["unannotated", "all"])
+def test_ncbi_download_gene_call(shared_datadir, tmp_path, gene_call):
+    data = shared_datadir / "db_download"  # the NCBI mirror: its assembly summary names local genome directories
+    ncbi = ["--download_backend", "direct", "--ncbi_summary", str(data / "assembly_summary.txt"),
+            "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update"]
+    outfile = tmp_path / "out.gb"
+    db_download.main(["--db", "ncbi_all", "-o", str(outfile), "--include_taxids", "562", "--gene_call", gene_call] + ncbi)
     records = list(parse_seqfiles([str(outfile)]))
-    assert [accession for record in records for accession in ("A0A001", "A0A002") if accession in record.id + record.name] == expected
+    assert len(records) == 3
+    assert all(any(f.type == "CDS" for f in r.features) for r in records)  # pDONR201_no_CDSs.gb gets genes called
+
+
+def test_ncbi_nonredundant_all_needs_no_taxonomy_filter(shared_datadir, tmp_path):
+    """The nonredundant databases load the taxonomy themselves, to compare lineages."""
+    data = shared_datadir / "db_download"  # the NCBI mirror: its assembly summary names local genome directories
+    ncbi = ["--download_backend", "direct", "--ncbi_summary", str(data / "assembly_summary.txt"),
+            "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update"]
+    outfile = tmp_path / "out.gb"
+    success_log = tmp_path / "success_log.txt"
+    db_download.main(["--db", "ncbi_nonredundant_all", "-o", str(outfile), "--success_log_out", str(success_log), "--max_records", "2"] + ncbi)
+    assert success_log.read_text().split() == ["GCA_000000033", "GCA_000000044"]
 
 
 def test_uniprot_download_partial_rejects_ncbi(tmp_path):

@@ -7802,6 +7802,16 @@
    "required": false
   },
   {
+   "name": "uniprot_dir",
+   "flags": [
+    "--uniprot_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
    "name": "ncbi_summary",
    "flags": [
     "--ncbi_summary"
