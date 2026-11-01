@@ -266,6 +266,23 @@ def strip_structure_extension(name: str) -> str:
     return name
 
 
+def sort_by_column(path: str, column: int, sorted_path: str, work_dir: str,
+                   description: str) -> None:
+    """Sort a TSV file on one 1-based column with coreutils sort, which spills to disk.
+
+    The order must not depend on the machine: LC_ALL=C compares the column as bytes rather
+    than by the locale's collation, and -s keeps lines with equal keys in their input order
+    instead of falling back to comparing the whole line.
+    """
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    run_command(
+        ["sort", "-s", "-t", "\t", f"-k{column},{column}",
+         "-T", work_dir, "-o", sorted_path, path],
+        description, expect=sorted_path, env=env,
+    )
+
+
 class StructureHit(NamedTuple):
     """One alignment, in backend-neutral form.
 
@@ -720,13 +737,9 @@ class FoldseekAligner(StructureAligner):
             # keyed by target. Sorting on the target column with coreutils sort keeps the
             # grouping pass O(one target's hits) in memory instead of O(all hits), which
             # matters when the target database has hundreds of millions of entries.
-            target_column = columns.index("target") + 1
             sorted_path = os.path.join(work_dir, "results.by_target.tsv")
-            run_command(
-                ["sort", "-t", "\t", f"-k{target_column},{target_column}",
-                 "-T", work_dir, "-o", sorted_path, results_path],
-                "sorting foldseek results by target", expect=sorted_path,
-            )
+            sort_by_column(results_path, columns.index("target") + 1, sorted_path, work_dir,
+                           "sorting foldseek results by target")
             results_path = sorted_path
 
         yield from self._parse_results(results_path, columns)
@@ -864,8 +877,11 @@ class ReseekAligner(StructureAligner):
             for path in inputs:
                 handle.write(f"{os.path.abspath(path)}\n")
 
+        # One thread: with several, reseek writes chains in whatever order its workers
+        # finish, so record order (and structure_dist's row order) would change from run
+        # to run. With one, the database follows the input list.
         completed = run_command(
-            [self.bin_path, "-convert", list_path, "-bcb", db_path],
+            [self.bin_path, "-convert", list_path, "-bcb", db_path, "-threads", "1"],
             "reseek -convert", expect=db_path, capture=True,
         )
         if not Path(db_path).is_file():
@@ -940,13 +956,9 @@ class ReseekAligner(StructureAligner):
         if sort_by_target:
             # Uncapped output is unbounded, so grouping by target goes through an external
             # (disk-backed) sort rather than memory.
-            target_column = self.COLUMNS.index("target") + 1
             sorted_path = os.path.join(work_dir, "reseek_hits.by_target.tsv")
-            run_command(
-                ["sort", "-t", "\t", f"-k{target_column},{target_column}",
-                 "-T", work_dir, "-o", sorted_path, results_path],
-                "sorting reseek results by target", expect=sorted_path,
-            )
+            sort_by_column(results_path, self.COLUMNS.index("target") + 1, sorted_path,
+                           work_dir, "sorting reseek results by target")
             results_path = sorted_path
 
         with open(results_path) as handle:

@@ -363,6 +363,18 @@ def test_structure_to_genbank_with_reseek(inputs, tmp_path):
 
 
 @needs_reseek
+def test_reseek_records_follow_the_input_order(inputs, tmp_path):
+    """A multithreaded reseek -convert stores chains in completion order, which changes
+    from run to run; the database is built with one thread so records follow the inputs."""
+    for attempt in range(3):
+        out = tmp_path / f"chains{attempt}.gb"
+        with pytest.warns(RuntimeWarning):
+            structure_to_genbank.main(["-i", inputs, "--algorithm", "reseek",
+                                       "-o", str(out), "--cpu", "4"])
+        assert [record.id for record in _read(out)] == sorted(RESEEK_NAMES)
+
+
+@needs_reseek
 def test_store_3di_rejected_for_reseek(inputs, tmp_path):
     with pytest.raises(RuntimeError, match="--store_3di is not available"):
         structure_to_genbank.main(["-i", inputs, "--algorithm", "reseek",

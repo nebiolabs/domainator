@@ -189,6 +189,27 @@ def test_resolve_binary_rejects_non_executable(tmp_path):
         structure_lib.resolve_binary("foldseek", str(bogus))
 
 
+@pytest.mark.skipif(shutil.which("sort") is None, reason="coreutils sort is not installed")
+def test_sort_by_column_is_byte_ordered_and_stable(tmp_path):
+    """The by-target order must not depend on the locale: bytes, with ties kept in input
+    order (a locale-aware sort puts 'a' before 'B' and breaks ties on the whole line)."""
+    source = tmp_path / "hits.tsv"
+    source.write_text("r2\tb_1\t9\n"
+                      "r1\tB_1\t1\n"
+                      "r3\tb_1\t2\n"
+                      "r1\ta_1\t5\n"
+                      "r0\tb_1\t7\n")
+    out = tmp_path / "sorted.tsv"
+    structure_lib.sort_by_column(str(source), 2, str(out), str(tmp_path), "sorting")
+    assert out.read_text().splitlines() == [
+        "r1\tB_1\t1",
+        "r1\ta_1\t5",
+        "r2\tb_1\t9",
+        "r3\tb_1\t2",
+        "r0\tb_1\t7",
+    ]
+
+
 def test_build_protein_record():
     record = structure_lib.build_protein_record("1UBQ_A", "MQIFV", "/x/1UBQ.pdb")
     assert record.id == "1UBQ_A" and record.name == "1UBQ_A"

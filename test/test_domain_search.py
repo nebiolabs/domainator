@@ -957,12 +957,12 @@ def _write_bgzf_copy(src_path, dest_path):
         out.write(data)
 
 
-def test_domain_search_bgzf_input_matches_uncompressed(shared_datadir):
+def test_domain_search_bgzf_input_matches_uncompressed(shared_datadir, tmp_path):
     """A BGZF-compressed GenBank input must produce identical output to the
     uncompressed input (Q2: transparent compressed input with random access)."""
     gb = shared_datadir / "pDONR201.gb"
     hmms = shared_datadir / "CcdB.hmm"
-    gb_bgz = shared_datadir / "pDONR201.gb.bgz"
+    gb_bgz = tmp_path / "pDONR201.gb.bgz"
     _write_bgzf_copy(gb, gb_bgz)
 
     with tempfile.TemporaryDirectory() as output_dir:
@@ -974,13 +974,13 @@ def test_domain_search_bgzf_input_matches_uncompressed(shared_datadir):
         compare_seqfiles(out_u, out_b)
 
 
-def test_domain_search_gzip_input_matches_uncompressed(shared_datadir):
+def test_domain_search_gzip_input_matches_uncompressed(shared_datadir, tmp_path):
     """A plain-gzip GenBank input is supported as a convenience and must produce
     the same output as the uncompressed input (single-worker whole-file read)."""
     import gzip
     gb = shared_datadir / "pDONR201.gb"
     hmms = shared_datadir / "CcdB.hmm"
-    gb_gz = shared_datadir / "pDONR201.gb.gz"
+    gb_gz = tmp_path / "pDONR201.gb.gz"
     with open(gb, "rb") as fh, gzip.open(str(gb_gz), "wb") as out:
         out.write(fh.read())
 
