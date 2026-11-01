@@ -357,12 +357,13 @@ def test_summary_page_taxonomy_zooms(open_page, tmp_path, shared_datadir):
     labels = page.eval_on_selector_all("#taxonomy-chart svg text[visibility='visible']", "t => t.map(x => x.textContent)")
     assert any(label.startswith("All") for label in labels)
     assert any(label.startswith("Bacteria") for label in labels)
-    before = page.get_attribute("#taxonomy-chart svg g:nth-of-type(2)", "transform")
+    bacteria_transform = """groups => groups.find(g => g.querySelector("tspan").textContent.startsWith("Bacteria")).getAttribute("transform")"""
+    before = page.eval_on_selector_all("#taxonomy-chart svg g", bacteria_transform)
     page.evaluate("window.taxonomyChart.zoom('Bacteria')")
     page.wait_for_timeout(800)
     # Bacteria now fills the chart, at the left edge.
-    assert page.get_attribute("#taxonomy-chart svg g:nth-of-type(2)", "transform") != before
-    assert page.get_attribute("#taxonomy-chart svg g:nth-of-type(2)", "transform") == "translate(0,0)"
+    assert page.eval_on_selector_all("#taxonomy-chart svg g", bacteria_transform) != before
+    assert page.eval_on_selector_all("#taxonomy-chart svg g", bacteria_transform) == "translate(0,0)"
     assert page.text_content("#taxa-table-counter").startswith("Showing 1-")
     assert page.pageerrors == []
 
