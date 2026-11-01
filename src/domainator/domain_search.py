@@ -23,7 +23,7 @@ When --max_hits is specified, it applies to the entire search, not individual re
 at most 100 hits will be returned (not 500). 
 
 When max_hits or pad are specified, hits will be sorted by best domain score and written after the entire search completes.
-If neither is set, then hits will be written on the fly and not sorted.
+If neither is set, then hits will be written on the fly, in input order.
 
 --dedup selects one output uniqueness policy: none (the default), id,
 sequence, or sequence_rc. With --max_hits, deduplication keeps the best-scoring
@@ -31,8 +31,8 @@ representatives before applying the limit, retaining at most --max_hits winners
 per worker and in the global merge. Domainator assumes that the same record ID
 always identifies the same sequence, so sequence uniqueness also ensures unique
 IDs. Hit scores and annotations can still differ between copies.
-Without --max_hits, the first arriving representative is kept; parallel arrival
-order is arbitrary.
+Without --max_hits, hits are written in input order, whatever --cpu is, and the first
+representative in input order is kept.
 """
 
 from jsonargparse import ActionConfigFile
@@ -44,7 +44,7 @@ from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles, native_parser_available
 from domainator.offsets import count_peptides_in_record, partition_seqfile, i_partition_seqfiles, index_total_cds
 from domainator.cli.common import list_and_file_to_dict_keys
-from domainator._mp import Shared, imap_unordered_bounded, make_pool, resolve_cpu
+from domainator._mp import Shared, imap_bounded, make_pool, resolve_cpu
 from domainator.taxonomy.records import compile_taxonomy_filter
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.partial import PARTIAL_CHOICES
@@ -283,8 +283,8 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
             nucleotide reverse complements. With max_hits, each worker and the parent
             retain at most max_hits winners, replacing copies with better-scoring hits,
             and sorting only the final winners. Equal scores favor earlier arrivals.
-            Without max_hits, the first arriving representative is kept; parallel
-            arrival order is arbitrary.
+            Without max_hits, hits are yielded in input order, whatever cpu is, and the
+            first representative in input order is kept.
 
     Yields:
         Matching protein records, nucleotide hit regions/whole contigs, or translated
@@ -325,7 +325,7 @@ def domain_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         # trimmed to that task's own top-max_hits (see _domain_search_worker), so
         # the parent merges O(tasks * max_hits) records rather than every hit; the
         # central heap below still selects the global top-max_hits.
-        for hits in imap_unordered_bounded(pool, worker, _search_tasks(targets, batch_size, alphabet), max_pending=2 * workers):
+        for hits in imap_bounded(pool, worker, _search_tasks(targets, batch_size, alphabet), max_pending=2 * workers):
 
             for rec in hits:
                 if top_hits is None:
@@ -543,7 +543,7 @@ def main(argv):
             cds_count = 0
             partitions = list()
             with make_pool(processes=cpus) as pool:
-                for file_cds_count, file_partitions in pool.imap_unordered(_partition_seqfile_worker(params.batch_size), input_files):
+                for file_cds_count, file_partitions in pool.imap(_partition_seqfile_worker(params.batch_size), input_files):
                     cds_count += file_cds_count
                     partitions.extend(file_partitions)
             Z = cds_count

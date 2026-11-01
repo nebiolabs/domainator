@@ -3,11 +3,12 @@ import functools
 import os
 import pickle
 import threading
+import time
 
 import pytest
 
 from domainator import _mp
-from domainator._mp import Shared, imap_unordered_bounded, make_pool
+from domainator._mp import Shared, imap_bounded, make_pool
 
 
 @pytest.fixture(params=["spawn", "threads"])
@@ -31,6 +32,12 @@ def _shared_value(shared, _):
 def _fail_on_three(x):
     if x == 3:
         raise ValueError("three")
+    return x
+
+
+def _slow_first(x):
+    # The first tasks finish last.
+    time.sleep(0.2 if x < 2 else 0)
     return x
 
 
@@ -96,21 +103,27 @@ def test_bounded_imap_reads_only_ahead_by_max_pending(monkeypatch):
             yield i
 
     with make_pool(2) as pool:
-        results = imap_unordered_bounded(pool, abs, items(), max_pending=3)
+        results = imap_bounded(pool, abs, items(), max_pending=3)
         first = next(results)
         assert read <= 3
-        assert sorted([first, *results]) == list(range(100))
+        assert [first, *results] == list(range(100))
 
 
 def test_bounded_imap_returns_every_result(start_method):
     with make_pool(2) as pool:
-        assert sorted(imap_unordered_bounded(pool, abs, range(-20, 0), max_pending=4)) == list(range(1, 21))
+        assert list(imap_bounded(pool, abs, range(-20, 0), max_pending=4)) == list(range(20, 0, -1))
+
+
+def test_bounded_imap_keeps_input_order_when_tasks_finish_out_of_order(monkeypatch):
+    monkeypatch.setenv("DOMAINATOR_MP_START_METHOD", "threads")
+    with make_pool(4) as pool:
+        assert list(imap_bounded(pool, _slow_first, range(8), max_pending=4)) == list(range(8))
 
 
 def test_bounded_imap_raises_a_task_error(start_method):
     with make_pool(2) as pool:
         with pytest.raises(ValueError, match="three"):
-            list(imap_unordered_bounded(pool, _fail_on_three, range(10), max_pending=2))
+            list(imap_bounded(pool, _fail_on_three, range(10), max_pending=2))
 
 
 def test_hmm_database_gives_each_thread_its_own_profiles(shared_datadir):

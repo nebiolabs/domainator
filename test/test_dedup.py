@@ -234,7 +234,7 @@ def test_partitioned_top_hits_match_full_sort(monkeypatch, dedup, batch_size, ma
 
     monkeypatch.setattr(domain_search, "make_pool", lambda **kwargs: nullcontext())
     monkeypatch.setattr(domain_search.domainate, "read_references", lambda *args, **kwargs: {})
-    monkeypatch.setattr(domain_search.domainate, "domainate", lambda records, **kwargs: records)
+    monkeypatch.setattr(domain_search.domainate, "_domainate", lambda records, **kwargs: records)
     monkeypatch.setattr(select_by_cds, "select_by_cds", lambda records, **kwargs: records)
 
     def run_tasks(pool, worker, tasks, **kwargs):
@@ -246,7 +246,7 @@ def test_partitioned_top_hits_match_full_sort(monkeypatch, dedup, batch_size, ma
             assert len(hits) <= max_hits
             yield hits
 
-    monkeypatch.setattr(domain_search, "imap_unordered_bounded", run_tasks)
+    monkeypatch.setattr(domain_search, "imap_bounded", run_tasks)
     result = list(domain_search.domain_search(
         records, references=[], z=1000, cpu=2, batch_size=batch_size,
         max_hits=max_hits, dedup=dedup,

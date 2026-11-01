@@ -8,11 +8,11 @@ choice: ``threads``, or a multiprocessing start method (``spawn``, ``forkserver`
 Pool tasks get large read-only data (references, matrices) through :class:`Shared`, which works
 for both: threads read the parent's copy, and each worker process gets its own copy once.
 """
+import collections
 import contextlib
 import multiprocessing
 import multiprocessing.pool
 import os
-import queue
 import sys
 import threading
 import uuid
@@ -125,37 +125,21 @@ def make_manager():
     return _process_context().Manager()
 
 
-class _Failed:
-    def __init__(self, error):
-        self.error = error
+def imap_bounded(pool, function: Callable, items: Iterable, max_pending: int) -> Iterator:
+    """``pool.imap(function, items)``, but reading ``items`` only ``max_pending`` tasks ahead.
 
-
-def imap_unordered_bounded(pool, function: Callable, items: Iterable, max_pending: int) -> Iterator:
-    """``pool.imap_unordered(function, items)``, but reading ``items`` only ``max_pending`` tasks ahead.
-
-    ``imap_unordered`` reads all of ``items`` at once, which for a stream of records would hold
-    the whole stream in memory. Results come back in the order they finish; the first task to
-    fail raises its exception here.
+    ``imap`` reads all of ``items`` at once, which for a stream of records would hold the
+    whole stream in memory. Results come back in the order of ``items``, whatever order the
+    tasks finish in, so output does not depend on timing; a failed task raises its
+    exception here when its turn comes.
     """
-    finished = queue.SimpleQueue()
-    pending = 0
-
-    def wait_for_one():
-        result = finished.get()
-        if isinstance(result, _Failed):
-            raise result.error
-        return result
-
+    pending = collections.deque()
     for item in items:
-        pool.apply_async(function, (item,), callback=finished.put,
-                         error_callback=lambda error: finished.put(_Failed(error)))
-        pending += 1
-        if pending >= max_pending:
-            yield wait_for_one()
-            pending -= 1
+        pending.append(pool.apply_async(function, (item,)))
+        if len(pending) >= max_pending:
+            yield pending.popleft().get()
     while pending:
-        yield wait_for_one()
-        pending -= 1
+        yield pending.popleft().get()
 
 
 def resolve_cpu(cpu: int) -> int:

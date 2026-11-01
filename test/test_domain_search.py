@@ -551,6 +551,20 @@ def test_deduplicate_by_sequence_protein(shared_datadir, extra_args):
         assert len(dedup_seqs) == len(expected)
         assert set(dedup_seqs) == expected
 
+def test_parallel_output_keeps_input_order(shared_datadir):
+    # Batches finish in whatever order the workers take; hits are still written in input
+    # order, so the output does not depend on --cpu or timing.
+    hmms = shared_datadir / "pdonr_hmms.hmm"
+    with tempfile.TemporaryDirectory() as output_dir:
+        serial, parallel = output_dir + "/serial.gb", output_dir + "/parallel.gb"
+        base_args = ["--input", str(shared_datadir / "pdonr_peptides.fasta"), "-r", str(hmms),
+                     "--evalue", "0.1", "-Z", "1000"]
+        main(base_args + ["-o", serial, "--cpu", "1"])
+        main(base_args + ["-o", parallel, "--cpu", "3", "--batch_size", "1"])
+        serial_ids = [rec.id for rec in SeqIO.parse(serial, "genbank")]
+        assert len(serial_ids) > 2
+        assert [rec.id for rec in SeqIO.parse(parallel, "genbank")] == serial_ids
+
 @pytest.mark.parametrize("dedup,message", [
     ("unknown", "invalid choice"),
     ("sequence_rc", "only supported for nucleotide output"),
@@ -588,7 +602,7 @@ def test_ranked_dedup_before_limit(monkeypatch, dedup, expected):
             assert len(hits) <= 2
             yield hits
 
-    monkeypatch.setattr(domain_search_module, "imap_unordered_bounded", run_tasks)
+    monkeypatch.setattr(domain_search_module, "imap_bounded", run_tasks)
     hits = list(domain_search_module.domain_search(
         records, references=[], z=1000, cpu=2, batch_size=3, max_hits=2, dedup=dedup,
     ))

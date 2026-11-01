@@ -179,15 +179,12 @@ def test_kmer_dist_translated_cds_genbank_runs(shared_datadir):
 
 
 def test_kmer_dist_ignores_noncanonical_protein_kmers(shared_datadir):
+    # kmer_dist_noncanonical.faa: seq1 ACXDE, seq2 ACYDE. X breaks a k-mer run; Y is canonical.
     with tempfile.TemporaryDirectory() as output_dir:
-        input_fasta = output_dir + "/noncanonical.faa"
         out = output_dir + "/out.hdf5"
 
-        with open(input_fasta, "w", encoding="utf-8") as handle:
-            handle.write(">seq1\nACXDE\n>seq2\nACYDE\n")
-
         kmer_dist.main([
-            "-i", input_fasta,
+            "-i", str(shared_datadir / "kmer_dist_noncanonical.faa"),
             "--hdf_out", out,
             "--metric", "jaccard",
             "--ksize", "2",
