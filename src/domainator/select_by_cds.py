@@ -26,7 +26,7 @@ from domainator.locations import FeatureIndex, pad_location, slice_record_from_l
 from Bio.SeqFeature import FeatureLocation
 from domainator.partial import fragment_status_allowed, cds_fragment_status, PARTIAL_CHOICES
 from domainator.location_ops import circular_envelope, copy_location, overlap_size, stranded_end, stranded_start
-from typing import Tuple, Optional, Set, Iterable, Iterator
+from typing import List, Tuple, Optional, Set, Iterable, Iterator
 from Bio.SeqRecord import SeqRecord
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.taxonomy import NCBITaxonomy
@@ -195,6 +195,13 @@ def circular_focus_distances(slice_location, focus_location, contig_length:int, 
     dist_to_end = len(slice_location) - dist_to_start - len(focus_envelope)
     return dist_to_start, dist_to_end
 
+def cds_range_members(cds_list, cds_idx) -> List[int]:
+    """The indices into cds_list that cds_range counts: the protein-coding CDSs, plus the
+    focus itself. The pseudo-CDSs standing for whole-contig nucleotide annotations are not
+    genes, so they are never neighbors, though one can be the focus."""
+    return [i for i, cds in enumerate(cds_list) if i == cds_idx or not cds.is_nucleic_acid]
+
+
 def neighborhood_feature_index(contig, cds_list) -> FeatureIndex:
     """The features get_cds_neighborhood carries into a neighborhood: the contig's features other than
     domain annotations, then the domain annotations and search hit of each CDS in cds_list."""
@@ -245,12 +252,14 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
             upstream_pad = kb_range[0] * 1000
             downstream_pad = kb_range[1] * 1000
         elif cds_range is not None:
+            members = cds_range_members(cds_list, cds_idx)
+            member_idx = members.index(cds_idx)
             if strand == -1: # reverse strand
-                left_cds = max(0, cds_idx - cds_range[1])
-                right_cds = min(len(cds_list) - 1, cds_idx + cds_range[0])
+                left_cds = members[max(0, member_idx - cds_range[1])]
+                right_cds = members[min(len(members) - 1, member_idx + cds_range[0])]
             else: #forward strand
-                left_cds = max(0, cds_idx - cds_range[0])
-                right_cds = min(len(cds_list) - 1, cds_idx + cds_range[1])
+                left_cds = members[max(0, member_idx - cds_range[0])]
+                right_cds = members[min(len(members) - 1, member_idx + cds_range[1])]
             left_coord = int(cds_list[left_cds].feature.location.start)
             right_coord = int(cds_list[right_cds].feature.location.end)
             left_pad = max(int(focus_cds.feature.location.start) - left_coord, 0) # min in case of overlapping CDSs
@@ -284,10 +293,13 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
                 downstream_pad = int(kb_range[1] * 1000)
             slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
         elif cds_range is not None:
+            members = cds_range_members(cds_list, cds_idx)
+            member_idx = members.index(cds_idx)
             if strand == -1:
-                left_cds, right_cds = pad_circular_cds(cds_idx, len(cds_list), cds_range[1], cds_range[0])
+                left_cds, right_cds = pad_circular_cds(member_idx, len(members), cds_range[1], cds_range[0])
             else:
-                left_cds, right_cds = pad_circular_cds(cds_idx, len(cds_list), cds_range[0], cds_range[1])
+                left_cds, right_cds = pad_circular_cds(member_idx, len(members), cds_range[0], cds_range[1])
+            left_cds, right_cds = members[left_cds], members[right_cds]
 
             #TODO: account for overlapping CDSs
             left_envelope = circular_envelope(cds_list[left_cds].feature.location, len(contig), 1)

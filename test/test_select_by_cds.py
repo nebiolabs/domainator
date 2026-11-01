@@ -12,6 +12,7 @@ import sys
 import subprocess
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from domainator.location_ops import circular_envelope
 from helpers import compare_seqfiles
 
@@ -527,3 +528,56 @@ def test_select_by_cds_writes_compressed_output(shared_datadir, tmp_path):
         select_by_cds.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "--domains", "CAT"])
     with gzip.open(compressed, "rt") as handle:
         assert handle.read() == open(plain).read()
+
+
+def _annotation(type, start, end, cds_id, name):
+    return SeqFeature(FeatureLocation(start, end, 1), type=type,
+                      qualifiers={"cds_id": [cds_id], "name": [name], "score": ["10.0"], "evalue": ["1e-5"]})
+
+
+def _cds(start, end, cds_id):
+    return SeqFeature(FeatureLocation(start, end, 1), type="CDS", qualifiers={"cds_id": [cds_id]})
+
+
+def _cds_range_contig(topology, features):
+    record = SeqRecord(Seq("A" * 100), id="c", features=features)
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["topology"] = topology
+    return record
+
+
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+def test_cds_range_skips_nucleotide_annotations_around_a_nucleotide_hit(topology):
+    # A whole-contig hit (cds_id ".") is a pseudo-CDS and may be the focus, but only real
+    # CDSs are neighbors: with nothing protein-coding downstream, the region ends at the hit
+    # rather than reaching the nucleotide annotation at 70..80.
+    record = _cds_range_contig(topology, [
+        _cds(0, 10, "a"),
+        _annotation(DOMAIN_SEARCH_BEST_HIT_NAME, 40, 50, ".", "q"),
+        _annotation(DOMAIN_FEATURE_NAME, 70, 80, ".", "other"),
+    ])
+    regions = list(select_by_cds.select_by_cds([record], has_search_hit=True, cds_range=(1, 1)))
+    assert [len(r) for r in regions] == [50]
+    assert [f.type for f in regions[0].features if f.type in (DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME)] == [DOMAIN_SEARCH_BEST_HIT_NAME]
+
+
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+def test_cds_range_skips_nucleotide_annotations_between_cdss(topology):
+    # The next CDS downstream of a is b, not the nucleotide annotation between them.
+    record = _cds_range_contig(topology, [
+        _cds(0, 10, "a"),
+        _annotation(DOMAIN_SEARCH_BEST_HIT_NAME, 0, 10, "a", "q"),
+        _annotation(DOMAIN_FEATURE_NAME, 20, 30, ".", "other"),
+        _cds(40, 50, "b"),
+    ])
+    regions = list(select_by_cds.select_by_cds([record], has_search_hit=True, cds_range=(0, 1)))
+    assert [len(r) for r in regions] == [50]
+    assert sorted(f.qualifiers["cds_id"][0] for f in regions[0].features if f.type == "CDS") == ["a", "b"]
+
+
+def test_cds_range_members():
+    cdss = [DomainatorCDS("a", "a", 0, _cds(0, 10, "a")), DomainatorCDS("n", "nuc_0", 1, _cds(20, 30, "nuc_0")),
+            DomainatorCDS("b", "b", 2, _cds(40, 50, "b"))]
+    cdss[1].is_nucleic_acid = True
+    assert select_by_cds.cds_range_members(cdss, 0) == [0, 2]
+    assert select_by_cds.cds_range_members(cdss, 1) == [0, 1, 2]

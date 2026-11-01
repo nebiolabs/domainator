@@ -161,3 +161,6 @@ rust/target/
 # Local TMbed checkout
 /TMbed/
 site/
+
+# Advisory lock the NCBI taxonomy loader leaves beside taxdump.tar.gz
+*.tar.gz.lock

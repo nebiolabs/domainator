@@ -436,7 +436,7 @@ def build_parser():
                         help="How many kb downstream of the selected CDS to extract. Starting from the end of the CDS.")
 
     parser.add_argument('--cds_range', type=int, default=None,
-                        help="How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs.")
+                        help="How many CDSs upstream and downstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream and downstream CDSs. Only protein-coding CDSs are counted, never hits on a nucleotide reference.")
     parser.add_argument('--cds_up', type=int, default=None,
                             help="How many CDSs upstream of the selected CDS to extract. Example, 1 would mean to return contigs including the selected CDSs and the immediate upstream CDS.")
     parser.add_argument('--cds_down', type=int, default=None,
