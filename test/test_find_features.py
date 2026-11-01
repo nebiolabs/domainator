@@ -356,3 +356,16 @@ def test_find_features_partial(shared_datadir, partial, expected_cds_ids):
         record = next(SeqIO.parse(out, "genbank"))
         cds_ids = {f.qualifiers["cds_id"][0] for f in record.features if f.type == DOMAIN_FEATURE_NAME}
         assert len(cds_ids) == expected_cds_ids
+
+
+def test_find_features_gene_call_all_drops_old_domain_annotations(shared_datadir):
+    # --gene_call all replaces every CDS, so the Domainator annotations anchored on the old
+    # ones go too, as in domainate, rather than staying behind pointing at CDSs that no
+    # longer exist.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        _find_features_main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+                             "--gene_call", "all", "-o", out])
+        for record in SeqIO.parse(out, "genbank"):
+            assert [f for f in record.features if f.type == DOMAIN_FEATURE_NAME] == []
+            assert any(f.type == "CDS" for f in record.features)

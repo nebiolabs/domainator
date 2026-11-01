@@ -616,7 +616,9 @@ def find_features(
             return md5(s.encode()).hexdigest()
     
     for rec in records:
-        CDS_count = clean_rec(rec, clear_CDS_annotations=clear_CDS_annotations)
+        # As in domainate: the domain annotations of CDSs about to be replaced go with them.
+        CDS_count = clean_rec(rec, clear_domainator_annotations=clear_CDS_annotations,
+                              clear_CDS_annotations=clear_CDS_annotations)
         
         # Gene calling if needed
         if CDS_count == 0 and rec.annotations.get('molecule_type') != "protein" and gene_call is not None:

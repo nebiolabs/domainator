@@ -55,15 +55,64 @@ def _read_cm_names(path):
     return [name for name, _ in split_by_cluster._iter_cm_blocks(path)]
 
 
-@pytest.mark.parametrize(
-    "matrix_output_type,matrix_name",
-    [("dense_text", "matrix.tsv"), ("hdf", "matrix.hdf5")],
-)
-def test_split_by_cluster_genbank_matrix_formats(shared_datadir, tmp_path, matrix_output_type, matrix_name):
+# Committed matrices under test/data/split_by_cluster, so the main([...]) calls below
+# name files that exist and can be replayed as they are (domainatoredux's parity sweep
+# harvests them). write_fixtures rebuilds them; test_split_by_cluster_fixtures_are_current
+# keeps the committed copies equal to what it writes.
+FIXTURE_DIR = "split_by_cluster"
+
+
+def write_fixtures(data_dir, out_dir):
+    """Write the matrix fixtures the tests read into out_dir."""
+    data_dir, out_dir = Path(data_dir), Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fesod = _read_seq_ids(data_dir / "FeSOD_20.gb", "genbank")
+    _write_test_matrix(out_dir / "FeSOD_20.matrix.tsv", fesod)
+    _write_test_matrix(out_dir / "FeSOD_20.matrix.hdf5", fesod, output_type="hdf")
+    _write_test_matrix(out_dir / "pdonr_hmms.matrix.tsv", _read_hmm_names(data_dir / "pdonr_hmms.hmm"))
+    _write_test_matrix(out_dir / "pDONR_201_domain_search.matrix.tsv",
+                       _read_seq_ids(data_dir / "pDONR_201_domain_search.gb", "genbank"))
+    _write_test_matrix(out_dir / "RF00042.matrix.tsv", _read_cm_names(data_dir / "RF00042.cm"))
+
+
+def test_split_by_cluster_fixtures_are_current(shared_datadir, tmp_path):
+    fresh = tmp_path / "fresh"  # not tmp_path itself, which holds shared_datadir
+    write_fixtures(shared_datadir, fresh)
+    committed = shared_datadir / FIXTURE_DIR
+    assert sorted(p.name for p in committed.iterdir()) == sorted(p.name for p in fresh.iterdir())
+    for path in fresh.iterdir():
+        expected, actual = DataMatrix.from_file(path), DataMatrix.from_file(committed / path.name)
+        assert list(actual.rows) == list(expected.rows) and list(actual.columns) == list(expected.columns)
+        assert np.array_equal(actual.toarray(), expected.toarray())
+
+
+def test_split_by_cluster_genbank(shared_datadir, tmp_path):
     input_path = shared_datadir / "FeSOD_20.gb"
     labels = [record.id for record in parse_seqfiles([input_path], filetype_override="genbank")]
-    matrix_path = tmp_path / matrix_name
-    matrix = _write_test_matrix(matrix_path, labels, output_type=matrix_output_type)
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
+    matrix = DataMatrix.from_file(matrix_path)
+    expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
+
+    split_by_cluster.main([
+        "-i", str(input_path),
+        "--matrix", str(matrix_path),
+        "--output_dir", str(tmp_path / "out"),
+        "--threshold", "0",
+        "--min_cluster_size", "2",
+        "--write_small_clusters",
+    ])
+
+    outdir = tmp_path / "out"
+    for cluster_id, members in expected_clusters.items():
+        assert _read_seq_ids(outdir / f"{cluster_id}.gb", "genbank") == members
+    assert _read_seq_ids(outdir / "small_clusters.gb", "genbank") == expected_small
+
+
+def test_split_by_cluster_hdf5_matrix(shared_datadir, tmp_path):
+    input_path = shared_datadir / "FeSOD_20.gb"
+    labels = [record.id for record in parse_seqfiles([input_path], filetype_override="genbank")]
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.hdf5"
+    matrix = DataMatrix.from_file(matrix_path)
     expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
 
     split_by_cluster.main([
@@ -84,8 +133,8 @@ def test_split_by_cluster_genbank_matrix_formats(shared_datadir, tmp_path, matri
 def test_split_by_cluster_fasta(shared_datadir, tmp_path):
     input_path = shared_datadir / "FeSOD_20.fasta"
     labels = [record.id for record in parse_seqfiles([input_path], filetype_override="fasta")]
-    matrix_path = tmp_path / "matrix.tsv"
-    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
+    matrix = DataMatrix.from_file(matrix_path)
     expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
 
     split_by_cluster.main([
@@ -106,8 +155,8 @@ def test_split_by_cluster_fasta(shared_datadir, tmp_path):
 def test_split_by_cluster_hmm(shared_datadir, tmp_path):
     input_path = shared_datadir / "pdonr_hmms.hmm"
     labels = _read_hmm_names(input_path)
-    matrix_path = tmp_path / "matrix.tsv"
-    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "pdonr_hmms.matrix.tsv"
+    matrix = DataMatrix.from_file(matrix_path)
     expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
 
     split_by_cluster.main([
@@ -126,13 +175,9 @@ def test_split_by_cluster_hmm(shared_datadir, tmp_path):
 
 
 def test_split_by_cluster_cm_small_clusters(shared_datadir, tmp_path):
-    source_cm = shared_datadir / "RF00042.cm"
-    input_path = tmp_path / "single.cm"
-    first_name, first_block = next(split_by_cluster._iter_cm_blocks(source_cm))
-    input_path.write_text(first_block, encoding="utf-8")
-    labels = [first_name]
-    matrix_path = tmp_path / "matrix.tsv"
-    _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    input_path = shared_datadir / "RF00042.cm"
+    labels = _read_cm_names(input_path)
+    matrix_path = shared_datadir / "split_by_cluster" / "RF00042.matrix.tsv"
 
     split_by_cluster.main([
         "-i", str(input_path),
@@ -146,6 +191,28 @@ def test_split_by_cluster_cm_small_clusters(shared_datadir, tmp_path):
     outdir = tmp_path / "out"
     assert not (outdir / "1.cm").exists()
     assert _read_cm_names(outdir / "small_clusters.cm") == labels
+    # the whole model, its filter HMM included
+    assert (outdir / "small_clusters.cm").read_text() == input_path.read_text()
+
+
+def test_split_by_cluster_cm_keeps_each_filter_hmm_with_its_model(shared_datadir, tmp_path):
+    # Every model of an Infernal file is a CM block and a filter HMM block, both named.
+    # They are one model: two of them make two labels, not four.
+    copa = (shared_datadir / "RF00042.cm").read_text()
+    copb = copa.replace("CopA", "CopB")
+    input_path = tmp_path / "two.cm"
+    input_path.write_text(copa + copb, encoding="utf-8")
+    assert _read_cm_names(input_path) == ["CopA", "CopB"]
+    matrix_path = tmp_path / "matrix.tsv"
+    _write_test_matrix(matrix_path, ["CopA", "CopB"])
+
+    split_by_cluster.main([
+        "-i", str(input_path),
+        "--matrix", str(matrix_path),
+        "--output_dir", str(tmp_path / "out"),
+    ])
+
+    assert (tmp_path / "out" / "1.cm").read_text() == copa + copb
 
 
 def test_split_by_cluster_requires_exact_label_match(shared_datadir, tmp_path):
@@ -165,8 +232,8 @@ def test_split_by_cluster_requires_exact_label_match(shared_datadir, tmp_path):
 def test_split_by_cluster_skips_small_clusters_by_default(shared_datadir, tmp_path):
     input_path = shared_datadir / "FeSOD_20.gb"
     labels = [record.id for record in parse_seqfiles([input_path], filetype_override="genbank")]
-    matrix_path = tmp_path / "matrix.tsv"
-    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
+    matrix = DataMatrix.from_file(matrix_path)
     expected_clusters, _expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
 
     split_by_cluster.main([
@@ -185,9 +252,7 @@ def test_split_by_cluster_skips_small_clusters_by_default(shared_datadir, tmp_pa
 
 def test_split_by_cluster_pad_on_search_hits_centers_genbank(shared_datadir, tmp_path):
     input_path = shared_datadir / "pDONR_201_domain_search.gb"
-    labels = [record.id for record in parse_seqfiles([input_path], filetype_override="genbank")]
-    matrix_path = tmp_path / "matrix.tsv"
-    _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "pDONR_201_domain_search.matrix.tsv"
 
     split_by_cluster.main([
         "-i", str(input_path),
@@ -207,9 +272,7 @@ def test_split_by_cluster_pad_on_search_hits_centers_genbank(shared_datadir, tmp
 
 def test_split_by_cluster_pad_on_search_hits_requires_domain_search(shared_datadir, tmp_path):
     input_path = shared_datadir / "FeSOD_20.gb"
-    labels = [record.id for record in parse_seqfiles([input_path], filetype_override="genbank")]
-    matrix_path = tmp_path / "matrix.tsv"
-    _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
 
     with pytest.raises(ValueError, match="does not contain any Domain_Search"):
         split_by_cluster.main([
@@ -222,9 +285,7 @@ def test_split_by_cluster_pad_on_search_hits_requires_domain_search(shared_datad
 
 def test_split_by_cluster_pad_on_search_hits_requires_genbank(shared_datadir, tmp_path):
     input_path = shared_datadir / "FeSOD_20.fasta"
-    labels = [record.id for record in parse_seqfiles([input_path], filetype_override="fasta")]
-    matrix_path = tmp_path / "matrix.tsv"
-    _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
 
     with pytest.raises(ValueError, match="only supported for GenBank"):
         split_by_cluster.main([
@@ -237,9 +298,7 @@ def test_split_by_cluster_pad_on_search_hits_requires_genbank(shared_datadir, tm
 
 def test_split_by_cluster_refuses_to_overwrite(shared_datadir, tmp_path):
     input_path = shared_datadir / "FeSOD_20.gb"
-    labels = [record.id for record in parse_seqfiles([input_path], filetype_override="genbank")]
-    matrix_path = tmp_path / "matrix.tsv"
-    _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
     outdir = tmp_path / "out"
     outdir.mkdir()
     (outdir / "1.gb").write_text("already here", encoding="utf-8")
@@ -288,8 +347,8 @@ def test_split_by_cluster_hmm_gzip(shared_datadir, tmp_path):
     plain = shared_datadir / "pdonr_hmms.hmm"
     input_path = helpers.gzip_file(plain, tmp_path / "clusters.hmm.gz")
     labels = _read_hmm_names(plain)
-    matrix_path = tmp_path / "matrix.tsv"
-    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "pdonr_hmms.matrix.tsv"
+    matrix = DataMatrix.from_file(matrix_path)
     expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
 
     split_by_cluster.main([
@@ -337,8 +396,8 @@ def test_split_by_cluster_genbank_bgzf(shared_datadir, tmp_path):
     plain = shared_datadir / "FeSOD_20.gb"
     input_path = helpers.bgzip_file(plain, tmp_path / "in.gb.bgz")
     labels = [record.id for record in parse_seqfiles([plain], filetype_override="genbank")]
-    matrix_path = tmp_path / "matrix.tsv"
-    matrix = _write_test_matrix(matrix_path, labels, output_type="dense_text")
+    matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
+    matrix = DataMatrix.from_file(matrix_path)
     expected_clusters, expected_small = _expected_cluster_members(labels, matrix, lb=0, min_cluster_size=2)
 
     split_by_cluster.main([

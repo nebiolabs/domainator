@@ -83,6 +83,29 @@ def _iter_hmm_models(input_path: Union[str, PathLike]) -> Iterator[Tuple[str, py
 
 
 def _iter_cm_blocks(input_path: Union[str, PathLike]) -> Iterator[Tuple[str, str]]:
+    """Yield (name, text) for each model of an Infernal CM file.
+
+    A model is its CM block followed by the HMM filter block Infernal stores with it;
+    each ends in '//' and carries the model's NAME, so the filter is kept with the CM
+    rather than read as a second model of the same name.
+    """
+    pending: Optional[Tuple[str, str]] = None  # a CM block, waiting for its filter HMM
+    for name, block in _iter_slash_blocks(input_path):
+        if block.lstrip().startswith("HMMER3"):
+            if pending is None:
+                raise ValueError(f"CM file has an HMM filter block ({name}) with no CM block before it.")
+            yield pending[0], pending[1] + block
+            pending = None
+        else:
+            if pending is not None:
+                yield pending
+            pending = (name, block)
+    if pending is not None:
+        yield pending
+
+
+def _iter_slash_blocks(input_path: Union[str, PathLike]) -> Iterator[Tuple[str, str]]:
+    """Yield (NAME, text) for each '//'-terminated block of a CM file."""
     record_lines: List[str] = []
     current_name: Optional[str] = None
 

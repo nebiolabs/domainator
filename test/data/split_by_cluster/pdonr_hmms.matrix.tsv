@@ -1,0 +1,8 @@
+	2-oxoacid_dh	APH	CAT	CcdA	CcdB	Condensation	TCAD9
+2-oxoacid_dh	0.0	10.0	0.0	0.0	0.0	0.0	0.0
+APH	10.0	0.0	0.0	0.0	0.0	0.0	0.0
+CAT	0.0	0.0	0.0	9.0	0.0	0.0	0.0
+CcdA	0.0	0.0	9.0	0.0	0.0	0.0	0.0
+CcdB	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+Condensation	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+TCAD9	0.0	0.0	0.0	0.0	0.0	0.0	0.0
