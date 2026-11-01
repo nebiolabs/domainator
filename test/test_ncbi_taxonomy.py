@@ -105,8 +105,19 @@ def test_compile_taxonomy_expression_semantics(shared_datadir):
             )
 
 
-def test_NCBItaxonomy_extracted_only(tmp_path, shared_datadir):
-    """If taxdump.tar.gz is missing, we should still load from extracted .dmp files."""
+def _no_network(monkeypatch):
+    import domainator.taxonomy.ncbi as ncbi
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the taxonomy was fetched from NCBI")
+    monkeypatch.setattr(ncbi, "download_url", refuse)
+    monkeypatch.setattr(ncbi, "_fetch_remote_md5", refuse)
+
+
+def test_NCBItaxonomy_extracted_only(tmp_path, shared_datadir, monkeypatch):
+    """If taxdump.tar.gz is missing, we should still load from extracted .dmp files,
+    without downloading the tarball."""
+    _no_network(monkeypatch)
     src = shared_datadir / "taxdmp"
     for name in ("nodes.dmp", "names.dmp", "merged.dmp", "delnodes.dmp"):
         shutil.copyfile(src / name, tmp_path / name)
@@ -128,3 +139,18 @@ def test_NCBItaxonomy_fallback_when_tar_corrupt(tmp_path, shared_datadir):
     with pytest.warns(UserWarning):
         tx = NCBITaxonomy(tmp_path, overwrite=False)
     assert tx.name(1423) == "Bacillus subtilis"
+
+
+def test_NCBItaxonomy_incomplete_extracted_files_are_downloaded_over(tmp_path, shared_datadir, monkeypatch):
+    """Without the tarball and with only some of the .dmp files, the tarball is downloaded."""
+    import domainator.taxonomy.ncbi as ncbi
+    shutil.copyfile(shared_datadir / "taxdmp" / "nodes.dmp", tmp_path / "nodes.dmp")
+    fetched = []
+
+    def fake_download(url, target_dir):
+        fetched.append(url)
+        shutil.copyfile(shared_datadir / "taxdmp" / "taxdump.tar.gz", target_dir / "taxdump.tar.gz")
+    monkeypatch.setattr(ncbi, "download_url", fake_download)
+    tx = NCBITaxonomy(tmp_path, overwrite=False)
+    assert fetched == ["https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz"]
+    assert tx.name(562) == "Escherichia coli"

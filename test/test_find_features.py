@@ -1,6 +1,7 @@
 """Tests for find_features.py"""
 
 import os
+import sys
 import pytest
 import tempfile
 from Bio import SeqIO
@@ -369,3 +370,17 @@ def test_find_features_gene_call_all_drops_old_domain_annotations(shared_datadir
         for record in SeqIO.parse(out, "genbank"):
             assert [f for f in record.features if f.type == DOMAIN_FEATURE_NAME] == []
             assert any(f.type == "CDS" for f in record.features)
+
+
+def test_find_features_tmbed_without_tmbed_is_an_error(shared_datadir, monkeypatch):
+    # --tmbed with TMbed not installed stops with the install hint; it does not quietly
+    # write the records without the prediction that was asked for.
+    from domainator.errors import ExternalToolError
+    for module in ("tmbed", "tmbed.tmbed", "tmbed.viterbi", "tmbed.utils"):
+        monkeypatch.setitem(sys.modules, module, None)  # makes the import raise ImportError
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        with pytest.raises(ExternalToolError, match="tmbed"):
+            _find_features_main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--tmbed",
+                                 "--device", "None", "-o", out])
+        assert not os.path.exists(out)

@@ -95,11 +95,22 @@ def _fetch_remote_md5(url: str) -> str:
     resp.raise_for_status()
     return resp.text.strip().split()[0]
 
+_DMP_NAMES = ("nodes.dmp", "merged.dmp", "delnodes.dmp", "names.dmp")
+
+
+def _has_extracted_dmps(local_path: Path) -> bool:
+    return all((local_path / name).exists() for name in _DMP_NAMES)
+
+
 class NCBITaxonomy:
     def __init__(self, local_path, overwrite=True):
+        """Load the taxonomy in ``local_path``: its ``taxdump.tar.gz``, or else its extracted
+        .dmp files. With neither, the tarball is downloaded from NCBI; with ``overwrite``, it is
+        also downloaded when the local one differs from the server's (or when there are only
+        extracted .dmp files, which cannot be compared)."""
         local_path = Path(local_path)
         local_path.mkdir(parents=True, exist_ok=True)
-        
+
 
         # check if local copy of taxdump.tar.gz exists and has the same md5 as the most recent one from ncbi
         # partly derived from https://github.com/etetoolkit/ete/blob/1f587a315f3c61140e3bdbe697e3e86eda6d2eca/ete3/ncbi_taxonomy/ncbiquery.py#L667
@@ -112,7 +123,7 @@ class NCBITaxonomy:
         with _locked_file(lock_path, fcntl.LOCK_SH):
             needs_download = False
             if not local_taxdump_tar_gz_path.exists():
-                needs_download = True
+                needs_download = overwrite or not _has_extracted_dmps(local_path)
             elif overwrite is False:
                 needs_download = False
             else:
@@ -139,7 +150,7 @@ class NCBITaxonomy:
                 # Re-check under exclusive lock in case another process already updated it.
                 still_needs_download = False
                 if not local_taxdump_tar_gz_path.exists():
-                    still_needs_download = True
+                    still_needs_download = overwrite or not _has_extracted_dmps(local_path)
                 elif overwrite is False:
                     still_needs_download = False
                 else:
@@ -201,7 +212,7 @@ class NCBITaxonomy:
                 merged_path = local_path / 'merged.dmp'
                 delnodes_path = local_path / 'delnodes.dmp'
                 names_path = local_path / 'names.dmp'
-                if all(p.exists() for p in (nodes_path, merged_path, delnodes_path, names_path)):
+                if _has_extracted_dmps(local_path):
                     self._nodes_tab = {int(x['tax_id']) : x for x in self.parse_taxdmp(nodes_path, 'nodes')}
                     self._merged_tab = {int(x["old_tax_id"]) : x for x in self.parse_taxdmp(merged_path, 'merged')}
                     self._deleted_tab = {int(x["tax_id"]) : x for x in self.parse_taxdmp(delnodes_path, 'delnodes')}

@@ -582,34 +582,32 @@ def find_features(
     tmbed_components = None
     get_md5 = None
     if run_tmbed:
-        try:
-            # Use algorithm-specific dir if set, otherwise fall back to generic model_dir
-            if model_dir is not None:
-                if Path(model_dir).is_dir() is False:
-                    raise ValueError(
-                        f"Model directory {model_dir} does not exist or is not a directory."
-                    )
+        # A missing TMbed is an error (get_tmbed_predictor raises ExternalToolError with an
+        # install hint), not a reason to quietly skip the prediction that was asked for.
+        # Use algorithm-specific dir if set, otherwise fall back to generic model_dir
+        if model_dir is not None:
+            if Path(model_dir).is_dir() is False:
+                raise ValueError(
+                    f"Model directory {model_dir} does not exist or is not a directory."
+                )
 
-            if tmbed_model_dir:
-                effective_tmbed_model_dir = tmbed_model_dir
-            elif model_dir:
-                effective_tmbed_model_dir = str(Path(model_dir) / "tmbed")
-                Path(effective_tmbed_model_dir).mkdir(parents=True, exist_ok=True)
-            else:
-                effective_tmbed_model_dir = None
-                
-            tmbed_components = get_tmbed_predictor(device, resolve_cpu(cpu), effective_tmbed_model_dir)
-            from tmbed.utils import get_md5
-        except ImportError as e:
-            warnings.warn(str(e))
-            run_tmbed = False
+        if tmbed_model_dir:
+            effective_tmbed_model_dir = tmbed_model_dir
+        elif model_dir:
+            effective_tmbed_model_dir = str(Path(model_dir) / "tmbed")
+            Path(effective_tmbed_model_dir).mkdir(parents=True, exist_ok=True)
+        else:
+            effective_tmbed_model_dir = None
+
+        tmbed_components = get_tmbed_predictor(device, resolve_cpu(cpu), effective_tmbed_model_dir)
+        from tmbed.utils import get_md5
     
     # Process sequences in batches
     # We need to collect sequences to process in batches for efficiency
     batch_contigs = []
     batch_sequences = []  # List of (contig_idx, cds_idx, seq_hash, sequence) tuples
     
-    # Simple MD5 fallback if tmbed not available
+    # Without TMbed, hash the sequences with hashlib
     if get_md5 is None:
         from hashlib import md5
         def get_md5(s):
