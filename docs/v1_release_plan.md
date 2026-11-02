@@ -534,7 +534,7 @@ Proposed canonical spellings, based on the audit's inventory of name drift:
 ## Suggested release sequence
 1. **0.13**: Phases 0, 1, 2a/2b (the dispatcher alongside the old scripts), and the import-hygiene part of 4. Non-breaking, and gives early feedback.
 2. **0.14**: Phase 5, the move to upstream Biopython. Doing it before the 1.0 renames isolates its output changes from the interface changes.
-3. **1.0.0rc1**: Phase 3 renames, the Phase 4 API, Phase 6 versioning, Phase 8 packaging, the Phase 9 manifest, and removal of the server and the `.py` scripts. Ship MIGRATION.md.
+3. **1.0.0-rc.1**: Phase 3 renames, the Phase 4 API, Phase 6 versioning, Phase 8 packaging, the Phase 9 manifest, and removal of the server and the `.py` scripts. Ship MIGRATION.md.
 4. **1.0.0**: after the rc has been used on real workflows. Phases 7, 10, 11 and 12 can land before or after 1.0, since they don't change interfaces.
 
 ## Verification
