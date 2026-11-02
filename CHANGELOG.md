@@ -172,6 +172,12 @@ Defaults and extraction behavior are unchanged; old names are not aliases.
   `domainator viewer` writes the page on its own (see MIGRATION.md).
 
 ### Fixed
+- hmmer_build reads its input MSA by path, as hmmbuild does. Read through an open file, an
+  input whose format could not be guessed (including a blank one) crashed the interpreter with
+  a segmentation fault, a SELEX alignment failed with "illegal residue(s)", and the A2M,
+  sequential PHYLIP and PSI-BLAST formats were unreachable, since only a file's suffix tells
+  them apart (`.a2m`, `.phys`, `.pb`). Standard input is read from a temporary copy, with its
+  format guessed from the content.
 - Strand-independent exact deduplication no longer collapses complement-only or
   reverse-only nucleotide sequences; only reverse-complement copies are equivalent.
 - A taxid missing from the NCBI taxonomy database (one newer than the database) crashed

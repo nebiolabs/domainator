@@ -1,0 +1,4 @@
+3 12
+alpha_long_name ACGTACGTACGT
+beta_long_name2 ACGTACGAACGT
+gamma_long_nam3 ACGTTCGAACGT

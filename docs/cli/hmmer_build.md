@@ -16,7 +16,7 @@ Give at least one of these outputs: `--hmm_out`. `-` as an input or output means
 |---|---|---|---|
 | `-v`, `--verbose` |  |  | show debug output, and a traceback for errors. |
 | `-q`, `--quiet` |  |  | show errors only: no progress messages or warnings. |
-| `-i`, `--input` | FILE | required | Path of input msa. Acceptable formats are the same as for hmmbuild. Use - to read standard input. |
+| `-i`, `--input` | FILE | required | Path of input msa. Acceptable formats are the same as for hmmbuild. The format is guessed from the content, and from the file suffix where the content is ambiguous (.a2m, .phys, .pb, .slx). Use - to read standard input. |
 | `-o`, `--hmm_out` | FILE |  | Write the profile to this hmm file. Writes gzip-compressed output if the path ends in '.gz'; '.bgz' is refused because HMMER cannot read BGZF. Output to stdout is never compressed. Use - for standard output. |
 | `--name` | STRING | required | Name of the HMM profile. |
 | `--acc` | STRING |  | Accession of the HMM profile. |

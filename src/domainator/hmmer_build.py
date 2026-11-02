@@ -9,42 +9,64 @@ from domainator.cli.common import add_input, add_output, check_outputs, declare_
 from domainator.hmmio import ALPHABET_NAMES, get_alphabet, is_nucleic_acid_alphabet, alphabet_name, open_writable_hmm_file
 from domainator.cli.common import OUTPUT_COMPRESSION_HELP
 import os
+import shutil
 import sys
+import tempfile
 import pyhmmer
 from typing import Optional,BinaryIO,Union
 import re
+
+MSA_FORMATS_HELP = ("Acceptable formats are those of hmmbuild: Stockholm, Pfam, aligned FASTA, A2M, "
+                    "Clustal, PHYLIP, SELEX and PSI-BLAST.")
 
 def sanitize_string(s:str) -> str:
     return re.sub(r"[^ \w\d_\-\.;:]", "_", s)
 
 
-def _reject_empty_input(file) -> None:
-    """Raise on empty input before pyhmmer can see it.
+def _spool(file:BinaryIO, directory:str) -> str:
+    """Copy a stream into a file in `directory` and return the file's path.
 
-    MSAFile(io.BytesIO(b""), digital=True) segfaults the interpreter under
-    pyhmmer 0.12.1, and that is reachable from the CLI through empty stdin.
-    An empty path, by contrast, raises a normal error, so only streams need
-    checking here.
+    pyhmmer's MSAFile misbehaves on a file object: under pyhmmer 0.12 it segfaults the
+    interpreter when the format cannot be guessed (empty, blank or unrecognized input),
+    and a SELEX stream fails with "illegal residue(s)" once the alphabet has been
+    guessed. Opened from a path it does neither. The copy has no suffix, so its format
+    is guessed from the content alone.
     """
-    if isinstance(file, (str, os.PathLike)):
-        return
-    peek = getattr(file, "peek", None)
-    if peek is not None: # buffered readers, including sys.stdin.buffer
-        if not peek(1):
-            raise ValueError("The input MSA is empty.")
-        return
-    if getattr(file, "seekable", lambda: False)(): # BytesIO and friends
-        position = file.tell()
-        empty = not file.read(1)
-        file.seek(position)
-        if empty:
-            raise ValueError("The input MSA is empty.")
+    path = os.path.join(directory, "msa")
+    with open(path, "wb") as out:
+        shutil.copyfileobj(file, out)
+    return path
+
+
+def _read_msa(path:str, alphabet:Optional[pyhmmer.easel.Alphabet]) -> pyhmmer.easel.MSA:
+    """Read the first alignment of the MSA file at `path`.
+
+    Opening by path lets Easel guess the format as hmmbuild does: from the first line,
+    with the filename suffix (after a `.gz`) deciding what the content cannot (`.a2m`,
+    `.phys`, `.pb`, `.slx`).
+    """
+    if os.path.getsize(path) == 0:
+        raise ValueError("The input MSA is empty.")
+    try:
+        with MSAFile(path, digital=True, alphabet=alphabet) as msa_file:
+            return msa_file.read()
+    except ValueError as exc:
+        if "Could not determine format" in str(exc):
+            raise ValueError(f"Could not determine the format of the input MSA. {MSA_FORMATS_HELP}") from None
+        if alphabet is None and "alphabet" in str(exc):
+            raise ValueError(
+                f"Could not determine the alphabet of the input MSA ({exc}). "
+                f"Specify it explicitly with --alphabet ({', '.join(ALPHABET_NAMES)})."
+            ) from None
+        raise
 
 def hmmer_build(file:Union[str,BinaryIO], *, alphabet:Optional[pyhmmer.easel.Alphabet]=None, name:Optional[str]=None, acc:Optional[str]=None, desc:Optional[str]=None, window_length:Optional[int]=None, window_beta:Optional[float]=None) -> pyhmmer.plan7.HMM:
     """Build a single plan7 profile from an MSA.
 
     Args:
         file: path to, or open binary handle on, an MSA in any format hmmbuild accepts.
+            A path's suffix can decide the format (`.a2m`, `.phys`, `.pb`); a handle's
+            format is guessed from its content.
         alphabet: alphabet of the MSA. If None, pyhmmer infers it from the residues,
             which can guess wrong on short or ambiguous alignments.
         name: value for the profile's NAME field.
@@ -62,18 +84,11 @@ def hmmer_build(file:Union[str,BinaryIO], *, alphabet:Optional[pyhmmer.easel.Alp
     if window_length is not None and window_beta is not None:
         raise ValueError("Only one of window_length and window_beta may be specified, because window_length takes precedence over window_beta.")
 
-    _reject_empty_input(file)
-
-    try:
-        with MSAFile(file, digital=True, alphabet=alphabet) as msa_file:
-            msa = msa_file.read()
-    except ValueError as exc:
-        if alphabet is None and "alphabet" in str(exc):
-            raise ValueError(
-                f"Could not determine the alphabet of the input MSA ({exc}). "
-                f"Specify it explicitly with --alphabet ({', '.join(ALPHABET_NAMES)})."
-            ) from None
-        raise
+    if isinstance(file, (str, os.PathLike)):
+        msa = _read_msa(os.fspath(file), alphabet)
+    else:
+        with tempfile.TemporaryDirectory() as directory:
+            msa = _read_msa(_spool(file, directory), alphabet)
 
     if (window_length is not None or window_beta is not None) and not is_nucleic_acid_alphabet(msa.alphabet):
         raise ValueError(f"window_length and window_beta apply only to nucleotide alphabets, but the input MSA is {alphabet_name(msa.alphabet)}.")
@@ -103,7 +118,7 @@ def hmmer_build(file:Union[str,BinaryIO], *, alphabet:Optional[pyhmmer.easel.Alp
 def build_parser():
     parser = tool_parser(__doc__)
 
-    add_input(parser, "Path of input msa. Acceptable formats are the same as for hmmbuild.", multiple=False)
+    add_input(parser, "Path of input msa. Acceptable formats are the same as for hmmbuild. The format is guessed from the content, and from the file suffix where the content is ambiguous (.a2m, .phys, .pb, .slx).", multiple=False)
 
     add_output(parser, "hmm", "Write the profile to this hmm file." + OUTPUT_COMPRESSION_HELP, primary=True)
 
@@ -133,7 +148,7 @@ def main(argv):
 
     check_outputs(parser, params)
     from_stdin = params.input in STDIN_PATHS
-    input_file = sys.stdin.buffer if from_stdin else open(params.input, "rb")
+    input_file = sys.stdin.buffer if from_stdin else params.input
     output_handle = open_writable_hmm_file(params.hmm_out)
 
     alphabet = get_alphabet(params.alphabet)
@@ -141,6 +156,4 @@ def main(argv):
     hmm = hmmer_build(file=input_file, alphabet=alphabet, name=params.name, acc=params.acc, desc=params.desc, window_length=params.window_length, window_beta=params.window_beta)
     hmm.write(output_handle)
 
-    if not from_stdin:
-        input_file.close()
     output_handle.close()

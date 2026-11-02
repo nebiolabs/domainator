@@ -1,0 +1,7 @@
+MUSCLE (3.8) multiple sequence alignment
+
+
+seqA      MKV-LLAGWWHK
+seqB      MKVALL-GWWHK
+seqC      MRV-LLAGWFHK
+          *.* ** * * **

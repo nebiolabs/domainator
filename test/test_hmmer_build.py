@@ -138,8 +138,8 @@ def test_hmmer_build_ambiguous_alphabet_error_mentions_flag():
 
 
 def test_hmmer_build_empty_input_raises():
-    # MSAFile segfaults the interpreter on an empty stream under pyhmmer 0.12.1, so this
-    # guard is what keeps empty stdin (and this test session) from taking the process down.
+    # MSAFile segfaults the interpreter on an empty stream under pyhmmer 0.12, so streams
+    # are read from a temporary copy, and an empty one is refused before pyhmmer sees it.
     with pytest.raises(ValueError, match="empty"):
         hmmer_build(BytesIO(b""), name="x")
 
@@ -163,3 +163,62 @@ def test_hmmer_build_gzip_output(msa_file, tmp_path):
 def test_hmmer_build_rejects_bgzf_output(msa_file, tmp_path):
     with pytest.raises(ValueError, match="BGZF"):
         main(["--name", "test_profile", "--input", msa_file, "-o", str(tmp_path / "out.hmm.bgz")])
+
+
+# --- MSA formats -----------------------------------------------------------
+#
+# msa_formats/FeSOD_20.* are FeSOD_20.afa written by pyhmmer's TextMSA.write in each
+# format (the A2M copy with an RF line marking the columns that are at least half
+# residues, since A2M written without one does not read back). The small .txt files are
+# hand-written cases for the guess from content: classic PHYLIP (names holding spaces,
+# glued to the sequence), a PHYLIP name field wider than 10, SELEX with spaces as gaps,
+# Clustal with residue counts, and a MUSCLE header.
+
+@pytest.mark.parametrize("fixture", [
+    "FeSOD_20.sto", "FeSOD_20.aln", "FeSOD_20_clustallike.txt", "FeSOD_20.phy", "FeSOD_20.phys",
+    "FeSOD_20.slx", "FeSOD_20.pb", "FeSOD_20.a2m", "phylip_interleaved.txt", "phylip_sequential.txt",
+    "phylip_wide_names.txt", "selex_space_gaps.txt", "clustal_residue_counts.txt", "muscle.txt",
+])
+def test_hmmer_build_msa_formats(shared_datadir, tmp_path, fixture):
+    out = tmp_path / "out.hmm"
+    main(["--name", "f", "--input", str(shared_datadir / "msa_formats" / fixture), "-o", str(out)])
+    assert "NAME  f" in out.read_text()
+
+
+def _profile_body(hmm):
+    handle = BytesIO()
+    hmm.write(handle)
+    return [l for l in handle.getvalue().decode().splitlines() if not l.startswith(("DATE", "COM"))]
+
+
+@pytest.mark.parametrize("fixture", [
+    "FeSOD_20.sto", "FeSOD_20.aln", "FeSOD_20_clustallike.txt", "FeSOD_20.phy", "FeSOD_20.phys", "FeSOD_20.slx",
+])
+def test_hmmer_build_formats_of_one_alignment_agree(shared_datadir, fixture):
+    expected = _profile_body(hmmer_build(str(shared_datadir / "FeSOD_20.afa"), name="f"))
+    assert _profile_body(hmmer_build(str(shared_datadir / "msa_formats" / fixture), name="f")) == expected
+
+
+@pytest.mark.parametrize("content", [b"\n \n", b"hello world foo\nbar\n"])
+def test_hmmer_build_unrecognized_stream_raises(content):
+    # pyhmmer 0.12's MSAFile segfaults the interpreter on a stream whose format it
+    # cannot guess, so hmmer_build reads streams from a temporary copy.
+    with pytest.raises(ValueError, match="format of the input MSA"):
+        hmmer_build(BytesIO(content), name="x")
+
+
+def test_hmmer_build_selex_stream(shared_datadir):
+    # Read through MSAFile directly, a SELEX stream fails with "illegal residue(s)" once
+    # its alphabet has been guessed.
+    data = (shared_datadir / "msa_formats" / "FeSOD_20.slx").read_bytes()
+    assert _profile_body(hmmer_build(BytesIO(data), name="f")) == _profile_body(
+        hmmer_build(str(shared_datadir / "FeSOD_20.afa"), name="f"))
+
+
+def test_hmmer_build_a2m_needs_its_suffix(shared_datadir):
+    # A2M cannot be told from aligned FASTA by content: as a stream it is read as aligned
+    # FASTA, whose rows must all be the same length.
+    path = shared_datadir / "msa_formats" / "FeSOD_20.a2m"
+    with pytest.raises(ValueError, match="alen"):
+        hmmer_build(BytesIO(path.read_bytes()), name="f")
+    assert "RF    yes" in "\n".join(_profile_body(hmmer_build(str(path), name="f")))

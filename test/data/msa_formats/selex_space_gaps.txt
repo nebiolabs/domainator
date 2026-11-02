@@ -1,0 +1,9 @@
+#=RF      xxx.xxxx
+seqA      MKV.LLAG
+seqB      MKVALL.G
+seqC      MRV LLAG
+
+#=RF      xxxx
+seqA      WWHK
+seqB      WWHK
+seqC      WFHK

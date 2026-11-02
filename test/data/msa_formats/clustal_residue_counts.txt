@@ -1,0 +1,12 @@
+CLUSTAL W (1.83) multiple sequence alignment
+
+
+seqA      MKV-LLAG 7
+seqB      MKVALL-G 7
+seqC      MRV-LLAG 7
+          *.* ** *
+
+seqA      WWHK 11
+seqB      WWHK 11
+seqC      WFHK 11
+          * **
