@@ -5,6 +5,8 @@ A flexible and modular software suite for domain-based gene neighborhood and pro
 
 Domainator can be run as command line tools or as a Python library.
 
+Note that the GUI that was bundled with earlier versions of Domainator has been removed. The preferred GUI solution for Domainator is the Rust rewrite Domainatoredux [https://github.com/nebiolabs/domainatoredux](https://github.com/nebiolabs/domainatoredux). 
+
 # Quickstart
 
 ```
