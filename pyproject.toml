@@ -39,7 +39,7 @@ before-all = "rustup target add x86_64-apple-darwin aarch64-apple-darwin || true
 [project]
 name = "domainator"
 authors = [
-    {name = "Sean Johnson", email = "sjohnson@neb.com"},
+    {name = "Sean Johnson"},
     {name = "Andrew Ge"},
     {name = "Yu-Cheng Lin"},
     {name = "Zhiyi Sun"}
