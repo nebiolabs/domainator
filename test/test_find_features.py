@@ -384,3 +384,48 @@ def test_find_features_tmbed_without_tmbed_is_an_error(shared_datadir, monkeypat
             _find_features_main(["-i", str(shared_datadir / "FeSOD_20.gb"), "--tmbed",
                                  "--device", "None", "-o", out])
         assert not os.path.exists(out)
+
+
+# TMbed's ProtT5 model directory, so the TMbed tests need not download it (2.4 GB) into the
+# TMbed package; unset, TMbed's default applies.
+TMBED_MODEL_DIR = os.environ.get("DOMAINATOR_TMBED_MODEL_DIR")
+
+
+def _tmbed_args():
+    return ["--tmbed", "--device", "None"] + (["--tmbed_model_dir", TMBED_MODEL_DIR] if TMBED_MODEL_DIR else [])
+
+
+def _tmbed_regions(record):
+    from collections import Counter
+    return Counter(f.qualifiers["name"][0] for f in record.features
+                   if f.type == "Domainator" and f.qualifiers["program"][0] == "TMbed")
+
+
+@pytest.mark.skipif(not TMBED_AVAILABLE, reason="TMbed not installed")
+def test_find_features_tmbed_membrane_proteins(shared_datadir, tmp_path):
+    out = tmp_path / "out.gb"
+    _find_features_main(["-i", str(shared_datadir / "tmbed" / "tm_proteins.fasta"), "-o", str(out)] + _tmbed_args())
+    regions = {r.id.split("|")[1]: _tmbed_regions(r) for r in SeqIO.parse(out, "genbank")}
+    assert regions["P02945"] == {"transmembrane_alpha_helix": 7}  # bacteriorhodopsin
+    assert regions["P0A910"] == {"signal_peptide": 1, "transmembrane_beta_strand": 8}  # OmpA
+    assert regions["P07550"] == {"transmembrane_alpha_helix": 7}  # beta-2 adrenergic receptor
+    assert regions["P01308"] == {"signal_peptide": 1}  # insulin
+    assert regions["P02920"] == {"transmembrane_alpha_helix": 12}  # lactose permease
+    assert regions["P0A9P0"] == {}  # dihydrolipoyl dehydrogenase, soluble
+
+
+@pytest.mark.skipif(not TMBED_AVAILABLE, reason="TMbed not installed")
+def test_find_features_tmbed_cds_regions_lie_in_their_cds(shared_datadir, tmp_path):
+    out = tmp_path / "out.gb"
+    _find_features_main(["-i", str(shared_datadir / "tmbed" / "tm_contigs.gb"), "-o", str(out)] + _tmbed_args())
+    found = 0
+    for record in SeqIO.parse(out, "genbank"):
+        cdss = {f.qualifiers["cds_id"][0]: f for f in record.features
+                if f.type == "CDS" and "cds_id" in f.qualifiers}
+        for f in record.features:
+            if f.type == "Domainator" and f.qualifiers["program"][0] == "TMbed":
+                cds = cdss[f.qualifiers["cds_id"][0]]
+                assert cds.location.start <= f.location.start < f.location.end <= cds.location.end
+                assert f.location.strand == cds.location.strand
+                found += 1
+    assert found > 0

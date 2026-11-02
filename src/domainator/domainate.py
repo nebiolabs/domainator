@@ -480,7 +480,7 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     
     return out
 
-def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None, foldseek_path=None):
+def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None, foldseek_path=None, prostt5_weights=None, prostt5_device=None):
     """
     Args:
         proteins: list
@@ -534,7 +534,7 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
                 hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **varargs)
                 hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "phmmer", out)
             elif algorithm == "foldseek":
-                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue, device = foldseek_device, foldseek_path = foldseek_path)
+                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue, device = foldseek_device, foldseek_path = foldseek_path, prostt5_weights = prostt5_weights, prostt5_device = prostt5_device)
                 foldseek_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "foldseek", out)
             elif algorithm == "nhmmer":
                 hits = pyhmmer.hmmer.nhmmer(db_dict[db_name].values(), nucleic_acids, cpus=cpu, E=evalue, incE=evalue)
@@ -991,7 +991,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None, foldseek_path=None):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None, foldseek_path=None, prostt5_weights=None, prostt5_device=None):
     """
 
     Args:
@@ -1015,7 +1015,7 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
     Returns:
         : 
     """
-    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device, foldseek_path=foldseek_path) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
+    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
@@ -1174,7 +1174,8 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
               max_mode: bool = False, foldseek: Optional[List[str]] = None,
               esm2_3di_weights: Optional[str] = None, esm2_3di_device: str = "cuda:0", overlap_by_db: bool = False,
               max_hits_per_contig: Optional[int] = None, foldseek_device: str = "cpu", partial: str = "include",
-              foldseek_path: Optional[str] = None) -> Iterator[SeqRecord]:
+              foldseek_path: Optional[str] = None, prostt5_weights: Optional[str] = None,
+              prostt5_device: str = "cpu") -> Iterator[SeqRecord]:
     """Annotate every input record with domain hits, retaining records without hits.
 
     Search references against proteins/CDSs or nucleotide contigs, adding Domainator
@@ -1193,6 +1194,7 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
         esm2_3di_weights=esm2_3di_weights, esm2_3di_device=esm2_3di_device,
         overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig,
         foldseek_device=foldseek_device, partial=partial, foldseek_path=foldseek_path,
+        prostt5_weights=prostt5_weights, prostt5_device=prostt5_device,
     )
 
 
@@ -1204,7 +1206,8 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
               max_mode: bool = False, foldseek: Optional[List[str]] = None,
               esm2_3di_weights: Optional[str] = None, esm2_3di_device: str = "cuda:0", overlap_by_db: bool = False,
               max_hits_per_contig: Optional[int] = None, foldseek_device: str = "cpu", partial: str = "include",
-              foldseek_path: Optional[str] = None) -> Iterator[SeqRecord]:
+              foldseek_path: Optional[str] = None, prostt5_weights: Optional[str] = None,
+              prostt5_device: str = "cpu") -> Iterator[SeqRecord]:
     """Annotate the CDSs (or proteins) of ``records`` with their domain hits, yielding each record.
 
     Searches the proteins, and with nucleotide references the contigs, against ``references``
@@ -1240,6 +1243,10 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
         esm2_3di_weights: the ESM-2 3Di checkpoint that predicts the 3Di sequences the Foldseek
             search needs.
         esm2_3di_device: the device to run the ESM-2 3Di model on.
+        prostt5_weights: foldseek's ProstT5 weights (from 'foldseek databases ProstT5'): have
+            foldseek predict the 3Di sequences with ProstT5 instead of ESM-2 3Di. One of
+            ``esm2_3di_weights`` and ``prostt5_weights`` is needed to search ``foldseek``.
+        prostt5_device: "cpu" to run ProstT5 on the CPU, or a CUDA device ("cuda", "cuda:0", ...).
         overlap_by_db: apply ``max_overlap`` within each database separately.
         max_hits_per_contig: with ``best_annotation``, the most best-hit features to add per
             contig for contig-level (nhmmer or Infernal) hits. None: all.
@@ -1264,7 +1271,12 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
         reference_groups = read_references(references, foldseek=foldseek)
 
     if "foldseek" in reference_groups:
-        foldseek_builder = foldseek_lib.foldseekBuilder(esm2_3di_device, esm2_3di_weights)
+        if (esm2_3di_weights is None) == (prostt5_weights is None):
+            raise ValueError("Searching foldseek databases needs exactly one of esm2_3di_weights and prostt5_weights.")
+        if prostt5_weights is not None:
+            foldseek_builder = foldseek_lib.ProstT5Builder()
+        else:
+            foldseek_builder = foldseek_lib.foldseekBuilder(esm2_3di_device, esm2_3di_weights)
 
     if gene_call not in (None, 'all', 'unannotated'):
         raise ValueError("gene_call must be one of None, 'all', or 'unannotated'")
@@ -1339,7 +1351,7 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device)
             for contig_id in return_contigs:
                 yield contigs_list[contig_id]
             contigs_list = list()
@@ -1349,7 +1361,7 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device)
     for contig_id in return_contigs:
         yield contigs_list[contig_id]
 
@@ -1370,6 +1382,12 @@ def build_parser():
                         help="checkpoint file for esm2_3Di model.") # TODO: this should be automated.
     parser.add_argument("--esm2_3di_device", default="cuda:0", type=str, required=False,
                         help="device to use for esm2_3Di model.")
+    parser.add_argument("--prostt5_weights", default=None, type=str, required=False,
+                        help="foldseek's ProstT5 weights directory (from 'foldseek databases ProstT5 weights tmp'). "
+                        "foldseek then predicts the 3Di sequences with ProstT5, instead of the esm2_3Di model.")
+    parser.add_argument("--prostt5_device", default="cpu", type=str, required=False,
+                        help="device to run ProstT5 on: 'cpu', or a CUDA device string ('cuda', 'cuda:0', ...), "
+                        "which requires a GPU build of foldseek.")
     parser.add_argument("--foldseek_device", default="cpu", type=str, required=False,
                         help="device to use for the foldseek search. 'cpu' for a CPU-only search, "
                         "or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) to enable GPU-accelerated search. "
@@ -1435,6 +1453,8 @@ def main(argv):
 
     if params.reference is None and params.foldseek is None:
         parser.error("You must specify at least one reference database (-r/--reference or --foldseek).")
+    if params.foldseek is not None and (params.esm2_3di_weights is None) == (params.prostt5_weights is None):
+        parser.error("--foldseek needs exactly one of --esm2_3di_weights and --prostt5_weights.")
     if params.max_hits_per_cds is not None and params.max_hits_per_cds < 1:
         parser.error("--max_hits_per_cds must be at least 1. Leave it out to report all hits.")
     check_outputs(parser, params)
@@ -1473,6 +1493,8 @@ def main(argv):
             esm2_3di_device=params.esm2_3di_device,
             foldseek_device=params.foldseek_device,
             foldseek_path=params.foldseek_path,
+            prostt5_weights=params.prostt5_weights,
+            prostt5_device=params.prostt5_device,
             overlap_by_db=params.overlap_by_db,
             partial=params.partial,
         )

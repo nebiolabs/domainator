@@ -20,14 +20,14 @@ MANIFEST_VERSION = 1
 # string option of every command is classified here or listed in TEXT_OPTIONS.
 INPUT_PATHS = {"input", "reference", "metadata", "color_table", "coords", "foldseek", "newick", "msa",
                "esm2_3di_weights", "matrix", "ncbi_summary"}
-DIRECTORIES = {"output_dir", "tmp_dir", "model_dir", "tmbed_model_dir", "datasets_workdir", "ncbi_taxonomy_path"}
+DIRECTORIES = {"output_dir", "tmp_dir", "model_dir", "tmbed_model_dir", "prostt5_weights", "datasets_workdir", "ncbi_taxonomy_path"}
 
 TEXT_OPTIONS = {
     "acc", "after", "before", "categorical", "cdhit_args", "cds",
     "cluster_sep", "color_by", "column_names", "contains", "contigs",
     "contigs_regex", "database_name", "databases", "datasets_include", "decoys", "definition_regex",
     "desc", "device", "diamond_args", "domain_expr", "domains", "email", "esm2_3di_device", "exact",
-    "exclude_accessions", "foldseek_args", "foldseek_device",
+    "exclude_accessions", "foldseek_args", "foldseek_device", "prostt5_device",
     "input_format", "keep_databases", "label_by", "motif", "name", "name_field",
     "ncbi_api_key", "node", "pca_args", "regex", "reseek_args", "search_hit_color",
     "sequence_regex", "subset", "taxonomy_expr", "threshold", "title", "tsne_args", "types", "umap_args",

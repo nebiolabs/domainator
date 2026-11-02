@@ -11,6 +11,27 @@ database built from them), use the structure tools described in
 support TM-align and the TM-score/lDDT/RMSD metrics, and need only the foldseek binary — no
 PyTorch, no esmologs, and no checkpoint.
 
+# ProstT5: the same workflow without PyTorch
+
+foldseek (release 10 or later) can predict 3Di itself, with the ProstT5 model, running inside
+the foldseek binary. Download its weights once, and pass them to `domainate` in place of the
+ESM-2 3B 3Di checkpoint:
+
+```bash
+foldseek databases ProstT5 prostt5_weights tmp
+
+domainator domainate -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_all_to_all_ProstT5.gb --foldseek domainator/test/data/foldseek/FeSOD --prostt5_weights prostt5_weights
+```
+
+`--prostt5_device cuda:0` runs ProstT5 on a GPU, which needs a GPU build of foldseek. Proteins
+are selected by the same rule as with ESM-2 3B 3Di (at most 2,500 residues, standard amino
+acids only). ESM-2 3B 3Di and ProstT5 3Di give similar search sensitivity (see the
+[eLife paper](https://elifesciences.org/articles/91415), Fig. 4), but they are different
+models, so for the best scores build the reference database with the same predictor as the
+queries (`foldseek createdb refs.fasta refs --prostt5-model prostt5_weights`), or from
+structures. On `FeSOD_20` against the ESM-2 3B 3Di `FeSOD` database, ProstT5 queries find
+the same 400 hits as ESM-2 3B 3Di queries, with bit scores about 10% lower.
+
 # Installation
 In addition to Domainator, the esmologs package ([https://github.com/seanrjohnson/esmologs](https://github.com/seanrjohnson/esmologs)) and pytorch with CUDA support must be installed. The easiest way to accomplish this is to create a new conda environment with esmologs, and install domainator into that environment.
 

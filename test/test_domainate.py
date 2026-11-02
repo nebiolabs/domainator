@@ -983,3 +983,44 @@ def test_domainate_keeps_input_order(shared_datadir, tmp_path, batch_size):
     output_ids = [rec.id for rec in SeqIO.parse(out, "genbank")]
     assert output_ids
     assert output_ids == input_ids
+
+
+PROSTT5_WEIGHTS = os.environ.get("DOMAINATOR_PROSTT5_WEIGHTS")
+
+
+def test_domainate_foldseek_needs_one_3di_predictor(shared_datadir, tmp_path):
+    # --foldseek searches 3Di sequences, which come from exactly one predictor.
+    query = str(shared_datadir / "foldseek" / "FeSOD_20.fasta")
+    db = str(shared_datadir / "foldseek" / "FeSOD")
+    with pytest.raises(SystemExit):
+        main(["-i", query, "--foldseek", db, "-o", str(tmp_path / "out.gb")])
+    with pytest.raises(SystemExit):
+        main(["-i", query, "--foldseek", db, "-o", str(tmp_path / "out.gb"),
+              "--esm2_3di_weights", "esm.pt", "--prostt5_weights", "weights"])
+
+
+@pytest.mark.requires_binary("foldseek")
+@pytest.mark.skipif(PROSTT5_WEIGHTS is None,
+                    reason="set DOMAINATOR_PROSTT5_WEIGHTS to foldseek's ProstT5 weights directory")
+def test_domainate_foldseek_prostt5(shared_datadir, tmp_path):
+    out = tmp_path / "out.gb"
+    main(["-i", str(shared_datadir / "foldseek" / "FeSOD_20.fasta"),
+          "--foldseek", str(shared_datadir / "foldseek" / "FeSOD"),
+          "--prostt5_weights", PROSTT5_WEIGHTS, "--cpu", "2", "-o", str(out)])
+    records = list(SeqIO.parse(out, "genbank"))
+    assert len(records) == 20
+    for rec in records:
+        hits = [f for f in rec.features if f.type == DOMAIN_FEATURE_NAME]
+        # FeSOD_20 is the database's own sequences, all one family: each finds all 20.
+        assert len(hits) == 20
+        assert {f.qualifiers["program"][0] for f in hits} == {"foldseek"}
+        assert {f.qualifiers["database"][0] for f in hits} == {"FeSOD"}
+        assert rec.id in {f.qualifiers["name"][0] for f in hits}
+
+
+def test_prostt5_builder_selects_like_the_esm2_3di_builder():
+    from domainator import foldseek as foldseek_lib
+    builder = foldseek_lib.ProstT5Builder()
+    assert builder("a", "MKV") == ""
+    assert builder("a", "MKVX") is None
+    assert builder("a", "M" * (foldseek_lib.MAX_PROTEIN_SIZE + 1)) is None

@@ -38,6 +38,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--foldseek` | FILE ... |  | Foldseek database files. |
 | `--esm2_3di_weights` | FILE |  | checkpoint file for esm2_3Di model. |
 | `--esm2_3di_device` | STRING | cuda:0 | device to use for esm2_3Di model. |
+| `--prostt5_weights` | DIR |  | foldseek's ProstT5 weights directory (from 'foldseek databases ProstT5 weights tmp'). foldseek then predicts the 3Di sequences with ProstT5, instead of the esm2_3Di model. |
+| `--prostt5_device` | STRING | cpu | device to run ProstT5 on: 'cpu', or a CUDA device string ('cuda', 'cuda:0', ...), which requires a GPU build of foldseek. |
 | `--foldseek_device` | STRING | cpu | device to use for the foldseek search. 'cpu' for a CPU-only search, or a CUDA device string ('cuda', 'cuda:0', 'cuda:1', ...) to enable GPU-accelerated search. GPU search requires a recent foldseek and a GPU-compatible (padded) target database (see 'foldseek makepaddedseqdb'). |
 | `--foldseek_path` | PROGRAM |  | path to the foldseek executable, if it is not on the PATH. |
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |

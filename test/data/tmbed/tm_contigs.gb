@@ -1,0 +1,907 @@
+LOCUS       AP010958_2275839:2267457rc        8381 bp    DNA     linear   UNK 14-FEB-2024
+DEFINITION  Escherichia coli O103:H2 str. 12009 DNA, complete genome.
+ACCESSION   AP010958
+VERSION     AP010958.1
+DBLINK      BioProject: PRJDA32511
+            BioSample: SAMD00060956
+KEYWORDS    .
+SOURCE      Escherichia coli O103:H2 str. 12009
+  ORGANISM  Escherichia coli O103:H2 str. 12009
+            Bacteria; Pseudomonadota; Gammaproteobacteria; Enterobacterales;
+            Enterobacteriaceae; Escherichia.
+FEATURES             Location/Qualifiers
+     source          complement(1..8381)
+                     /organism="Escherichia coli O103:H2 str. 12009"
+                     /mol_type="genomic DNA"
+                     /strain=12009
+                     /serovar="O103:H2"
+                     /db_xref="taxon:585395"
+                     /note="enteropathogenic Escherichia coli"
+     gene            complement(1..852)
+                     /gene="hchA"
+                     /locus_tag="ECO103_2215"
+     CDS             complement(1..852)
+                     /gene="hchA"
+                     /locus_tag="ECO103_2215"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="Hsp31 molecular chaperone"
+                     /protein_id="BAI31007.1"
+                     /translation="MTVQTSKNPQVDIAEDNAFFPSEYSLSQYTSPVSDLDGVDYPKP
+                     YRGKHKILVIAADERYLPTDNGKLFSTGNHPIETLLPLYHLHAAGFEFEVATISGLMT
+                     KFEYWAMPHKDEKVMPFFEQHKSLFRNPKKLADVVASLNADSEYAAIFVPGGHGALIG
+                     LPESQDVAAALQWAIKNDRFVISLCHGPAAFLALRHGDNPLNGYSICAFPDAADKQTP
+                     EIGYMPGHLTWYFGEELKKMGMNIINDDITGRVHKDRKVLTGDSPFAANALGKLAAQE
+                     MLAAYAG"
+                     /cds_id="2274987_1_2275838"
+                     /domainator_Pfam-A="DJ-1_PfpI (DJ-1/PfpI family, 6.8e-07,
+                     25.1)"
+                     /Color="#37AAB9"
+     Domainator      complement(25..651)
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="DJ-1/PfpI family"
+                     /evalue="6.8e-07"
+                     /score="25.1"
+                     /name="DJ-1_PfpI"
+                     /identity="25.7"
+                     /cds_id="2274987_1_2275838"
+                     /rstart=14
+                     /rend=126
+                     /rlen=165
+                     /Color="#37AAB9"
+     gene            complement(1445..2518)
+                     /locus_tag="ECO103_2214"
+     CDS             complement(1445..2518)
+                     /locus_tag="ECO103_2214"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="predicted outer membrane porin protein"
+                     /protein_id="BAI31006.1"
+                     /translation="MKRKVLAMLVPALLVAGAANAAEIYNKDGNKVDFYGKMVGERIW
+                     SNTDDNNSENEDTSYARFGVKGETQITSELTGFGQFEYNLDASKPEGSNQEKTRLTFA
+                     GLKYNELGSFDYGRNYGVAYDAAAYTDMLVEWGGDSWASADNFMNGRTNGVATYRNSD
+                     FFGLVDGLNFAVQYQGKNSNRGVTKQNGDGYALSVDYNIEGFGFVGAYSKSDRTNEQA
+                     GDGYGDNAEVWSLAAKYDANNIYAAMMYGETRNMTVLANDHFANKTQNFEAVVQYQFD
+                     FGLRPSLGYVYSKGKDLYARNGHKGVDADRVNYIEVGTWYYFNKNMNVYTAYKFNLLD
+                     KDDAAITDAATDDQFAVGIVYQF"
+                     /cds_id="2273321_1_2274394"
+                     /domainator_Pfam-A="Porin_1 (Gram-negative porin,
+                     3.2e-123, 407.4)"
+                     /Color="#9591F4"
+     Domainator      complement(1448..2440)
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Gram-negative porin"
+                     /evalue="3.2e-123"
+                     /score="407.4"
+                     /name="Porin_1"
+                     /identity="58.2"
+                     /cds_id="2273321_1_2274394"
+                     /rstart=1
+                     /rend=337
+                     /rlen=337
+                     /Color="#9591F4"
+     gene            complement(2830..2920)
+                     /gene="rseX"
+                     /locus_tag="ECO103_ncRNA29"
+     ncRNA           complement(2830..2920)
+                     /ncRNA_class="other"
+                     /gene="rseX"
+                     /locus_tag="ECO103_ncRNA29"
+                     /inference="similar to DNA sequence:INSD:U00096.2"
+                     /note="sRNA regulating ompA and ompC translation, with
+                     Hfq"
+     gene            3085..3450
+                     /gene="yedR"
+                     /locus_tag="ECO103_2213"
+     CDS             3085..3450
+                     /gene="yedR"
+                     /locus_tag="ECO103_2213"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="conserved predicted protein"
+                     /protein_id="BAI31005.1"
+                     /translation="MEKCDFYHIIVLSLNFPGYLKMEYGSTKMEERLSRSPGGKLALW
+                     AFYTWCGYFVWAMARYIWVMSRIPDAPVSGFESDLGSTAGKWLGALVGFLFMALVGAL
+                     LGSIAWYTRPRPARSRRYE"
+                     /cds_id="2272754_-1_2272389"
+     gene            3490..4185
+                     /gene="yedJ"
+                     /locus_tag="ECO103_2212"
+     CDS             3490..4185
+                     /gene="yedJ"
+                     /locus_tag="ECO103_2212"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="predicted phosphohydrolase"
+                     /protein_id="BAI31004.1"
+                     /translation="MDLQHWQAQFENWLKNHHQHQDAAHDVCHFRRVWATAQKLAADD
+                     DVDMLVILTACYFHDIVSLAKNHPQRQRSSILAAEETRRLLREEFEQFPAEKIEAVCH
+                     AIAAHSFSAQIAPLTTEAKIVQDADRLEALGAIGLARVFAVSGALGVALFDGEDPFAQ
+                     HRPLDDKRYALDHFQTKLLKLPQTMQTARGKQLAQHNAHFLVEFMAKLSAELAGENEG
+                     VDHKVIDAFSPAG"
+                     /cds_id="2272349_-1_2271654"
+                     /domainator_Pfam-A="HD (HD domain, 6.8e-18, 61.0)"
+                     /Color="#BB9832"
+     Domainator      3568..3885
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="HD domain"
+                     /evalue="6.8e-18"
+                     /score="61.0"
+                     /name="HD"
+                     /identity="26.8"
+                     /cds_id="2272349_-1_2271654"
+                     /rstart=4
+                     /rend=115
+                     /rlen=116
+                     /Color="#BB9832"
+     gene            4252..5670
+                     /gene="dcm"
+                     /locus_tag="ECO103_2211"
+     CDS             4252..5670
+                     /gene="dcm"
+                     /locus_tag="ECO103_2211"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="DNA cytosine methylase"
+                     /protein_id="BAI31003.1"
+                     /translation="MQENISVTDSYSTGNAAQAMLEKLLQIYDVKTLVAQLNGVGENH
+                     WSAAILKRALANDSAWHRLSEKEFAHLQTLLPKPPAHHPHYAFRFIDLFAGIGGIRRG
+                     FESIGGQCVFTSEWNKHAVRTYKANHYCDPATHHFNEDIRDITLSHKEGVSDEAAAEH
+                     IRQHIPEHDVLLAGFPCQPFSLAGVSKKNSLGRAHGFACDTQGTLFFDVVRIIDSRRP
+                     AMFVLENVKNLKSHDQGKTFRIIMQTLDELGYDVADAEDNGPDDPKIIDGKHFLPQHR
+                     ERIVLVGFRRDLNLKADFTLRDISECFPAQRVTLAQLLDPMVEAKYILTPVLWKYLYR
+                     YAKKHQARGNGFGYGMVYPNNPQSVTRTLSARYYKDGAEILIDRGWDMAKGEKDFDDP
+                     QNQQHRPRRLTPRECARLMGFEAPGEAKFRIPVSDTQAYRQFGNSVVVPVFAAVAKLL
+                     EPKIKQAVALRQQEAQHGRRSR"
+                     /cds_id="2271587_-1_2270169"
+                     /domainator_Pfam-A="DNA_meth_N (DNA methylase N-terminal
+                     domain, 1.9e-20, 68.6) & DNA_methylase (C-5
+                     cytosine-specific DNA methylase, 2.2e-78, 259.8)"
+                     /Color="#8EA631"
+     Domain_Search   4252..5667
+                     /program="phmmer"
+                     /database="REBASE_gold_MTs"
+                     /description="EnzType:Type II methyltransferase;
+                     RecSeq:CCWGG; Org#: 13583; OrgName: Escherichia coli
+                     O146:H21 2010C-3325; Source: R. Lindsey;
+                     GenBank:JASR01000005; SeqLength:472; Locus:BU55_25955;
+                     ProteinId:KDV30859.1; GI:651647880"
+                     /accession="."
+                     /evalue="0.0e+00"
+                     /score="1099.6"
+                     /name="M.Eco3325Dcm"
+                     /identity="99.8"
+                     /cds_id="2271587_-1_2270169"
+                     /rstart=1
+                     /rend=472
+                     /rlen=472
+     Domainator      4306..4476
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="DNA methylase N-terminal domain"
+                     /evalue="1.9e-20"
+                     /score="68.6"
+                     /name="DNA_meth_N"
+                     /identity="47.4"
+                     /cds_id="2271587_-1_2270169"
+                     /rstart=1
+                     /rend=57
+                     /rlen=57
+                     /Color="#F560E4"
+     Domainator      4510..5604
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="C-5 cytosine-specific DNA methylase"
+                     /evalue="2.2e-78"
+                     /score="259.8"
+                     /name="DNA_methylase"
+                     /identity="41.6"
+                     /cds_id="2271587_-1_2270169"
+                     /rstart=1
+                     /rend=320
+                     /rlen=324
+                     /Color="#8EA631"
+     gene            5651..6121
+                     /gene="vsr"
+                     /locus_tag="ECO103_2210"
+     CDS             5651..6121
+                     /gene="vsr"
+                     /locus_tag="ECO103_2210"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="DNA mismatch endonuclease Vsr of very short
+                     patch repair"
+                     /protein_id="BAI31002.1"
+                     /translation="MADVHDKATRSKNMRAIATRDTAIEKRLASLLTGQGLAFRVQDA
+                     SLPGRPDFVVDEYRCVIFTHGCFWHHHHCYLFKVPATRTEFWLEKIGKNVERDRRDIS
+                     RLQELGWRVLIVWECALRGREKLTDEALSERLEEWICGEGASAQIDTQGIHLLA"
+                     /cds_id="2270188_-1_2269718"
+                     /domainator_Pfam-A="Vsr (DNA mismatch endonuclease Vsr,
+                     8.1e-41, 133.7)"
+                     /Color="#36ADA4"
+     Domainator      5654..5875
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="DNA mismatch endonuclease Vsr"
+                     /evalue="8.1e-41"
+                     /score="133.7"
+                     /name="Vsr"
+                     /identity="57.5"
+                     /cds_id="2270188_-1_2269718"
+                     /rstart=1
+                     /rend=73
+                     /rlen=74
+                     /Color="#36ADA4"
+     gene            complement(6110..7030)
+                     /gene="yedA"
+                     /locus_tag="ECO103_2209"
+     CDS             complement(6110..7030)
+                     /gene="yedA"
+                     /locus_tag="ECO103_2209"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="predicted inner membrane protein"
+                     /protein_id="BAI31001.1"
+                     /translation="MRFRQLLPLFGALFALYIIWGSTYFVIRIGVESWPPLMMAGVRF
+                     LAAGILLMAFLLLRGHKLPPLRPLLNAALIGLLLLAVGNGMVTVAEHQNVPSGIAAVV
+                     VATVPLFTLCFSRLFGIKTRKLEWVGIAIGLAGIIMLNSGGNLSGNPWGAILILIGSI
+                     SWAFGSVYGSRITLPVGMMAGAIEMLAAGVVLMIASMIAGEKLTALPSLSGFLAVGYL
+                     ALFGSIIAINAYMYLIRNVSPALATSYAYVNPVVAVLLGTGLGGETLSKIEWLALGVI
+                     VFAVVLVTLGKYLFPAKPVVAPVIQDASSE"
+                     /cds_id="2268809_1_2269729"
+                     /domainator_Pfam-A="EamA (EamA-like transporter family,
+                     3.7e-20, 68.4) & EamA (EamA-like transporter family,
+                     5.5e-25, 84.0)"
+                     /Color="#F37A32"
+     Domainator      complement(6176..6586)
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="EamA-like transporter family"
+                     /evalue="3.7e-20"
+                     /score="68.4"
+                     /name="EamA"
+                     /identity="26.9"
+                     /cds_id="2268809_1_2269729"
+                     /rstart=2
+                     /rend=135
+                     /rlen=136
+                     /Color="#F37A32"
+     Domainator      complement(6608..7006)
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="EamA-like transporter family"
+                     /evalue="5.5e-25"
+                     /score="84.0"
+                     /name="EamA"
+                     /identity="28.7"
+                     /cds_id="2268809_1_2269729"
+                     /rstart=7
+                     /rend=135
+                     /rlen=136
+                     /Color="#F37A32"
+     gene            7203..8120
+                     /gene="yedI"
+                     /locus_tag="ECO103_2208"
+     CDS             7203..8120
+                     /gene="yedI"
+                     /locus_tag="ECO103_2208"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="conserved predicted inner membrane protein"
+                     /protein_id="BAI31000.1"
+                     /translation="MLLAGSSLLTLLDDIATLLDDISVMGKLAAKKTAGVLGDDLSLN
+                     AQQVSGVRANRELPVVWGVAKGSLINKVILVPLALIISAFIPWAITPLLMIGGAFLCF
+                     EGVEKVLHMLEARKHKEDPAQSQQRLEKLAAQDPLKFEKDKIKGAIRTDFILSAEIVA
+                     ITLGIVAEAPLLNQVLVLSGIALVVTVGVYGLVGVIVKIDDLGYWLAEKSSALMQALG
+                     KGLLIIAPWLMKALSIVGTLAMFLVGGGIVVHGIAPLHHAIEHFAGQQSAVVAMILPT
+                     VLNLILGFIIGGIVVLGVKAVAKMRGQAH"
+                     /cds_id="2268636_-1_2267719"
+                     /domainator_Pfam-A="DUF808 (Protein of unknown function
+                     (DUF808), 1.6e-114, 377.9)"
+                     /Color="#77AB31"
+     Domainator      7218..8081
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Protein of unknown function (DUF808)"
+                     /evalue="1.6e-114"
+                     /score="377.9"
+                     /name="DUF808"
+                     /identity="54.5"
+                     /cds_id="2268636_-1_2267719"
+                     /rstart=1
+                     /rend=301
+                     /rlen=303
+                     /Color="#77AB31"
+     gene            8199..8381
+                     /gene="yodC"
+                     /locus_tag="ECO103_2207"
+     CDS             8199..8381
+                     /gene="yodC"
+                     /locus_tag="ECO103_2207"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="conserved predicted protein"
+                     /protein_id="BAI30999.1"
+                     /translation="MSFMVSEEVTVKEGGPRMIVTGYSSGMVECRWYDGYGVKREAFH
+                     ETELVPGEGSRSAEEV"
+                     /cds_id="2267640_-1_2267458"
+                     /domainator_Pfam-A="DUF2158 (Uncharacterized small protein
+                     (DUF2158), 1.3e-08, 30.4)"
+                     /Color="#50B131"
+     Domainator      8211..8342
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Uncharacterized small protein (DUF2158)"
+                     /evalue="1.3e-08"
+                     /score="30.4"
+                     /name="DUF2158"
+                     /identity="37.0"
+                     /cds_id="2267640_-1_2267458"
+                     /rstart=6
+                     /rend=51
+                     /rlen=52
+                     /Color="#50B131"
+ORIGIN      
+        1 ttaacccgcg taagctgcca gcatttcctg cgccgccagt ttacccaacg cattcgctgc
+       61 aaaaggactg tcgccagtga gaactttacg gtccttatgt actcgcccgg tgatgtcgtc
+      121 attaataatg ttcatgccca ttttcttcag ctcttcgccg aagtaccagg tgagatgacc
+      181 cggcatatag cctatctctg gcgtttgttt gtctgcggcg tctgggaatg cgcaaatgga
+      241 ataaccattc agtgggttat cgccgtggcg aagcgccaga aaagccgccg ggccgtggca
+      301 aagggagata acaaaacggt catttttgat tgcccactgc aaagcagcag ctacgtcctg
+      361 gctttctggt aaaccaataa gtgcgccatg accaccagga acaaagattg ctgcatattc
+      421 gctatcagcg ttgaggctgg cgacaacatc cgcgagtttc ttcggattgc ggaacaacga
+      481 tttatgttgc tcaaagaatg gcattacttt ttcatctttg tgcggcatag cccagtattc
+      541 aaacttggtc atcagaccgg aaatggtcgc cacttcgaat tcgaaacctg cagcatggag
+      601 atgatacaac ggcagcaacg tttcaatcgg atggttaccg gtcgagaaca gttttccgtt
+      661 atcggttggc aaataacgtt cgtccgcggc gatcaccaga attttatgct taccgcgata
+      721 cggttttgga tagtccacgc catcaagatc agagacggga ctggtatatt ggctaagcga
+      781 atattctgaa gggaagaatg cattatcttc agcaatatcg acctgcggat ttttacttgt
+      841 ttgaacagtc atagtgtatt ccttattgtt gcttagttag ggtagtcact atatttgcga
+      901 ctgagctggt cgctattttt aaccagtctg gaaaattgag tcaatatatc gaaagcggta
+      961 gtcggcgggt gtaagtatgt aatgatgatg ctgcactggt gttgaatatt attcacgcca
+     1021 aattttcctt attgagcaac gtcgtcgcaa gtggcctcaa tgattttaga ccattatcaa
+     1081 aggtacgggg cggcggggag agatttagtg ctgtgaaata ttgtggtact gatgaatatt
+     1141 tatatcgcgg attggtagag aaaagattat ttcatgcact atttttgcaa atatttctat
+     1201 atgggaagcg tgtttgttac ggggtaattc atcagaatgt gcatttgggg tgttggctgg
+     1261 aagagtcgct ggtagatgtt attgtggcag gaggggcagg gtaaggtgct gtatcgatat
+     1321 gctttggcaa ttgcgtgtgc cgcagatgga gatgaaatgc caataaaaaa agcctgagtt
+     1381 cgatgaggga cgaactcagg ctagtgttat gttttacagt aacacgccgc ggcgcgttgg
+     1441 ctgattagaa ctggtagacg ataccaactg caaactggtc atcagttgcg gcatcggtaa
+     1501 tcgctgcatc gtctttatcc agcaggttaa atttgtatgc tgtgtagacg ttcatgttct
+     1561 tattgaagta gtaccaggta ccaacttcga tataatttac gcggtcagca tcaacacctt
+     1621 tatgtccatt acgagcataa agatctttgc ctttggaata tacgtagcct aaagacggac
+     1681 gtaaaccgaa gtcgaactga tactgtacaa cagcttcaaa gttttgggtt ttatttgcaa
+     1741 aatgatcatt agccaaaacg gtcatgttgc gggtttcacc gtacatcatt gctgcataga
+     1801 tattatttgc atcatacttg gctgctaatg accacacttc agcgttatca ccgtagccgt
+     1861 caccagcttg ttcattagta cgatcagatt tgctatatgc acctacaaaa ccaaaacctt
+     1921 cgatgttgta gtctacagac aacgcatagc catcaccgtt ttgtttagta acgccacgat
+     1981 tgctgttctt accttgatat tgcacagcaa aattcagacc atcaaccaga ccaaagaaat
+     2041 cagagttacg gtaggttgca acaccgttgg tacgaccgtt catgaagttg tcagcggaag
+     2101 cccaggaatc accaccccat tcaactaaca tatcggtata agctgcggca tcataagcaa
+     2161 caccgtagtt acgaccatag tcgaaagatc ctaactcgtt atatttcaaa cctgcgaagg
+     2221 ttaaacgggt tttttcctga ttagagcctt cgggcttgct ggcgtcgagg ttgtattcaa
+     2281 actgaccaaa accagtcagt tcgctggtga tttgggtttc acctttaaca ccgaaacgag
+     2341 cataggaggt atcttcgttt tcgctgttat tatcatcagt atttgaccag atgcgttcgc
+     2401 caaccatctt gccgtagaaa tcaactttat tgccatcttt attgtaaatt tcagccgcat
+     2461 ttgctgcgcc agcaactaat aacgccggga ccagcattgc cagaactttt cttttcatta
+     2521 tgtattccct tgtgattata atcttcatga atatatcaat aagtgccgtt atccaaaaaa
+     2581 aagcacattt ggatactatt ctatgaagtt cattttattt taaagattac atgtaacaaa
+     2641 tgtatttaaa agatttcaaa atgtttctaa tctatttaat ataattcagg attatgaatt
+     2701 ctaaatataa atattcatga aaattataaa tgtatatcaa tatgttatga gttgagtgga
+     2761 agcatagggg gtatcaatga ttgttgcgcc aaacggctgg tgtgatcacg cgcacattaa
+     2821 tgaaggcata aaaaaaagcc ggcatcatgc cggcccaaaa aatataaaca agacgataaa
+     2881 aggctaataa cggaggcatc atgacacaga aaaataaaaa ggtataattg tattcagtgc
+     2941 taatatattg attaaatgaa ttaataaagc cgatctcaaa gataaataaa atcgctcaaa
+     3001 acgatttttc ctgtattcac tgccgttgcg caaaaattat ctatttgttc aaaaaatgag
+     3061 tgagtcttga ctggctcatc caatgtggaa aaatgtgact tttatcacat aatagtgcta
+     3121 agtctgaatt ttccgggtta tctcaaaatg gaatacggtt cgacaaagat ggaagagaga
+     3181 ctctctcgca gccctggtgg caaactggct ttgtgggctt tctatacatg gtgtggctat
+     3241 ttcgtctggg caatggcgcg ttacatctgg gtgatgagcc ggatccccga tgccccggtg
+     3301 tcgggatttg aaagcgattt aggctctacc gcgggaaagt ggttaggggc actggtcgga
+     3361 tttttattta tggctctggt cggggcattg ttaggcagca ttgcctggta cacccgacct
+     3421 cgtcccgcac gtagcagacg ctatgaataa aaactgctaa ggtggcgact ctttggcaac
+     3481 ggagcgcgta tggacttaca acactggcag gcacagttcg aaaactggtt gaaaaaccat
+     3541 catcagcacc aggacgcggc ccatgacgtg tgtcattttc gccgcgtctg ggctacggca
+     3601 cagaagctgg cggcagatga cgatgtcgat atgctggtga ttttaaccgc ctgttatttt
+     3661 cacgatattg tgagcctggc gaaaaatcat ccgcaaaggc agcgttcttc aatcctggcg
+     3721 gcagaagaga cgcgtcgcct gctccgtgaa gagttcgagc aatttccggc ggagaaaatc
+     3781 gaggccgttt gtcatgccat tgccgctcac agtttcagcg cgcaaatcgc ccccttaaca
+     3841 acggaagcta aaatcgtcca ggatgcggat cggctggaag ccctgggggc gattggcctg
+     3901 gcgcgcgtgt ttgccgtttc aggggcattg ggcgtggcgc tgtttgatgg tgaagatccg
+     3961 ttcgcacagc atcgcccgct tgatgataaa cgctacgcgc tggatcattt ccagactaag
+     4021 ttgctgaagc taccgcaaac catgcaaacc gcaagaggca agcagctggc gcagcacaac
+     4081 gcgcattttt tagtcgagtt tatggcgaag ctcagtgccg aactggcggg ggagaatgaa
+     4141 ggtgtcgatc acaaggtgat agatgcgttt tcacccgcgg gataagcgcg tggccctaaa
+     4201 tggctgtaat tatgttaacc tgtcggccat ctcagatggc cggttaaatc tatgcaggaa
+     4261 aatatatcag taaccgattc atacagcacc gggaatgccg cacaggcaat gctggagaaa
+     4321 ctgctgcaaa tttatgatgt taaaacgctg gtggcgcagc ttaatggtgt gggtgagaat
+     4381 cactggagcg cggcaatttt aaaacgtgcg ctggcgaatg actcggcatg gcaccgttta
+     4441 agtgagaaag agttcgccca tctgcaaacg ttgttaccca aaccaccggc acatcatccg
+     4501 cattatgcgt ttcgctttat cgatctattt gccggaattg gcggcatccg tcgcggtttt
+     4561 gaatcgattg gcggacagtg cgtgtttacc agcgaatgga acaaacatgc ggtacgcact
+     4621 tataaagcca atcattattg cgacccggcg acgcatcatt ttaatgaaga tatccgcgac
+     4681 atcaccctca gccataaaga aggcgtgagt gatgaggcgg cggcggaaca tattcgtcaa
+     4741 cacattcctg aacacgatgt tttactggcc ggtttccctt gtcagccatt ttcgctggct
+     4801 ggcgtatcga aaaagaactc gctcgggcgg gcgcacggtt ttgcctgcga tacccagggc
+     4861 acgctgtttt ttgatgtggt gcgcattatc gactcgcgtc gtccggcgat gtttgtgctc
+     4921 gaaaacgtca aaaacctgaa aagccatgac cagggtaaaa cgttccgcat catcatgcag
+     4981 acgctggacg aactgggcta tgacgtggct gatgcagaag ataacgggcc agacgatccg
+     5041 aaaatcatcg acggcaaaca ttttctgcca cagcaccgtg aacgcatcgt gctggtgggt
+     5101 tttcgtcgcg atctgaatct gaaagccgat tttaccctgc gtgatatcag cgaatgtttc
+     5161 cctgcgcagc gagtgacgct ggcgcagctg ctggacccga tggtcgaggc gaaatatatc
+     5221 ctgacgccgg tgctgtggaa gtacctctat cgatatgcga aaaaacatca ggcgcgcggt
+     5281 aacggcttcg gttatggaat ggtttatccg aacaatccgc aaagcgtcac gcgtacgctg
+     5341 tctgcgcgtt attacaaaga tggcgcggaa attttaatcg atcgcggctg ggatatggcc
+     5401 aaaggtgaga aagactttga cgatccgcag aatcagcaac atcgtccacg tcggttaacg
+     5461 cctcgtgaat gcgcgcgctt aatgggtttt gaagcgccgg gagaagcgaa attccgcatt
+     5521 ccggtttcgg acactcaggc ctatcgccag ttcggtaact cggtggtcgt gccggtcttt
+     5581 gccgcggtgg caaaactgct tgagccaaaa atcaaacagg cggtggcgtt gcgtcagcaa
+     5641 gaggcacaac atggccgacg ttcacgataa ggccactcgc agcaaaaata tgcgcgcgat
+     5701 tgccacgcgt gatacggcga tagagaagcg cctcgccagt ctgttaaccg ggcagggcct
+     5761 ggcgtttcgc gttcaggacg ccagtctgcc cggacgcccg gattttgtcg ttgatgaata
+     5821 tcgctgcgtg atatttaccc acggctgctt ctggcatcat catcactgct atctgtttaa
+     5881 agtgcctgcg actcgaaccg agttctggct ggagaagata ggtaaaaatg ttgagcgcga
+     5941 tcgccgcgat atcagtcgct tgcaggaact cggctggcgc gtattgattg tctgggagtg
+     6001 cgcgttacgt gggcgcgaga agctgacgga tgaagcgctt agcgagcgtc tggaagagtg
+     6061 gatctgcggc gaaggtgcca gcgcgcagat cgacacgcag gggattcatt tactcgcttg
+     6121 atgcgtcctg aataactggc gcaactacgg gttttgccgg aaagagatat tttcccaacg
+     6181 tgaccagcac caccgcgaag acaattacgc cgagcgccag ccattcaatc ttcgacagcg
+     6241 tctctccgcc cagtcccgta cccagcaaga ccgcgaccac cgggttaacg taggcgtagc
+     6301 tggtggcgag agccggactg acattacgga ttaaatacat ataagcgttg atggcgataa
+     6361 tcgaaccaaa cagcgccaga tagccgaccg caaggaagcc tgaaagggaa gggagcgccg
+     6421 tcagtttttc acctgcaatc atcgacgcga tcattaacac cacgcctgcc gccagcatct
+     6481 caatagcacc cgccatcatc cctacaggta aggtaatgcg cgagccataa accgagccaa
+     6541 acgcccagct aatcgagccg attaaaatca gaatcgcgcc ccacggattg ccgcttaaat
+     6601 ttccaccgct attgagcatg atgattccgg caagcccaat ggcgataccc acccattcca
+     6661 gtttgcgcgt tttaatgcca aacaggcggc tgaagcacag ggtaaagagg ggcacggttg
+     6721 caaccacaac ggcggcgatg ccggaaggaa cattttgatg ctcggcaacc gtcaccatgc
+     6781 cattaccgac agccagcaat aacaggccaa tcagcgcggc attgagcagc ggacgtagcg
+     6841 gggggagctt gtgtccgcgc agtagcaaaa atgccatcaa taaaataccg gctgccagga
+     6901 atcgaacgcc tgccatcatt aacggaggcc agctttccac gccaatccga atgacaaaat
+     6961 aggttgagcc ccaaatgata tacaacgcaa acagcgcgcc aaaaagcggt aacaactggc
+     7021 ggaaacgcat aatccctcac ggtggaaata aaaaggtggt tcatagtaaa cgtgaaaatc
+     7081 attctgctgg cgagagatat aattgcactt aattgttaaa aaaatgttga cctgtgaagc
+     7141 aagtatcaga gctgccgttt ttgcttcata cttacaccct tcaacaataa aaatgagagg
+     7201 gaatgctttt ggccgggagt agtttactga cgttgctcga tgatatcgcc acactactgg
+     7261 acgatatctc cgtgatgggc aaactggcgg cgaagaaaac cgccggtgta ttaggggatg
+     7321 acttatcgct caatgcgcaa caagtttcag gcgtgcgggc caaccgggaa cttcccgtgg
+     7381 tctggggcgt ggcgaaagga tcgctgatta ataaagtgat tctggtgccg ctggcgctga
+     7441 tcatcagtgc gtttatcccg tgggcgatta cgcctctgtt gatgattggt ggcgcgtttc
+     7501 tctgctttga aggagtagag aaagtgctgc atatgctgga ggcgcgtaaa cataaagaag
+     7561 atccggcgca gagccagcag cgtctggaga agctggcggc gcaggatccg ctgaagtttg
+     7621 aaaaggacaa aataaaaggg gcgattcgta ccgattttat attgtctgcc gaaatcgtcg
+     7681 ccatcacgct ggggattgtg gccgaagcgc cgttgcttaa tcaggtgctg gtgctttcag
+     7741 gcatcgcgct ggtagtgacc gtgggcgtct acggtctggt aggggttatc gttaagattg
+     7801 atgacctggg gtattggctg gcggaaaaat ccagcgcgct gatgcaggca ttaggtaaag
+     7861 ggttattgat cattgcgccc tggttgatga aggcgttatc gattgtcggc acgctggcga
+     7921 tgttcctcgt cggcggcggg attgtggtac atggtattgc gccgctgcat cacgccattg
+     7981 aacatttcgc cgggcagcaa agtgcagtgg tggcgatgat attaccgact gttttaaatc
+     8041 tgattcttgg atttatcatc ggcggcatcg tggtgctggg agtgaaagcc gtagcgaaaa
+     8101 tgcgcggtca ggcacattaa tactcgcaca ggctattatg caaaattcgc catcttcaac
+     8161 taaggtgaac aagtttcact cgaaaaaagg aggcgagtat gagctttatg gttagtgagg
+     8221 aagttacggt taaagagggt ggcccgcgga tgattgtcac cggatactcc agcggtatgg
+     8281 ttgagtgtcg ttggtatgac ggttacgggg tcaagcggga agcttttcat gaaaccgagc
+     8341 ttgttccggg ggaggggagt cgttctgcgg aagaagtttg a
+//
+LOCUS       AP010958_2177479:2170952rc        6526 bp    DNA     linear   UNK 14-FEB-2024
+DEFINITION  Escherichia coli O103:H2 str. 12009 DNA, complete genome.
+ACCESSION   AP010958
+VERSION     AP010958.1
+DBLINK      BioProject: PRJDA32511
+            BioSample: SAMD00060956
+KEYWORDS    .
+SOURCE      Escherichia coli O103:H2 str. 12009
+  ORGANISM  Escherichia coli O103:H2 str. 12009
+            Bacteria; Pseudomonadota; Gammaproteobacteria; Enterobacterales;
+            Enterobacteriaceae; Escherichia.
+FEATURES             Location/Qualifiers
+     source          complement(1..6526)
+                     /organism="Escherichia coli O103:H2 str. 12009"
+                     /mol_type="genomic DNA"
+                     /strain=12009
+                     /serovar="O103:H2"
+                     /db_xref="taxon:585395"
+                     /note="enteropathogenic Escherichia coli"
+     gene            1..258
+                     /locus_tag="ECO103_2101"
+     CDS             1..258
+                     /locus_tag="ECO103_2101"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="BAI30897.1"
+                     /translation="MNNQTMTFTPEQLRKQAQEMLRQAEQLEKTGVTKDAIRRDMVPA
+                     LRELMQAKHRAQKAVDELVDCVAELETKVGKFEKMVQEVLR"
+                     /cds_id="2177478_-1_2177221"
+                     /domainator_Pfam-A="BLOC1_2 (Biogenesis of
+                     lysosome-related organelles complex-1 subunit 2, 4.8e-04,
+                     16.4)"
+                     /Color="#36ACAE"
+     Domainator      94..249
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Biogenesis of lysosome-related organelles
+                     complex-1 subunit 2"
+                     /evalue="4.8e-04"
+                     /score="16.4"
+                     /name="BLOC1_2"
+                     /identity="18.2"
+                     /cds_id="2177478_-1_2177221"
+                     /rstart=40
+                     /rend=83
+                     /rlen=96
+                     /Color="#36ACAE"
+     gene            258..617
+                     /locus_tag="ECO103_2100"
+     CDS             258..617
+                     /locus_tag="ECO103_2100"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="putative holliday junction resolvase"
+                     /protein_id="BAI30896.1"
+                     /translation="MRHEFILPYPPTVNTYWRRHGNTYFISEAGKRYRRDVALIVRQQ
+                     RLKLNLSGRLAIKIIAEPPDKRRRDLDNILKAPLDALTHAGLLIDDEQFDEINIVRGQ
+                     LVSGGRLGVQIYKIESE"
+                     /cds_id="2177221_-1_2176862"
+                     /domainator_Pfam-A="RusA (Endodeoxyribonuclease RusA,
+                     6.6e-16, 54.9)"
+                     /Color="#CA9232"
+     Domainator      279..599
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Endodeoxyribonuclease RusA"
+                     /evalue="6.6e-16"
+                     /score="54.9"
+                     /name="RusA"
+                     /identity="25.4"
+                     /cds_id="2177221_-1_2176862"
+                     /rstart=1
+                     /rend=114
+                     /rlen=128
+                     /Color="#CA9232"
+     gene            626..1180
+                     /locus_tag="ECO103_2099"
+     CDS             626..1180
+                     /locus_tag="ECO103_2099"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="putative late gene regulator"
+                     /protein_id="BAI30895.1"
+                     /translation="MIYPEITGKSGEHLRLKTLESVWIQGKLRMWGRWSYIGDGKTGN
+                     MFNQLLTSKKLTKTAINEALRRMKRAGLDKPELEAFLRDMINGNQKSWLAHCTDSEAL
+                     IIDRVIGEVLAGYPGLFNVLSQRYLGRGMTKRKMAELLNDAHPEWSLRTCERRIEHWL
+                     KVAEFILYKPMVMAFGIEKKVIAF"
+                     /cds_id="2176853_-1_2176299"
+                     /domainator_Pfam-A="DUF1133 (Protein of unknown function
+                     (DUF1133), 5.8e-106, 347.4)"
+                     /Color="#6E9BF4"
+     Domainator      626..1153
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Protein of unknown function (DUF1133)"
+                     /evalue="5.8e-106"
+                     /score="347.4"
+                     /name="DUF1133"
+                     /identity="77.3"
+                     /cds_id="2176853_-1_2176299"
+                     /rstart=1
+                     /rend=176
+                     /rlen=176
+                     /Color="#6E9BF4"
+     gene            1403..1600
+                     /locus_tag="ECO103_2098"
+     CDS             1403..1600
+                     /locus_tag="ECO103_2098"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="predicted lipoprotein"
+                     /protein_id="BAI30894.1"
+                     /translation="MLKQQDMTETARVVFNELSVTDPATVGEIAQNTYLSRERCQLIL
+                     TQLVMAGLADYQFGCYRRLQP"
+                     /cds_id="2176076_-1_2175879"
+                     /domainator_Pfam-A="TrmB (Sugar-specific transcriptional
+                     regulator TrmB, 1.5e-04, 17.5)"
+                     /Color="#F77468"
+     Domainator      1406..1597
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Sugar-specific transcriptional regulator
+                     TrmB"
+                     /evalue="1.5e-04"
+                     /score="17.5"
+                     /name="TrmB"
+                     /identity="30.2"
+                     /cds_id="2176076_-1_2175879"
+                     /rstart=13
+                     /rend=55
+                     /rlen=68
+                     /Color="#F77468"
+     gene            1751..2809
+                     /locus_tag="ECO103_2097"
+     CDS             1751..2809
+                     /locus_tag="ECO103_2097"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="putative DNA methylase"
+                     /protein_id="BAI30893.1"
+                     /translation="MTNTVKISSCELINADCLEFIQTLPKNSVDLIVTDPPYFKVKPE
+                     GWDNQWKGDDDYLKWLGQCLAQFWRVLKPAGSLYLFCGHRLASDIEIMMREHFNVLNH
+                     IIWAKPSGRWNGCNKESLRAYFPATERILFAEHYQGPYQPKNDGYAAKGRELKQHAMA
+                     PLISYFRDARESLGITAKQIADATGKKNMVSHWFSASQWQLPNEDDYRKLQALFARVA
+                     AEKHQRGELEKPHHQLVCTYSELSRQYASLLEEYKFLRRYFSVSAAVPYTDVWTHKPV
+                     QFYPGKHPCEKPAEMLQQIISASSRPGDLVADFFMGSGSTVKAALALGRRATGVELEA
+                     ERFEQTVREVQDLIIQNG"
+                     /cds_id="2175728_-1_2174670"
+                     /domainator_Pfam-A="N6_N4_Mtase (DNA methylase, 1.0e-43,
+                     145.7)"
+                     /Color="#8EA631"
+     Domain_Search   1751..2797
+                     /program="phmmer"
+                     /database="REBASE_gold_MTs"
+                     /description="EnzType:Type II methyltransferase; RecSeq:A;
+                     Org#: 8139; OrgName: Escherichia coli O104:H4 C227-11;
+                     Source: D.R. Webster; GenBank:AFST01000004; SeqLength:349;
+                     Locus:C22711_1742; ProteinId:EGT67713.1; GI:341918099"
+                     /accession="."
+                     /evalue="6.5e-223"
+                     /score="735.1"
+                     /name="M.EcoGI"
+                     /identity="89.7"
+                     /cds_id="2175728_-1_2174670"
+                     /rstart=1
+                     /rend=349
+                     /rlen=349
+     Domainator      1835..2776
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="DNA methylase"
+                     /evalue="1.0e-43"
+                     /score="145.7"
+                     /name="N6_N4_Mtase"
+                     /identity="32.0"
+                     /cds_id="2175728_-1_2174670"
+                     /rstart=1
+                     /rend=219
+                     /rlen=221
+                     /Color="#8EA631"
+     gene            2850..2925
+                     /gene="ileZ1"
+                     /locus_tag="ECO103_tRNA30"
+     tRNA            2850..2925
+                     /gene="ileZ1"
+                     /locus_tag="ECO103_tRNA30"
+                     /product="tRNA-Ile"
+                     /note="Prophage ECO103_P08; codon recognized: AUA; C in
+                     the first position of the anticodon assumed to be
+                     post-transcriptionally modified to lysidine, which pairs
+                     with A rather than G; tRNA with a methionine anticodon
+                     post-transcriptionally modified to have tRNA isoleucine
+                     activity"
+     gene            2933..3009
+                     /gene="argN1"
+                     /locus_tag="ECO103_tRNA29"
+     tRNA            2933..3009
+                     /gene="argN1"
+                     /locus_tag="ECO103_tRNA29"
+                     /product="tRNA-Arg"
+                     /note="Prophage ECO103_P08"
+     gene            3023..3099
+                     /gene="argO1"
+                     /locus_tag="ECO103_tRNA28"
+     tRNA            3023..3099
+                     /gene="argO1"
+                     /locus_tag="ECO103_tRNA28"
+                     /product="tRNA-Arg"
+                     /note="Prophage ECO103_P08"
+     gene            3268..3699
+                     /locus_tag="ECO103_2096"
+     CDS             3268..3699
+                     /locus_tag="ECO103_2096"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="predicted TciA/TerB-like protein"
+                     /protein_id="BAI30892.1"
+                     /translation="MFGIFKKKTRRAAAEIKKFEKRDLAQAVINAAYLVAYADGECEA
+                     SEKAKIEQVLRNQPALSAFTSEINAISATIIGQLDTNFKIGRRAALREIEDVKHDTRE
+                     AEDVLDVAVAIAEADGEIEPEERKVLEEIAGVLGLRLENHL"
+                     /cds_id="2174211_-1_2173780"
+                     /domainator_Pfam-A="TerB (Tellurite resistance protein
+                     TerB, 7.2e-14, 48.0)"
+                     /Color="#36ADA4"
+     Domainator      3340..3690
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Tellurite resistance protein TerB"
+                     /evalue="7.2e-14"
+                     /score="48.0"
+                     /name="TerB"
+                     /identity="23.1"
+                     /cds_id="2174211_-1_2173780"
+                     /rstart=2
+                     /rend=109
+                     /rlen=118
+                     /Color="#36ADA4"
+     gene            3696..3863
+                     /locus_tag="ECO103_2095"
+     CDS             3696..3863
+                     /locus_tag="ECO103_2095"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="predicted TciB/TerA-like protein"
+                     /protein_id="BAI30891.1"
+                     /translation="MTVKLRLAVAALLLFLVVIVDFTSRIMSVLADGVLVCGIVVLLW
+                     PVIKRNNLHNA"
+                     /cds_id="2173783_-1_2173616"
+                     /domainator_Pfam-A="DUF3927 (Protein of unknown function
+                     (DUF3927), 6.1e-18, 60.5)"
+                     /Color="#3BA3EC"
+     Domainator      3699..3851
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Protein of unknown function (DUF3927)"
+                     /evalue="6.1e-18"
+                     /score="60.5"
+                     /name="DUF3927"
+                     /identity="54.2"
+                     /cds_id="2173783_-1_2173616"
+                     /rstart=2
+                     /rend=49
+                     /rlen=53
+                     /Color="#3BA3EC"
+     gene            4306..6027
+                     /locus_tag="ECO103_2094"
+                     /pseudo
+     CDS             4306..6027
+                     /locus_tag="ECO103_2094"
+                     /note="Prophage ECO103_P08; conserved predicted protein,
+                     C-terminal part"
+                     /pseudo="/codon_start=1 /transl_table=11"
+     gene            6320..6526
+                     /locus_tag="ECO103_2093"
+     CDS             6320..6526
+                     /locus_tag="ECO103_2093"
+                     /note="Prophage ECO103_P08"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="putative holin protein"
+                     /protein_id="BAI30890.1"
+                     /translation="MEKITTGVSYTTSAVGTGYWLLQLLDKVSPSQWVAIGVLGSLLF
+                     GLLTYLTNLYFKIREDRRKTARGD"
+                     /cds_id="2171159_-1_2170953"
+                     /domainator_Pfam-A="Phage_holin_2_1 (Bacteriophage P21
+                     holin S, 6.4e-34, 111.7)"
+                     /Color="#38A9C5"
+     Domainator      6323..6514
+                     /program="HMMER"
+                     /database="Pfam-A"
+                     /description="Bacteriophage P21 holin S"
+                     /evalue="6.4e-34"
+                     /score="111.7"
+                     /name="Phage_holin_2_1"
+                     /identity="76.2"
+                     /cds_id="2171159_-1_2170953"
+                     /rstart=1
+                     /rend=63
+                     /rlen=64
+                     /Color="#38A9C5"
+ORIGIN      
+        1 ttgaacaacc agacaatgac ttttacccct gaacaattac gcaaacaggc gcaggaaatg
+       61 ttgcgacagg cggaacaact ggaaaaaaca ggtgtaacaa aagatgccat tcgtcgggat
+      121 atggtgccag cgctcaggga actgatgcag gcgaaacatc gcgcacaaaa agcagtggat
+      181 gagctggtgg attgtgtggc ggagctggaa accaaagttg gaaagtttga aaaaatggtg
+      241 caggaggtgc tgcgctgatg cgccatgagt ttattttacc ttatccgccg acggtgaata
+      301 cttactggcg acgtcatggc aatacgtatt tcatctcgga ggccggaaag cgttatcgcc
+      361 gtgatgtggc gctaattgtt cgccagcagc ggctgaaatt aaacctgtcc ggaaggctgg
+      421 cgataaagat tattgcagag ccaccggata agcgccgtcg tgacctggac aatatcctga
+      481 aagcaccact ggatgcgctg acgcatgccg gattgctcat agacgacgag cagtttgacg
+      541 aaattaatat tgtgcgcggt cagctcgttt ctggtggtcg gttgggtgtg cagatttaca
+      601 aaattgaaag tgagtgagca taaatatgat atacccggaa attacaggca aaagcggtga
+      661 gcatttgcgc ctgaaaacgc tggaaagtgt ctggatccag gggaaactgc gtatgtgggg
+      721 gcgttggtcg tatattggcg acggtaagac gggaaatatg ttcaaccaat tactgacctc
+      781 taaaaagctg acaaaaacgg caattaacga ggcgctccgg aggatgaaaa gagcgggtct
+      841 ggacaaacct gaacttgagg cttttttgcg ggatatgatc aacggcaatc aaaaaagctg
+      901 gctggcacat tgtaccgatt cagaggcgtt aataatcgac agggttattg gtgaagtact
+      961 ggcaggttat cccgggttgt tcaatgttct gagtcagcgt tatttggggc gggggatgac
+     1021 taagcgcaaa atggctgaac tgctgaatga tgcacatccg gaatggagtt taagaacctg
+     1081 tgaaaggcgc attgagcatt ggctaaaggt ggcagaattt attttgtaca aaccaatggt
+     1141 tatggctttt ggtatagaga aaaaagttat tgctttttga cgtaaaaact gcttcaattc
+     1201 cggtacgctt cgcaaagctg taccgcgagg cgaatagcag acatggacat ttgaaagagc
+     1261 ccgctttttg cgggtttttt tatgactgaa aaacggcacg gggcgttaat gcgctggtgg
+     1321 ttgcgaatac cggtctttct gcttgctggc tttttggaca agagttattg gtatgttacg
+     1381 ttaaccaaaa gggaaaaaag acatgctaaa acagcaggat atgacagaaa ccgccagagt
+     1441 ggtgtttaat gaattaagcg ttaccgaccc ggcgacagtc ggggagattg cgcagaatac
+     1501 ttacctttca cgcgaacgct gccagttaat actgacccag cttgttatgg cgggtctggc
+     1561 agattatcag ttcggttgtt acagacgcct tcagccctga aggctttttt atttgtggta
+     1621 atgggcggct ggtgggtgtt agcggcacct gccagccatc tgctcatgcg ttggggtcac
+     1681 aagcaaacct caggcccatc tgctttgcgc aaaagcagaa tgagcctatc agagaagtgc
+     1741 ttattgatct atgactaata ctgtaaaaat atccagttgt gagttaatca atgctgattg
+     1801 cctggaattt atccagacct taccgaaaaa ctctgtcgat ctgatagtca cagacccgcc
+     1861 atactttaaa gtgaagcccg agggctggga taaccagtgg aagggcgacg atgattacct
+     1921 gaaatggctg ggccagtgtc tggcgcagtt ctggcgggta ctgaaacccg ccggaagtct
+     1981 ctacctgttc tgtggtcatc gcctggcatc tgatatcgaa atcatgatgc gtgagcactt
+     2041 taatgtgctg aaccacatta tctgggcgaa gccgtccgga cgctggaacg ggtgcaacaa
+     2101 ggagagcctg cgggcgtatt ttccagcgac agagcgcatt ctgtttgctg aacattatca
+     2161 ggggccatat cagccgaaaa atgacggcta tgcggcaaag gggcgcgagc ttaagcagca
+     2221 cgcgatggcc ccgctgattt cttactttcg tgatgcgcgt gaatcactgg ggataacggc
+     2281 aaaacagatt gcggatgcca caggaaagaa aaacatggtg tcgcactggt tcagtgccag
+     2341 ccagtggcag ttaccgaacg aggatgatta cagaaaactc caggcgctgt tcgcgcgtgt
+     2401 agcggcagaa aaacaccagc gtggggaact ggaaaaacca caccaccagc tggtatgcac
+     2461 atacagcgaa ctgagccggc aatatgccag tctgctggag gagtataaat ttctgcggcg
+     2521 ttatttttct gtatcggctg cggttcctta tacggatgta tggacgcata agcccgtaca
+     2581 gttttatccc gggaaacatc cgtgcgaaaa accggcagaa atgttgcagc agataatcag
+     2641 cgcaagcagt cgtccggggg atctggttgc agattttttt atgggatcag gttcaacagt
+     2701 caaagcggca ctggcactgg ggcgtcgtgc aactggtgtt gagctggagg ctgagcgttt
+     2761 tgagcagacg gtcagggagg ttcaggattt aatcatccag aacggatgat attgcggaat
+     2821 taattacggg ccattattat tctgctcccg gccctttagc tcagtggtga gagcgagcga
+     2881 ctcataatcg ccaggtcgct ggttcaaatc cagcaagggc caccatcaca taccgccatt
+     2941 agctcatcgg gatagaacgc cagccttcga agctggtttc gcggggttcg gatccccgat
+     3001 ggtggtccat tatcggtatt ctgcgttgtt agctcagcag gacagagcaa ttgccttcta
+     3061 agcaatcggt cactggttcg actccagtac aacgcgccac acttattttc ccggctcgct
+     3121 tttgcgggcc ttttttatat ctgcgccacg cccggcgcat atcaaccaca gagcctttcg
+     3181 gggggagctt actgagtggt cagtgtggct ttctctgtgg gcagatcgct cccgggcgtt
+     3241 ggctcaccca cccaaaggaa cgtcacgatg tttggtatct tcaaaaagaa aacccgcaga
+     3301 gcggcagcgg aaattaaaaa gtttgagaaa cgcgatctgg cacaggcggt gattaacgct
+     3361 gcatacctgg tggcctatgc agatggtgaa tgcgaggcat ccgagaaagc gaagatcgaa
+     3421 caggtcttac gtaatcagcc tgcgttgtct gcgtttacct cggaaattaa tgcgattagc
+     3481 gcaactatta tcggtcagct ggataccaat tttaaaattg gtcgtcgtgc cgcgttacgc
+     3541 gagattgagg atgtgaaaca cgatacgcgt gaagcggaag atgtgctgga tgtggcggtg
+     3601 gccattgcgg aggcagacgg cgaaattgag ccggaagagc gcaaggtgct ggaagagatt
+     3661 gccggtgttc tggggcttcg tctggagaat cacctgtgac ggtaaaactg cgcctggctg
+     3721 tggctgcact cctgctgttt ctggtggtga tagtggattt caccagcaga atcatgtcgg
+     3781 tgctggcgga tggcgtgctg gtctgcggca ttgtggtatt gctgtggccg gtgataaaaa
+     3841 gaaacaacct gcataatgct tgattttttt gtttgctgtt tattaaaaaa acttctgcat
+     3901 ggtgaatccc cctgtgcggt ggggcaatca gcaagaaggt atatggggta atcgcggatt
+     3961 caggtgctga tactgaattc accgggaggc acccggcacc atgctatgcc acaagattgt
+     4021 tgtttctgtt tttctcaaac tatcatcgtt atccctttat ttccggctgc gcatggcgcg
+     4081 gccttttttt tacgatcagc cactggcaga tggtcatcct gtgatttgat tccggttccg
+     4141 gctttttaac tctgttcctg tacacgggag aaattcgatg tcgattaaac attacgatgt
+     4201 tatcagggcg cctcgccgtc agatctggcg gaaaaactga cacaaaagct gaaagagggc
+     4261 tggcagccat acggcggacc ggttgccatt acgccgtaca cactgatgca ggctgtggcc
+     4321 attgaaggcg agccacaggt cggtccttca tctgagccgg actggtatta cgtggttgtg
+     4381 cttgccggac agtccaacgg catggcttac ggtgaagggc ttccgttacc ggattcttac
+     4441 gatgctccgg atccgcgcat taaacaactg gcacgccgca gcacggtaac cccgggtggc
+     4501 gagagttgcg cgtataacga catcatcccg gccgaccact gcctgcatga tgtgcaggat
+     4561 atgagtacgc tgaatcatcc gaaggcagac ctgagcaaag ggcagtacgg ctgtgtcggc
+     4621 caggggttac atattgccaa aaaactgctc ccgtatatcc cgaataacgc ggggatcctg
+     4681 ctggtaccat gctgtcgtgg tggttcggca tttacccagg gcgcggaggg gacattcagt
+     4741 gcggacacgg gggccagcca ggattcggcg cgctggggtg tgggtaaacc gttatatcag
+     4801 gacctgattg cgcgcaccaa agctgcatta cagaagaacc cgaaaaatgt gttgctggcg
+     4861 gtgtgctgga tgcagggaga gtttgacatg agcgccgcca cccacgcaca gcaacctgcg
+     4921 ctgtttacag ccatgctgac acagtttcgt gctgacctct ccgtgtttaa cgcgcagtgc
+     4981 catggtggca gtgctgcaga tgtgccgtgg atttgtggtg acacgacgta ttactggaaa
+     5041 aatacatacg ctacccagta cgacaccgtg tacggcgggt ataaaaacag ggagagtgag
+     5101 ggcgtttatt ttgtgccctt catgacagac ggtaacggcg tcaataccgc cactaacgcg
+     5161 ccggcagaag atccggatat tccggcatca ggatattacg gtgcggcatc gagaacgaat
+     5221 ggaaaccagg tatcatcaaa ccgcccgaca catttcagtt catgggcgcg caggagcatt
+     5281 attccggatc gtctggcaac cgctattctg aacgcagccg ggcgcacctc agccttcatc
+     5341 agtggtaagg caccggaaat caaaccctcg cccggcggca acacgccatc gggtccgtct
+     5401 gcagatacgt ccgttcgcac aatctccctg ctgccggcag ccggagaggc tgctgcgcag
+     5461 ggctggagca ttaaggatgg cggaattcag ttgtcagatg gtgtatttaa gatcaccaag
+     5521 cagagcaata aaacctggtc cctgacgcat ccggtggatg acgcaattac cctgctgaca
+     5581 cagggcggca gactgacctg taagttccgc ctgtcaggcg cactgaccaa caatcagttc
+     5641 gggctgggga tttatctgta tacggatgct cccgttcctg atggtgtggc gatgacgggt
+     5701 accggtaatc cgttcctgat gtcgtacttc actcagacca ctgacggcag agtgaatctg
+     5761 atgcatcaca ggaaagccgg aaacacgaag ctgggggagt tcggcgatta cggtaacgac
+     5821 tggcagacgc tggagctggt gttcaccgcc ggcagtgcca cggttactcc gaaactgaat
+     5881 ggagtggctg gcccggcatt ccaggttata aaagacagtc tgacactggg actgaatgcg
+     5941 ctgacgctga cggatgttac aaaaaatgca gcgtatggcg ttgagataga aagtctgatg
+     6001 ctggagataa atgcaccggc agcataataa aaaaagccag cgcccactct gaaggacgct
+     6061 ggctaaaacg ggtagatgta cttcacatga tacttatatt tggcagtaca ttttctgaca
+     6121 gacagtgacg gatgttgtca agatattgtg tcatttataa cctgaatcag gggttggtcg
+     6181 gaatgttatc tggcattttt agcagagcct gaatgccata atcacggctc ccggcgttgg
+     6241 ccgtcagtgg gtgacactgg cggctttttg ttttccttta ctttcatttt ctgtcggcgg
+     6301 tgacggagac atacatcgga tggaaaaaat cacaacaggt gtgtcataca ccacgtcagc
+     6361 ggtggggacg ggatactggc tactgcagtt gctggacaaa gtctctccgt cccagtgggt
+     6421 ggcaataggt gtactgggga gtctgctgtt tggcctgctg acgtatctga ctaacctgta
+     6481 tttcaaaatc agggaggacc gccgtaagac ggcgcgggga gactaa
+//

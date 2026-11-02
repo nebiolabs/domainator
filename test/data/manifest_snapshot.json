@@ -86,6 +86,25 @@
    "required": false
   },
   {
+   "name": "prostt5_weights",
+   "flags": [
+    "--prostt5_weights"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": false
+  },
+  {
+   "name": "prostt5_device",
+   "flags": [
+    "--prostt5_device"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
    "name": "foldseek_device",
    "flags": [
     "--foldseek_device"

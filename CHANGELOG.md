@@ -16,6 +16,11 @@ of `keep_name` on all three extract tools. `extract_unannotated` also renames
 Defaults and extraction behavior are unchanged; old names are not aliases.
 
 ### Added
+- domainate `--prostt5_weights` (and `--prostt5_device`): `--foldseek` searches can predict
+  their query 3Di sequences with foldseek's built-in ProstT5 instead of ESM-2 3B 3Di, which
+  needs only the foldseek binary and its weights (`foldseek databases ProstT5`), not PyTorch
+  or esmologs. `--foldseek` now needs exactly one of `--esm2_3di_weights` and
+  `--prostt5_weights`.
 - db_download `--uniprot_dir` reads the UniProt release files from a local mirror instead of
   downloading them, and an `--ncbi_summary` whose `ftp_path` is a local directory (relative to
   the summary) is read from a local mirror of the NCBI genomes server. The tests now run
