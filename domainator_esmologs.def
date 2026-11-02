@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: condaforge/miniforge3:24.9.2-0
+From: condaforge/miniforge3:26.9.4-0
 
 %environment
 export PATH="/opt/conda/bin:$PATH"

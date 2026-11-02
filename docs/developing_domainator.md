@@ -63,6 +63,18 @@ python scripts/bench/bench.py --baseline before.json
 ```
 Each step reports its fastest of `--repeat` runs; `--only domainate` runs a subset.
 
+## release checks
+
+Before tagging a release, check that the packages build and work once installed. Run this on a fresh clone of the commit you will tag, so untracked files in your working copy can't hide a file the package is missing:
+```
+conda activate domainator   # python, and the Rust toolchain for the native extension
+git clone https://github.com/nebiolabs/domainator.git domainator_release && cd domainator_release
+scripts/release_check.sh
+```
+`scripts/release_check.sh [work_dir]` builds the sdist, then the wheel from the sdist (so a file the build needs but `MANIFEST.in` leaves out fails it), and runs `twine check --strict` on both. It then installs each into a clean venv and, from outside the repository, imports the native extension and runs `domainator --version`, `doctor`, `completion bash`, `describe`, `viewer` (which needs the viewer page's package data) and a small workflow: `domainate`, `select_by_cds`, `enum_report`.
+
+The local wheel is tagged `linux_x86_64`, which PyPI doesn't accept. The wheels that are published are built by `.github/workflows/wheels.yml` (cibuildwheel, manylinux and macOS), which publishes them to PyPI when a `v*` tag is pushed.
+
 
 ## Projects that domainator depends on
 
