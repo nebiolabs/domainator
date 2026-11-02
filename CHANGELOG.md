@@ -45,7 +45,7 @@ Defaults and extraction behavior are unchanged; old names are not aliases.
   consistently selects annotation sources rather than implicitly adding search hits.
 - The `domainator <command>` dispatcher, with `domainator --help`, `domainator completion
   {bash,zsh,tcsh}` (shell tab completion) and `domainator doctor` (which optional programs
-  and packages are installed).
+  and packages are installed, and whether PyTorch can use the GPU).
 - `-v/--verbose` and `-q/--quiet` on every command; errors you can fix are one-line messages.
 - `--fasta_out` on every command that writes GenBank, alongside `-o/--genbank_out`.
 - `docs/stability.md`, and a reference for every GenBank qualifier Domainator writes in
@@ -75,7 +75,7 @@ Defaults and extraction behavior are unchanged; old names are not aliases.
   manifest, docs/tool_manifest.md), for GUIs and workflow systems.
 - A command-line reference generated from the parsers (docs/cli/), and a documentation site
   with the Python API reference, published at https://nebiolabs.github.io/domainator/.
-- Python extras: `projection` (UMAP), `structure` (torch), `dev`.
+- Python extras: `projection` (UMAP), `structure` (torch and fair-esm), `dev`.
 - `scripts/bench/bench.py`, a benchmark of common steps.
 - The `domain_search` function searches SeqRecords as well as file partitions, reading a stream
   of records only a few batches ahead of the search; it has a `batch_size` parameter.

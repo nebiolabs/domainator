@@ -25,11 +25,15 @@ def _has_foldseek():
 
 
 def _has_cuda_gpu():
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except Exception:
+    # foldseek uses CUDA directly, so detect the GPU without depending on PyTorch.
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
         return False
+    try:
+        result = subprocess.run([nvidia_smi, "-L"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and result.stdout.startswith("GPU")
 
 
 def _has_esmologs():

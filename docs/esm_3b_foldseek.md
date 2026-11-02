@@ -33,7 +33,7 @@ structures. On `FeSOD_20` against the ESM-2 3B 3Di `FeSOD` database, ProstT5 que
 the same 400 hits as ESM-2 3B 3Di queries, with bit scores about 10% lower.
 
 # Installation
-In addition to Domainator, the esmologs package ([https://github.com/seanrjohnson/esmologs](https://github.com/seanrjohnson/esmologs)) and pytorch with CUDA support must be installed. The easiest way to accomplish this is to create a new conda environment with esmologs, and install domainator into that environment.
+In addition to Domainator, the esmologs package ([https://github.com/seanrjohnson/esmologs](https://github.com/seanrjohnson/esmologs)), fair-esm and PyTorch with CUDA support must be installed. They can be installed into the `domainator` conda environment from the README's Installation section.
 
 You also need to download the ESM-2 3B 3Di fine tuning checkpoint, from [https://zenodo.org/record/8174960](https://zenodo.org/record/8174960)
 
@@ -43,23 +43,24 @@ You also need to download the ESM-2 3B 3Di fine tuning checkpoint, from [https:/
 wget https://zenodo.org/record/8174960/files/ESM-2_3B_3Di.pt
 ```
 
-## Install via conda
+## Install into the domainator conda environment
 
 ```bash
-git clone https://github.com/seanrjohnson/esmologs.git
-cd esmologs
+conda activate domainator
 
-conda env create --name domainator_esmologs --file conda_env.yml
+# PyTorch: choose the build for your NVIDIA driver. The "CUDA Version" at the top of nvidia-smi's
+# output is the newest CUDA the driver supports; install a build for that version or older (the
+# builds are listed at https://pytorch.org/get-started/locally/). For example, for CUDA 12.4:
+pip install torch --index-url https://download.pytorch.org/whl/cu124
 
-cd ..
-git clone https://github.com/nebiolabs/domainator.git
-cd domainator
-conda env update --name domainator_esmologs --file conda_env.yml
+pip install "fair-esm>=2.0" "esmologs @ git+https://github.com/seanrjohnson/esmologs.git@0e937758ebb68983a3049b64e62307e524c10ac4"
 
-conda activate domainator_esmologs
-pytest test
-cd ..
+domainator doctor   # torch and esmologs should be found, and under GPU, torch should be able to use the GPU
 ```
+
+pip's default PyTorch is built for a recent CUDA version (CUDA 13 for recent releases). With an
+older driver it can't use the GPU, and `--esm2_3di_device cuda:0` (the default) fails;
+`domainator doctor` says when this is the problem.
 
 ## install via Apptainer/Singularity
 
@@ -86,7 +87,7 @@ In this workflow, we first create a reference Foldseek 3Di database, and then us
 
 ## conda
 ```bash
-conda activate domainator_esmologs
+conda activate domainator
 
 # convert a reference file to 3di
 predict_from_ESM2_to_3Di.py -i domainator/test/data/foldseek/FeSOD_20.fasta -o FeSOD_20.3di.fasta --weights ESM-2_3B_3Di.pt --device cuda:0

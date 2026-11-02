@@ -91,7 +91,8 @@ dependencies = [
 projection = ["umap-learn >=0.5.4"]
 # domainate --foldseek and find_features --tmbed. They also need packages that are not on PyPI:
 # esmologs (see docs/esm_3b_foldseek.md) and TMbed (see "Optional: TMbed" in README.md).
-structure = ["torch >=2.0"]
+# esmologs needs fair-esm but doesn't declare it.
+structure = ["torch >=2.0", "fair-esm >=2.0"]
 test = ["pytest >=7.4",
         "pytest-datadir >=1.4.1"]
 # Browser-driven regression tests for the Domainator Similarity Network Viewer HTML. Not part of `test`

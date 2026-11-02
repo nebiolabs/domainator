@@ -2,14 +2,16 @@
 
 Most of Domainator needs only its Python dependencies. A few commands also need an external
 program or an optional package; this lists each one, the commands that need it, whether it
-was found, and how to install it.
+was found, and how to install it. It also reports whether PyTorch can use an NVIDIA GPU.
 """
 import argparse
 import importlib.util
 import platform
+import re
 import shutil
+import subprocess
 import sys
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Tuple
 
 
 class Requirement(NamedTuple):
@@ -41,6 +43,10 @@ OPTIONAL_PACKAGES = (
     Requirement("tmbed", "find_features --tmbed", 'see "Optional: TMbed" in README.md (needs Python 3.14 or older)'),
 )
 
+GPU_NEEDED_BY = ("domainate --esm2_3di_device, --prostt5_device and --foldseek_device (a GPU build of foldseek); "
+                 "find_features --device (TMbed)")
+PYTORCH_INSTALL = "https://pytorch.org/get-started/locally/"
+
 
 def _program_found(name: str) -> Optional[str]:
     return shutil.which(name)
@@ -49,6 +55,68 @@ def _program_found(name: str) -> Optional[str]:
 def _package_found(name: str) -> Optional[str]:
     spec = importlib.util.find_spec(name)
     return None if spec is None else (spec.origin or "found")
+
+
+def _nvidia_gpus() -> Optional[Tuple[List[str], Optional[str]]]:
+    """The GPUs nvidia-smi lists, and the newest CUDA version their driver supports. None without nvidia-smi."""
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        return None
+    try:
+        listing = subprocess.run([nvidia_smi, "-L"], capture_output=True, text=True, timeout=30).stdout
+        summary = subprocess.run([nvidia_smi], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return [], None
+    gpus = [line.split(" (UUID")[0] for line in listing.splitlines() if line.startswith("GPU ")]
+    cuda = re.search(r"CUDA Version:\s*([\d.]+)", summary)
+    return gpus, cuda.group(1) if cuda else None
+
+
+def _torch_cuda() -> Optional[Tuple[str, Optional[str], int]]:
+    """torch's version, the CUDA version it was built for (None for a CPU-only build), and how many
+    GPUs it can use. None when torch is not installed."""
+    if _package_found("torch") is None:
+        return None
+    import torch
+    return torch.__version__, torch.version.cuda, torch.cuda.device_count() if torch.cuda.is_available() else 0
+
+
+def _cuda_version(version: str) -> Tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+def _torch_status(driver_cuda: Optional[str]) -> str:
+    try:
+        torch_cuda = _torch_cuda()
+    except Exception as error:  # a broken torch install
+        return f"cannot be imported ({error})"
+    if torch_cuda is None:
+        return "not installed"
+    version, built_cuda, usable = torch_cuda
+    if built_cuda is None:
+        return f"{version} is a CPU-only build; for a GPU, install a CUDA build ({PYTORCH_INSTALL})"
+    if usable:
+        return f"{version}, built for CUDA {built_cuda}, can use {usable} GPU{'' if usable == 1 else 's'}"
+    if driver_cuda and _cuda_version(built_cuda) > _cuda_version(driver_cuda):
+        return (f"{version} is built for CUDA {built_cuda}, newer than the driver supports, so it runs on the CPU. "
+                f"Install a build for CUDA {driver_cuda} or older ({PYTORCH_INSTALL}), or update the NVIDIA driver.")
+    return f"{version}, built for CUDA {built_cuda}, cannot use a GPU"
+
+
+def gpu_report() -> List[str]:
+    gpus = _nvidia_gpus()
+    driver_cuda = None
+    if gpus is None:
+        found = "none found (nvidia-smi is not on PATH)"
+    elif not gpus[0]:
+        found = "none found (nvidia-smi lists no GPUs)"
+    else:
+        names, driver_cuda = gpus
+        found = ", ".join(names) + (f"; the driver supports CUDA {driver_cuda} and older" if driver_cuda else "")
+    return ["", "GPU:",
+            f"  NVIDIA GPU: {found}",
+            f"  torch:      {_torch_status(driver_cuda)}",
+            f"  needed by:  {GPU_NEEDED_BY}"]
 
 
 def report() -> List[str]:
@@ -67,7 +135,7 @@ def report() -> List[str]:
             status = f"found ({where})" if where else f"missing; install: {requirement.install}"
             lines.append(f"  {requirement.name:<9} {status}")
             lines.append(f"  {'':<9} needed by: {requirement.needed_by}")
-    return lines
+    return lines + gpu_report()
 
 
 def main(argv: Optional[List[str]] = None) -> int:

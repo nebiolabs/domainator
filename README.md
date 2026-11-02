@@ -258,9 +258,15 @@ domainator doctor   # should now list torch and tmbed as found
 - **`transformers<5`**: TMbed uses tokenizer methods that transformers 5 removed.
 - **The TMbed commit is pinned** because TMbed has no releases; this is the version Domainator is
   tested with.
-- **GPU or CPU.** `--device` (default `cuda:0`) falls back to the CPU when CUDA is not available.
-  pip's default PyTorch on Linux includes CUDA libraries. For a smaller CPU-only install, install
-  PyTorch first with `pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+- **GPU or CPU.** `--device` (default `cuda:0`) falls back to the CPU when PyTorch can't use the
+  GPU. pip's default PyTorch on Linux is built for a recent CUDA version (CUDA 13 for recent
+  releases), which needs a recent NVIDIA driver; with an older driver, PyTorch can't use the GPU
+  and TMbed runs on the CPU, much more slowly. `domainator doctor` reports whether PyTorch can use
+  your GPU. If it can't, look up the "CUDA Version" at the top of `nvidia-smi`'s output and install
+  a PyTorch build for that version or older first, for example
+  `pip install torch --index-url https://download.pytorch.org/whl/cu124` for CUDA 12.4 (the builds
+  are listed at https://pytorch.org/get-started/locally/). For a smaller CPU-only install, use
+  `--index-url https://download.pytorch.org/whl/cpu`.
 - **Model download.** The first run downloads TMbed's ProtT5 encoder (about 2.25 GB), by default
   into the installed `tmbed` package. Use `--tmbed_model_dir` (or `--model_dir`, or the `HF_HOME`
   environment variable) to keep it somewhere else, such as a shared directory.

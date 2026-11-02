@@ -217,3 +217,36 @@ def test_doctor_lists_every_optional_requirement(capsys, monkeypatch):
     assert "cmbuild   missing; install: conda install -c bioconda infernal" in out
     for requirement in doctor.EXTERNAL_PROGRAMS + doctor.OPTIONAL_PACKAGES:
         assert f"  {requirement.name} " in out
+    assert "GPU:" in out
+
+
+@pytest.mark.parametrize("gpus, torch_cuda, expected", [
+    (None, None, ["NVIDIA GPU: none found (nvidia-smi is not on PATH)", "torch:      not installed"]),
+    ((["GPU 0: Quadro RTX 6000"], "12.4"), ("2.6.0+cu124", "12.4", 1),
+     ["NVIDIA GPU: GPU 0: Quadro RTX 6000; the driver supports CUDA 12.4 and older",
+      "torch:      2.6.0+cu124, built for CUDA 12.4, can use 1 GPU"]),
+    # torch built for a newer CUDA than the driver supports silently runs on the CPU
+    ((["GPU 0: Quadro RTX 6000"], "12.4"), ("2.15.0", "13.0", 0),
+     ["torch:      2.15.0 is built for CUDA 13.0, newer than the driver supports, so it runs on the CPU. "
+      "Install a build for CUDA 12.4 or older"]),
+    ((["GPU 0: Quadro RTX 6000"], "12.4"), ("2.6.0+cpu", None, 0), ["torch:      2.6.0+cpu is a CPU-only build"]),
+    (([], None), ("2.6.0+cu124", "12.4", 0),
+     ["NVIDIA GPU: none found (nvidia-smi lists no GPUs)", "torch:      2.6.0+cu124, built for CUDA 12.4, cannot use a GPU"]),
+])
+def test_doctor_reports_gpu(monkeypatch, gpus, torch_cuda, expected):
+    from domainator.cli import doctor
+    monkeypatch.setattr(doctor, "_nvidia_gpus", lambda: gpus)
+    monkeypatch.setattr(doctor, "_torch_cuda", lambda: torch_cuda)
+    out = "\n".join(doctor.gpu_report())
+    for text in expected:
+        assert text in out
+    assert f"needed by:  {doctor.GPU_NEEDED_BY}" in out
+
+
+def test_doctor_reports_broken_torch(monkeypatch):
+    from domainator.cli import doctor
+    def broken():
+        raise OSError("libcudart.so.13: cannot open shared object file")
+    monkeypatch.setattr(doctor, "_nvidia_gpus", lambda: None)
+    monkeypatch.setattr(doctor, "_torch_cuda", broken)
+    assert "torch:      cannot be imported (libcudart.so.13" in "\n".join(doctor.gpu_report())
