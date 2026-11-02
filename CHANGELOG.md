@@ -4,9 +4,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Domainator follows [Semantic Versioning](https://semver.org/): what stays stable is listed in
 [docs/stability.md](docs/stability.md).
 
-## [Unreleased]
+## v.1.0.0rc1
 
-The 1.0 release: one `domainator` command, consistent options, a documented Python API and
+The 1.0rc1 release: one `domainator` command, consistent options, a documented Python API and
 documented, versioned file formats. Many options were renamed; [MIGRATION.md](MIGRATION.md)
 lists every change from 0.x.
 
