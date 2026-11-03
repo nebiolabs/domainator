@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import domainator.domainate as domainate_module
 from domainator.domainate import main, filter_by_overlap, SearchResult
 import tempfile
@@ -1016,6 +1017,45 @@ def test_domainate_foldseek_prostt5(shared_datadir, tmp_path):
         assert {f.qualifiers["program"][0] for f in hits} == {"foldseek"}
         assert {f.qualifiers["database"][0] for f in hits} == {"FeSOD"}
         assert rec.id in {f.qualifiers["name"][0] for f in hits}
+
+
+def _copy_foldseek_db(src, dest):
+    """Copy the foldseek database ``src`` (a path prefix) to the prefix ``dest``. foldseek
+    has no copy command, and its files do not record their own name."""
+    import re
+    import shutil
+    src, dest = Path(src), Path(dest)
+    own = re.compile(re.escape(src.name) + r"(_h|_ss|_ca)?(\.[a-z]+)?$")
+    for path in src.parent.iterdir():
+        if own.fullmatch(path.name):
+            shutil.copy(path, dest.parent / (dest.name + path.name[len(src.name):]))
+    return dest
+
+
+@pytest.mark.requires_binary("foldseek")
+@pytest.mark.skipif(PROSTT5_WEIGHTS is None,
+                    reason="set DOMAINATOR_PROSTT5_WEIGHTS to foldseek's ProstT5 weights directory")
+def test_domainate_foldseek_prostt5_two_databases(shared_datadir, tmp_path):
+    # The 3Di sequences are predicted once and searched against both databases, so each
+    # database must still give every hit it gives on its own. The copy is the same
+    # database under another name, so the two sets of hits must be identical.
+    db = shared_datadir / "foldseek" / "FeSOD"
+    copy = _copy_foldseek_db(db, tmp_path / "FeSOD_copy")
+    out = tmp_path / "out.gb"
+    main(["-i", str(shared_datadir / "foldseek" / "FeSOD_20.fasta"),
+          "--foldseek", str(db), str(copy),
+          "--prostt5_weights", PROSTT5_WEIGHTS, "--cpu", "2", "-o", str(out)])
+    records = list(SeqIO.parse(out, "genbank"))
+    assert len(records) == 20
+    for rec in records:
+        by_db = {"FeSOD": [], "FeSOD_copy": []}
+        for f in rec.features:
+            if f.type == DOMAIN_FEATURE_NAME:
+                q = f.qualifiers
+                by_db[q["database"][0]].append(
+                    (q["name"][0], q["evalue"][0], q["score"][0], int(f.location.start), int(f.location.end)))
+        assert len(by_db["FeSOD"]) == 20
+        assert sorted(by_db["FeSOD"]) == sorted(by_db["FeSOD_copy"])
 
 
 def test_domainate_foldseek_predicts_3di_once_for_all_databases(monkeypatch):
