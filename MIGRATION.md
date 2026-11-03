@@ -2,7 +2,26 @@
 
 Domainator 1.0 makes the command line consistent across all programs. Old option names are
 **not** kept as aliases: a script that uses one fails with an "unrecognized arguments" error
-that names it, so nothing changes silently. This guide lists every change.
+that names it. This guide lists every change. Two of them are not caught that way:
+
+> **Warning: `compare_contigs -o` is now the matrix, not the sorted GenBank.** In 0.x,
+> `compare_contigs -o sorted.gb` wrote the contigs sorted by similarity. In 1.0, `-o` is
+> `--hdf_out`, the score matrix, and the sorted GenBank is `--genbank_out`. A script that
+> still passes `-o sorted.gb` is not rejected as an unknown option. Instead, it fails before
+> doing any work, because an hdf5 output must end in `.h5`, `.hdf5` or `.hdf`. Change it
+> to:
+>
+> ```bash
+> # 0.x
+> compare_contigs.py -i neighborhoods.gb -o sorted.gb --sparse scores.h5
+> # 1.0
+> domainator compare_contigs -i neighborhoods.gb --genbank_out sorted.gb -o scores.h5
+> ```
+>
+> **compare_contigs also sorts differently.** The default clustering changed from Ward
+> linkage with SciPy's optimal ordering to average linkage with greedy leaf ordering. The
+> order of `--genbank_out` therefore changes, and so do the `--name_by_order` prefixes. See
+> [Behavior changes](#behavior-changes).
 
 ## Installation
 
@@ -169,6 +188,10 @@ Output ending in `.gz` is compressed for every GenBank, FASTA, and TSV output.
 |---|---|---|
 | `-r/--references` | `-r/--reference` | |
 | `--lb` (matrix and network programs) | `--threshold` | keep values strictly above this |
+| `--sparse`, `--dense` (matrix programs) | `-o/--hdf_out` | always sparse (CSR) hdf5; 1.0 still reads 0.x dense hdf5 files |
+| `--dense_text` (matrix programs) | `--dense_text_out` | |
+| `-k` (seq_dist, kmer_dist, structure_dist, compare_contigs, hmmer_compare) | `--max_hits_per_query` | |
+| `--mst_knn K` (seq_dist, structure_dist, compare_contigs, transform_matrix, build_ssn) | `--mst --knn K` | `--mst_knn 0` is `--mst`. `--knn` is unchanged, and now combines with `--mst` instead of excluding it. kmer_dist gains both. |
 | `--score_cutoff`, `--score` | `--min_score` | |
 | `--search_hits` | `--has_search_hit` | additive search-hit selection; extract_unannotated uses `--annotation_type all` instead |
 | `--keep_db` | `--db_out` | |
@@ -246,6 +269,7 @@ Options not listed are unchanged.
 | | `--params` | `--umap_args`, `--tsne_args`, `--pca_args`: `key=value` pairs, e.g. `--umap_args="n_neighbors=30 min_dist=0.1"` |
 | build_ssn | `--xgmml`, `--cluster_tsv` | `-o/--xgmml_out`, `--cluster_tsv_out` |
 | | `--lb` | `--threshold` |
+| | `--mst_knn K` | `--mst --knn K` (`--mst_knn 0`: `--mst`) |
 | build_ssn_viewer | `-o/--output` (a `.dsnv` bundle) | `build_ssn --dvb_out` (a `.dvb` bundle) |
 | | `--html --embed_data` | `build_ssn --html_out` |
 | | `--html` alone (an empty page) | `viewer --html_out` |
@@ -254,8 +278,12 @@ Options not listed are unchanged.
 | color_genbank | `-o/--output` | `-o/--genbank_out` |
 | | `--mode` | `--target` |
 | color_table_to_legend | `--svg` | `-o/--svg_out` |
-| compare_contigs | `--hdf`, `--dense_text`, `-o/--output` (sorted GenBank) | `-o/--hdf_out`, `--dense_text_out`, `--genbank_out` |
+| compare_contigs | **`-o/--output` (sorted GenBank)** | **`--genbank_out`; `-o` is now `--hdf_out`** (see the warning at the top) |
+| | `--sparse`, `--dense`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
 | | `--lb` | `--threshold` |
+| | `-k` | `--max_hits_per_query` |
+| | `--mst_knn K` | `--mst --knn K` (`--mst_knn 0`: `--mst`) |
+| | | new: `--linkage` (default `average`, was `ward`), `--leaf_ordering` (default `greedy`; was SciPy's optimal ordering), `--skip_sort_memory_check` |
 | db_download | `-o/--output` | `--genbank_out` or `--fasta_out`, matching the format of `--db` |
 | | `--skip_taxonomy_update` | `--no_taxonomy_update` |
 | | `--num_recs` | `--max_records` |
@@ -303,14 +331,18 @@ Options not listed are unchanged.
 | hmmer_compare | `-o/--output` | `-o/--tsv_out` |
 | | `--alignments` (alignments mixed into the TSV) | `--alignments_out PATH`, a separate file; the TSV is now always a plain table |
 | | `--score_cutoff` | `--min_score` |
+| | `-k` | `--max_hits_per_query` |
 | hmmer_report | `-o/--output`, `--html`, `--json` | `-o/--tsv_out`, `--html_out`, `--json_out` |
 | | one flag per column: `--acc --length --append name str value` | `--columns acc length append:name:str:value` |
 | hmmer_search | `--score_cutoff` | `--min_score` |
 | infernal_build | `-o/--output` | `-o/--cm_out` |
 | | `--informat` | `--input_format` |
-| kmer_dist | `--hdf`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
+| kmer_dist | `--sparse`, `--dense`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
 | | `--lb` | `--threshold` |
+| | `-k` | `--max_hits_per_query` |
+| | | new: `--mst`, `--knn` |
 | matrix_report | `-o/--output`, `--html`, `--json` | `-o/--text_out`, `--html_out`, `--json_out` |
+| | `--include_mst_knn` | `--knn_projection` |
 | plot_contigs | `--html` | `-o/--html_out` |
 | | | new: `--color_table`, colors for `--color_by` values |
 | rotate_contigs | `-o/--output` + `--fasta_out` switch | `-o/--genbank_out`, `--fasta_out` |
@@ -328,8 +360,10 @@ Options not listed are unchanged.
 | | `--cds_count_lb`, `--cds_count_ub` | `--min_cds`, `--max_cds` |
 | | `--search_score_lb`, `--search_score_ub` | `--min_search_score`, `--max_search_score` |
 | select_by_coord | `-o/--output`, `-c/--coords` | `-o/--genbank_out`, `--fasta_out`, `--coords` |
-| seq_dist | `--hdf`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
+| seq_dist | `--sparse`, `--dense`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
 | | `--lb` | `--threshold` |
+| | `-k` | `--max_hits_per_query` |
+| | `--mst_knn K` | `--mst --knn K` (`--mst_knn 0`: `--mst`) |
 | | `--input_type`, `--reference_type` | `--input_format`, `--reference_format` |
 | | `--params '"-c":4'` | `--diamond_args="-c 4"` |
 | | | new: `--diamond_path` |
@@ -339,8 +373,10 @@ Options not listed are unchanged.
 | ssn_navigator | `-o/--output`; config key `cluster_id` | `-o/--json_out`; config key `cluster` (the option is still `--cluster`) |
 | | `--mode` | `--query` |
 | | `--id` | `--cluster` |
-| structure_dist | `--hdf`, `--dense_text`, `--hits_tsv`, `--keep_db` | `-o/--hdf_out`, `--dense_text_out`, `--hits_tsv_out`, `--db_out` |
+| structure_dist | `--sparse`, `--dense`, `--dense_text`, `--hits_tsv`, `--keep_db` | `-o/--hdf_out`, `--dense_text_out`, `--hits_tsv_out`, `--db_out` |
 | | `--lb` | `--threshold` |
+| | `-k` | `--max_hits_per_query` |
+| | `--mst_knn K` | `--mst --knn K` (`--mst_knn 0`: `--mst`) |
 | structure_domainate | `-o/--output`, `--hits_tsv`, `--keep_db` | `-o/--genbank_out`, `--fasta_out`, `--hits_tsv_out`, `--db_out` |
 | | `-r/--references` | `-r/--reference` |
 | | `--max_domains` | `--max_hits_per_cds` |
@@ -350,8 +386,9 @@ Options not listed are unchanged.
 | summary_report | `-o/--output`, `--html`, `--json` | `-o/--text_out`, `--html_out`, `--json_out` |
 | | `--domains_table` | `--domains_tsv_out` |
 | | `--co_occurence_fraction`, `--co_occurence_count` | `--co_occurrence_fraction_out`, `--co_occurrence_count_out` |
-| transform_matrix | `--hdf`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
+| transform_matrix | `--sparse`, `--dense`, `--dense_text` | `-o/--hdf_out`, `--dense_text_out` |
 | | `--lb` | `--threshold` |
+| | `--mst_knn K` | `--mst --knn K` (`--mst_knn 0`: `--mst`) |
 | | `--input_type` | `--value_type` |
 | trim_contigs | `-o/--output` | `-o/--genbank_out`, `--fasta_out` |
 | | `--kb_both`, `--cds_both` | `--kb_range`, `--cds_range` |
@@ -408,6 +445,13 @@ plain reversal.
 
 ## Behavior changes
 
+- compare_contigs sorts `--genbank_out` (0.x `-o`) with average linkage and greedy leaf
+  ordering by default. 0.x used Ward linkage with SciPy's `optimal_ordering`, and listed the
+  contigs in the order the clustering first merged them. As a result the output order and
+  the `--name_by_order` prefixes (`000_`, `001_`, ...) are different, so anything keyed on
+  those prefixes needs regenerating. `--linkage ward --leaf_ordering optimal` comes closest
+  to the old order but doesn't reproduce it exactly, and optimal ordering is slow for
+  thousands of contigs.
 - `-e/--evalue` keeps annotations with an e-value *at or below* the cutoff in every program.
   select_by_contig, select_by_cds and extract_peptides used to drop an annotation whose
   e-value equaled the cutoff, and so did the searches in domainate, domain_search and the
@@ -466,7 +510,7 @@ internal; see `docs/stability.md`.
 | `build_ssn_viewer.build_ssn_viewer_bundle(matrix, metadata_files=..., categorical_columns=...)` | `build_ssn.build_ssn(matrix, dvb_out=..., metadata=..., categorical=...)`, which writes the bundle (`ssn_bundle.load_bundle` reads it back) |
 | (none) | `genbank_to_fasta.genbank_to_fasta(input, fasta_out=...)` |
 | `summary_report(records, out_text_handle=..., out_html_handle=..., out_json_handle=..., focus_domains=..., report_taxonomy=..., domains_table=..., co_occurrence_fraction_outfile=..., co_occurrence_count_outfile=...)` | `summary_report(records, text_out_handle=..., html_out_handle=..., json_out_handle=..., domains=..., taxonomy=..., domains_tsv_out=..., co_occurrence_fraction_out=..., co_occurrence_count_out=...)` |
-| `matrix_report(matrix, out_text_handle=..., out_html_handle=..., out_json_handle=..., profile_stages=...)` | `matrix_report(matrix, text_out_handle=..., html_out_handle=..., json_out_handle=...)` (pass `stage_timings=[]` to collect timings) |
+| `matrix_report(matrix, out_text_handle=..., out_html_handle=..., out_json_handle=..., include_mst_knn=..., profile_stages=...)` | `matrix_report(matrix, text_out_handle=..., html_out_handle=..., json_out_handle=..., knn_projection=...)` (pass `stage_timings=[]` to collect timings) |
 | `ssn_navigator(bundle, mode=..., cluster_id=...)` | `ssn_navigator(bundle, query=..., cluster=...)` |
 | `format_db(inputs, log=...)`, `deduplicate_genbank(inputs, log_handle=...)` | `log_out_handle=...` |
 | `db_download(..., api_key=...)` | `db_download(..., ncbi_api_key=...)` |
@@ -500,6 +544,8 @@ every other argument is keyword-only. Parameters were renamed to match the optio
 | all | `fasta_type` | `alphabet` |
 | all | `threads`, `cpus` | `cpu` |
 | all matrix tools | `lb` | `threshold` |
+| seq_dist, kmer_dist, structure_dist, compare_contigs, hmmer_compare | `k` | `max_hits_per_query` |
+| seq_dist, structure_dist, compare_contigs, build_ssn | `mst_knn=K` | `mst=True, knn=K` (`mst_knn=0`: `mst=True`) |
 | extract_domains, extract_peptides, rotate_contigs, select_by_cds | `search_hits=True` | `has_search_hit=True` |
 | extract_unannotated | `search_hits=True` | `annotation_type="all"` |
 | select_by_contig | `domain_type="domain"/"search"/"both"` | `annotation_type="domainator"/"domain_search"/"all"` |
@@ -536,11 +582,13 @@ as in configuration files. For example, use `dedup="sequence_rc"` instead of
 `dedup=["id", "sequence_rc"]`. `domain_search` defaults to `dedup="none"`.
 
 **Matrices.** `seq_dist`, `kmer_dist`, `structure_dist` and `compare_contigs` return a
-`DataMatrix` instead of writing files, so they no longer take `hdf`, `dense_text` or
-`max_output_bytes`. Write the result with `matrix.write(path, "hdf")`.
+`DataMatrix` instead of writing files, so they no longer take `sparse`, `dense`, `dense_text`
+or `max_output_bytes`. Write the result with `matrix.write(path, "hdf")`.
 `compare_contigs` takes records instead of file names, and no longer takes `reports`,
 `contigs`, `name_by_order` or `databases` (give the metrics `databases`); its sorted GenBank
-output is `compare_contigs.write_sorted_genbank(records, matrix, path, ...)`.
+output is `compare_contigs.write_sorted_genbank(records, matrix, path, ...)`, whose
+`linkage_method="average"` and `leaf_ordering="greedy"` defaults differ from the 0.x sort
+(see [Behavior changes](#behavior-changes)).
 
 **Warnings and errors.** Importing Domainator no longer hides numpy's warnings for the whole
 process. Missing optional structure-search packages (torch, esmologs) raise

@@ -449,9 +449,9 @@ def _check_sort_feasible(n, leaf_ordering, check_memory=True):
     available = psutil.virtual_memory().available if check_memory else None
     if check_memory and needed > available:
         raise SortMemoryLimitExceeded(
-            f"Sorting {n} contigs for genbank output (-o) needs about {format_bytes(needed)} of memory, "
+            f"Sorting {n} contigs for --genbank_out needs about {format_bytes(needed)} of memory, "
             f"but only {format_bytes(available)} is available. "
-            "To avoid this, drop -o and write a matrix with --hdf_out instead, sort a subset of contigs with --contigs or --contigs_file, "
+            "To avoid this, drop --genbank_out and write only a matrix with -o/--hdf_out, sort a subset of contigs with --contigs or --contigs_file, "
             "or deduplicate the input first. Use --skip_sort_memory_check to try anyway."
         )
     if leaf_ordering == "optimal" and n > _OPTIMAL_LEAF_ORDERING_WARN_CONTIGS:
@@ -594,16 +594,16 @@ def build_parser():
                         help="Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order.")
 
     parser.add_argument("--linkage", default="average", choices=LINKAGE_METHODS,
-                        help="Hierarchical clustering linkage method used to sort contigs for the genbank output (-o). Distances are 1 - score/max(score); pairs with no score have distance 1.")
+                        help="Hierarchical clustering linkage method used to sort contigs for --genbank_out. Distances are 1 - score/max(score); pairs with no score have distance 1.")
 
     parser.add_argument("--leaf_ordering", default="greedy", choices=LEAF_ORDERINGS,
-                        help="How to order the leaves of the clustering tree for the genbank output (-o). "
+                        help="How to order the leaves of the clustering tree for --genbank_out. "
                         "greedy: flip subtrees so that the most similar contigs meet at each junction; fast and usually about as good as optimal. "
                         "optimal: scipy's optimal leaf ordering; very slow (minutes to hours) beyond a few thousand contigs. "
                         "none: plain dendrogram order.")
 
     parser.add_argument("--skip_sort_memory_check", action="store_true",
-                        help="Don't fail early when sorting the contigs for the genbank output (-o) is estimated to need more memory than is available.")
+                        help="Don't fail early when sorting the contigs for --genbank_out is estimated to need more memory than is available.")
 
     parser.add_argument('--contigs', default=[], nargs='+',
                         help="only annotate contigs with ids in this list. Additive with --contigs_file. default: all contigs.")
@@ -653,7 +653,9 @@ def main(argv):
     max_output_bytes = max_output_gb_to_bytes(params.max_output_gb)
     cpus = resolve_cpu(params.cpu)
 
-    hdf, dense_text = resolve_matrix_outputs(params, require_output=False)
+    hdf, dense_text = resolve_matrix_outputs(
+        params, require_output=False,
+        extension_hint="In Domainator 0.x, compare_contigs -o wrote the sorted GenBank file; that is now --genbank_out.")
 
     databases=None
     if params.databases is not None:

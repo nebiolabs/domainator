@@ -21,9 +21,9 @@ Give at least one of these outputs: `--hdf_out`, `--dense_text_out`, `--genbank_
 | `-i`, `--input` | FILE ... | required | Genbank filenames. Use - to read standard input. |
 | `--genbank_out` | FILE |  | Write the contigs to this GenBank file, sorted hierarchically by similarity. Use - for standard output. |
 | `--name_by_order` |  |  | Will rename contigs in the genbank file such that they have a prefix that can be sorted to restore the sorted order. |
-| `--linkage` | {average,ward,complete,single,weighted} | average | Hierarchical clustering linkage method used to sort contigs for the genbank output (-o). Distances are 1 - score/max(score); pairs with no score have distance 1. |
-| `--leaf_ordering` | {greedy,optimal,none} | greedy | How to order the leaves of the clustering tree for the genbank output (-o). greedy: flip subtrees so that the most similar contigs meet at each junction; fast and usually about as good as optimal. optimal: scipy's optimal leaf ordering; very slow (minutes to hours) beyond a few thousand contigs. none: plain dendrogram order. |
-| `--skip_sort_memory_check` |  |  | Don't fail early when sorting the contigs for the genbank output (-o) is estimated to need more memory than is available. |
+| `--linkage` | {average,ward,complete,single,weighted} | average | Hierarchical clustering linkage method used to sort contigs for --genbank_out. Distances are 1 - score/max(score); pairs with no score have distance 1. |
+| `--leaf_ordering` | {greedy,optimal,none} | greedy | How to order the leaves of the clustering tree for --genbank_out. greedy: flip subtrees so that the most similar contigs meet at each junction; fast and usually about as good as optimal. optimal: scipy's optimal leaf ordering; very slow (minutes to hours) beyond a few thousand contigs. none: plain dendrogram order. |
+| `--skip_sort_memory_check` |  |  | Don't fail early when sorting the contigs for --genbank_out is estimated to need more memory than is available. |
 | `--contigs` | STRING ... |  | only annotate contigs with ids in this list. Additive with --contigs_file. default: all contigs. |
 | `--contigs_file` | FILE |  | only annotate contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
 | `--max_hits_per_query` | INTEGER |  | After combining all metric scores, keep this many of the top hits for each query and consider all other hits to be zero. Applied before --mst and --knn, so a cap can split clusters that --mst would otherwise keep connected. Default: keep all hits. |

@@ -1,4 +1,4 @@
-from domainator.errors import OutputSizeLimitExceeded
+from domainator.errors import InputError, OutputSizeLimitExceeded
 from domainator import compare_contigs, sparse_scores
 from domainator.seqio import parse_seqfiles
 import os
@@ -122,6 +122,18 @@ def test_compare_contigs_max_output_gb_blocks_dense_output(shared_datadir):
                 "--hdf_out", out_dense,
                 "--max_output_gb", "0.000001",
             ])
+
+
+def test_compare_contigs_old_genbank_dash_o_points_to_genbank_out(shared_datadir):
+    # 0.x `-o` was the sorted GenBank; in 1.0 it is --hdf_out, so an old script must fail clearly.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out_gb = output_dir + "/sorted.gb"
+        with pytest.raises(InputError, match="now --genbank_out"):
+            compare_contigs.main([
+                "-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"),
+                "-o", out_gb,
+            ])
+        assert not os.path.exists(out_gb)
 
 
 def test_compare_contigs_progress_flag(shared_datadir):

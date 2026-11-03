@@ -110,7 +110,7 @@ def test_no_output_specified(inputs):
 
 
 def test_dense_output_needs_an_hdf5_extension(inputs, tmp_path):
-    with pytest.raises(ValueError, match="hdf5 related extension"):
+    with pytest.raises(ValueError, match=r"must end in \.h5, \.hdf5, or \.hdf"):
         structure_dist.main(["-i", inputs, "--hdf_out", str(tmp_path / "out.txt")])
 
 

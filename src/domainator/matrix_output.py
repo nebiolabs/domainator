@@ -9,6 +9,7 @@ from typing import Optional, Sequence, Tuple
 
 from domainator.cli.common import declare_outputs
 from domainator.data_matrix import DataMatrix, SYMMETRIZE_CHOICES, get_matrix_file_type
+from domainator.errors import InputError
 from domainator.output_guardrails import enforce_matrix_output_limit
 
 
@@ -23,13 +24,20 @@ def add_matrix_output_arguments(parser, *, noun: str = "matrix") -> None:
     declare_outputs(parser, ["hdf_out", "dense_text_out"])
 
 
-def resolve_matrix_outputs(params, *, require_output: bool = True) -> Tuple[Optional[str], Optional[str]]:
-    """Return ``(hdf_path, dense_text_path)`` from parsed arguments, checking the hdf5 file extension."""
+def resolve_matrix_outputs(params, *, require_output: bool = True,
+                           extension_hint: str = "") -> Tuple[Optional[str], Optional[str]]:
+    """Return ``(hdf_path, dense_text_path)`` from parsed arguments, checking the hdf5 file extension.
+
+    ``extension_hint`` is appended to the error for an -o/--hdf_out path without an hdf5 extension.
+    """
     hdf = params.hdf_out
     if hdf is not None and get_matrix_file_type(hdf) != "hdf5":
-        raise ValueError("Please use an hdf5 related extension for the --hdf_out output, such as .h5, .hdf5, or .hdf.")
+        message = f"-o/--hdf_out writes an hdf5 matrix, so its file name must end in .h5, .hdf5, or .hdf, not {hdf!r}."
+        if extension_hint:
+            message += " " + extension_hint
+        raise InputError(message)
     if require_output and hdf is None and params.dense_text_out is None:
-        raise ValueError("No output specified! Please specify at least one of: -o/--hdf_out, --dense_text_out")
+        raise InputError("No output specified! Please specify at least one of: -o/--hdf_out, --dense_text_out")
     return hdf, params.dense_text_out
 
 
