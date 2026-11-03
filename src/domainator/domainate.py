@@ -19,6 +19,7 @@ NOTES: genbank files that contain translation annotations in their CDS features 
     domainator domainate stores the entire reference set in memory, so it is not suitable for cases where the reference
     set is larger than your system memory (this may change in future versions).
 """
+import contextlib
 import warnings
 import sys
 import threading
@@ -522,27 +523,32 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
         varargs["F2"] = 1.0
         varargs["F3"] = 1.0
 
-    for (algorithm, db_dict) in references.items():
+    with contextlib.ExitStack() as stack:
+        foldseek_query = None
+        for (algorithm, db_dict) in references.items():
 
-        for db_name in db_dict:
-            if algorithm == "hmmsearch":
-                queries = db_dict[db_name]
-                queries = queries.optimized_profiles() if isinstance(queries, HMMDatabase) else queries.values()
-                hits = pyhmmer.hmmer.hmmsearch(queries, **varargs)
-                hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "hmmsearch", out)
-            elif algorithm == "phmmer":
-                hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **varargs)
-                hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "phmmer", out)
-            elif algorithm == "foldseek":
-                hits = foldseek_lib.search(db_dict[db_name], proteins = proteins, foldseek = foldseek, cpu = cpu, E = evalue, device = foldseek_device, foldseek_path = foldseek_path, prostt5_weights = prostt5_weights, prostt5_device = prostt5_device)
-                foldseek_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "foldseek", out)
-            elif algorithm == "nhmmer":
-                hits = pyhmmer.hmmer.nhmmer(db_dict[db_name].values(), nucleic_acids, cpus=cpu, E=evalue, incE=evalue)
-                nhmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, out)
-            elif algorithm == "infernal":
-                infernal_sequences = pyhmmer.easel.DigitalSequenceBlock(pyhmmer.easel.Alphabet.rna(), infernal_nucleic_acids)
-                hits = pyinfernal.cmsearch(db_dict[db_name].values(), infernal_sequences, cpus=cpu, parallel="queries")
-                infernal_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, out)
+            for db_name in db_dict:
+                if algorithm == "hmmsearch":
+                    queries = db_dict[db_name]
+                    queries = queries.optimized_profiles() if isinstance(queries, HMMDatabase) else queries.values()
+                    hits = pyhmmer.hmmer.hmmsearch(queries, **varargs)
+                    hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "hmmsearch", out)
+                elif algorithm == "phmmer":
+                    hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **varargs)
+                    hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "phmmer", out)
+                elif algorithm == "foldseek":
+                    if foldseek_query is None:
+                        # 3Di prediction (ProstT5 above all) depends only on the queries: once per batch.
+                        foldseek_query = stack.enter_context(foldseek_lib.QueryDb(proteins, foldseek, cpu, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device))
+                    hits = foldseek_query.search(db_dict[db_name], E=evalue, device=foldseek_device)
+                    foldseek_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "foldseek", out)
+                elif algorithm == "nhmmer":
+                    hits = pyhmmer.hmmer.nhmmer(db_dict[db_name].values(), nucleic_acids, cpus=cpu, E=evalue, incE=evalue)
+                    nhmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, out)
+                elif algorithm == "infernal":
+                    infernal_sequences = pyhmmer.easel.DigitalSequenceBlock(pyhmmer.easel.Alphabet.rna(), infernal_nucleic_acids)
+                    hits = pyinfernal.cmsearch(db_dict[db_name].values(), infernal_sequences, cpus=cpu, parallel="queries")
+                    infernal_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, out)
     return out
 
 

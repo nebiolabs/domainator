@@ -4,6 +4,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Domainator follows [Semantic Versioning](https://semver.org/): what stays stable is listed in
 [docs/stability.md](docs/stability.md).
 
+## Unreleased
+
+### Changed
+- `domainate --foldseek` with several databases predicts the queries' 3Di sequences once per
+  batch instead of once per database, so a ProstT5 (or ESM-2 3Di) run against N databases no
+  longer repeats the prediction N times. Results are unchanged. `foldseek.QueryDb` is the
+  library form: build it once, then `search` it against each database.
+
 ## v.1.0.0-rc.1
 
 The 1.0rc1 release: one `domainator` command, consistent options, a documented Python API and

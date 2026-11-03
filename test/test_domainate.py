@@ -1018,6 +1018,36 @@ def test_domainate_foldseek_prostt5(shared_datadir, tmp_path):
         assert rec.id in {f.qualifiers["name"][0] for f in hits}
 
 
+def test_domainate_foldseek_predicts_3di_once_for_all_databases(monkeypatch):
+    # ProstT5 depends only on the queries and is by far the costliest step, so a search
+    # over several databases runs createdb once; only search and convertalis repeat.
+    from domainator import foldseek as foldseek_lib
+    calls = []
+
+    def fake_run_command(argv, description, expect=None, env=None, capture=False):
+        calls.append(argv)
+        if argv[1] == "convertalis":
+            os.makedirs(os.path.dirname(argv[-1]), exist_ok=True)
+            with open(argv[-1], "w") as f:
+                f.write("0,1\tT\t0,1 \tT desc\t50.0\t10\t5\t0\t1\t10\t1\t10\t1.0E-5\t40\t10\t10\n")
+
+    monkeypatch.setattr(foldseek_lib, "run_command", fake_run_command)
+    monkeypatch.setattr(foldseek_lib, "resolve_binary", lambda *args, **kwargs: "foldseek")
+    amino = pyhmmer.easel.Alphabet.amino()
+    proteins = [pyhmmer.easel.TextSequence(name=b"0,1", sequence="MKVLA").digitize(amino),
+                pyhmmer.easel.TextSequence(name=b"0,2", sequence="MKVXA").digitize(amino)]
+    builder = foldseek_lib.ProstT5Builder()
+    foldseek = [builder("0,1", "MKVLA"), builder("0,2", "MKVXA")]
+    references = {"foldseek": {"A": "/dbs/A", "B": "/dbs/B"}}
+
+    out = domainate_module.run_search(proteins, [], [], foldseek, references, 1e-3, 1,
+                                      prostt5_weights="weights", prostt5_device="cpu")
+
+    assert [argv[1] for argv in calls] == ["createdb", "search", "convertalis", "search", "convertalis"]
+    assert [argv[3] for argv in calls if argv[1] == "search"] == ["/dbs/A", "/dbs/B"]
+    assert [r.database for r in out[0][1]] == ["A", "B"]
+
+
 def test_prostt5_builder_selects_like_the_esm2_3di_builder():
     from domainator import foldseek as foldseek_lib
     builder = foldseek_lib.ProstT5Builder()
