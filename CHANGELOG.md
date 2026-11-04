@@ -4,7 +4,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Domainator follows [Semantic Versioning](https://semver.org/): what stays stable is listed in
 [docs/stability.md](docs/stability.md).
 
-## v.1.0.0-rc.3
+## v.1.0.0-rc.3 (2026-11-04)
 
 ### Changed
 - `domainate --foldseek` with several databases predicts the queries' 3Di sequences once per
@@ -20,7 +20,7 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   example an incremental update whose selection is all in `--exclude_accessions_file`. It used
   to fail after retrying `datasets` with an empty accession list.
 
-## v.1.0.0-rc.1
+## v.1.0.0-rc.1 (2026-11-02)
 
 The 1.0rc1 release: one `domainator` command, consistent options, a documented Python API and
 documented, versioned file formats. Many options were renamed; [MIGRATION.md](MIGRATION.md)
