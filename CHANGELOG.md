@@ -4,13 +4,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Domainator follows [Semantic Versioning](https://semver.org/): what stays stable is listed in
 [docs/stability.md](docs/stability.md).
 
-## Unreleased
+## v.1.0.0-rc.3
 
 ### Changed
 - `domainate --foldseek` with several databases predicts the queries' 3Di sequences once per
   batch instead of once per database, so a ProstT5 (or ESM-2 3Di) run against N databases no
   longer repeats the prediction N times. Results are unchanged. `foldseek.QueryDb` is the
   library form: build it once, then `search` it against each database.
+
+### Fixed
+- Annotations that `domainate` and `find_features` place on a partial CDS have exact ends. The
+  release candidates copied a plus-strand CDS's `<` onto both ends of every domain on it (for
+  example `<744..<911` on a `<1..917` CDS). See [MIGRATION.md](MIGRATION.md).
+- `db_download` succeeds with empty outputs when its filters select no NCBI assemblies, for
+  example an incremental update whose selection is all in `--exclude_accessions_file`. It used
+  to fail after retrying `datasets` with an empty accession list.
 
 ## v.1.0.0-rc.1
 
