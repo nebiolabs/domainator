@@ -402,6 +402,61 @@ def test_domainator_infernal_searches_long_contigs_whole(shared_datadir):
         assert ("[98944:99029](-)", "idnO") not in hits
 
 
+def test_domainator_infernal_searches_models_without_basepairs(shared_datadir):
+    # A CM with no base pairs is searched by Infernal's HMM-only pipeline, which runs an
+    # MSV composition-bias window filter before Viterbi and Forward. Without that filter
+    # the low-complexity stretches of this AT-rich phage give many extra weak hits.
+    # rfam_hmmonly.cm is DLEU2_1 (RF02105) and TtnuCD7 (RF02284) from Rfam 15.1, both
+    # zero-basepair models. The hits are those of C cmsearch -Z 0.142094.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "-i", str(shared_datadir / "206.gb"),
+            "-r", str(shared_datadir / "rfam_hmmonly.cm"),
+            "--genbank_out", out,
+            "--evalue", "10",
+        ])
+        hits = {(str(x.location), x.qualifiers["name"][0])
+                for x in next(SeqIO.parse(out, "genbank")).features if x.type == DOMAIN_FEATURE_NAME}
+        assert hits == {
+            ("[13774:13887](+)", "DLEU2_1"),
+            ("[109446:109491](+)", "DLEU2_1"),
+            ("[14136:14219](-)", "TtnuCD7"),
+            ("[14228:14264](-)", "TtnuCD7"),
+            ("[59822:59877](+)", "TtnuCD7"),
+        }
+
+
+def test_domainator_infernal_ssv_windows_match_infernal(shared_datadir):
+    # Infernal's first filter (SSV) turns each high-scoring diagonal into a window. When
+    # several model positions tie for the best score in a row, HMMER's striped SIMD scan
+    # decides which one ends the diagonal, and that decides the window. A different
+    # choice gives different windows and, on this phage, extra or missing weak hits.
+    # rfam_ssv_ties.cm is S16-Flavobacteria (RF03138) from Rfam 15.1. The hits are those
+    # of C cmsearch -Z 0.142094.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "-i", str(shared_datadir / "206.gb"),
+            "-r", str(shared_datadir / "rfam_ssv_ties.cm"),
+            "--genbank_out", out,
+            "--evalue", "10",
+        ])
+        hits = {str(x.location)
+                for x in next(SeqIO.parse(out, "genbank")).features if x.type == DOMAIN_FEATURE_NAME}
+        assert hits == {
+            "[6352:6397](-)",
+            "[10271:10302](-)",
+            "[33739:33761](-)",
+            "[53424:53453](-)",
+            "[85965:86000](-)",
+            "[90407:90437](+)",
+            "[108972:108990](-)",
+            "[110118:110137](-)",
+            "[112684:112701](+)",
+        }
+
+
 def _assert_mixed_contig_and_cds_hits_are_both_annotated(shared_datadir, monkeypatch, cds_hit_name, cds_hit_desc, cds_hit_database, cds_hit_program):
     contig = next(SeqIO.parse(shared_datadir / "pDONR201.gb", "genbank"))
     domainate_module.clean_rec(contig)
