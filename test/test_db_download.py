@@ -458,6 +458,27 @@ def test_ncbi_download_exclude_accessions_file(shared_datadir, tmp_path):
     assert success_log.read_text().split() == ["GCA_000000022", "GCA_000000077"]
 
 
+@pytest.mark.parametrize("backend", ["direct", "datasets"])
+def test_ncbi_download_empty_selection_succeeds(shared_datadir, tmp_path, monkeypatch, backend):
+    """An incremental update with nothing new (every selected accession excluded) leaves an
+    empty output and an empty success log and succeeds, without running `datasets`, which
+    rejects an empty accession file."""
+    data = shared_datadir / "db_download"
+    def no_datasets(*args, **kwargs):
+        raise AssertionError(f"datasets must not run on an empty selection: {args}")
+    monkeypatch.setattr(db_download.subprocess, "run", no_datasets)
+    outfile = tmp_path / "out.gb"
+    success_log = tmp_path / "success_log.txt"
+    db_download.main(["--db", "ncbi_all", "-o", str(outfile), "--success_log_out", str(success_log),
+                      "--download_backend", backend, "--datasets_workdir", str(tmp_path / "wd"),
+                      "--ncbi_summary", str(data / "assembly_summary.txt"),
+                      "--ncbi_taxonomy_path", str(data / "taxdmp"), "--no_taxonomy_update",
+                      "--include_taxids", "562", "--exclude_accessions",
+                      "GCA_000000011", "GCA_000000022", "GCA_000000099", "GCA_000000112"])
+    assert outfile.read_text() == ""
+    assert success_log.read_text() == ""
+
+
 @pytest.mark.parametrize("download_workers", ["1", "4"])
 def test_ncbi_download_keeps_summary_order(shared_datadir, tmp_path, download_workers):
     """Genomes are appended in summary order whatever order the workers finish in, so the

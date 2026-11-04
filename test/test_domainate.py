@@ -381,6 +381,27 @@ def test_domainator_infernal_skips_duplicate_hits(shared_datadir):
         assert len(locations) == len(set(locations))
 
 
+def test_domainator_infernal_searches_long_contigs_whole(shared_datadir):
+    # pyinfernal runs the Infernal pipeline over each whole sequence, where the cmsearch
+    # command line reads 100 kb windows, and the filters score each window: on the 142 kb
+    # phage, the windowed search loses a MicF hit just short of 100 kb and gains two idnO
+    # hits. rfam_window_boundary.cm is MicF (RF00033) and idnO (RF04318) from Rfam 15.1.
+    # This pins the whole-sequence behavior the Rust port reproduces.
+    with tempfile.TemporaryDirectory() as output_dir:
+        out = output_dir + "/out.gb"
+        main([
+            "-i", str(shared_datadir / "206.gb"),
+            "-r", str(shared_datadir / "rfam_window_boundary.cm"),
+            "--genbank_out", out,
+            "--evalue", "10",
+        ])
+        hits = {(str(x.location), x.qualifiers["name"][0])
+                for x in next(SeqIO.parse(out, "genbank")).features if x.type == DOMAIN_FEATURE_NAME}
+        assert ("[98491:98535](-)", "MicF") in hits
+        assert ("[98701:98784](-)", "idnO") not in hits
+        assert ("[98944:99029](-)", "idnO") not in hits
+
+
 def _assert_mixed_contig_and_cds_hits_are_both_annotated(shared_datadir, monkeypatch, cds_hit_name, cds_hit_desc, cds_hit_database, cds_hit_program):
     contig = next(SeqIO.parse(shared_datadir / "pDONR201.gb", "genbank"))
     domainate_module.clean_rec(contig)

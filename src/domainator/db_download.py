@@ -159,6 +159,13 @@ def download_ncbi(output_handle, include_taxa=None, exclude_taxa=None, taxonomy_
     genbank_accessions = filter_by_refseq_category(genbank_accessions) if no_na else genbank_accessions
 
     targeted = len(genbank_accessions)
+    if targeted == 0:
+        # An incremental update with nothing new: succeed with empty outputs rather than ask a
+        # backend for nothing (`datasets` rejects an empty accession file, after retries).
+        logger.info("0 assemblies to download")
+        if success_rec_log is not None:
+            open(success_rec_log, "w").close()
+        return
     if download_backend == "datasets":
         summary = process_via_datasets(genbank_accessions, output_handle, gene_call, num_recs, cpus, success_rec_log,
                                        datasets_workdir, datasets_include, datasets_max_workers, api_key, datasets_path, datasets_gzip)
@@ -560,6 +567,12 @@ def process_via_datasets(genbank_accessions, output_file_path, gene_call, num_re
     if num_recs is not None:
         # cap the *download* (not just the append) so --max_records is a cheap end-to-end test
         accessions = accessions[:num_recs]
+    if not accessions:
+        # `datasets` rejects an empty accession file (--max_records 0, or nothing selected).
+        logger.info("0 assemblies to download")
+        if success_rec_log is not None:
+            open(success_rec_log, "w").close()
+        return {"appended": 0, "failed": 0, "missing": 0}
     accession_file = workdir / "accessions.txt"
     with open(accession_file, "w") as fh:
         for acc in accessions:

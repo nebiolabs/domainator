@@ -472,6 +472,15 @@ plain reversal.
   depends on parallel batch completion); sort_contigs uses input order.
 - Missing external programs (foldseek, cmbuild, cd-hit, usearch, diamond, datasets) give one
   error message that names the `--<program>_path` option.
+- Annotations that domainate and find_features place on a partial CDS have exact ends. 1.0
+  release candidates (and 0.x) copied a plus-strand CDS's `<` onto both ends of every domain on
+  it, e.g. `<744..<911` on a `<1..917` CDS, as a side effect of Biopython position arithmetic;
+  minus-strand CDSs and `>` ends were never copied. Whether a domain is on a fragment is the
+  CDS's fragment status, which is what `--partial` has always used.
+- db_download succeeds with empty outputs (and an empty `--success_log_out`) when the filters
+  select no NCBI assemblies, for example an incremental update whose selection is all in
+  `--exclude_accessions_file`. It used to fail after retrying `datasets` with an empty
+  accession list.
 
 ## File formats
 

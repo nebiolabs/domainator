@@ -367,6 +367,8 @@ Domainator keeps the GenBank partial markers `<` and `>` on feature locations. `
 * `Domainator` and `Domain_Search` features that the slice cuts are dropped, because their scores and coordinates describe the whole hit.
 * A feature split across the ends of a rotated circular contig is not cut (its whole sequence is still in the record), so it is written as a `join` without markers.
 
+**Annotations on a partial CDS.** `Domainator` and `Domain_Search` features (and `domainator find_features` annotations) placed on a CDS cover part of its protein, so their ends are exact even when the CDS is partial: a domain on a `<1..917` CDS is written `744..911`. A domain's fragment status is that of its CDS.
+
 **CDS reading frame and translation.** When a CDS is cut, its `codon_start` qualifier is updated so the reading frame is preserved. Its `translation` is trimmed to the residues whose codons are completely kept, following the NCBI convention that the translation of a partial CDS covers only the part on the contig. If the kept part is not contiguous (an interior exon was cut out), the `translation` is removed and is re-translated the next time the record goes through `domainator domainate`.
 
 Some files give a partial CDS the translation of the full protein, including residues encoded off the edge of the contig. When `domainator domainate` and `domainator domain_search` read such a CDS, they trim the translation to the on-contig residues, from the partial end. If both ends are partial, they can't tell where the extra residues belong, so they re-translate from the contig and warn. A complete 3' end is assumed to end in a stop codon, which GenBank translations omit and Domainator's own translations include as `*`.

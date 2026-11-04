@@ -58,9 +58,13 @@ def overlay(location: AnyLocation, offset: int, length: int) -> AnyLocation:
     if offset + length > len(location):
         raise ValueError("offset + length must be <= len(location)")
     if not isinstance(location, CompoundLocation):
+        # int() first: a BeforePosition/AfterPosition plus an offset stays fuzzy (minus does not),
+        # which put the CDS's `<` on both ends of every domain of a 5'-partial plus-strand CDS
+        # (`<744..<911`). The overlaid region lies inside the location, so its ends are exact.
+        start, end = int(location.start), int(location.end)
         if location.strand == -1:
-            return SimpleLocation(location.end - offset - length, location.end - offset, location.strand)
-        return SimpleLocation(location.start + offset, location.start + offset + length, location.strand)
+            return SimpleLocation(end - offset - length, end - offset, location.strand)
+        return SimpleLocation(start + offset, start + offset + length, location.strand)
     new_parts = []
     for part in location.parts:
         part_len = len(part)

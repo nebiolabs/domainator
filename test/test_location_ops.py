@@ -1,5 +1,5 @@
 import os
-from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, SimpleLocation
+from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, SimpleLocation, BeforePosition, AfterPosition, ExactPosition
 from domainator.location_ops import overlaps, overlay, stranded_end, stranded_end_human_readable, stranded_start, stranded_start_human_readable
 import tempfile
 from glob import glob
@@ -149,3 +149,20 @@ def test_simple_location_overlay_bounds(location):
     for offset, length in [(150, 300), (0, 301), (-1, 10), (0, -1)]:
         with pytest.raises(ValueError):
             overlay(location, offset, length)
+
+
+@pytest.mark.parametrize("location", [
+    SimpleLocation(BeforePosition(0), 917, 1),
+    SimpleLocation(0, AfterPosition(917), 1),
+    SimpleLocation(BeforePosition(0), AfterPosition(917), -1),
+])
+def test_overlay_on_a_partial_location_has_exact_ends(location):
+    """A domain on a partial CDS lies inside it, so its ends are exact. Biopython keeps a
+    BeforePosition fuzzy through `+`, which used to give `<744..<911` on a `<1..917` CDS."""
+    region = overlay(location, 743, 168)
+    assert type(region.start) is ExactPosition and type(region.end) is ExactPosition
+    expected = (743, 911) if location.strand == 1 else (6, 174)
+    assert (int(region.start), int(region.end)) == expected
+    compound = CompoundLocation([SimpleLocation(BeforePosition(0), 100, 1), SimpleLocation(200, AfterPosition(400), 1)])
+    for part in overlay(compound, 50, 120).parts:
+        assert type(part.start) is ExactPosition and type(part.end) is ExactPosition
