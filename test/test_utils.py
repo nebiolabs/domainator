@@ -1,4 +1,4 @@
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.colors import DISTINCT_COLORS, OTHER_COLOR, get_palette, sort_palette_values
 from domainator.errors import InputError
@@ -665,6 +665,14 @@ def test_slice_drops_cut_domain_features():
     assert [f.type for f in sliced.features] == ["source", "CDS", DOMAIN_SEARCH_BEST_HIT_NAME]
     sliced = slice_record_from_location(record, FeatureLocation(20, 75, 1), truncate_features=False)
     assert [f.type for f in sliced.features] == ["source", DOMAIN_SEARCH_BEST_HIT_NAME]
+
+
+@pytest.mark.parametrize("feature_type", [SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME])
+def test_slice_drops_cut_system_features(feature_type):
+    system = SeqFeature(FeatureLocation(5, 71, 1), type=feature_type, qualifiers={"name": ["s"]})
+    record = _partial_test_record(FeatureLocation(5, 71, strand=1), extra_features=[system])
+    assert feature_type in [f.type for f in slice_record_from_location(record, FeatureLocation(0, 75, 1)).features]
+    assert feature_type not in [f.type for f in slice_record_from_location(record, FeatureLocation(20, 75, 1)).features]
 
 
 def test_merge_parts_keeps_partial_markers():

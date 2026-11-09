@@ -15,7 +15,7 @@ from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from jsonargparse import ActionConfigFile
 
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, report_html
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME, report_html
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
 from domainator.colors import OTHER_COLOR, get_palette, normalize_color_hex, read_color_table
 from domainator.errors import InputError
@@ -24,7 +24,8 @@ from domainator.outputs import output_file
 from domainator.seqio import open_if_is_name, parse_seqfiles
 
 #: The feature types drawn by default, in stacking order.
-DEFAULT_TYPES = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME]
+DEFAULT_TYPES = ["CDS", "exon", "repeat_region", "ncRNA", "rRNA", "tRNA", DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME,
+                 SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME]
 
 #: The color of a contig's line when it is not colored by metadata, and of a value a color
 #: table does not list.
@@ -64,7 +65,7 @@ def feature_to_dict(feature: SeqFeature, default_color: Optional[Union[str, Dict
             {"CDS": "CCCCCC", "exon": "00FF00"}, types missing from it being "#CCCCCC".
     """
     if default_color is None:
-        default_color = defaultdict(lambda: "#CCCCCC", {"CDS": "#CCCCCC", "exon": "#CCCCCC", "repeat_region": "#0000FF", DOMAIN_FEATURE_NAME: "#00FFFF", DOMAIN_SEARCH_BEST_HIT_NAME: "#06FF0D", "source": "#2626FF"})
+        default_color = defaultdict(lambda: "#CCCCCC", {"CDS": "#CCCCCC", "exon": "#CCCCCC", "repeat_region": "#0000FF", DOMAIN_FEATURE_NAME: "#00FFFF", DOMAIN_SEARCH_BEST_HIT_NAME: "#06FF0D", SYSTEM_FEATURE_NAME: "#FFA500", SYSTEM_SEARCH_BEST_HIT_NAME: "#FF00FF", "source": "#2626FF"})
     elif isinstance(default_color, defaultdict):
         pass
     elif isinstance(default_color, dict):
@@ -236,7 +237,7 @@ def build_parser():
     parser.add_argument("--width", default=1200, type=int, required=False,
                         help="width of the contig plot, in pixels")
     parser.add_argument("--types", default=None, type=str, required=False, nargs="+",
-                        help="Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search'.")
+                        help="Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search Domain_System System_Search'.")
     parser.add_argument("--feature_height", default=50, type=int, required=False,
                         help="height of the feature arrows, in pixels.")
     parser.add_argument("--feature_font_size", default=26, type=int, required=False,

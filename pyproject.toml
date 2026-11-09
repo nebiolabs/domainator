@@ -79,6 +79,8 @@ dependencies = [
     "pyinfernal >=0.1.0,<0.2",
     "pyrodigal >=3.0.1",
     "jsonargparse >=4.49",
+    # system model files (domainator.systems.native)
+    "pyyaml >=6.0",
     "shtab >=1.7",
     "psutil >=5.9.6",
     "tqdm >=4.65",

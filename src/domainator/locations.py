@@ -4,7 +4,7 @@ from typing import Dict, Iterable, List, Tuple, Union
 from collections import defaultdict
 import functools
 
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME
 from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, ExactPosition, BeforePosition, AfterPosition
 from Bio.SeqRecord import SeqRecord
 from domainator.partial import codon_offset, location_partial_ends, on_contig_translation
@@ -347,6 +347,10 @@ class FeatureIndex:
         return [self.features[i] for i in sorted(found)]
 
 
+_HIT_FEATURE_TYPES = frozenset({DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME})
+"""Feature types that slice_record_from_location drops, rather than truncates, when a slice cuts them."""
+
+
 def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,CompoundLocation], features:Iterable[SeqFeature]=None, pad_upstream:int = 0, pad_downstream:int = 0, truncate_features=True) -> SeqRecord:
     """Extract a sub-record from supplied parent record using the location of the SeqFeature object.
         Output record will have the same id, name, description, dbxrefs, and annotations as the parent record.
@@ -427,14 +431,14 @@ def slice_record_from_location(r:SeqRecord, location:Union[FeatureLocation,Compo
     
     is_protein = r.annotations.get("molecule_type") == "protein"
     # include features that overlap the location. Features cut by the edge of the location are truncated, and the cut ends get '<' or '>' markers.
-    # Domain hit features that are cut are dropped, because their scores and coordinates describe the whole hit.
+    # Domain hit and system features that are cut are dropped, because their scores and coordinates describe the whole hit or system.
     loc_bounds = [(int(part.start), int(part.end)) for part in location.parts]
     for f in features:
         # Skip features nowhere near the location (the outer bounds of a feature cover all its parts).
         f_outer_start, f_outer_end = int(f.location.start), int(f.location.end)
         if not any(f_outer_start <= loc_end and f_outer_end >= loc_start for loc_start, loc_end in loc_bounds):
             continue
-        is_hit_feature = f.type == DOMAIN_FEATURE_NAME or f.type == DOMAIN_SEARCH_BEST_HIT_NAME
+        is_hit_feature = f.type in _HIT_FEATURE_TYPES
         f_parts = f.location.parts
         overlap = [set() for _ in range(len(f_parts))] # list of sets of indices of location parts that overlap with the feature part
         total_overlap = 0
