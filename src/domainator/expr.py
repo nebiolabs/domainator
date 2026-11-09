@@ -1,6 +1,6 @@
 """Boolean expressions over domain names and taxonomy (``--domain_expr``, ``--taxonomy_expr``).
 """
-from typing import Iterable, List, Tuple, Union
+from typing import Iterable, Iterator, List, Tuple, Union
 
 from domainator.errors import InputError
 
@@ -30,6 +30,17 @@ def tokenize(expression: str, operators: str) -> List[str]:
     return tokens
 
 
+def _positive_names(node, negated: bool = False) -> Iterator[str]:
+    if isinstance(node, str):
+        if not negated:
+            yield node
+    elif node[0] == "not":
+        yield from _positive_names(node[1], not negated)
+    else:
+        yield from _positive_names(node[1], negated)
+        yield from _positive_names(node[2], negated)
+
+
 class BooleanEvaluator():
     """A boolean expression over names: ``&`` (and), ``|`` (or), ``~`` (not) and parentheses.
 
@@ -49,6 +60,8 @@ class BooleanEvaluator():
             self._error(f"unexpected {self._tokens[self._pos]!r}")
         self.names = frozenset(t for t in self._tokens if t not in _OPERATORS)
         """Every name the expression mentions."""
+        self.positive_names = frozenset(_positive_names(self._tree))
+        """The names that appear outside any ``~``, or under an even number of them."""
 
     def _error(self, problem):
         raise InputError(f"Invalid boolean expression {self.expression!r}: {problem}.")

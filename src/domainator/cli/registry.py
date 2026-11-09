@@ -37,6 +37,7 @@ TOOLS: Dict[str, Tool] = {
     "find_systems": Tool("find_systems", "annotate", "Annotate systems: domains found together in one neighborhood, in already-annotated records."),
     "structure_domainate": Tool("structure_domainate", "annotate", "Annotate structure-derived protein records, retaining records without hits."),
     "structure_search": Tool("structure_search", "annotate", "Select matching structure-derived protein records and mark their best-hit regions."),
+    "system_search": Tool("system_search", "annotate", "Search sequence databases for systems and select the neighborhoods around them."),
     # edit
     "clean_sequences": Tool("clean_sequences", "edit", "Clean sequence names and residues, and filter out sequences with non-canonical residues."),
     "color_genbank": Tool("color_genbank", "edit", "Add color qualifiers to CDS and domain features."),

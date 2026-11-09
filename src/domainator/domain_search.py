@@ -56,7 +56,6 @@ from domainator import domainate
 import functools
 from typing import List, Tuple, Set, Optional, Iterable, Iterator, Union
 from domainator import extract_peptides
-from pathlib import Path
 from domainator.taxonomy import NCBITaxonomy
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from Bio.SeqRecord import SeqRecord
@@ -189,6 +188,28 @@ class _partition_seqfile_worker():
     def __call__(self, input_file):
         return partition_seqfile(input_file, self.cdss_per_partition)
     
+
+def search_partitions(input_files: List[str], z: int, batch_size: int, cpu: int) -> Tuple[Iterable[Tuple[str, int, int]], int]:
+    """The (path, offset, count) partitions of input_files, of about batch_size CDSs each, and
+    the database size for e-values: z, or with z == 0 the number of CDSs (or proteins) in
+    input_files, counted before any taxonomy filter so that filtering doesn't change e-values.
+
+    The partitions are lazy unless the CDSs must be counted and some input has no .didx index
+    (whose header holds the count): then the files are counted and partitioned in parallel.
+    """
+    if z != 0:
+        return i_partition_seqfiles(input_files, batch_size), z
+    header_counts = [index_total_cds(f) for f in input_files]
+    if header_counts and all(c is not None for c in header_counts):
+        return i_partition_seqfiles(input_files, batch_size), sum(header_counts)
+    cds_count = 0
+    partitions = list()
+    with make_pool(processes=cpu) as pool:
+        for file_cds_count, file_partitions in pool.imap(_partition_seqfile_worker(batch_size), input_files):
+            cds_count += file_cds_count
+            partitions.extend(file_partitions)
+    return partitions, cds_count
+
 
 def _search_tasks(targets, batch_size, alphabet):
     """The pool tasks for ``targets``: each partition as it is, and records in lists of about
@@ -529,27 +550,7 @@ def main(argv):
     
 
 
-    #partition the input files for parallelization later
-    if params.Z == 0: #if Z is none, then we must know the total CDS count for per-sequence E-values.
-        # Counted before the taxonomy filter, so filtering does not change E-values.
-        # If every input has a valid .didx index, the total count is in the headers
-        # (O(1) per file), so we can take the true count cheaply and still partition
-        # lazily. Otherwise fall back to an eager parallel count over all files.
-        header_counts = [index_total_cds(f) for f in input_files]
-        if header_counts and all(c is not None for c in header_counts):
-            Z = sum(header_counts)
-            partitions = i_partition_seqfiles(input_files, params.batch_size)
-        else:
-            cds_count = 0
-            partitions = list()
-            with make_pool(processes=cpus) as pool:
-                for file_cds_count, file_partitions in pool.imap(_partition_seqfile_worker(params.batch_size), input_files):
-                    cds_count += file_cds_count
-                    partitions.extend(file_partitions)
-            Z = cds_count
-    else: #Z is pre-set, so partitions can be a lazy iterator.
-        partitions = i_partition_seqfiles(input_files, params.batch_size)
-        Z = params.Z
+    partitions, Z = search_partitions(input_files, params.Z, params.batch_size, cpus)
 
     ncbi_taxonomy = taxonomy_from_args(params)
 

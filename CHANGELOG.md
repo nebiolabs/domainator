@@ -40,6 +40,11 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   `conversion.tsv` of what the conversion approximated or dropped.
 - `import_systems --source antismash` turns antiSMASH's protoclusters (or candidate clusters,
   or regions) into `Domain_System` features.
+- `system_search`: search a sequence database for systems and extract the regions around
+  them, in parallel like `domain_search`. Models come from `--system_models` or a
+  `--domain_expr` with a window; `--system_expr "gabija & ~thoeris_I"` selects Gabija systems
+  on contigs without Thoeris I. It takes `select_by_system`'s padding and `--min_context_*`
+  options, and `--translate` outputs the members' proteins.
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
 
 ### Changed

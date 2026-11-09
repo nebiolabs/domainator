@@ -930,3 +930,13 @@ def test_boolean_evaluator_rejects_malformed_expressions(expression):
 
 def test_boolean_evaluator_names():
     assert BooleanEvaluator("(A & ~B) | A").names == {"A", "B"}
+
+
+@pytest.mark.parametrize("expression, positive", [
+    ("(A & ~B) | A", {"A"}),
+    ("~(A | ~B)", {"B"}),   # B is under two negations
+    ("~A", set()),
+    ("A & ~(B & ~C)", {"A", "C"}),
+])
+def test_boolean_evaluator_positive_names(expression, positive):
+    assert BooleanEvaluator(expression).positive_names == positive

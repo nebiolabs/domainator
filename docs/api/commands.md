@@ -17,6 +17,8 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 
 ::: domainator.structure_search.structure_search
 
+::: domainator.system_search.system_search
+
 ## Select, filter, and edit annotated records
 
 ::: domainator.clean_sequences.clean_sequences

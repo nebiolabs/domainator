@@ -207,7 +207,7 @@ documents above have been corrected.
 
 ## Implementation status
 
-Phases 1 and 2 are implemented. Where the code departs from these documents:
+Phases 1 and 2, and Phase 3's `system_search`, are implemented. Where the code departs from these documents:
 
 1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
    `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
@@ -227,3 +227,11 @@ Phases 1 and 2 are implemented. Where the code departs from these documents:
    beside `--systems`; a name in an expression is `name` or `database:name`.
 7. **`import_systems`** names candidate clusters and regions by their protoclusters' products
    joined with `+` (e.g. `hglE-KS+T1PKS`), and replaces systems it imported before.
+8. **`system_search`** searches `-r` and the model profiles in one pass, since it has no
+   `--max_overlap` or `--max_hits_per_cds` to exempt the profiles from: overlapping hits are
+   for detection to resolve. It also drops `--alphabet` (inputs are nucleotide; FASTA needs
+   `--gene_call`) and `--max_hits_per_contig` (`--max_systems_per_contig` covers it). With
+   `--systems` and `--system_expr` together, the models named by either are searched, the
+   expression must hold on the contig, and systems of the `--systems` models and of the
+   expression's positive names are selected. With `--translate`, `--max_hits` still counts
+   systems.

@@ -11,6 +11,7 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 - [find_systems](find_systems.md): Annotate systems: domains found together in one neighborhood, in already-annotated records.
 - [structure_domainate](structure_domainate.md): Annotate structure-derived protein records, retaining records without hits.
 - [structure_search](structure_search.md): Select matching structure-derived protein records and mark their best-hit regions.
+- [system_search](system_search.md): Search sequence databases for systems and select the neighborhoods around them.
 
 ## Select, filter, and edit annotated records
 
