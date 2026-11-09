@@ -1,0 +1,10 @@
+---
+maintainer:
+  name: Domainator tests
+  email: none@example.org
+short_desc: A synthetic MacSyFinder package for Domainator's tests
+vers: 0.1.0
+license: CC0-1.0
+cite:
+  - Pfam profiles PF01845, PF07362, PF00302, PF01636 and PF00198 (CC0)
+license: CC0-1.0 (second key, as in defense-finder-models)

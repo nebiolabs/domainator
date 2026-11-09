@@ -207,7 +207,7 @@ documents above have been corrected.
 
 ## Implementation status
 
-Phases 1 and 2, and Phase 3's `system_search` and options on existing commands, are implemented. Where the code departs from these documents:
+Phases 1 and 2, and Phase 3's `system_search`, options on existing commands and the MacSyFinder converter, are implemented. Where the code departs from these documents:
 
 1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
    `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
@@ -243,3 +243,11 @@ Phases 1 and 2, and Phase 3's `system_search` and options on existing commands, 
     any value sorts by the best score of those systems.
 11. **`select_by_contig --window_*`**: with a window, protein records aren't selected by
     `--domain_expr`, since they have no windows.
+12. **MacSyFinder conversion** (checked against defense-finder-models 3.1.0, all 666 models):
+    `--source defensefinder` names the collection `defensefinder`, and `--source macsyfinder`
+    names it after the package directory. Component names drop the gene's `<family>__` prefix
+    (`Gabija__GajA` → `GajA`). The category is the model's top-level folder (`DefenseFinder`,
+    `RM`, `ADF`), not `defense`. Two models with the same file name get their path as their
+    name (with a note), instead of an error suggesting `--name_style`. A gene listed twice in a
+    model (five DefenseFinder models do this) is merged, with a note. The download uses the
+    release's tarball asset.

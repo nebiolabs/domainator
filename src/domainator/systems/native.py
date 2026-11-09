@@ -168,6 +168,10 @@ def _foreign_error(path, label) -> InputError:
     if label.lower().startswith("padloc"):
         directory = path if label.startswith("padloc-db") else "<its padloc-db directory>"
         return InputError(f"{message}: domainator system_db_download --source padloc --input {directory} --output_dir <directory>")
+    if label.startswith("MacSyFinder"):
+        directory = path if "package" in label else "<its package directory>"
+        return InputError(f"{message}: domainator system_db_download --source defensefinder (or macsyfinder) "
+                          f"--input {directory} --output_dir <directory>")
     return InputError(f"{message}. This version of Domainator can't convert it yet.")
 
 

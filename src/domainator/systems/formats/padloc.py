@@ -10,8 +10,6 @@ import csv
 from dataclasses import replace
 import os
 from pathlib import Path
-import tarfile
-import tempfile
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import yaml
@@ -248,35 +246,3 @@ def _cm_files(path: Path, cm_names: List[str]) -> List[Path]:
     if missing:
         raise InputError(f"{path}/cm has no covariance model file for {', '.join(missing[:5])}.")
     return files
-
-
-def download(release: Optional[str], directory: os.PathLike) -> Tuple[Path, str, str]:
-    """Download a padloc-db release (default: the latest) from GitHub into directory.
-
-    Returns:
-        (the padloc-db directory, the release tag, the URL it came from)
-    """
-    import requests
-
-    session = requests.Session()
-    session.headers["User-Agent"] = f"domainator/{__version__}"
-    if release is None:
-        response = session.get(f"https://api.github.com/repos/{REPOSITORY}/releases/latest", timeout=60)
-        response.raise_for_status()
-        release = response.json()["tag_name"]
-    url = f"https://github.com/{REPOSITORY}/archive/refs/tags/{release}.tar.gz"
-    archive = Path(directory) / f"padloc-db-{release}.tar.gz"
-    with session.get(url, stream=True, timeout=60) as response:
-        if response.status_code == 404:
-            raise InputError(f"padloc-db has no release {release!r} (see https://github.com/{REPOSITORY}/releases).")
-        response.raise_for_status()
-        with open(archive, "wb") as handle:
-            for chunk in response.iter_content(chunk_size=1 << 20):
-                handle.write(chunk)
-    extract_to = Path(tempfile.mkdtemp(dir=directory))
-    with tarfile.open(archive) as tar:
-        tar.extractall(extract_to, filter="data")
-    roots = [child for child in extract_to.iterdir() if child.is_dir()]
-    if len(roots) != 1:
-        raise InputError(f"Unexpected layout in {url}: expected one top-level directory.")
-    return roots[0], release, url

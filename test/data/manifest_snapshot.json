@@ -9902,7 +9902,9 @@
    "type": "string",
    "required": true,
    "choices": [
-    "padloc"
+    "padloc",
+    "defensefinder",
+    "macsyfinder"
    ]
   },
   {
@@ -9923,6 +9925,15 @@
    ],
    "kind": "value",
    "type": "string",
+   "required": false
+  },
+  {
+   "name": "coverage_profile",
+   "flags": [
+    "--coverage_profile"
+   ],
+   "kind": "value",
+   "type": "number",
    "required": false
   },
   {

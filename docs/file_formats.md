@@ -594,7 +594,7 @@ Leftover sidecars are therefore harmless, and safe to delete. Note that pressing
 System models say which domains make up a system and how close together they must be. They
 are YAML files with a `domainator_systems:` key giving the format version, or directories
 holding such a file named `systems.yaml`. `--system_models` reads them (`find_systems`,
-`domainate`, `format_systems`).
+`domainate`, `system_search`, `format_systems`).
 
 Other tools' databases are converted to this format once, by `domainator system_db_download`.
 For PADLOC's padloc-db, it writes a directory holding `systems.yaml`, `padloc.hmm` (the
@@ -605,6 +605,19 @@ source's `LICENSE`, and `conversion.tsv`, which lists every approximation (`mode
 padloc's `yaml.name`, as padloc reports them, and PADLOC's catch-all `*_other` models list the
 canonical models they share a component with as `superiors`. PADLOC measures coverage as
 `(to - from) / length`; Domainator includes both ends, so its coverage is one residue more.
+
+For DefenseFinder's defense-finder-models (`--source defensefinder`) and other MacSyFinder
+model packages (`--source macsyfinder --input`), it writes `<database>.hmm` with every profile
+the models use (`defensefinder.hmm`, or the package directory's name), and one model per
+`definitions/` file, named by its file name (or by its path, when two files share a name) with
+the path as its `accession` and its top-level folder (e.g. `DefenseFinder`, `RM`, `ADF`) as its
+`category`. Genes become components of a `chain` window (`mandatory` → `core`), named without
+their `<family>__` prefix; exchangeable genes become extra references of their gene's
+component. References are the profiles' `NAME` lines, which can differ from their file names,
+with MacSyFinder's hit filters as thresholds: `i_evalue_sel` (0.001), `coverage_profile` (0.4
+for DefenseFinder, else the package's `model_conf.xml`, else 0.5; `--coverage_profile` sets it)
+and each profile's domain gathering threshold as `min_score`. Loners and multi-locus models are
+found as single loci.
 
 The common case is short. "X, Y, Z and Q or R within 10 CDSs, at E-value 1e-20":
 

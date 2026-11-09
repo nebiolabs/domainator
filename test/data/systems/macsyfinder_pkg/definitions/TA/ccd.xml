@@ -1,0 +1,10 @@
+<model inter_gene_max_space="1" min_mandatory_genes_required="2" min_genes_required="2" max_nb_genes="3" vers="2.0">
+<gene name="TA__CcdB" presence="mandatory"/>
+<gene name="TA__CcdA" presence="mandatory" loner="1">
+<exchangeables>
+<gene name="TA__CcdA_2"/>
+</exchangeables>
+</gene>
+<gene name="TA__CAT" presence="accessory" inter_gene_max_space="0"/>
+<gene name="TA__Missing" presence="neutral"/>
+</model>

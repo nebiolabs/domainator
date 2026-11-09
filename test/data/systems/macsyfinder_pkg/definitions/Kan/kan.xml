@@ -1,0 +1,4 @@
+<model inter_gene_max_space="2" multi_loci="1" vers="2.0">
+<gene name="Kan__APH" presence="mandatory" multi_system="1" multi_model="1"/>
+<gene name="Kan__Tnp" presence="forbidden"/>
+</model>

@@ -16,10 +16,16 @@ comes from its reference file's name (seqio.db_name_from_path). Then annotating 
 label hits the same way, so both find the same systems.
 """
 from dataclasses import dataclass, field
+import gzip
 import os
 from pathlib import Path
 import shutil
-from typing import Dict, List, NamedTuple, Optional, Sequence
+import tarfile
+import tempfile
+from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
+
+from domainator import __version__
+from domainator.errors import InputError
 
 from domainator.systems.model import ModelCollection
 from domainator.systems.native import DIRECTORY_FILE, write_system_models
@@ -61,10 +67,10 @@ def write_conversion(conversion: Conversion, output_dir: os.PathLike) -> None:
 
 
 def _concatenate(sources: Sequence[Path], destination: Path) -> None:
-    """Concatenate text profile files (HMMER3 or Infernal), each ending in a newline."""
+    """Concatenate text profile files (HMMER3 or Infernal, or gzipped), each ending in a newline."""
     with open(destination, "wb") as out:
         for source in sources:
-            with open(source, "rb") as handle:
+            with (gzip.open if str(source).endswith(".gz") else open)(source, "rb") as handle:
                 data = handle.read()
             out.write(data)
             if data and not data.endswith(b"\n"):
@@ -78,3 +84,43 @@ def summarize(notes: Sequence[Note]) -> str:
         kind = note.action.split(":", 1)[0]
         counts[kind] = counts.get(kind, 0) + 1
     return "\n".join(f"  {count} x {kind}" for kind, count in sorted(counts.items(), key=lambda item: -item[1]))
+
+
+def download_github_release(repository: str, release: Optional[str], directory: os.PathLike, *, label: str,
+                            asset: Optional[Callable[[str], str]] = None) -> Tuple[Path, str, str]:
+    """Download a release of a GitHub repository (default: the latest) into directory, and
+    extract it.
+
+    asset: a function of the release tag giving the name of the release's tarball asset to
+    download. None: download the source archive of the tag.
+
+    Returns:
+        (the single top-level directory of the tarball, the release tag, the URL it came from)
+    """
+    import requests
+
+    session = requests.Session()
+    session.headers["User-Agent"] = f"domainator/{__version__}"
+    if release is None:
+        response = session.get(f"https://api.github.com/repos/{repository}/releases/latest", timeout=60)
+        response.raise_for_status()
+        release = response.json()["tag_name"]
+    if asset is None:
+        url = f"https://github.com/{repository}/archive/refs/tags/{release}.tar.gz"
+    else:
+        url = f"https://github.com/{repository}/releases/download/{release}/{asset(release)}"
+    archive = Path(directory) / f"{label}-{release}.tar.gz"
+    with session.get(url, stream=True, timeout=60) as response:
+        if response.status_code == 404:
+            raise InputError(f"{label} has no release {release!r} (see https://github.com/{repository}/releases).")
+        response.raise_for_status()
+        with open(archive, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=1 << 20):
+                handle.write(chunk)
+    extract_to = Path(tempfile.mkdtemp(dir=directory))
+    with tarfile.open(archive) as tar:
+        tar.extractall(extract_to, filter="data")
+    roots = [child for child in extract_to.iterdir() if child.is_dir()]
+    if len(roots) != 1:
+        raise InputError(f"Unexpected layout in {url}: expected one top-level directory.")
+    return roots[0], release, url

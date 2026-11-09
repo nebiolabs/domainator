@@ -1,0 +1,6 @@
+<model_config>
+    <filtering>
+        <i_evalue_sel>0.01</i_evalue_sel>
+        <coverage_profile>0.3</coverage_profile>
+    </filtering>
+</model_config>

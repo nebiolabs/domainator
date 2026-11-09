@@ -38,6 +38,9 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
 - `system_db_download --source padloc` downloads PADLOC's padloc-db (or converts a local
   copy) into a directory for `--system_models`, with the profiles the models use and a
   `conversion.tsv` of what the conversion approximated or dropped.
+- `system_db_download --source defensefinder` downloads DefenseFinder's defense-finder-models
+  (or converts a local copy), and `--source macsyfinder` converts any other MacSyFinder model
+  package. `--coverage_profile` sets their minimum profile coverage.
 - `import_systems --source antismash` turns antiSMASH's protoclusters (or candidate clusters,
   or regions) into `Domain_System` features.
 - `system_search`: search a sequence database for systems and extract the regions around
