@@ -204,3 +204,26 @@ documents above have been corrected.
     uses a worker pool), system_search must annotate every hit before detection, which systems
     of a `--system_expr` become focus regions, the writer checks `|` in hit databases, and
     `program`/`semantics:` records provenance.
+
+## Implementation status
+
+Phases 1 and 2 are implemented. Where the code departs from these documents:
+
+1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
+   `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
+   such as `CBASS (other)` would break `--system_expr`. `sys_meta.system` is the description.
+2. **`domainate --system_models`** searches the model profiles in a second pass over the
+   stream, rather than through exemption keys in the reference dict: the second pass has no
+   `--max_hits_per_cds` or `--max_overlap`, and `run_search` takes per-profile e-values.
+3. **`select_by_system --partial_systems`** is a selector on the `/system_partial` flag
+   (`include`, `exclude`, `only`, like `--partial`), not the Phase 4 detection option of the
+   same name. The detection commands still don't have it.
+4. **`add_neighborhood`** was not extracted: the padding options' help differs between
+   `domain_search`, `select_by_cds` and `select_by_system`, and extracting it would change
+   existing help text. `select_by_cds.get_neighborhood` is shared instead.
+5. **`/system_membership`** (on the CDS features of `extract_peptides` proteins) is
+   `role|component|database|name`, mirroring `/component`, rather than `Gabija:GajA:core`.
+6. **`select_by_contig --system_expr`** and **`extract_peptides --system_expr`** were added
+   beside `--systems`; a name in an expression is `name` or `database:name`.
+7. **`import_systems`** names candidate clusters and regions by their protoclusters' products
+   joined with `+` (e.g. `hglE-KS+T1PKS`), and replaces systems it imported before.
