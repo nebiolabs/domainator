@@ -86,4 +86,5 @@ TOOLS: Dict[str, Tool] = {
     # database
     "db_download": Tool("db_download", "database", "Download sequence databases in formats Domainator reads."),
     "format_db": Tool("format_db", "database", "Shard, compress, and index a database for domain_search."),
+    "system_db_download": Tool("system_db_download", "database", "Download system models (PADLOC), or convert a local copy, for --system_models."),
 }

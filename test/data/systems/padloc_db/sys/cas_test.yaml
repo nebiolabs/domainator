@@ -1,0 +1,14 @@
+force_strand: FALSE
+maximum_separation: 2
+minimum_core: 2
+minimum_total: 4
+core_genes:
+  - cas_adaptation
+secondary_genes:
+  - Cas1
+  - CRISPR_array
+  - Missing_gene
+neutral_genes:
+  - Cas2
+prohibited_genes:
+  - NA

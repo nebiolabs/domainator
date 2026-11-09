@@ -1,0 +1,7 @@
+hmm.accession	hmm.name	hmm.description	protein.name	secondary.name	author	e.val.threshold	hmm.coverage.threshold	target.coverage.threshold	literature.ref	database.ref	comment
+PDLC00001	GajA_00001	A test profile	GajA	NA	Test A	1.00E-05	0.3	0.3	NA	NA	NA
+PDLC00002	GajB_00001	A test profile	GajB | GajB2	NA	Test A	1.00E-05	0.3	0.3	NA	NA	NA
+PDLC00003	Cas1_00001	A test profile	Cas1	cas_adaptation	Test A	NA	NA	NA	NA	NA	NA
+PDLC00004	Cas2_00001	A test profile	Cas2	cas_adaptation	Test A	1.00E-03	0.2	0.1	NA	NA	NA
+PDLC00005	Tnp_00001	A test profile	Tnp	NA	Test A	1.00E-05	0.3	0.3	NA	NA	NA
+PDLC00006	Unused_00001	A test profile	Unused	NA	Test A	1.00E-05	0.3	0.3	NA	NA	NA

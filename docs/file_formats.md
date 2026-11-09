@@ -583,7 +583,18 @@ Leftover sidecars are therefore harmless, and safe to delete. Note that pressing
 
 System models say which domains make up a system and how close together they must be. They
 are YAML files with a `domainator_systems:` key giving the format version, or directories
-holding such a file named `systems.yaml`. `find_systems --system_models` reads them.
+holding such a file named `systems.yaml`. `--system_models` reads them (`find_systems`,
+`domainate`, `format_systems`).
+
+Other tools' databases are converted to this format once, by `domainator system_db_download`.
+For PADLOC's padloc-db, it writes a directory holding `systems.yaml`, `padloc.hmm` (the
+profiles the models use, named after the collection's database so that `domainate -r
+padloc.hmm` labels hits as the models expect), `padloc.cm` (retron ncRNA models), the
+source's `LICENSE`, and `conversion.tsv`, which lists every approximation (`model`, `feature`,
+`action`): CRISPR arrays, which Domainator can't detect, are dropped. Models are named by
+padloc's `yaml.name`, as padloc reports them, and PADLOC's catch-all `*_other` models list the
+canonical models they share a component with as `superiors`. PADLOC measures coverage as
+`(to - from) / length`; Domainator includes both ends, so its coverage is one residue more.
 
 The common case is short. "X, Y, Z and Q or R within 10 CDSs, at E-value 1e-20":
 

@@ -1,0 +1,7 @@
+system	yaml.name	search	comment	references	group	fill	stroke
+Gabija	gabija	TRUE	NA	doron2018:10/gcwwm5	DMS	#FFFFFF	#000000
+Gabija (other)	gabija_other	TRUE	NA	NA	DMS	#FFFFFF	#000000
+Cas test	cas_test	TRUE	NA	NA	CRISPR	#FFFFFF	#000000
+Retron test	retron_test	TRUE	NA	NA	DRT	#FFFFFF	#000000
+Not searched	not_searched	FALSE	NA	NA	DMS	#FFFFFF	#000000
+No model file	no_model_file	TRUE	NA	NA	DMS	#FFFFFF	#000000

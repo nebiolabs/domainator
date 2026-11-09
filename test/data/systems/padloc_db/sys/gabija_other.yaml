@@ -1,0 +1,9 @@
+force_strand: FALSE
+maximum_separation: 2
+minimum_core: 1
+minimum_total: 1
+core_genes:
+  - GajA
+secondary_genes: NA
+neutral_genes: NA
+prohibited_genes: NA

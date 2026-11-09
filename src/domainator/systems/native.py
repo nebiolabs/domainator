@@ -46,7 +46,8 @@ class _Mapping(dict):
     line: Optional[int] = None
 
 
-class _Loader(yaml.SafeLoader):
+# libyaml's loader, when PyYAML was built with it: converted collections are megabytes of YAML.
+class _Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
     pass
 
 
@@ -161,9 +162,13 @@ def _foreign_format(path: Path) -> Optional[str]:
 
 
 def _foreign_error(path, label) -> InputError:
-    return InputError(f"{path} looks like a {label}. Domainator reads only its own system model format "
-                      f"(a YAML file with a '{FORMAT_KEY}:' key, or a directory holding {DIRECTORY_FILE}), "
-                      f"so a {label} must be converted to it first.")
+    message = (f"{path} looks like a {label}. Domainator reads only its own system model format "
+               f"(a YAML file with a '{FORMAT_KEY}:' key, or a directory holding {DIRECTORY_FILE}), "
+               f"so a {label} must be converted to it first")
+    if label.lower().startswith("padloc"):
+        directory = path if label.startswith("padloc-db") else "<its padloc-db directory>"
+        return InputError(f"{message}: domainator system_db_download --source padloc --input {directory} --output_dir <directory>")
+    return InputError(f"{message}. This version of Domainator can't convert it yet.")
 
 
 def _load_yaml(path: Path):

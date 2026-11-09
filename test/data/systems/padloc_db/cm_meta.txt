@@ -1,0 +1,2 @@
+cm.accession	cm.name	cm.description	author	literature.ref	comment
+CM00001	CopA	A test model	Test A	NA	NA

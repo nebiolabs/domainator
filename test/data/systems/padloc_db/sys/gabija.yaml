@@ -1,0 +1,13 @@
+force_strand: FALSE
+maximum_separation: 0
+minimum_core: 2
+minimum_total: 2
+core_genes:
+  - GajA
+  - GajB
+secondary_genes:
+  - NA
+neutral_genes:
+  - NA
+prohibited_genes:
+  - Tnp

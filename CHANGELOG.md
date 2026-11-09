@@ -35,6 +35,9 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
 - `format_systems`: write system models as a model file (`--yaml_out`, which also turns a
   `--domain_expr` model into a file), as a table of their components and thresholds
   (`--tsv_out`), or as the HMM profiles they name (`--hmm_out`).
+- `system_db_download --source padloc` downloads PADLOC's padloc-db (or converts a local
+  copy) into a directory for `--system_models`, with the profiles the models use and a
+  `conversion.tsv` of what the conversion approximated or dropped.
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
 
 ### Changed

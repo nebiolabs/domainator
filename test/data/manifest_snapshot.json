@@ -9010,5 +9010,67 @@
    "role": "output",
    "required": false
   }
+ ],
+ "system_db_download": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "source",
+   "flags": [
+    "--source"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": true,
+   "choices": [
+    "padloc"
+   ]
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "release",
+   "flags": [
+    "--release"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "output_dir",
+   "flags": [
+    "--output_dir"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "directory",
+   "required": true
+  }
  ]
 }

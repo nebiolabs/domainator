@@ -76,3 +76,4 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 
 - [db_download](db_download.md): Download sequence databases in formats Domainator reads.
 - [format_db](format_db.md): Shard, compress, and index a database for domain_search.
+- [system_db_download](system_db_download.md): Download system models (PADLOC), or convert a local copy, for --system_models.

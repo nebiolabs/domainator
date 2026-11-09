@@ -114,3 +114,5 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 ::: domainator.db_download.db_download
 
 ::: domainator.format_db.format_db
+
+::: domainator.system_db_download.system_db_download
