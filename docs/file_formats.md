@@ -614,7 +614,10 @@ For PADLOC's padloc-db, it writes a directory holding `systems.yaml`, `padloc.hm
 profiles the models use, named after the collection's database so that `domainate -r
 padloc.hmm` labels hits as the models expect), `padloc.cm` (retron ncRNA models), the
 source's `LICENSE`, and `conversion.tsv`, which lists every approximation (`model`, `feature`,
-`action`): CRISPR arrays, which Domainator can't detect, are dropped. Models are named by
+`action`). CRISPR arrays become feature components filled by `repeat_region` features with
+`/rpt_family="CRISPR"`, which is how NCBI annotates arrays; Domainator doesn't detect arrays
+itself, so on records without such features they are never found, as in padloc run without
+CRISPRDetect. Models are named by
 padloc's `yaml.name`, as padloc reports them, and PADLOC's catch-all `*_other` models list the
 canonical models they share a component with as `superiors`. PADLOC measures coverage as
 `(to - from) / length`; Domainator includes both ends, so its coverage is one residue more.
@@ -698,6 +701,15 @@ thresholds (`evalue`, `min_score`, `min_reference_coverage`, `min_target_coverag
 `min_tmscore`, `min_lddt` and `min_prob`, read from their `tmscore`, `lddt` and `prob`
 qualifiers; a hit without the qualifier fails them), `exchangeable` and `attach_to_cds` (a contig-level
 nucleotide hit counts as the CDS it overlaps on its strand by at least half its length).
+
+A domain can instead be a **record feature** (format 1.1), for parts of a system that no search
+finds, such as CRISPR arrays from NCBI's annotation or another tool:
+`{feature: repeat_region, qualifiers: {rpt_family: CRISPR}}` is filled by every
+`repeat_region` feature whose `rpt_family` qualifier is `CRISPR` (values compared ignoring
+case; with no `qualifiers`, by every feature of that type). Feature domains take no thresholds
+and no `database`. Like contig-level nucleotide hits, the features never count as CDSs in
+windows. Their `component` values have database `feature` and the feature type as reference,
+and they add 0 to the score.
 
 **Roles**: core and accessory components count toward `min_core`/`min_total`, the score and
 completeness; neutral ones join a system without counting; a forbidden one vetoes any system it

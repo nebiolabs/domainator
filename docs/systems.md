@@ -215,9 +215,11 @@ annotations. Slicing tools drop a system they cut through.
 Converted models are evaluated with Domainator's semantics, which follow their sources closely
 but not exactly. The differences are listed in each directory's `conversion.tsv`; in general:
 
-- **PADLOC.** CRISPR arrays can't be detected, so they are dropped from the models (and their
-  `minimum_total` lowered if needed). PADLOC measures reference coverage as `(to - from) /
-  length`, one residue less than Domainator.
+- **PADLOC.** CRISPR arrays are feature components, filled by `repeat_region` features with
+  `/rpt_family="CRISPR"` (as in NCBI's genome annotations): Domainator doesn't detect arrays,
+  so on records without such features, models that need an array find fewer systems, as padloc
+  does without CRISPRDetect. PADLOC measures reference coverage as `(to - from) / length`, one
+  residue less than Domainator.
 - **DefenseFinder and MacSyFinder.** Each profile's domain gathering threshold becomes a
   `min_score`, which approximates `hmmsearch --cut_ga` (that also checks the sequence
   threshold). Loners and multi-locus models are found as single loci: their genes must lie

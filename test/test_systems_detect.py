@@ -4,7 +4,7 @@ import tempfile
 import warnings
 
 import pytest
-from Bio.SeqFeature import BeforePosition, CompoundLocation, FeatureLocation
+from Bio.SeqFeature import BeforePosition, CompoundLocation, FeatureLocation, SeqFeature
 
 from domainator import SYSTEM_FEATURE_NAME
 from domainator.seqio import parse_seqfiles, write_genbank
@@ -437,3 +437,26 @@ def test_truncated_quorum_systems():
         ["cds2", "cds3"], "<", 2 / 3, 2, 2)  # the minus strand: the contig's end is the system's upstream end
     with pytest.raises(ValueError, match="truncated_systems"):
         detect_systems(contig(["A"]), [collection], truncated_systems="only")
+
+
+def test_feature_components():
+    """A component can be a record feature, such as a CRISPR array annotated as a repeat_region."""
+    collection = models_1_1({"name": "cas", "min_core": 1, "min_total": 2, "window": {"mode": "chain", "max_cds": 0},
+                             "components": [
+                                 {"name": "Cas1", "domains": ["Cas1"]},
+                                 {"name": "array", "role": "accessory",
+                                  "domains": [{"feature": "repeat_region", "qualifiers": {"rpt_family": "CRISPR"}}]}]})
+    record = contig(["Cas1", "", "", "X"])
+    array = SeqFeature(FeatureLocation(950, 990, 1), type="repeat_region", qualifiers={"rpt_family": ["crispr"]})
+    other = SeqFeature(FeatureLocation(2950, 2990, 1), type="repeat_region", qualifiers={"rpt_family": ["other"]})
+    assert found(record, collection) == []
+    record.features += [array, other]
+    hit, = detect_systems(record, [collection])
+    assert [str(value) for value in system_feature(hit).qualifiers["component"]] == [
+        "core|Cas1|cds0|db|Cas1", "accessory|array|nuc_951_1_990|feature|repeat_region"]
+    assert (hit.score, hit.total_count, hit.completeness) == (50.0, 2, 1.0)
+    # the array doesn't count as a CDS: Cas1 and X are still 2 CDSs apart
+    assert found(record, window_model("Cas1 & X", window_cds=1, window_mode="chain")) == []
+    # a Domainator hit named like the feature type doesn't fill a feature component
+    record = contig(["Cas1", "repeat_region"])
+    assert found(record, collection) == []

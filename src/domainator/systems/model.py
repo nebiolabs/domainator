@@ -18,6 +18,8 @@ WINDOW_MODES = ("span", "chain", "anchor")
 """How "close together" is measured. The first is the default."""
 COMMAND_LINE_DATABASE = "command_line"
 """The database of a model defined with --domain_expr."""
+FEATURE_DATABASE = "feature"
+"""The database of a member that is a record feature (a feature component), in the component qualifier."""
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,11 @@ class ReferenceRule:
     """Structural hits: the least probability of homology, from the prob qualifier."""
     exchangeable: bool = False
     attach_to_cds: bool = False
+    feature: bool = False
+    """A feature component (format 1.1): a record feature of type ``name`` (such as a repeat_region
+    for a CRISPR array), not a Domainator hit. It has no thresholds."""
+    qualifiers: Tuple[Tuple[str, str], ...] = ()
+    """For a feature component: (qualifier, value) pairs the feature must have, values compared ignoring case."""
 
 
 THRESHOLD_KEYS = ("evalue", "min_score", "min_reference_coverage", "min_target_coverage",

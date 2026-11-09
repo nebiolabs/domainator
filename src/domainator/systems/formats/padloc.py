@@ -24,6 +24,8 @@ REPOSITORY = "padlocbio/padloc-db"
 DEFAULT_EVALUE = 1e-5
 DEFAULT_COVERAGE = 0.3
 CRISPR_ARRAY = "CRISPR_array"
+CRISPR_ARRAY_RULE = ReferenceRule("repeat_region", feature=True, qualifiers=(("rpt_family", "CRISPR"),))
+"""A CRISPR array as NCBI annotates one: a repeat_region feature with /rpt_family="CRISPR"."""
 NCRNA = "ncRNA"
 _ROLES = (("core_genes", "core"), ("secondary_genes", "accessory"), ("neutral_genes", "neutral"),
           ("prohibited_genes", "forbidden"))
@@ -155,9 +157,11 @@ def convert(path: os.PathLike, *, release: Optional[str] = None, url: Optional[s
         for key, role in _ROLES:
             for gene in genes[key]:
                 if gene == CRISPR_ARRAY:
-                    notes.append(Note(name, gene, f"dropped: Domainator has no CRISPR array detector ({role} component)"))
-                    continue
-                if gene == NCRNA:
+                    notes.append(Note(name, gene, f"feature component: filled by repeat_region features with "
+                                                  f"/rpt_family=CRISPR, as NCBI annotates arrays ({role} component); "
+                                                  f"Domainator doesn't detect arrays itself"))
+                    references = (CRISPR_ARRAY_RULE,)
+                elif gene == NCRNA:
                     if not cm_names:
                         notes.append(Note(name, gene, "dropped: the database has no covariance models (cm_meta.txt)"))
                         continue

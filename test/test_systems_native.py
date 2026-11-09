@@ -258,3 +258,21 @@ def test_conflicting_aliases_are_not_written():
     with tempfile.TemporaryDirectory() as directory:
         with pytest.raises(InputError, match="alias 'L' means"):
             write_system_models(merged, os.path.join(directory, "out.yaml"))
+
+
+def test_feature_components_round_trip():
+    text = ('domainator_systems: "1.1"\ndefaults: {evalue: 1.0e-5, window: {mode: chain, max_cds: 2}}\nsystems:\n'
+            '  - name: cas\n    components:\n      - {name: Cas1, domains: [Cas1]}\n'
+            '      - {name: array, role: accessory, domains: [{feature: repeat_region, qualifiers: {rpt_family: CRISPR}}]}\n')
+    collection = read_text(text)
+    array = collection.models[0].components[1].references[0]
+    assert array == ReferenceRule("repeat_region", feature=True, qualifiers=(("rpt_family", "CRISPR"),))  # no default thresholds
+    with tempfile.TemporaryDirectory() as directory:
+        path = os.path.join(directory, "out.yaml")
+        write_system_models(collection, path)
+        again, = read_system_models([path])
+    assert again == collection
+    with pytest.raises(InputError, match="feature component"):
+        read_text(text.replace('"1.1"', "1"))
+    with pytest.raises(InputError, match="thresholds don't apply"):
+        read_text(text.replace("qualifiers: {rpt_family: CRISPR}", "min_score: 3"))

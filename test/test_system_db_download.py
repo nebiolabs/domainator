@@ -52,8 +52,9 @@ def test_convert(padloc_db):
 
     # The group expands to its proteins; Cas1 is then core, not secondary, and Cas2 is not neutral.
     cas = models["cas_test"]
-    assert [(c.name, c.role) for c in cas.components] == [("Cas1", "core"), ("Cas2", "core")]
-    assert (cas.min_core, cas.min_total) == (2, 2)  # minimum_total 4 can't be reached without the CRISPR array
+    assert [(c.name, c.role) for c in cas.components] == [("Cas1", "core"), ("Cas2", "core"), ("CRISPR_array", "accessory")]
+    assert cas.components[2].references == (ReferenceRule("repeat_region", feature=True, qualifiers=(("rpt_family", "CRISPR"),)),)
+    assert (cas.min_core, cas.min_total) == (2, 3)  # minimum_total 4 can't be reached without Missing_gene
 
     retron = models["retron_test"]
     assert retron.same_strand
@@ -63,7 +64,7 @@ def test_convert(padloc_db):
     assert {(note.model, note.feature, note.action.split(":")[0]) for note in conversion.notes} == {
         ("no_model_file", "model", "dropped"),
         ("gabija_other", "superiors", "added"),
-        ("cas_test", "CRISPR_array", "dropped"),
+        ("cas_test", "CRISPR_array", "feature component"),
         ("cas_test", "Missing_gene", "dropped"),
         ("cas_test", "minimum_total", "lowered"),
     }

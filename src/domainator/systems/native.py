@@ -33,6 +33,7 @@ _MODEL_KEYS = {"name", "category", "description", "accession", "window", "min_co
                "multi_loci", "orientation_from", "examples", "related", "literature", "reference_files"}
 _COMPONENT_KEYS = {"name", "role", "domains", "loner", "multi_system", "multi_model", "max_gap_cds"}
 _RULE_KEYS = {"name", "database"} | set(THRESHOLD_KEYS) | {"exchangeable", "attach_to_cds"}
+_FEATURE_RULE_KEYS = {"feature", "qualifiers", "exchangeable"}
 _WINDOW_KEYS = {"mode", "max_cds", "max_kb", "max_span_cds", "max_span_kb"}
 _EXAMPLE_KEYS = {"accession", "start", "end", "note"}
 _INTEGER_THRESHOLDS = {"min_target_length", "max_target_length"}
@@ -356,6 +357,16 @@ def _default_min_core(condition: Optional[Condition], components: Sequence[Compo
 def _rule(reader, value, thresholds, node) -> ReferenceRule:
     if isinstance(value, str):
         return ReferenceRule(name=reader.text(value, "a domain name", node), **thresholds)
+    if isinstance(value, dict) and "feature" in value:
+        reader.require(FORMAT_1_1, "a feature component (feature:)", value)
+        reader.check_keys(value, _FEATURE_RULE_KEYS, "a feature domain (thresholds don't apply to features)")
+        qualifiers = value.get("qualifiers") or {}
+        if not isinstance(qualifiers, dict):
+            raise reader.error("qualifiers must be a mapping from qualifier to value.", value)
+        return ReferenceRule(name=reader.name(value["feature"], "feature type", value), feature=True,
+                             qualifiers=tuple(sorted((reader.name(str(k), "qualifier", value), reader.text(str(v), "qualifier value", value))
+                                                     for k, v in qualifiers.items())),
+                             exchangeable=reader.boolean(value.get("exchangeable", False), "exchangeable", value))
     reader.check_keys(value, _RULE_KEYS, "a domain")
     if "name" not in value:
         raise reader.error("each domain needs a name.", value)
@@ -581,7 +592,7 @@ def _window_data(window: Window) -> Dict[str, Any]:
 def _common_defaults(models: Sequence[SystemModel]) -> Dict[str, Any]:
     """The thresholds, window and same_strand shared by every rule and model, to write once in ``defaults``."""
     defaults = dict()
-    rules = [rule for model in models for component in model.components for rule in component.references]
+    rules = [rule for model in models for component in model.components for rule in component.references if not rule.feature]
     for key in THRESHOLD_KEYS:
         values = {getattr(rule, key) for rule in rules}
         if len(values) == 1 and None not in values:
@@ -595,6 +606,13 @@ def _common_defaults(models: Sequence[SystemModel]) -> Dict[str, Any]:
 
 
 def _rule_data(rule: ReferenceRule, defaults: Dict[str, Any]):
+    if rule.feature:
+        data = {"feature": rule.name}
+        if rule.qualifiers:
+            data["qualifiers"] = dict(rule.qualifiers)
+        if rule.exchangeable:
+            data["exchangeable"] = True
+        return data
     data = {"name": rule.name}
     if rule.database is not None:
         data["database"] = rule.database
@@ -661,7 +679,8 @@ def _model_data(model: SystemModel, defaults: Dict[str, Any]) -> Dict[str, Any]:
 def _model_version(model: SystemModel) -> Tuple[int, int]:
     define = dict(model.define)
     versions = [Condition(text, define).version for text in (model.condition, model.extenders) if text is not None]
-    if model.extenders is not None or model.define or model.related:
+    if (model.extenders is not None or model.define or model.related
+            or any(rule.feature for component in model.components for rule in component.references)):
         versions.append(FORMAT_1_1)
     return max(versions, default=(1, 0))
 

@@ -18,11 +18,13 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.partial import PARTIAL_CHOICES, cds_fragment_status, fragment_status_allowed
 from domainator.systems import windows
 from domainator.systems.conditions import Condition
-from domainator.systems.model import (COUNTED_ROLES, ROLES, STRUCTURAL_THRESHOLDS, Component, ModelCollection,
-                                      ReferenceRule, SystemHit, SystemMember, SystemModel)
+from domainator.systems.model import (COUNTED_ROLES, FEATURE_DATABASE, ROLES, STRUCTURAL_THRESHOLDS, Component,
+                                      ModelCollection, ReferenceRule, SystemHit, SystemMember, SystemModel)
 
 _ROLE_PRIORITY = {role: i for i, role in enumerate(ROLES)}
 TRUNCATED_CHOICES = ("exclude", "include")
+_FEATURE_HIT = "system_feature_component"
+"""The type of the stand-in hit a record feature gets when a feature component can match it."""
 _SCORE_TIE = 1e-8  # hits within this many bits of the best in a competing group are all kept
 
 
@@ -182,6 +184,7 @@ class SystemDetector:
         self._warned: Set[Tuple[str, str]] = set()
         self._prepared: List[List[_Prepared]] = list()
         self._lookup: List[Dict[str, List[Tuple[int, Component, ReferenceRule]]]] = list()
+        self._feature_types: Set[str] = set()
         for collection in self.collections:
             prepared = list()
             lookup: Dict[str, List[Tuple[int, Component, ReferenceRule]]] = dict()
@@ -197,6 +200,8 @@ class SystemDetector:
                 for component in model.components:
                     for rule in component.references:
                         lookup.setdefault(rule.name, list()).append((model_index, component, rule))
+                        if rule.feature:
+                            self._feature_types.add(rule.name)
             self._prepared.append(prepared)
             self._lookup.append(lookup)
 
@@ -225,6 +230,7 @@ class SystemDetector:
                     hits = []
             genes.append(_Gene(0, cds, start, end, _location_strand(location), not cds.is_nucleic_acid, 0, cds_id,
                                len(location), hits))
+        genes.extend(self._feature_genes(record, circular))
         genes.sort(key=lambda gene: (gene.start, gene.end))
         rank = 0
         for index, gene in enumerate(genes):
@@ -232,6 +238,22 @@ class SystemDetector:
             gene.rank = rank
             if gene.is_cds:
                 rank += 1
+        return genes
+
+    def _feature_genes(self, record: SeqRecord, circular: bool) -> List[_Gene]:
+        """Pseudo-CDSs for the record features that feature components can match, each with a stand-in hit
+        (database ``feature``, name the feature type, score 0, e-value 0) carrying the feature's qualifiers."""
+        genes = list()
+        for feature in record.features:
+            if feature.type not in self._feature_types:
+                continue
+            location = feature.location
+            hit = SeqFeature(location, type=_FEATURE_HIT, qualifiers={
+                **feature.qualifiers, "database": [FEATURE_DATABASE], "name": [feature.type], "score": ["0"], "evalue": ["0"]})
+            cds_id = "nuc_" + get_cds_unique_name(SeqFeature(location, type="misc_feature"))
+            cds = DomainatorCDS(feature.type, cds_id, -1, feature, [hit], {feature.type}, None, True)
+            start, end = _gene_bounds(location, len(record), circular)
+            genes.append(_Gene(0, cds, start, end, _location_strand(location), False, 0, cds_id, len(location), [hit]))
         return genes
 
     # ---- steps 2-4: competing hits, matching, primary components
@@ -257,6 +279,11 @@ class SystemDetector:
     @staticmethod
     def _rule_passes(rule: ReferenceRule, hit: SeqFeature, gene: _Gene) -> bool:
         qualifiers = hit.qualifiers
+        if rule.feature != (hit.type == _FEATURE_HIT):
+            return False
+        if rule.feature:
+            return all(any(str(value).lower() == wanted.lower() for value in qualifiers.get(key, ()))
+                       for key, wanted in rule.qualifiers)
         if rule.database is not None and qualifiers["database"][0] != rule.database:
             return False
         if not evalue_passes(hit, rule.evalue):
