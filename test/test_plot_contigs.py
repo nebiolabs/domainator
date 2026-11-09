@@ -1,7 +1,7 @@
 import pytest
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 
-from domainator import plot_contigs
+from domainator import find_systems, plot_contigs
 from domainator.colors import DISTINCT_COLORS, OTHER_COLOR, get_palette
 from domainator.errors import InputError
 from helpers import report_data
@@ -175,3 +175,14 @@ def test_feature_to_dict_keeps_each_part():
         "parts": [[50, 80, "-"], [10, 30, "-"]],
         "qualifiers": [["locus_tag", ["X1"]], ["note", ["a", "b"]]],
     }
+
+
+def test_plot_contigs_draws_systems(shared_datadir, tmp_path):
+    systems = str(tmp_path / "systems.gb")
+    find_systems.main(["-i", str(shared_datadir / "systems" / "contigs.gb"), "--system_models",
+                       str(shared_datadir / "systems" / "defense.yaml"), "-o", systems])
+    output = str(tmp_path / "contigs.html")
+    plot_contigs.main(["-i", systems, "--html_out", output])
+    data = _page_data(output)
+    drawn = [f for f in _contig(data, "gabija_ta")["features"] if f["type"] == "Domain_System"]
+    assert len(drawn) == 2

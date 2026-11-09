@@ -11,6 +11,8 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 
 ::: domainator.find_features.find_features
 
+::: domainator.find_systems.find_systems
+
 ::: domainator.structure_domainate.structure_domainate
 
 ::: domainator.structure_search.structure_search

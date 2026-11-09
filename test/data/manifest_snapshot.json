@@ -841,6 +841,243 @@
    ]
   }
  ],
+ "find_systems": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "system_models",
+   "flags": [
+    "--system_models"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "domain_expr",
+   "flags": [
+    "--domain_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "window_cds",
+   "flags": [
+    "--window_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "window_kb",
+   "flags": [
+    "--window_kb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "window_mode",
+   "flags": [
+    "--window_mode"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "span",
+    "chain",
+    "anchor"
+   ]
+  },
+  {
+   "name": "system_name",
+   "flags": [
+    "--system_name"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "same_strand",
+   "flags": [
+    "--same_strand"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "evalue",
+   "flags": [
+    "-e",
+    "--evalue"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "annotation_type",
+   "flags": [
+    "--annotation_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domainator",
+    "domain_search",
+    "all"
+   ]
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "min_score",
+   "flags": [
+    "--min_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_completeness",
+   "flags": [
+    "--min_completeness"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_system_overlap",
+   "flags": [
+    "--max_system_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_systems_per_contig",
+   "flags": [
+    "--max_systems_per_contig"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "clear",
+   "flags": [
+    "--clear"
+   ],
+   "negative_flags": [
+    "--no_clear"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "partial",
+   "flags": [
+    "--partial"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  }
+ ],
  "structure_domainate": [
   {
    "name": "verbose",

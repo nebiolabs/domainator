@@ -8,6 +8,7 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 - [domainate](domainate.md): Annotate contigs or proteins with reference hits, retaining records without hits.
 - [domain_search](domain_search.md): Select matching sequence records or hit neighborhoods; optionally translate CDS hits.
 - [find_features](find_features.md): Annotate transmembrane regions, signal peptides, and other sequence features.
+- [find_systems](find_systems.md): Annotate systems: domains found together in one neighborhood, in already-annotated records.
 - [structure_domainate](structure_domainate.md): Annotate structure-derived protein records, retaining records without hits.
 - [structure_search](structure_search.md): Select matching structure-derived protein records and mark their best-hit regions.
 

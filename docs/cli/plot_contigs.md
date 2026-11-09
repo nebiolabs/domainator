@@ -19,7 +19,7 @@ Give at least one of these outputs: `--html_out`. `-` as an input or output mean
 | `-o`, `--html_out` | FILE | required | Write the plot to this html file. Use - for standard output. |
 | `--height` | INTEGER | 2400 | height of the contig plot, in pixels |
 | `--width` | INTEGER | 1200 | width of the contig plot, in pixels |
-| `--types` | STRING ... |  | Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search'. |
+| `--types` | STRING ... |  | Feature types to include in the plot. Default is 'CDS exon repeat_region ncRNA rRNA tRNA Domainator Domain_Search Domain_System System_Search'. |
 | `--feature_height` | INTEGER | 50 | height of the feature arrows, in pixels. |
 | `--feature_font_size` | INTEGER | 26 | font size of the feature labels, in pixels. |
 | `--metadata` | FILE ... |  | tab separated files of additional contig metadata. |

@@ -19,7 +19,7 @@ MANIFEST_VERSION = 1
 # name decides: see docs/tool_manifest.md for the rules. test_manifest.py checks that every
 # string option of every command is classified here or listed in TEXT_OPTIONS.
 INPUT_PATHS = {"input", "reference", "metadata", "color_table", "coords", "foldseek", "newick", "msa",
-               "esm2_3di_weights", "matrix", "ncbi_summary"}
+               "esm2_3di_weights", "matrix", "ncbi_summary", "system_models"}
 DIRECTORIES = {"output_dir", "tmp_dir", "model_dir", "tmbed_model_dir", "prostt5_weights", "datasets_workdir", "ncbi_taxonomy_path"}
 
 TEXT_OPTIONS = {
@@ -30,7 +30,7 @@ TEXT_OPTIONS = {
     "exclude_accessions", "foldseek_args", "foldseek_device", "prostt5_device",
     "input_format", "keep_databases", "label_by", "motif", "name", "name_field",
     "ncbi_api_key", "node", "pca_args", "regex", "reseek_args", "search_hit_color",
-    "sequence_regex", "subset", "taxonomy_expr", "threshold", "title", "tsne_args", "types", "umap_args",
+    "sequence_regex", "subset", "system_name", "systems", "taxonomy_expr", "threshold", "title", "tsne_args", "types", "umap_args",
     "usearch_args",
 }
 """String options without choices that are not paths."""

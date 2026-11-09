@@ -18,7 +18,7 @@ from domainator.cli.registry import TOOLS
 REPO = Path(__file__).resolve().parents[1]
 DOCS = [REPO / "README.md", REPO / "AGENTS.md", *sorted((REPO / "docs").rglob("*.md"))]
 # Documents that discuss options as history or plans rather than as current usage.
-EXCLUDED_DOCS = {REPO / "docs" / "v1_release_plan.md"}
+EXCLUDED_DOCS = {REPO / "docs" / "v1_release_plan.md", *(REPO / "docs" / "design").rglob("*.md")}
 
 _MODULE_TO_COMMAND = {tool.module: name for name, tool in TOOLS.items()}
 _COMMAND_RE = re.compile(r"(?:^|[\s|;(])(?:domainator\s+([a-z_]+)|([a-z_]+)\.py)(?=\s)")

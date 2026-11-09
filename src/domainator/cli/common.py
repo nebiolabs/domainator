@@ -20,6 +20,7 @@ import warnings
 from typing import Iterable, Optional, Sequence
 
 from jsonargparse import ArgumentParser
+from jsonargparse.typing import NonNegativeFloat, NonNegativeInt, PositiveInt
 
 from domainator import __version__
 from domainator.dedup import DEDUP_CHOICES
@@ -230,6 +231,43 @@ def add_annotation_type(parser, *, choices: Sequence[str] = ANNOTATION_TYPES, de
                                help=(help or "Which annotations to use.") + " domainator: domain annotations (from domainate). "
                                     "domain_search: best-hit annotations (from domain_search)."
                                     + (" all: both." if "all" in choices else ""))
+
+
+def add_system_models(parser, *, required: bool = False):
+    """Add ``--system_models``: native system model files, or directories holding systems.yaml."""
+    return parser.add_argument("--system_models", type=str, nargs="+", default=None, required=required,
+                               help="System model files (YAML with a domainator_systems: key), or directories holding "
+                                    "a systems.yaml. See docs/file_formats.md.")
+
+
+def add_window_model(parser):
+    """Add the options that define one system model on the command line (a short-form model)."""
+    from domainator.systems.model import WINDOW_MODES
+    parser.add_argument("--domain_expr", type=str, default=None,
+                        help="A system defined on the command line: a boolean expression over domain (reference) names "
+                             "that must hold within one window, using & (and), | (or), ~ (not, within the window), "
+                             "parentheses and < (upstream of, in system orientation). database:name limits a name to one "
+                             "database. Needs --window_cds or --window_kb.")
+    parser.add_argument("--window_cds", type=NonNegativeInt, default=None,
+                        help="Window size for --domain_expr, in CDSs (see --window_mode).")
+    parser.add_argument("--window_kb", type=NonNegativeFloat, default=None,
+                        help="Window size for --domain_expr, in kb (see --window_mode). With --window_cds, both must hold.")
+    parser.add_argument("--window_mode", type=str, default=WINDOW_MODES[0], choices=WINDOW_MODES,
+                        help="How --window_cds and --window_kb are measured. span: the whole system, first member to last. "
+                             "chain: the gap between consecutive members. anchor: the distance of every member from one anchor member.")
+    parser.add_argument("--system_name", type=str, default="domain_expr",
+                        help="Name of the --domain_expr system (its database is command_line).")
+    parser.add_argument("--same_strand", action="store_true", default=False,
+                        help="Members of the --domain_expr system must all be on one strand.")
+
+
+def add_system_detection(parser):
+    """Add the options that resolve overlapping systems, for the commands that detect systems."""
+    parser.add_argument("--max_system_overlap", type=float, default=1.0,
+                        help="Drop a system when more than this fraction of its counted members belong to better-scoring "
+                             "systems. 1 keeps every system; 0 makes calls exclusive.")
+    parser.add_argument("--max_systems_per_contig", type=PositiveInt, default=None,
+                        help="Keep at most this many systems per record, best score first. Default: no limit.")
 
 
 def add_has_search_hit(parser):

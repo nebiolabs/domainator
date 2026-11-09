@@ -34,6 +34,7 @@ TOOLS: Dict[str, Tool] = {
     "domainate": Tool("domainate", "annotate", "Annotate contigs or proteins with reference hits, retaining records without hits."),
     "domain_search": Tool("domain_search", "annotate", "Select matching sequence records or hit neighborhoods; optionally translate CDS hits."),
     "find_features": Tool("find_features", "annotate", "Annotate transmembrane regions, signal peptides, and other sequence features."),
+    "find_systems": Tool("find_systems", "annotate", "Annotate systems: domains found together in one neighborhood, in already-annotated records."),
     "structure_domainate": Tool("structure_domainate", "annotate", "Annotate structure-derived protein records, retaining records without hits."),
     "structure_search": Tool("structure_search", "annotate", "Select matching structure-derived protein records and mark their best-hit regions."),
     # edit
