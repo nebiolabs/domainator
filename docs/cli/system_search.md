@@ -69,6 +69,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--min_completeness` | NUMBER |  | Only select systems with at least this completeness (0 to 1). Systems of models without a quorum have no completeness, and are not filtered by it. |
 | `--max_system_overlap` | NUMBER | 1.0 | Drop a system when more than this fraction of its counted members belong to better-scoring systems. 1 keeps every system; 0 makes calls exclusive. |
 | `--max_systems_per_contig` | INTEGER |  | Keep at most this many systems per record, best score first. Default: no limit. |
+| `--truncated_systems` | {exclude,include} | exclude | include: also report systems that the end of a linear contig may have cut: windows at an end that lack components, but would be systems if the missing ones lay just beyond the end. They have a system_partial qualifier, as do complete systems near an end. Default: exclude. |
 | `--max_hits` | INTEGER |  | The most systems to return, best score first. Default: all. |
 | `--include_taxids` | INTEGER ... |  | Include these NCBI taxids and their descendants (OR). |
 | `--exclude_taxids` | INTEGER ... |  | Exclude these NCBI taxids and their descendants; exclusions take precedence. |

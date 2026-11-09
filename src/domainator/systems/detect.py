@@ -4,6 +4,7 @@ Follows docs/design/systems/detection.md. It reads Domainator (and, with annotat
 Domain_Search) features and never searches.
 """
 from dataclasses import dataclass, replace
+import math
 from typing import Collection, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 import warnings
 
@@ -21,6 +22,7 @@ from domainator.systems.model import (COUNTED_ROLES, ROLES, STRUCTURAL_THRESHOLD
                                       ReferenceRule, SystemHit, SystemMember, SystemModel)
 
 _ROLE_PRIORITY = {role: i for i, role in enumerate(ROLES)}
+TRUNCATED_CHOICES = ("exclude", "include")
 _SCORE_TIE = 1e-8  # hits within this many bits of the best in a competing group are all kept
 
 
@@ -69,6 +71,11 @@ class _Member:
         return self.record_gene.is_cds
 
     @property
+    def virtual(self) -> bool:
+        """A stand-in beyond a contig end for the components a truncated system lacks."""
+        return self.record_gene.cds is None
+
+    @property
     def strand(self) -> int:
         return self.record_gene.strand
 
@@ -77,7 +84,7 @@ class _Member:
         return frozenset(self.filled)
 
     def score(self, name: str) -> float:
-        return self.filled[name].score
+        return math.inf if self.virtual else self.filled[name].score
 
     def positions(self, name: str) -> Tuple[int, ...]:
         return self.filled[name].positions
@@ -117,6 +124,8 @@ class _Found:
     evaluation: _Evaluation
     radius_cds: Optional[float]
     radius_bp: Optional[float]
+    truncated: str = ""
+    """For a system found only with stand-ins beyond the contig ends: which ends, "<", ">" or "<>" (contig order)."""
 
 
 def _gene_bounds(location, contig_length: int, circular: bool) -> Tuple[int, int]:
@@ -146,14 +155,21 @@ class SystemDetector:
     max_system_overlap: reject a system when more than this fraction of its counted members
         are already used by better systems (1: keep everything).
     max_systems_per_contig: keep at most this many systems per record, best first.
+    truncated_systems: "include" also reports systems that a linear contig end may have cut:
+        windows at an end that fail the requirement, but would pass if every component they lack
+        lay just beyond the end. They are flagged with ``partial``. "exclude" (the default)
+        reports only systems that pass.
     """
 
     def __init__(self, collections: Sequence[ModelCollection], *, evalue: Optional[float] = None,
                  databases: Optional[Collection[str]] = None, annotation_type: str = "domainator",
                  partial: str = "include", max_system_overlap: float = 1.0,
-                 max_systems_per_contig: Optional[int] = None):
+                 max_systems_per_contig: Optional[int] = None, truncated_systems: str = "exclude"):
         if partial not in PARTIAL_CHOICES:
             raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
+        if truncated_systems not in TRUNCATED_CHOICES:
+            raise ValueError(f"truncated_systems must be one of {', '.join(TRUNCATED_CHOICES)}, not {truncated_systems}")
+        self.truncated_systems = truncated_systems
         if not 0 <= max_system_overlap <= 1:
             raise ValueError("max_system_overlap must be between 0 and 1.")
         self.collections = list(collections)
@@ -317,6 +333,7 @@ class SystemDetector:
 
     def _orientation(self, prepared: _Prepared, members: Sequence[_Member]) -> int:
         model = prepared.model
+        members = [m for m in members if not m.virtual]
         if model.orientation_from is not None:
             filling = [(m.filled[model.orientation_from].score, m.strand) for m in members if model.orientation_from in m.filled]
             if filling:
@@ -343,27 +360,32 @@ class SystemDetector:
             ordered_run = sorted(run, key=lambda m: m.start, reverse=reverse)
             ordered_reach = sorted(reach, key=lambda m: m.start, reverse=reverse)
             condition_ok, contributors = prepared.condition.evaluate(ordered_run, ordered_reach)
-        counted: Dict[str, Tuple[_Member, _Match]] = dict()
-        if model.has_quorum:
-            for member in run:
-                if member.role in COUNTED_ROLES:
-                    match = member.filled[member.primary]
-                    current = counted.get(member.primary)
-                    if current is None or match.score > current[1].score:
-                        counted[member.primary] = (member, match)
-        else:
-            for member in run:
-                for name in contributors & member.names:
-                    match = member.filled[name]
-                    current = counted.get(name)
-                    if current is None or match.score > current[1].score:
-                        counted[name] = (member, match)
-        core_count = sum(1 for name in counted if prepared.components[name].role == "core")
-        total_count = sum(1 for name in counted if prepared.components[name].role in COUNTED_ROLES)
+        counted, core_count, total_count = self._counted(prepared, run, contributors)
         forbidden = any(m.role == "forbidden" for m in reach)
         passed = (condition_ok and not forbidden and core_count >= model.min_core and total_count >= model.min_total
                   and bool(counted))
         return _Evaluation(passed, strand, counted, contributors, core_count, total_count)
+
+    @staticmethod
+    def _counted(prepared: _Prepared, run: Sequence[_Member], contributors: FrozenSet[str]):
+        """The counted components of ``run`` (with the member and match that fill each best), and the
+        numbers of core and of counted components among them."""
+        counted: Dict[str, Tuple[_Member, _Match]] = dict()
+        for member in run:
+            if member.virtual:  # a stand-in fills every component
+                names = [name for name in member.filled if prepared.components[name].role in COUNTED_ROLES]
+            elif prepared.model.has_quorum:
+                names = [member.primary] if member.role in COUNTED_ROLES else []
+            else:
+                names = contributors & member.names
+            for name in names:
+                match = member.filled[name]
+                current = counted.get(name)
+                if current is None or match.score > current[1].score:
+                    counted[name] = (member, match)
+        core_count = sum(1 for name in counted if prepared.components[name].role == "core")
+        total_count = sum(1 for name in counted if prepared.components[name].role in COUNTED_ROLES)
+        return counted, core_count, total_count
 
     def _passing(self, prepared):
         def evaluate(run, reach):
@@ -447,7 +469,8 @@ class SystemDetector:
                                                  windows.cds_inclusive(run), run[0].start))
         found = list()
         for run, result in picked:
-            radius_cds = None if max_cds is None else max_cds - windows.cds_inclusive(run)
+            # a missing member past an end takes a CDS of its own
+            radius_cds = None if max_cds is None else max_cds - windows.cds_inclusive(run) - 1
             radius_bp = None if max_kb is None else max_kb * 1000 - windows.span_bp(run)
             found.append(_Found(prepared, list(run), result, radius_cds, radius_bp))
         return found
@@ -488,6 +511,71 @@ class SystemDetector:
             found.append(_Found(prepared, cluster, self._evaluate(prepared, cluster, cluster), window.max_cds,
                                 None if window.max_kb is None else window.max_kb * 1000))
         return found
+
+    def _windows(self, prepared: _Prepared, members: List[_Member], circular: bool) -> List[_Found]:
+        window = prepared.model.window
+        if window.mode == "chain":
+            return self._chain(prepared, members, circular)
+        if window.mode == "anchor":
+            return self._anchor(prepared, members, circular)
+        return self._span(prepared, members, window.max_cds, window.max_kb, circular=circular)
+
+    def _truncated(self, prepared: _Prepared, members: List[_Member], systems: Sequence[_Found], contig_length: int,
+                   cds_count: int) -> List[_Found]:
+        """The systems that fail, but pass with a stand-in member just beyond a contig end that fills
+        every component, and share no member with ``systems``."""
+        names = prepared.positive
+
+        def stand_in(gene, start, end, rank):
+            record_gene = _Gene(gene, None, start, end, 0, True, rank, "", 0, [])
+            filled = {name: _Match(prepared.components[name], None, -math.inf, math.inf) for name in names}
+            primary = min(filled, key=lambda name: (_ROLE_PRIORITY[prepared.components[name].role], name))
+            return _Member(gene, record_gene, filled, primary, prepared.components[primary].role, start, end, rank,
+                           contig_length, cds_count)
+
+        left, right = stand_in(-1, -1, 0, -1), stand_in(-2, contig_length, contig_length + 1, cds_count)
+        window = prepared.model.window
+        if window.mode == "span":
+            # the window at each end: a stand-in passes on its own, so the tightest runs would be the stand-ins
+            candidates = list()
+            for end, ordered in ((left, members), (right, members[::-1])):
+                run = [end]
+                for member in ordered:
+                    if not windows.fits_span(sorted(run + [member], key=lambda m: m.start), window.max_cds, window.max_kb):
+                        break
+                    run.append(member)
+                run.sort(key=lambda m: m.start)
+                evaluation = self._evaluate(prepared, run, run)
+                if evaluation.passed:
+                    needed = [i for i, m in enumerate(run) if not m.virtual and self._counted(prepared, [m], evaluation.contributors)[0]]
+                    if needed:
+                        first, last = (0, max(needed)) if end is left else (min(needed), len(run) - 1)
+                        candidates.append(_Found(prepared, run[first:last + 1], evaluation, None, None))
+        else:
+            candidates = self._windows(prepared, [left, *members, right], circular=False)
+        used = {m.gene for system in systems for m in system.members}
+        out = list()
+        for system in candidates:
+            ends = {m.gene for m in system.members if m.virtual}
+            real = self._trim([m for m in system.members if not m.virtual])
+            if not ends or not real or used & {m.gene for m in real}:
+                continue
+            evaluation = self._evaluate(prepared, real, real)
+            if evaluation.passed:
+                continue
+            # count what the stand-ins helped satisfy, as far as the real members fill it
+            counted, core_count, total_count = self._counted(prepared, real, system.evaluation.contributors)
+            evaluation = replace(evaluation, counted=counted, contributors=system.evaluation.contributors,
+                                 core_count=core_count, total_count=total_count)
+            used |= {m.gene for m in real}
+            if window.mode == "span":
+                radius_cds = None if window.max_cds is None else window.max_cds - windows.cds_inclusive(real) - 1
+                radius_bp = None if window.max_kb is None else window.max_kb * 1000 - windows.span_bp(real)
+            else:
+                radius_cds, radius_bp = system.radius_cds, system.radius_bp
+            out.append(replace(system, members=real, evaluation=evaluation, radius_cds=radius_cds, radius_bp=radius_bp,
+                               truncated=("<" if -1 in ends else "") + (">" if -2 in ends else "")))
+        return out
 
     # ---- step 7: extend
 
@@ -555,12 +643,9 @@ class SystemDetector:
                 members = self._members(prepared, model_matches, genes, contig_length, cds_count)
                 strands = [[m for m in members if m.strand == s] for s in (1, -1)] if prepared.model.same_strand else [members]
                 for group in strands:
-                    if window.mode == "chain":
-                        systems = self._chain(prepared, group, circular)
-                    elif window.mode == "anchor":
-                        systems = self._anchor(prepared, group, circular)
-                    else:
-                        systems = self._span(prepared, group, window.max_cds, window.max_kb, circular=circular)
+                    systems = self._windows(prepared, group, circular)
+                    if self.truncated_systems == "include" and not circular and group:
+                        systems.extend(self._truncated(prepared, group, systems, contig_length, cds_count))
                     if prepared.extenders is not None:
                         systems = [self._extend(system, group, circular) for system in systems]
                     found.extend(systems)
@@ -631,7 +716,8 @@ class SystemDetector:
             return ((found.radius_cds is None or cds <= found.radius_cds)
                     and (found.radius_bp is None or bp <= found.radius_bp))
 
-        left, right = reachable(cds_left, bp_left), reachable(cds_right, bp_right)
+        left = reachable(cds_left, bp_left) or "<" in found.truncated
+        right = reachable(cds_right, bp_right) or ">" in found.truncated
         if found.evaluation.strand == -1:
             left, right = right, left
         return ("<" if left else "") + (">" if right else "")

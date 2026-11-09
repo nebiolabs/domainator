@@ -385,7 +385,7 @@ location never includes the model's suggested neighborhood (`neighborhood_kb`,
 | `core_count`, `total_count` | Distinct core components, and distinct core and accessory components, counted. |
 | `member_count` | Number of member CDSs (and contig-level nucleotide members). |
 | `neighborhood_kb`, `neighborhood_cds` | The model's suggested padding around the system, when it has one. Not part of the location. |
-| `system_partial` | `<`, `>` or `<>` when, on a linear contig, a component the system lacks could lie past the upstream (`<`) or downstream (`>`) end of the contig, in system orientation. Absent otherwise. |
+| `system_partial` | `<`, `>` or `<>` when, on a linear contig, a component the system lacks could lie past the upstream (`<`) or downstream (`>`) end of the contig, in system orientation. Absent otherwise. With `--truncated_systems include`, systems that are found only because their missing components could lie past an end are reported too, always with this qualifier. |
 | `component` | Repeated: one value per (member, component) pair, in contig order. |
 
 **Counted components.** In a model with a quorum (`min_core`, `min_total`), each member CDS

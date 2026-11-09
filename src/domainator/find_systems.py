@@ -39,8 +39,8 @@ def find_systems(records: Iterable[SeqRecord], *,
                  systems: Optional[Set[str]] = None, evalue: Optional[float] = None, annotation_type: str = "domainator",
                  databases: Optional[Set[str]] = None, min_score: Optional[float] = None,
                  min_completeness: Optional[float] = None, max_system_overlap: float = 1.0,
-                 max_systems_per_contig: Optional[int] = None, clear: bool = True,
-                 partial: str = "include") -> Iterator[SeqRecord]:
+                 max_systems_per_contig: Optional[int] = None, truncated_systems: str = "exclude",
+                 clear: bool = True, partial: str = "include") -> Iterator[SeqRecord]:
     """Annotate each record with the systems the models find, as Domain_System features.
 
     Models come from system_models (native model files, directories holding systems.yaml, or
@@ -53,7 +53,8 @@ def find_systems(records: Iterable[SeqRecord], *,
     which CDSs can be members, by fragment status. Systems scoring below min_score, or with a
     completeness below min_completeness, are dropped (models without a quorum have no
     completeness, and are not dropped by it). max_system_overlap and max_systems_per_contig
-    resolve overlapping systems.
+    resolve overlapping systems. truncated_systems="include" also reports systems that a linear
+    contig end may have cut (see SystemDetector).
 
     With clear, existing Domain_System features from the models' databases are removed first
     (for the command-line model, only those with its name), so that re-running replaces systems.
@@ -70,22 +71,22 @@ def find_systems(records: Iterable[SeqRecord], *,
     yield from annotate_systems(records, collections, evalue=evalue, annotation_type=annotation_type, databases=databases,
                                 min_score=min_score, min_completeness=min_completeness,
                                 max_system_overlap=max_system_overlap, max_systems_per_contig=max_systems_per_contig,
-                                clear=clear, partial=partial)
+                                truncated_systems=truncated_systems, clear=clear, partial=partial)
 
 
 def annotate_systems(records: Iterable[SeqRecord], collections: Sequence[ModelCollection], *,
                      evalue: Optional[float] = None, annotation_type: str = "domainator",
                      databases: Optional[Set[str]] = None, min_score: Optional[float] = None,
                      min_completeness: Optional[float] = None, max_system_overlap: float = 1.0,
-                     max_systems_per_contig: Optional[int] = None, clear: bool = True,
-                     partial: str = "include") -> Iterator[SeqRecord]:
+                     max_systems_per_contig: Optional[int] = None, truncated_systems: str = "exclude",
+                     clear: bool = True, partial: str = "include") -> Iterator[SeqRecord]:
     """Add a Domain_System feature to each record for each system the collections find, as
     find_systems does, yielding the records as they are annotated. Protein records get no systems."""
     if partial not in PARTIAL_CHOICES:
         raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
     detector = SystemDetector(collections, evalue=evalue, databases=databases, annotation_type=annotation_type,
                               partial=partial, max_system_overlap=max_system_overlap,
-                              max_systems_per_contig=max_systems_per_contig)
+                              max_systems_per_contig=max_systems_per_contig, truncated_systems=truncated_systems)
     cleared_databases = {c.database for c in collections if c.database != COMMAND_LINE_DATABASE}
     cleared_models = {(m.database, m.name) for c in collections if c.database == COMMAND_LINE_DATABASE for m in c.models}
 
@@ -165,6 +166,7 @@ def main(argv):
         min_completeness=params.min_completeness,
         max_system_overlap=params.max_system_overlap,
         max_systems_per_contig=params.max_systems_per_contig,
+        truncated_systems=params.truncated_systems,
         clear=params.clear,
         partial=params.partial,
     ), genbank=params.genbank_out, fasta=params.fasta_out)

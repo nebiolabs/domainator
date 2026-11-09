@@ -301,6 +301,19 @@
    "required": false
   },
   {
+   "name": "truncated_systems",
+   "flags": [
+    "--truncated_systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include"
+   ]
+  },
+  {
    "name": "max_output_gb",
    "flags": [
     "--max_output_gb"
@@ -1100,6 +1113,19 @@
    "kind": "value",
    "type": "integer",
    "required": false
+  },
+  {
+   "name": "truncated_systems",
+   "flags": [
+    "--truncated_systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include"
+   ]
   },
   {
    "name": "clear",
@@ -1964,6 +1990,19 @@
    "kind": "value",
    "type": "integer",
    "required": false
+  },
+  {
+   "name": "truncated_systems",
+   "flags": [
+    "--truncated_systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "exclude",
+    "include"
+   ]
   },
   {
    "name": "max_hits",

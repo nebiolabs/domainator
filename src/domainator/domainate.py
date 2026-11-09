@@ -1220,7 +1220,7 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
               foldseek_path: Optional[str] = None, prostt5_weights: Optional[str] = None,
               prostt5_device: str = "cpu", system_models: Optional[Sequence[Any]] = None,
               systems: Optional[Set[str]] = None, max_system_overlap: float = 1.0,
-              max_systems_per_contig: Optional[int] = None) -> Iterator[SeqRecord]:
+              max_systems_per_contig: Optional[int] = None, truncated_systems: str = "exclude") -> Iterator[SeqRecord]:
     """Annotate every input record with domain hits, retaining records without hits.
 
     Search references against proteins/CDSs or nucleotide contigs, adding Domainator
@@ -1237,8 +1237,8 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
     in the models' reference files are searched too, each with the larger of evalue and its
     loosest model threshold, and are exempt from max_hits_per_cds and max_overlap, so that
     detection, not the search, chooses between hits. As in find_systems, a hit counts as
-    evidence only if it also passes evalue. max_system_overlap and max_systems_per_contig
-    resolve overlapping systems. Protein records get no systems.
+    evidence only if it also passes evalue. max_system_overlap, max_systems_per_contig and
+    truncated_systems are as for find_systems. Protein records get no systems.
     """
     search = dict(z=z, evalue=evalue, cpu=cpu, batch_size=batch_size, min_evalue=min_evalue, max_mode=max_mode,
                   partial=partial)
@@ -1278,7 +1278,8 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
                             gene_call=None if searches_references else gene_call,
                             profile_evalues=model_profile_evalues(collections, model_files, evalue), **search)
     yield from annotate_systems(stream, collections, evalue=evalue, partial=partial,
-                                max_system_overlap=max_system_overlap, max_systems_per_contig=max_systems_per_contig)
+                                max_system_overlap=max_system_overlap, max_systems_per_contig=max_systems_per_contig,
+                                truncated_systems=truncated_systems)
 
 
 def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str]], z: int, evalue: float = 0.001,
@@ -1605,6 +1606,7 @@ def main(argv):
             system_models=collections,
             max_system_overlap=params.max_system_overlap,
             max_systems_per_contig=params.max_systems_per_contig,
+            truncated_systems=params.truncated_systems,
         )
     write_seq_outputs(annotated, genbank=params.genbank_out, fasta=params.fasta_out,
                       max_output_bytes=max_output_gb_to_bytes(params.max_output_gb),

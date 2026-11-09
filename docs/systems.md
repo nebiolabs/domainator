@@ -193,6 +193,8 @@ and leave out `--max_hits_per_cds` and `--max_overlap`.
 |---|---|
 | regions around systems, padded by CDSs or kb from their outermost members | `select_by_system --cds_range 5` (or `--model_neighborhood`, the model's own neighborhood) |
 | skip systems cut by a contig end | `--min_context_cds 5` (or `_up`/`_down`, `--min_context_kb`) on `select_by_system` and `system_search` |
+| also report systems a contig end may have cut short (fragmented assemblies) | `--truncated_systems include` on `find_systems`, `domainate` and `system_search`; they are flagged with `/system_partial` |
+| keep or drop systems flagged as partial | `select_by_system --partial_systems exclude` (or `only`) |
 | contigs with a combination of systems | `select_by_contig --system_expr "Gabija & ~Thoeris_I"` |
 | contigs where domains co-occur within a window, without writing systems | `select_by_contig --domain_expr "A & B" --window_cds 5` |
 | the members of systems, with neighbors | `select_by_cds --systems Gabija --cds_range 2` |

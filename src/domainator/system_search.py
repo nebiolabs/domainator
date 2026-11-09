@@ -181,6 +181,7 @@ def system_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
                   system_categories: Optional[Set[str]] = None, evalue: float = 0.001, min_evalue: float = 0.0,
                   max_mode: bool = False, min_score: Optional[float] = None, min_completeness: Optional[float] = None,
                   max_system_overlap: float = 1.0, max_systems_per_contig: Optional[int] = None,
+                  truncated_systems: str = "exclude",
                   max_hits: Optional[int] = None, cpu: int = 0, batch_size: int = 10000, add_annotations: bool = False,
                   cds_range: Optional[Tuple[int, int]] = None, kb_range: Optional[Tuple[float, float]] = None,
                   whole_contig: bool = False, model_neighborhood: bool = False,
@@ -215,7 +216,7 @@ def system_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         evalue: search with this e-value (model profiles: or their model's looser threshold),
             and count only hits passing it as evidence.
         min_evalue, max_mode: as for domainate.
-        min_score, min_completeness, max_system_overlap, max_systems_per_contig: as for
+        min_score, min_completeness, max_system_overlap, max_systems_per_contig, truncated_systems: as for
             find_systems.
         max_hits: keep only this many systems, the best-scoring. None: all.
         cpu: number of workers (0: one per physical core); values below 2 are raised to 2.
@@ -274,7 +275,7 @@ def system_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
     shared_references = Shared(build=functools.partial(domainate.read_references, search_files, foldseek=None))
     shared_taxids = Shared(allowed_taxids)
     detection = dict(min_score=min_score, min_completeness=min_completeness, max_system_overlap=max_system_overlap,
-                     max_systems_per_contig=max_systems_per_contig)
+                     max_systems_per_contig=max_systems_per_contig, truncated_systems=truncated_systems)
     selection = dict(strand=strand, cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig,
                      model_neighborhood=model_neighborhood, min_context_cds=min_context_cds,
                      min_context_kb=min_context_kb, normalize_direction=normalize_direction,
@@ -463,6 +464,7 @@ def main(argv):
             min_completeness=params.min_completeness,
             max_system_overlap=params.max_system_overlap,
             max_systems_per_contig=params.max_systems_per_contig,
+            truncated_systems=params.truncated_systems,
             max_hits=params.max_hits,
             cpu=cpus,
             batch_size=params.batch_size,

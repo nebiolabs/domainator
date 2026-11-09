@@ -129,3 +129,13 @@ def test_cds_ids_survive_slicing(shared_datadir):
     assert {value.cds_id for value in component_values(feature)} <= region_cds_ids
     cut, = select_by_cds(xyzq, domains={"Y"}, cds_range=(1, 1))
     assert [f for f in cut.features if f.type == SYSTEM_FEATURE_NAME] == []
+
+
+def test_truncated_systems(shared_datadir):
+    expr = ("--domain_expr", "X & Y & Z & (Q | R)", "--window_cds", "10")
+    assert systems_of(run(shared_datadir, *expr)["xyz_only"]) == []
+    records = run(shared_datadir, *expr, "--truncated_systems", "include")
+    feature, = [f for f in records["xyz_only"].features if f.type == SYSTEM_FEATURE_NAME]
+    # Q or R could lie beyond either end of this 5-CDS contig
+    assert (str(feature.location), feature.qualifiers["system_partial"]) == ("[0:2900](+)", ["<>"])
+    assert systems_of(records["xyzq"]) == [("command_line", "domain_expr", "[1000:5900](+)")]

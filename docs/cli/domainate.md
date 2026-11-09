@@ -66,6 +66,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--systems_file` | FILE |  | With --system_models, only look for the models with these names (name or database:name). Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--max_system_overlap` | NUMBER | 1.0 | Drop a system when more than this fraction of its counted members belong to better-scoring systems. 1 keeps every system; 0 makes calls exclusive. |
 | `--max_systems_per_contig` | INTEGER |  | Keep at most this many systems per record, best score first. Default: no limit. |
+| `--truncated_systems` | {exclude,include} | exclude | include: also report systems that the end of a linear contig may have cut: windows at an end that lack components, but would be systems if the missing ones lay just beyond the end. They have a system_partial qualifier, as do complete systems near an end. Default: exclude. |
 | `--max_output_gb` | NUMBER | 25.0 | Fail if a projected output file would exceed this many GB. Set to 0 to disable the guardrail. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

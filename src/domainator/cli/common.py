@@ -269,6 +269,11 @@ def add_system_detection(parser):
                              "systems. 1 keeps every system; 0 makes calls exclusive.")
     parser.add_argument("--max_systems_per_contig", type=PositiveInt, default=None,
                         help="Keep at most this many systems per record, best score first. Default: no limit.")
+    parser.add_argument("--truncated_systems", type=str, default="exclude", choices=("exclude", "include"),
+                        help="include: also report systems that the end of a linear contig may have cut: windows at an "
+                             "end that lack components, but would be systems if the missing ones lay just beyond the "
+                             "end. They have a system_partial qualifier, as do complete systems near an end. "
+                             "Default: exclude.")
 
 
 def add_system_type(parser, *, help: str = ""):

@@ -402,3 +402,38 @@ def test_extenders_wrap_the_origin():
     hit, = detect_systems(record, [collection])
     assert member_ids(hit) == ["cds6", "cds0", "cds1"]
     assert [(int(p.start), int(p.end)) for p in hit.location.parts] == [(6000, len(record)), (0, 1900)]
+
+
+@pytest.mark.parametrize("mode", ["chain", "anchor", "span"])
+def test_truncated_systems(mode):
+    """With truncated_systems="include", a window at a linear contig end that lacks components is
+    reported when they could lie beyond the end."""
+    collection = window_model("A & B & C", window_cds=2 if mode != "span" else 4, window_mode=mode)
+    record = contig(["B", "", "C", "", "", "", "", "", "A", "B"])
+    assert found(record, collection) == []
+    hits = detect_systems(record, [collection], truncated_systems="include")
+    assert [(member_ids(hit), hit.partial) for hit in hits] == [(["cds0", "cds2"], "<"), (["cds8", "cds9"], ">")]
+    assert hits[0].score == 100.0 and hits[0].completeness is None
+    # an end too far away to hold the missing component
+    assert found(contig(["", "", "", "B", "", "C", "", "", ""]), collection, truncated_systems="include") == []
+    # not on circular contigs
+    assert found(contig(["B", "", "C"], topology="circular"), collection, truncated_systems="include") == []
+
+
+def test_truncated_systems_respect_vetoes_and_whole_systems():
+    collection = window_model("A & B & ~W", window_cds=2, window_mode="chain")
+    assert found(contig(["B", "W"]), collection, truncated_systems="include") == []
+    # a system that passes is reported as it is, not as a truncated one
+    hits = detect_systems(contig(["A", "B", "", "", "", "", "B"]), [collection], truncated_systems="include")
+    assert [(member_ids(hit), hit.partial) for hit in hits] == [(["cds0", "cds1"], ""), (["cds6"], ">")]
+
+
+def test_truncated_quorum_systems():
+    collection = models({"name": "S", "min_core": 2, "min_total": 3, "window": {"mode": "chain", "max_cds": 1},
+                         "components": [{"name": "A", "domains": ["A"]}, {"name": "B", "domains": ["B"]},
+                                        {"name": "C", "role": "accessory", "domains": ["C"]}]})
+    hit, = detect_systems(contig(["", "", "-A", "-B"]), [collection], truncated_systems="include")
+    assert (member_ids(hit), hit.partial, hit.completeness, hit.core_count, hit.total_count) == (
+        ["cds2", "cds3"], "<", 2 / 3, 2, 2)  # the minus strand: the contig's end is the system's upstream end
+    with pytest.raises(ValueError, match="truncated_systems"):
+        detect_systems(contig(["A"]), [collection], truncated_systems="only")
