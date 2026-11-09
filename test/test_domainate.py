@@ -1170,3 +1170,26 @@ def test_prostt5_builder_selects_like_the_esm2_3di_builder():
     assert builder("a", "MKV") == ""
     assert builder("a", "MKVX") is None
     assert builder("a", "M" * (foldseek_lib.MAX_PROTEIN_SIZE + 1)) is None
+
+
+def test_domainator_inner_keeps_contig_hit_scores_beside_cds_hit_scores(monkeypatch):
+    """A nucleotide contig with both a whole-contig hit and a CDS hit keeps the scores of both."""
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from domainator.model import get_hit_names, get_hit_scores
+    contig = SeqRecord(Seq("ATG" + "GCT" * 99 + "TAA" + "A" * 600), id="contig")
+    contig.annotations["molecule_type"] = "DNA"
+    contig.features.append(SeqFeature(FeatureLocation(0, 303, 1), type="CDS",
+                                      qualifiers={"cds_id": ["cds_1"], "translation": ["M" + "A" * 99]}))
+
+    def hit(name, score, start, end, program):
+        return SearchResult(name, ".", ".", 1e-10, score, start, end, "db", 50.0, 1, 10, 10, program)
+
+    found = {0: {-1: [hit("rna", 40.0, 400, 500, "nhmmer")], 0: [hit("protein", 80.0, 1, 50, "hmmsearch")]}}
+    monkeypatch.setattr(domainate_module, "run_search", lambda *args, **kwargs: found)
+    contigs = [contig]
+    domainate_module.domainator_inner(contigs, None, None, None, None, None, 10, 1, None, False, True, 1, 1.0, True)
+    scores = get_hit_scores(contigs[0])
+    names = get_hit_names(contigs[0])
+    assert scores[0] == 80.0 and names[0] == "protein"
+    contig_hit_index = next(i for i, f in enumerate(contigs[0].features) if f.type == DOMAIN_SEARCH_BEST_HIT_NAME and f.qualifiers["name"] == ["rna"])
+    assert scores[contig_hit_index] == 40.0 and names[contig_hit_index] == "rna"

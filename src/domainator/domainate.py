@@ -35,7 +35,7 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation, Before
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import partial_help
 from domainator.locations import feature_intervals, overlap_fraction
-from domainator.model import get_sources, set_hit_best_score, set_hit_names, set_hit_scores
+from domainator.model import get_hit_names, get_hit_scores, get_sources, set_hit_best_score, set_hit_names, set_hit_scores
 from domainator.offsets import count_peptides
 from domainator.partial import PARTIAL_CHOICES, codon_offset, fragment_status_allowed, get_fragment_status, normalize_cds_translation, on_contig_translation
 from domainator.taxonomy.records import get_taxid, location_taxid, source_taxids, taxid_allowed, TaxonomyFilter
@@ -907,7 +907,7 @@ def add_protein_annotations(contig:SeqRecord, hits_list:List[SearchResult] , max
 
 #contig.features, cds_index, seq_group_index, contig_index, db_index, database_names, hits, max_hits, max_overlap
 #contig, contigs_list[contig_id], max_hits, max_overlap
-def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResult]] , max_hits:int, max_overlap:float, no_annotations:bool, best_annotation:bool, overlap_by_db:bool=False):
+def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResult]] , max_hits:int, max_overlap:float, no_annotations:bool, best_annotation:bool, overlap_by_db:bool=False, keep_contig_hits:bool=False):
     """add annoations to a nucleic acid contig
 
     Args:
@@ -918,9 +918,11 @@ def add_nucleic_acid_annotations(contig:SeqRecord, hits:Dict[int,List[SearchResu
         no_annotations (bool): if true, then no annotations will be added to the contig
         best_annotation (bool): if True then add a special Domainator annotation to each peptide or CDS with the best hit from this search.
         overlap_by_db (bool): if True, then filter by overlap by database. If False, then filter by overlap by all databases.
+        keep_contig_hits (bool): if True, then add to the hit scores and names that add_contig_nucleic_acid_annotations
+            set for this contig, instead of replacing them.
     """
-    hit_scores = dict()
-    best_hits = dict()
+    hit_scores = dict(get_hit_scores(contig)) if keep_contig_hits else dict()
+    best_hits = dict(get_hit_names(contig)) if keep_contig_hits else dict()
     for feature_id in hits: #iterate through the CDS features
         feature = contig.features[feature_id]
         hits[feature_id].sort(key=lambda x: x.score, reverse=True)
@@ -1055,7 +1057,8 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
             if contig_hits:
                 add_contig_nucleic_acid_annotations(contig, contig_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig)
             if cds_hits:
-                add_nucleic_acid_annotations(contig, cds_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db)
+                add_nucleic_acid_annotations(contig, cds_hits, max_hits, max_overlap, no_annotations, best_annotation, overlap_by_db=overlap_by_db,
+                                             keep_contig_hits=bool(contig_hits))
 
     if hits_only:
         return_contigs = sorted(hits.keys())
