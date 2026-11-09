@@ -10,6 +10,26 @@ _OPERATORS = "&|~()"
 _Node = Union[str, Tuple]
 
 
+def tokenize(expression: str, operators: str) -> List[str]:
+    """Split ``expression`` into tokens: each character of ``operators`` is a token, and a name
+    is any run of other non-space characters. Shared by every expression grammar, so they all
+    read names the same way."""
+    tokens = list()
+    name = ""
+    for char in expression:
+        if char in operators or char.isspace():
+            if name:
+                tokens.append(name)
+                name = ""
+            if not char.isspace():
+                tokens.append(char)
+        else:
+            name += char
+    if name:
+        tokens.append(name)
+    return tokens
+
+
 class BooleanEvaluator():
     """A boolean expression over names: ``&`` (and), ``|`` (or), ``~`` (not) and parentheses.
 
@@ -20,7 +40,7 @@ class BooleanEvaluator():
 
     def __init__(self, expression):
         self.expression = str(expression)
-        self._tokens = self._tokenize(self.expression)
+        self._tokens = tokenize(self.expression, _OPERATORS)
         self._pos = 0
         if not self._tokens:
             raise InputError(f"Empty boolean expression: {self.expression!r}")
@@ -29,23 +49,6 @@ class BooleanEvaluator():
             self._error(f"unexpected {self._tokens[self._pos]!r}")
         self.names = frozenset(t for t in self._tokens if t not in _OPERATORS)
         """Every name the expression mentions."""
-
-    @staticmethod
-    def _tokenize(expression: str) -> List[str]:
-        tokens = list()
-        name = ""
-        for char in expression:
-            if char in _OPERATORS or char.isspace():
-                if name:
-                    tokens.append(name)
-                    name = ""
-                if not char.isspace():
-                    tokens.append(char)
-            else:
-                name += char
-        if name:
-            tokens.append(name)
-        return tokens
 
     def _error(self, problem):
         raise InputError(f"Invalid boolean expression {self.expression!r}: {problem}.")

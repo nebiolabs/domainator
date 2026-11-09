@@ -1,0 +1,14 @@
+# "10-CDS windows with X, Y, Z and Q or R", in the full form. Same model as xyz_short.yaml.
+domainator_systems: 1
+database: xyz
+defaults: {evalue: 1.0e-5}
+systems:
+  - name: XYZ_QR
+    window: {mode: span, max_cds: 10}
+    components:
+      - {name: X, role: core, domains: [X]}
+      - {name: Y, role: core, domains: [Y]}
+      - {name: Z, role: core, domains: [Z]}
+      - {name: Q, role: core, domains: [Q]}
+      - {name: R, role: core, domains: [R]}
+    condition: "X & Y & Z & (Q | R)"

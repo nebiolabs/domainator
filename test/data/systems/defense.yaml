@@ -1,0 +1,22 @@
+# Quorum models in the full form, for find_systems tests.
+domainator_systems: 1
+database: defense
+defaults:
+  evalue: 1.0e-5
+  window: {mode: chain, max_cds: 2}
+systems:
+  - name: Gabija
+    category: defense
+    components:
+      - {name: GajA, role: core, domains: [GajA]}
+      - name: GajB
+        role: core
+        domains: [GajB_1, {name: GajB_2, min_score: 40}]
+  - name: TA
+    category: toxin_antitoxin
+    window: {mode: span, max_cds: 3}
+    components:
+      - {name: toxin, role: core, domains: [RelE]}
+      - {name: antitoxin, role: core, domains: [HicB]}
+      - {name: transposase, role: forbidden, domains: [Tnp]}
+    orientation_from: antitoxin

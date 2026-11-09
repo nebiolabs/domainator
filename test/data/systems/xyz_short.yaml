@@ -1,0 +1,6 @@
+# "10-CDS windows with X, Y, Z and Q or R", in the short form. Same model as xyz_full.yaml.
+domainator_systems: 1
+database: xyz
+defaults: {evalue: 1.0e-5, window: {max_cds: 10}}
+systems:
+  XYZ_QR: "X & Y & Z & (Q | R)"
