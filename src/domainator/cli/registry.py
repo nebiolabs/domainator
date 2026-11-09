@@ -58,6 +58,7 @@ TOOLS: Dict[str, Tool] = {
     # profile
     "hmmer_build": Tool("hmmer_build", "profile", "Build an HMM profile from a multiple sequence alignment."),
     "infernal_build": Tool("infernal_build", "profile", "Build a covariance model (CM) from a multiple sequence alignment (experimental)."),
+    "format_systems": Tool("format_systems", "profile", "Write system models as a model file, a table, or the HMM profiles they need."),
     "hmmer_select": Tool("hmmer_select", "profile", "Extract a subset of profiles from HMM files."),
     "hmmer_search": Tool("hmmer_search", "profile", "Select HMM profiles by their similarity to reference profiles."),
     "hmmer_compare": Tool("hmmer_compare", "profile", "Score and align pairs of HMM profiles."),

@@ -38,6 +38,7 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 
 - [hmmer_build](hmmer_build.md): Build an HMM profile from a multiple sequence alignment.
 - [infernal_build](infernal_build.md): Build a covariance model (CM) from a multiple sequence alignment (experimental).
+- [format_systems](format_systems.md): Write system models as a model file, a table, or the HMM profiles they need.
 - [hmmer_select](hmmer_select.md): Extract a subset of profiles from HMM files.
 - [hmmer_search](hmmer_search.md): Select HMM profiles by their similarity to reference profiles.
 - [hmmer_compare](hmmer_compare.md): Score and align pairs of HMM profiles.

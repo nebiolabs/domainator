@@ -20,6 +20,9 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   system's outermost members (`--cds_range`, `--kb_range`, or each model's own neighborhood
   with `--model_neighborhood`). `--min_context_cds` and `--min_context_kb` (and their `_up`
   and `_down` forms) skip systems without enough context, such as systems cut by a contig end.
+- `format_systems`: write system models as a model file (`--yaml_out`, which also turns a
+  `--domain_expr` model into a file), as a table of their components and thresholds
+  (`--tsv_out`), or as the HMM profiles they name (`--hmm_out`).
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
 
 ### Changed

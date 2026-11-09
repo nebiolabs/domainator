@@ -59,6 +59,8 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 
 ::: domainator.infernal_build.infernal_build
 
+::: domainator.format_systems.format_systems
+
 ::: domainator.hmmer_select.hmmer_select
 
 ::: domainator.hmmer_search.hmmer_search
