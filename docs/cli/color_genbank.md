@@ -12,6 +12,10 @@ Domains are colored based on domain name.
 
 CDSs are colored based on the associated domains, prioritized by domain score.
 
+Systems (Domain_System features, from find_systems) are colored by name, category or database
+(--system_color_by), and with --target systems_and_cdss so are their member CDSs, prioritized by
+system score.
+
 If a color_table is provided, then the colors in the table will be used, otherwise a random color will be assigned to each domain.
 ```
 
@@ -28,10 +32,11 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--contigs_file` | FILE |  | only color contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs. |
 | `--color_table` | FILE |  | tab separated file with two columns and no header, columns are: domain id, hex color. For example: CCDB   cc0000 |
 | `--color_table_out` | FILE |  | tab separated file with two columns and no header, columns are: annotation, hex color. Written after the color table is updated with new colors, for example if using --color_by, but not supplying an external color table. |
-| `--search_hit_color` | STRING |  | color to use for search hit annotations. |
+| `--search_hit_color` | STRING |  | color to use for search hit annotations (Domain_Search, and System_Search with --target systems or systems_and_cdss). |
 | `--clear` |  |  | if set, then remove all color annotations from the genbank file before adding any new ones. |
 | `--databases` | STRING ... |  | Domain databases to use for coloring. default: all databases. |
-| `--target` | {domains,cdss,domains_and_cdss} | cdss | what to color. domains: color only domain annotations. cdss: color only CDS annotations. domains_and_cdss: color both domains and CDS annotations. |
+| `--target` | {domains,cdss,domains_and_cdss,systems,systems_and_cdss} | cdss | what to color. domains: color only domain annotations. cdss: color only CDS annotations. domains_and_cdss: color both domains and CDS annotations. systems: color system (Domain_System) annotations. systems_and_cdss: color systems and their member CDSs. |
+| `--system_color_by` | {name,category,database} | name | with --target systems or systems_and_cdss: color systems by this qualifier. With --color_table, the first column must hold these values. |
 | `--domain_database` |  |  | if set, then color domains based on their database instead of their name. If used with --color_table, the first column must contain database ids. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

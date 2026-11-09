@@ -1,9 +1,10 @@
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME
 from domainator.seqio import parse_seqfiles
+import os
 from pathlib import Path
 import tempfile
 
-from domainator import color_genbank
+from domainator import color_genbank, find_systems
 
 def test_color_genbank_1(shared_datadir):
     
@@ -231,3 +232,40 @@ def test_color_genbank_domain_database_1(shared_datadir):
                 color_table_dict[annotation] = color
 
         assert color_table_dict == database_colors
+
+def _systems_record(shared_datadir):
+    records = find_systems.find_systems(parse_seqfiles([shared_datadir / "systems" / "contigs.gb"]),
+                           system_models=[shared_datadir / "systems" / "defense.yaml"])
+    return next(r for r in records if r.id == "gabija_ta")
+
+
+def _colors(record, feature_type):
+    return {f.qualifiers.get("cds_id", f.qualifiers.get("name"))[0]: f.qualifiers.get("Color", [None])[0]
+            for f in record.features if f.type == feature_type}
+
+
+def test_color_genbank_systems(shared_datadir):
+    record = _systems_record(shared_datadir)
+    table = {"Gabija": "#FF0000", "TA": "#0000FF", "defense": "#00FF00", "toxin_antitoxin": "#FFFF00"}
+    colored, = color_genbank.color_genbank([record], color_table=table, targets=color_genbank.COLOR_MODES["systems"])
+    assert _colors(colored, SYSTEM_FEATURE_NAME) == {"Gabija": "#FF0000", "TA": "#0000FF"}
+    assert set(_colors(colored, "CDS").values()) == {None}
+    assert set(_colors(colored, DOMAIN_FEATURE_NAME).values()) == {None}
+
+    colored, = color_genbank.color_genbank([_systems_record(shared_datadir)], color_table=table,
+                                           targets=color_genbank.COLOR_MODES["systems_and_cdss"], system_color_by="category")
+    assert _colors(colored, SYSTEM_FEATURE_NAME) == {"Gabija": "#00FF00", "TA": "#FFFF00"}
+    assert _colors(colored, "CDS") == {"cds0": "#00FF00", "cds1": None, "cds2": "#00FF00", "cds3": None, "cds4": None,
+                                       "cds5": None, "cds6": "#FFFF00", "cds7": "#FFFF00"}
+
+
+def test_color_genbank_systems_cli(shared_datadir):
+    with tempfile.TemporaryDirectory() as output_dir:
+        systems = os.path.join(output_dir, "systems.gb")
+        out = os.path.join(output_dir, "colored.gb")
+        table_out = os.path.join(output_dir, "colors.tsv")
+        find_systems.main(["-i", str(shared_datadir / "systems" / "contigs.gb"), "--system_models",
+                           str(shared_datadir / "systems" / "defense.yaml"), "-o", systems])
+        color_genbank.main(["-i", systems, "-o", out, "--target", "systems", "--color_table_out", table_out])
+        with open(table_out) as handle:
+            assert sorted(line.split("\t")[0] for line in handle) == ["Gabija", "TA"]  # domains get no colors

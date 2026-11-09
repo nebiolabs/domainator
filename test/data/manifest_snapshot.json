@@ -1910,7 +1910,23 @@
    "choices": [
     "domains",
     "cdss",
-    "domains_and_cdss"
+    "domains_and_cdss",
+    "systems",
+    "systems_and_cdss"
+   ]
+  },
+  {
+   "name": "system_color_by",
+   "flags": [
+    "--system_color_by"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "name",
+    "category",
+    "database"
    ]
   },
   {
