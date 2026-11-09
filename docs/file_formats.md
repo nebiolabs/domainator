@@ -407,6 +407,16 @@ and a CDS with hits to several of them (a fusion) fills each.
 
 Split a value with `value.split("|", 4)`: only the reference name may contain `|`.
 
+**Imported systems.** `import_systems --source antismash` turns antiSMASH's cluster calls into
+`Domain_System` features in the `antismash` database: by default one per protocluster, located
+at its core, named by its product, with antiSMASH's `cutoff` as an `anchor` window and its
+`neighbourhood` as `neighborhood_kb`. The members are the core CDSs whose profiles triggered the
+product (antiSMASH's `/gene_functions`), one `component` value per profile, and the score is
+the sum of each member's best `sec_met_domain` bit score among those profiles. antiSMASH gives
+no positions within the protein, so there are no `Domainator` features for these hits.
+`--level candidate_cluster` and `--level region` locate one system at each whole feature, with
+antiSMASH's `/kind` on candidate clusters.
+
 **On proteins.** A protein record can't carry a system, so `extract_peptides` writes a
 `system_membership` qualifier on the CDS feature of each protein that comes from a system
 member, one value per system: `role|component|database|name` (the system's database and

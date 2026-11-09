@@ -5100,6 +5100,93 @@
    "required": false
   }
  ],
+ "import_systems": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "source",
+   "flags": [
+    "--source"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "antismash"
+   ]
+  },
+  {
+   "name": "level",
+   "flags": [
+    "--level"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "protocluster",
+    "candidate_cluster",
+    "region"
+   ]
+  },
+  {
+   "name": "clear_source",
+   "flags": [
+    "--clear_source"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  }
+ ],
  "hmmer_build": [
   {
    "name": "verbose",

@@ -55,6 +55,7 @@ TOOLS: Dict[str, Tool] = {
     # convert
     "genbank_to_fasta": Tool("genbank_to_fasta", "convert", "Convert GenBank files to FASTA."),
     "structure_to_genbank": Tool("structure_to_genbank", "convert", "Convert protein structures into protein GenBank records."),
+    "import_systems": Tool("import_systems", "convert", "Convert system calls made by other tools (antiSMASH) into Domain_System features."),
     # profile
     "hmmer_build": Tool("hmmer_build", "profile", "Build an HMM profile from a multiple sequence alignment."),
     "infernal_build": Tool("infernal_build", "profile", "Build a covariance model (CM) from a multiple sequence alignment (experimental)."),

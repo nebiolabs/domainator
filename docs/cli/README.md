@@ -33,6 +33,7 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 
 - [genbank_to_fasta](genbank_to_fasta.md): Convert GenBank files to FASTA.
 - [structure_to_genbank](structure_to_genbank.md): Convert protein structures into protein GenBank records.
+- [import_systems](import_systems.md): Convert system calls made by other tools (antiSMASH) into Domain_System features.
 
 ## Build, select, and compare HMM and CM profiles
 

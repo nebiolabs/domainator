@@ -53,6 +53,8 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 
 ::: domainator.structure_to_genbank.structure_to_genbank
 
+::: domainator.import_systems.import_systems
+
 ## Build, select, and compare HMM and CM profiles
 
 ::: domainator.hmmer_build.hmmer_build

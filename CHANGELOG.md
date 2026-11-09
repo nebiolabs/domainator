@@ -38,6 +38,8 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
 - `system_db_download --source padloc` downloads PADLOC's padloc-db (or converts a local
   copy) into a directory for `--system_models`, with the profiles the models use and a
   `conversion.tsv` of what the conversion approximated or dropped.
+- `import_systems --source antismash` turns antiSMASH's protoclusters (or candidate clusters,
+  or regions) into `Domain_System` features.
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
 
 ### Changed
