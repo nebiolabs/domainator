@@ -207,7 +207,8 @@ documents above have been corrected.
 
 ## Implementation status
 
-Phases 1, 2 and 3 are implemented. Where the code departs from these documents:
+Phases 1 to 4 are implemented, except the optional `merge_systems`. Where the code departs
+from these documents:
 
 1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
    `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
@@ -256,3 +257,33 @@ Phases 1, 2 and 3 are implemented. Where the code departs from these documents:
     PADLOC's `*_padloc.csv`, given with `--calls`, into the `defensefinder` and `padloc`
     databases. PADLOC's table has no scores or roles: its systems score 0 and every member is
     core. Members without a CDS (CRISPR arrays, ncRNAs) are skipped.
+14. **`--truncated_systems {exclude,include}`** (`find_systems`, `domainate`, `system_search`)
+    is the detection option the design calls `--partial_systems include`: that name is
+    `select_by_system`'s flag selector (deviation 3). A window passes as truncated when it
+    passes with a stand-in member just beyond the contig end that fills every component. In
+    span mode, the window at each end (as far as the limit reaches) is tested, because a
+    stand-in alone would always be the tightest run. The span radius behind `/system_partial`
+    now leaves a CDS for the missing member.
+15. **Short-form roles.** A name used only negated as a bare name (`~W`) is forbidden. One used
+    only negated inside `cds()`, a function or `<`, or only in `extenders`, is neutral: in
+    Phase 1, `~(W < V)` made W and V forbidden, so any W vetoed the system.
+16. **Format 1.1 additions beyond the design:** `related` (antiSMASH `RELATED`, informational),
+    and feature components (`{feature: repeat_region, qualifiers: {rpt_family: CRISPR}}`),
+    which take no thresholds and add 0 to the score. The PADLOC converter keeps `CRISPR_array`
+    as such a component instead of dropping it and lowering `minimum_total`, which is what
+    padloc does without CRISPRDetect output.
+17. **Extenders** grow a system in every window mode by the window's `max_cds`/`max_kb` from
+    the last member on that side; members that don't meet the extenders are passed over while
+    within that distance. Condition contributors are names, so in anchor mode every member
+    filling a contributing name is a core member, as are `cds()` contributors on other CDSs.
+18. **antiSMASH conversion** reads an antiSMASH checkout, installation or `hmm_detection`
+    directory (not a lone rule file), records antiSMASH's version from its `main.py`, writes
+    a `NOTICE` on the AGPL beside the license, and approximates `CUTOFF 0` (one loose rule) as
+    a 0 kb window. Substitutes files are `domainator_substitutes: 1` with a `components` list.
+    Checked against antiSMASH 8.0.4: all 103 rules convert and read back unchanged, and seven
+    rule examples (benzoxazole, T2PKS, transAT-PKS, lanthipeptide class I) are found.
+19. **`--bit_cutoffs`** is on `system_search` too. With it, `-e` doesn't filter system evidence,
+    because the cutoffs replace it.
+20. **`format_systems --check_examples_out <tsv>`** (outputs end in `_out`) is the design's
+    `--check_examples`. It annotates each example with domainate's defaults.
+21. **`merge_systems`** is not built.

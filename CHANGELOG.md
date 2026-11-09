@@ -37,7 +37,8 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   (`--tsv_out`), or as the HMM profiles they name (`--hmm_out`).
 - `system_db_download --source padloc` downloads PADLOC's padloc-db (or converts a local
   copy) into a directory for `--system_models`, with the profiles the models use and a
-  `conversion.tsv` of what the conversion approximated or dropped.
+  `conversion.tsv` of what the conversion approximated or dropped. CRISPR arrays become
+  feature components filled by `repeat_region` features with `/rpt_family="CRISPR"`.
 - `system_db_download --source defensefinder` downloads DefenseFinder's defense-finder-models
   (or converts a local copy), and `--source macsyfinder` converts any other MacSyFinder model
   package. `--coverage_profile` sets their minimum profile coverage.
@@ -59,6 +60,22 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
 - `select_by_contig --window_cds/--window_kb` make `--domain_expr` hold within one window of
   a contig (`--window_mode`, `--same_strand`), and allow `<` in it.
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
+- System model format 1.1 (`domainator_systems: "1.1"`): the condition functions `cds()`,
+  `minimum()`, `repeatable()` and `minscore()`, with `cds(a < b)` for domain order within a
+  protein; `define` aliases; `extenders`, which grow a system over neighboring CDSs that meet
+  them; `related`; and feature components, which match record features such as CRISPR arrays
+  (`{feature: repeat_region, qualifiers: {rpt_family: CRISPR}}`). The same functions work in
+  `--domain_expr`.
+- `system_db_download --source antismash` converts antiSMASH's cluster rules from a local copy
+  of antiSMASH (`--antismash_strictness`, and `--substitutes_file` for its code-based dynamic
+  profiles).
+- `find_systems`, `domainate` and `system_search --truncated_systems include` also report
+  systems that a linear contig end may have cut short, flagged with `/system_partial`.
+- `domainate` and `system_search --bit_cutoffs {gathering,trusted,noise}` search profiles with
+  their own score cutoffs, like `hmmsearch --cut_ga`.
+- `compare_contigs --sji` weighs the Jaccard index of the contigs' systems.
+- `format_systems --check_examples_out` downloads each model's examples from NCBI and reports
+  whether the model still finds them.
 
 ### Changed
 - Slicing tools drop `Domain_System` and `System_Search` features that a slice cuts through,
