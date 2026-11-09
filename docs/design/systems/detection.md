@@ -135,12 +135,14 @@ CDSs (first to last inclusive) and spans at most `max_kb` kb, whichever are set.
   that could be added to the run with the result still fitting the limit. A maximal window
   around the run never extends past its reach, so "no W within reach" means "no W in any
   window of the allowed size that contains the system" (decided).
-- A passing run is a candidate only if no shorter run inside it also passes. So the system
-  is the tightest set of members that satisfies the model, and stray duplicates within the
-  limit don't stretch it.
+Every passing run is a candidate. Pick non-overlapping candidates greedily by score (the sum
+of the best hit to each counted component), breaking ties toward the smaller span, then the
+leftmost. So a system takes every member that fits and fills another component: five
+adjacent members of a "2 of 5" quorum are one system, not the best pair. Stray duplicates
+and neutral members add nothing to the score, so they don't stretch a system.
 
-Then pick non-overlapping candidates greedily by score, breaking ties toward the smaller
-span, then the leftmost.
+(An earlier draft kept only minimal passing runs, those with no shorter passing run inside.
+That split a quorum's members into separate pairs and dropped the rest, so it was replaced.)
 
 Testing every run is O(H × w²) for H members and windows of up to w members, which is small
 in practice. Testing only maximal windows would be cheaper, but it gets negation wrong.

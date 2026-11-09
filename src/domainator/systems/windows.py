@@ -89,20 +89,19 @@ def chain(items: Sequence[Item], linked: Callable[[Item, Item], bool]) -> List[L
 def span_candidates(items: Sequence[Item], fits: Callable[[Sequence[Item]], bool],
                     evaluate: Callable[[Sequence[Item], Sequence[Item]], Optional[object]],
                     starts: Optional[range] = None) -> List[Tuple[int, int, object]]:
-    """The minimal passing runs of a span window.
+    """The passing runs of a span window.
 
     Every contiguous run of ``items`` that ``fits`` is evaluated with ``evaluate(run, reach)``,
     where the reach is every item that could be added to the run with the result still fitting.
-    ``evaluate`` returns None for a run that fails. A passing run is a candidate when neither of
-    the runs one item shorter passes. ``starts`` limits the first item of a candidate (on a
-    circular contig, to one copy of the items); runs never hold two copies of one gene.
+    ``evaluate`` returns None for a run that fails. ``starts`` limits the first item of a
+    candidate (on a circular contig, to one copy of the items); runs never hold two copies of
+    one gene. Choosing among overlapping runs is the caller's (see select_greedily).
 
-    Returns (first index, last index, evaluate's result) of each candidate.
+    Returns (first index, last index, evaluate's result) of each passing run.
     """
     n = len(items)
-    passing: Dict[Tuple[int, int], object] = dict()
-    first_starts = range(n) if starts is None else range(max(starts.start - 1, 0), min(starts.stop + 1, n))
-    for i in first_starts:
+    passing = list()
+    for i in range(n) if starts is None else starts:
         genes = set()
         for j in range(i, n):
             if items[j].gene in genes or not fits(items[i:j + 1]):
@@ -117,15 +116,8 @@ def span_candidates(items: Sequence[Item], fits: Callable[[Sequence[Item]], bool
             reach = [item for item in items[left:right + 1] if item.gene not in genes] + list(items[i:j + 1])
             result = evaluate(items[i:j + 1], _dedup_genes(sorted(reach, key=lambda item: item.start)))
             if result is not None:
-                passing[(i, j)] = result
-    candidates = list()
-    for (i, j), result in passing.items():
-        if starts is not None and i not in starts:
-            continue
-        if j > i and ((i + 1, j) in passing or (i, j - 1) in passing):
-            continue
-        candidates.append((i, j, result))
-    return candidates
+                passing.append((i, j, result))
+    return passing
 
 
 def _dedup_genes(items: Sequence[Item]) -> List[Item]:

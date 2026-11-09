@@ -563,7 +563,7 @@ class SystemDetector:
         left, right = stand_in(-1, -1, 0, -1), stand_in(-2, contig_length, contig_length + 1, cds_count)
         window = prepared.model.window
         if window.mode == "span":
-            # the window at each end: a stand-in passes on its own, so the tightest runs would be the stand-ins
+            # the window at each end: a stand-in passes on its own, so span selection would pick it alone
             candidates = list()
             for end, ordered in ((left, members), (right, members[::-1])):
                 run = [end]

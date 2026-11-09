@@ -133,7 +133,9 @@ of "the window":
 - `span`: the system's **reach** (decided). A member is within reach when the system plus
   that member would still fit the span limit. So with `max_cds: 10`, a 3-CDS system reaches
   7 CDSs beyond either end. `~W` means "no W within reach", and a forbidden member within
-  reach vetoes the system. The system itself is the tightest run of members that passes.
+  reach vetoes the system. The system itself is the best-scoring run of members that passes,
+  and the shortest of equal scores: it takes every member that fills another component, but no
+  stray duplicates.
 
 - When both `max_cds` and `max_kb` are given, both must hold.
 - `mode` defaults to `span`, the literal reading of "within N CDSs", so
@@ -164,7 +166,7 @@ Span mode, negation and duplicates: members X, Y and W at CDS positions 1, 2 and
 
 | Condition | Result | Why |
 |---|---|---|
-| `X & Y` | **found**, CDSs 1-2 | the tightest passing run is X, Y; W is not part of the system |
+| `X & Y` | **found**, CDSs 1-2 | X, Y is the shortest of the best-scoring runs; W is not part of the system |
 | `X & Y & ~W` | not found | W is within reach: the system plus W covers 9 CDSs, within 10 |
 | `X & Y & ~W`, `max_cds: 5` | **found**, CDSs 1-2 | W is out of reach: the system plus W would cover 9 CDSs, more than 5 |
 

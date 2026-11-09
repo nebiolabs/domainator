@@ -66,6 +66,22 @@ def test_span_picks_the_best_of_overlapping_runs():
     assert found(record, window_model("A & B", window_cds=2)) == [["cds1", "cds2"]]
 
 
+QUORUM_OF_FIVE = {"name": "S", "min_core": 2, "components": [{"name": name, "domains": [name]} for name in "ABCDE"]}
+
+
+@pytest.mark.parametrize("collection", [
+    models(QUORUM_OF_FIVE, defaults={"window": {"mode": "span", "max_cds": 10}}),
+    window_model("minimum(2, [A, B, C, D, E])", window_cds=10),
+    models(QUORUM_OF_FIVE, defaults={"window": {"mode": "chain", "max_cds": 10, "max_span_cds": 10}}),
+], ids=["span_quorum", "span_minimum", "chain_capped"])
+def test_span_takes_every_member_that_fits(collection):
+    # a run that passes with 2 members grows to every member within the span, not just the best pair
+    assert found(contig(["", "A", "B", "C", "D", "E", ""]), collection) == [["cds1", "cds2", "cds3", "cds4", "cds5"]]
+    # 12 CDSs end to end: the best run that fits is C, D, E; then A, B
+    record = contig(["A", "B", "", "", "", "", "", "", "", "C", "D", "E"])
+    assert sorted(found(record, collection)) == [["cds0", "cds1"], ["cds9", "cds10", "cds11"]]
+
+
 def test_tandem_copies_are_separate_systems():
     record = contig(["A", "B", "", "", "", "A", "B"])
     for mode, size in (("chain", 1), ("span", 2), ("anchor", 1)):

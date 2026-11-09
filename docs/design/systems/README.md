@@ -164,7 +164,7 @@ The maintainer settled the open questions of the earlier drafts (November 2026):
     `attach_to_cds` ([definition_formats.md](definition_formats.md#nucleotide-references)).
 12. **Span mode:** a negated name or forbidden component vetoes a system when it is within
     the system's *reach* (the system plus it would still fit the span limit), and the system
-    is the tightest passing run of members ([detection.md](detection.md#span-domainator-the-whole-system-within-x)).
+    is the best-scoring passing run of members, shortest first among equal scores ([detection.md](detection.md#span-domainator-the-whole-system-within-x)).
 13. **Partial flag:** the qualifier is `/system_partial`, not `/partial`
     ([data_model.md](data_model.md#qualifiers)).
 14. **Context requirement:** `system_search` and `select_by_system` take
@@ -261,8 +261,8 @@ from these documents:
     is the detection option the design calls `--partial_systems include`: that name is
     `select_by_system`'s flag selector (deviation 3). A window passes as truncated when it
     passes with a stand-in member just beyond the contig end that fills every component. In
-    span mode, the window at each end (as far as the limit reaches) is tested, because a
-    stand-in alone would always be the tightest run. The span radius behind `/system_partial`
+    span mode, the window at each end (as far as the limit reaches) is tested, because span
+    selection would always pick a stand-in alone (it passes, and is the shortest run). The span radius behind `/system_partial`
     now leaves a CDS for the missing member.
 15. **Short-form roles.** A name used only negated as a bare name (`~W`) is forbidden. One used
     only negated inside `cds()`, a function or `<`, or only in `extenders`, is neutral: in

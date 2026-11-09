@@ -750,6 +750,10 @@ attached to a CDS never count as CDSs.
 | `anchor` | each member's distance from an anchor member that contributes to the condition | the anchor's radius |
 
 `chain` and `anchor` windows may add `max_span_cds`/`max_span_kb`, a cap on the whole system.
+In `span` mode (and where a cap splits a cluster), overlapping runs that pass are chosen by
+score, then by the shorter span: a system takes every member within the limit that fills
+another component (five neighbors of a "2 of 5" quorum are one system), but not a stray second
+copy of a component.
 
 **Conditions**: `&`, `|`, `~` and parentheses over component names, and `a < b` (a member
 filling a lies upstream of one filling b, in system orientation; `a < b < c` needs three
