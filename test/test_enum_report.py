@@ -1086,3 +1086,55 @@ def test_enum_report_fragment(shared_datadir):
         assert set(contig_rows.values()) == {"?", "complete"}
         domain_rows = {row[0]: row[-1] for row in report(proteins, "--by", "domain")}
         assert domain_rows[fragment_id] == "?" # the domain doesn't need to reach the missing end
+
+
+def _systems_contig():
+    from domainator.find_systems import find_systems
+    from system_records import contig, layout
+    record = contig(layout({"GajA": 2, "GajB": 3, "RelE": 8, "HicB": 9}), record_id="both")
+    record, = find_systems([record], domain_expr="GajA & GajB", window_cds=3, system_name="Gabija")
+    record, = find_systems([record], domain_expr="RelE & HicB", window_cds=3, system_name="TA", clear=False)
+    return record
+
+
+def _report(records, by, columns):
+    import io
+    from domainator.enum_report import enum_report
+    from domainator.report_columns import parse_columns
+    from domainator.enum_report import COLUMNS
+    out = io.StringIO()
+    enum_report(records, by=by, analyses=parse_columns(columns, COLUMNS), tsv_out_handle=out)
+    header, *rows = [line.split("\t") for line in out.getvalue().splitlines()]
+    return [dict(zip(header, row)) for row in rows]
+
+
+def test_enum_report_systems_by_contig():
+    row, = _report([_systems_contig()], "contig", ["systems", "system_components", "system_count:TA", "system_count:command_line:Gabija"])
+    assert row["systems"] == "Gabija; TA"
+    assert row["system_components"] == "core:GajA; core:GajB; core:RelE; core:HicB"
+    assert row["system_count_TA"] == "1" and row["system_count_command_line_Gabija"] == "1"
+
+
+def test_enum_report_by_system():
+    rows = _report([_systems_contig()], "system", ["domains", "length", "start", "end", "systems", "system_categories"])
+    assert [(r["contig"], r["system"], r["domains"], r["length"], r["start"], r["end"]) for r in rows] == [
+        ("both", "Gabija", "GajA; GajB", "1900", "1001", "2900"), ("both", "TA", "HicB; RelE", "1900", "7001", "8900")]
+    assert [r["systems"] for r in rows] == ["Gabija", "TA"]
+    assert rows[0]["system_categories"] == "."
+
+
+def test_enum_report_systems_by_cds():
+    rows = _report([_systems_contig()], "cds", ["systems", "system_components"])
+    assert [(r["cds"], r["systems"], r["system_components"]) for r in rows if r["systems"]] == [
+        ("L1", "Gabija", "core:GajA"), ("L2", "Gabija", "core:GajB"), ("L7", "TA", "core:RelE"), ("L8", "TA", "core:HicB")]
+    assert sum(1 for r in rows if not r["systems"]) == 8
+
+
+def test_enum_report_system_search():
+    from domainator.select_by_system import select_by_system
+    region, _ = select_by_system([_systems_contig()], cds_range=(1, 1))
+    row, = _report([region], "contig", ["system_search"])
+    assert (row["system_search_name"], row["system_search_database"], row["system_search_score"],
+            row["system_search_completeness"], row["system_search_core_count"]) == ("Gabija", "command_line", "100.0", "", "2")
+    row, = _report([_systems_contig()], "contig", ["system_search"])
+    assert row["system_search_name"] == ""

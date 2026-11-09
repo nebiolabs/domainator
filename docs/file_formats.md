@@ -1165,6 +1165,11 @@ when a key is removed or changes meaning; new keys can appear without a new vers
 readers must ignore keys they don't know. All three are at version 1.
 
 - `summary_report`: `contig_stats`, `domain_frequency`, `domain_cooccurrence` and `taxonomy`.
+  Input with systems (`Domain_System` features) adds `system_frequency` (one object per system
+  name: `system`, `database`, `category`, `count`, `contigs`, `avg_score`),
+  `system_cooccurrence` (for each system, the percent of the contigs with it that also have
+  each other system), and with `--taxonomy`, `system_taxonomy` (`taxid`, `name`, `rank`,
+  `system`, `count`).
 - `matrix_report`: `nodes`, `non_zero_edges`, `edge_scores`, `connected_components`,
   `merge_impact_metric`, `split_events`, `split_event_total` and `max_merge_events`.
 - `ssn_navigator`: `query` (the `--query` mode) and the keys of that mode's answer.

@@ -1,6 +1,12 @@
 """Writes record-wise information from Genbank files into tab-separated or html tables
 
-Takes a genbank file which has been annotated using Domainate, write tabulated descriptions of each contig, CDS, or domain.
+Takes a genbank file which has been annotated using Domainate, write tabulated descriptions of each contig, CDS, domain
+or system.
+
+With --by system, each row is the region of one system (a Domain_System feature, from find_systems), so columns
+such as domains, architecture and length describe the system. The systems columns report, for each row, the
+systems on the contig (--by contig), the systems a CDS is a member of (--by cds and --by domain), or the system
+itself (--by system).
 
 """
 
@@ -17,7 +23,8 @@ from domainator.cli.common import list_and_file_to_dict_keys, partial_help
 from domainator.locations import slice_record_from_location
 from domainator.taxonomy.records import TaxonomyData
 from domainator.partial import get_fragment_status, cds_fragment_status, contig_has_fragment, fragment_status_allowed, PARTIAL_CHOICES
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME
+from domainator.systems.features import component_values
 from domainator.find_features import search_motif
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.SeqUtils import molecular_weight
@@ -33,7 +40,7 @@ from domainator.location_ops import stranded_end_human_readable, stranded_start,
 import re
 from domainator.report_columns import Analysis
 
-SELECT_CATEGORIES = ("contig", "cds", "domain")
+SELECT_CATEGORIES = ("contig", "cds", "domain", "system")
 COLUMNS = (
     Column("domains", "the domain names, in alphabetical order and separated by '; ', each listed once."),
     Column("domain_descriptions", "the domain descriptions, in alphabetical order of domain name and separated by '; ', each listed once."),
@@ -69,7 +76,14 @@ COLUMNS = (
     Column("partial_count", "the number of partial CDSs: by contig, the CDSs with '<' or '>' in their location (for a protein record, 1 if it is a fragment); by cds, 1 if the CDS or protein is a fragment, otherwise 0; by domain, 1 if its CDS or protein is a fragment, whether or not the domain reaches the missing end."),
     Column("fragment", "whether the protein or CDS is a fragment: complete, N (missing the N-terminus), C (missing the C-terminus), NC (missing both), or ? (missing ends unknown, e.g. from a UniProt ' (Fragment)' or MGnify 'FL=0' header). Only for rows that are a single protein or CDS; otherwise empty, with a warning."),
     Column("append", "a column with this name and type (str, int or float) holding this value in every row.", ("name", "type", "value")),
+    Column("systems", "the names of the row's systems (see the description above), in alphabetical order and separated by '; ', each listed once."),
+    Column("system_categories", "the categories of the row's systems, in alphabetical order and separated by '; ', each listed once."),
+    Column("system_components", "role:component for each member of the row's systems, in contig order, separated by '; '. By cds and domain, the components the CDS fills."),
+    Column("system_count", "the number of the row's systems with this name (name or database:name), in a column named system_count_[name].", ("name",)),
+    Column("system_search", "several columns describing the record's System_Search feature (from select_by_system): system_search_name, system_search_database, system_search_score, system_search_evalue, system_search_completeness, system_search_core_count, system_search_total_count."),
 )
+
+ROW_SYSTEMS_ANNOTATION = "_row_systems" # set on each row's record by process_record: [(system feature, [ComponentValue of the row])]
 
 def get_strand(loc: Union[FeatureLocation, CompoundLocation]) -> str:
     if loc.parts[0].strand == -1:
@@ -573,6 +587,62 @@ PARTIAL_COUNT_HELP = ("Reports the number of partial CDSs: by contig, the number
                       "by cds, 1 if the CDS or protein is a fragment, otherwise 0; by domain, 1 if the CDS or protein the domain is on is a fragment, "
                       "otherwise 0, whether or not the domain reaches the missing end.")
 
+def _row_systems(rec):
+    return rec.annotations.get(ROW_SYSTEMS_ANNOTATION, [])
+
+
+def system_names(rec) -> str:
+    return "; ".join(sorted({feature.qualifiers["name"][0] for feature, _ in _row_systems(rec)}))
+
+
+def system_categories(rec) -> str:
+    return "; ".join(sorted({feature.qualifiers.get("category", ["."])[0] for feature, _ in _row_systems(rec)}))
+
+
+def system_components(rec) -> str:
+    return "; ".join(f"{value.role}:{value.component}" for _, values in _row_systems(rec) for value in values)
+
+
+def system_count_factory(spec):
+    """Factory for counting the row's systems with a given name (name or database:name)."""
+    name = spec[0] if isinstance(spec, list) else spec
+
+    def system_count(rec, loc, tax):
+        return sum(1 for feature, _ in _row_systems(rec)
+                   if name in (feature.qualifiers["name"][0], f"{feature.qualifiers['database'][0]}:{feature.qualifiers['name'][0]}"))
+
+    safe_name = re.sub(r"[^A-Za-z0-9]+", "_", str(name)).strip("_") or "system"
+    return {"columns": [f"system_count_{safe_name}"], "column_types": ["int"], "function": system_count}
+
+
+SYSTEM_SEARCH_COLUMNS = ("system_search_name", "system_search_database", "system_search_score", "system_search_evalue",
+                         "system_search_completeness", "system_search_core_count", "system_search_total_count")
+
+
+def system_search(rec: SeqRecord) -> Tuple:
+    """The SYSTEM_SEARCH_COLUMNS of the record's System_Search feature, or empty values without one."""
+    for feature in rec.features:
+        if feature.type == SYSTEM_SEARCH_BEST_HIT_NAME:
+            completeness = feature.qualifiers.get("completeness", ["."])[0]
+            return (feature.qualifiers["name"][0], feature.qualifiers["database"][0], feature_score(feature),
+                    feature.qualifiers.get("evalue", [None])[0], None if completeness == "." else float(completeness),
+                    int(feature.qualifiers.get("core_count", [0])[0]), int(feature.qualifiers.get("total_count", [0])[0]))
+    return ("", "", None, None, None, None, None)
+
+
+def _systems_by_cds(rec) -> Dict[str, List]:
+    """{cds_id: [(system feature, [the ComponentValues of that CDS])]} for the record's Domain_System features."""
+    out: Dict[str, List] = dict()
+    for feature in rec.features:
+        if feature.type == SYSTEM_FEATURE_NAME:
+            values_by_cds: Dict[str, List] = dict()
+            for value in component_values(feature):
+                values_by_cds.setdefault(value.cds_id, []).append(value)
+            for cds_id, values in values_by_cds.items():
+                out.setdefault(cds_id, []).append((feature, values))
+    return out
+
+
 def get_analysis_names(analyses):
     analysis_names = list()
     for analysis in analyses:
@@ -586,7 +656,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
     """
     Args:
         rec (SeqRecord): 
-        by (str): one of "contig", "cds", "domain"
+        by (str): one of "contig", "cds", "domain", "system"
         analyses_to_run (list): list of dicts with keys "columns", "column_types", "function"
         ncbi_taxonomy (NCBITaxonomy): 
         partial (str): which rows to report, by fragment status: "include" (all), "exclude" (skip fragments), or "only" (only fragments).
@@ -601,7 +671,11 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
     sub_recs = list()
     locs = list()
     fragment_statuses = list() # one per sub_rec, for the partial filter
+    row_systems = list() # one per sub_rec: [(system feature, [ComponentValue of the row])]
+    cds_names = list()
+    domain_names = list()
     if by == "contig":
+        row_systems.append([(f, component_values(f)) for f in rec.features if f.type == SYSTEM_FEATURE_NAME])
         sub_recs.append(rec)
         locs.append(FeatureLocation(0, len(rec), 1))
         if rec.annotations.get("molecule_type") == "protein":
@@ -610,10 +684,20 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
         else:
             fragment_statuses.append("?" if contig_has_fragment(rec) else None) # for the partial filter
             contig_partial_count = sum(1 for f in rec.features if f.type == "CDS" and get_fragment_status(f) is not None)
+    elif by == "system":
+        for feature in rec.features:
+            if feature.type == SYSTEM_FEATURE_NAME:
+                system_rec = slice_record_from_location(rec, feature.location)
+                if source_filename:
+                    system_rec.annotations["_source_filename"] = source_filename
+                sub_recs.append(system_rec)
+                locs.append(feature.location)
+                cds_names.append(feature.qualifiers["name"][0])
+                row_systems.append([(feature, component_values(feature))])
+                fragment_statuses.append("?" if contig_has_fragment(system_rec) else None)
     else: #by cds or domain
-        cds_names = list()
-        domain_names = list()
         sources = get_sources(rec)
+        systems_by_cds = _systems_by_cds(rec)
         if rec.annotations['molecule_type'] != "protein": # nucleic acid
             cdss = DomainatorCDS.list_from_contig(rec, include_nucleic_acid_annotations=True)
             cdss.sort(key=lambda x: stranded_start(x.feature.location))
@@ -629,6 +713,7 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                     locs.append(cdss[i].feature.location)
                     cds_names.append(cdss[i].name)
                     fragment_statuses.append(cds_fragment_status(rec, cdss[i].feature))
+                    row_systems.append(systems_by_cds.get(cdss[i].num, []))
                 else: # by == "domain"
                     cds_summary = cdss[i]
                     for domain in cds_summary.domain_features:
@@ -641,12 +726,14 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                         sub_recs.append(domain_rec)
                         locs.append(domain.location)
                         fragment_statuses.append(cds_fragment_status(rec, cds_summary.feature))
+                        row_systems.append(systems_by_cds.get(cds_summary.num, []))
         else: # protein
             if by == "cds":
                 sub_recs.append(rec)
                 cds_names.append(" ")
                 locs.append(FeatureLocation(0, len(rec), 1))
                 fragment_statuses.append(get_fragment_status(rec))
+                row_systems.append([])
             else: # by == "domain"
                 sources = get_sources(rec)
                 for feature in rec.features:
@@ -659,14 +746,23 @@ def process_record(rec:SeqRecord, by:str, analyses_to_run:List[Dict[str,Any]], n
                         sub_recs.append(domain_rec)
                         locs.append(feature.location)
                         fragment_statuses.append(get_fragment_status(rec))
+                        row_systems.append([])
             
     
     for i, sub_rec in enumerate(sub_recs):
         if not fragment_status_allowed(fragment_statuses[i], partial):
             continue
         sub_rec.annotations[FRAGMENT_STATUS_ANNOTATION] = fragment_statuses[i]
-        sub_rec.annotations[PARTIAL_COUNT_ANNOTATION] = contig_partial_count if by == "contig" else (0 if fragment_statuses[i] is None else 1)
+        if by == "contig":
+            sub_rec.annotations[PARTIAL_COUNT_ANNOTATION] = contig_partial_count
+        elif by == "system":
+            sub_rec.annotations[PARTIAL_COUNT_ANNOTATION] = sum(1 for f in sub_rec.features if f.type == "CDS" and get_fragment_status(f) is not None)
+        else:
+            sub_rec.annotations[PARTIAL_COUNT_ANNOTATION] = 0 if fragment_statuses[i] is None else 1
+        sub_rec.annotations[ROW_SYSTEMS_ANNOTATION] = row_systems[i]
         out_line = [contig_name]
+        if by == "system":
+            out_line.append(cds_names[i])
         if by == "cds" or by == "domain":
             out_line.append(cds_names[i])
             if by == "domain":
@@ -717,8 +813,8 @@ def enum_report(records: Iterable[SeqRecord], *, by: str = "contig", analyses: L
 
     Args:
         records: the contigs or proteins (SeqRecords).
-        by: what each row describes: "contig", "cds" or "domain". For proteins, contig and cds
-            are the same.
+        by: what each row describes: "contig", "cds", "domain" or "system" (the region of each
+            Domain_System feature). For proteins, contig and cds are the same.
         analyses: the columns to report (from report_columns.parse_columns).
         tsv_out_handle: an open text handle for the TSV table, or None.
         html_out_handle: an open text handle for the HTML table, or None.
@@ -754,8 +850,13 @@ def enum_report(records: Iterable[SeqRecord], *, by: str = "contig", analyses: L
                 "taxid_lineage": { "columns": ["taxid_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([str(x) for x in tax.lineage][1:]) }, # [1:] to remove root
                 "taxname_lineage": { "columns": ["taxname_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.names][1:]) }, # [1:] to remove root
                 "rank_lineage": { "columns": ["rank_lineage"], "column_types": ["str"], "function": lambda rec,loc,tax: "; ".join([x for x in tax.ranks][1:]) }, # [1:] to remove root
+                "systems": {"columns": ["systems"], "column_types": ["str"], "function": lambda rec,loc,tax: system_names(rec)},
+                "system_categories": {"columns": ["system_categories"], "column_types": ["str"], "function": lambda rec,loc,tax: system_categories(rec)},
+                "system_components": {"columns": ["system_components"], "column_types": ["str"], "function": lambda rec,loc,tax: system_components(rec)},
+                "system_search": {"columns": list(SYSTEM_SEARCH_COLUMNS), "column_types": ["str", "str", "float", "str", "float", "int", "int"],
+                                  "function": lambda rec,loc,tax: system_search(rec)},
                 }
-    DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
+    DYNAMIC_ANALYSES = {"taxid": taxid_factory, "taxname": taxname_factory, "qualifier":qualifier_factory, "feature_count": feature_count_factory, "append": append_factory, "motif_count": motif_count_factory, "net_charge": net_charge_factory, "repeat_count": repeat_count_factory, "named_domain_count": named_domain_count_factory, "system_count": system_count_factory} # values are functions that return dicts of {"columns":[names_to_appear_in_output],  "column_types": [types_of_columns], "function": function taking rec, loc, tax as arguments and returning a scalar or list of scalars}
     STATIC_ANALYSES_FACTORIES = {"isoelectric_point": isoelectric_point_factory, "starts_with": starts_with_factory, "molecular_weight": molecular_weight_factory, "fragment": fragment_factory, "partial_count": partial_count_factory} # factories that take no arguments
     
     headers = ["contig"]
@@ -766,6 +867,9 @@ def enum_report(records: Iterable[SeqRecord], *, by: str = "contig", analyses: L
         column_types.append("str")
     if by == "domain":
         headers.append("domain")
+        column_types.append("str")
+    if by == "system":
+        headers.append("system")
         column_types.append("str")
 
 
@@ -834,7 +938,7 @@ def build_parser():
                         help="only examine contigs with ids listed in this file (one per line). Additive with --contigs. default: all contigs.")
 
     parser.add_argument('--by', type=str.lower, default="contig", choices=SELECT_CATEGORIES,
-                        help="One line in output for every by contig, cds or domain. For protein genbanks, contig and cds are treated the same.")
+                        help="One line in output for every contig, cds, domain or system (the region of each Domain_System feature, from find_systems). For protein genbanks, contig and cds are treated the same.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES,
                         help=partial_help("Which rows to report") + " By contig, a nucleotide contig is a fragment if any of its CDSs is. By domain, the CDS or protein the domain is on decides.")
 

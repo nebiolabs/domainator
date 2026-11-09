@@ -29,7 +29,7 @@ from domainator.taxonomy.records import TaxonomyData, get_taxid
 from domainator.partial import get_fragment_status, fragment_status_allowed, PARTIAL_CHOICES
 from domainator.model import get_cds_unique_name, feature_score
 from domainator.data_matrix import DataMatrix
-from domainator import DOMAIN_FEATURE_NAME
+from domainator import DOMAIN_FEATURE_NAME, SYSTEM_FEATURE_NAME
 import numpy as np
 from typing import Dict, Iterable, Optional, Set, TextIO, Tuple
 from domainator.text_plot import text_histogram, text_table
@@ -85,6 +85,25 @@ CDSs per 10 kb: {num_cdss / ((sum(lengths) + 0.01) / 10000):.2f}
         print("Taxonomy", file=self.out_handle)
         print(text_table(["taxid", "name", "rank", "count"], rows, [True, False, False, True]), file=self.out_handle)
 
+    def write_system_tables(self, system_rows, system_cooccurrence, system_taxonomy):
+        if not system_rows:
+            return
+        print("System Frequency", file=self.out_handle)
+        print(text_table(["system", "database", "category", "count", "contigs", "avg score"],
+                         [[r["system"], r["database"], r["category"], str(r["count"]), str(r["contigs"]), f"{r['avg_score']:.1f}"]
+                          for r in system_rows], [False, False, False, True, True, True]), file=self.out_handle)
+        columns = [r["system"] for r in system_rows]
+        print("System Co-occurrence (the percent of the contigs with the row's system that also have the column's "
+              "system)", file=self.out_handle)
+        print(text_table(["system", *columns],
+                         [[row] + [f"{system_cooccurrence[row].get(column, 0):.1f}" for column in columns] for row in columns],
+                         [False] + [True] * len(columns)), file=self.out_handle)
+        if system_taxonomy is not None:
+            print("Systems by Taxonomy", file=self.out_handle)
+            print(text_table(["taxid", "name", "rank", "system", "count"],
+                             [[str(r["taxid"]), r["name"], r["rank"], r["system"], str(r["count"])] for r in system_taxonomy],
+                             [True, False, False, False, True]), file=self.out_handle)
+
     def write_footer(self):
         pass
 
@@ -137,6 +156,14 @@ class SummaryJSONWriter():
             name, rank = _name_and_rank(entry["data"])
             rows.append({"taxid": taxid, "name": name, "rank": rank, "count": entry["count"]})
         self.payload["taxonomy"] = rows
+
+    def write_system_tables(self, system_rows, system_cooccurrence, system_taxonomy):
+        if not system_rows:
+            return
+        self.payload["system_frequency"] = system_rows
+        self.payload["system_cooccurrence"] = system_cooccurrence or None
+        if system_taxonomy is not None:
+            self.payload["system_taxonomy"] = system_taxonomy
 
     def write_footer(self):
         json.dump(self.payload, self.out_handle, separators=(",", ":"), default=str)
@@ -255,6 +282,10 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
     """Write a summary of ``records``: contig and CDS counts, contig lengths and a table of the
     domains found, to any of the text, HTML and JSON handles (each can be None).
 
+    Records with systems (Domain_System features, from find_systems) also get a table of the
+    systems found, how often each system occurs on a contig with each other, and with
+    ``taxonomy``, the systems of each taxon, in the text and JSON reports.
+
     Args:
         records: the annotated contigs or proteins (SeqRecords).
         text_out_handle: an open text handle for the text report.
@@ -293,6 +324,9 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
         domains = list()
 
     taxa_data = dict() # dict of dicts, taxid: {count: int, data: TaxonomyData}
+    system_stats = dict() # system name: {count, contigs, databases, categories, avg score}
+    system_contig_pairs = Counter() # (system, system): contigs with both
+    system_taxa = Counter() # (taxid, system): systems
 
     for contig in records:
         if databases is not None:
@@ -349,6 +383,23 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
                 inv_count = 1/domain_stats[id]['count']
                 domain_stats[id]['avg score'] = (inv_count * score) + ((1 - inv_count)*domain_stats[id]['avg score'])
         
+        contig_systems = set()
+        for feature in contig.features:
+            if feature.type == SYSTEM_FEATURE_NAME:
+                name = feature.qualifiers["name"][0]
+                stats = system_stats.setdefault(name, {"count": 0, "contigs": 0, "database": set(), "category": set(), "avg_score": 0.0})
+                stats["count"] += 1
+                stats["database"].add(feature.qualifiers["database"][0])
+                stats["category"].add(feature.qualifiers.get("category", ["."])[0])
+                stats["avg_score"] += (feature_score(feature) - stats["avg_score"]) / stats["count"]
+                if taxonomy:
+                    system_taxa[(taxid, name)] += 1
+                contig_systems.add(name)
+        for name in contig_systems:
+            system_stats[name]["contigs"] += 1
+            for other in contig_systems:
+                system_contig_pairs[(name, other)] += 1
+
         # calculate correlations
         for domain1 in contig_domains:
             for domain2 in contig_domains:
@@ -375,11 +426,26 @@ def summary_report(records: Iterable[SeqRecord], *, text_out_handle: Optional[Te
     if len(correlations_dict) > 0:
         domain_cooccurence_df = pd.DataFrame.from_dict(correlations_dict, orient='index').fillna("")
 
+    system_rows = [{"system": name, "database": "; ".join(sorted(stats["database"])),
+                    "category": "; ".join(sorted(stats["category"])), "count": stats["count"],
+                    "contigs": stats["contigs"], "avg_score": stats["avg_score"]}
+                   for name, stats in sorted(system_stats.items(), key=lambda item: (-item[1]["count"], item[0]))]
+    system_cooccurrence = {row: {column: 100 * system_contig_pairs[(row, column)] / system_stats[row]["contigs"]
+                                 for column in sorted(system_stats) if system_contig_pairs[(row, column)]}
+                           for row in sorted(system_stats)}
+    system_taxonomy = None
+    if taxonomy:
+        system_taxonomy = list()
+        for (taxid, name), count in sorted(system_taxa.items(), key=lambda item: (str(item[0][0]), item[0][1])):
+            taxon_name, rank = _name_and_rank(taxa_data[taxid]["data"])
+            system_taxonomy.append({"taxid": taxid, "name": taxon_name, "rank": rank, "system": name, "count": count})
+
     for output in longform_outputs:
         output.write_header(num_contigs, num_cdss, lengths, num_partial_cdss=num_partial_cdss, num_fragment_proteins=num_fragment_proteins)
         output.write_domain_table(domain_table_df, domain_cooccurence_df)
         if taxonomy:
             output.write_taxonomy(taxa_data)
+        output.write_system_tables(system_rows, system_cooccurrence, system_taxonomy)
         output.write_footer()
 
     if co_occurrence_fraction_out is not None:

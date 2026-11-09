@@ -309,3 +309,27 @@ def test_summary_report_taxid_missing_from_the_database(shared_datadir, tmp_path
     data = json.loads(out.read_text())
     assert data["contig_stats"]["contigs"] == 20
     assert {"taxid": 59919, "name": "", "rank": "", "count": 1} in data["taxonomy"]
+
+
+def test_summary_report_systems():
+    import io
+    import json as json_module
+    from domainator.find_systems import find_systems
+    from domainator.summary_report import summary_report
+    from system_records import contig, layout
+    both = contig(layout({"GajA": 2, "GajB": 3, "RelE": 8, "HicB": 9}), record_id="both")
+    gabija = contig(layout({"GajA": 2, "GajB": 3}), record_id="gabija")
+    records = list(find_systems([both, gabija], domain_expr="GajA & GajB", window_cds=3, system_name="Gabija"))
+    records = list(find_systems(records, domain_expr="RelE & HicB", window_cds=3, system_name="TA", clear=False))
+    text, json_out = io.StringIO(), io.StringIO()
+    summary_report(records, text_out_handle=text, json_out_handle=json_out)
+    summary = json_module.loads(json_out.getvalue())
+    assert summary["system_frequency"] == [
+        {"system": "Gabija", "database": "command_line", "category": ".", "count": 2, "contigs": 2, "avg_score": 100.0},
+        {"system": "TA", "database": "command_line", "category": ".", "count": 1, "contigs": 1, "avg_score": 100.0}]
+    assert summary["system_cooccurrence"] == {"Gabija": {"Gabija": 100.0, "TA": 50.0}, "TA": {"Gabija": 100.0, "TA": 100.0}}
+    assert "System Frequency" in text.getvalue() and "System Co-occurrence" in text.getvalue()
+    # Without systems, nothing changes.
+    json_out = io.StringIO()
+    summary_report([contig(layout({"GajA": 2}))], json_out_handle=json_out)
+    assert "system_frequency" not in json_module.loads(json_out.getvalue())
