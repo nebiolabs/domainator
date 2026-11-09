@@ -205,6 +205,7 @@ and leave out `--max_hits_per_cds` and `--max_overlap`.
 | sort `system_search` output by score | `sort_contigs --system_type system_search` |
 | color and plot | `color_genbank --target systems_and_cdss --system_color_by category`, then `plot_contigs` |
 | tables | `enum_report --by system --columns systems system_components ...`, `summary_report` (system frequency, co-occurrence, and systems by taxon) |
+| neighborhood similarity by system content | `compare_contigs --sji 0.5` (beside `--ji` and `--ai`), then `build_ssn` |
 
 Systems are snapshots: `filter_domains` and other domain editors leave them as they are.
 Re-run `find_systems` (which replaces the systems of the same models) after changing the

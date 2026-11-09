@@ -8,7 +8,7 @@ Navarro-Muñoz, Jorge C., Nelly Selem-Mojica, Michael W. Mullowney, Satria A. Ka
 import functools
 import warnings
 from jsonargparse import ActionConfigFile
-from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_input, add_output, add_system_type, check_outputs, declare_outputs, tool_parser
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles, write_genbank, copy_SeqRecord, open_writable_seqfile
 from domainator._mp import Shared, make_pool, resolve_cpu
@@ -16,6 +16,7 @@ from collections import OrderedDict
 import scipy.cluster.hierarchy
 import math
 from domainator import DOMAIN_FEATURE_NAME
+from domainator.model import system_feature_types
 from domainator.data_matrix import DataMatrix, mirror_upper_triangle
 from domainator.sparse_scores import StreamingCSRChunkBuilder, feed_chunk_to_accumulator, iter_query_chunks, keep_top_k_per_row, prune_scores_inplace
 from domainator.ssn_edges import StreamingMstKnnAccumulator
@@ -326,6 +327,23 @@ class AdjacencyIndex(ContigMetric):
         _contig_ids, feature_matrix = _build_sparse_feature_matrix(contig_data)
         return _PreparedSimilarityMetric(self.weight, feature_matrix, self.__class__.__name__)
         
+class SystemJaccardIndex(JaccardIndex):
+    """The Jaccard index of the names of the systems on two contigs (Domain_System features, or with
+    system_type, System_Search features or both)."""
+
+    def __init__(self, weight: float = 0.0, system_type: str = "domain_system"):
+        self.weight = weight
+        self.feature_types = system_feature_types(system_type)
+        self.databases = None
+
+    def get_contig_data(self, recs, databases=None):
+        out = OrderedDict()
+        for contig in recs:
+            names = out.setdefault(contig.id, set())
+            names.update(feature.qualifiers["name"][0] for feature in contig.features if feature.type in self.feature_types)
+        return out
+
+
 class DomainSequenceSimilarity(ContigMetric):
     pass
 
@@ -503,7 +521,7 @@ def compare_contigs(records: Iterable[SeqRecord], *, metrics: Iterable[ContigMet
 
     Args:
         records: the contigs (SeqRecords). Of records with the same id, only the first is scored.
-        metrics: JaccardIndex and/or AdjacencyIndex objects; their weighted scores are summed.
+        metrics: JaccardIndex, AdjacencyIndex and/or SystemJaccardIndex objects; their weighted scores are summed.
         max_hits_per_query: keep this many of the top combined scores per contig (None: all).
         threshold: round combined scores less than or equal to this down to zero.
         progress: show progress bars.
@@ -624,8 +642,13 @@ def build_parser():
                         help="weighting for jaccard index metric, a comparison of all distinct types of domains in the contigs. When two contigs have no domains, their ji is 0.0.")
     parser.add_argument("--ai", default=0.5, required=False, type=float,
                         help="weighting for adjacency index metric, a comparison of shared domain pairs in the contigs. When two contigs have 0 or 1 domains, their ai is 0.0.")
+    parser.add_argument("--sji", default=0.0, required=False, type=float,
+                        help="weighting for system jaccard index metric, a comparison of the distinct systems (by name) "
+                             "in the contigs, from find_systems or domainate --system_models. When two contigs have no "
+                             "systems, their sji is 0.0. Default: 0 (not used).")
+    add_system_type(parser, help="Which systems --sji compares.")
     parser.add_argument("--databases", default=None, required=False, type=str, nargs="+",
-                        help="Domain databases to use for domain content comparison. default: all databases.")
+                        help="Domain databases to use for domain content comparison (--ji and --ai). default: all databases.")
 
     add_matrix_output_arguments(parser, noun="contig similarity score matrix")
 
@@ -661,13 +684,15 @@ def main(argv):
     if params.databases is not None:
         databases = set(params.databases)
 
-    if params.ji < 0 or params.ai < 0:
-        raise ValueError("Metric weights (--ji, --ai) must be non-negative.")
+    if params.ji < 0 or params.ai < 0 or params.sji < 0:
+        raise ValueError("Metric weights (--ji, --ai, --sji) must be non-negative.")
     metrics = list()
     if params.ji != 0.0:
         metrics.append(JaccardIndex(params.ji, databases=databases))
     if params.ai != 0.0:
         metrics.append(AdjacencyIndex(params.ai, databases=databases))
+    if params.sji != 0.0:
+        metrics.append(SystemJaccardIndex(params.sji, system_type=params.system_type))
     if len(metrics) == 0:
         raise ValueError("Please specify a non-zero weight for at least one metric.")
 

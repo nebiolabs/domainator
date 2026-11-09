@@ -7645,6 +7645,29 @@
    "required": false
   },
   {
+   "name": "sji",
+   "flags": [
+    "--sji"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
+  },
+  {
    "name": "databases",
    "flags": [
     "--databases"

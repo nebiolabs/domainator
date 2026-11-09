@@ -32,7 +32,9 @@ Give at least one of these outputs: `--hdf_out`, `--dense_text_out`, `--genbank_
 | `--knn` | INTEGER |  | Keep only OR-symmetric K-nearest-neighbor edges (K >= 1): an edge is kept if it is among the K best for either of its nodes. On its own this can split a cluster of the full graph into several; add --mst to keep the clusters connected. Computed while streaming, so the full matrix is never held in memory. Best paired with --hdf_out. |
 | `--ji` | NUMBER | 0.5 | weighting for jaccard index metric, a comparison of all distinct types of domains in the contigs. When two contigs have no domains, their ji is 0.0. |
 | `--ai` | NUMBER | 0.5 | weighting for adjacency index metric, a comparison of shared domain pairs in the contigs. When two contigs have 0 or 1 domains, their ai is 0.0. |
-| `--databases` | STRING ... |  | Domain databases to use for domain content comparison. default: all databases. |
+| `--sji` | NUMBER | 0.0 | weighting for system jaccard index metric, a comparison of the distinct systems (by name) in the contigs, from find_systems or domainate --system_models. When two contigs have no systems, their sji is 0.0. Default: 0 (not used). |
+| `--system_type` | {domain_system,system_search,all} | domain_system | Which systems --sji compares. domain_system: systems found by find_systems (Domain_System features). system_search: systems selected by a search (System_Search features). all: both. |
+| `--databases` | STRING ... |  | Domain databases to use for domain content comparison (--ji and --ai). default: all databases. |
 | `-o`, `--hdf_out` | FILE |  | Write the contig similarity score matrix to this Domainator hdf5 file. Values are stored sparse; a matrix with exactly symmetric values is stored as its upper triangle. |
 | `--dense_text_out` | FILE |  | Write the contig similarity score matrix to this tab-separated text file, every cell included. Use - for standard output. |
 | `--cpu` | INTEGER | 0 | How many cpu workers to use. Default: use all available physical cores. |

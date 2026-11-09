@@ -805,3 +805,30 @@ def test_compare_contigs_upper_triangle_scoring_matches_full_rows(lb):
 
         with pytest.raises(ValueError, match="cannot be combined with upper_only"):
             compare_contigs._compute_combined_similarity_chunk(prepared_metrics, 0, 2, 1, lb, upper_only=True)
+
+
+def _with_systems(record_id, names, feature_type="Domain_System"):
+    record = _make_compare_contig_record(record_id, ["A"])
+    for name in names:
+        record.features.append(SeqFeature(FeatureLocation(0, 10, 1), type=feature_type,
+                                          qualifiers={"name": [name], "database": ["test"]}))
+    return record
+
+
+def test_compare_contigs_sji():
+    """--sji compares the systems on the contigs by name."""
+    records = [_with_systems("a", ["Gabija", "Zorya"]), _with_systems("b", ["Gabija"]), _with_systems("c", []),
+               _with_systems("d", ["Gabija"], feature_type="System_Search")]
+    with tempfile.TemporaryDirectory() as output_dir:
+        input_path = os.path.join(output_dir, "input.gb")
+        with open(input_path, "w") as handle:
+            write_genbank(records, handle)
+        for system_type, expected in (("domain_system", {("a", "b"): 0.5, ("a", "a"): 1.0, ("b", "d"): 0.0}),
+                                      ("all", {("a", "b"): 0.5, ("b", "d"): 1.0, ("a", "d"): 0.5})):
+            out = os.path.join(output_dir, f"{system_type}.tsv")
+            compare_contigs.main(["-i", input_path, "--ji", "0", "--ai", "0", "--sji", "1", "--system_type", system_type,
+                                  "--dense_text_out", out])
+            matrix = pd.read_csv(out, sep="\t", index_col=0)
+            for (row, column), value in expected.items():
+                assert matrix.loc[row, column] == pytest.approx(value)
+            assert matrix.loc["a", "c"] == 0.0  # no systems
