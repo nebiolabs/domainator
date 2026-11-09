@@ -1193,3 +1193,44 @@ def test_domainator_inner_keeps_contig_hit_scores_beside_cds_hit_scores(monkeypa
     assert scores[0] == 80.0 and names[0] == "protein"
     contig_hit_index = next(i for i, f in enumerate(contigs[0].features) if f.type == DOMAIN_SEARCH_BEST_HIT_NAME and f.qualifiers["name"] == ["rna"])
     assert scores[contig_hit_index] == 40.0 and names[contig_hit_index] == "rna"
+
+
+def _hits(path):
+    return [(f.qualifiers["name"][0], f.qualifiers["score"][0]) for rec in SeqIO.parse(path, "genbank")
+            for f in rec.features if f.type == DOMAIN_FEATURE_NAME]
+
+
+@pytest.mark.parametrize("cutoff,line,kept", [
+    ("gathering", "GA    103.00 103.00;", True),
+    ("gathering", "GA    103.00 104.00;", False),  # the domain score is 103.1
+    ("gathering", "GA    104.00 100.00;", False),  # the sequence score is too
+    ("trusted", "TC    103.00 103.00;", True),
+    ("noise", "NC    200.00 200.00;", False),
+])
+def test_bit_cutoffs(shared_datadir, cutoff, line, kept):
+    """--bit_cutoffs keeps the hits that reach the profile's own two cutoffs, whatever -e says."""
+    key = line.split()[0]
+    with open(shared_datadir / "CcdB.hmm") as handle:
+        text = "".join(f"{line}\n" if row.startswith(key + " ") else row for row in handle)
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = os.path.join(output_dir, "ccdb.hmm")
+        with open(hmm, "w") as handle:
+            handle.write(text)
+        out = os.path.join(output_dir, "out.gb")
+        main(["-i", str(shared_datadir / "pDONR201.gb"), "-r", hmm, "-o", out, "-Z", "1000", "-e", "1e-50",
+              "--bit_cutoffs", cutoff])
+        assert _hits(out) == ([("CcdB", "103.1")] if kept else [])
+
+
+def test_bit_cutoffs_fall_back_to_evalue(shared_datadir):
+    """A profile without the cutoffs is searched with -e, with a warning."""
+    with open(shared_datadir / "CcdB.hmm") as handle:
+        text = "".join(row for row in handle if not row.startswith(("GA ", "TC ", "NC ")))
+    with tempfile.TemporaryDirectory() as output_dir:
+        hmm = os.path.join(output_dir, "ccdb.hmm")
+        with open(hmm, "w") as handle:
+            handle.write(text)
+        out = os.path.join(output_dir, "out.gb")
+        with pytest.warns(UserWarning, match="1 of the 1 profiles of database ccdb have no gathering cutoffs"):
+            main(["-i", str(shared_datadir / "pDONR201.gb"), "-r", hmm, "-o", out, "-Z", "1000", "--bit_cutoffs", "gathering"])
+        assert _hits(out) == [("CcdB", "103.1")]

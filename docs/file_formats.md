@@ -632,7 +632,8 @@ their `<family>__` prefix; exchangeable genes become extra references of their g
 component. References are the profiles' `NAME` lines, which can differ from their file names,
 with MacSyFinder's hit filters as thresholds: `i_evalue_sel` (0.001), `coverage_profile` (0.4
 for DefenseFinder, else the package's `model_conf.xml`, else 0.5; `--coverage_profile` sets it)
-and each profile's domain gathering threshold as `min_score`. Loners and multi-locus models are
+and each profile's domain gathering threshold as `min_score` (`domainate --bit_cutoffs gathering`
+applies the sequence threshold too, as MacSyFinder does). Loners and multi-locus models are
 found as single loci.
 
 The common case is short. "X, Y, Z and Q or R within 10 CDSs, at E-value 1e-20":

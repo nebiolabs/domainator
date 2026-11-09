@@ -98,8 +98,8 @@ class _system_search_worker():
 
     def __init__(self, *, references: Shared, allowed_taxids: Shared, collections: Sequence[ModelCollection],
                  profile_evalues, focus: Set[str], system_expr: Optional[str], z: int, evalue: float,
-                 min_evalue: float, max_mode: bool, batch_size: int, gene_call: Optional[str], partial: str,
-                 detection: dict, selection: dict, add_annotations: bool, max_hits: Optional[int], dedup: str):
+                 min_evalue: float, max_mode: bool, bit_cutoffs: Optional[str], batch_size: int,
+                 gene_call: Optional[str], partial: str, detection: dict, selection: dict, add_annotations: bool, max_hits: Optional[int], dedup: str):
         self.references = references
         self.allowed_taxids = allowed_taxids
         self.collections = collections
@@ -110,6 +110,7 @@ class _system_search_worker():
         self.evalue = evalue
         self.min_evalue = min_evalue
         self.max_mode = max_mode
+        self.bit_cutoffs = bit_cutoffs
         self.batch_size = batch_size
         self.gene_call = gene_call
         self.partial = partial
@@ -133,9 +134,12 @@ class _system_search_worker():
         annotated = domainate._domainate(
             records, references=None, pre_parsed_references=references, z=self.z, evalue=self.evalue,
             max_overlap=1, cpu=1, batch_size=self.batch_size, hits_only=True, gene_call=self.gene_call,
-            min_evalue=self.min_evalue, max_mode=self.max_mode, allowed_taxids=self.allowed_taxids.get(),
+            min_evalue=self.min_evalue, max_mode=self.max_mode, bit_cutoffs=self.bit_cutoffs,
+            allowed_taxids=self.allowed_taxids.get(),
             partial=self.partial, profile_evalues=self.profile_evalues)
-        with_systems = annotate_systems(annotated, self.collections, evalue=self.evalue, partial=self.partial,
+        # with bit_cutoffs, the profiles' cutoffs replace -e, so -e doesn't filter evidence either
+        evidence_evalue = None if self.bit_cutoffs is not None else self.evalue
+        with_systems = annotate_systems(annotated, self.collections, evalue=evidence_evalue, partial=self.partial,
                                         **self.detection)
         out = TopHits(self.max_hits, self.dedup) if self.max_hits is not None else list()
         for record in with_systems:
@@ -179,7 +183,8 @@ def system_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
                   window_mode: str = "span", system_name: str = "domain_expr", same_strand: bool = False,
                   systems: Optional[Set[str]] = None, system_expr: Optional[str] = None,
                   system_categories: Optional[Set[str]] = None, evalue: float = 0.001, min_evalue: float = 0.0,
-                  max_mode: bool = False, min_score: Optional[float] = None, min_completeness: Optional[float] = None,
+                  max_mode: bool = False, bit_cutoffs: Optional[str] = None, min_score: Optional[float] = None,
+                  min_completeness: Optional[float] = None,
                   max_system_overlap: float = 1.0, max_systems_per_contig: Optional[int] = None,
                   truncated_systems: str = "exclude",
                   max_hits: Optional[int] = None, cpu: int = 0, batch_size: int = 10000, add_annotations: bool = False,
@@ -215,7 +220,7 @@ def system_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
         system_categories: look only for models in these categories.
         evalue: search with this e-value (model profiles: or their model's looser threshold),
             and count only hits passing it as evidence.
-        min_evalue, max_mode: as for domainate.
+        min_evalue, max_mode, bit_cutoffs: as for domainate.
         min_score, min_completeness, max_system_overlap, max_systems_per_contig, truncated_systems: as for
             find_systems.
         max_hits: keep only this many systems, the best-scoring. None: all.
@@ -286,7 +291,8 @@ def system_search(targets: Iterable[Union[SeqRecord, Tuple[str, int, int]]], *, 
     worker = _system_search_worker(
         references=shared_references, allowed_taxids=shared_taxids, collections=collections,
         profile_evalues=profile_evalues, focus=focus, system_expr=system_expr, z=z, evalue=evalue,
-        min_evalue=min_evalue, max_mode=max_mode, batch_size=batch_size, gene_call=gene_call, partial=partial,
+        min_evalue=min_evalue, max_mode=max_mode, bit_cutoffs=bit_cutoffs, batch_size=batch_size, gene_call=gene_call,
+        partial=partial,
         detection=detection, selection=selection, add_annotations=add_annotations, max_hits=max_hits,
         dedup=region_dedup)
     top_hits = TopHits(max_hits, region_dedup) if max_hits is not None else None
@@ -336,6 +342,10 @@ def build_parser():
                         help="Hits with an e-value below this are not reported.")
     parser.add_argument("--max_mode", action="store_true", default=False,
                         help="Turn off hmmsearch's heuristic filters: slower, but finds weak hits.")
+    parser.add_argument("--bit_cutoffs", type=str, default=None, choices=domainate.BIT_CUTOFFS,
+                        help="Search protein HMM profiles with their own score cutoffs (gathering, trusted or noise), "
+                             "as hmmsearch --cut_ga does, instead of -e; -e then doesn't filter evidence either. "
+                             "Profiles without the cutoffs use -e. Models' own thresholds still apply.")
     parser.add_argument("--min_score", type=float, default=None,
                         help="Only select systems with at least this score.")
     parser.add_argument("--min_completeness", type=NonNegativeFloat, default=None,
@@ -460,6 +470,7 @@ def main(argv):
             evalue=params.evalue,
             min_evalue=params.min_evalue,
             max_mode=params.max_mode,
+            bit_cutoffs=params.bit_cutoffs,
             min_score=params.min_score,
             min_completeness=params.min_completeness,
             max_system_overlap=params.max_system_overlap,

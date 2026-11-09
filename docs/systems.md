@@ -222,7 +222,8 @@ but not exactly. The differences are listed in each directory's `conversion.tsv`
   residue less than Domainator.
 - **DefenseFinder and MacSyFinder.** Each profile's domain gathering threshold becomes a
   `min_score`, which approximates `hmmsearch --cut_ga` (that also checks the sequence
-  threshold). Loners and multi-locus models are found as single loci: their genes must lie
+  threshold). For the exact filter, search with `--bit_cutoffs gathering` (`domainate`,
+  `system_search`), as DefenseFinder does. Loners and multi-locus models are found as single loci: their genes must lie
   within the cluster.
 - **antiSMASH** (imported calls): members are the core CDSs whose profiles triggered each
   product, and protocluster systems are padded by antiSMASH's neighborhood with

@@ -255,8 +255,10 @@ def domain_feature_qualifiers(hit: SearchResult, cds_id: str) -> Dict[str, List[
     return qualifiers
 
 
-def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, program, out, evalues=None):
-    """evalues: per-reference e-value thresholds that replace evalue, by reference name."""
+def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, program, out, evalues=None, cutoffs=False):
+    """evalues: per-reference e-value thresholds that replace evalue, by reference name.
+    cutoffs: the hits were searched with bit_cutoffs; keep the domains HMMER includes under them,
+    instead of filtering by e-value."""
 
     for top_hits in hits: # each top_hits covers a single hmm
         for hit in top_hits:
@@ -264,8 +266,11 @@ def hmmer_hits_to_search_results(hits, references, evalue, db_name, min_evalue, 
             contig_index = int(hit_name[0])
             cds_index = int(hit_name[1])
             for domain in hit.domains:
-                threshold = evalues.get(domain.alignment.hmm_name, evalue) if evalues else evalue
-                if domain.i_evalue <= threshold and domain.i_evalue >= min_evalue:
+                if cutoffs:
+                    passes = hit.included and domain.included
+                else:
+                    passes = domain.i_evalue <= (evalues.get(domain.alignment.hmm_name, evalue) if evalues else evalue)
+                if passes and domain.i_evalue >= min_evalue:
                     domain_name = domain.alignment.hmm_name
                     domain_accession = domain.alignment.hmm_accession
                     match_positions = sum(1 for c in domain.alignment.identity_sequence if c.isalpha())
@@ -508,7 +513,22 @@ def read_references(reference_files: Optional[List[str]], foldseek: Optional[Lis
     
     return out
 
-def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None, foldseek_path=None, prostt5_weights=None, prostt5_device=None, profile_evalues=None):
+BIT_CUTOFFS = ("gathering", "trusted", "noise")
+"""The profile score cutoffs --bit_cutoffs can use, as in hmmsearch --cut_ga, --cut_tc and --cut_nc."""
+
+
+def _split_by_cutoffs(queries, hmms, bit_cutoffs: str, db_name: str):
+    """(profiles that have the bit_cutoffs, profiles that don't), warning about the second."""
+    with_cutoffs, without = list(), list()
+    for query, hmm in zip(queries, hmms):
+        (with_cutoffs if getattr(hmm.cutoffs, f"{bit_cutoffs}_available")() else without).append(query)
+    if without:
+        warnings.warn(f"{len(without)} of the {len(with_cutoffs) + len(without)} profiles of database {db_name} have no "
+                      f"{bit_cutoffs} cutoffs, so they were searched with the e-value threshold instead.")
+    return with_cutoffs, without
+
+
+def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, references, evalue:int, cpu:int, z=None, min_evalue:float=0.0, max_mode:bool=False, foldseek_device=None, foldseek_path=None, prostt5_weights=None, prostt5_device=None, profile_evalues=None, bit_cutoffs=None):
     """
     Args:
         proteins: list
@@ -532,6 +552,8 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
 
         algorithm: hmmsearch, phmmer, or foldseek depending on what the reference type is.
 
+        bit_cutoffs: "gathering", "trusted" or "noise": search protein profiles that have these score
+            cutoffs with them (hmmsearch --cut_ga, --cut_tc, --cut_nc) instead of evalue.
         profile_evalues: e-value thresholds that replace evalue for some references, by
             (db_name, reference name). Not applied to foldseek databases.
 
@@ -563,9 +585,17 @@ def run_search(proteins, nucleic_acids, infernal_nucleic_acids, foldseek, refere
                 db_varargs = {**varargs, "E": search_evalue, "domE": search_evalue, "incdomE": search_evalue} if evalues else varargs
                 if algorithm == "hmmsearch":
                     queries = db_dict[db_name]
-                    queries = queries.optimized_profiles() if isinstance(queries, HMMDatabase) else queries.values()
-                    hits = pyhmmer.hmmer.hmmsearch(queries, **db_varargs)
-                    hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "hmmsearch", out, evalues)
+                    queries = queries.optimized_profiles() if isinstance(queries, HMMDatabase) else list(queries.values())
+                    if bit_cutoffs is not None:
+                        queries, without = _split_by_cutoffs(queries, db_dict[db_name].values(), bit_cutoffs, db_name)
+                        if queries:
+                            hits = pyhmmer.hmmer.hmmsearch(queries, **{key: value for key, value in varargs.items() if key not in ("E", "domE", "incdomE")},
+                                                           bit_cutoffs=bit_cutoffs)
+                            hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "hmmsearch", out, cutoffs=True)
+                        queries = without
+                    if queries:
+                        hits = pyhmmer.hmmer.hmmsearch(queries, **db_varargs)
+                        hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "hmmsearch", out, evalues)
                 elif algorithm == "phmmer":
                     hits = pyhmmer.hmmer.phmmer(db_dict[db_name].values(), **db_varargs)
                     hmmer_hits_to_search_results(hits, db_dict[db_name], evalue, db_name, min_evalue, "phmmer", out, evalues)
@@ -1032,7 +1062,7 @@ def add_contig_nucleic_acid_annotations(contig: SeqRecord, hits_list: List[Searc
         )
         
 
-def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None, foldseek_path=None, prostt5_weights=None, prostt5_device=None, profile_evalues=None):
+def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits, max_overlap, best_annotation, min_evalue=0.0, max_mode=False, overlap_by_db=False, max_hits_per_contig=None, foldseek_device=None, dropped_types=None, allowed_taxids=None, foldseek_path=None, prostt5_weights=None, prostt5_device=None, profile_evalues=None, bit_cutoffs=None):
     """
 
     Args:
@@ -1053,11 +1083,12 @@ def domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nu
         overlap_by_db (bool, optional): Defaults to False.
         max_hits_per_contig (int, optional): Maximum number of independent hits per contig. Defaults to None (unlimited).
         profile_evalues (dict, optional): e-value thresholds that replace evalue for some references, by (db_name, reference name).
+        bit_cutoffs (str, optional): search protein profiles with their gathering, trusted or noise cutoffs (see run_search).
 
     Returns:
         : 
     """
-    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device, profile_evalues=profile_evalues) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
+    hits =  run_search(proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, min_evalue=min_evalue, max_mode=max_mode, foldseek_device=foldseek_device, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device, profile_evalues=profile_evalues, bit_cutoffs=bit_cutoffs) # returns a dict of dicts of lists of SearchResults, where keys are contig_index, cds_index
     
     for contig_id in hits:
         contig = contigs_list[contig_id]
@@ -1220,7 +1251,8 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
               foldseek_path: Optional[str] = None, prostt5_weights: Optional[str] = None,
               prostt5_device: str = "cpu", system_models: Optional[Sequence[Any]] = None,
               systems: Optional[Set[str]] = None, max_system_overlap: float = 1.0,
-              max_systems_per_contig: Optional[int] = None, truncated_systems: str = "exclude") -> Iterator[SeqRecord]:
+              max_systems_per_contig: Optional[int] = None, truncated_systems: str = "exclude",
+              bit_cutoffs: Optional[str] = None) -> Iterator[SeqRecord]:
     """Annotate every input record with domain hits, retaining records without hits.
 
     Search references against proteins/CDSs or nucleotide contigs, adding Domainator
@@ -1230,6 +1262,9 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
     searched; max_mode disables heuristic filters. Foldseek options configure optional
     structural searches. best_annotation also adds Domain_Search best-hit features.
     Use domain_search for taxonomy filtering, hit-only output, or optional annotations.
+    bit_cutoffs ("gathering", "trusted" or "noise") searches protein HMM profiles that have those
+    score cutoffs with them instead of evalue, like hmmsearch --cut_ga; then evalue doesn't
+    filter system evidence either.
 
     system_models (model files, directories holding systems.yaml, or ModelCollections; see
     find_systems) also annotates the systems the models find, as Domain_System features.
@@ -1241,7 +1276,7 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
     truncated_systems are as for find_systems. Protein records get no systems.
     """
     search = dict(z=z, evalue=evalue, cpu=cpu, batch_size=batch_size, min_evalue=min_evalue, max_mode=max_mode,
-                  partial=partial)
+                  partial=partial, bit_cutoffs=bit_cutoffs)
     first_pass = dict(
         max_hits_per_cds=max_hits_per_cds, max_overlap=max_overlap, best_annotation=best_annotation,
         gene_call=gene_call, foldseek=foldseek, esm2_3di_weights=esm2_3di_weights, esm2_3di_device=esm2_3di_device,
@@ -1277,7 +1312,8 @@ def domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[str
                             max_hits_per_cds=None, max_overlap=1, best_annotation=False,
                             gene_call=None if searches_references else gene_call,
                             profile_evalues=model_profile_evalues(collections, model_files, evalue), **search)
-    yield from annotate_systems(stream, collections, evalue=evalue, partial=partial,
+    # with bit_cutoffs, the profiles' cutoffs replace evalue, so it doesn't filter evidence either
+    yield from annotate_systems(stream, collections, evalue=None if bit_cutoffs is not None else evalue, partial=partial,
                                 max_system_overlap=max_system_overlap, max_systems_per_contig=max_systems_per_contig,
                                 truncated_systems=truncated_systems)
 
@@ -1291,7 +1327,8 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
               esm2_3di_weights: Optional[str] = None, esm2_3di_device: str = "cuda:0", overlap_by_db: bool = False,
               max_hits_per_contig: Optional[int] = None, foldseek_device: str = "cpu", partial: str = "include",
               foldseek_path: Optional[str] = None, prostt5_weights: Optional[str] = None,
-              prostt5_device: str = "cpu", profile_evalues: Optional[Dict[Tuple[str, str], float]] = None) -> Iterator[SeqRecord]:
+              prostt5_device: str = "cpu", profile_evalues: Optional[Dict[Tuple[str, str], float]] = None,
+              bit_cutoffs: Optional[str] = None) -> Iterator[SeqRecord]:
     """Annotate the CDSs (or proteins) of ``records`` with their domain hits, yielding each record.
 
     Searches the proteins, and with nucleotide references the contigs, against ``references``
@@ -1343,12 +1380,17 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
         foldseek_path: the foldseek program, if it is not on the PATH.
         profile_evalues: e-value thresholds that replace ``evalue`` for some references, by
             (database, reference name), such as the profiles of system models.
+        bit_cutoffs: "gathering", "trusted" or "noise": protein HMM profiles that have these
+            score cutoffs are searched with them, like hmmsearch --cut_ga, --cut_tc or --cut_nc,
+            instead of with ``evalue``; profiles without them use ``evalue``, with a warning.
 
     Yields:
         The annotated records (with ``hits_only``, only those with hits).
     """
 
     cpu = resolve_cpu(cpu)
+    if bit_cutoffs not in (None, *BIT_CUTOFFS):
+        raise ValueError(f"bit_cutoffs must be one of {', '.join(BIT_CUTOFFS)}, not {bit_cutoffs}")
     if max_hits_per_cds is None:
         max_hits_per_cds = sys.maxsize
     if references is None and foldseek is None:
@@ -1437,7 +1479,7 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
             infernal_nucleic_acid_list.append(get_pyhmmer_digital_nucleotide_sequence(f"{contig_index},contig,{len(rec)}", get_contig_search_sequence(rec, infernal_extension), pyhmmer.easel.Alphabet.rna()))
         contig_index += 1
         if len(proteins_list) >= batch_size:
-            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device, profile_evalues=profile_evalues)
+            return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device, profile_evalues=profile_evalues, bit_cutoffs=bit_cutoffs)
             for contig_id in return_contigs:
                 yield contigs_list[contig_id]
             contigs_list = list()
@@ -1447,7 +1489,7 @@ def _domainate(records: Iterable[SeqRecord], *, references: Optional[Iterable[st
             foldseek_list = list()
             contig_index = 0
     
-    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device, profile_evalues=profile_evalues)
+    return_contigs = domainator_inner(contigs_list, proteins_list, nucleic_acid_list, infernal_nucleic_acid_list, foldseek_list, reference_groups, evalue, cpu, z, hits_only, no_annotations, max_hits_per_cds, max_overlap, best_annotation, min_evalue=min_evalue, max_mode=max_mode, overlap_by_db=overlap_by_db, max_hits_per_contig=max_hits_per_contig, foldseek_device=foldseek_device, dropped_types=dropped_types, allowed_taxids=allowed_taxids, foldseek_path=foldseek_path, prostt5_weights=prostt5_weights, prostt5_device=prostt5_device, profile_evalues=profile_evalues, bit_cutoffs=bit_cutoffs)
     for contig_id in return_contigs:
         yield contigs_list[contig_id]
 
@@ -1496,6 +1538,12 @@ def build_parser():
     
     parser.add_argument('--min_evalue', type=NonNegativeFloat, default=0.0,
                         help="hits with E value LOWER (as in BETTER) than this will be filtered out. NOT FREQUENTLY USED. Use only if you want to eliminate close matches. Must be >=0. [default 0]")
+
+    parser.add_argument('--bit_cutoffs', type=str, default=None, choices=BIT_CUTOFFS,
+                        help="Search protein HMM profiles with their own score cutoffs instead of -e, as hmmsearch "
+                             "--cut_ga, --cut_tc and --cut_nc do: gathering (GA), trusted (TC) or noise (NC). A hit is "
+                             "kept when its sequence and domain scores reach the profile's two cutoffs. Profiles without "
+                             "them, and other reference types, use -e.")
 
     parser.add_argument('--max_hits_per_cds', type=int, default=None,
                         help="the maximum number of domains to be reported per CDS. If not specified, then all hits are reported.")
@@ -1594,6 +1642,7 @@ def main(argv):
             pre_parsed_references=reference_groups,
             gene_call=params.gene_call,
             max_mode=params.max_mode,
+            bit_cutoffs=params.bit_cutoffs,
             foldseek=None,
             esm2_3di_weights=params.esm2_3di_weights,
             esm2_3di_device=params.esm2_3di_device,

@@ -173,6 +173,20 @@
    "required": false
   },
   {
+   "name": "bit_cutoffs",
+   "flags": [
+    "--bit_cutoffs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "gathering",
+    "trusted",
+    "noise"
+   ]
+  },
+  {
    "name": "max_hits_per_cds",
    "flags": [
     "--max_hits_per_cds"
@@ -1954,6 +1968,20 @@
    ],
    "kind": "flag",
    "type": "boolean"
+  },
+  {
+   "name": "bit_cutoffs",
+   "flags": [
+    "--bit_cutoffs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "gathering",
+    "trusted",
+    "noise"
+   ]
   },
   {
    "name": "min_score",

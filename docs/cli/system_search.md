@@ -65,6 +65,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-e`, `--evalue` | NUMBER | 0.001 | Count only hits with an e-value at most this as evidence. Model profiles are searched with this or their model's own threshold, whichever is larger. |
 | `--min_evalue` | NUMBER | 0.0 | Hits with an e-value below this are not reported. |
 | `--max_mode` |  |  | Turn off hmmsearch's heuristic filters: slower, but finds weak hits. |
+| `--bit_cutoffs` | {gathering,trusted,noise} |  | Search protein HMM profiles with their own score cutoffs (gathering, trusted or noise), as hmmsearch --cut_ga does, instead of -e; -e then doesn't filter evidence either. Profiles without the cutoffs use -e. Models' own thresholds still apply. |
 | `--min_score` | NUMBER |  | Only select systems with at least this score. |
 | `--min_completeness` | NUMBER |  | Only select systems with at least this completeness (0 to 1). Systems of models without a quorum have no completeness, and are not filtered by it. |
 | `--max_system_overlap` | NUMBER | 1.0 | Drop a system when more than this fraction of its counted members belong to better-scoring systems. 1 keeps every system; 0 makes calls exclusive. |
