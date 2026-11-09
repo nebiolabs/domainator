@@ -18,7 +18,6 @@ copies one model out of a collection into a file of its own, to edit.
 """
 from dataclasses import replace
 import os
-from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Set, Union
 import warnings
 
@@ -29,35 +28,13 @@ from domainator.cli.common import (add_list_and_file, add_system_models, add_win
 from domainator.errors import InputError
 from domainator.hmmio import iter_hmms, open_writable_hmm_file
 from domainator.seqio import db_name_from_path
-from domainator.systems.model import COMMAND_LINE_DATABASE, ModelCollection, SystemModel
-from domainator.systems.native import read_system_models, window_model, write_system_models
+from domainator.systems.model import COMMAND_LINE_DATABASE, ModelCollection
+from domainator.systems.native import read_system_models, reference_paths, select_models, window_model, write_system_models
 
 TSV_COLUMNS = ("database", "system", "category", "window", "min_core", "min_total", "condition", "component", "role",
                "reference", "reference_database", "evalue", "min_score", "min_reference_coverage",
                "min_target_coverage", "min_target_length", "max_target_length", "exchangeable", "attach_to_cds")
 _HMM_SUFFIXES = (".hmm", ".hmm.gz")
-
-
-def _select(collections: Sequence[ModelCollection], systems: Optional[Set[str]],
-            system_categories: Optional[Set[str]]) -> List[ModelCollection]:
-    """The collections, with only the models named in systems and in system_categories."""
-    wanted = set(systems) if systems is not None else set()
-    out = list()
-    for collection in collections:
-        models = list()
-        for model in collection.models:
-            names = {model.name, f"{model.database}:{model.name}"}
-            if systems is not None and not names & systems:
-                continue
-            wanted -= names
-            if system_categories is not None and model.category not in system_categories:
-                continue
-            models.append(model)
-        if models:
-            out.append(replace(collection, models=tuple(models)))
-    if wanted:
-        raise InputError(f"--systems names models that aren't in the system models given: {', '.join(sorted(wanted))}.")
-    return out
 
 
 def _cell(value) -> str:
@@ -82,20 +59,11 @@ def _tsv_rows(collections: Sequence[ModelCollection]) -> Iterable[List[str]]:
                         rule.min_target_length, rule.max_target_length, rule.exchangeable, rule.attach_to_cds)]
 
 
-def _reference_files(collection: ModelCollection, models: Sequence[SystemModel]) -> List[str]:
-    """The collection's and the models' reference files, relative to the collection's file."""
-    base = Path(collection.path).parent if collection.path else Path(".")
-    files = list(collection.reference_files)
-    for model in models:
-        files.extend(file for file in model.reference_files if file not in files)
-    return [str(base / file) for file in files]
-
-
 def _write_hmms(collections: Sequence[ModelCollection], hmm_out: str) -> None:
     wanted = {(rule.name, rule.database) for collection in collections for model in collection.models
               for component in model.components for rule in component.references}
     written = set()
-    files = [file for collection in collections for file in _reference_files(collection, collection.models)]
+    files = [file for collection in collections for file in reference_paths(collection)]
     if not files:
         raise InputError("The selected models list no reference_files, so there are no profiles to write.")
     out_database = db_name_from_path(hmm_out)
@@ -112,10 +80,9 @@ def _write_hmms(collections: Sequence[ModelCollection], hmm_out: str) -> None:
                 raise InputError(f"Reference file not found: {file}")
             database = db_name_from_path(file)
             for hmm in iter_hmms(file):
-                name = hmm.name.decode() if isinstance(hmm.name, bytes) else hmm.name
-                if name not in written and ((name, None) in wanted or (name, database) in wanted):
+                if hmm.name not in written and ((hmm.name, None) in wanted or (hmm.name, database) in wanted):
                     hmm.write(handle)
-                    written.add(name)
+                    written.add(hmm.name)
     finally:
         handle.close()
     missing = sorted({name for name, _ in wanted} - written)
@@ -149,7 +116,7 @@ def format_systems(system_models: Optional[Sequence[Union[str, os.PathLike, Mode
                                         system_name=system_name, same_strand=same_strand))
     if not collections:
         raise InputError("No system models: give system_models (--system_models), domain_expr (--domain_expr), or both.")
-    collections = _select(collections, systems, set(system_categories) if system_categories is not None else None)
+    collections = select_models(collections, systems, system_categories)
     if not collections:
         raise InputError("No models match --systems and --system_categories.")
 

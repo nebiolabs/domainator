@@ -14,6 +14,9 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   --window_cds 10`), with `span`, `chain` and `anchor` windows, quorums, conditions with an
   order operator (`a < b`), forbidden components, competing references and superiors. See
   [docs/file_formats.md](docs/file_formats.md).
+- `domainate --system_models` searches the profiles that system models name, along with `-r`,
+  and annotates the systems it finds in the same pass. Model profiles are searched with their
+  own thresholds and are exempt from `--max_hits_per_cds` and `--max_overlap`.
 - `color_genbank --target systems` and `systems_and_cdss`, with `--system_color_by`.
 - `plot_contigs` draws `Domain_System` and `System_Search` features by default.
 - `select_by_system`: extract regions around annotated systems, padded by CDSs or kb from a

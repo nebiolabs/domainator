@@ -21,6 +21,12 @@ the references to search for.
 Supported references include protein HMMs, protein FASTA, nucleotide FASTA, nucleotide HMMs, and infernal CM files.
 Protein inputs cannot be searched with nucleotide references.
 
+With --system_models, domainate also finds systems (sets of domains found together in one
+neighborhood; see find_systems) and adds them as Domain_System features. The profiles in the
+models' reference files are searched along with -r, each with the larger of -e and its loosest
+model threshold, and without --max_hits_per_cds or --max_overlap, so that detection, not the
+search, chooses between overlapping hits. A hit counts as evidence only if it also passes -e.
+
 NOTES: genbank files that contain translation annotations in their CDS features will run much faster than those without translation annotations.
     domainator domainate stores the entire reference set in memory, so it is not suitable for cases where the reference
     set is larger than your system memory (this may change in future versions).
@@ -55,6 +61,11 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--overlap_by_db` |  |  | If activated, then overlap filtering will be done by database, rather than all together. |
 | `--batch_size` | INTEGER | 10000 | How many target sequences to search at one time in a batch. Increasing this number might improve speeds at the cost of memory. |
 | `--gene_call` | {all,unannotated} |  | When activated, new CDS annotations will be added with Prodigal in Metagenomic mode. If 'all', then any existing CDS annotations will be deleted and all contigs will be re-annotated. If 'unannotated', then only contigs without CDS annotations will be annotated. If you supply a nucleotide fasta file, be sure to also specify --alphabet nucleotide. -Z 0 can't be used with gene calling, because the number of target sequences isn't known until the genes are called. |
+| `--system_models` | FILE ... |  | System model files (YAML with a domainator_systems: key), or directories holding a systems.yaml. See docs/file_formats.md. |
+| `--systems` | STRING ... |  | With --system_models, only look for the models with these names (name or database:name). Additive with --systems_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--systems_file` | FILE |  | With --system_models, only look for the models with these names (name or database:name). Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--max_system_overlap` | NUMBER | 1.0 | Drop a system when more than this fraction of its counted members belong to better-scoring systems. 1 keeps every system; 0 makes calls exclusive. |
+| `--max_systems_per_contig` | INTEGER |  | Keep at most this many systems per record, best score first. Default: no limit. |
 | `--max_output_gb` | NUMBER | 25.0 | Fail if a projected output file would exceed this many GB. Set to 0 to disable the guardrail. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

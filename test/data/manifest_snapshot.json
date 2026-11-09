@@ -252,6 +252,55 @@
    ]
   },
   {
+   "name": "system_models",
+   "flags": [
+    "--system_models"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "max_system_overlap",
+   "flags": [
+    "--max_system_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "max_systems_per_contig",
+   "flags": [
+    "--max_systems_per_contig"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
    "name": "max_output_gb",
    "flags": [
     "--max_output_gb"

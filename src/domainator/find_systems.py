@@ -10,7 +10,6 @@ Detection uses only the annotations already in the records, so run domainate per
 enough (a loose -e, no --max_hits_per_cds, --max_overlap 1) that the hits the models need are
 there. See docs/file_formats.md for the model format and the Domain_System qualifiers.
 """
-from dataclasses import replace
 import os
 from typing import Iterable, Iterator, Optional, Sequence, Set, Union
 
@@ -30,22 +29,7 @@ from domainator.seqio import parse_seqfiles
 from domainator.systems.detect import SystemDetector
 from domainator.systems.features import system_feature
 from domainator.systems.model import COMMAND_LINE_DATABASE, ModelCollection
-from domainator.systems.native import read_system_models, window_model
-
-
-def _select_models(collections: Sequence[ModelCollection], systems: Set[str]) -> list:
-    """The collections, keeping only the models named in ``systems`` (``name`` or ``database:name``)."""
-    wanted = set(systems)
-    out = list()
-    for collection in collections:
-        models = tuple(model for model in collection.models
-                       if model.name in systems or f"{model.database}:{model.name}" in systems)
-        wanted -= {model.name for model in models} | {f"{model.database}:{model.name}" for model in models}
-        if models:
-            out.append(replace(collection, models=models))
-    if wanted:
-        raise InputError(f"--systems names models that aren't in the system models given: {', '.join(sorted(wanted))}.")
-    return out
+from domainator.systems.native import read_system_models, select_models, window_model
 
 
 def find_systems(records: Iterable[SeqRecord], *,
@@ -82,7 +66,21 @@ def find_systems(records: Iterable[SeqRecord], *,
     if not collections:
         raise InputError("No system models: give system_models (--system_models), domain_expr (--domain_expr), or both.")
     if systems is not None:
-        collections = _select_models(collections, systems)
+        collections = select_models(collections, systems)
+    yield from annotate_systems(records, collections, evalue=evalue, annotation_type=annotation_type, databases=databases,
+                                min_score=min_score, min_completeness=min_completeness,
+                                max_system_overlap=max_system_overlap, max_systems_per_contig=max_systems_per_contig,
+                                clear=clear, partial=partial)
+
+
+def annotate_systems(records: Iterable[SeqRecord], collections: Sequence[ModelCollection], *,
+                     evalue: Optional[float] = None, annotation_type: str = "domainator",
+                     databases: Optional[Set[str]] = None, min_score: Optional[float] = None,
+                     min_completeness: Optional[float] = None, max_system_overlap: float = 1.0,
+                     max_systems_per_contig: Optional[int] = None, clear: bool = True,
+                     partial: str = "include") -> Iterator[SeqRecord]:
+    """Add a Domain_System feature to each record for each system the collections find, as
+    find_systems does, yielding the records as they are annotated. Protein records get no systems."""
     if partial not in PARTIAL_CHOICES:
         raise ValueError(f"partial must be one of {', '.join(PARTIAL_CHOICES)}, not {partial}")
     detector = SystemDetector(collections, evalue=evalue, databases=databases, annotation_type=annotation_type,
@@ -100,6 +98,9 @@ def find_systems(records: Iterable[SeqRecord], *,
     for record in records:
         if clear:
             record.features = [feature for feature in record.features if not cleared(feature)]
+        if record.annotations.get("molecule_type") == "protein":
+            yield record
+            continue
         for hit in detector.detect(record):
             if min_score is not None and hit.score < min_score:
                 continue

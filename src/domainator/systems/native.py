@@ -460,6 +460,43 @@ def read_system_models(sources: Iterable[Union[str, os.PathLike, ModelCollection
     return collections
 
 
+def select_models(collections: Sequence[ModelCollection], systems: Optional[Iterable[str]] = None,
+                  system_categories: Optional[Iterable[str]] = None) -> List[ModelCollection]:
+    """The collections, keeping only the models named in ``systems`` (``name`` or
+    ``database:name``) and in ``system_categories``; None selects every model. Collections left
+    with no models are dropped. A name in systems that names no model is an InputError."""
+    systems = set(systems) if systems is not None else None
+    system_categories = set(system_categories) if system_categories is not None else None
+    unmatched = set(systems) if systems is not None else set()
+    out = list()
+    for collection in collections:
+        models = list()
+        for model in collection.models:
+            names = {model.name, f"{model.database}:{model.name}"}
+            if systems is not None:
+                if not names & systems:
+                    continue
+                unmatched -= names
+            if system_categories is not None and model.category not in system_categories:
+                continue
+            models.append(model)
+        if models:
+            out.append(replace(collection, models=tuple(models)))
+    if unmatched:
+        raise InputError(f"--systems names models that aren't in the system models given: {', '.join(sorted(unmatched))}.")
+    return out
+
+
+def reference_paths(collection: ModelCollection) -> List[str]:
+    """The reference files of a collection and its models, without repeats. Relative paths are
+    relative to the directory of the collection's file."""
+    base = Path(collection.path).parent if collection.path else Path(".")
+    files = list(collection.reference_files)
+    for model in collection.models:
+        files.extend(file for file in model.reference_files if file not in files)
+    return [str(base / file) for file in files]
+
+
 def window_model(domain_expr: str, *, window_cds: Optional[int] = None, window_kb: Optional[float] = None,
                  window_mode: str = "span", system_name: str = "domain_expr", same_strand: bool = False) -> ModelCollection:
     """The model --domain_expr and the --window options define: a short-form model in the
