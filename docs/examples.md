@@ -94,6 +94,21 @@ domainator color_genbank -i annotated_proteins.gb -o annotated_proteins_colored.
 domainator plot_contigs -i annotated_proteins_colored.gb --html_out proteins_plot.html 
 ```
 
+## Finding systems
+
+Systems are sets of domains found together, such as defense systems (see [systems.md](systems.md)).
+```bash
+# download PADLOC's defense system models, and annotate the systems in the example genomes
+domainator system_db_download --source padloc --output_dir padloc_db
+domainator domainate -i ncbi_complete_subset.gb --system_models padloc_db -o defense.gb --cpu 4
+
+# the region around each Gabija system, with 5 CDSs on each side, and a table of the systems
+domainator select_by_system -i defense.gb --systems gabija --cds_range 5 --min_context_cds 5 -o gabija.gb
+domainator enum_report -i defense.gb --by system --columns systems system_components length -o systems.tsv
+domainator color_genbank -i gabija.gb --target systems_and_cdss -o gabija_colored.gb
+domainator plot_contigs -i gabija_colored.gb --html_out gabija_plot.html
+```
+
 ## Making a sequence similarity network or tree
 ```bash
 domainator enum_report -i example_files/FeSOD_20.gb --columns length sequence -o metadata.tsv
