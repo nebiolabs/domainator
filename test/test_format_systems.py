@@ -100,3 +100,47 @@ def test_hmm_out_needs_reference_files(tmp_path):
 def test_needs_an_output(capsys):
     with pytest.raises(SystemExit):
         format_systems_module.main(["--domain_expr", "A", "--window_cds", "3"])
+
+
+def test_check_examples(shared_datadir, tmp_path, monkeypatch):
+    """--check_examples_out downloads each example (here, a stand-in for NCBI) and looks for its model there."""
+    from domainator.seqio import parse_seqfiles
+    from domainator.system_db_download import system_db_download
+    from domainator.systems import examples
+
+    models = tmp_path / "antismash_rules"
+    system_db_download(str(shared_datadir / "systems" / "antismash_rules"), source="antismash", output_dir=str(models))
+    fetched = list()
+
+    def fetch(self, example):
+        fetched.append((example.accession, example.start, example.end))
+        if example.accession == "missing.1":
+            raise RuntimeError("no such record")
+        return list(parse_seqfiles([str(shared_datadir / "pDONR201.gb")]))
+
+    monkeypatch.setattr(examples.NcbiFetcher, "__init__", lambda self: None)
+    monkeypatch.setattr(examples.NcbiFetcher, "__call__", fetch)
+    collection, = read_system_models([models])
+    from dataclasses import replace
+    from domainator.systems.model import Example
+    ccd, alone, resistance = collection.models
+    collection = replace(collection, models=(ccd, replace(alone, examples=(Example("missing.1"),)),
+                                             replace(resistance, examples=(Example("pDONR201.1", 1, 4470),)),
+                                             replace(ccd, name="ccd_cat_copy")))
+    out = tmp_path / "examples.tsv"
+    with pytest.warns(UserWarning, match="0 examples were not found by their models, and 1 couldn't be checked"):
+        format_systems([collection], check_examples_out=str(out))
+    header, *rows = [line.split("\t") for line in out.read_text().splitlines()]
+    assert header == list(examples.REPORT_COLUMNS)
+    assert [(row[1], row[2], row[6], row[7], row[9][:12]) for row in rows] == [
+        ("ccd_cat", "pDONR201.1", "yes", "1", ""), ("ccdb_alone", "missing.1", "no", "0", "RuntimeError"),
+        ("resistance", "pDONR201.1", "yes", "1", ""), ("ccd_cat_copy", "pDONR201.1", "yes", "1", "")]
+    assert fetched[0] == ("pDONR201.1", 0, 4470)
+
+
+@pytest.mark.network
+def test_ncbi_fetcher():
+    from domainator.systems.examples import NcbiFetcher
+    from domainator.systems.model import Example
+    record, = NcbiFetcher()(Example("NC_001422.1", 100, 600))  # phage phiX174
+    assert len(record) == 501

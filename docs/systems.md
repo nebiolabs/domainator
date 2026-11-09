@@ -103,7 +103,9 @@ near. A domain can be a mapping with a `database` and thresholds (`evalue`, `min
 `min_reference_coverage`, `min_target_coverage`, `min_target_length`, `max_target_length`, and
 for structural hits `min_tmscore`, `min_lddt`, `min_prob`). `format_systems --yaml_out` writes
 a `--domain_expr` model as a file to start from, and `--tsv_out` lists every component and
-threshold of a model file as a table. The format is specified in
+threshold of a model file as a table. A model's `examples` (known occurrences: an accession and
+a range) are a regression check: `format_systems --check_examples_out examples.tsv` downloads
+each from NCBI and reports whether its model still finds it. The format is specified in
 [file_formats.md](file_formats.md#system-model-files).
 
 Format 1.1 (`domainator_systems: "1.1"`) adds antiSMASH's condition functions, aliases and

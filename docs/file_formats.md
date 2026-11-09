@@ -711,7 +711,8 @@ the number of core components when there is no condition, else 0); `min_total` (
 `min_core`); `category`, `description`, `accession`; `same_strand`; `superiors` (models of the
 same file, or `database:name`); `orientation_from` (a component); `neighborhood_kb`,
 `neighborhood_cds`; `max_components` (the completeness denominator); `multi_loci`; `examples`
-(`accession`, `start`, `end`, `note`); `literature`; `reference_files`; and in format 1.1
+(`accession`, `start`, `end`, `note`: known occurrences, which `format_systems
+--check_examples_out` downloads from NCBI to check that the model still finds them); `literature`; `reference_files`; and in format 1.1
 `extenders` (see below) and `related` (references that are relevant but not required, as
 antiSMASH's `RELATED`; informational). A model needs a window (its own or the default) and a
 requirement: `min_core`, `min_total` or a condition.

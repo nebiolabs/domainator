@@ -17,13 +17,17 @@ Reads system models (--system_models, and/or one model defined on the command li
 - --tsv_out: one row per model, component and reference, with its thresholds, to see what a
   model (for example a converted one) means;
 - --hmm_out: the HMM profiles that the selected models name, from their reference_files, ready
-  for domainate -r.
+  for domainate -r;
+- --check_examples_out: a check that the models still find their own examples. Each example
+  (an accession, and optionally a range) is downloaded from NCBI, annotated as domainate
+  --system_models would (with default settings, calling genes if it has no CDSs), and reported
+  as found or not, one row per example. This needs network access.
 
 --systems/--systems_file and --system_categories select models, so --systems with --yaml_out
 copies one model out of a collection into a file of its own, to edit.
 ```
 
-Give at least one of these outputs: `--yaml_out`, `--tsv_out`, `--hmm_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
+Give at least one of these outputs: `--yaml_out`, `--tsv_out`, `--hmm_out`, `--check_examples_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
 
 | Option | Value | Default | Description |
 |---|---|---|---|
@@ -42,5 +46,6 @@ Give at least one of these outputs: `--yaml_out`, `--tsv_out`, `--hmm_out`. `-` 
 | `--yaml_out` | FILE |  | Write the selected models as a native system model file. They must come from one collection; a command-line model is written in a collection named after this file. |
 | `--tsv_out` | FILE |  | Write one row per model, component and reference, with its thresholds. |
 | `--hmm_out` | FILE |  | Write the HMM profiles the selected models name, from their reference files, for domainate -r. Components that only accept hits from one database match hits labeled with that database, which domainate takes from the file name, so name the file after it. |
+| `--check_examples_out` | FILE |  | Download each example of the selected models from NCBI, look for its model there (as domainate --system_models does with default settings, calling genes on records without CDSs), and write one row per example: whether the model found it, how many systems, the best score, or why it couldn't be checked. Needs network access. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

@@ -11,7 +11,11 @@ Reads system models (--system_models, and/or one model defined on the command li
 - --tsv_out: one row per model, component and reference, with its thresholds, to see what a
   model (for example a converted one) means;
 - --hmm_out: the HMM profiles that the selected models name, from their reference_files, ready
-  for domainate -r.
+  for domainate -r;
+- --check_examples_out: a check that the models still find their own examples. Each example
+  (an accession, and optionally a range) is downloaded from NCBI, annotated as domainate
+  --system_models would (with default settings, calling genes if it has no CDSs), and reported
+  as found or not, one row per example. This needs network access.
 
 --systems/--systems_file and --system_categories select models, so --systems with --yaml_out
 copies one model out of a collection into a file of its own, to edit.
@@ -99,7 +103,8 @@ def format_systems(system_models: Optional[Sequence[Union[str, os.PathLike, Mode
                    window_kb: Optional[float] = None, window_mode: str = "span", system_name: str = "domain_expr",
                    same_strand: bool = False, systems: Optional[Set[str]] = None,
                    system_categories: Optional[Set[str]] = None, yaml_out: Optional[str] = None,
-                   tsv_out: Optional[str] = None, hmm_out: Optional[str] = None) -> List[ModelCollection]:
+                   tsv_out: Optional[str] = None, hmm_out: Optional[str] = None,
+                   check_examples_out: Optional[str] = None) -> List[ModelCollection]:
     """Read system models, select some, and write them as YAML, a table and/or HMM profiles.
 
     Models come from system_models (native model files, directories holding systems.yaml, or
@@ -109,7 +114,9 @@ def format_systems(system_models: Optional[Sequence[Union[str, os.PathLike, Mode
     yaml_out writes the selected models as a native model file; they must come from one
     collection. A command-line model is written in the collection named after the file.
     tsv_out writes one row per model, component and reference. hmm_out writes the HMM
-    profiles the selected models name, from their reference files.
+    profiles the selected models name, from their reference files. check_examples_out downloads
+    each example of the selected models from NCBI, looks for its model there, and writes one row
+    per example (see systems.examples.check_examples).
 
     Returns:
         The selected collections.
@@ -141,7 +148,24 @@ def format_systems(system_models: Optional[Sequence[Union[str, os.PathLike, Mode
                 print("\t".join(row), file=handle)
     if hmm_out is not None:
         _write_hmms(collections, hmm_out)
+    if check_examples_out is not None:
+        _check_examples(collections, check_examples_out)
     return collections
+
+
+def _check_examples(collections: Sequence[ModelCollection], path: str) -> None:
+    from domainator.systems.examples import REPORT_COLUMNS, check_examples
+    if not any(model.examples for collection in collections for model in collection.models):
+        warnings.warn("None of the selected models has examples to check.")
+    missed = failed = 0
+    with open(path, "w") as handle:
+        print("\t".join(REPORT_COLUMNS), file=handle)
+        for check in check_examples(collections):
+            print("\t".join(_cell(value) for value in check.row()), file=handle, flush=True)
+            failed += check.error is not None
+            missed += check.error is None and not check.found
+    if missed or failed:
+        warnings.warn(f"{missed} examples were not found by their models, and {failed} couldn't be checked; see {path}.")
 
 
 def build_parser():
@@ -161,8 +185,13 @@ def build_parser():
                         help="Write the HMM profiles the selected models name, from their reference files, for "
                              "domainate -r. Components that only accept hits from one database match hits labeled "
                              "with that database, which domainate takes from the file name, so name the file after it.")
+    parser.add_argument("--check_examples_out", type=str, default=None,
+                        help="Download each example of the selected models from NCBI, look for its model there (as "
+                             "domainate --system_models does with default settings, calling genes on records without "
+                             "CDSs), and write one row per example: whether the model found it, how many systems, the "
+                             "best score, or why it couldn't be checked. Needs network access.")
     parser.add_argument("--config", action=ActionConfigFile)
-    declare_outputs(parser, ["yaml_out", "tsv_out", "hmm_out"])
+    declare_outputs(parser, ["yaml_out", "tsv_out", "hmm_out", "check_examples_out"])
     return parser
 
 
@@ -183,4 +212,5 @@ def main(argv):
         yaml_out=params.yaml_out,
         tsv_out=params.tsv_out,
         hmm_out=params.hmm_out,
+        check_examples_out=params.check_examples_out,
     )

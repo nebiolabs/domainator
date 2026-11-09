@@ -6404,6 +6404,16 @@
    "type": "string",
    "role": "output",
    "required": false
+  },
+  {
+   "name": "check_examples_out",
+   "flags": [
+    "--check_examples_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
   }
  ],
  "hmmer_select": [
