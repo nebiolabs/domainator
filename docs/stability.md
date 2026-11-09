@@ -13,25 +13,29 @@ error.
 
 - The names the package root exports, listed in `domainator.__all__`: `parse_seqfiles`,
   `write_genbank`, `DataMatrix`, the exceptions in `domainator.errors`, the feature-type
-  constants `DOMAIN_FEATURE_NAME` and `DOMAIN_SEARCH_BEST_HIT_NAME`, and `__version__`.
+  constants `DOMAIN_FEATURE_NAME`, `DOMAIN_SEARCH_BEST_HIT_NAME`, `SYSTEM_FEATURE_NAME` and
+  `SYSTEM_SEARCH_BEST_HIT_NAME`, and `__version__`.
 - Each command's function, `from domainator.<command> import <command>`. Its first parameter
   is positional and the rest are keyword-only, named like the command's options and with
   the same defaults, so new parameters can be added without breaking callers. What it returns (records, a `DataMatrix`,
   ...) is part of the contract.
 - The other modules (`seqio`, `hmmio`, `model`, `locations`, `partial`, `taxonomy`, `expr`,
-  `colors`, `offsets`, `external`, `cli`, ...) and every name that starts with `_` are internal.
+  `colors`, `offsets`, `external`, `systems`, `cli`, ...) and every name that starts with `_` are internal.
 
 ## File formats
 
 The formats in [file_formats.md](file_formats.md):
 
-- **GenBank**: the `Domainator` and `Domain_Search` feature types and the qualifiers in its
+- **GenBank**: the `Domainator`, `Domain_Search`, `Domain_System` and `System_Search` feature types and the qualifiers in its
   qualifier reference, including how locations and coordinates are written. These change only
   by addition, so a reader must ignore qualifiers it doesn't know.
 - **Versioned files**: matrix hdf5 files (`MATRIX_FILE_VERSION`), `.dvb` viewer bundles (and
   the `.dsnv` network bundles of earlier versions, which are still read) and `.didx`
   indexes. Each is read for its current and previous major versions, and a file from a newer
   major version is refused with a `FormatVersionError`.
+- **System model files** (`domainator_systems:`): read for the current and previous major
+  versions. A file from a newer version, major or minor, is refused with a
+  `FormatVersionError`.
 - **Report JSON** (`--json_out` of `summary_report`, `matrix_report` and `ssn_navigator`): the
   keys, versioned by the `schema_version` key. New keys can appear in 1.x.
 - **The tool manifest** (`domainator describe`, [tool_manifest.md](tool_manifest.md)), versioned

@@ -8,6 +8,7 @@
 - [Key algorithms](algorithms.md)
 - [Developing Domainator](developing_domainator.md)
 - [1.0 release plan](v1_release_plan.md)
+- [Design: multidomain systems](design/systems/README.md) (proposal; Phase 1 implemented)
 - [Structure search and annotation](structure_search.md)
 - [ESM-2 3B 3Di and foldseek integration](esm_3b_foldseek.md)
 - [Limitations and FAQ](limitations_and_FAQ.md)

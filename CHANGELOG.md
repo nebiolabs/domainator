@@ -4,6 +4,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Domainator follows [Semantic Versioning](https://semver.org/): what stays stable is listed in
 [docs/stability.md](docs/stability.md).
 
+## Unreleased
+
+### Added
+- Systems: sets of domains found together in one neighborhood, such as defense systems,
+  operons and toxin/antitoxin pairs. `find_systems` finds them in domain-annotated records and
+  writes `Domain_System` features. Models come from a system model file (a new YAML format,
+  `domainator_systems: 1`) or from the command line (`--domain_expr "X & Y & (Q | R)"
+  --window_cds 10`), with `span`, `chain` and `anchor` windows, quorums, conditions with an
+  order operator (`a < b`), forbidden components, competing references and superiors. See
+  [docs/file_formats.md](docs/file_formats.md).
+- `color_genbank --target systems` and `systems_and_cdss`, with `--system_color_by`.
+- `plot_contigs` draws `Domain_System` and `System_Search` features by default.
+- The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
+
+### Changed
+- Slicing tools drop `Domain_System` and `System_Search` features that a slice cuts through,
+  as they drop cut domain hits.
+- PyYAML is an explicit dependency.
+
 ## v.1.0.0-rc.3 (2026-11-04)
 
 ### Changed

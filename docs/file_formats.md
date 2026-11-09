@@ -335,9 +335,85 @@ Qualifiers Domainator writes on other features:
 | any | `Color` | `color_genbank` | A `#rrggbb` color. Readers also accept `color`. |
 | `misc_feature` | `threedi` | `structure_to_genbank --store_3di` | See above. |
 
+### Systems
+
+A *system* is a set of domains found together in one neighborhood, such as a defense system,
+an operon or a toxin/antitoxin pair. `domainator find_systems` finds them in records that
+already carry `Domainator` features, using a [system model file](#system-model-files) or a
+`--domain_expr` with a window, and adds one `Domain_System` feature per system found.
+`System_Search` features have the same qualifiers, and mark the system a selected region was
+cut out for (by the system selection commands planned for a later release).
+
+```javascript
+     Domain_System   complement(12011..18930)
+                     /name="Gabija"
+                     /database="defense"
+                     /program="domainator"
+                     /category="defense"
+                     /description="."
+                     /accession="."
+                     /window="chain:cds=5"
+                     /score="1203.4"
+                     /evalue="3.2e-41"
+                     /completeness="1.000"
+                     /core_count="2"
+                     /total_count="2"
+                     /member_count="2"
+                     /component="core|GajA|18930_-1_16102|defense|Gabija__GajA"
+                     /component="core|GajB|15998_-1_12011|defense|Gabija__GajB_1"
+```
+
+The **location** covers the member CDSs (whole CDSs, not just their domains), from the first
+to the last. On a circular contig a system across the origin has two parts. The **strand** is
+the system's orientation: the strand of its counted CDS members (core and accessory), by
+majority; on a tie, the strand of its best-scoring core member; or the strand of the
+`orientation_from` component when the model names one. Nucleotide members don't vote. The
+location never includes the model's suggested neighborhood (`neighborhood_kb`,
+`neighborhood_cds`), which is only recorded.
+
+| Qualifier | Value |
+|---|---|
+| `name` | The model's name. |
+| `database` | The model collection: the model file's `database:` key, or its file name without extensions. `command_line` for a `--domain_expr` model. |
+| `program` | Which tool's conventions the model was written or converted from: `domainator`, `padloc`, `macsyfinder` or `antismash` (the file's `semantics:` key). Detection is the same for all of them. |
+| `category`, `description`, `accession` | From the model, or `.`. For a `--domain_expr` model, `description` is the expression. |
+| `window` | The window the model used: its mode, then its limits, e.g. `chain:cds=5`, `span:kb=2.5`, `chain:cds=3,span_kb=40`. |
+| `score` | The sum, over the counted components, of the best bit score of a member filling each, `%.1f`. Duplicate copies of a component add nothing. |
+| `evalue` | The largest E-value among the hits that make up the score, `%.1e`. |
+| `completeness` | Counted components found ÷ the model's core and accessory components (or its `max_components`), `%.3f`; `.` for models without a quorum (condition-only models, including every `--domain_expr` model). |
+| `core_count`, `total_count` | Distinct core components, and distinct core and accessory components, counted. |
+| `member_count` | Number of member CDSs (and contig-level nucleotide members). |
+| `neighborhood_kb`, `neighborhood_cds` | The model's suggested padding around the system, when it has one. Not part of the location. |
+| `system_partial` | `<`, `>` or `<>` when, on a linear contig, a component the system lacks could lie past the upstream (`<`) or downstream (`>`) end of the contig, in system orientation. Absent otherwise. |
+| `component` | Repeated: one value per (member, component) pair, in contig order. |
+
+**Counted components.** In a model with a quorum (`min_core`, `min_total`), each member CDS
+fills one component, chosen by role (core, then accessory, neutral, forbidden), then bit
+score, then E-value, and the core and accessory ones are counted. In a model without a quorum
+(a condition only), the counted components are those whose presence makes the condition true,
+and a CDS with hits to several of them (a fusion) fills each.
+
+**The `component` qualifier** is `role|component|cds_id|database|reference`:
+
+- `role`: `core`, `accessory` or `neutral`;
+- `component`: the component's name in the model;
+- `cds_id`: the member CDS's `cds_id`. A contig-level nucleotide member (`cds_id="."` on its
+  hit) is written `nuc_<start>_<strand>_<end>` from the hit's coordinates. Unlike a `cds_id`,
+  those coordinates aren't stored on the hit, so they describe the contig as it was when the
+  system was found; find a nucleotide member by its database and reference name inside the
+  system's location;
+- `database`, `reference`: the `database` and `name` of the hit that filled the component.
+
+Split a value with `value.split("|", 4)`: only the reference name may contain `|`.
+
+**Editing.** A system is a snapshot of the hits it was found from. Tools that remove domains
+(`filter_domains`, `extract_domains`) leave systems alone; run `find_systems` again to
+recompute them. Slicing tools drop a system that a slice cuts through, as they drop cut domain
+hits, and `cds_id`s are kept, so a system kept whole still points at its members.
+
 ### Compatibility
 
-The feature types `Domainator` and `Domain_Search` and the qualifiers above are the GenBank
+The feature types `Domainator`, `Domain_Search`, `Domain_System` and `System_Search` and the qualifiers above are the GenBank
 part of the 1.x stability contract ([stability.md](stability.md)). Within 1.x they change only
 by addition: a new qualifier or feature type may appear, so readers must ignore ones they don't
 know, but an existing one keeps its name, meaning and format. Files carry no version marker; a
@@ -496,6 +572,107 @@ silent-wrong-results failure mode.
 Leftover sidecars are therefore harmless, and safe to delete. Note that pressing a *compressed*
 `.hmm` accomplishes nothing even outside Domainator: HMMER skips sidecar detection entirely for
 `.gz` paths, so the sidecars are never read.
+
+## System model files
+
+System models say which domains make up a system and how close together they must be. They
+are YAML files with a `domainator_systems:` key giving the format version, or directories
+holding such a file named `systems.yaml`. `find_systems --system_models` reads them.
+
+The common case is short. "X, Y, Z and Q or R within 10 CDSs, at E-value 1e-20":
+
+```yaml
+domainator_systems: 1
+defaults: {evalue: 1.0e-20, window: {max_cds: 10}}
+systems:
+  XYZ_QR: "X & Y & Z & (Q | R)"
+  HicB_RelE: "HicB < RelE"          # antitoxin upstream of toxin
+```
+
+`--domain_expr "X & Y & Z & (Q | R)" --window_cds 10` defines the same model on the command
+line. The full form names components and roles:
+
+```yaml
+domainator_systems: 1
+database: my_systems              # default: the file name without extensions
+defaults:                         # thresholds, window and same_strand for every model and domain
+  evalue: 1.0e-5
+  window: {mode: chain, max_cds: 3}
+competing:                        # overlapping hits within a group compete: the best one counts
+  - [GajB_1, GajB_2]
+systems:
+  - name: Gabija
+    category: defense
+    window: {mode: chain, max_cds: 5}
+    components:
+      - {name: GajA, role: core, domains: [GajA]}
+      - name: GajB
+        role: core
+        domains: [GajB_1, {name: GajB_2, min_score: 40}]
+  - name: TA
+    window: {mode: span, max_kb: 2.5}
+    same_strand: true
+    components:
+      - {name: toxin, role: core, domains: [RelE, ParE_toxin]}
+      - {name: antitoxin, role: core, domains: [HicB]}
+      - {name: transposase, role: forbidden, domains: [DDE_Tnp_1]}
+    orientation_from: antitoxin
+    superiors: [Gabija]           # drop a TA call where a Gabija system overlaps it
+```
+
+**Collection keys**: `domainator_systems` (required), `database`, `semantics` (`domainator`,
+or `padloc`, `macsyfinder` or `antismash` for converted collections), `source` (`name`, `url`,
+`release`, `date`, `converter`, `license`; informational), `reference_files`, `defaults`,
+`competing` and `competing_overlap_aa` (default 20 residues), and `systems`: a list of models,
+or a mapping from model name to condition (the short form).
+
+**Model keys**: `name` (required); `window`; `components`; `condition`; `min_core` (default:
+the number of core components when there is no condition, else 0); `min_total` (default:
+`min_core`); `category`, `description`, `accession`; `same_strand`; `superiors` (models of the
+same file, or `database:name`); `orientation_from` (a component); `neighborhood_kb`,
+`neighborhood_cds`; `max_components` (the completeness denominator); `multi_loci`; `examples`
+(`accession`, `start`, `end`, `note`); `literature`; `reference_files`. A model needs a window
+(its own or the default) and a requirement: `min_core`, `min_total` or a condition.
+
+**Components**: `name`, `role` (`core`, the default, `accessory`, `neutral` or `forbidden`),
+`domains`, and the flags `loner`, `multi_system`, `multi_model` and `max_gap_cds` (a chain gap
+for this component; between two components with gaps, the smaller applies). A domain is a
+reference name, or a mapping with `name`, `database` (the hit's `database`; default: any),
+thresholds (`evalue`, `min_score`, `min_reference_coverage`, `min_target_coverage`,
+`min_target_length`, `max_target_length`), `exchangeable` and `attach_to_cds` (a contig-level
+nucleotide hit counts as the CDS it overlaps on its strand by at least half its length).
+
+**Roles**: core and accessory components count toward `min_core`/`min_total`, the score and
+completeness; neutral ones join a system without counting; a forbidden one vetoes any system it
+is near (see windows).
+
+**Windows**: `mode` and `max_cds` and/or `max_kb` (both must hold). Nucleotide hits that are not
+attached to a CDS never count as CDSs.
+
+| Mode | `max_cds` / `max_kb` limit | Negation and forbidden components look at |
+|---|---|---|
+| `span` (default) | the whole system, first member to last, inclusive | the system's reach: every member that could join it within the limit |
+| `chain` | the gap between consecutive members (every role chains) | the chain |
+| `anchor` | each member's distance from an anchor member that contributes to the condition | the anchor's radius |
+
+`chain` and `anchor` windows may add `max_span_cds`/`max_span_kb`, a cap on the whole system.
+
+**Conditions**: `&`, `|`, `~` and parentheses over component names, and `a < b` (a member
+filling a lies upstream of one filling b, in system orientation; `a < b < c` needs three
+members). `<` binds tightest, so `~a < b` means `~(a < b)`. Without a `components:` list, every
+name in the condition is a domain and its own component (`database:name` limits it to one
+database): positive names are core, names used only under `~` are forbidden.
+
+**Thresholds** are checked against the qualifiers of the hits already in the records, so a
+model can only use hits that the search kept. `find_systems -e` is an extra filter on top of
+them. Coverage is `(rend - rstart + 1) / rlen` of the reference, and hit length / CDS length of
+the target.
+
+**Versions.** `domainator_systems` is `major` or `"major.minor"`; write minor versions quoted,
+because YAML reads `1.10` as the number 1.1. This release reads format 1. A file from a newer
+version, or with a key this version doesn't know, is refused. Format 1.1 is planned to add
+`extenders`, `define` aliases and the condition functions `cds()`, `minimum()`,
+`repeatable()` and `minscore()`.
 
 ## Protein structures
 
