@@ -42,7 +42,8 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   (or converts a local copy), and `--source macsyfinder` converts any other MacSyFinder model
   package. `--coverage_profile` sets their minimum profile coverage.
 - `import_systems --source antismash` turns antiSMASH's protoclusters (or candidate clusters,
-  or regions) into `Domain_System` features.
+  or regions) into `Domain_System` features. `--source defensefinder` and `--source padloc`
+  do the same for the systems in DefenseFinder's and PADLOC's output tables (`--calls`).
 - `system_search`: search a sequence database for systems and extract the regions around
   them, in parallel like `domain_search`. Models come from `--system_models` or a
   `--domain_expr` with a window; `--system_expr "gabija & ~thoeris_I"` selects Gabija systems

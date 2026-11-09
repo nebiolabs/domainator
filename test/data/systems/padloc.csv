@@ -1,0 +1,4 @@
+system.number,seqid,system,target.name,hmm.accession,hmm.name,protein.name,full.seq.E.value,domain.iE.value,target.coverage,hmm.coverage,start,end,strand,target.description,relative.position,contig.end,all.domains,best.hits
+1,pDONR201_1,gabija,WP_000001,PDLC00001,GajA_00001,GajA,NA,1.1e-30,NA,NA,959,1264,-,NA,2,NA,NA,NA
+1,pDONR201_1,gabija,pDONR201_3,PDLC00002,GajB_00001,GajB,NA,2.5e-12,NA,NA,NA,NA,-,NA,3,NA,NA,NA
+2,pDONR201_1,cas_type_I-E,CRISPR_1,NA,NA,CRISPR_array,NA,NA,NA,NA,3000,3200,+,NA,4.01,NA,NA,NA

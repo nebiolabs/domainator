@@ -19,7 +19,7 @@ MANIFEST_VERSION = 1
 # name decides: see docs/tool_manifest.md for the rules. test_manifest.py checks that every
 # string option of every command is classified here or listed in TEXT_OPTIONS.
 INPUT_PATHS = {"input", "reference", "metadata", "color_table", "coords", "foldseek", "newick", "msa",
-               "esm2_3di_weights", "matrix", "ncbi_summary", "system_models"}
+               "esm2_3di_weights", "matrix", "ncbi_summary", "system_models", "calls"}
 DIRECTORIES = {"output_dir", "tmp_dir", "model_dir", "tmbed_model_dir", "prostt5_weights", "datasets_workdir", "ncbi_taxonomy_path"}
 
 TEXT_OPTIONS = {

@@ -128,11 +128,18 @@ Converted models keep their source's names (`gabija`, `cas_type_I-E` for PADLOC;
 PADLOC's human-readable names (`Gabija`, `CBASS (other)`) are in the `description` qualifier,
 and DefenseFinder's model paths (`DefenseFinder/Gabija/Gabija`) in `accession`.
 
-antiSMASH's calls can be brought in from its own GenBank output, without converting its rules:
+Calls the tools have already made can be brought in too, for example to compare them with
+Domainator's: antiSMASH's from its GenBank output, and DefenseFinder's and PADLOC's from their
+output tables, for the records they were run on:
 
 ```bash
 domainator import_systems -i antismash_output.gbk --source antismash --level protocluster -o bgcs.gb
+domainator import_systems -i genome.gb --source defensefinder --calls genome_defense_finder_genes.tsv -o df_systems.gb
+domainator import_systems -i genome.gb --source padloc --calls genome_padloc.csv -o padloc_systems.gb
 ```
+
+Imported systems use the same database names as converted models (`defensefinder`, `padloc`),
+and importing replaces that database's systems, so import into a separate file to compare.
 
 ## Pipelines
 

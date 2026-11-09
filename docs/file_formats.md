@@ -417,6 +417,18 @@ no positions within the protein, so there are no `Domainator` features for these
 `--level candidate_cluster` and `--level region` locate one system at each whole feature, with
 antiSMASH's `/kind` on candidate clusters.
 
+`import_systems --source defensefinder --calls <name>_defense_finder_genes.tsv` and
+`--source padloc --calls <name>_padloc.csv` read those tools' tables of called systems into the
+`defensefinder` and `padloc` databases, located at their members' envelope. DefenseFinder
+systems are named by their subtype, with the model's path as `accession`, its top-level folder
+as `category` and its type as `description`, DefenseFinder's `sys_score` and `sys_wholeness` as
+`score` and `completeness`, and each member's model gene (without its `<family>__` prefix), role
+and profile in `component`. PADLOC systems are named by the model's `yaml.name`; PADLOC's table
+has no scores and doesn't give roles, so they score 0, have no completeness, and every member is
+`core`. Members are matched to CDSs by name (DefenseFinder's own gene calls, `<contig>_<n>`, by
+position; PADLOC's by coordinates first), and members with no CDS (CRISPR arrays, ncRNAs) are
+skipped. Importing replaces the systems of that database already on the record.
+
 **On proteins.** A protein record can't carry a system, so `extract_peptides` writes a
 `system_membership` qualifier on the CDS feature of each protein that comes from a system
 member, one value per system: `role|component|database|name` (the system's database and

@@ -5937,7 +5937,9 @@
    "type": "string",
    "required": false,
    "choices": [
-    "antismash"
+    "antismash",
+    "defensefinder",
+    "padloc"
    ]
   },
   {
@@ -5953,6 +5955,17 @@
     "candidate_cluster",
     "region"
    ]
+  },
+  {
+   "name": "calls",
+   "flags": [
+    "--calls"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": false
   },
   {
    "name": "clear_source",

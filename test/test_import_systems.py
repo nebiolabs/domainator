@@ -81,3 +81,70 @@ def test_main(shared_datadir, tmp_path):
                                 "--level", "region"])
     record, = parse_seqfiles([str(out)])
     assert [f.qualifiers["name"][0] for f in systems(record)] == ["hglE-KS+T1PKS"]
+
+
+# DefenseFinder and PADLOC call tables (synthetic, for pDONR201_multi_genemark.gb; its CDSs are
+# named pDONR201_1 ... pDONR201_6 by gene_id, with ccdB second and ccdA third).
+
+@pytest.fixture
+def pdonr(shared_datadir):
+    return str(shared_datadir / "pDONR201_multi_genemark.gb")
+
+
+def test_defensefinder_calls(pdonr, shared_datadir):
+    calls = [str(shared_datadir / "systems" / "defensefinder_genes.tsv")]
+    with pytest.warns(UserWarning, match="pDONR201_2: 1 system members match no CDS"):
+        records = list(import_systems(parse_seqfiles([pdonr]), source="defensefinder", calls=calls))
+    system, = systems(records[0])
+    assert (system.qualifiers["name"], system.qualifiers["database"], system.qualifiers["program"]) == (
+        ["CcdAB"], ["defensefinder"], ["macsyfinder"])
+    assert (system.qualifiers["accession"], system.qualifiers["category"]) == (["DefenseFinder/CcdAB/CcdAB"], ["DefenseFinder"])
+    assert str(system.location) == "[958:1391](-)"
+    # ccdB by its gene_id, ccdA as DefenseFinder's gene 3 of the replicon.
+    assert system.qualifiers["component"] == ["core|CcdB|1264_-1_959|defensefinder|CcdAB__CcdB",
+                                              "accessory|CcdA|1391_-1_1266|defensefinder|CcdAB__CcdA_2"]
+    assert (system.qualifiers["score"], system.qualifiers["evalue"], system.qualifiers["completeness"]) == (
+        ["2.0"], ["3.4e-15"], ["1.000"])
+    assert [f.qualifiers["member_count"] for f in systems(records[1])] == [["1"]]
+    assert systems(records[2]) == systems(records[3]) == []
+
+
+def test_padloc_calls(pdonr, shared_datadir):
+    calls = [str(shared_datadir / "systems" / "padloc.csv")]
+    with pytest.warns(UserWarning, match="1 system members match no CDS"):  # the CRISPR array
+        record = next(iter(import_systems(parse_seqfiles([pdonr]), source="padloc", calls=calls)))
+    system, = systems(record)
+    assert (system.qualifiers["name"], system.qualifiers["database"], system.qualifiers["category"]) == (
+        ["gabija"], ["padloc"], ["defense"])
+    # GajA by its coordinates, GajB by its name.
+    assert system.qualifiers["component"] == ["core|GajA|1264_-1_959|padloc|GajA_00001",
+                                              "core|GajB|1391_-1_1266|padloc|GajB_00001"]
+    assert (system.qualifiers["score"], system.qualifiers["evalue"], system.qualifiers["completeness"]) == (
+        ["0.0"], ["2.5e-12"], ["."])
+    # Importing again replaces them.
+    with pytest.warns(UserWarning):
+        record, = import_systems([record], source="padloc", calls=calls)
+    assert len(systems(record)) == 1
+
+
+def test_call_table_errors(pdonr, shared_datadir, tmp_path, capsys):
+    from domainator.errors import InputError
+    with pytest.raises(InputError, match="is not a DefenseFinder genes table"):
+        list(import_systems(parse_seqfiles([pdonr]), source="defensefinder",
+                            calls=[str(shared_datadir / "systems" / "padloc.csv")]))
+    with pytest.raises(SystemExit):
+        import_systems_module.main(["-i", pdonr, "--source", "padloc", "-o", str(tmp_path / "out.gb")])
+    assert "needs --calls" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        import_systems_module.main(["-i", pdonr, "--calls", str(shared_datadir / "systems" / "padloc.csv"),
+                                    "-o", str(tmp_path / "out.gb")])
+    assert "--calls is for" in capsys.readouterr().err
+
+
+def test_main_padloc(pdonr, shared_datadir, tmp_path):
+    out = tmp_path / "out.gb"
+    with pytest.warns(UserWarning):
+        import_systems_module.main(["-i", pdonr, "--source", "padloc", "--calls", str(shared_datadir / "systems" / "padloc.csv"),
+                                    "-o", str(out)])
+    regions = list(select_by_system(parse_seqfiles([str(out)]), systems={"padloc:gabija"}, cds_range=(1, 1)))
+    assert len(regions) == 1

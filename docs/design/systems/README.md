@@ -207,7 +207,7 @@ documents above have been corrected.
 
 ## Implementation status
 
-Phases 1 and 2, and Phase 3's `system_search`, options on existing commands, the MacSyFinder converter and structural thresholds, are implemented. Where the code departs from these documents:
+Phases 1, 2 and 3 are implemented. Where the code departs from these documents:
 
 1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
    `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
@@ -251,3 +251,8 @@ Phases 1 and 2, and Phase 3's `system_search`, options on existing commands, the
     name (with a note), instead of an error suggesting `--name_style`. A gene listed twice in a
     model (five DefenseFinder models do this) is merged, with a note. The download uses the
     release's tarball asset.
+13. **`import_systems --source defensefinder/padloc`** reads DefenseFinder's
+    `*_defense_finder_genes.tsv` (not `*_systems.tsv`, which lacks roles and profiles) and
+    PADLOC's `*_padloc.csv`, given with `--calls`, into the `defensefinder` and `padloc`
+    databases. PADLOC's table has no scores or roles: its systems score 0 and every member is
+    core. Members without a CDS (CRISPR arrays, ncRNAs) are skipped.
