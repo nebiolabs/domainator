@@ -13,7 +13,6 @@ itself (--by system).
 import contextlib
 import os
 import warnings
-import argparse
 from jsonargparse import ActionConfigFile
 from domainator.cli.common import add_input, add_output, check_outputs, declare_outputs, STDIN_PATHS, tool_parser
 from domainator.outputs import output_file
