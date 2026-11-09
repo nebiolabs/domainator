@@ -23,6 +23,7 @@ Generated from the commands' parsers by `scripts/docs/cli_reference.py`. `domain
 - [filter_domains](filter_domains.md): Filter domain annotations by e-value, overlap, database, or name.
 - [rotate_contigs](rotate_contigs.md): Set the origin of circular contigs relative to a domain.
 - [select_by_cds](select_by_cds.md): Extract contigs or neighborhoods around selected CDSs.
+- [select_by_system](select_by_system.md): Extract neighborhoods around systems already annotated by find_systems.
 - [select_by_contig](select_by_contig.md): Select whole contigs by their domain content and other properties.
 - [select_by_coord](select_by_coord.md): Extract contig regions listed in a coordinate table.
 - [sort_contigs](sort_contigs.md): Sort contigs by their Domain_Search score.

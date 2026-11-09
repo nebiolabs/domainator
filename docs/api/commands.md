@@ -37,6 +37,8 @@ Each command is also a function: `from domainator.<command> import <command>`. I
 
 ::: domainator.select_by_cds.select_by_cds
 
+::: domainator.select_by_system.select_by_system
+
 ::: domainator.select_by_contig.select_by_contig
 
 ::: domainator.select_by_coord.select_by_coord

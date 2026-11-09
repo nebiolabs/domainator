@@ -26,6 +26,7 @@ NOT_OPTIONS = {
     "extract_unannotated": {"ncbi_taxonomy"},
     "rotate_contigs": {"z", "pre_parsed_references"},
     "select_by_cds": {"cds_ids", "normalize_direction", "_from_domain_search", "_domain_search_negatives", "ncbi_taxonomy"},
+    "select_by_system": {"normalize_direction"},
     "select_by_contig": {"ncbi_taxonomy"},
     "select_by_coord": {"coordinate_selections"},
     "structure_to_genbank": {"aligner"},

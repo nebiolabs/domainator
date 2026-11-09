@@ -47,6 +47,7 @@ TOOLS: Dict[str, Tool] = {
     "filter_domains": Tool("filter_domains", "edit", "Filter domain annotations by e-value, overlap, database, or name."),
     "rotate_contigs": Tool("rotate_contigs", "edit", "Set the origin of circular contigs relative to a domain."),
     "select_by_cds": Tool("select_by_cds", "edit", "Extract contigs or neighborhoods around selected CDSs."),
+    "select_by_system": Tool("select_by_system", "edit", "Extract neighborhoods around systems already annotated by find_systems."),
     "select_by_contig": Tool("select_by_contig", "edit", "Select whole contigs by their domain content and other properties."),
     "select_by_coord": Tool("select_by_coord", "edit", "Extract contig regions listed in a coordinate table."),
     "sort_contigs": Tool("sort_contigs", "edit", "Sort contigs by their Domain_Search score."),

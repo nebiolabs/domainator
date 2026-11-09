@@ -270,6 +270,49 @@ def add_system_detection(parser):
                         help="Keep at most this many systems per record, best score first. Default: no limit.")
 
 
+def add_system_type(parser, *, help: str = ""):
+    """Add ``--system_type``: which systems a command reads."""
+    from domainator.model import SYSTEM_TYPES
+    return parser.add_argument("--system_type", type=str, default=SYSTEM_TYPES[0], choices=SYSTEM_TYPES,
+                               help=(help or "Which systems to use.") + " domain_system: systems found by find_systems "
+                                    "(Domain_System features). system_search: systems selected by a search "
+                                    "(System_Search features). all: both.")
+
+
+def add_system_selection(parser):
+    """Add ``--systems``/``--systems_file`` and ``--system_categories``: select systems by name and category."""
+    add_list_and_file(parser, "systems", help="Select systems with these names (name, or database:name for one "
+                                              "collection's model).")
+    parser.add_argument("--system_categories", type=str, nargs="+", default=None,
+                        help="Select systems in these categories (the category qualifier, e.g. defense or PKS). "
+                             "With --systems, a system must match both.")
+
+
+def add_model_neighborhood(parser):
+    """Add ``--model_neighborhood``: pad each system by its model's suggested neighborhood."""
+    return parser.add_argument("--model_neighborhood", action="store_true", default=False,
+                               help="Pad each system by its model's neighborhood (the neighborhood_kb qualifier, else "
+                                    "neighborhood_cds), instead of by --kb_* or --cds_*. Systems whose model has no "
+                                    "neighborhood are not padded.")
+
+
+def add_min_context(parser):
+    """Add the ``--min_context_*`` options: require context beyond each end of a system."""
+    for unit, kind, what in (("cds", NonNegativeInt, "CDSs"), ("kb", NonNegativeFloat, "kb")):
+        counted = " Pseudo-CDSs for nucleotide hits are not counted." if unit == "cds" else ""
+        parser.add_argument(f"--min_context_{unit}", type=kind, default=None,
+                            help=f"Only select systems with at least this many {what} upstream and downstream of them "
+                                 f"on the contig, in system orientation, for example to skip systems cut by a contig end. "
+                                 f"On a circular contig, the {what} outside the system must add up to at least twice "
+                                 f"this. Independent of the padding options.{counted}")
+        parser.add_argument(f"--min_context_{unit}_up", type=kind, default=None,
+                            help=f"Only select systems with at least this many {what} upstream of them. "
+                                 f"Can't be combined with --min_context_{unit}.")
+        parser.add_argument(f"--min_context_{unit}_down", type=kind, default=None,
+                            help=f"Only select systems with at least this many {what} downstream of them. "
+                                 f"Can't be combined with --min_context_{unit}.")
+
+
 def add_has_search_hit(parser):
     """Add the independent, additive search-hit selection criterion."""
     return parser.add_argument("--has_search_hit", action="store_true", default=False,

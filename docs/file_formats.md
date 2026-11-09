@@ -342,7 +342,8 @@ an operon or a toxin/antitoxin pair. `domainator find_systems` finds them in rec
 already carry `Domainator` features, using a [system model file](#system-model-files) or a
 `--domain_expr` with a window, and adds one `Domain_System` feature per system found.
 `System_Search` features have the same qualifiers, and mark the system a selected region was
-cut out for (by the system selection commands planned for a later release).
+cut out for: `domainator select_by_system` gives each region it extracts one `System_Search`
+feature, a copy of the system it was selected for.
 
 ```javascript
      Domain_System   complement(12011..18930)

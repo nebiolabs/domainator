@@ -128,54 +128,35 @@ def pad_circular_cds(center:int, size:int, left_pad:int, right_pad:int) -> Tuple
     """
     if center < 0 or center >= size:
         raise(ValueError("center must be >= 0 and < size"))
+    return pad_circular_run(center, center, size, left_pad, right_pad)
+
+def pad_circular_run(first:int, last:int, size:int, left_pad:int, right_pad:int) -> Tuple[int,int]:
+    """
+    Pad a run of CDSs on a circular contig.
+
+    first, last: the indices of the first and last CDS of the run, in contig order. The run wraps
+        around the origin when last < first.
+    size: the number of CDSs in the contig
+    left_pad, right_pad: the number of CDSs to pad to the left of first and to the right of last
+
+    returns: (left_cds, right_cds), the indices of the left-most and right-most CDSs of the padded
+    region. No CDS is covered twice: each side is limited to the CDSs outside the run, and when the
+    two sides would meet, the CDSs outside the run are divided equally between them.
+    """
+    if not (0 <= first < size and 0 <= last < size):
+        raise(ValueError("first and last must be >= 0 and < size"))
     if left_pad < 0:
         raise(ValueError("Padding must be positive"))
     if right_pad < 0:
         raise(ValueError("Padding must be positive"))
-
-    if size == 1: # cannot pad when there is only 1 CDS
-        left_pad = 0
-        right_pad = 0
-
-    end_to_origin = size-(center + 1) # 
-    min_coord = center-left_pad
-    max_coord = center + right_pad
-    
-    if min_coord >= 0 and max_coord < size:
-        # the bounds do not extend beyond the origin, on either side, so they can't overlap
-        return min_coord, max_coord
-    else:
-        # If regions extending beyond the origin run into the center, truncate them there.
-        # We want a maximum coverage of one for any CDS.
-        
-        # adjust min_coord and max_coord so that they don't wrap around the center.
-        # we've already handled the case of size == 1, we should not be setting min_coord or max_coord to the center here.
-        if min_coord < 0 and ((-1 * min_coord) > end_to_origin):
-            min_coord = -1 * (end_to_origin)
-        if max_coord >= size and (max_coord - size >= center):
-            max_coord = size + (center -1)
-        
-        # If the adjusted regions overlap with each other, then divide the overlap equally between min and max.
-        # shift the perspective so that min_coord is at the origin
-        min_coord_shifted = 0 # min_coord_shifted = min_coord - min_coord
-        max_coord_shifted = max_coord - min_coord
-        
-        # calculuate overlap size:
-        overflow = (max_coord_shifted + 1) - size
-        if overflow > 0:
-            # divide overlap equally between min and max
-            min_coord_shifted += overflow // 2
-            max_coord_shifted -= overflow // 2
-            # if overflow is odd, then we need to adjust one of the coordinates by 1
-            if overflow % 2 == 1:
-                    max_coord_shifted -= 1 
-        # shift the perspective back to the original coordinate system
-        max_coord = max_coord_shifted + min_coord
-        min_coord = min_coord_shifted + min_coord
-        if min_coord < 0:
-            min_coord = size + min_coord
-
-        return (min_coord, max_coord % size) # TODO: is % size necessary?
+    outside = size - ((last - first) % size + 1)
+    left_pad = min(left_pad, outside)
+    right_pad = min(right_pad, outside)
+    overflow = left_pad + right_pad - outside
+    if overflow > 0:
+        left_pad -= overflow // 2
+        right_pad -= overflow - overflow // 2
+    return (first - left_pad) % size, (last + right_pad) % size
 
 def circular_focus_distances(slice_location, focus_location, contig_length:int, strand:int) -> Tuple[int, int]:
     """
@@ -195,11 +176,11 @@ def circular_focus_distances(slice_location, focus_location, contig_length:int, 
     dist_to_end = len(slice_location) - dist_to_start - len(focus_envelope)
     return dist_to_start, dist_to_end
 
-def cds_range_members(cds_list, cds_idx) -> List[int]:
+def cds_range_members(cds_list, *focus_indices) -> List[int]:
     """The indices into cds_list that cds_range counts: the protein-coding CDSs, plus the
-    focus itself. The pseudo-CDSs standing for whole-contig nucleotide annotations are not
-    genes, so they are never neighbors, though one can be the focus."""
-    return [i for i, cds in enumerate(cds_list) if i == cds_idx or not cds.is_nucleic_acid]
+    focus CDSs themselves. The pseudo-CDSs standing for whole-contig nucleotide annotations are
+    not genes, so they are never neighbors, though they can be in the focus."""
+    return [i for i, cds in enumerate(cds_list) if i in focus_indices or not cds.is_nucleic_acid]
 
 
 def neighborhood_feature_index(contig, cds_list) -> FeatureIndex:
@@ -233,11 +214,99 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
 
         _feature_index: neighborhood_feature_index(contig, cds_list), to reuse when getting several neighborhoods of one contig.
     """
-   
     focus_cds = cds_list[cds_idx]
+    center_location = None
+    keep_feature = None
+    if _from_domain_search:
+        if focus_cds.domain_search_feature is not None:
+            # center a whole circular contig on the search hit, rather than on the CDS containing it.
+            center_location = focus_cds.domain_search_feature.location
+        # only the focus CDS keeps its search hit
+        keep_feature = lambda f: f.type != DOMAIN_SEARCH_BEST_HIT_NAME or f is focus_cds.domain_search_feature
+    return get_neighborhood(contig, cds_list, [cds_idx], focus_cds.feature.location, focus_cds.feature.location.parts[0].strand,
+                            cds_range=cds_range, kb_range=kb_range, whole_contig=whole_contig, normalize_direction=normalize_direction,
+                            center_location=center_location, keep_feature=keep_feature, _feature_index=_feature_index,
+                            describe=f"CDS {focus_cds}")
 
-    strand = focus_cds.feature.location.parts[0].strand
 
+def _focus_order(contig, cds_list, focus_indices, focus_location):
+    """focus_indices in contig order, starting from the start of focus_location (which may wrap
+    around the origin of a circular contig)."""
+    if len(focus_indices) == 1:
+        return list(focus_indices)
+    if contig.annotations.get("topology") != "circular":
+        return sorted(focus_indices)
+    envelope_start = int(circular_envelope(focus_location, len(contig), 1).parts[0].start)
+    return sorted(focus_indices, key=lambda i: (int(cds_list[i].feature.location.start) - envelope_start) % len(contig))
+
+
+def focus_context(contig, cds_list, focus_indices, focus_location, strand):
+    """How much of contig lies beyond a focus (one CDS, or a run of CDSs).
+
+    Returns ((cds_up, cds_down), (bp_up, bp_down)) on a linear contig: the CDSs and bases from
+    each end of the focus to the contig end, upstream and downstream in the focus's orientation.
+    On a circular contig, there is no end, so it returns (cds, bp): the CDSs and bases outside
+    the focus. CDSs are counted as cds_range counts them, so pseudo-CDSs for nucleotide hits
+    are not counted.
+    """
+    members = cds_range_members(cds_list, *focus_indices)
+    if contig.annotations.get("topology") == "circular":
+        ordered = _focus_order(contig, cds_list, focus_indices, focus_location)
+        first_idx, last_idx = members.index(ordered[0]), members.index(ordered[-1])
+        outside_cds = len(members) - ((last_idx - first_idx) % len(members) + 1)
+        return outside_cds, len(contig) - len(circular_envelope(focus_location, len(contig), 1))
+    first_idx = members.index(min(focus_indices))
+    last_idx = members.index(max(focus_indices))
+    left = (first_idx, int(focus_location.start))
+    right = (len(members) - 1 - last_idx, len(contig) - int(focus_location.end))
+    up, down = (right, left) if strand == -1 else (left, right)
+    return (up[0], down[0]), (up[1], down[1])
+
+
+def has_context(contig, cds_list, focus_indices, focus_location, strand, min_context_cds=None, min_context_kb=None) -> bool:
+    """True if the focus has at least min_context_cds CDSs and min_context_kb kb beyond it, each
+    an (upstream, downstream) pair or None for no requirement. On a circular contig, the CDSs or
+    bases outside the focus must add up to at least upstream + downstream. See focus_context."""
+    if min_context_cds is None and min_context_kb is None:
+        return True
+    cds, bp = focus_context(contig, cds_list, focus_indices, focus_location, strand)
+    if contig.annotations.get("topology") == "circular":
+        return ((min_context_cds is None or cds >= sum(min_context_cds))
+                and (min_context_kb is None or bp >= sum(min_context_kb) * 1000))
+    return ((min_context_cds is None or (cds[0] >= min_context_cds[0] and cds[1] >= min_context_cds[1]))
+            and (min_context_kb is None or (bp[0] >= min_context_kb[0] * 1000 and bp[1] >= min_context_kb[1] * 1000)))
+
+
+def get_neighborhood(contig, cds_list, focus_indices, focus_location, strand, *, cds_range: Tuple[int, int] = None,
+                     kb_range: Tuple[float, float] = None, whole_contig=False, normalize_direction=True,
+                     center_location=None, keep_feature=None, extra_features=(), _feature_index=None, describe="the focus"):
+    """
+        The region of contig around a focus: one CDS, or a run of CDSs such as the members of a system.
+
+        contig: a SeqRecord object
+
+        cds_list: a list of DomainatorCDS object derived from the contig, MUST BE SORTED by stranded start coordinate
+
+        focus_indices: the indices in cds_list of the focus CDSs. cds_range is counted from the outermost of them.
+
+        focus_location: the location of the focus (the CDS's location, or the envelope of a run of CDSs, which may wrap around the origin of a circular contig)
+
+        strand: the orientation of the focus. Upstream and downstream are in this orientation.
+
+        cds_range, kb_range, whole_contig, normalize_direction: as for get_cds_neighborhood.
+
+        center_location: with whole_contig, center a circular contig on this location instead of on the focus. Distances are still to the focus.
+
+        keep_feature: if given, a function of a feature that returns False for features to leave out of the region.
+
+        extra_features: features to add to the region, such as a feature marking the focus.
+
+        _feature_index: neighborhood_feature_index(contig, cds_list), to reuse when getting several neighborhoods of one contig.
+
+        describe: the focus, for error messages.
+
+        returns: (record, slice_location). The record has dist to start, dist to end and focus strand set.
+    """
     if sum((cds_range is not None, kb_range is not None, whole_contig)) > 1:
         raise RuntimeError(
             "No more than one of: cds_range, kb_range, or whole_contig may be specified.")
@@ -252,58 +321,60 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
             upstream_pad = kb_range[0] * 1000
             downstream_pad = kb_range[1] * 1000
         elif cds_range is not None:
-            members = cds_range_members(cds_list, cds_idx)
-            member_idx = members.index(cds_idx)
+            members = cds_range_members(cds_list, *focus_indices)
+            first_idx = members.index(min(focus_indices))
+            last_idx = members.index(max(focus_indices))
             if strand == -1: # reverse strand
-                left_cds = members[max(0, member_idx - cds_range[1])]
-                right_cds = members[min(len(members) - 1, member_idx + cds_range[0])]
+                left_cds = members[max(0, first_idx - cds_range[1])]
+                right_cds = members[min(len(members) - 1, last_idx + cds_range[0])]
             else: #forward strand
-                left_cds = members[max(0, member_idx - cds_range[0])]
-                right_cds = members[min(len(members) - 1, member_idx + cds_range[1])]
+                left_cds = members[max(0, first_idx - cds_range[0])]
+                right_cds = members[min(len(members) - 1, last_idx + cds_range[1])]
             left_coord = int(cds_list[left_cds].feature.location.start)
             right_coord = int(cds_list[right_cds].feature.location.end)
-            left_pad = max(int(focus_cds.feature.location.start) - left_coord, 0) # min in case of overlapping CDSs
-            right_pad = max(right_coord - int(focus_cds.feature.location.end), 0) # max in case of overlapping CDSs
+            left_pad = max(int(focus_location.start) - left_coord, 0) # min in case of overlapping CDSs
+            right_pad = max(right_coord - int(focus_location.end), 0) # max in case of overlapping CDSs
             if strand == -1:
                 upstream_pad = right_pad
                 downstream_pad = left_pad
             else:
                 upstream_pad = left_pad
                 downstream_pad = right_pad
-        else: # just keep this CDS
+        else: # just keep the focus
             pass
 
-        envelope = FeatureLocation(focus_cds.feature.location.start, focus_cds.feature.location.end, strand)
+        envelope = FeatureLocation(focus_location.start, focus_location.end, strand)
         slice_location, (dist_to_start, dist_to_end) = pad_location(contig, envelope, int(upstream_pad), int(downstream_pad), return_extension_sizes=True)
     else: #Topology is circular, so we need to find the selection edges using modular arithmetic
         if whole_contig:
             upstream_pad = len(contig)
             downstream_pad = len(contig)
-            if _from_domain_search and focus_cds.domain_search_feature is not None:
-                # center the contig on the search hit, rather than on the CDS containing it. Distances are still to the focus CDS, so that padding aligns CDSs.
-                slice_location = pad_location(contig, circular_envelope(focus_cds.domain_search_feature.location, len(contig), strand), upstream_pad, downstream_pad)
-                dist_to_start, dist_to_end = circular_focus_distances(slice_location, focus_cds.feature.location, len(contig), strand)
+            if center_location is not None:
+                # Distances are still to the focus, so that padding aligns focuses.
+                slice_location = pad_location(contig, circular_envelope(center_location, len(contig), strand), upstream_pad, downstream_pad)
+                dist_to_start, dist_to_end = circular_focus_distances(slice_location, focus_location, len(contig), strand)
             else:
-                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
+                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
         elif kb_range is not None or cds_range is None:
             upstream_pad = 0
             downstream_pad = 0
             if kb_range is not None:
                 upstream_pad = int(kb_range[0] * 1000)
                 downstream_pad = int(kb_range[1] * 1000)
-            slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
+            slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_location, len(contig), strand), upstream_pad, downstream_pad, return_extension_sizes=True)
         elif cds_range is not None:
-            members = cds_range_members(cds_list, cds_idx)
-            member_idx = members.index(cds_idx)
+            members = cds_range_members(cds_list, *focus_indices)
+            ordered = _focus_order(contig, cds_list, focus_indices, focus_location)
+            first_idx, last_idx = members.index(ordered[0]), members.index(ordered[-1])
             if strand == -1:
-                left_cds, right_cds = pad_circular_cds(member_idx, len(members), cds_range[1], cds_range[0])
+                left_cds, right_cds = pad_circular_run(first_idx, last_idx, len(members), cds_range[1], cds_range[0])
             else:
-                left_cds, right_cds = pad_circular_cds(member_idx, len(members), cds_range[0], cds_range[1])
+                left_cds, right_cds = pad_circular_run(first_idx, last_idx, len(members), cds_range[0], cds_range[1])
             left_cds, right_cds = members[left_cds], members[right_cds]
 
             #TODO: account for overlapping CDSs
             left_envelope = circular_envelope(cds_list[left_cds].feature.location, len(contig), 1)
-            focus_envelope = circular_envelope(focus_cds.feature.location, len(contig), 1)
+            focus_envelope = circular_envelope(focus_location, len(contig), 1)
             right_envelope = circular_envelope(cds_list[right_cds].feature.location, len(contig), 1)
             neighborhood = left_envelope + focus_envelope + right_envelope
 
@@ -322,20 +393,21 @@ def get_cds_neighborhood(contig, cds_list, cds_idx,cds_range: Tuple[int, int]=No
                 dist_to_end = tmp
             
             if len(slice_location) == len(contig): # Account for the edge case where neighborhood spans the entire contig, which would make the neighborhood improperly centered.
-                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_cds.feature.location, len(contig), strand), len(contig), len(contig), return_extension_sizes=True)
+                slice_location, (dist_to_start, dist_to_end) = pad_location(contig, circular_envelope(focus_location, len(contig), strand), len(contig), len(contig), return_extension_sizes=True)
 
     if _feature_index is None:
         _feature_index = neighborhood_feature_index(contig, cds_list)
     features = _feature_index.near(slice_location)
-    if _from_domain_search: # only the focus CDS keeps its search hit
-        features = [f for f in features if f.type != DOMAIN_SEARCH_BEST_HIT_NAME or f is focus_cds.domain_search_feature]
+    if keep_feature is not None:
+        features = [f for f in features if keep_feature(f)]
+    features = [*features, *extra_features]
     # Domain annotations cut by the edge of the region are dropped by slice_record_from_location.
     try:
         record = slice_record_from_location(contig, slice_location, features)
         if contig.annotations.get("topology") == "circular" and len(slice_location) == len(contig): # the whole circular contig, rotated
             record.annotations["topology"] = "circular"
     except Exception as e:
-        e.add_note(f"while slicing contig {contig.id} at {slice_location} around CDS {focus_cds}")
+        e.add_note(f"while slicing contig {contig.id} at {slice_location} around {describe}")
         raise
 
 
@@ -516,10 +588,20 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                 else:
                     yield record
 
-def validate_range(kb_range, kb_up, kb_down, cds_range, cds_up, cds_down):
-    """
+def up_down_pair(both, up, down, both_name: str, up_name: str, down_name: str):
+    """(up, down) from an option for both sides and the options for each side, or None if none
+    of them is given. A side that isn't given is 0. ``both`` can't be combined with ``up`` or ``down``."""
+    if both is not None:
+        if up is not None or down is not None:
+            raise ValueError(f"Cannot specify {both_name} with {down_name} or {up_name}")
+        return (both, both)
+    if up is None and down is None:
+        return None
+    return (0 if up is None else up, 0 if down is None else down)
 
-    """
+
+def validate_range(kb_range, kb_up, kb_down, cds_range, cds_up, cds_down):
+    """(kb_range, cds_range), each an (upstream, downstream) pair or None, from the padding options."""
 
     if kb_range is not None and kb_range < 0:
         raise ValueError("kb_range must be >= 0")
@@ -535,48 +617,10 @@ def validate_range(kb_range, kb_up, kb_down, cds_range, cds_up, cds_down):
     if cds_down is not None and cds_down < 0:
         raise ValueError("cds_range must be >= 0")
 
-    cds_range_seen = False
-    cds_range_out = None
-    if cds_up is not None or cds_down is not None:
-        cds_range_out = (0,0)
-
-    if cds_up is not None:
-        cds_range_out = (cds_up, cds_range_out[1])
-        cds_range_seen = True
-    if cds_down is not None:
-        cds_range_out = (cds_range_out[0], cds_down)
-        cds_range_seen = True
-
-    if cds_range is not None:
-        if cds_range_seen:
-            raise ValueError("Cannot specify cds_range with cds_down or cds_up")
-        cds_range_seen = True
-        cds_range_out = (cds_range, cds_range)
-
-
-    if cds_range_seen and ((kb_range is not None) or (kb_up is not None) or (kb_down is not None)):
+    cds_range_out = up_down_pair(cds_range, cds_up, cds_down, "cds_range", "cds_up", "cds_down")
+    kb_range_out = up_down_pair(kb_range, kb_up, kb_down, "kb_range", "kb_up", "kb_down")
+    if cds_range_out is not None and kb_range_out is not None:
         raise ValueError("Cannot specify kb_range and cds_range")
-
-
-
-    kb_range_seen = False
-    kb_range_out = None
-    if kb_up is not None or kb_down is not None:
-        kb_range_out = (0,0)
-
-    if kb_up is not None:
-        kb_range_out = (kb_up, kb_range_out[1])
-        kb_range_seen = True
-    if kb_down is not None:
-        kb_range_out = (kb_range_out[0], kb_down)
-        kb_range_seen = True
-
-    if kb_range is not None:
-        if kb_range_seen:
-            raise ValueError("Cannot specify kb_range with kb_down or kb_up")
-        kb_range_seen = True
-        kb_range_out = (kb_range, kb_range)
-   
     return (kb_range_out, cds_range_out)
 
 

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Set, Union
 import hashlib
 import warnings
 
-from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
+from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME, SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from Bio.SeqRecord import SeqRecord
@@ -121,6 +121,23 @@ def annotation_feature_types(annotation_type: str) -> Set[str]:
     if annotation_type == "domain_search":
         return {DOMAIN_SEARCH_BEST_HIT_NAME}
     return {DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME}
+
+
+SYSTEM_TYPES = ("domain_system", "system_search", "all")
+"""Which systems a function reads: ``domain_system`` is the systems written by find_systems
+(``Domain_System`` features), ``system_search`` the systems a search selected
+(``System_Search`` features), and ``all`` both."""
+
+
+def system_feature_types(system_type: str) -> Set[str]:
+    """The GenBank feature types selected by ``system_type``."""
+    if system_type not in SYSTEM_TYPES:
+        raise ValueError(f"system_type must be one of {', '.join(SYSTEM_TYPES)}, not {system_type}")
+    if system_type == "domain_system":
+        return {SYSTEM_FEATURE_NAME}
+    if system_type == "system_search":
+        return {SYSTEM_SEARCH_BEST_HIT_NAME}
+    return {SYSTEM_FEATURE_NAME, SYSTEM_SEARCH_BEST_HIT_NAME}
 
 
 def get_cds_unique_name(feature):

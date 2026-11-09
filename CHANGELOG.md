@@ -16,12 +16,20 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   [docs/file_formats.md](docs/file_formats.md).
 - `color_genbank --target systems` and `systems_and_cdss`, with `--system_color_by`.
 - `plot_contigs` draws `Domain_System` and `System_Search` features by default.
+- `select_by_system`: extract regions around annotated systems, padded by CDSs or kb from a
+  system's outermost members (`--cds_range`, `--kb_range`, or each model's own neighborhood
+  with `--model_neighborhood`). `--min_context_cds` and `--min_context_kb` (and their `_up`
+  and `_down` forms) skip systems without enough context, such as systems cut by a contig end.
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
 
 ### Changed
 - Slicing tools drop `Domain_System` and `System_Search` features that a slice cuts through,
   as they drop cut domain hits.
 - PyYAML is an explicit dependency.
+
+### Fixed
+- `domain_search` keeps the whole-contig hits of a nucleotide contig that also has CDS hits.
+  Hits on the contig's CDSs replaced them, so regions were cut only around the CDS hits.
 
 ## v.1.0.0-rc.3 (2026-11-04)
 

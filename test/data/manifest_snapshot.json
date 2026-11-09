@@ -3703,6 +3703,364 @@
    "type": "boolean"
   }
  ],
+ "select_by_system": [
+  {
+   "name": "verbose",
+   "flags": [
+    "-v",
+    "--verbose"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "quiet",
+   "flags": [
+    "-q",
+    "--quiet"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "input",
+   "flags": [
+    "-i",
+    "--input"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "multiple": true,
+   "required": true
+  },
+  {
+   "name": "genbank_out",
+   "flags": [
+    "-o",
+    "--genbank_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "fasta_out",
+   "flags": [
+    "--fasta_out"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "output",
+   "required": false
+  },
+  {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "system_categories",
+   "flags": [
+    "--system_categories"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "databases",
+   "flags": [
+    "--databases"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
+  },
+  {
+   "name": "min_score",
+   "flags": [
+    "--min_score"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_completeness",
+   "flags": [
+    "--min_completeness"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "partial_systems",
+   "flags": [
+    "--partial_systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "include",
+    "exclude",
+    "only"
+   ]
+  },
+  {
+   "name": "invert",
+   "flags": [
+    "--invert"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "strand",
+   "flags": [
+    "--strand"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "f",
+    "r"
+   ]
+  },
+  {
+   "name": "kb_range",
+   "flags": [
+    "--kb_range"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_up",
+   "flags": [
+    "--kb_up"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "kb_down",
+   "flags": [
+    "--kb_down"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "cds_range",
+   "flags": [
+    "--cds_range"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_up",
+   "flags": [
+    "--cds_up"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "cds_down",
+   "flags": [
+    "--cds_down"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "whole_contig",
+   "flags": [
+    "--whole_contig"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "model_neighborhood",
+   "flags": [
+    "--model_neighborhood"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "min_context_cds",
+   "flags": [
+    "--min_context_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "min_context_cds_up",
+   "flags": [
+    "--min_context_cds_up"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "min_context_cds_down",
+   "flags": [
+    "--min_context_cds_down"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "min_context_kb",
+   "flags": [
+    "--min_context_kb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_context_kb_up",
+   "flags": [
+    "--min_context_kb_up"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "min_context_kb_down",
+   "flags": [
+    "--min_context_kb_down"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "pad",
+   "flags": [
+    "--pad"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "anchor",
+   "flags": [
+    "--anchor"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "start",
+    "end",
+    "center"
+   ]
+  },
+  {
+   "name": "keep_direction",
+   "flags": [
+    "--keep_direction"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
+   "name": "dedup",
+   "flags": [
+    "--dedup"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "none",
+    "id",
+    "sequence",
+    "sequence_rc"
+   ]
+  },
+  {
+   "name": "max_region_overlap",
+   "flags": [
+    "--max_region_overlap"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "contigs",
+   "flags": [
+    "--contigs"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "contigs_file",
+   "flags": [
+    "--contigs_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  }
+ ],
  "select_by_contig": [
   {
    "name": "verbose",
