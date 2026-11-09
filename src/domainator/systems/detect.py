@@ -3,7 +3,7 @@
 Follows docs/design/systems/detection.md. It reads Domainator (and, with annotation_type,
 Domain_Search) features and never searches.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Collection, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 import warnings
 
@@ -45,6 +45,8 @@ class _Match:
     hit: SeqFeature
     score: float
     evalue: float
+    positions: Tuple[int, ...] = ()
+    """Where every passing hit to the component starts along the protein, N- to C-terminal."""
 
 
 @dataclass
@@ -74,6 +76,12 @@ class _Member:
     def names(self) -> FrozenSet[str]:
         return frozenset(self.filled)
 
+    def score(self, name: str) -> float:
+        return self.filled[name].score
+
+    def positions(self, name: str) -> Tuple[int, ...]:
+        return self.filled[name].positions
+
     def shifted(self, k: int) -> "_Member":
         return _Member(self.gene, self.record_gene, self.filled, self.primary, self.role,
                        self.start + k * self.contig_length, self.end + k * self.contig_length,
@@ -95,6 +103,7 @@ class _Evaluation:
 class _Prepared:
     model: SystemModel
     condition: Optional[Condition]
+    extenders: Optional[Condition]
     components: Dict[str, Component]
     positive: FrozenSet[str]
     """Components whose presence counts: core and accessory for quorum models, the condition's positive names otherwise."""
@@ -161,12 +170,14 @@ class SystemDetector:
             prepared = list()
             lookup: Dict[str, List[Tuple[int, Component, ReferenceRule]]] = dict()
             for model_index, model in enumerate(collection.models):
-                condition = None if model.condition is None else Condition(model.condition)
+                define = dict(model.define)
+                condition = None if model.condition is None else Condition(model.condition, define)
+                extenders = None if model.extenders is None else Condition(model.extenders, define)
                 if model.has_quorum:
                     positive = frozenset(c.name for c in model.components if c.role in COUNTED_ROLES)
                 else:
                     positive = condition.positive_names
-                prepared.append(_Prepared(model, condition, {c.name: c for c in model.components}, positive))
+                prepared.append(_Prepared(model, condition, extenders, {c.name: c for c in model.components}, positive))
                 for component in model.components:
                     for rule in component.references:
                         lookup.setdefault(rule.name, list()).append((model_index, component, rule))
@@ -291,11 +302,15 @@ class SystemDetector:
                     target = gene
                     if rule.attach_to_cds and not gene.is_cds:
                         target = self._attached_gene(hit, gene, genes)
-                    match = _Match(component, hit, feature_score(hit), feature_evalue(hit))
+                    position = int(hit.location.start) if target.strand == 1 else -int(hit.location.end)
+                    match = _Match(component, hit, feature_score(hit), feature_evalue(hit), (position,))
                     filled = out.setdefault(model_index, dict()).setdefault(target.index, dict())
                     current = filled.get(component.name)
-                    if current is None or (match.score, -match.evalue) > (current.score, -current.evalue):
+                    if current is None:
                         filled[component.name] = match
+                    else:
+                        best = match if (match.score, -match.evalue) > (current.score, -current.evalue) else current
+                        filled[component.name] = replace(best, positions=tuple(sorted(current.positions + match.positions)))
         return out
 
     # ---- the requirement
@@ -327,8 +342,7 @@ class SystemDetector:
             reverse = strand == -1
             ordered_run = sorted(run, key=lambda m: m.start, reverse=reverse)
             ordered_reach = sorted(reach, key=lambda m: m.start, reverse=reverse)
-            condition_ok, contributors = prepared.condition.evaluate([m.names for m in ordered_run],
-                                                                     [m.names for m in ordered_reach])
+            condition_ok, contributors = prepared.condition.evaluate(ordered_run, ordered_reach)
         counted: Dict[str, Tuple[_Member, _Match]] = dict()
         if model.has_quorum:
             for member in run:
@@ -475,6 +489,43 @@ class SystemDetector:
                                 None if window.max_kb is None else window.max_kb * 1000))
         return found
 
+    # ---- step 7: extend
+
+    @staticmethod
+    def _extend(found: _Found, members: Sequence[_Member], circular: bool) -> _Found:
+        """``found`` grown outward over the members next to it that meet the model's extenders, each
+        within the window's radius of the last member on its side."""
+        prepared = found.prepared
+        window = prepared.model.window
+        if not found.members:
+            return found
+        pool = [m.shifted(k) for k in (-1, 0, 1) for m in members] if circular else list(members)
+        system = sorted(found.members, key=lambda m: m.start)
+        used = {m.gene for m in system}
+        extended: List[_Member] = list()
+        sides = ((system[-1], sorted((m for m in pool if m.start > system[-1].start), key=lambda m: m.start)),
+                 (system[0], sorted((m for m in pool if m.start < system[0].start), key=lambda m: m.start, reverse=True)))
+        for edge, candidates in sides:
+            for candidate in candidates:
+                if not windows.within_radius(edge, candidate, window.max_cds, window.max_kb):
+                    break
+                if candidate.gene in used:
+                    continue
+                passed, contributors = prepared.extenders.evaluate([candidate])
+                filled = {name: candidate.filled[name] for name in contributors & candidate.names}
+                if not passed or not filled:
+                    continue
+                primary = min(filled, key=lambda name: (-filled[name].score, filled[name].evalue, name))
+                extended.append(replace(candidate, filled=filled, primary=primary, role="extender"))
+                used.add(candidate.gene)
+                edge = candidate
+        if not extended:
+            return found
+        grown = sorted(system + extended, key=lambda m: m.start)
+        if grown[0].start < 0:  # extended back across the origin: keep starts on the contig
+            grown = [m.shifted(1) for m in grown]
+        return replace(found, members=grown)
+
     # ---- detection
 
     def detect(self, record: SeqRecord) -> List[SystemHit]:
@@ -505,11 +556,14 @@ class SystemDetector:
                 strands = [[m for m in members if m.strand == s] for s in (1, -1)] if prepared.model.same_strand else [members]
                 for group in strands:
                     if window.mode == "chain":
-                        found.extend(self._chain(prepared, group, circular))
+                        systems = self._chain(prepared, group, circular)
                     elif window.mode == "anchor":
-                        found.extend(self._anchor(prepared, group, circular))
+                        systems = self._anchor(prepared, group, circular)
                     else:
-                        found.extend(self._span(prepared, group, window.max_cds, window.max_kb, circular=circular))
+                        systems = self._span(prepared, group, window.max_cds, window.max_kb, circular=circular)
+                    if prepared.extenders is not None:
+                        systems = [self._extend(system, group, circular) for system in systems]
+                    found.extend(systems)
         found = [f for f in found if f.members and f.evaluation.counted]
         hits = [self._hit(f, record, genes, circular, cds_count) for f in found]
         accepted = self._resolve(hits, found)
@@ -529,11 +583,14 @@ class SystemDetector:
             else:
                 names = [name for name in member.filled if prepared.components[name].role != "forbidden"]
                 names.sort(key=lambda name: (_ROLE_PRIORITY[prepared.components[name].role], name))
+            if member.role == "extender":
+                names = sorted(member.filled)
             for name in names:
                 match = member.filled[name]
                 component = prepared.components[name]
+                role = "extender" if member.role == "extender" else component.role
                 system_members.append(SystemMember(member.record_gene.cds, member.record_gene.cds_id, component,
-                                                   component.role, match.hit))
+                                                   role, match.hit))
         contig_length = len(record)
         strand = evaluation.strand
         start = min(m.start for m in members)

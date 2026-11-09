@@ -27,7 +27,7 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `-o`, `--genbank_out` | FILE |  | Write the records to this GenBank file. Use - for standard output. |
 | `--fasta_out` | FILE |  | Write the records to this FASTA file. Use - for standard output. |
 | `--system_models` | FILE ... |  | System model files (YAML with a domainator_systems: key), or directories holding a systems.yaml. See docs/file_formats.md. |
-| `--domain_expr` | STRING |  | A system defined on the command line: a boolean expression over domain (reference) names that must hold within one window, using & (and), \| (or), ~ (not, within the window), parentheses and < (upstream of, in system orientation). database:name limits a name to one database. Needs --window_cds or --window_kb. |
+| `--domain_expr` | STRING |  | A system defined on the command line: a boolean expression over domain (reference) names that must hold within one window, using & (and), \| (or), ~ (not, within the window), parentheses and < (upstream of, in system orientation), and the functions cds(), minimum(), repeatable() and minscore() (see the system model files section of docs/file_formats.md). database:name limits a name to one database. Needs --window_cds or --window_kb. |
 | `--window_cds` | INTEGER |  | Window size for --domain_expr, in CDSs (see --window_mode). |
 | `--window_kb` | NUMBER |  | Window size for --domain_expr, in kb (see --window_mode). With --window_cds, both must hold. |
 | `--window_mode` | {span,chain,anchor} | span | How --window_cds and --window_kb are measured. span: the whole system, first member to last. chain: the gap between consecutive members. anchor: the distance of every member from one anchor member. |

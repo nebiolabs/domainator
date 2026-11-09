@@ -121,7 +121,7 @@ def test_parse_version(value, version):
     assert parse_version(value) == version
 
 
-@pytest.mark.parametrize("version", ["2", "\"1.1\""])
+@pytest.mark.parametrize("version", ["2", "\"1.2\""])
 def test_newer_version_refused(version):
     with pytest.raises(FormatVersionError, match="format"):
         read_text(f"domainator_systems: {version}\nsystems: {{A: \"A\"}}\ndefaults: {{window: {{max_cds: 1}}}}\n")
@@ -132,6 +132,10 @@ def test_newer_version_refused(version):
     ("domainator_systems: 1\ndefaults: {window: {max_cds: 1}}\nsystem: {A: A}\n", r"line 1: unknown key 'system'"),
     ("domainator_systems: 1\nsystems:\n  - name: A\n    window: {max_cds: 1}\n    condition: A\n    extenders: B\n", "format 1.1"),
     ("domainator_systems: 1\ndefine: {X: A}\nsystems: {A: A}\n", "format 1.1"),
+    ("domainator_systems: 1\ndefaults: {window: {max_cds: 1}}\nsystems: {A: \"cds(A & B)\"}\n", r"cds\(\) needs system model format 1.1"),
+    ("domainator_systems: \"1.1\"\ndefaults: {window: {max_cds: 1}}\ndefine: {\"X Y\": A}\nsystems: {A: A}\n", "can't contain"),
+    ("domainator_systems: \"1.1\"\ndefaults: {window: {max_cds: 1}}\nsystems:\n  - name: A\n    components: [{name: X, domains: [X]}]\n    condition: X\n    extenders: Y\n", "extenders names Y"),
+    ("domainator_systems: \"1.1\"\ndefaults: {window: {max_cds: 1}}\ndefine: {X: A}\nsystems:\n  - name: A\n    components: [{name: X, domains: [X]}]\n    condition: X\n", "both components and aliases"),
     ("domainator_systems: 1\nsystems: {A: A}\n", "no window"),
     ("domainator_systems: 1\ndefaults: {window: {mode: span}}\nsystems: {A: A}\n", "needs max_cds, max_kb or both"),
     ("domainator_systems: 1\ndefaults: {window: {max_cds: 2, max_span_cds: 3}}\nsystems: {A: A}\n", "in span mode"),
@@ -195,3 +199,62 @@ def test_collection_from_data_default_database():
     collection = collection_from_data({"domainator_systems": 1, "defaults": {"window": {"max_cds": 1}}, "systems": {"A": "A"}},
                                       default_database="mine")
     assert collection.database == collection.models[0].database == "mine"
+
+
+FORMAT_1_1 = """\
+domainator_systems: "1.1"
+database: bgc
+define:
+  ANY_KS: PKS_KS | ene_KS
+defaults: {window: {mode: anchor, max_kb: 20}}
+systems:
+  - name: transAT
+    condition: cds(PKS_AT & ~ANY_KS) & (cds(ATd & ANY_KS) | minscore(tra_KS, 50))
+    extenders: cds(ANY_KS & ~PKS_AT)
+    related: [PP-binding]
+  - name: plain
+    condition: A & B
+"""
+
+
+def test_format_1_1():
+    collection = read_text(FORMAT_1_1)
+    transat, plain = collection.models
+    assert transat.define == (("ANY_KS", "PKS_KS | ene_KS"),)
+    assert transat.extenders == "cds(ANY_KS & ~PKS_AT)"
+    assert transat.related == ("PP-binding",)
+    assert plain.define == ()
+    roles = {c.name: c.role for c in transat.components}
+    # PKS_KS and ene_KS are used positively in cds(ATd & ANY_KS)
+    assert roles == {"PKS_AT": "core", "PKS_KS": "core", "ene_KS": "core", "ATd": "core", "tra_KS": "core"}
+    with tempfile.TemporaryDirectory() as directory:
+        path = os.path.join(directory, "out.yaml")
+        write_system_models(collection, path)
+        with open(path) as handle:
+            text = handle.read()
+        again, = read_system_models([path])
+    assert "domainator_systems: '1.1'" in text
+    assert "define:" in text and "components" not in text  # implicit components still fit
+    assert again == collection
+
+
+def test_extender_only_names_are_neutral():
+    model, = read_text('domainator_systems: "1.1"\ndefaults: {window: {max_kb: 5}}\n'
+                       'systems:\n  - {name: M, condition: "A & ~cds(A & Z)", extenders: "T"}\n').models
+    assert {c.name: c.role for c in model.components} == {"A": "core", "Z": "neutral", "T": "neutral"}
+
+
+def test_writer_writes_format_1_when_it_can(shared_datadir):
+    collection, = read_system_models([shared_datadir / "systems" / "xyz_short.yaml"])
+    data = yaml.safe_load(yaml.safe_dump(__import__("domainator.systems.native", fromlist=["x"]).collection_to_data(collection)))
+    assert data["domainator_systems"] == 1
+
+
+def test_conflicting_aliases_are_not_written():
+    first = read_text('domainator_systems: "1.1"\ndatabase: d\ndefaults: {window: {max_kb: 5}}\ndefine: {L: A | B}\nsystems: {M: "L"}\n')
+    second = read_text('domainator_systems: "1.1"\ndatabase: d\ndefaults: {window: {max_kb: 5}}\ndefine: {L: A | C}\nsystems: {N: "L"}\n')
+    from dataclasses import replace
+    merged = replace(first, models=first.models + second.models)
+    with tempfile.TemporaryDirectory() as directory:
+        with pytest.raises(InputError, match="alias 'L' means"):
+            write_system_models(merged, os.path.join(directory, "out.yaml"))

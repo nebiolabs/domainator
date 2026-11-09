@@ -45,9 +45,9 @@ class ReferenceRule:
 
 THRESHOLD_KEYS = ("evalue", "min_score", "min_reference_coverage", "min_target_coverage",
                   "min_target_length", "max_target_length", "min_tmscore", "min_lddt", "min_prob")
+"""The ReferenceRule fields that are thresholds, which a collection's ``defaults`` can set."""
 STRUCTURAL_THRESHOLDS = {"min_tmscore": "tmscore", "min_lddt": "lddt", "min_prob": "prob"}
 """The structural thresholds, and the hit qualifiers they read. A hit without the qualifier fails them."""
-"""The ReferenceRule fields that are thresholds, which a collection's ``defaults`` can set."""
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,10 @@ class SystemModel:
     min_core: int = 0
     min_total: int = 0
     condition: Optional[str] = None
+    extenders: Optional[str] = None
+    """A condition, evaluated on one CDS at a time, that CDSs next to the system must meet to extend it (format 1.1)."""
+    define: Tuple[Tuple[str, str], ...] = ()
+    """The aliases (name, expression) the condition and extenders use (format 1.1)."""
     superiors: Tuple[Tuple[str, str], ...] = ()
     """(database, name) of the models that win when they overlap this one."""
     category: str = "."
@@ -108,6 +112,8 @@ class SystemModel:
     multi_loci: bool = False
     orientation_from: Optional[str] = None
     examples: Tuple[Example, ...] = ()
+    related: Tuple[str, ...] = ()
+    """References that are relevant but not required (antiSMASH RELATED). Informational (format 1.1)."""
     literature: Tuple[str, ...] = ()
     reference_files: Tuple[str, ...] = ()
 
@@ -153,7 +159,7 @@ class SystemMember:
     """The CDS's cds_id, or ``nuc_<start>_<strand>_<end>`` for a contig-level nucleotide hit."""
     component: Component
     role: str
-    """core, accessory or neutral (extender in format 1.1)."""
+    """core, accessory, neutral, or extender for a CDS added by the model's extenders."""
     hit: SeqFeature
     """The Domainator feature that satisfied the component."""
 

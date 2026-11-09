@@ -31,7 +31,8 @@ from domainator.seqio import db_name_from_path
 from domainator.systems.model import COMMAND_LINE_DATABASE, ModelCollection
 from domainator.systems.native import read_system_models, reference_paths, select_models, window_model, write_system_models
 
-TSV_COLUMNS = ("database", "system", "category", "window", "min_core", "min_total", "condition", "component", "role",
+TSV_COLUMNS = ("database", "system", "category", "window", "min_core", "min_total", "condition", "extenders", "related",
+               "component", "role",
                "reference", "reference_database", "evalue", "min_score", "min_reference_coverage",
                "min_target_coverage", "min_target_length", "max_target_length", "min_tmscore", "min_lddt", "min_prob",
                "exchangeable", "attach_to_cds")
@@ -55,7 +56,8 @@ def _tsv_rows(collections: Sequence[ModelCollection]) -> Iterable[List[str]]:
                 for rule in component.references:
                     yield [_cell(value) for value in (
                         model.database, model.name, model.category, model.window.describe(), model.min_core,
-                        model.min_total, model.condition, component.name, component.role, rule.name, rule.database,
+                        model.min_total, model.condition, model.extenders, ",".join(model.related), component.name,
+                        component.role, rule.name, rule.database,
                         rule.evalue, rule.min_score, rule.min_reference_coverage, rule.min_target_coverage,
                         rule.min_target_length, rule.max_target_length, rule.min_tmscore, rule.min_lddt, rule.min_prob,
                         rule.exchangeable, rule.attach_to_cds)]

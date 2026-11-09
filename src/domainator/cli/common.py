@@ -246,8 +246,9 @@ def add_window_model(parser):
     parser.add_argument("--domain_expr", type=str, default=None,
                         help="A system defined on the command line: a boolean expression over domain (reference) names "
                              "that must hold within one window, using & (and), | (or), ~ (not, within the window), "
-                             "parentheses and < (upstream of, in system orientation). database:name limits a name to one "
-                             "database. Needs --window_cds or --window_kb.")
+                             "parentheses and < (upstream of, in system orientation), and the functions cds(), minimum(), "
+                             "repeatable() and minscore() (see the system model files section of docs/file_formats.md). "
+                             "database:name limits a name to one database. Needs --window_cds or --window_kb.")
     parser.add_argument("--window_cds", type=NonNegativeInt, default=None,
                         help="Window size for --domain_expr, in CDSs (see --window_mode).")
     parser.add_argument("--window_kb", type=NonNegativeFloat, default=None,

@@ -106,6 +106,29 @@ a `--domain_expr` model as a file to start from, and `--tsv_out` lists every com
 threshold of a model file as a table. The format is specified in
 [file_formats.md](file_formats.md#system-model-files).
 
+Format 1.1 (`domainator_systems: "1.1"`) adds antiSMASH's condition functions, aliases and
+extenders, for models that need more than "these components nearby":
+
+```yaml
+domainator_systems: "1.1"
+define:
+  ANY_KS: "PKS_KS | ene_KS | mod_KS"
+defaults: {window: {mode: anchor, max_kb: 20}}
+systems:
+  - name: transAT_PKS
+    # an AT-only CDS, and a KS fused to a docking domain or a trans-AT KS with a carrier protein
+    condition: "cds(PKS_AT & ~ANY_KS) & (cds(ATd & ANY_KS) | cds(tra_KS & PP-binding))"
+    extenders: "cds(ANY_KS & ~PKS_AT)"   # KS-only CDSs next to the system join it
+  - name: two_of_three
+    condition: "minimum(2, [LanB, LanC, LanM]) & minscore(LanA, 25)"
+  - name: architecture
+    condition: "cds(PAS < GGDEF < EAL)"  # one protein with these domains, N- to C-terminal
+```
+
+`cds(...)` holds on one CDS, `minimum(n, [...])` counts distinct components,
+`repeatable(n, [...])` counts copies too, and `minscore(a, s)` needs a bit score of at least s.
+The same functions work in `--domain_expr`.
+
 ## Published model collections
 
 `system_db_download` converts other tools' model collections, once, into a directory that

@@ -330,3 +330,75 @@ def test_feature_qualifiers():
         "core_count": ["2"], "total_count": ["2"], "member_count": ["2"], "neighborhood_kb": ["5"]}
     assert feature.qualifiers["component"] == ["core|A|cds0|db|A|x", "core|B|cds1|db|B"]
     assert component_values(feature)[0].reference == "A|x"
+
+
+def models_1_1(*systems, **collection):
+    return models(*systems, domainator_systems="1.1", **collection)
+
+
+def test_cds_function_needs_a_fusion():
+    collection = models_1_1({"name": "S", "condition": "cds(A & B) & C", "window": {"mode": "anchor", "max_cds": 3}})
+    assert found(contig(["A", "B", "C"]), collection) == []
+    assert found(contig(["A+B", "", "C"]), collection) == [["cds0", "cds2"]]
+
+
+def test_minimum_and_repeatable():
+    minimum = models_1_1({"name": "S", "condition": "minimum(2, [A, B, C])", "window": {"mode": "span", "max_cds": 5}})
+    assert found(contig(["A", "", "A"]), minimum) == []
+    assert found(contig(["A", "", "C"]), minimum) == [["cds0", "cds2"]]
+    repeatable = models_1_1({"name": "S", "condition": "repeatable(3, [A, B])", "window": {"mode": "span", "max_cds": 5}})
+    assert found(contig(["A", "A", "", "A"]), repeatable) == [["cds0", "cds1", "cds3"]]
+    assert found(contig(["A", "A", "", "C"]), repeatable) == []
+
+
+def test_minscore():
+    collection = models_1_1({"name": "S", "condition": "minscore(A, 60) & B", "window": {"mode": "chain", "max_cds": 2}})
+    assert found(contig(["A:59", "B"]), collection) == []
+    assert found(contig(["A:60", "B"]), collection) == [["cds0", "cds1"]]
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+def test_cds_order_is_n_to_c_terminal(strand):
+    """cds(A < B): on a minus-strand CDS, the N-terminal hit is the one at the higher coordinate."""
+    record = contig(["-" if strand == -1 else ""])
+    cds = record.features[0]
+    first, second = FeatureLocation(0, 300, strand), FeatureLocation(600, 900, strand)
+    n_terminal, c_terminal = (first, second) if strand == 1 else (second, first)
+    record.features += [hit_feature(n_terminal, "A", "cds0"), hit_feature(c_terminal, "B", "cds0")]
+    assert cds.qualifiers["cds_id"] == ["cds0"]
+    window = {"mode": "span", "max_cds": 1}
+    assert found(record, models_1_1({"name": "S", "condition": "cds(A < B)", "window": window})) == [["cds0"]]
+    assert found(record, models_1_1({"name": "S", "condition": "cds(B < A)", "window": window})) == []
+
+
+def test_define_aliases():
+    collection = models_1_1({"name": "S", "condition": "cds(AT & ~ANY_KS) & ANY_KS"}, define={"ANY_KS": "KS1 | KS2"})
+    assert found(contig(["AT", "KS2"]), collection) == [["cds0", "cds1"]]
+    assert found(contig(["AT+KS1", "KS2"]), collection) == []
+
+
+def test_extenders():
+    collection = models_1_1({"name": "S", "condition": "A & B", "extenders": "T | cds(K & ~Q)",
+                             "window": {"mode": "anchor", "max_cds": 1}})
+    # T at 3 extends the system; K at 6 is more than one CDS from it, and so is the T at 9
+    record = contig(["", "A", "B", "T", "", "", "K", "", "", "T"])
+    hit, = detect_systems(record, [collection])
+    assert member_ids(hit) == ["cds1", "cds2", "cds3"]
+    assert [(m.cds_id, m.role, m.component.name) for m in hit.members][-1] == ("cds3", "extender", "T")
+    assert (int(hit.location.start), int(hit.location.end)) == (1000, 3900)
+    assert hit.score == 100.0  # extenders don't count
+    # extension passes over members that don't qualify (K+Q at 4) while it is within the radius of the last
+    # member, and each new member moves the edge (T at 5, then T at 7)
+    hit, = detect_systems(contig(["K", "", "A", "B", "K+Q", "T", "", "T"]), [collection])
+    assert member_ids(hit) == ["cds0", "cds2", "cds3", "cds5", "cds7"]
+    # names only in the extenders are neutral components, and don't start systems
+    assert {c.name: c.role for c in collection.models[0].components}["Q"] == "neutral"
+    assert found(contig(["T", "T"]), collection) == []
+
+
+def test_extenders_wrap_the_origin():
+    collection = models_1_1({"name": "S", "condition": "A & B", "extenders": "T", "window": {"mode": "chain", "max_cds": 1}})
+    record = contig(["A", "B", "", "", "", "", "T"], topology="circular")
+    hit, = detect_systems(record, [collection])
+    assert member_ids(hit) == ["cds6", "cds0", "cds1"]
+    assert [(int(p.start), int(p.end)) for p in hit.location.parts] == [(6000, len(record)), (0, 1900)]

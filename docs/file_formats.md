@@ -396,7 +396,8 @@ and a CDS with hits to several of them (a fusion) fills each.
 
 **The `component` qualifier** is `role|component|cds_id|database|reference`:
 
-- `role`: `core`, `accessory` or `neutral`;
+- `role`: `core`, `accessory` or `neutral`, or `extender` for a CDS the model's `extenders`
+  added;
 - `component`: the component's name in the model;
 - `cds_id`: the member CDS's `cds_id`. A contig-level nucleotide member (`cds_id="."` on its
   hit) is written `nuc_<start>_<strand>_<end>` from the hit's coordinates. Unlike a `cds_id`,
@@ -675,16 +676,18 @@ systems:
 **Collection keys**: `domainator_systems` (required), `database`, `semantics` (`domainator`,
 or `padloc`, `macsyfinder` or `antismash` for converted collections), `source` (`name`, `url`,
 `release`, `date`, `converter`, `license`; informational), `reference_files`, `defaults`,
-`competing` and `competing_overlap_aa` (default 20 residues), and `systems`: a list of models,
-or a mapping from model name to condition (the short form).
+`competing` and `competing_overlap_aa` (default 20 residues), `define` (aliases, format 1.1),
+and `systems`: a list of models, or a mapping from model name to condition (the short form).
 
 **Model keys**: `name` (required); `window`; `components`; `condition`; `min_core` (default:
 the number of core components when there is no condition, else 0); `min_total` (default:
 `min_core`); `category`, `description`, `accession`; `same_strand`; `superiors` (models of the
 same file, or `database:name`); `orientation_from` (a component); `neighborhood_kb`,
 `neighborhood_cds`; `max_components` (the completeness denominator); `multi_loci`; `examples`
-(`accession`, `start`, `end`, `note`); `literature`; `reference_files`. A model needs a window
-(its own or the default) and a requirement: `min_core`, `min_total` or a condition.
+(`accession`, `start`, `end`, `note`); `literature`; `reference_files`; and in format 1.1
+`extenders` (see below) and `related` (references that are relevant but not required, as
+antiSMASH's `RELATED`; informational). A model needs a window (its own or the default) and a
+requirement: `min_core`, `min_total` or a condition.
 
 **Components**: `name`, `role` (`core`, the default, `accessory`, `neutral` or `forbidden`),
 `domains`, and the flags `loner`, `multi_system`, `multi_model` and `max_gap_cds` (a chain gap
@@ -713,9 +716,35 @@ attached to a CDS never count as CDSs.
 
 **Conditions**: `&`, `|`, `~` and parentheses over component names, and `a < b` (a member
 filling a lies upstream of one filling b, in system orientation; `a < b < c` needs three
-members). `<` binds tightest, so `~a < b` means `~(a < b)`. Without a `components:` list, every
-name in the condition is a domain and its own component (`database:name` limits it to one
-database): positive names are core, names used only under `~` are forbidden.
+members). `<` binds tightest, so `~a < b` means `~(a < b)`. A condition is evaluated over the
+members of one window, so `~a` means "no a in this window" (see the table above).
+
+Format 1.1 adds antiSMASH's functions:
+
+| Function | True when |
+|---|---|
+| `cds(...)` | the expression inside holds on **one** CDS: `cds(a & b)` is a fusion, `cds(a & ~b)` a CDS with a but not b. Inside, `a < b` means a hit to a starts before a hit to b along the protein, N- to C-terminal (`cds(a < b < c)` is a domain architecture). `cds()` can't hold another function. |
+| `minimum(n, [a, b, c])` | at least n of the listed components are present |
+| `repeatable(n, [a, b, c])` | at least n (member, component) pairs among the listed components, so repeats count |
+| `minscore(a, s)` | a member fills a with a bit score of at least s |
+
+and **aliases**, a collection-level `define` mapping from a name to an expression, used like a
+name: `define: {ANY_KS: "PKS_KS | ene_KS"}` and `cds(PKS_AT & ~ANY_KS)`. An alias can use
+other aliases. Where a list of names is expected (the operands of `<`, the lists of the
+functions), an alias must be a disjunction of names. Names can't contain `& | ~ ( ) < , [ ]`
+or spaces.
+
+Without a `components:` list, every name in the condition is a domain and its own component
+(`database:name` limits it to one database): names used positively are core; names used only
+negated, as a bare name (`~W`), are forbidden; and other names (only negated inside `cds()`,
+a function or `<`, or used only in `extenders`) are neutral, so they can join a system without
+counting or vetoing it.
+
+**Extenders** (format 1.1): a condition that a CDS next to a found system can meet, alone, to
+join it, as antiSMASH's `EXTENDERS`. The system grows outward from each end over the CDSs that
+meet it, each within the window's `max_cds`/`max_kb` of the last member on that side (CDSs that
+don't meet it are passed over while still within that distance). Extended members have role
+`extender`, are part of the location, and don't count toward the score or completeness.
 
 **Thresholds** are checked against the qualifiers of the hits already in the records, so a
 model can only use hits that the search kept. `find_systems -e` is an extra filter on top of
@@ -723,10 +752,11 @@ them. Coverage is `(rend - rstart + 1) / rlen` of the reference, and hit length 
 the target.
 
 **Versions.** `domainator_systems` is `major` or `"major.minor"`; write minor versions quoted,
-because YAML reads `1.10` as the number 1.1. This release reads format 1. A file from a newer
-version, or with a key this version doesn't know, is refused. Format 1.1 is planned to add
-`extenders`, `define` aliases and the condition functions `cds()`, `minimum()`,
-`repeatable()` and `minscore()`.
+because YAML reads `1.10` as the number 1.1. This release reads formats 1 and 1.1. A file from a
+newer version, or with a key this version doesn't know, is refused. A file that uses `define`,
+`extenders`, `related` or the condition functions must say `domainator_systems: "1.1"`; the
+writer (`format_systems --yaml_out`, `system_db_download`) writes 1 when a collection needs
+nothing newer.
 
 ## Protein structures
 

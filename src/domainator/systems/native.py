@@ -13,32 +13,31 @@ import yaml
 
 from domainator.errors import FormatVersionError, InputError
 from domainator.seqio import db_name_from_path
-from domainator.systems.conditions import Condition
+from domainator.systems.conditions import FORMAT_1_1, OPERATORS, Condition, alias_closure
 from domainator.systems.model import (COMMAND_LINE_DATABASE, ROLES, THRESHOLD_KEYS, WINDOW_MODES, Component, Example,
                                       ModelCollection, ReferenceRule, Source, SystemModel, Window)
 
 FORMAT_KEY = "domainator_systems"
-FORMAT_VERSION = (1, 0)
-"""The newest format version this module reads and the one it writes."""
+FORMAT_VERSION = FORMAT_1_1
+"""The newest format version this module reads. The writer writes 1 when a collection needs nothing newer."""
 DIRECTORY_FILE = "systems.yaml"
 """The file a model directory (written by system_db_download) holds."""
 SEMANTICS = ("domainator", "padloc", "macsyfinder", "antismash")
 
 _COLLECTION_KEYS = {FORMAT_KEY, "database", "semantics", "source", "reference_files", "defaults", "competing",
-                    "competing_overlap_aa", "systems"}
+                    "competing_overlap_aa", "define", "systems"}
 _SOURCE_KEYS = {"name", "url", "release", "date", "converter", "license"}
 _DEFAULTS_KEYS = set(THRESHOLD_KEYS) | {"window", "same_strand"}
 _MODEL_KEYS = {"name", "category", "description", "accession", "window", "min_core", "min_total", "condition",
-               "components", "superiors", "neighborhood_kb", "neighborhood_cds", "same_strand", "max_components",
-               "multi_loci", "orientation_from", "examples", "literature", "reference_files"}
+               "extenders", "components", "superiors", "neighborhood_kb", "neighborhood_cds", "same_strand", "max_components",
+               "multi_loci", "orientation_from", "examples", "related", "literature", "reference_files"}
 _COMPONENT_KEYS = {"name", "role", "domains", "loner", "multi_system", "multi_model", "max_gap_cds"}
 _RULE_KEYS = {"name", "database"} | set(THRESHOLD_KEYS) | {"exchangeable", "attach_to_cds"}
 _WINDOW_KEYS = {"mode", "max_cds", "max_kb", "max_span_cds", "max_span_kb"}
 _EXAMPLE_KEYS = {"accession", "start", "end", "note"}
-_FORMAT_1_1_KEYS = {"define": "define aliases", "extenders": "extenders"}
 _INTEGER_THRESHOLDS = {"min_target_length", "max_target_length"}
 
-_OPERATOR_CHARACTERS = set("&|~()<")
+_OPERATOR_CHARACTERS = set(OPERATORS)
 
 
 class _Mapping(dict):
@@ -63,8 +62,15 @@ _Loader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _constru
 class _Reader:
     """Reads one collection, raising InputError with the file and line of the problem."""
 
-    def __init__(self, path: Optional[str]):
+    def __init__(self, path: Optional[str], version: Tuple[int, int] = FORMAT_VERSION):
         self.path = path
+        self.version = version
+
+    def require(self, version: Tuple[int, int], what: str, node=None):
+        """Refuse ``what`` when the file's format version is older than ``version``."""
+        if self.version < version:
+            raise self.error(f"{what} needs system model format {_version_text(version)}; this file says "
+                             f"{FORMAT_KEY}: {_version_text(self.version)} (write {FORMAT_KEY}: \"{_version_text(version)}\").", node)
 
     def error(self, message: str, node: Any = None) -> InputError:
         where = self.path or "system models"
@@ -77,9 +83,6 @@ class _Reader:
         if not isinstance(mapping, dict):
             raise self.error(f"{what} must be a mapping, not {mapping!r}.")
         for key in mapping:
-            if key in _FORMAT_1_1_KEYS and key not in allowed:
-                raise self.error(f"{_FORMAT_1_1_KEYS[key]} ({key!r}) need system model format 1.1; "
-                                 f"this version of Domainator reads format 1.", mapping)
             if key not in allowed:
                 raise self.error(f"unknown key {key!r} in {what}. Known keys: {', '.join(sorted(allowed))}.", mapping)
 
@@ -227,6 +230,7 @@ def collection_from_data(data: Dict[str, Any], *, path: Optional[str] = None,
     if version[0] != FORMAT_VERSION[0] or version > FORMAT_VERSION:
         raise FormatVersionError(f"{path or 'system models'}: system model format {_version_text(version)} can't be read by this "
                                  f"version of Domainator, which reads format {_version_text(FORMAT_VERSION)}.")
+    reader.version = version
     database = reader.name(data.get("database", default_database), "database", data)
     semantics = data.get("semantics", "domainator")
     if semantics not in SEMANTICS:
@@ -248,6 +252,14 @@ def collection_from_data(data: Dict[str, Any], *, path: Optional[str] = None,
         competing.append(frozenset(reader.text_list(group, "each competing group", data)))
     competing_overlap_aa = reader.number(data.get("competing_overlap_aa", 20), "competing_overlap_aa", data, integer=True)
 
+    define = dict()
+    if data.get("define") is not None:
+        reader.require(FORMAT_1_1, "define (aliases)", data)
+        if not isinstance(data["define"], dict):
+            raise reader.error("define must be a mapping from alias to expression.", data)
+        for alias, expression in data["define"].items():
+            define[reader.name(alias, "alias", data["define"])] = reader.text(expression, f"alias {alias!r}", data["define"])
+
     systems = data.get("systems")
     if isinstance(systems, dict):
         entries = list()
@@ -268,7 +280,7 @@ def collection_from_data(data: Dict[str, Any], *, path: Optional[str] = None,
     raw_superiors = list()
     for entry in entries:
         model, superiors = _model(reader, entry, database=database, program=semantics, default_thresholds=default_thresholds,
-                                  default_window=default_window, default_same_strand=default_same_strand)
+                                  default_window=default_window, default_same_strand=default_same_strand, define=define)
         parsed.append(model)
         raw_superiors.append((entry, superiors))
     names = [model.name for model in parsed]
@@ -310,19 +322,27 @@ def _window(reader, value) -> Window:
     return Window(mode=mode, **limits)
 
 
-def implicit_components(condition: Condition, thresholds: Dict[str, Any]) -> Tuple[Component, ...]:
-    """The components of a model with no components list: one per name in the condition, with that
-    one reference (``database:name`` limits it to one database). Names used only under ``~`` are
-    forbidden; the rest are core."""
+def implicit_components(condition: Condition, thresholds: Dict[str, Any],
+                        extenders: Optional[Condition] = None) -> Tuple[Component, ...]:
+    """The components of a model with no components list: one per name in the condition (and the
+    extenders), with that one reference (``database:name`` limits it to one database).
+
+    A name the condition uses positively is core. One it uses only negated as a bare name
+    (``~W``) is forbidden. Any other name (only negated inside ``cds()``, the functions or ``<``,
+    or only in the extenders) is neutral: it can join a system, but not count or veto."""
     components = list()
-    seen = set()
-    for token in condition._tokens:
-        if token not in condition.names or token in seen:
-            continue
-        seen.add(token)
+    names = list(condition.ordered_names)
+    if extenders is not None:
+        names.extend(name for name in extenders.ordered_names if name not in condition.names)
+    for token in names:
         database, _, name = token.rpartition(":")
         rule = ReferenceRule(name=name, database=database or None, **thresholds)
-        role = "core" if token in condition.positive_names else "forbidden"
+        if token in condition.positive_names:
+            role = "core"
+        elif token in condition.veto_names:
+            role = "forbidden"
+        else:
+            role = "neutral"
         components.append(Component(name=token, role=role, references=(rule,)))
     return tuple(components)
 
@@ -368,7 +388,20 @@ def _component(reader, value, thresholds) -> Component:
                      max_gap_cds=None if value.get("max_gap_cds") is None else reader.number(value["max_gap_cds"], "max_gap_cds", value, integer=True))
 
 
-def _model(reader, entry, *, database, program, default_thresholds, default_window, default_same_strand) -> Tuple[SystemModel, List[str]]:
+def _condition(reader, entry, key, define, error) -> Optional[Condition]:
+    if entry.get(key) is None:
+        return None
+    try:
+        condition = Condition(reader.text(entry[key], key, entry), define)
+    except InputError as e:
+        raise error(str(e)) from None
+    if condition.functions:
+        reader.require(FORMAT_1_1, f"{key} using {', '.join(sorted(f + '()' for f in condition.functions))}", entry)
+    return condition
+
+
+def _model(reader, entry, *, database, program, default_thresholds, default_window, default_same_strand,
+           define=None) -> Tuple[SystemModel, List[str]]:
     reader.check_keys(entry, _MODEL_KEYS, "a model")
     if "name" not in entry:
         raise reader.error("each model needs a name.", entry)
@@ -380,12 +413,11 @@ def _model(reader, entry, *, database, program, default_thresholds, default_wind
     window = _window(reader, entry["window"]) if entry.get("window") is not None else default_window
     if window is None:
         raise error("no window (give one, or a window in defaults).")
-    condition = None
-    if entry.get("condition") is not None:
-        try:
-            condition = Condition(reader.text(entry["condition"], "condition", entry))
-        except InputError as e:
-            raise error(str(e)) from None
+    define = define or {}
+    condition = _condition(reader, entry, "condition", define, error)
+    if entry.get("extenders") is not None:
+        reader.require(FORMAT_1_1, "extenders", entry)
+    extenders = _condition(reader, entry, "extenders", define, error)
     if entry.get("components") is not None:
         if not isinstance(entry["components"], list) or not entry["components"]:
             raise error("components must be a non-empty list.")
@@ -394,17 +426,22 @@ def _model(reader, entry, *, database, program, default_thresholds, default_wind
         duplicates = sorted({c for c in component_names if component_names.count(c) > 1})
         if duplicates:
             raise error(f"duplicate components: {', '.join(duplicates)}.")
-        if condition is not None:
-            unknown = sorted(condition.names - set(component_names))
-            if unknown:
-                raise error(f"the condition names {', '.join(unknown)}, which are not components.")
+        shadowed = sorted(set(component_names) & set(define))
+        if shadowed:
+            raise error(f"{', '.join(shadowed)} are both components and aliases.")
+        for key, parsed in (("condition", condition), ("extenders", extenders)):
+            if parsed is not None:
+                unknown = sorted(parsed.names - set(component_names))
+                if unknown:
+                    raise error(f"the {key} names {', '.join(unknown)}, which are not components.")
     else:
         if condition is None:
             raise error("a model needs components, a condition, or both.")
-        bad = sorted(n for n in condition.names if "|" in n)
+        names = condition.names | (extenders.names if extenders is not None else frozenset())
+        bad = sorted(n for n in names if "|" in n)
         if bad:
             raise error(f"names can't contain '|': {', '.join(bad)}.")
-        components = implicit_components(condition, default_thresholds)
+        components = implicit_components(condition, default_thresholds, extenders)
     min_core = entry.get("min_core")
     min_core = _default_min_core(condition, components) if min_core is None else reader.number(min_core, "min_core", entry, integer=True)
     min_total = entry.get("min_total")
@@ -415,6 +452,8 @@ def _model(reader, entry, *, database, program, default_thresholds, default_wind
     if orientation_from is not None and orientation_from not in {c.name for c in components}:
         raise error(f"orientation_from names {orientation_from!r}, which is not a component.")
     superiors = list(reader.text_list(entry.get("superiors", []), "superiors", entry))
+    if entry.get("related") is not None:
+        reader.require(FORMAT_1_1, "related", entry)
     examples = list()
     for example in entry.get("examples") or []:
         reader.check_keys(example, _EXAMPLE_KEYS, "an example")
@@ -431,6 +470,9 @@ def _model(reader, entry, *, database, program, default_thresholds, default_wind
     model = SystemModel(
         name=name, database=database, program=program, components=components, window=window,
         min_core=min_core, min_total=min_total, condition=None if condition is None else condition.text,
+        extenders=None if extenders is None else extenders.text,
+        define=alias_closure(define, (condition.aliases if condition is not None else frozenset())
+                             | (extenders.aliases if extenders is not None else frozenset())),
         category=reader.text(entry.get("category", "."), "category", entry),
         neighborhood_kb=optional_number("neighborhood_kb"),
         neighborhood_cds=optional_number("neighborhood_cds", integer=True),
@@ -441,6 +483,7 @@ def _model(reader, entry, *, database, program, default_thresholds, default_wind
         multi_loci=reader.boolean(entry.get("multi_loci", False), "multi_loci", entry),
         orientation_from=orientation_from,
         examples=tuple(examples),
+        related=reader.text_list(entry.get("related", []), "related", entry),
         literature=reader.text_list(entry.get("literature", []), "literature", entry),
         reference_files=reader.text_list(entry.get("reference_files", []), "reference_files", entry),
     )
@@ -585,12 +628,16 @@ def _model_data(model: SystemModel, defaults: Dict[str, Any]) -> Dict[str, Any]:
         data["window"] = _window_data(model.window)
     if model.same_strand != defaults.get("same_strand", False):
         data["same_strand"] = model.same_strand
-    condition = None
+    condition = extenders = None
+    define = dict(model.define)
     if model.condition is not None:
         data["condition"] = model.condition
-        condition = Condition(model.condition)
+        condition = Condition(model.condition, define)
+    if model.extenders is not None:
+        data["extenders"] = model.extenders
+        extenders = Condition(model.extenders, define)
     thresholds = {key: defaults[key] for key in THRESHOLD_KEYS if key in defaults}
-    if condition is None or model.components != implicit_components(condition, thresholds):
+    if condition is None or model.components != implicit_components(condition, thresholds, extenders):
         data["components"] = [_component_data(component, defaults) for component in model.components]
     if model.min_core != _default_min_core(condition, model.components):
         data["min_core"] = model.min_core
@@ -605,15 +652,36 @@ def _model_data(model: SystemModel, defaults: Dict[str, Any]) -> Dict[str, Any]:
         data["multi_loci"] = True
     if model.examples:
         data["examples"] = [{key: value for key, value in vars(example).items() if value is not None} for example in model.examples]
-    for key in ("literature", "reference_files"):
+    for key in ("related", "literature", "reference_files"):
         if getattr(model, key):
             data[key] = list(getattr(model, key))
     return data
 
 
+def _model_version(model: SystemModel) -> Tuple[int, int]:
+    define = dict(model.define)
+    versions = [Condition(text, define).version for text in (model.condition, model.extenders) if text is not None]
+    if model.extenders is not None or model.define or model.related:
+        versions.append(FORMAT_1_1)
+    return max(versions, default=(1, 0))
+
+
+def _collection_define(collection: ModelCollection) -> Dict[str, str]:
+    define: Dict[str, str] = dict()
+    for model in collection.models:
+        for alias, expression in model.define:
+            if define.setdefault(alias, expression) != expression:
+                raise InputError(f"Can't write the system models of {collection.database} to one file: alias {alias!r} "
+                                 f"means {define[alias]!r} in one model and {expression!r} in another.")
+    return define
+
+
 def collection_to_data(collection: ModelCollection) -> Dict[str, Any]:
-    """The native-format contents for ``collection``. Models that fit the short form are written in it."""
-    data: Dict[str, Any] = {FORMAT_KEY: FORMAT_VERSION[0], "database": collection.database}
+    """The native-format contents for ``collection``. Models that fit the short form are written in
+    it. The version is 1, or "1.1" when a model uses aliases, extenders or condition functions."""
+    version = max((_model_version(model) for model in collection.models), default=(1, 0))
+    data: Dict[str, Any] = {FORMAT_KEY: version[0] if version[1] == 0 else _version_text(version),
+                            "database": collection.database}
     if collection.semantics != "domainator":
         data["semantics"] = collection.semantics
     if collection.source is not None:
@@ -627,6 +695,9 @@ def collection_to_data(collection: ModelCollection) -> Dict[str, Any]:
         data["competing"] = [sorted(group) for group in collection.competing]
     if collection.competing_overlap_aa != 20:
         data["competing_overlap_aa"] = collection.competing_overlap_aa
+    define = _collection_define(collection)
+    if define:
+        data["define"] = dict(sorted(define.items()))
     entries = [_model_data(model, defaults) for model in collection.models]
     if all(set(entry) == {"name", "condition"} for entry in entries):
         data["systems"] = {entry["name"]: entry["condition"] for entry in entries}

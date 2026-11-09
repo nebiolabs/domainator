@@ -57,7 +57,8 @@ def test_tsv(sod_models, tmp_path):
     format_systems([str(sod_models)], tsv_out=str(out))
     header, *rows = [line.split("\t") for line in out.read_text().splitlines()]
     assert tuple(header) == TSV_COLUMNS
-    assert [(row[1], row[7], row[8], row[9]) for row in rows] == [
+    column = {name: i for i, name in enumerate(TSV_COLUMNS)}
+    assert [tuple(row[column[name]] for name in ("system", "component", "role", "reference")) for row in rows] == [
         ("FeSOD", "Sod_Fe_N", "core", "Sod_Fe_N"), ("FeSOD", "Sod_Fe_C", "core", "Sod_Fe_C"),
         ("CcdB_only", "CcdB", "core", "CcdB"), ("CcdB_only", "Missing", "core", "Missing")]
     assert rows[2][2] == "toxin" and rows[2][3] == "span:cds=1"
