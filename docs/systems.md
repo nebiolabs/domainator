@@ -138,13 +138,24 @@ The same functions work in `--domain_expr`.
 domainator system_db_download --source padloc --output_dir padloc_db/
 domainator system_db_download --source defensefinder --output_dir defensefinder_db/
 domainator system_db_download --source macsyfinder --input CasFinder/ --output_dir casfinder_db/
+domainator system_db_download --source antismash --input ~/antismash/ --output_dir antismash_rules/
 ```
 
 The directory holds `systems.yaml`, the profiles the models use (`padloc.hmm`,
 `defensefinder.hmm`, ...), the source's `LICENSE`, and `conversion.tsv`, which lists everything
 the conversion approximated or dropped. With `--input`, a local copy is converted instead of
 downloading one (padloc-db, a defense-finder-models directory as installed by `defense-finder
-update`, or any MacSyFinder model package).
+update`, or any MacSyFinder model package). antiSMASH's cluster rules are only converted from
+your own copy (a checkout or installation of antiSMASH), because they are AGPL-3.0 licensed;
+`--antismash_strictness` chooses the rule files as antiSMASH's `--hmmdetection-strictness` does
+(default `relaxed`). That gives the BGC rules of antiSMASH's detection stage for
+`system_search`, which can then scan large genome databases for BGC neighborhoods without
+running antiSMASH on each genome:
+
+```bash
+domainator system_search -i genomes.gb --system_models antismash_rules/ --system_categories PKS \
+    --model_neighborhood -o pks_regions.gb
+```
 
 Converted models keep their source's names (`gabija`, `cas_type_I-E` for PADLOC; `Gabija`,
 `RM_Type_II` for DefenseFinder), and their descriptions, categories and accessions:
@@ -226,6 +237,12 @@ but not exactly. The differences are listed in each directory's `conversion.tsv`
   threshold). For the exact filter, search with `--bit_cutoffs gathering` (`domainate`,
   `system_search`), as DefenseFinder does. Loners and multi-locus models are found as single loci: their genes must lie
   within the cluster.
+- **antiSMASH rules** (converted): each rule is an `anchor` model with antiSMASH's `CUTOFF` and
+  `NEIGHBOURHOOD`, its conditions, extenders and superiors, and the profiles' cutoffs as
+  `min_score` (Domainator keeps scores at the cutoff, antiSMASH only above it). The systems are
+  protocluster cores; antiSMASH's candidate clusters and regions are not reproduced.
+  antiSMASH's six dynamic profiles are code, so the components that need them are never found
+  unless `--substitutes_file` gives them references, such as `find_features` motif hits.
 - **antiSMASH** (imported calls): members are the core CDSs whose profiles triggered each
   product, and protocluster systems are padded by antiSMASH's neighborhood with
   `--model_neighborhood`.
@@ -234,5 +251,6 @@ but not exactly. The differences are listed in each directory's `conversion.tsv`
 
 Domainator ships no model content. `system_db_download` downloads a collection to your machine
 and copies its license next to the converted files: padloc-db is MIT licensed;
-defense-finder-models' metadata gives both GPL-3.0 and CC BY-NC-SA 4.0 (non-commercial). Check
-the `LICENSE` file before redistributing a converted directory.
+defense-finder-models' metadata gives both GPL-3.0 and CC BY-NC-SA 4.0 (non-commercial). A
+directory converted from antiSMASH is derived from its AGPL-3.0 rules and profiles, and says so
+in a `NOTICE` file. Check the `LICENSE` file before redistributing a converted directory.

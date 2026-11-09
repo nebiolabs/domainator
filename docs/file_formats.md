@@ -636,6 +636,29 @@ and each profile's domain gathering threshold as `min_score` (`domainate --bit_c
 applies the sequence threshold too, as MacSyFinder does). Loners and multi-locus models are
 found as single loci.
 
+For antiSMASH's cluster rules (`--source antismash --input`, a checkout or installation of
+antiSMASH or its `detection/hmm_detection` directory), it writes `antismash.hmm`, the license,
+and a `NOTICE` that the directory is derived from AGPL-3.0 files. `--antismash_strictness`
+loads `strict.txt`, then `relaxed.txt`, then `loose.txt`, cumulatively. Each rule becomes a
+format 1.1 model named by the rule, with `accession` `antismash:<rule>`, its `CATEGORY`,
+`DESCRIPTION`, `EXAMPLE`s, `RELATED` and `SUPERIORS`, an `anchor` window of `CUTOFF` kb less
+one bp (antiSMASH's distance test is strict), `NEIGHBOURHOOD` as `neighborhood_kb`, and its
+`CONDITIONS` and `EXTENDERS` translated (`and`, `or`, `not` → `&`, `|`, `~`); `DEFINE` aliases
+become `define`. Every profile identifier is a component (by the short form's roles), whose
+reference is the profile's `NAME` from `hmmdetails.txt` with its cutoff as `min_score`;
+`filterhmmdetails.txt`'s groups become `competing` groups. Dynamic profiles get no references,
+unless a **substitutes file** (`--substitutes_file`) gives them some:
+
+```yaml
+domainator_substitutes: 1
+components:
+  - name: darobactin_precursor
+    domains: [{name: darobactin_motif, database: MOTIF, min_target_length: 10, max_target_length: 80}]
+```
+
+Its components' domains (written as in a model file) replace those of every component with the
+same name.
+
 The common case is short. "X, Y, Z and Q or R within 10 CDSs, at E-value 1e-20":
 
 ```yaml

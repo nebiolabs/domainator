@@ -8,6 +8,7 @@ dropped. write_conversion writes it as a native model directory:
       systems.yaml     the models, with database:, semantics:, source: and reference_files:
       <database>.hmm   every profile the models use (and <database>.cm for covariance models)
       LICENSE          copied from the source
+      NOTICE           for some sources, what their license means for the converted files
       conversion.tsv   one row per approximation: model, feature, what was done
 
 Profile files are named after the collection's database, because a hit's database qualifier
@@ -48,6 +49,8 @@ class Conversion:
     collection's reference_files."""
     license_file: Optional[Path] = None
     notes: List[Note] = field(default_factory=list)
+    license_notice: Optional[str] = None
+    """Text for a NOTICE file: what the license of the converted files means for the user."""
 
 
 def write_conversion(conversion: Conversion, output_dir: os.PathLike) -> None:
@@ -58,6 +61,8 @@ def write_conversion(conversion: Conversion, output_dir: os.PathLike) -> None:
         _concatenate(sources, output_dir / name)
     if conversion.license_file is not None:
         shutil.copyfile(conversion.license_file, output_dir / "LICENSE")
+    if conversion.license_notice is not None:
+        (output_dir / "NOTICE").write_text(conversion.license_notice, encoding="utf-8")
     with open(output_dir / CONVERSION_REPORT, "w") as handle:
         print("model\tfeature\taction", file=handle)
         for note in conversion.notes:

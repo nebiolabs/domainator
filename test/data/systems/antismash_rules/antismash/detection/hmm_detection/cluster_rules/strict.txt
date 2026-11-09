@@ -1,0 +1,26 @@
+# Synthetic rules for Domainator's tests, in antiSMASH's rule language
+
+# Cutoffs and neighbourhoods are in kilobases
+
+DEFINE ANY_TOX AS (CcdB or TCAD9)
+
+RULE ccd_cat
+    CATEGORY toxin
+    DESCRIPTION A toxin near a chloramphenicol
+                acetyltransferase
+    EXAMPLE NCBI pDONR201.1 0-4470 synthetic  # a comment
+    RELATED CcdA, Condensation
+    CUTOFF 1
+    NEIGHBOURHOOD 2
+    CONDITIONS ANY_TOX
+               and CAT   # spans lines
+               and not cds(CcdB and APH)
+    EXTENDERS APH
+
+RULE ccdb_alone
+    CATEGORY toxin
+    DESCRIPTION CcdB on its own
+    SUPERIORS ccd_cat
+    CUTOFF 1
+    NEIGHBOURHOOD 2
+    CONDITIONS minscore(CcdB, 50)

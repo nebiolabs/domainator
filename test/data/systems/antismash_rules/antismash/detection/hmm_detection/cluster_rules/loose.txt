@@ -1,0 +1,7 @@
+RULE needs_code
+    CATEGORY RiPP
+    DESCRIPTION Uses a dynamic profile
+    SUPERIORS loose_only_missing
+    CUTOFF 10
+    NEIGHBOURHOOD 10
+    CONDITIONS CcdB and fake_precursor and not Unknown_profile

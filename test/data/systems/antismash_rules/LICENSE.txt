@@ -1,0 +1,1 @@
+Synthetic test rules for Domainator, CC0. (A real antiSMASH checkout has its AGPL-3.0 license here.)

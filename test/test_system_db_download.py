@@ -7,7 +7,7 @@ from domainator import system_db_download as system_db_download_module
 from domainator.errors import InputError
 from domainator.hmmio import iter_hmm_names
 from domainator.seqio import parse_seqfiles
-from domainator.systems.formats import macsyfinder, padloc
+from domainator.systems.formats import antismash, macsyfinder, padloc
 from domainator.systems.model import ReferenceRule
 from domainator.systems.native import read_system_models
 
@@ -236,3 +236,107 @@ def test_download_defensefinder(tmp_path):
     gabija = models_by_name(collection)["Gabija"]
     assert gabija.accession == "DefenseFinder/Gabija/Gabija"
     assert gabija.components[0].references[0].min_reference_coverage == 0.4
+
+
+@pytest.fixture
+def antismash_rules(shared_datadir):
+    """A synthetic antiSMASH checkout: rules written for these tests, in antiSMASH's language, with Pfam profiles."""
+    return shared_datadir / "systems" / "antismash_rules"
+
+
+def test_convert_antismash(antismash_rules):
+    conversion = antismash.convert(antismash_rules, strictness="loose")
+    models = models_by_name(conversion.collection)
+    assert list(models) == ["ccd_cat", "ccdb_alone", "resistance", "needs_code"]
+    ccd = models["ccd_cat"]
+    assert ccd.condition == "ANY_TOX & CAT & ~cds(CcdB & APH)"
+    assert ccd.define == (("ANY_TOX", "(CcdB | TCAD9)"),)
+    assert ccd.extenders == "APH"
+    assert (ccd.window.mode, ccd.window.max_kb, ccd.neighborhood_kb) == ("anchor", 0.999, 2.0)
+    assert (ccd.category, ccd.description, ccd.accession) == ("toxin", "A toxin near a chloramphenicol acetyltransferase", "antismash:ccd_cat")
+    assert [(e.accession, e.start, e.end, e.note) for e in ccd.examples] == [("pDONR201.1", 0, 4470, "synthetic")]
+    assert ccd.related == ("CcdA", "Condensation")
+    assert [(c.name, c.role) for c in ccd.components] == [("CcdB", "core"), ("TCAD9", "core"), ("CAT", "core"), ("APH", "neutral")]
+    assert ccd.components[2].references == (ReferenceRule("CAT", database="antismash", min_score=200.0),)
+    assert models["resistance"].condition == "minimum(2, [CAT, APH, Condensation]) | repeatable(3, [CAT, APH])"
+    assert models["ccdb_alone"].superiors == (("antismash", "ccd_cat"),)
+    assert models["needs_code"].superiors == ()  # its superior isn't a rule
+    assert [(c.name, c.role, c.references) for c in models["needs_code"].components][1:] == [
+        ("fake_precursor", "core", ()), ("Unknown_profile", "forbidden", ())]
+    assert set(conversion.collection.competing) == {frozenset({"CcdB", "TCAD9"}), frozenset({"CAT", "Condensation"})}
+    assert {(note.model, note.feature, note.action.split(":")[0]) for note in conversion.notes} == {
+        ("needs_code", "fake_precursor", "no references"), ("needs_code", "Unknown_profile", "no references"),
+        ("needs_code", "superiors", "dropped"), (".", "license", "AGPL-3.0")}
+    assert [len(antismash.convert(antismash_rules, strictness=level).collection.models) for level in antismash.STRICTNESS] == [2, 3, 4]
+
+
+def test_antismash_substitutes(antismash_rules, tmp_path):
+    substitutes = tmp_path / "substitutes.yaml"
+    substitutes.write_text("domainator_substitutes: 1\ncomponents:\n"
+                           "  - {name: fake_precursor, domains: [{name: W_W_K, database: MOTIF, max_target_length: 80}]}\n"
+                           "  - {name: unused, domains: [X]}\n")
+    conversion = antismash.convert(antismash_rules, strictness="loose", substitutes_file=str(substitutes))
+    precursor = models_by_name(conversion.collection)["needs_code"].components[1]
+    assert precursor.references == (ReferenceRule("W_W_K", database="MOTIF", max_target_length=80),)
+    assert {(note.feature, note.action.split(":")[0]) for note in conversion.notes if note.model == "."} == {
+        ("fake_precursor", "substituted"), ("unused", "unused substitute"), ("license", "AGPL-3.0")}
+    substitutes.write_text("components: []\n")
+    with pytest.raises(InputError, match="not a substitutes file"):
+        antismash.convert(antismash_rules, substitutes_file=str(substitutes))
+
+
+def test_system_db_download_antismash(antismash_rules, shared_datadir, tmp_path, capsys):
+    output_dir = tmp_path / "out"
+    system_db_download_module.main(["--source", "antismash", "--input", str(antismash_rules / "antismash" / "detection" / "hmm_detection"),
+                                    "--output_dir", str(output_dir)])
+    assert "for your own use" in capsys.readouterr().err
+    assert sorted(path.name for path in output_dir.iterdir()) == ["LICENSE", "NOTICE", "antismash.hmm", "conversion.tsv", "systems.yaml"]
+    assert "Synthetic test rules" in (output_dir / "LICENSE").read_text()  # found above the hmm_detection directory
+    assert "AGPL-3.0" in (output_dir / "NOTICE").read_text()
+    assert sorted(iter_hmm_names(output_dir / "antismash.hmm")) == ["APH", "CAT", "CcdB", "Condensation", "TCAD9"]
+    collection, = read_system_models([output_dir])
+    assert [model.name for model in collection.models] == ["ccd_cat", "ccdb_alone", "resistance"]
+
+    out = tmp_path / "out.gb"
+    domainate_module.main(["-i", str(shared_datadir / "pDONR201.gb"), "--system_models", str(output_dir), "-o", str(out)])
+    record = next(iter(parse_seqfiles([str(out)])))
+    systems = {f.qualifiers["name"][0]: f for f in record.features if f.type == SYSTEM_FEATURE_NAME}
+    # ccdb_alone yields to ccd_cat, its superior; ccd_cat grows over APH, its extender
+    assert sorted(systems) == ["ccd_cat", "resistance"]
+    assert systems["ccd_cat"].qualifiers["component"] == [
+        "core|CcdB|1264_-1_959|antismash|CcdB", "core|CAT|2265_-1_1606|antismash|CAT", "extender|APH|2868_1_3677|antismash|APH"]
+    assert [value.split("|")[1] for value in systems["resistance"].qualifiers["component"]] == ["CAT", "APH"]
+    assert systems["ccd_cat"].qualifiers["neighborhood_kb"] == ["2"]
+
+
+def test_antismash_errors(antismash_rules, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        system_db_download_module.main(["--source", "antismash", "--output_dir", str(tmp_path / "out")])
+    assert "needs --input" in capsys.readouterr().err
+    with pytest.raises(InputError, match="system_db_download --source antismash"):
+        read_system_models([antismash_rules / "antismash" / "detection" / "hmm_detection"])
+    with pytest.raises(InputError, match="not an antiSMASH hmm_detection directory"):
+        antismash.convert(tmp_path)
+    rules = tmp_path / "rules"
+    (rules / "cluster_rules").mkdir(parents=True)
+    (rules / "data").mkdir()
+    (rules / "data" / "hmmdetails.txt").write_text("")
+    for text, message in (("CATEGORY x\n", "outside a RULE"), ("RULE a\nCATEGORY x\nCUTOFF 1\nNEIGHBOURHOOD 1\n", "has no CONDITIONS"),
+                          ("DEFINE X Y\n", "DEFINE <label> AS"), ("RULE a\nCATEGORY x\nCUTOFF one\nNEIGHBOURHOOD 1\nCONDITIONS a\n", "must be numbers")):
+        (rules / "cluster_rules" / "strict.txt").write_text(text)
+        with pytest.raises(InputError, match=message):
+            antismash.convert(rules, strictness="strict")
+
+
+@pytest.mark.network
+def test_convert_antismash_release(tmp_path):
+    """Every rule of a pinned antiSMASH release converts, and the result reads back unchanged."""
+    from domainator.systems.formats import download_github_release, write_conversion
+    root, release, _ = download_github_release("antismash/antismash", "8-0-4", tmp_path, label="antismash")
+    conversion = antismash.convert(root, strictness="loose")
+    assert len(conversion.collection.models) >= 100
+    assert conversion.collection.source.release == "8.0.4"
+    assert sum(1 for note in conversion.notes if "dynamic profile" in note.action) == 6
+    write_conversion(conversion, tmp_path / "out")
+    collection, = read_system_models([tmp_path / "out"])
+    assert collection.models == conversion.collection.models

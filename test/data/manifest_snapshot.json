@@ -10007,7 +10007,8 @@
    "choices": [
     "padloc",
     "defensefinder",
-    "macsyfinder"
+    "macsyfinder",
+    "antismash"
    ]
   },
   {
@@ -10037,6 +10038,30 @@
    ],
    "kind": "value",
    "type": "number",
+   "required": false
+  },
+  {
+   "name": "antismash_strictness",
+   "flags": [
+    "--antismash_strictness"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "strict",
+    "relaxed",
+    "loose"
+   ]
+  },
+  {
+   "name": "substitutes_file",
+   "flags": [
+    "--substitutes_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
    "required": false
   },
   {

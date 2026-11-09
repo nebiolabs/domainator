@@ -1,0 +1,6 @@
+CcdB	CcdB toxin	20	CcdB.hmm
+CcdA	CcdA antitoxin	20	PF07362.hmm
+CAT	Chloramphenicol acetyltransferase	200	CAT.hmm
+APH	Aminoglycoside phosphotransferase	50	APH.hmm
+TCAD9	TCAD9 domain	20	TCAD9.hmm
+Condensation	Condensation domain	20	Condensation.hmm

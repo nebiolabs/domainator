@@ -176,6 +176,9 @@ def _foreign_error(path, label) -> InputError:
         directory = path if "package" in label else "<its package directory>"
         return InputError(f"{message}: domainator system_db_download --source defensefinder (or macsyfinder) "
                           f"--input {directory} --output_dir <directory>")
+    if label.startswith("antiSMASH"):
+        directory = path if "directory" in label else "<the antiSMASH hmm_detection directory>"
+        return InputError(f"{message}: domainator system_db_download --source antismash --input {directory} --output_dir <directory>")
     return InputError(f"{message}. This version of Domainator can't convert it yet.")
 
 
@@ -390,8 +393,8 @@ def _component(reader, value, thresholds) -> Component:
     if role not in ROLES:
         raise reader.error(f"component {name!r}: role must be one of {', '.join(ROLES)}, not {role!r}.", value)
     domains = value.get("domains")
-    if not isinstance(domains, list) or not domains:
-        raise reader.error(f"component {name!r} needs a list of domains.", value)
+    if not isinstance(domains, list):
+        raise reader.error(f"component {name!r} needs a list of domains (an empty list for a component nothing fills).", value)
     return Component(name=name, role=role, references=tuple(_rule(reader, d, thresholds, value) for d in domains),
                      loner=reader.boolean(value.get("loner", False), "loner", value),
                      multi_system=reader.boolean(value.get("multi_system", False), "multi_system", value),
@@ -499,6 +502,46 @@ def _model(reader, entry, *, database, program, default_thresholds, default_wind
         reference_files=reader.text_list(entry.get("reference_files", []), "reference_files", entry),
     )
     return model, superiors
+
+
+SUBSTITUTES_KEY = "domainator_substitutes"
+_SUBSTITUTES_COMPONENT_KEYS = {"name", "domains"}
+
+
+def read_substitutes(path: Union[str, os.PathLike]) -> Dict[str, Tuple[ReferenceRule, ...]]:
+    """{component name: references} from a substitutes file, which gives converted models'
+    components other references (format version 1):
+
+        domainator_substitutes: 1
+        components:
+          - name: darobactin_precursor
+            domains: [{name: darobactin_motif, database: MOTIF, min_target_length: 10, max_target_length: 80}]
+
+    Domains are written as in a model file (format 1.1, so feature domains are allowed).
+    """
+    data = _load_yaml(Path(path))
+    reader = _Reader(str(path))
+    if not isinstance(data, dict) or SUBSTITUTES_KEY not in data:
+        raise InputError(f"{path} is not a substitutes file: it has no top-level '{SUBSTITUTES_KEY}:' key.")
+    reader.check_keys(data, {SUBSTITUTES_KEY, "components"}, "the file")
+    try:
+        version = parse_version(data[SUBSTITUTES_KEY])
+    except (TypeError, ValueError):
+        raise reader.error(f"{SUBSTITUTES_KEY} must be a version number like 1.", data) from None
+    if version[0] != 1:
+        raise FormatVersionError(f"{path}: substitutes format {_version_text(version)} can't be read by this version of "
+                                 "Domainator, which reads format 1.")
+    components = data.get("components")
+    if not isinstance(components, list) or not components:
+        raise reader.error("components must be a non-empty list.", data)
+    out: Dict[str, Tuple[ReferenceRule, ...]] = dict()
+    for value in components:
+        reader.check_keys(value, _SUBSTITUTES_COMPONENT_KEYS, "a substitute")
+        component = _component(reader, {**value, "role": "core"}, {})
+        if component.name in out:
+            raise reader.error(f"component {component.name!r} is given twice.", value)
+        out[component.name] = component.references
+    return out
 
 
 def read_system_models(sources: Iterable[Union[str, os.PathLike, ModelCollection]]) -> List[ModelCollection]:

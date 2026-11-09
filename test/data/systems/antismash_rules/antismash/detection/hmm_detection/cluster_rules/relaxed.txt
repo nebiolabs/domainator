@@ -1,0 +1,7 @@
+RULE resistance
+    CATEGORY other
+    DESCRIPTION Two resistance genes
+    CUTOFF 2
+    NEIGHBOURHOOD 5
+    CONDITIONS minimum(2, [CAT, APH, Condensation]) or repeatable(3,
+        [CAT, APH])

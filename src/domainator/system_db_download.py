@@ -6,7 +6,7 @@ it to --output_dir:
     systems.yaml     the models (see docs/file_formats.md)
     <database>.hmm   every profile the models use, named after the collection's database
                      (padloc, defensefinder, or a MacSyFinder package's name)
-    LICENSE          the source's license
+    LICENSE          the source's license (and for antiSMASH, a NOTICE on what it means)
     conversion.tsv   every approximation the conversion made: model, feature, what was done
 
 The directory can then be given to --system_models (find_systems, domainate, system_search
@@ -21,7 +21,8 @@ Sources:
     padloc: PADLOC's padloc-db (https://github.com/padlocbio/padloc-db, MIT license). Without
         --input, a release is downloaded from GitHub (--release, default: the latest). With
         --input, a local copy (a directory with sys/, hmm/, hmm_meta.txt and sys_meta.txt) is
-        converted. CRISPR arrays can't be detected, so they are dropped from the models.
+        converted. CRISPR arrays are filled by repeat_region features with /rpt_family="CRISPR",
+        as NCBI annotates them.
     defensefinder: DefenseFinder's defense-finder-models (https://github.com/mdmparis/defense-finder-models;
         its metadata gives the licenses GPL-3.0 and CC BY-NC-SA 4.0). Without --input, a release
         is downloaded from GitHub. With --input, a local copy (a MacSyFinder package directory,
@@ -31,6 +32,13 @@ Sources:
     macsyfinder: any other MacSyFinder model package (models format 2.0), given with --input. It
         is named after its directory. --coverage_profile defaults to the package's
         model_conf.xml, else MacSyFinder's 0.5.
+
+    antismash: antiSMASH's cluster rules, given with --input: an antiSMASH checkout or
+        installation, or its antismash/detection/hmm_detection directory. There is no download:
+        antiSMASH's rules and profiles are AGPL-3.0, so the converted directory is for your own
+        use (see its NOTICE). --antismash_strictness chooses the rule files as antiSMASH's
+        --hmmdetection-strictness does. Dynamic profiles (code-based) can't be converted; their
+        components are never found unless --substitutes_file gives them references.
 
 MacSyFinder loners and multi-locus models are found as single loci, and listed in
 conversion.tsv.
@@ -46,15 +54,18 @@ from jsonargparse import ActionConfigFile
 from domainator.cli.common import tool_parser
 from domainator.errors import InputError
 from domainator.systems.formats import Conversion, Note, download_github_release, summarize, write_conversion
-from domainator.systems.formats import macsyfinder, padloc
+from domainator.systems.formats import antismash, macsyfinder, padloc
 
-SOURCES = ("padloc", "defensefinder", "macsyfinder")
+SOURCES = ("padloc", "defensefinder", "macsyfinder", "antismash")
 DOWNLOADS = {"padloc": (padloc.REPOSITORY, "padloc-db", None),
              "defensefinder": (macsyfinder.DEFENSEFINDER_REPOSITORY, "defense-finder-models", macsyfinder.defensefinder_asset)}
 
 
 def _convert(source: str, path, *, release: Optional[str], url: Optional[str],
-             coverage_profile: Optional[float]) -> Conversion:
+             coverage_profile: Optional[float], antismash_strictness: str = antismash.DEFAULT_STRICTNESS,
+             substitutes_file: Optional[str] = None) -> Conversion:
+    if source == "antismash":
+        return antismash.convert(path, strictness=antismash_strictness, substitutes_file=substitutes_file)
     if source == "padloc":
         return padloc.convert(path, release=release, url=url)
     if source == "defensefinder":
@@ -66,16 +77,22 @@ def _convert(source: str, path, *, release: Optional[str], url: Optional[str],
 
 
 def system_db_download(input: Optional[str] = None, *, source: str, output_dir: str,
-                       release: Optional[str] = None, coverage_profile: Optional[float] = None) -> List[Note]:
+                       release: Optional[str] = None, coverage_profile: Optional[float] = None,
+                       antismash_strictness: str = antismash.DEFAULT_STRICTNESS,
+                       substitutes_file: Optional[str] = None) -> List[Note]:
     """Convert a foreign system model database into a native model directory.
 
     Args:
         input: a local copy of the database. None: download it (not for "macsyfinder").
-        source: the database's format: "padloc", "defensefinder" or "macsyfinder".
+        source: the database's format: "padloc", "defensefinder", "macsyfinder" or "antismash".
         output_dir: the directory to write (see the module docstring).
         release: the release to download (default: the latest). Only without input.
         coverage_profile: for MacSyFinder packages, the fraction of a profile a hit must cover.
             None: DefenseFinder's 0.4, or a package's model_conf.xml, else 0.5.
+        antismash_strictness: for antiSMASH, which rule files to load: strict, relaxed (antiSMASH's
+            default) or loose, cumulatively.
+        substitutes_file: for antiSMASH, a file giving references for components by name (see
+            systems.native.read_substitutes), for dynamic profiles.
 
     Returns:
         The notes on what the conversion approximated or dropped, also written to
@@ -85,12 +102,15 @@ def system_db_download(input: Optional[str] = None, *, source: str, output_dir: 
         raise ValueError(f"source must be one of {', '.join(SOURCES)}, not {source!r}")
     if input is not None and release is not None:
         raise InputError("--release selects a release to download, so it can't be combined with --input.")
-    if coverage_profile is not None and source == "padloc":
-        raise InputError("--coverage_profile is for MacSyFinder packages: padloc-db gives each profile's coverage.")
+    if coverage_profile is not None and source not in ("defensefinder", "macsyfinder"):
+        raise InputError("--coverage_profile is for MacSyFinder packages (defensefinder, macsyfinder).")
+    if substitutes_file is not None and source != "antismash":
+        raise InputError("--substitutes_file is for antiSMASH rules.")
     if input is None and source not in DOWNLOADS:
-        raise InputError(f"--source {source} has nothing to download: give the package directory with --input.")
+        raise InputError(f"--source {source} has nothing to download: give a local copy to convert with --input.")
     if input is not None:
-        conversion = _convert(source, input, release=None, url=None, coverage_profile=coverage_profile)
+        conversion = _convert(source, input, release=None, url=None, coverage_profile=coverage_profile,
+                              antismash_strictness=antismash_strictness, substitutes_file=substitutes_file)
         write_conversion(conversion, output_dir)
         return conversion.notes
     repository, label, asset = DOWNLOADS[source]
@@ -114,6 +134,14 @@ def build_parser():
                         help="For defensefinder and macsyfinder: the fraction of a profile a hit must cover. Default: "
                              "0.4 for defensefinder (as DefenseFinder runs MacSyFinder); for macsyfinder, the "
                              "package's model_conf.xml, else 0.5.")
+    parser.add_argument("--antismash_strictness", type=str, default=antismash.DEFAULT_STRICTNESS,
+                        choices=antismash.STRICTNESS,
+                        help="For antismash: which rule files to convert, as antiSMASH's --hmmdetection-strictness: "
+                             "strict, relaxed (strict and relaxed rules; the default, as in antiSMASH) or loose (all).")
+    parser.add_argument("--substitutes_file", type=str, default=None,
+                        help="For antismash: a YAML file of components (domainator_substitutes: 1, then a components "
+                             "list with name and domains) whose domains replace those of the rules' components of the "
+                             "same name, such as find_features motifs for antiSMASH's dynamic (code-based) profiles.")
     parser.add_argument("--output_dir", type=str, required=True,
                         help="The directory to write the models, profiles, license and conversion report to.")
     parser.add_argument("--config", action=ActionConfigFile)
@@ -128,13 +156,20 @@ def main(argv):
     if params.input is not None and not os.path.isdir(params.input):
         parser.error(f"--input must be a directory: {params.input}")
     if params.input is None and params.source not in DOWNLOADS:
-        parser.error(f"--source {params.source} needs --input: the package directory to convert.")
-    if params.coverage_profile is not None and params.source == "padloc":
+        parser.error(f"--source {params.source} needs --input: a local copy to convert.")
+    if params.coverage_profile is not None and params.source not in ("defensefinder", "macsyfinder"):
         parser.error("--coverage_profile is for MacSyFinder packages (defensefinder, macsyfinder).")
+    if params.substitutes_file is not None and params.source != "antismash":
+        parser.error("--substitutes_file is for --source antismash.")
     if params.coverage_profile is not None and not 0 <= params.coverage_profile <= 1:
         parser.error("--coverage_profile must be between 0 and 1.")
     notes = system_db_download(params.input, source=params.source, output_dir=params.output_dir,
-                               release=params.release, coverage_profile=params.coverage_profile)
+                               release=params.release, coverage_profile=params.coverage_profile,
+                               antismash_strictness=params.antismash_strictness,
+                               substitutes_file=params.substitutes_file)
+    if params.source == "antismash":
+        print(f"{params.output_dir} is derived from antiSMASH's AGPL-3.0 rules and profiles: keep it for your own use "
+              "(see its NOTICE).", file=sys.stderr)
     report = Path(params.output_dir) / "conversion.tsv"
     if notes:
         print(f"The conversion made {len(notes)} changes, listed in {report}:\n{summarize(notes)}", file=sys.stderr)
