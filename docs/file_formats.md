@@ -407,6 +407,11 @@ and a CDS with hits to several of them (a fusion) fills each.
 
 Split a value with `value.split("|", 4)`: only the reference name may contain `|`.
 
+**On proteins.** A protein record can't carry a system, so `extract_peptides` writes a
+`system_membership` qualifier on the CDS feature of each protein that comes from a system
+member, one value per system: `role|component|database|name` (the system's database and
+name), for example `/system_membership="core|GajA|defense|Gabija"`.
+
 **Editing.** A system is a snapshot of the hits it was found from. Tools that remove domains
 (`filter_domains`, `extract_domains`) leave systems alone; run `find_systems` again to
 recompute them. Slicing tools drop a system that a slice cuts through, as they drop cut domain

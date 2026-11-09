@@ -18,6 +18,10 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   and annotates the systems it finds in the same pass. Model profiles are searched with their
   own thresholds and are exempt from `--max_hits_per_cds` and `--max_overlap`.
 - `color_genbank --target systems` and `systems_and_cdss`, with `--system_color_by`.
+- `select_by_contig --systems`, `--system_expr`, `--system_categories` and `--min_system_score`
+  select records by the systems they contain.
+- `extract_peptides --systems` and `--system_expr` select the members of systems, and the CDS
+  feature of a protein from a system member gets a `system_membership` qualifier.
 - `plot_contigs` draws `Domain_System` and `System_Search` features by default.
 - `select_by_system`: extract regions around annotated systems, padded by CDSs or kb from a
   system's outermost members (`--cds_range`, `--kb_range`, or each model's own neighborhood

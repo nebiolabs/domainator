@@ -28,9 +28,14 @@ OR (contig contains a combination of domains that match the specified boolean ex
 OR (contig contains no domains [unannotated])
 OR (contig contains a qualifying search hit [has_search_hit])
 OR (contig has a search-hit score within specified bounds [min_search_score, max_search_score])
+OR (contig contains a selected system [systems, system_expr, system_categories, min_system_score])
 )
 AND
 (total number of selected contigs is less than or equal to specified maximum [max_records])
+
+Systems (from find_systems) are selected by name (--systems), by a boolean expression over the
+names of a contig's systems (--system_expr), or, with neither, by their presence. Only systems of
+--system_type, in --system_categories and scoring at least --min_system_score are considered.
 
 If --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. Length, CDS count, taxonomy, fragment status, and max_records still apply,
 but the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.
@@ -72,6 +77,12 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--max_cds` | INTEGER |  | skip contigs with more CDSs than this. Pseudogenes are not counted. |
 | `--min_search_score` | NUMBER |  | Also select records with an existing Domain_Search annotation scoring >= this and passing e-value/database filters. Paired with --max_search_score as an inclusive range; OR with other selectors and affected by --invert. Also restricts --has_search_hit scoring, which ignores databases. |
 | `--max_search_score` | NUMBER |  | Upper bound (inclusive) of the search-score selector range. OR with other selectors, not a restriction on records selected by other criteria. Also restricts --has_search_hit scoring, which ignores databases. |
+| `--systems` | STRING ... |  | Select systems with these names (name, or database:name for one collection's model). Additive with --systems_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--systems_file` | FILE |  | Select systems with these names (name, or database:name for one collection's model). Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--system_expr` | STRING |  | A boolean expression over the names of the systems in a record, using & (and), \| (or), ~ (not) and parentheses, e.g. "Gabija & ~Thoeris". A name is name or database:name. |
+| `--system_categories` | STRING ... |  | Select systems in these categories (the category qualifier, e.g. defense or PKS). With --systems, a system must match both. |
+| `--system_type` | {domain_system,system_search,all} | domain_system | Which systems to select contigs by. domain_system: systems found by find_systems (Domain_System features). system_search: systems selected by a search (System_Search features). all: both. |
+| `--min_system_score` | NUMBER |  | Consider only systems scoring at least this. With --system_categories, and without --systems and --system_expr, select contigs with any system considered. |
 | `--invert` |  |  | Invert the selection criteria. i.e. return contigs that do not match the selection criteria. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

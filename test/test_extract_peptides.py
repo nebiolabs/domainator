@@ -339,3 +339,31 @@ def test_extract_peptides_evalue_is_numeric(shared_datadir, tmp_path):
     extract_peptides.main(["-i", str(shared_datadir / "pDONR201_multi_genemark_domainator.gb"), "-o", out, "-e", "1e-10"])
     evalues = [float(f.qualifiers["evalue"][0]) for rec in parse_seqfiles([out]) for f in rec.features if f.type == DOMAIN_FEATURE_NAME]
     assert evalues and max(evalues) < 1e-10
+
+
+def _gabija_and_ta():
+    from domainator.find_systems import find_systems
+    from system_records import contig, layout
+    record = contig(layout({"GajA": 2, "GajB": 3, "RelE": 8, "HicB": 9}), record_id="both")
+    record, = find_systems([record], domain_expr="GajA & GajB", window_cds=3, system_name="Gabija")
+    record, = find_systems([record], domain_expr="RelE & HicB", window_cds=3, system_name="TA", clear=False)
+    return record
+
+
+def _membership(peptide):
+    cds, = [f for f in peptide.features if f.type == "CDS"]
+    return cds.qualifiers.get("system_membership")
+
+
+def test_extract_peptides_by_system():
+    from domainator.extract_peptides import extract_peptides
+    peptides = list(extract_peptides([_gabija_and_ta()], systems={"Gabija"}))
+    assert [p.id for p in peptides] == ["L1", "L2"]
+    assert _membership(peptides[0]) == ["core|GajA|command_line|Gabija"]
+    peptides = list(extract_peptides([_gabija_and_ta()], system_expr="command_line:TA & ~Gabija"))
+    assert [p.id for p in peptides] == ["L7", "L8"]
+    # Every peptide from a member says which systems it belongs to.
+    peptides = list(extract_peptides([_gabija_and_ta()]))
+    assert len(peptides) == 12
+    assert [_membership(p) for p in peptides].count(None) == 8
+    assert list(extract_peptides([_gabija_and_ta()], systems={"Gabija"}, system_type="system_search")) == []

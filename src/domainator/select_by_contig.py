@@ -22,9 +22,14 @@ OR (contig contains a combination of domains that match the specified boolean ex
 OR (contig contains no domains [unannotated])
 OR (contig contains a qualifying search hit [has_search_hit])
 OR (contig has a search-hit score within specified bounds [min_search_score, max_search_score])
+OR (contig contains a selected system [systems, system_expr, system_categories, min_system_score])
 )
 AND
 (total number of selected contigs is less than or equal to specified maximum [max_records])
+
+Systems (from find_systems) are selected by name (--systems), by a boolean expression over the
+names of a contig's systems (--system_expr), or, with neither, by their presence. Only systems of
+--system_type, in --system_categories and scoring at least --min_system_score are considered.
 
 If --invert is specified, the selection criteria in the middle expression (the stuff linked by OR) are inverted. Length, CDS count, taxonomy, fragment status, and max_records still apply,
 but the contigs that would have been selected by the middle expression are instead discarded, and contigs that would have been discarded are selected.
@@ -34,7 +39,7 @@ from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 import sys
 
-from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, add_system_selection, add_system_type, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import add_list_and_file, list_and_file_to_dict_keys
@@ -46,7 +51,8 @@ from typing import Set, Optional, Iterable, Iterator
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from domainator.taxonomy import NCBITaxonomy
-from domainator.model import annotation_feature_types, evalue_passes, feature_score
+from domainator.model import SYSTEM_TYPES, annotation_feature_types, evalue_passes, feature_score
+from domainator.systems.records import system_features
 from Bio.SeqRecord import SeqRecord
 
 # TODO: account for different domain databases
@@ -108,7 +114,9 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
                      databases: Optional[Set[str]] = None, unannotated: bool = False,
                      min_search_score: Optional[float] = None, max_search_score: Optional[float] = None,
                      annotation_type: str = "domainator", partial: str = "include",
-                     has_search_hit: bool = False) -> Iterator[SeqRecord]:
+                     has_search_hit: bool = False, systems: Optional[Set[str]] = None,
+                     system_expr: Optional[str] = None, system_categories: Optional[Set[str]] = None,
+                     system_type: str = "domain_system", min_system_score: Optional[float] = None) -> Iterator[SeqRecord]:
     """Yield the records of ``records`` that are selected.
 
     A record is selected if it matches any of the name, definition, sequence, domain and
@@ -155,6 +163,16 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
             keeps only fragments. A protein record is a fragment if
             partial.get_fragment_status says so (e.g. a UniProt " (Fragment)" header); a
             nucleotide contig is a fragment if it has a CDS with '<' or '>' in its location.
+        systems: select records with a system of one of these names (``name`` or
+            ``database:name``).
+        system_expr: select records whose system names (each as ``name`` and as
+            ``database:name``) satisfy this boolean expression.
+        system_categories: consider only systems in these categories.
+        system_type: which systems to consider: "domain_system" (from find_systems),
+            "system_search", or "all".
+        min_system_score: consider only systems scoring at least this. With
+            system_categories, and without systems and system_expr, select records with any
+            system considered.
 
     Yields:
         The selected records.
@@ -178,6 +196,14 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
 
     if contigs_regex is not None:
         contigs_regex = re.compile(contigs_regex)
+
+    if system_type not in SYSTEM_TYPES:
+        raise ValueError(f"system_type must be one of {', '.join(SYSTEM_TYPES)}, not {system_type}")
+    systems = set(systems) if systems is not None else None
+    system_categories = set(system_categories) if system_categories is not None else None
+    system_evaluator = BooleanEvaluator(system_expr) if system_expr is not None else None
+    select_by_systems = (systems is not None or system_expr is not None or system_categories is not None
+                         or min_system_score is not None)
 
     taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
                                               taxonomy_expr, taxonomy_unknown)
@@ -249,6 +275,23 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
             
             if unannotated and len(contig_domains) == 0: # select the contig if it contains no domains
                 selected = True
+        if select_by_systems:
+            at_least_one_test = True
+            names = set()
+            for feature in system_features(contig, system_type):
+                if system_categories is not None and feature.qualifiers.get("category", ["."])[0] not in system_categories:
+                    continue
+                if min_system_score is not None and feature_score(feature) < min_system_score:
+                    continue
+                names.add(feature.qualifiers["name"][0])
+                names.add(f"{feature.qualifiers['database'][0]}:{feature.qualifiers['name'][0]}")
+            if systems is not None and names & systems:
+                selected = True
+            if system_evaluator is not None and system_evaluator.check_expression(names):
+                selected = True
+            if systems is None and system_evaluator is None and names:
+                selected = True
+
         if not at_least_one_test: # if no selection criteria are specified, select the contig
             selected = True
         
@@ -328,6 +371,12 @@ def build_parser():
     parser.add_argument('--max_search_score', default=None, type=float,
                             help="Upper bound (inclusive) of the search-score selector range. OR with other selectors, not a restriction on records selected by other criteria. Also restricts --has_search_hit scoring, which ignores databases.")
     
+    add_system_selection(parser, expr=True)
+    add_system_type(parser, help="Which systems to select contigs by.")
+    parser.add_argument("--min_system_score", type=float, default=None,
+                        help="Consider only systems scoring at least this. With --system_categories, and without "
+                             "--systems and --system_expr, select contigs with any system considered.")
+
     parser.add_argument('--invert', action='store_true',
                         help="Invert the selection criteria. i.e. return contigs that do not match the selection criteria.")
 
@@ -386,7 +435,12 @@ def main(argv):
                     max_search_score=params.max_search_score,
                     annotation_type=params.annotation_type,
                     has_search_hit=params.has_search_hit,
-                    partial=params.partial
+                    partial=params.partial,
+                    systems=list_and_file_to_dict_keys(params.systems, params.systems_file, as_set=True),
+                    system_expr=params.system_expr,
+                    system_categories=params.system_categories,
+                    system_type=params.system_type,
+                    min_system_score=params.min_system_score,
     )
 
     write_seq_outputs(extracted_contigs_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

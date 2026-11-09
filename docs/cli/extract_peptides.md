@@ -14,11 +14,14 @@ By default, extracts peptides from all CDSs in the genbank file.
 
 If any criteria are supplied, then only peptides from CDSs that meet the criteria will be extracted.
 
-CDS names, domain names, domain expressions, unannotated, and search-hit presence
-are OR selectors. With no selectors, all eligible CDSs are selected.
+CDS names, domain names, domain expressions, unannotated, search-hit presence, and system
+membership are OR selectors. With no selectors, all eligible CDSs are selected.
 Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions.
 Invert negates only the combined selectors, never these restrictions. With no
 selectors, invert warns and is ignored.
+
+The CDS feature of a protein from a member of a system (see find_systems) gets a
+system_membership qualifier for each system it belongs to: role|component|database|name.
 ```
 
 Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
@@ -53,5 +56,9 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--keep_parent_id` |  |  | Use the original contig ID instead of the resolved CDS name for peptide IDs. This can produce duplicate IDs. |
 | `--name_field` | STRING |  | The CDS qualifier to prefer for CDS name matching and peptide IDs. If not supplied, then qualifiers will be checked in order of: \["protein_id", "gene_id", "locus_tag", "gene"\] |
 | `-e`, `--evalue` | NUMBER |  | Maximum e-value of domain/search-hit annotations used for CDS selection and carried onto peptide records. Default: no cutoff. |
+| `--systems` | STRING ... |  | Select the members of systems with these names (name or database:name), OR with other CDS selectors. Additive with --systems_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--systems_file` | FILE |  | Select the members of systems with these names (name or database:name), OR with other CDS selectors. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--system_expr` | STRING |  | Select CDSs whose systems' names satisfy this boolean expression, using &, \|, ~ and parentheses. A name is name or database:name. OR with other CDS selectors. |
+| `--system_type` | {domain_system,system_search,all} | domain_system | Which systems to read. domain_system: systems found by find_systems (Domain_System features). system_search: systems selected by a search (System_Search features). all: both. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

@@ -279,10 +279,16 @@ def add_system_type(parser, *, help: str = ""):
                                     "(System_Search features). all: both.")
 
 
-def add_system_selection(parser):
-    """Add ``--systems``/``--systems_file`` and ``--system_categories``: select systems by name and category."""
+def add_system_selection(parser, *, expr: bool = False):
+    """Add ``--systems``/``--systems_file`` and ``--system_categories`` (and with expr, ``--system_expr``):
+    select by system name and category."""
     add_list_and_file(parser, "systems", help="Select systems with these names (name, or database:name for one "
                                               "collection's model).")
+    if expr:
+        parser.add_argument("--system_expr", type=str, default=None,
+                            help="A boolean expression over the names of the systems in a record, using & (and), "
+                                 "| (or), ~ (not) and parentheses, e.g. \"Gabija & ~Thoeris\". A name is name or "
+                                 "database:name.")
     parser.add_argument("--system_categories", type=str, nargs="+", default=None,
                         help="Select systems in these categories (the category qualifier, e.g. defense or PKS). "
                              "With --systems, a system must match both.")

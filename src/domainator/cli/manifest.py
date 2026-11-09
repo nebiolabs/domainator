@@ -30,7 +30,7 @@ TEXT_OPTIONS = {
     "exclude_accessions", "foldseek_args", "foldseek_device", "prostt5_device",
     "input_format", "keep_databases", "label_by", "motif", "name", "name_field",
     "ncbi_api_key", "node", "pca_args", "regex", "reseek_args", "search_hit_color",
-    "sequence_regex", "subset", "system_categories", "system_name", "systems", "taxonomy_expr", "threshold", "title", "tsne_args", "types", "umap_args",
+    "sequence_regex", "subset", "system_categories", "system_expr", "system_name", "systems", "taxonomy_expr", "threshold", "title", "tsne_args", "types", "umap_args",
     "usearch_args",
 }
 """String options without choices that are not paths."""

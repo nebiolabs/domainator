@@ -8,18 +8,21 @@ By default, extracts peptides from all CDSs in the genbank file.
 
 If any criteria are supplied, then only peptides from CDSs that meet the criteria will be extracted.
 
-CDS names, domain names, domain expressions, unannotated, and search-hit presence
-are OR selectors. With no selectors, all eligible CDSs are selected.
+CDS names, domain names, domain expressions, unannotated, search-hit presence, and system
+membership are OR selectors. With no selectors, all eligible CDSs are selected.
 Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions.
 Invert negates only the combined selectors, never these restrictions. With no
 selectors, invert warns and is ignored.
+
+The CDS feature of a protein from a member of a system (see find_systems) gets a
+system_membership qualifier for each system it belongs to: role|component|database|name.
 
 """
 
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 from typing import Optional, Set, Iterable, Iterator
-from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, add_system_type, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, CompoundLocation, BeforePosition, AfterPosition
@@ -35,6 +38,7 @@ from itertools import chain
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.taxonomy import NCBITaxonomy
 from domainator.taxonomy.records import compile_taxonomy_filter
+from domainator.systems.records import MEMBERSHIP_QUALIFIER, memberships
 
 # TODO: account for different databases in domain selection
 # TODO: how to handle stop codons? Right now they are translated if they are covered by in the CDS annotation.
@@ -75,7 +79,9 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                      partial: str = "include", has_search_hit: bool = False,
                      ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                      include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
-                     taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
+                     taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude",
+                     systems: Optional[Set[str]] = None, system_expr: Optional[str] = None,
+                     system_type: str = "domain_system") -> Iterator[SeqRecord]:
     """
         Extracts all peptide sequences from each SeqRecord in records.
         Yields the extracted peptides as SeqRecord objects.
@@ -113,6 +119,13 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
             taxonomy_unknown: unresolved taxonomy policy: exclude (default), include,
                 evaluate against an empty lineage, or error. Taxonomy is resolved on the
                 original CDS, before translation, and is not affected by invert.
+            systems: also select the members of systems with these names (``name`` or
+                ``database:name``).
+            system_expr: also select CDSs whose systems' names (each as ``name`` and as
+                ``database:name``) satisfy this boolean expression.
+            system_type: which systems to read: "domain_system" (from find_systems),
+                "system_search", or "all". The CDS feature of each protein from a system member
+                gets a system_membership qualifier per system: role|component|database|name.
     """
     check_annotation_type(annotation_type)
     taxonomy_filter = compile_taxonomy_filter(ncbi_taxonomy, include_taxids, exclude_taxids,
@@ -124,8 +137,11 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
     name_precedence = cds_name_precedence(
         name_field, default=["protein_id", "gene_id", "locus_tag", "gene"])
     expression_evaluator = BooleanEvaluator(domain_expr) if domain_expr is not None else None
+    system_evaluator = BooleanEvaluator(system_expr) if system_expr is not None else None
+    systems = set(systems) if systems is not None else None
     no_selectors = (cds_ids is None and domains is None and domain_expr is None
-                    and not unannotated and not has_search_hit and not _from_domain_search)
+                    and not unannotated and not has_search_hit and not _from_domain_search
+                    and systems is None and system_expr is None)
     if no_selectors and invert:
         warnings.warn("Invert supplied with no selection criteria. Invert will be ignored.")
         invert = False
@@ -133,6 +149,7 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
     for contig in records:
         cdss = DomainatorCDS.list_from_contig(contig, evalue, skip_pseudo=True, name_precedence=name_precedence)
         source_features = get_sources(contig)
+        cds_memberships = memberships(contig, system_type)
         if _from_domain_search:
             hit_scores = get_hit_scores(contig)
             hit_names = get_hit_names(contig)
@@ -159,6 +176,12 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                     keep = True
                 if unannotated and len(domain_names) == 0:
                     keep = True
+                if systems is not None or system_evaluator is not None:
+                    system_names = set().union(*(m.names for m in cds_memberships.get(cds.num, [])))
+                    if systems is not None and system_names & systems:
+                        keep = True
+                    if system_evaluator is not None and system_evaluator.check_expression(system_names):
+                        keep = True
             
             if invert:
                 keep = not keep
@@ -182,6 +205,8 @@ def extract_peptides(records: Iterable[SeqRecord], *, evalue: Optional[float] = 
                     if "translation" in cds_feature_tmp.qualifiers: # remove the translation qualifier, because it's not necessary in the output
                         del cds_feature_tmp.qualifiers["translation"]
                     cds_feature_tmp.qualifiers.pop("codon_start", None) # the reading frame is meaningless in peptide coordinates
+                    if cds.num in cds_memberships:
+                        cds_feature_tmp.qualifiers[MEMBERSHIP_QUALIFIER] = [m.format() for m in cds_memberships[cds.num]]
                     
                     features = chain(source_features, (x for x in (cds.domain_search_feature,) if x is not None), cds.domain_features, (cds_feature_tmp,))
                 else:
@@ -262,6 +287,13 @@ def build_parser():
 
     parser.add_argument('-e', '--evalue', type=PositiveFloat, default=None,
                         help="Maximum e-value of domain/search-hit annotations used for CDS selection and carried onto peptide records. Default: no cutoff.")
+
+    add_list_and_file(parser, "systems", help="Select the members of systems with these names (name or database:name), "
+                                              "OR with other CDS selectors.")
+    parser.add_argument("--system_expr", type=str, default=None,
+                        help="Select CDSs whose systems' names satisfy this boolean expression, using &, |, ~ and "
+                             "parentheses. A name is name or database:name. OR with other CDS selectors.")
+    add_system_type(parser, help="Which systems to read.")
     
 
     parser.add_argument('--config', action=ActionConfigFile)
@@ -306,6 +338,9 @@ def main(argv):
                     exclude_taxids=params.exclude_taxids,
                     taxonomy_expr=params.taxonomy_expr,
                     taxonomy_unknown=params.taxonomy_unknown,
+                    systems=list_and_file_to_dict_keys(params.systems, params.systems_file, as_set=True),
+                    system_expr=params.system_expr,
+                    system_type=params.system_type,
                     )
 
     write_seq_outputs(extracted_peptides_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

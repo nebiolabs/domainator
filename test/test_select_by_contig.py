@@ -1,5 +1,7 @@
 import tempfile
 
+import pytest
+
 from domainator import select_by_contig
 from domainator.seqio import parse_seqfiles
 import subprocess
@@ -284,3 +286,33 @@ def test_select_by_contig_partial_uniprot_fasta(shared_datadir):
         out = output_dir + "/only.gb"
         select_by_contig.main(["-i", fasta, "-o", out, "--partial", "only"])
         assert [r.id for r in parse_seqfiles([out])] == [fragment_id]
+
+
+def _records_with_systems():
+    from domainator.find_systems import find_systems
+    from system_records import contig, layout
+    gabija = contig(layout({"GajA": 2, "GajB": 3}), record_id="gabija")
+    both = contig(layout({"GajA": 2, "GajB": 3, "RelE": 8, "HicB": 9}), record_id="both")
+    neither = contig(layout({"GajA": 2}), record_id="neither")
+    records = list(find_systems([gabija, both, neither], domain_expr="GajA & GajB", window_cds=3, system_name="Gabija"))
+    records = list(find_systems(records, domain_expr="RelE & HicB", window_cds=3, system_name="TA", clear=False))
+    for record in records:
+        for feature in record.features:
+            if feature.type == "Domain_System" and feature.qualifiers["name"] == ["TA"]:
+                feature.qualifiers["category"] = ["toxin_antitoxin"]
+                feature.qualifiers["score"] = ["10.0"]
+    return records
+
+
+@pytest.mark.parametrize("kwargs, selected", [
+    ({"systems": {"TA"}}, ["both"]),
+    ({"systems": {"command_line:Gabija"}}, ["gabija", "both"]),
+    ({"system_expr": "Gabija & ~TA"}, ["gabija"]),
+    ({"system_categories": {"toxin_antitoxin"}}, ["both"]),
+    ({"min_system_score": 50}, ["gabija", "both"]),
+    ({"min_system_score": 50, "systems": {"TA"}}, []),
+    ({"systems": {"TA"}, "invert": True}, ["gabija", "neither"]),
+    ({"system_type": "system_search", "systems": {"TA"}}, []),
+])
+def test_select_by_systems(kwargs, selected):
+    assert [record.id for record in select_by_contig.select_by_contig(_records_with_systems(), **kwargs)] == selected
