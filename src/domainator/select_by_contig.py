@@ -18,7 +18,7 @@ OR (contig name matches specified regex [contigs_regex])
 OR (contig definition matches specified regex [definition_regex]) 
 OR (contig sequence matches specified regex [sequence_regex])
 OR (contig contains at least one domain with name in specified list [domains, domains_file])
-OR (contig contains a combination of domains that match the specified boolean expression [domain_expr])
+OR (contig contains a combination of domains that match the specified boolean expression [domain_expr], within one window [window_cds, window_kb])
 OR (contig contains no domains [unannotated])
 OR (contig contains a qualifying search hit [has_search_hit])
 OR (contig has a search-hit score within specified bounds [min_search_score, max_search_score])
@@ -26,6 +26,10 @@ OR (contig contains a selected system [systems, system_expr, system_categories, 
 )
 AND
 (total number of selected contigs is less than or equal to specified maximum [max_records])
+
+With --window_cds or --window_kb, --domain_expr must hold within one window of the contig, as
+for find_systems --domain_expr (see --window_mode), instead of over the whole contig. Protein
+records have no windows, so they aren't selected by it.
 
 Systems (from find_systems) are selected by name (--systems), by a boolean expression over the
 names of a contig's systems (--system_expr), or, with neither, by their presence. Only systems of
@@ -36,7 +40,7 @@ but the contigs that would have been selected by the middle expression are inste
 
 """
 from jsonargparse import ActionConfigFile
-from jsonargparse.typing import PositiveFloat
+from jsonargparse.typing import NonNegativeFloat, NonNegativeInt, PositiveFloat
 import sys
 
 from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, add_system_selection, add_system_type, check_outputs, declare_outputs, tool_parser
@@ -52,6 +56,10 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 import re
 from domainator.taxonomy import NCBITaxonomy
 from domainator.model import SYSTEM_TYPES, annotation_feature_types, evalue_passes, feature_score
+from domainator.errors import InputError
+from domainator.systems.detect import SystemDetector
+from domainator.systems.model import WINDOW_MODES
+from domainator.systems.native import window_model
 from domainator.systems.records import system_features
 from Bio.SeqRecord import SeqRecord
 
@@ -116,7 +124,9 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
                      annotation_type: str = "domainator", partial: str = "include",
                      has_search_hit: bool = False, systems: Optional[Set[str]] = None,
                      system_expr: Optional[str] = None, system_categories: Optional[Set[str]] = None,
-                     system_type: str = "domain_system", min_system_score: Optional[float] = None) -> Iterator[SeqRecord]:
+                     system_type: str = "domain_system", min_system_score: Optional[float] = None,
+                     window_cds: Optional[int] = None, window_kb: Optional[float] = None,
+                     window_mode: str = "span", same_strand: bool = False) -> Iterator[SeqRecord]:
     """Yield the records of ``records`` that are selected.
 
     A record is selected if it matches any of the name, definition, sequence, domain and
@@ -127,6 +137,9 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
         records: the contigs or proteins (SeqRecords).
         domains: select records with a domain of one of these names.
         domain_expr: select records whose domain names satisfy this boolean expression.
+        window_cds, window_kb, window_mode, same_strand: make domain_expr hold within one window
+            of a contig, as a find_systems command-line model does. Protein records have no
+            windows, so they aren't selected by it.
         evalue: consider only domains with an e-value at most this (None: no cutoff).
         max_records: yield at most this many records.
         min_length: keep only input records at least this long, in bp for nucleotide input
@@ -185,8 +198,16 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
     if domains is not None:
         domains = set(domains)
 
-    if domain_expr is not None:
+    window_detector = None
+    if domain_expr is not None and window_cds is None and window_kb is None:
         expression_evaluator = BooleanEvaluator(domain_expr)
+    elif window_cds is not None or window_kb is not None:
+        if domain_expr is None:
+            raise InputError("window_cds and window_kb apply to domain_expr, which wasn't given.")
+        window_detector = SystemDetector(
+            [window_model(domain_expr, window_cds=window_cds, window_kb=window_kb, window_mode=window_mode,
+                          same_strand=same_strand)],
+            evalue=evalue, databases=databases, annotation_type=annotation_type)
     
     if definition_regex is not None:
         definition_regex = re.compile(definition_regex)
@@ -270,7 +291,10 @@ def select_by_contig(records: Iterable[SeqRecord], *, domains: Optional[Set[str]
             if domains is not None and len(domains.intersection(contig_domains)) > 0: # select the contig if it contains any of the target domains
                 selected = True
             
-            if domain_expr is not None and expression_evaluator.check_expression(contig_domains): # select the contig if it contains the specified combination of domains
+            if window_detector is not None:
+                if window_detector.detect(contig): # the combination is found within one window
+                    selected = True
+            elif domain_expr is not None and expression_evaluator.check_expression(contig_domains): # select the contig if it contains the specified combination of domains
                 selected = True
             
             if unannotated and len(contig_domains) == 0: # select the contig if it contains no domains
@@ -331,6 +355,18 @@ def build_parser():
                       help="Select records containing these domain names, OR with other record selectors.")
     parser.add_argument('--domain_expr', type=str, default=None,
                         help="a boolean expression using operators & (AND), | (OR), and ~(NOT), to specify a desired combination of domains")
+    parser.add_argument("--window_cds", type=NonNegativeInt, default=None,
+                        help="Make --domain_expr hold within a window of this many CDSs (see --window_mode), instead of over "
+                             "the whole contig. Its expression can then also use < (upstream of), as in find_systems.")
+    parser.add_argument("--window_kb", type=NonNegativeFloat, default=None,
+                        help="Make --domain_expr hold within a window of this many kb (see --window_mode). With "
+                             "--window_cds, both must hold.")
+    parser.add_argument("--window_mode", type=str, default=WINDOW_MODES[0], choices=WINDOW_MODES,
+                        help="How --window_cds and --window_kb are measured. span: from the first matching CDS to the "
+                             "last. chain: the gap between consecutive matching CDSs. anchor: the distance of every "
+                             "matching CDS from one anchor.")
+    parser.add_argument("--same_strand", action="store_true", default=False,
+                        help="With --window_cds or --window_kb, the domains of --domain_expr must be on CDSs on one strand.")
 
     parser.add_argument("--partial", type=str, default="include", choices=PARTIAL_CHOICES,
                         help="Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. "
@@ -392,6 +428,8 @@ def build_parser():
 def main(argv):
     parser = build_parser()
     params = parser.parse_args(argv)
+    if (params.window_cds is not None or params.window_kb is not None) and params.domain_expr is None:
+        parser.error("--window_cds and --window_kb apply to --domain_expr, which wasn't given.")
 
     # figure out selection filters
 
@@ -441,6 +479,10 @@ def main(argv):
                     system_categories=params.system_categories,
                     system_type=params.system_type,
                     min_system_score=params.min_system_score,
+                    window_cds=params.window_cds,
+                    window_kb=params.window_kb,
+                    window_mode=params.window_mode,
+                    same_strand=params.same_strand,
     )
 
     write_seq_outputs(extracted_contigs_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

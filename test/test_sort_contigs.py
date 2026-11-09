@@ -186,3 +186,22 @@ def test_sort_contigs_domains_raises_when_no_matching_score():
                 "-o", str(output_path),
                 "--domains", "target",
             ])
+
+def test_sort_contigs_by_system_score():
+    import pytest
+    from domainator import SYSTEM_SEARCH_BEST_HIT_NAME
+    from domainator.find_systems import find_systems
+    from domainator.sort_contigs import sort_contigs
+    from system_records import contig
+    records = [contig(["GajA:20", "GajB:20"], record_id="weak"), contig(["GajA:90", "GajB:90"], record_id="strong"),
+               contig(["GajA:50", "GajB:50"], record_id="middle")]
+    records = list(find_systems(records, domain_expr="GajA & GajB", window_cds=2, system_name="Gabija"))
+    assert [r.id for r in sort_contigs(records, system_type="domain_system")] == ["strong", "middle", "weak"]
+    assert [r.id for r in sort_contigs(records, system_type="all", max_hits=1)] == ["strong"]
+    with pytest.raises(ValueError, match="does not contain any system_search systems"):
+        list(sort_contigs(records, system_type="system_search"))
+    for record in records:
+        for feature in record.features:
+            if feature.type == "Domain_System":
+                feature.type = SYSTEM_SEARCH_BEST_HIT_NAME
+    assert [r.id for r in sort_contigs(records, system_type="system_search")] == ["strong", "middle", "weak"]

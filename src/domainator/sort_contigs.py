@@ -4,6 +4,9 @@ This matches the output ordering used by domainator domain_search when --max_hit
 It is primarily intended for post-processing domain_search output written without
 --max_hits, where the temporary hit_best_score annotation is not preserved in the
 written GenBank file.
+
+--system_type sorts by the best system score instead: --system_type system_search matches the
+ordering of system_search with --max_hits.
 """
 
 import heapq
@@ -18,7 +21,8 @@ from domainator.outputs import write_seq_outputs
 from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.cli.common import list_and_file_to_dict_keys
 from domainator.seqio import parse_seqfiles
-from domainator.model import feature_score, get_hit_best_score, set_hit_best_score
+from domainator.model import SYSTEM_TYPES, feature_score, get_hit_best_score, set_hit_best_score
+from domainator.systems.records import system_features
 
 
 def _get_feature_score(feature, record_id: str) -> float:
@@ -30,10 +34,16 @@ def _get_feature_score(feature, record_id: str) -> float:
         ) from exc
 
 
-def set_record_best_score(record, domains: Optional[Set[str]] = None, databases: Optional[Set[str]] = None):
+def set_record_best_score(record, domains: Optional[Set[str]] = None, databases: Optional[Set[str]] = None,
+                          system_type: Optional[str] = None):
     best_score = None
 
-    if domains is None:
+    if system_type is not None:
+        scores = [_get_feature_score(feature, record.id) for feature in system_features(record, system_type)]
+        if not scores:
+            raise ValueError(f"Record {record.id} does not contain any {system_type} systems to sort by.")
+        best_score = max(scores)
+    elif domains is None:
         for feature in record.features:
             if feature.type != DOMAIN_SEARCH_BEST_HIT_NAME:
                 continue
@@ -79,18 +89,23 @@ def set_record_best_score(record, domains: Optional[Set[str]] = None, databases:
 
 
 def sort_contigs(records: Iterable[SeqRecord], *, max_hits: Optional[int] = None, domains: Optional[Set[str]] = None,
-                 databases: Optional[Set[str]] = None) -> Iterator[SeqRecord]:
+                 databases: Optional[Set[str]] = None, system_type: Optional[str] = None) -> Iterator[SeqRecord]:
     """Yield ``records`` sorted by their best score, highest first, keeping the best ``max_hits``.
 
     The score is the best Domain_Search hit's, as domain_search orders its output, or with
     ``domains`` the best score among Domainator domains with those names (and, with
-    ``databases``, from those databases). Records with equal scores keep their input order.
-    Raises ValueError for a record with nothing to score.
+    ``databases``, from those databases), or with ``system_type`` ("domain_system",
+    "system_search" or "all") the best score of those systems. Records with equal scores keep
+    their input order. Raises ValueError for a record with nothing to score.
     """
+    if system_type is not None and system_type not in SYSTEM_TYPES:
+        raise ValueError(f"system_type must be one of {', '.join(SYSTEM_TYPES)}, not {system_type}")
+    if system_type is not None and domains is not None:
+        raise ValueError("Sort by domains or by systems (system_type), not both.")
     out_heap = []  # (best score, -input order, record), so of equal scores the earlier record ranks higher
 
     for index, record in enumerate(records):
-        set_record_best_score(record, domains=domains, databases=databases)
+        set_record_best_score(record, domains=domains, databases=databases, system_type=system_type)
         entry = (get_hit_best_score(record), -index, record)
         if max_hits is None or len(out_heap) < max_hits:
             heapq.heappush(out_heap, entry)
@@ -115,6 +130,9 @@ def build_parser():
                         help="Like --domains, but read the domain names from this file, one per line. Additive with --domains.")
     parser.add_argument("--databases", type=str, default=None, nargs="+",
                         help="When used with --domains, only consider Domainator annotations from these databases.")
+    parser.add_argument("--system_type", type=str, default=None, choices=SYSTEM_TYPES,
+                        help="Sort by the best score of these systems instead: domain_system (from find_systems), "
+                             "system_search (from system_search) or all. Not with --domains.")
     parser.add_argument("--config", action=ActionConfigFile)
     declare_outputs(parser, ["genbank_out", "fasta_out"])
     return parser
@@ -131,6 +149,8 @@ def main(argv):
     databases = None if params.databases is None else set(params.databases)
     if domains is None:
         databases = None
+    if domains is not None and params.system_type is not None:
+        parser.error("--system_type can't be combined with --domains/--domains_file.")
 
     check_outputs(parser, params)
 
@@ -139,4 +159,5 @@ def main(argv):
         max_hits=params.max_hits,
         domains=domains,
         databases=databases,
+        system_type=params.system_type,
     ), genbank=params.genbank_out, fasta=params.fasta_out)

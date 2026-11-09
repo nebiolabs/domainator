@@ -356,3 +356,24 @@ def test_extract_domains_partial(shared_datadir, partial, expected):
         extract_domains.main(["-i", annotated, "-o", out, "--partial", partial])
         names = {f.qualifiers["name"][0] for r in SeqIO.parse(out, "genbank") for f in r.features if f.type == DOMAIN_FEATURE_NAME}
         assert names == expected
+
+
+def test_extract_domains_of_systems():
+    """Only the hits that are members' evidence: not a hit outside the system, nor a fused domain
+    no component names."""
+    from domainator.extract_domains import extract_domains
+    from domainator.find_systems import find_systems
+    from system_records import contig
+    record = contig(["GajA+X", "GajB", "nc:R", "", "", "", "", "GajA"], record_id="c")
+    record, = find_systems([record], domain_expr="GajA & GajB & R", window_cds=3, system_name="Gabija")
+    record, = find_systems([record], domain_expr="X & GajB", window_cds=3, system_name="Other", clear=False)
+
+    def lengths(**kwargs):
+        return sorted(len(region) for region in extract_domains([record], **kwargs))
+
+    # GajA (cds0), GajB (cds1) and R (200 bp); not X on cds0, nor the GajA on cds7.
+    assert lengths(systems={"Gabija"}) == [200, 900, 900]
+    assert lengths() == [200, 900, 900, 900, 900]
+    assert lengths(systems={"command_line:Other"}) == [900, 900]
+    assert lengths(systems={"Gabija"}, domains={"R"}) == [200]
+    assert lengths(systems={"Gabija"}, system_type="system_search") == []

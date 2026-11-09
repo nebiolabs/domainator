@@ -316,3 +316,22 @@ def _records_with_systems():
 ])
 def test_select_by_systems(kwargs, selected):
     assert [record.id for record in select_by_contig.select_by_contig(_records_with_systems(), **kwargs)] == selected
+
+
+def test_domain_expr_within_a_window():
+    """With a window, the expression must hold within it, and can use <."""
+    from system_records import contig
+    near = contig(["A", "B", "", "", "", "", ""], record_id="near")
+    far = contig(["A", "", "", "", "", "", "B"], record_id="far")
+    reversed_order = contig(["B", "A"], record_id="reversed")
+
+    def selected(**kwargs):
+        return [r.id for r in select_by_contig.select_by_contig([near, far, reversed_order], **kwargs)]
+
+    assert selected(domain_expr="A & B") == ["near", "far", "reversed"]
+    assert selected(domain_expr="A & B", window_cds=2) == ["near", "reversed"]
+    assert selected(domain_expr="A < B", window_cds=2) == ["near"]
+    assert selected(domain_expr="A & B", window_kb=10) == ["near", "far", "reversed"]
+    assert selected(domain_expr="A & B", window_cds=2, invert=True) == ["far"]
+    with pytest.raises(select_by_contig.InputError, match="apply to domain_expr"):
+        selected(window_cds=2)

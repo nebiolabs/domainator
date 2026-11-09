@@ -4,8 +4,8 @@ Takes a domain-annotated genbank file and extracts regions of contigs based on c
 
 Specify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.
 
-CDS names, domain names, domain expressions, unannotated, and search-hit presence
-are OR selectors. With no selectors, all eligible CDSs are selected.
+CDS names, domain names, domain expressions, unannotated, search-hit presence, and system
+membership (--systems, --system_expr) are OR selectors. With no selectors, all eligible CDSs are selected.
 Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions.
 Invert negates only the combined selectors, never these restrictions. With no
 selectors, invert warns and is ignored. Restrictions apply to the focus CDS,
@@ -14,7 +14,7 @@ not every feature in an expanded neighborhood.
 """
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_dedup, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_dedup, add_has_search_hit, add_input, add_seq_outputs, add_system_type, check_outputs, declare_outputs, tool_parser
 from domainator.dedup import RecordDeduplicator
 from domainator.outputs import SeqOutputs
 from domainator.seqio import parse_seqfiles
@@ -31,6 +31,7 @@ from Bio.SeqRecord import SeqRecord
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.taxonomy import NCBITaxonomy
 from domainator.taxonomy.records import compile_taxonomy_filter
+from domainator.systems.records import memberships
 import warnings
 #TODO: account for domain order, like by making boolean searches binned. Try to emulate the behavior of the InterPro domain selector tool:
 #       https://www.ebi.ac.uk/interpro/search/ida/
@@ -436,12 +437,14 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                   ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                   include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
                   taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude",
+                  systems: Optional[Set[str]] = None, system_expr: Optional[str] = None,
+                  system_type: str = "domain_system",
                   ) -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` around the CDSs (or proteins) that are selected.
 
     A CDS is selected if it matches any of ``cds_ids``, ``domains``, ``domain_expr``,
-    ``unannotated`` and ``has_search_hit`` (or with none of them, every CDS), and then the ``strand`` and ``partial``
-    filters.
+    ``unannotated``, ``has_search_hit``, ``systems`` and ``system_expr`` (or with none of them,
+    every CDS), and then the ``strand`` and ``partial`` filters.
 
     Args:
         records: the contigs or proteins (SeqRecords).
@@ -487,6 +490,12 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
         taxonomy_unknown: unresolved taxonomy policy: exclude (default), include, evaluate
             against an empty lineage, or error. Applies to the focus CDS/hit, not the
             expanded neighborhood; not affected by invert.
+        systems: also select the members of systems with these names (``name`` or
+            ``database:name``).
+        system_expr: also select CDSs whose systems' names (each as ``name`` and as
+            ``database:name``) satisfy this boolean expression.
+        system_type: which systems to read: "domain_system" (from find_systems),
+            "system_search", or "all".
 
     Yields:
         SeqRecords of the selected regions.
@@ -504,9 +513,12 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
 
     if domain_expr is not None:
         expression_evaluator = BooleanEvaluator(domain_expr)
+    system_evaluator = BooleanEvaluator(system_expr) if system_expr is not None else None
+    systems = set(systems) if systems is not None else None
     name_precedence = cds_name_precedence(name_field)
     no_selectors = (cds_ids is None and domains is None and domain_expr is None
-                    and not has_search_hit and not _from_domain_search and not unannotated)
+                    and not has_search_hit and not _from_domain_search and not unannotated
+                    and systems is None and system_expr is None)
     if no_selectors and invert:
         warnings.warn("Invert supplied with no selection criteria. Invert will be ignored.")
         invert = False
@@ -516,6 +528,7 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
         cdss = DomainatorCDS.list_from_contig(rec, evalue, name_precedence=name_precedence,
                                             include_nucleic_acid_annotations=True) # _from_domain_search
         cdss.sort(key=lambda x: stranded_start(x.feature.location)) #TODO: why is this stranded_start, not start?
+        cds_memberships = memberships(rec, system_type) if systems is not None or system_evaluator is not None else {}
         if max_region_overlap < 1.0:
             selected_locations = list()
         
@@ -555,6 +568,12 @@ def select_by_cds(records: Iterable[SeqRecord], *, cds_ids: Optional[Set[str]] =
                         keep = True
                 if has_search_hit and cds.domain_search_feature is not None:
                     keep = True
+                if systems is not None or system_evaluator is not None:
+                    system_names = set().union(*(m.names for m in cds_memberships.get(cds.num, [])))
+                    if systems is not None and system_names & systems:
+                        keep = True
+                    if system_evaluator is not None and system_evaluator.check_expression(system_names):
+                        keep = True
             
             if invert:
                 keep = not keep
@@ -674,6 +693,12 @@ def build_parser():
 
     add_annotation_type(parser, help="Which annotations to select CDSs by.")
     add_has_search_hit(parser)
+    add_list_and_file(parser, "systems", help="Select the members of systems with these names (name or database:name), "
+                                              "OR with other CDS selectors.")
+    parser.add_argument("--system_expr", type=str, default=None,
+                        help="Select CDSs whose systems' names satisfy this boolean expression, using &, |, ~ and "
+                             "parentheses. A name is name or database:name. OR with other CDS selectors.")
+    add_system_type(parser, help="Which systems to read.")
 
     parser.add_argument('--pad', action='store_true', default=False,
                         help="If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor.")
@@ -752,6 +777,9 @@ def main(argv):
         exclude_taxids=params.exclude_taxids,
         taxonomy_expr=params.taxonomy_expr,
         taxonomy_unknown=params.taxonomy_unknown,
+        systems=list_and_file_to_dict_keys(params.systems, params.systems_file, as_set=True),
+        system_expr=params.system_expr,
+        system_type=params.system_type,
         )
     with SeqOutputs(params.genbank_out, params.fasta_out) as outputs:
         outputs.write_all(deduplicate_and_pad(selected, dedup=params.dedup, pad=params.pad, anchor=params.anchor))

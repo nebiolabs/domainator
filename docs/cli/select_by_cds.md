@@ -10,8 +10,8 @@ Takes a domain-annotated genbank file and extracts regions of contigs based on c
 
 Specify a range to extract around selected CDSs, if no range is specified, then only the selected CDSs will be returned and not any of their neighbors.
 
-CDS names, domain names, domain expressions, unannotated, and search-hit presence
-are OR selectors. With no selectors, all eligible CDSs are selected.
+CDS names, domain names, domain expressions, unannotated, search-hit presence, and system
+membership (--systems, --system_expr) are OR selectors. With no selectors, all eligible CDSs are selected.
 Contig IDs, strand, fragment status, and taxonomy are independent AND restrictions.
 Invert negates only the combined selectors, never these restrictions. With no
 selectors, invert warns and is ignored. Restrictions apply to the focus CDS,
@@ -54,6 +54,10 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--unannotated` |  |  | Select CDSs with no domain annotations. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select CDSs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
 | `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
+| `--systems` | STRING ... |  | Select the members of systems with these names (name or database:name), OR with other CDS selectors. Additive with --systems_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--systems_file` | FILE |  | Select the members of systems with these names (name or database:name), OR with other CDS selectors. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--system_expr` | STRING |  | Select CDSs whose systems' names satisfy this boolean expression, using &, \|, ~ and parentheses. A name is name or database:name. OR with other CDS selectors. |
+| `--system_type` | {domain_system,system_search,all} | domain_system | Which systems to read. domain_system: systems found by find_systems (Domain_System features). system_search: systems selected by a search (System_Search features). all: both. |
 | `--pad` |  |  | If set, then ends of sequences will be padded so that the focus CDS aligns. See --anchor. |
 | `--anchor` | {start,end,center} | start | Where to align the focus CDSs when --pad is set, relative to the focus CDS in its own orientation. start: align the first base of the focus CDSs. end: align their last base. center: align their midpoints. |
 | `--keep_direction` |  |  | by default extracted regions will be flipped so that the focus cds is on the forward strand. Setting this option will keep the focus cds on whatever strand it started on. |

@@ -8,6 +8,9 @@ Trim contigs based on CDS or domain names or presence of domains in CDSs
 
 Circular contigs are linearized before trimming.
 
+--systems trims each end back to the outermost system with one of these names (see
+find_systems), keeping those systems whole; contigs without one are dropped.
+
 Typically used for nucleotide sequences, but can be used for protein sequences as well, if you use the 'kb' options to mean 1000 amino acids. CDS and domain options are not supported for protein sequences.
 ```
 
@@ -34,5 +37,8 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--domain_expr` | STRING |  | a boolean expression using operators & (AND), \| (OR), and ~(NOT), to specify a desired combination of domains for CDSs to trim |
 | `-e`, `--evalue` | NUMBER |  | the evalue cutoff (max) for domain annotations to be considered when trimming by domain. Default: no cutoff. |
 | `--databases` | STRING ... |  | Only consider domain annotations from these databases when trimming by domain. |
+| `--systems` | STRING ... |  | Trim each end back to the outermost system with one of these names (name or database:name), keeping those systems whole. Contigs without one are dropped. Additive with --systems_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--systems_file` | FILE |  | Trim each end back to the outermost system with one of these names (name or database:name), keeping those systems whole. Contigs without one are dropped. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--system_type` | {domain_system,system_search,all} | domain_system | Which systems --systems reads. domain_system: systems found by find_systems (Domain_System features). system_search: systems selected by a search (System_Search features). all: both. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

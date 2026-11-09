@@ -368,7 +368,7 @@ def test_rotate_config_file(shared_datadir):
 
 
 @pytest.mark.parametrize("args,match", [
-    ([], "Specify references, domains, or annotation_type"),
+    ([], "Specify references, domains, annotation_type"),
     (["--domains", "DHFR_1", "--gene_call", "unannotated"], "gene_call only applies"),
     (["--domains", "DHFR_1", "-r", "SPR.hmm", "--gene_call", "all"], "gene_call 'all'"),
 ])
@@ -397,3 +397,21 @@ def test_rotate_z0_stdin(shared_datadir, monkeypatch):
 def test_registered_with_the_dispatcher():
     from domainator.cli.registry import TOOLS
     assert TOOLS["rotate_contigs"].module == "rotate_contigs"
+
+
+@pytest.mark.parametrize("anchor, origin", [("start", 1000), ("end", 3200), ("center", 2100)])
+def test_rotate_on_system(anchor, origin):
+    """The origin goes at the start, end or center of the system's location, which spans its
+    members (here from the nucleotide member R to GajB)."""
+    from domainator import SYSTEM_FEATURE_NAME
+    from domainator.find_systems import find_systems
+    from system_records import contig
+    record = contig(["", "nc:R", "GajA", "GajB", "", "RelE", "HicB", ""], record_id="c", topology="circular")
+    record, = find_systems([record], domain_expr="R & GajA & GajB", window_cds=3, system_name="Gabija")
+    length = len(record)
+    rotated, = rotate_contigs.rotate_contigs([record], systems={"Gabija"}, anchor=anchor, keep_name=True)
+    assert str(rotated.seq) == str(record.seq[origin:] + record.seq[:origin])
+    system, = [f for f in rotated.features if f.type == SYSTEM_FEATURE_NAME]
+    assert int(system.location.parts[0].start) == (1000 - origin) % length  # wraps the origin with center
+    with pytest.warns(UserWarning, match="No qualifying domain"):
+        assert list(rotate_contigs.rotate_contigs([record], systems={"Gabija"}, system_type="system_search")) == []

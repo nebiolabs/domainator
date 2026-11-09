@@ -45,6 +45,13 @@ Domainator follows [Semantic Versioning](https://semver.org/): what stays stable
   `--domain_expr` with a window; `--system_expr "gabija & ~thoeris_I"` selects Gabija systems
   on contigs without Thoeris I. It takes `select_by_system`'s padding and `--min_context_*`
   options, and `--translate` outputs the members' proteins.
+- System options for more commands: `select_by_cds --systems/--system_expr` select system
+  members; `extract_domains --systems` extracts only the hits that are members' evidence;
+  `trim_contigs --systems` trims each end back to the outermost selected system;
+  `rotate_contigs --systems` rotates on a system; `sort_contigs --system_type` sorts by system
+  score; `split_by_cluster --pad_on_search_hits` also centers on `System_Search` systems.
+- `select_by_contig --window_cds/--window_kb` make `--domain_expr` hold within one window of
+  a contig (`--window_mode`, `--same_strand`), and allow `<` in it.
 - The `SYSTEM_FEATURE_NAME` and `SYSTEM_SEARCH_BEST_HIT_NAME` constants.
 
 ### Changed

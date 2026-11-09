@@ -7,7 +7,8 @@ Set the origin of circular contigs relative to a domain.
 Rotate circular contigs so that their origin is set relative to a domain annotation.
 
 For each contig, one domain is chosen from new annotations found by searching the references (-r) against the contig,
-and/or from pre-existing annotations (--domains, --annotation_type, --has_search_hit).
+and/or from pre-existing annotations (--domains, --annotation_type, --has_search_hit), or a system (--systems, see
+find_systems), whose location spans its members.
 If there are several candidates, the one with the highest score is chosen (ties broken by lowest E-value, then by position).
 The contig is then rotated so that the origin is at the start, end, or center of the chosen domain (--anchor),
 and reverse complemented if necessary to put the chosen domain on the forward strand (unless --keep_direction).
@@ -43,6 +44,9 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--databases` | STRING ... |  | Consider only pre-existing annotations from these databases. default: all databases. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which pre-existing annotations to rotate on. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
 | `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |
+| `--systems` | STRING ... |  | Rotate on systems with these names (name or database:name), at their location, which spans their members. Ranked with the domains by score. Additive with --systems_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
+| `--systems_file` | FILE |  | Rotate on systems with these names (name or database:name), at their location, which spans their members. Ranked with the domains by score. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --systems; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
+| `--system_type` | {domain_system,system_search,all} | domain_system | Which systems --systems reads. domain_system: systems found by find_systems (Domain_System features). system_search: systems selected by a search (System_Search features). all: both. |
 | `--anchor` | {start,end,center} | start | where to put the origin, relative to the chosen domain in its own orientation (not relative to the original orientation of the contig). start: the first base of the domain becomes the first base of the contig. end: the last base of the domain becomes the last base of the contig. center: the origin is placed in the middle of the domain. |
 | `--keep_direction` |  |  | by default, contigs are reverse complemented if necessary to put the chosen domain on the forward strand. Setting this option will keep the original orientation of the contig. |
 | `--circularize` |  |  | treat fasta records and linear genbank records as circular, before searching and rotating. By default, they are skipped. |

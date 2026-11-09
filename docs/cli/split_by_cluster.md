@@ -22,6 +22,6 @@ single small_clusters output file.
 | `--threshold` | NUMBER | 0 | Keep only edges with weights strictly above this value when finding connected components. |
 | `--min_cluster_size` | INTEGER | 1 | Minimum cluster size required to write a dedicated cluster file. |
 | `--write_small_clusters` |  |  | If set, write clusters smaller than --min_cluster_size into small_clusters.<ext>. Otherwise those records or models are skipped. |
-| `--pad_on_search_hits` |  |  | For GenBank inputs, center each contig on its first Domain_Search annotation and pad records within each output file so the search hits align. Raises an error if any record lacks Domain_Search. |
+| `--pad_on_search_hits` |  |  | For GenBank inputs, center each contig on its first Domain_Search annotation (or, without one, its first System_Search system) and pad records within each output file so the search hits align. Raises an error if any record has neither. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

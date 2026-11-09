@@ -10,6 +10,9 @@ This matches the output ordering used by domainator domain_search when --max_hit
 It is primarily intended for post-processing domain_search output written without
 --max_hits, where the temporary hit_best_score annotation is not preserved in the
 written GenBank file.
+
+--system_type sorts by the best system score instead: --system_type system_search matches the
+ordering of system_search with --max_hits.
 ```
 
 Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an input or output means standard input or output, where the option says it is allowed.
@@ -25,5 +28,6 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--domains` | STRING ... |  | If supplied, sort by the best Domainator annotation score from domains with these names instead of Domain_Search annotation scores. Additive with --domains_file. |
 | `--domains_file` | FILE |  | Like --domains, but read the domain names from this file, one per line. Additive with --domains. |
 | `--databases` | STRING ... |  | When used with --domains, only consider Domainator annotations from these databases. |
+| `--system_type` | {domain_system,system_search,all} |  | Sort by the best score of these systems instead: domain_system (from find_systems), system_search (from system_search) or all. Not with --domains. |
 
 Every command also takes `--config FILE` (options from a JSON or YAML file, keyed by option name) and `--print_config`.

@@ -581,3 +581,22 @@ def test_cds_range_members():
     cdss[1].is_nucleic_acid = True
     assert select_by_cds.cds_range_members(cdss, 0) == [0, 2]
     assert select_by_cds.cds_range_members(cdss, 1) == [0, 1, 2]
+
+
+def test_select_by_cds_by_system():
+    """Each member of a system, with one CDS on either side."""
+    from domainator.find_systems import find_systems
+    from system_records import contig, layout
+    record = contig(layout({"GajA": 2, "GajB": 3, "RelE": 8, "HicB": 9}), record_id="both")
+    record, = find_systems([record], domain_expr="GajA & GajB", window_cds=3, system_name="Gabija")
+    record, = find_systems([record], domain_expr="RelE & HicB", window_cds=3, system_name="TA", clear=False)
+
+    def focus_domains(regions):
+        return [sorted(DomainatorCDS.list_from_contig(region)[1].get_domain_names()) for region in regions]
+
+    regions = list(select_by_cds.select_by_cds([record], systems={"Gabija"}, cds_range=(1, 1)))
+    assert focus_domains(regions) == [["GajA"], ["GajB"]]
+    regions = list(select_by_cds.select_by_cds([record], system_expr="command_line:TA & ~Gabija", cds_range=(1, 1)))
+    assert focus_domains(regions) == [["RelE"], ["HicB"]]
+    assert list(select_by_cds.select_by_cds([record], systems={"Gabija"}, system_type="system_search")) == []
+    assert len(list(select_by_cds.select_by_cds([record], systems={"Gabija"}, invert=True))) == 10

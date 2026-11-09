@@ -24,7 +24,7 @@ OR (contig name matches specified regex [contigs_regex])
 OR (contig definition matches specified regex [definition_regex]) 
 OR (contig sequence matches specified regex [sequence_regex])
 OR (contig contains at least one domain with name in specified list [domains, domains_file])
-OR (contig contains a combination of domains that match the specified boolean expression [domain_expr])
+OR (contig contains a combination of domains that match the specified boolean expression [domain_expr], within one window [window_cds, window_kb])
 OR (contig contains no domains [unannotated])
 OR (contig contains a qualifying search hit [has_search_hit])
 OR (contig has a search-hit score within specified bounds [min_search_score, max_search_score])
@@ -32,6 +32,10 @@ OR (contig contains a selected system [systems, system_expr, system_categories, 
 )
 AND
 (total number of selected contigs is less than or equal to specified maximum [max_records])
+
+With --window_cds or --window_kb, --domain_expr must hold within one window of the contig, as
+for find_systems --domain_expr (see --window_mode), instead of over the whole contig. Protein
+records have no windows, so they aren't selected by it.
 
 Systems (from find_systems) are selected by name (--systems), by a boolean expression over the
 names of a contig's systems (--system_expr), or, with neither, by their presence. Only systems of
@@ -58,6 +62,10 @@ Give at least one of these outputs: `--genbank_out`, `--fasta_out`. `-` as an in
 | `--domains` | STRING ... |  | Select records containing these domain names, OR with other record selectors. Additive with --domains_file; duplicate names are ignored. If neither source is supplied, no name criterion is applied. |
 | `--domains_file` | FILE |  | Select records containing these domain names, OR with other record selectors. Read names from a plain-text file (one per line), FASTA/GenBank record IDs, or HMM profile names. Additive with --domains; duplicate names are ignored. Plain-text lines are stripped and blank lines ignored. An empty file adds no names; if no names are supplied directly either, the resulting list is explicitly empty, not an omitted criterion. |
 | `--domain_expr` | STRING |  | a boolean expression using operators & (AND), \| (OR), and ~(NOT), to specify a desired combination of domains |
+| `--window_cds` | INTEGER |  | Make --domain_expr hold within a window of this many CDSs (see --window_mode), instead of over the whole contig. Its expression can then also use < (upstream of), as in find_systems. |
+| `--window_kb` | NUMBER |  | Make --domain_expr hold within a window of this many kb (see --window_mode). With --window_cds, both must hold. |
+| `--window_mode` | {span,chain,anchor} | span | How --window_cds and --window_kb are measured. span: from the first matching CDS to the last. chain: the gap between consecutive matching CDSs. anchor: the distance of every matching CDS from one anchor. |
+| `--same_strand` |  |  | With --window_cds or --window_kb, the domains of --domain_expr must be on CDSs on one strand. |
 | `--partial` | {include,exclude,only} | include | Select contigs by fragment status. include: all. exclude: drop fragments. only: keep only fragments. A protein record is a fragment if it has a UniProt ' (Fragment)' or MGnify 'FL=0' header, a 'Flags: Fragment' definition, NON_TER features, or a CDS/Protein feature with '<' or '>' spanning it. A nucleotide contig is a fragment if any of its CDSs has '<' or '>' in its location, or a /partial qualifier. Not affected by --invert. |
 | `--annotation_type` | {domainator,domain_search,all} | domainator | Which annotations to select contigs by. domainator: domain annotations (from domainate). domain_search: best-hit annotations (from domain_search). all: both. |
 | `--has_search_hit` |  |  | Also select existing domain_search hits, regardless of annotation_type, domain names, domain expressions, or databases. Hits must pass the e-value and score cutoffs where applicable. Participates in --invert where available. |

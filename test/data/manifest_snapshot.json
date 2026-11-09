@@ -2990,6 +2990,40 @@
    "type": "boolean"
   },
   {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
+  },
+  {
    "name": "partial",
    "flags": [
     "--partial"
@@ -3885,6 +3919,40 @@
    "type": "boolean"
   },
   {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
+  },
+  {
    "name": "anchor",
    "flags": [
     "--anchor"
@@ -4290,6 +4358,49 @@
    ],
    "kind": "flag",
    "type": "boolean"
+  },
+  {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "system_expr",
+   "flags": [
+    "--system_expr"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
   },
   {
    "name": "pad",
@@ -4859,6 +4970,46 @@
    "required": false
   },
   {
+   "name": "window_cds",
+   "flags": [
+    "--window_cds"
+   ],
+   "kind": "value",
+   "type": "integer",
+   "required": false
+  },
+  {
+   "name": "window_kb",
+   "flags": [
+    "--window_kb"
+   ],
+   "kind": "value",
+   "type": "number",
+   "required": false
+  },
+  {
+   "name": "window_mode",
+   "flags": [
+    "--window_mode"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "span",
+    "chain",
+    "anchor"
+   ]
+  },
+  {
+   "name": "same_strand",
+   "flags": [
+    "--same_strand"
+   ],
+   "kind": "flag",
+   "type": "boolean"
+  },
+  {
    "name": "partial",
    "flags": [
     "--partial"
@@ -5271,6 +5422,20 @@
    "type": "string",
    "multiple": true,
    "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
   }
  ],
  "trim_contigs": [
@@ -5455,6 +5620,40 @@
    "type": "string",
    "multiple": true,
    "required": false
+  },
+  {
+   "name": "systems",
+   "flags": [
+    "--systems"
+   ],
+   "kind": "value",
+   "type": "string",
+   "multiple": true,
+   "required": false
+  },
+  {
+   "name": "systems_file",
+   "flags": [
+    "--systems_file"
+   ],
+   "kind": "path",
+   "type": "string",
+   "role": "input",
+   "required": false
+  },
+  {
+   "name": "system_type",
+   "flags": [
+    "--system_type"
+   ],
+   "kind": "value",
+   "type": "string",
+   "required": false,
+   "choices": [
+    "domain_system",
+    "system_search",
+    "all"
+   ]
   }
  ],
  "genbank_to_fasta": [

@@ -2,6 +2,9 @@
 
 Circular contigs are linearized before trimming.
 
+--systems trims each end back to the outermost system with one of these names (see
+find_systems), keeping those systems whole; contigs without one are dropped.
+
 Typically used for nucleotide sequences, but can be used for protein sequences as well, if you use the 'kb' options to mean 1000 amino acids. CDS and domain options are not supported for protein sequences.
 
 """
@@ -9,7 +12,7 @@ Typically used for nucleotide sequences, but can be used for protein sequences a
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
 import logging
-from domainator.cli.common import add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_input, add_list_and_file, add_seq_outputs, add_system_type, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.locations import slice_record
@@ -20,6 +23,7 @@ from Bio.SeqFeature import FeatureLocation
 from Bio.SeqRecord import SeqRecord
 from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
 from domainator.select_by_cds import validate_range
+from domainator.systems.records import system_features
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +68,11 @@ def strip_domains_from_ends(cds_domain_names: List[Set[str]], left_cds, right_cd
     return left_cds, right_cds
 
 
-def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], cds_truncation:Optional[Tuple[int, int]], strip_domains:Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> SeqRecord:
-    """Trim one contig. Domain criteria only count domain annotations from databases (if given) with E-values at most evalue (if given)."""
+def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], cds_truncation:Optional[Tuple[int, int]], strip_domains:Optional[Set[str]], domain_expr:Optional[str]=None, no_domain:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None, systems:Optional[Set[str]]=None, system_type:str="domain_system") -> SeqRecord:
+    """Trim one contig. Domain criteria only count domain annotations from databases (if given) with E-values at most evalue (if given).
+    With systems, also trim each end back to the outermost system with one of these names, or return None if there is none."""
     by_domain = strip_domains is not None or domain_expr is not None or no_domain
-    if kb_truncation is None and cds_truncation is None and not by_domain:
+    if kb_truncation is None and cds_truncation is None and not by_domain and systems is None:
         return record # TODO: should this be a copy?
 
     if domain_expr is not None:
@@ -115,6 +120,13 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
             left = cdss[left_cds].feature.location.start
         if (right_cds < len(cdss) - 1 ) and (cdss[right_cds].feature.location.end < right):
             right = cdss[right_cds].feature.location.end
+    if systems is not None:
+        selected = [feature for feature in system_features(record, system_type)
+                    if {feature.qualifiers["name"][0], f"{feature.qualifiers['database'][0]}:{feature.qualifiers['name'][0]}"} & systems]
+        if not selected:
+            return None
+        left = max(left, min(int(feature.location.start) for feature in selected))
+        right = min(right, max(int(feature.location.end) for feature in selected))
     if left >= right:
         return None
 
@@ -127,7 +139,8 @@ def trim_contig(record:SeqRecord, kb_truncation:Optional[Tuple[float, float]], c
 
 
 def trim_contigs(records: Iterable[SeqRecord], *, kb_range: Optional[Tuple[float, float]] = None,
-                 cds_range: Optional[Tuple[int, int]] = None, domains: Optional[Set[str]] = None, domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None) -> Iterator[SeqRecord]:
+                 cds_range: Optional[Tuple[int, int]] = None, domains: Optional[Set[str]] = None, domain_expr:Optional[str]=None, unannotated:bool=False, evalue:Optional[float]=None, databases:Optional[Set[str]]=None,
+                 systems: Optional[Set[str]] = None, system_type: str = "domain_system") -> Iterator[SeqRecord]:
     """Yield ``records`` with their ends trimmed.
 
     kb_range: (left, right) kb to trim from each end, or None.
@@ -135,8 +148,12 @@ def trim_contigs(records: Iterable[SeqRecord], *, kb_range: Optional[Tuple[float
     domains, domain_expr, unannotated: also trim CDSs from each end while they have one of these
         domains, match this expression, or (with unannotated) have no domains; evalue and
         databases limit which domain annotations count.
+    systems: also trim each end back to the outermost system with one of these names (``name``
+        or ``database:name``), of system_type ("domain_system", "system_search" or "all"), so
+        that those systems are kept whole. A record without one is dropped.
     Circular contigs are linearized first. A record trimmed to nothing is dropped.
     """
+    systems = set(systems) if systems is not None else None
     if domains is not None:
         domains = set(domains)
 
@@ -144,7 +161,7 @@ def trim_contigs(records: Iterable[SeqRecord], *, kb_range: Optional[Tuple[float
         domain_expr = BooleanEvaluator(domain_expr)
 
     for record in records:
-        trimmed = trim_contig(record, kb_range, cds_range, domains, domain_expr, unannotated, evalue, databases)
+        trimmed = trim_contig(record, kb_range, cds_range, domains, domain_expr, unannotated, evalue, databases, systems, system_type)
         if trimmed is not None:
             yield trimmed
 
@@ -189,6 +206,10 @@ def build_parser():
                         help="the evalue cutoff (max) for domain annotations to be considered when trimming by domain. Default: no cutoff.")
     parser.add_argument('--databases', type=str, default=None, nargs='+',
                         help="Only consider domain annotations from these databases when trimming by domain.")
+    add_list_and_file(parser, "systems", help="Trim each end back to the outermost system with one of these names "
+                                              "(name or database:name), keeping those systems whole. Contigs without "
+                                              "one are dropped.")
+    add_system_type(parser, help="Which systems --systems reads.")
     
     parser.add_argument('--config', action=ActionConfigFile)
     declare_outputs(parser, ["genbank_out", "fasta_out"])
@@ -223,4 +244,6 @@ def main(argv):
         unannotated=params.unannotated,
         evalue=params.evalue,
         databases=set(params.databases) if params.databases is not None else None,
+        systems=list_and_file_to_dict_keys(params.systems, params.systems_file, as_set=True),
+        system_type=params.system_type,
         ), genbank=params.genbank_out, fasta=params.fasta_out)

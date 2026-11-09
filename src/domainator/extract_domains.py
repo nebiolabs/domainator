@@ -22,7 +22,7 @@ extract_domains. For whole CDSs or nucleotide neighborhoods, use select_by_cds.
 from typing import Iterable, Iterator, Optional, Set
 from jsonargparse import ActionConfigFile
 from jsonargparse.typing import PositiveFloat
-from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, check_outputs, declare_outputs, tool_parser
+from domainator.cli.common import add_annotation_type, add_has_search_hit, add_input, add_seq_outputs, add_system_type, check_outputs, declare_outputs, tool_parser
 from domainator.outputs import write_seq_outputs
 from domainator.seqio import parse_seqfiles
 from domainator.cli.common import add_list_and_file, list_and_file_to_dict_keys, partial_help
@@ -36,6 +36,7 @@ from Bio.SeqRecord import SeqRecord
 from domainator.cli.common import add_taxonomy_filters, taxonomy_from_args
 from domainator.taxonomy import NCBITaxonomy
 from domainator.taxonomy.records import compile_taxonomy_filter
+from domainator.systems.records import MemberHits, system_features
 
 def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = None, min_score: Optional[float] = None,
                     domains: Optional[Set[str]] = None, extend_range: Optional[int] = None,
@@ -44,7 +45,8 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
                     databases: Optional[Set[str]] = None, splice: bool = False, partial: str = "include",
                     has_search_hit: bool = False, ncbi_taxonomy: Optional[NCBITaxonomy] = None,
                     include_taxids: Optional[Iterable[int]] = None, exclude_taxids: Optional[Iterable[int]] = None,
-                    taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude") -> Iterator[SeqRecord]:
+                    taxonomy_expr: Optional[str] = None, taxonomy_unknown: str = "exclude",
+                    systems: Optional[Set[str]] = None, system_type: str = "domain_system") -> Iterator[SeqRecord]:
     """Yield the regions of ``records`` covered by their domain annotations.
 
     Output retains the input sequence type. Nucleotide regions are not translated,
@@ -92,6 +94,10 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
             "include" (all, the default), "exclude" (skip domains on fragments), or "only" (only
             domains on fragments). Contig-level nucleotide hits are never on fragments.
             See partial.get_fragment_status.
+        systems: extract only the hits that are members' evidence in systems with these names
+            (``name`` or ``database:name``): the hits their component qualifiers name.
+        system_type: which systems to read: "domain_system" (from find_systems),
+            "system_search", or "all".
 
     Yields:
         The extracted regions.
@@ -104,6 +110,7 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
         raise ValueError("Cannot use --splice and --combine at the same time.")
 
     databases = set(databases) if databases is not None else None
+    systems = set(systems) if systems is not None else None
     extend_default = extend_range if extend_range is not None else 0
     extend_up = extend_up if extend_up is not None else extend_default
     extend_down = extend_down if extend_down is not None else extend_default
@@ -111,6 +118,10 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
     for rec in records:
         feature_index = FeatureIndex(rec.features)
         hit_domains = list() #list of SeqFeatures
+        if systems is not None:
+            member_hits = MemberHits(
+                feature for feature in system_features(rec, system_type)
+                if {feature.qualifiers["name"][0], f"{feature.qualifiers['database'][0]}:{feature.qualifiers['name'][0]}"} & systems)
         if partial != "include":
             cds_by_id = {get_cds_unique_name(f): f for f in rec.features if f.type == "CDS"}
         for feature in rec.features:
@@ -123,7 +134,9 @@ def extract_domains(records: Iterable[SeqRecord], *, evalue: Optional[float] = N
             )
             if selected or search_hit:
                 keep = True
-                if not evalue_passes(feature, evalue):
+                if systems is not None and feature not in member_hits:
+                    keep = False
+                elif not evalue_passes(feature, evalue):
                     keep = False
                 elif min_score is not None and feature_score(feature) < min_score:
                     keep = False
@@ -254,6 +267,9 @@ def build_parser():
 
     add_annotation_type(parser, help="Which annotations to extract.")
     add_has_search_hit(parser)
+    add_list_and_file(parser, "systems", help="Extract only the hits that are members' evidence in systems with these names "
+                                              "(name or database:name), e.g. the GajA domain of Gabija systems.")
+    add_system_type(parser, help="Which systems to read.")
     parser.add_argument('--partial', type=str, default="include", choices=PARTIAL_CHOICES, help=partial_help("Which domains to extract, by the CDS or protein they are on") + " Contig-level nucleotide hits are never on fragments.")
 
     parser.add_argument("--extend_range", type=int, default=None, help="Extend each side by this many amino acids for protein input or bases for nucleotide input. Not rounded to codons or restricted to CDS boundaries. Sets the default of --extend_up and --extend_down.")
@@ -313,6 +329,8 @@ def main(argv):
         exclude_taxids=params.exclude_taxids,
         taxonomy_expr=params.taxonomy_expr,
         taxonomy_unknown=params.taxonomy_unknown,
+        systems=list_and_file_to_dict_keys(params.systems, params.systems_file, as_set=True),
+        system_type=params.system_type,
         )
 
     write_seq_outputs(extracted_domains_iterator, genbank=params.genbank_out, fasta=params.fasta_out)

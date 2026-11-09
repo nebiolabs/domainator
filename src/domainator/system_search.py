@@ -55,8 +55,7 @@ from domainator.expr import BooleanEvaluator
 from domainator.extract_peptides import extract_peptides
 from domainator.find_systems import annotate_systems
 from domainator.locations import WHERE_CHOICES
-from domainator.location_ops import overlap_size
-from domainator.model import DomainatorCDS, get_hit_best_score, set_hit_best_score
+from domainator.model import get_hit_best_score, set_hit_best_score
 from domainator import db_index
 from domainator.output_guardrails import add_max_output_gb_argument, max_output_gb_to_bytes
 from domainator.outputs import SeqOutputs
@@ -64,10 +63,9 @@ from domainator.partial import PARTIAL_CHOICES
 from domainator.select_by_cds import deduplicate_and_pad, up_down_pair, validate_range
 from domainator.select_by_system import select_by_system
 from domainator.seqio import parse_seqfiles
-from domainator.systems.features import component_values
 from domainator.systems.model import ModelCollection
 from domainator.systems.native import read_system_models, select_models, window_model
-from domainator.systems.records import NUCLEOTIDE_MEMBER_PREFIX, system_features
+from domainator.systems.records import MemberHits, system_features
 from domainator.systems.search import model_profile_evalues, model_reference_files
 from domainator.taxonomy import NCBITaxonomy
 from domainator.taxonomy.records import compile_taxonomy_filter
@@ -75,31 +73,13 @@ from domainator.taxonomy.records import compile_taxonomy_filter
 
 def keep_member_hits(region: SeqRecord, databases: Set[str], system_databases: Set[str]) -> SeqRecord:
     """Remove from region the Domainator hits from ``databases`` that aren't evidence for its
-    System_Search system, and the Domain_System features from ``system_databases``.
-
-    A hit is evidence when it is on a member CDS (or, for a nucleotide member, overlaps the
-    system) and its database and name are those the system's component qualifiers give for that
-    member.
-    """
-    focus, = system_features(region, "system_search")
-    values = component_values(focus)
-    cds_hits = {(value.cds_id, value.database, value.reference) for value in values
-                if not value.cds_id.startswith(NUCLEOTIDE_MEMBER_PREFIX)}
-    nucleotide_hits = {(value.database, value.reference) for value in values
-                       if value.cds_id.startswith(NUCLEOTIDE_MEMBER_PREFIX)}
-    evidence = set()
-    for cds in DomainatorCDS.list_from_contig(region, include_nucleic_acid_annotations=True):
-        for hit in cds.domain_features:
-            key = (hit.qualifiers["database"][0], hit.qualifiers["name"][0])
-            if cds.is_nucleic_acid:
-                if key in nucleotide_hits and overlap_size(hit.location, focus.location) > 0:
-                    evidence.add(id(hit))
-            elif (cds.num, *key) in cds_hits:
-                evidence.add(id(hit))
+    System_Search system (see systems.records.MemberHits), and the Domain_System features from
+    ``system_databases``."""
+    evidence = MemberHits(system_features(region, "system_search"))
 
     def kept(feature) -> bool:
         if feature.type == DOMAIN_FEATURE_NAME:
-            return id(feature) in evidence or feature.qualifiers.get("database", [None])[0] not in databases
+            return feature.qualifiers.get("database", [None])[0] not in databases or feature in evidence
         if feature.type == SYSTEM_FEATURE_NAME:
             return feature.qualifiers.get("database", [None])[0] not in system_databases
         return True

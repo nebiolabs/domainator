@@ -136,3 +136,24 @@ def test_trim_contigs_cds_range_without_cdss(tmp_path):
     trim_contigs.main(["-i", in_gb, "-o", out, "--cds_range", "1"])
     records = list(SeqIO.parse(out, "genbank"))
     assert len(records) == 1 and len(records[0]) == 200
+
+
+def test_trim_contigs_to_systems():
+    """Each end is trimmed back to the outermost selected system, nucleotide members included."""
+    from domainator import SYSTEM_FEATURE_NAME
+    from domainator.find_systems import find_systems
+    from system_records import contig
+    record = contig(["", "nc:R", "GajA", "GajB", "", "RelE", "HicB", "", ""], record_id="c")
+    record, = find_systems([record], domain_expr="R & GajA & GajB", window_cds=3, system_name="Gabija")
+    record, = find_systems([record], domain_expr="RelE & HicB", window_cds=3, system_name="TA", clear=False)
+    other = contig(["", "GajA"], record_id="no_system")
+
+    trimmed, = trim_contigs.trim_contigs([record, other], systems={"Gabija"})
+    assert (trimmed.id, len(trimmed)) == ("c_1001:3200", 2200)  # from R (at 1000) to the end of GajB
+    assert [f.qualifiers["name"][0] for f in trimmed.features if f.type == SYSTEM_FEATURE_NAME] == ["Gabija"]
+    trimmed, = trim_contigs.trim_contigs([record], systems={"Gabija", "command_line:TA"})
+    assert trimmed.id == "c_1001:6200"  # to the end of HicB
+    # Trimming by CDS still applies: it can cut into the system.
+    trimmed, = trim_contigs.trim_contigs([record], systems={"command_line:TA"}, cds_range=(5, 0))
+    assert trimmed.id == "c_5301:6200"
+    assert list(trim_contigs.trim_contigs([record], systems={"Gabija"}, system_type="system_search")) == []

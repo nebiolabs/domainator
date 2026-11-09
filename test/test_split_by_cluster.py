@@ -274,7 +274,7 @@ def test_split_by_cluster_pad_on_search_hits_requires_domain_search(shared_datad
     input_path = shared_datadir / "FeSOD_20.gb"
     matrix_path = shared_datadir / "split_by_cluster" / "FeSOD_20.matrix.tsv"
 
-    with pytest.raises(ValueError, match="does not contain any Domain_Search"):
+    with pytest.raises(ValueError, match="does not contain any Domain_Search or System_Search"):
         split_by_cluster.main([
             "-i", str(input_path),
             "--matrix", str(matrix_path),
@@ -418,3 +418,23 @@ def test_split_by_cluster_genbank_bgzf(shared_datadir, tmp_path):
         assert [r.id for r in parse_seqfiles([out], filetype_override="genbank")] == members
     small = outdir / "small_clusters.gb.bgz"
     assert [r.id for r in parse_seqfiles([small], filetype_override="genbank")] == expected_small
+
+
+def test_center_record_on_system_search():
+    """Without a Domain_Search hit, a contig is centered on its System_Search system."""
+    from domainator import SYSTEM_SEARCH_BEST_HIT_NAME
+    from domainator.find_systems import find_systems
+    from system_records import contig
+    record = contig(["GajA", "GajB", "", "", "", "", "", ""], record_id="c", topology="circular")
+    record, = find_systems([record], domain_expr="GajA & GajB", window_cds=3, system_name="Gabija")
+    for feature in record.features:
+        if feature.type == "Domain_System":
+            feature.type = SYSTEM_SEARCH_BEST_HIT_NAME
+    centered = split_by_cluster._center_record_on_search_hit(record)
+    assert len(centered) == len(record)
+    system, = [f for f in centered.features if f.type == SYSTEM_SEARCH_BEST_HIT_NAME]
+    center = (int(system.location.start) + int(system.location.end)) / 2
+    assert abs(center - len(centered) / 2) <= 1
+    record.features = [f for f in record.features if f.type != SYSTEM_SEARCH_BEST_HIT_NAME]
+    with pytest.raises(ValueError, match="Domain_Search or System_Search"):
+        split_by_cluster._center_record_on_search_hit(record)

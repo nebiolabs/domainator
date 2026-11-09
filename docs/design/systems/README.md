@@ -207,7 +207,7 @@ documents above have been corrected.
 
 ## Implementation status
 
-Phases 1 and 2, and Phase 3's `system_search`, are implemented. Where the code departs from these documents:
+Phases 1 and 2, and Phase 3's `system_search` and options on existing commands, are implemented. Where the code departs from these documents:
 
 1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
    `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
@@ -235,3 +235,11 @@ Phases 1 and 2, and Phase 3's `system_search`, are implemented. Where the code d
    expression must hold on the contig, and systems of the `--systems` models and of the
    expression's positive names are selected. With `--translate`, `--max_hits` still counts
    systems.
+9. **`trim_contigs --systems`** has no `--system_expr`: it trims to the outermost selected
+   system's location, so that the systems stay whole (nucleotide members included), which a
+   per-CDS expression wouldn't guarantee. `extract_domains --systems` and `rotate_contigs
+   --systems` take `--system_type`, and `rotate_contigs` doesn't filter systems by `-e`.
+10. **`sort_contigs --system_type`** defaults to none (sort by `Domain_Search`, as before);
+    any value sorts by the best score of those systems.
+11. **`select_by_contig --window_*`**: with a window, protein records aren't selected by
+    `--domain_expr`, since they have no windows.

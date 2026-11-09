@@ -24,6 +24,7 @@ from domainator.seqio import COMPRESSION_EXTENSIONS, get_file_type, is_compresse
 from domainator.model import DomainatorCDS
 from domainator.hmmio import open_hmm_file, open_writable_hmm_file
 from domainator.location_ops import stranded_start
+from domainator.systems.records import member_indices, system_features, system_strand
 
 
 SUPPORTED_INPUT_TYPES = {"genbank", "fasta", "hmm", "cm"}
@@ -211,6 +212,7 @@ def _get_destination_handle(
 
 
 def _center_record_on_search_hit(record):
+    """The whole record, centered on its first Domain_Search hit, else on its first System_Search system."""
     cdss = DomainatorCDS.list_from_contig(record, include_nucleic_acid_annotations=True)
     cdss.sort(key=lambda cds: stranded_start(cds.feature.location))
 
@@ -223,9 +225,16 @@ def _center_record_on_search_hit(record):
                 whole_contig=True,
             )
             return centered_record
+    for system in system_features(record, "system_search"):
+        members = member_indices(system, cdss)
+        if members:
+            centered_record, _ = select_by_cds.get_neighborhood(
+                record, cdss, members, system.location, system_strand(system), whole_contig=True,
+                describe=f"system {system.qualifiers['name'][0]}")
+            return centered_record
 
     raise ValueError(
-        f"Record {record.id} does not contain any Domain_Search annotations required by --pad_on_search_hits."
+        f"Record {record.id} does not contain any Domain_Search or System_Search annotations required by --pad_on_search_hits."
     )
 
 
@@ -374,7 +383,7 @@ def build_parser():
         "--pad_on_search_hits",
         action="store_true",
         default=False,
-        help="For GenBank inputs, center each contig on its first Domain_Search annotation and pad records within each output file so the search hits align. Raises an error if any record lacks Domain_Search.",
+        help="For GenBank inputs, center each contig on its first Domain_Search annotation (or, without one, its first System_Search system) and pad records within each output file so the search hits align. Raises an error if any record has neither.",
     )
     parser.add_argument("--config", action=ActionConfigFile)
     return parser

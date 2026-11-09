@@ -1,5 +1,5 @@
 """Systems already annotated on records, for the commands that select by them."""
-from typing import Dict, List, NamedTuple, Optional, Sequence, Set
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from Bio.SeqFeature import SeqFeature
 
@@ -53,6 +53,32 @@ def _hits(cds: DomainatorCDS):
     yield from cds.domain_features
     if cds.domain_search_feature is not None:
         yield cds.domain_search_feature
+
+
+class MemberHits:
+    """The domain hits that are members' evidence in some systems: ``hit in member_hits``.
+
+    A hit on a CDS is evidence when the system's component qualifiers name its cds_id,
+    database and name. A contig-level nucleotide hit is evidence when they name its database
+    and name for a nucleotide member, and it overlaps the system.
+    """
+
+    def __init__(self, features: Iterable[SeqFeature]):
+        self.cds_hits: Set[Tuple[str, str, str]] = set()
+        self.nucleotide_hits: List[Tuple[str, str, SeqFeature]] = list()
+        for feature in features:
+            for value in component_values(feature):
+                if value.cds_id.startswith(NUCLEOTIDE_MEMBER_PREFIX):
+                    self.nucleotide_hits.append((value.database, value.reference, feature))
+                else:
+                    self.cds_hits.add((value.cds_id, value.database, value.reference))
+
+    def __contains__(self, hit: SeqFeature) -> bool:
+        database, name = hit.qualifiers["database"][0], hit.qualifiers["name"][0]
+        if (hit.qualifiers.get("cds_id", ["."])[0], database, name) in self.cds_hits:
+            return True
+        return any((database, name) == (system_database, system_name) and overlap_size(hit.location, system.location) > 0
+                   for system_database, system_name, system in self.nucleotide_hits)
 
 
 def system_completeness(feature: SeqFeature) -> Optional[float]:
