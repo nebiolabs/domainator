@@ -33,7 +33,8 @@ from domainator.systems.native import read_system_models, reference_paths, selec
 
 TSV_COLUMNS = ("database", "system", "category", "window", "min_core", "min_total", "condition", "component", "role",
                "reference", "reference_database", "evalue", "min_score", "min_reference_coverage",
-               "min_target_coverage", "min_target_length", "max_target_length", "exchangeable", "attach_to_cds")
+               "min_target_coverage", "min_target_length", "max_target_length", "min_tmscore", "min_lddt", "min_prob",
+               "exchangeable", "attach_to_cds")
 _HMM_SUFFIXES = (".hmm", ".hmm.gz")
 
 
@@ -56,7 +57,8 @@ def _tsv_rows(collections: Sequence[ModelCollection]) -> Iterable[List[str]]:
                         model.database, model.name, model.category, model.window.describe(), model.min_core,
                         model.min_total, model.condition, component.name, component.role, rule.name, rule.database,
                         rule.evalue, rule.min_score, rule.min_reference_coverage, rule.min_target_coverage,
-                        rule.min_target_length, rule.max_target_length, rule.exchangeable, rule.attach_to_cds)]
+                        rule.min_target_length, rule.max_target_length, rule.min_tmscore, rule.min_lddt, rule.min_prob,
+                        rule.exchangeable, rule.attach_to_cds)]
 
 
 def _write_hmms(collections: Sequence[ModelCollection], hmm_out: str) -> None:

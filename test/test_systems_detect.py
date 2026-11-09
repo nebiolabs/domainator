@@ -166,6 +166,21 @@ def test_thresholds():
     assert found(record, window_model("A & B", window_cds=2), databases={"other"}) == []
 
 
+@pytest.mark.parametrize("threshold, qualifier", [("min_tmscore", "tmscore"), ("min_lddt", "lddt"), ("min_prob", "prob")])
+def test_structural_thresholds(threshold, qualifier):
+    """Read from foldseek hits' qualifiers; a hit without one (an HMM hit) fails them."""
+    record = contig(["A", "B"])
+    record.features[1].qualifiers[qualifier] = ["0.650"]
+
+    def rule(value):
+        return models({"name": "S", "components": [{"name": "A", "domains": [{"name": "A", threshold: value}]},
+                                                   {"name": "B", "domains": ["B"]}]})
+    assert found(record, rule(0.65)) == [["cds0", "cds1"]]
+    assert found(record, rule(0.66)) == []
+    del record.features[1].qualifiers[qualifier]
+    assert found(record, rule(0.1)) == []
+
+
 def test_partial_cdss():
     record = contig(["A", "B"])
     record.features[0].location = FeatureLocation(BeforePosition(0), 900, 1)

@@ -679,7 +679,9 @@ same file, or `database:name`); `orientation_from` (a component); `neighborhood_
 for this component; between two components with gaps, the smaller applies). A domain is a
 reference name, or a mapping with `name`, `database` (the hit's `database`; default: any),
 thresholds (`evalue`, `min_score`, `min_reference_coverage`, `min_target_coverage`,
-`min_target_length`, `max_target_length`), `exchangeable` and `attach_to_cds` (a contig-level
+`min_target_length`, `max_target_length`, and for structural hits from `domainate --foldseek`
+`min_tmscore`, `min_lddt` and `min_prob`, read from their `tmscore`, `lddt` and `prob`
+qualifiers; a hit without the qualifier fails them), `exchangeable` and `attach_to_cds` (a contig-level
 nucleotide hit counts as the CDS it overlaps on its strand by at least half its length).
 
 **Roles**: core and accessory components count toward `min_core`/`min_total`, the score and

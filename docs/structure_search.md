@@ -260,6 +260,34 @@ fold but little sequence. Use `domainator structure_dist` when you want the fold
 Note that it is one opaque string per record, so it does not survive tools that slice
 records.
 
+## Systems with structural components
+
+Systems (sets of domains found together in one neighborhood; see `find_systems`) are found on
+contigs, so the structure tools, whose records are single proteins, don't detect them. Use
+`domainate --foldseek` instead: it predicts 3Di sequences for the proteins of a contig's CDSs
+and searches them against a Foldseek database, writing ordinary `Domainator` hits with
+`program=foldseek`, `database=<the database's name>` and `tmscore`, `lddt` and `prob`
+qualifiers. A system model can name those hits, and mix them with HMM hits:
+
+```yaml
+domainator_systems: 1
+systems:
+  - name: Gabija_structural
+    window: {mode: chain, max_cds: 3}
+    min_core: 2
+    components:
+      - {name: GajA, domains: [{name: GajA_AF2, database: defense_structures, min_tmscore: 0.5}]}
+      - {name: GajB, domains: [GajB_1]}
+```
+
+```bash
+domainator domainate -i contigs.gb -r gajb.hmm --foldseek defense_structures \
+    --prostt5_weights prostt5/ --system_models gabija.yaml -o systems.gb
+```
+
+`min_tmscore`, `min_lddt` and `min_prob` read those qualifiers; a hit without them, such as an
+HMM hit, doesn't pass them.
+
 ## How the reseek backend differs
 
 reseek is an independent implementation, and the interface reflects what it can actually do

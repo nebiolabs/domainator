@@ -17,8 +17,8 @@ from domainator import DOMAIN_FEATURE_NAME, DOMAIN_SEARCH_BEST_HIT_NAME
 from domainator.partial import PARTIAL_CHOICES, cds_fragment_status, fragment_status_allowed
 from domainator.systems import windows
 from domainator.systems.conditions import Condition
-from domainator.systems.model import (COUNTED_ROLES, ROLES, Component, ModelCollection, ReferenceRule, SystemHit,
-                                      SystemMember, SystemModel)
+from domainator.systems.model import (COUNTED_ROLES, ROLES, STRUCTURAL_THRESHOLDS, Component, ModelCollection,
+                                      ReferenceRule, SystemHit, SystemMember, SystemModel)
 
 _ROLE_PRIORITY = {role: i for i, role in enumerate(ROLES)}
 _SCORE_TIE = 1e-8  # hits within this many bits of the best in a competing group are all kept
@@ -256,6 +256,14 @@ class SystemDetector:
                 return False
             if rule.max_target_length is not None and length > rule.max_target_length:
                 return False
+        for key, qualifier in STRUCTURAL_THRESHOLDS.items():
+            threshold = getattr(rule, key)
+            if threshold is not None:
+                try:
+                    if float(qualifiers[qualifier][0]) < threshold:
+                        return False
+                except (KeyError, IndexError, ValueError):
+                    return False
         return True
 
     @staticmethod

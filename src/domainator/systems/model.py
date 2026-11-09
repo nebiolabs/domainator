@@ -33,12 +33,20 @@ class ReferenceRule:
     min_target_coverage: Optional[float] = None
     min_target_length: Optional[int] = None
     max_target_length: Optional[int] = None
+    min_tmscore: Optional[float] = None
+    """Structural hits (foldseek): the least TM-score, from the hit's tmscore qualifier."""
+    min_lddt: Optional[float] = None
+    """Structural hits: the least lDDT, from the lddt qualifier."""
+    min_prob: Optional[float] = None
+    """Structural hits: the least probability of homology, from the prob qualifier."""
     exchangeable: bool = False
     attach_to_cds: bool = False
 
 
 THRESHOLD_KEYS = ("evalue", "min_score", "min_reference_coverage", "min_target_coverage",
-                  "min_target_length", "max_target_length")
+                  "min_target_length", "max_target_length", "min_tmscore", "min_lddt", "min_prob")
+STRUCTURAL_THRESHOLDS = {"min_tmscore": "tmscore", "min_lddt": "lddt", "min_prob": "prob"}
+"""The structural thresholds, and the hit qualifiers they read. A hit without the qualifier fails them."""
 """The ReferenceRule fields that are thresholds, which a collection's ``defaults`` can set."""
 
 

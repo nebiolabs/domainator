@@ -207,7 +207,7 @@ documents above have been corrected.
 
 ## Implementation status
 
-Phases 1 and 2, and Phase 3's `system_search`, options on existing commands and the MacSyFinder converter, are implemented. Where the code departs from these documents:
+Phases 1 and 2, and Phase 3's `system_search`, options on existing commands, the MacSyFinder converter and structural thresholds, are implemented. Where the code departs from these documents:
 
 1. **PADLOC model names.** Converted models are named by padloc's `yaml.name` (e.g.
    `cas_type_I-E`), not `sys_meta.system`: padloc reports systems by `yaml.name`, and names
